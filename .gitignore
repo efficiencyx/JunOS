@@ -1,0 +1,30 @@
+# env / secrets
+.env
+.env.local
+
+# python
+__pycache__/
+*.pyc
+.venv/
+tts/.venv/
+
+# editor / OS
+.idea/
+.vscode/
+.DS_Store
+*~
+
+# build / runtime
+node_modules/
+*.log
+
+# project-specific
+Junk/
+webapp/assets/*~
+
+# heavy artifacts kept on disk but not in initial baseline
+webapp/voice_index.bin
+
+# deploy state (created at runtime)
+data/
+letsencrypt/

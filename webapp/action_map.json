@@ -1,0 +1,194 @@
+{
+  "_comment": "Mappa azioni semantiche -> parametri Live2D del modello interaction_model. Il frontend deve fare lerp dal valore corrente al target in 'duration' ms. Valori dei parametri sono nel range [-1,1] o [0,1] secondo le convenzioni Cubism standard. I parametri inesistenti vanno semplicemente ignorati.",
+
+  "look_at": {
+    "user": {
+      "ParamEyeballLX": 0, "ParamEyeballRX": 0,
+      "ParamEyeballLY": 0, "ParamEyeballRY": 0,
+      "ParamHeadX": 0, "ParamHeadY": 0
+    }
+  },
+  "look": {
+    "up":    { "ParamEyeballLY":  1, "ParamEyeballRY":  1, "ParamHeadY":  0.3 },
+    "down":  { "ParamEyeballLY": -1, "ParamEyeballRY": -1, "ParamHeadY": -0.3 },
+    "left":  { "ParamEyeballLX": -1, "ParamEyeballRX": -1, "ParamHeadX": -0.3 },
+    "right": { "ParamEyeballLX":  1, "ParamEyeballRX":  1, "ParamHeadX":  0.3 },
+    "away":  { "ParamEyeballLX":  0.7, "ParamEyeballRX": 0.7, "ParamHeadX": 0.4, "ParamHeadZ": -10 }
+  },
+
+  "tilt_head": {
+    "left":  { "ParamHeadZ": -15, "_scale": ["amount"] },
+    "right": { "ParamHeadZ":  15, "_scale": ["amount"] }
+  },
+  "nod":        { "_sequence": [ {"ParamHeadY": -0.4, "_t": 200}, {"ParamHeadY": 0.2, "_t": 200}, {"ParamHeadY": 0, "_t": 200} ] },
+  "shake_head": { "_sequence": [ {"ParamHeadX": -0.4, "_t": 180}, {"ParamHeadX": 0.4, "_t": 180}, {"ParamHeadX": -0.3, "_t": 180}, {"ParamHeadX": 0, "_t": 180} ] },
+
+  "blink":      { "_sequence": [ {"ParamEyeOpen": 0, "_t": 80}, {"ParamEyeOpen": 1, "_t": 120} ] },
+  "close_eyes": { "ParamEyeOpen": 0 },
+  "open_eyes":  { "ParamEyeOpen": 1 },
+  "happy_eyes": { "ParamEyesHappy": 1, "ParamEyeOpen": 0.3 },
+  "shocked":    { "ParamEyeRShock": 1, "ParamEyeLShock": 1, "ParamIrisZoom": -1 },
+  "heart_eyes": { "ParamHeart": 1, "ParamIrisZoom": 0.5 },
+  "pupil_wiggle": { "ParamPupilWiggle": 1 },
+
+  "brow": {
+    "happy":     { "ParamBrowLEmote":  0.6, "ParamBrowREmote":  0.6, "ParamBrowLY":  0.3, "ParamBrowRY":  0.3 },
+    "sad":       { "ParamBrowLEmote": -0.6, "ParamBrowREmote": -0.6, "ParamBrowLY": -0.3, "ParamBrowRY": -0.3 },
+    "angry":     { "ParamBrowLEmote": -1,   "ParamBrowREmote": -1,   "ParamBrowLRot": -0.5, "ParamBrowRRot": 0.5 },
+    "surprised": { "ParamBrowLY":  0.8, "ParamBrowRY":  0.8 },
+    "worried":   { "ParamBrowLEmote": -0.4, "ParamBrowREmote": -0.4, "ParamBrowLRot": 0.3, "ParamBrowRRot": -0.3 },
+    "neutral":   { "ParamBrowLEmote": 0, "ParamBrowREmote": 0, "ParamBrowLY": 0, "ParamBrowRY": 0, "ParamBrowLRot": 0, "ParamBrowRRot": 0 }
+  },
+
+  "mouth": {
+    "smile":   { "ParamMouthForm":  1, "ParamMouthOpen": 0.2 },
+    "frown":   { "ParamMouthForm": -1, "ParamMouthOpen": 0   },
+    "open":    { "ParamMouthOpen":  1 },
+    "closed":  { "ParamMouthOpen":  0, "ParamMouthForm": 0 },
+    "pout":    { "ParamMouthForm": -0.5, "ParamMouthOpen": 0.3 },
+    "grin":    { "ParamMouthForm":  1, "ParamMouthOpen": 0.6 }
+  },
+  "tongue_out": { "ParamToungeY": 1, "ParamMouthOpen": 0.4 },
+  "speak": {
+    "short":  { "_loop": [ {"ParamMouthOpen": 0.6, "_t": 120}, {"ParamMouthOpen": 0.1, "_t": 120} ], "_repeats": 2 },
+    "medium": { "_loop": [ {"ParamMouthOpen": 0.6, "_t": 120}, {"ParamMouthOpen": 0.1, "_t": 120} ], "_repeats": 5 },
+    "long":   { "_loop": [ {"ParamMouthOpen": 0.6, "_t": 120}, {"ParamMouthOpen": 0.1, "_t": 120} ], "_repeats": 10 }
+  },
+
+  "emote": {
+    "happy":       { "_compose": ["brow.happy", "mouth.smile", "happy_eyes"] },
+    "sad":         { "_compose": ["brow.sad", "mouth.frown"], "ParamEyeOpen": 0.5 },
+    "angry":       { "_compose": ["brow.angry", "mouth.frown"], "ParamMouthOpen": 0.2 },
+    "surprised":   { "_compose": ["brow.surprised", "mouth.open"], "ParamEyeOpen": 1, "ParamIrisZoom": -0.3 },
+    "embarrassed": { "_compose": ["brow.worried"], "ParamBlush": 1, "ParamMouthForm": -0.3 },
+    "sleepy":      { "ParamEyeOpen": 0.2, "ParamMouthForm": -0.2, "ParamBrowLY": -0.2, "ParamBrowRY": -0.2 },
+    "excited":     { "_compose": ["brow.happy", "mouth.grin", "happy_eyes"], "ParamBlush": 0.4 },
+    "smug":        { "ParamMouthForm": 0.6, "ParamEyeOpen": 0.5, "ParamBrowLEmote": 0.3, "ParamBrowREmote": 0.3 },
+    "pout":        { "_compose": ["mouth.pout", "brow.angry"], "ParamHeadZ": -8 },
+    "crying":      { "_compose": ["brow.sad", "mouth.frown"], "ParamEyeOpen": 0.3, "ParamBlush": 0.3 },
+    "laughing":    { "_compose": ["happy_eyes", "mouth.grin"], "_sequence": [{"ParamHeadY": -0.2,"_t":150},{"ParamHeadY":0.1,"_t":150},{"ParamHeadY":0,"_t":150}] }
+  },
+
+  "blush": { "_param": "ParamBlush", "_scale": ["intensity"] },
+
+  "lean": {
+    "left":    { "ParamBodyX": -1, "_scale": ["amount"] },
+    "right":   { "ParamBodyX":  1, "_scale": ["amount"] },
+    "forward": { "ParamBodyZ":  10, "_scale": ["amount"] },
+    "back":    { "ParamBodyZ": -10, "_scale": ["amount"] }
+  },
+  "idle": {
+    "ParamHeadX": 0, "ParamHeadY": 0, "ParamHeadZ": 0,
+    "ParamBodyX": 0, "ParamBodyY": 0, "ParamBodyZ": 0,
+    "ParamEyeOpen": 1, "ParamMouthOpen": 0, "ParamMouthForm": 0,
+    "ParamBrowLEmote": 0, "ParamBrowREmote": 0,
+    "ParamBlush": 0, "ParamHeart": 0, "ParamEyesHappy": 0
+  },
+  "breath": {
+    "calm":    { "_loop_param": "ParamBodyY", "_amplitude": 0.3, "_period_ms": 3500 },
+    "excited": { "_loop_param": "ParamBodyY", "_amplitude": 0.6, "_period_ms": 1500 },
+    "sleepy":  { "_loop_param": "ParamBodyY", "_amplitude": 0.2, "_period_ms": 5000 }
+  },
+
+  "_comment_arm_gesture": "ParamArmLGesture / ParamArmRGesture sono discreti: 1=point/rest, 2=open palm/wave, 3=intuition/smart moment.",
+  "wave": {
+    "ParamArmRUp": 1, "ParamArmRGesture": 2,
+    "_sequence": [
+      {"ParamArmRRot":  0.4, "_t": 200},
+      {"ParamArmRRot": -0.4, "_t": 200},
+      {"ParamArmRRot":  0.4, "_t": 200},
+      {"ParamArmRRot":  0,   "ParamArmRUp": 0, "ParamArmRGesture": 1, "_t": 300}
+    ]
+  },
+  "arm_gesture": {
+    "_resolve": {
+      "left.raise":  { "ParamArmLUp": 1 },
+      "right.raise": { "ParamArmRUp": 1 },
+      "both.raise":  { "ParamArmLUp": 1, "ParamArmRUp": 1 },
+      "left.point":  { "ParamArmLUp": 1, "ParamArmLGesture": 1 },
+      "right.point": { "ParamArmRUp": 1, "ParamArmRGesture": 1 },
+      "left.wave":   { "ParamArmLUp": 1, "ParamArmLGesture": 2 },
+      "right.wave":  { "ParamArmRUp": 1, "ParamArmRGesture": 2 },
+      "left.smart":  { "ParamArmLUp": 1, "ParamArmLGesture": 3 },
+      "right.smart": { "ParamArmRUp": 1, "ParamArmRGesture": 3 },
+      "left.hide":   { "ParamArmLUp": -1 },
+      "right.hide":  { "ParamArmRUp": -1 },
+      "both.hide":   { "ParamArmLUp": -1, "ParamArmRUp": -1 }
+    }
+  },
+  "handhold": {
+    "_resolve": {
+      "left.true":   { "ParamHandholdingLEnable": 1, "ParamHandholdingLY": 0 },
+      "right.true":  { "ParamHandholdingREnable": 1, "ParamHandholdingRY": 0 },
+      "both.true":   { "ParamHandholdingLEnable": 1, "ParamHandholdingREnable": 1 },
+      "left.false":  { "ParamHandholdingLEnable": 0 },
+      "right.false": { "ParamHandholdingREnable": 0 },
+      "both.false":  { "ParamHandholdingLEnable": 0, "ParamHandholdingREnable": 0 }
+    }
+  },
+
+  "ear_wiggle": { "ParamEarsWiggle": 1 },
+  "ear": {
+    "_resolve": {
+      "left.up":    { "ParamEarL":  1 },
+      "left.flat":  { "ParamEarL":  0 },
+      "left.down":  { "ParamEarL": -1 },
+      "right.up":   { "ParamEarR":  1 },
+      "right.flat": { "ParamEarR":  0 },
+      "right.down": { "ParamEarR": -1 }
+    }
+  },
+  "tail_wiggle": {
+    "slow":   { "_loop_param": "ParamTailWiggle", "_amplitude": 0.5, "_period_ms": 2000 },
+    "normal": { "_loop_param": "ParamTailWiggle", "_amplitude": 1.0, "_period_ms": 1200 },
+    "fast":   { "_loop_param": "ParamTailWiggle", "_amplitude": 1.0, "_period_ms": 600 }
+  },
+
+  "receive_headpat": {
+    "ParamHeadpat": 1,
+    "_compose": ["happy_eyes"],
+    "ParamBlush": 0.4,
+    "_sequence": [{"ParamHeadpatY": 0.3, "_t": 200}, {"ParamHeadpatY": -0.3, "_t": 200}, {"ParamHeadpatY": 0, "_t": 200}]
+  },
+  "nuzzle": { "ParamFaceRubEnable": 1, "_sequence": [{"ParamFaceRubMoveX": -0.5, "_t": 250}, {"ParamFaceRubMoveX": 0.5, "_t": 250}, {"ParamFaceRubMoveX": 0, "ParamFaceRubEnable": 0, "_t": 250}] },
+
+  "blanket": { "_resolve": { "on": { "ParamBlanketSitting": 1 }, "off": { "ParamBlanketSitting": 0 } } },
+  "cuddle":  { "_resolve": {
+      "on":  { "ParamBlanketCuddle": 1, "ParamArmLCuddleUp": 1 },
+      "off": { "ParamBlanketCuddle": 0, "ParamArmLCuddleUp": 0, "ParamArmLCuddleDown": 0 }
+  }},
+  "pillow":  { "_resolve": { "on": { "ParamPillow": 1 }, "off": { "ParamPillow": 0 } } },
+
+  "_comment_outfit": "Esclusioni: BOTTOM={skirt,pants,dress} mutuamente esclusivi; 'dress' esclude anche shirt/hoodie (è un capo intero). shirt+hoodie sono compatibili (felpa sopra maglietta). Underwear (bra, panties) e shoes sono indipendenti. 'skirt_up' e 'panties_aside' sono modificatori sullo stato corrente.",
+  "outfit": {
+    "_resolve": {
+      "shirt.on":    { "ParamShirtEnabled": 1, "ParamDress2Enabled": 0 },
+      "shirt.off":   { "ParamShirtEnabled": 0 },
+      "hoodie.on":   { "ParamHoodieEnabled": 1, "ParamDress2Enabled": 0 },
+      "hoodie.off":  { "ParamHoodieEnabled": 0 },
+      "skirt.on":    { "ParamSkirtEnabled": 1, "ParamPantsEnabled": 0, "ParamDress2Enabled": 0 },
+      "skirt.off":   { "ParamSkirtEnabled": 0 },
+      "pants.on":    { "ParamPantsEnabled": 1, "ParamSkirtEnabled": 0, "ParamDress2Enabled": 0 },
+      "pants.off":   { "ParamPantsEnabled": 0 },
+      "dress.on":    { "ParamDress2Enabled": 1, "ParamShirtEnabled": 0, "ParamHoodieEnabled": 0, "ParamSkirtEnabled": 0, "ParamPantsEnabled": 0 },
+      "dress.off":   { "ParamDress2Enabled": 0 },
+      "bra.on":      { "ParamBraEnabled": 1 },
+      "bra.off":     { "ParamBraEnabled": 0 },
+      "panties.on":  { "ParamPantiesEnabled": 1 },
+      "panties.off": { "ParamPantiesEnabled": 0 },
+      "shoes.on":    { "ParamShoeLOn": 1, "ParamShoeROn": 1 },
+      "shoes.off":   { "ParamShoeLOn": 0, "ParamShoeROn": 0 },
+      "shoe_left.on":   { "ParamShoeLOn": 1 }, "shoe_left.off":  { "ParamShoeLOn": 0 },
+      "shoe_right.on":  { "ParamShoeROn": 1 }, "shoe_right.off": { "ParamShoeROn": 0 },
+      "skirt_up.on":      { "ParamSkirtUp": 1 },  "skirt_up.off":      { "ParamSkirtUp": 0 },
+      "panties_aside.on": { "ParamPantiesX": 1 }, "panties_aside.off": { "ParamPantiesX": 0 },
+      "nude.on":     { "ParamShirtEnabled": 0, "ParamHoodieEnabled": 0, "ParamDress2Enabled": 0, "ParamSkirtEnabled": 0, "ParamPantsEnabled": 0, "ParamBraEnabled": 0, "ParamPantiesEnabled": 0 }
+    }
+  },
+
+  "mood": { "_param": "ParamOmegaMeter", "_relative": true, "_scale": ["level"] },
+
+  "_comment_outfit_shortcuts": "Alias top-level: l'LLM tende a emettere [ACTION:skirt_up] invece di [ACTION:outfit|item=skirt_up|state=on]. La forma nuda accende; per spegnere usare la forma outfit (item=skirt_up|state=off).",
+  "skirt_up":      { "ParamSkirtUp": 1 },
+  "panties_aside": { "ParamPantiesX": 1 }
+}
