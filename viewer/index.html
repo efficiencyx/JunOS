@@ -1,0 +1,1007 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Live2D Viewer</title>
+<style>
+  :root{
+    --bg:#0e1014; --bg-2:#161a21; --bg-3:#1d222b; --bg-4:#252b36;
+    --line:#2a3140; --line-2:#384153;
+    --text:#e6e8ee; --muted:#8a93a4; --dim:#5b6477;
+    --accent:#7c9eff; --accent-2:#9eb6ff; --accent-soft:#7c9eff22;
+    --danger:#ff7676; --ok:#7bd88f;
+    --radius:8px; --radius-sm:5px;
+    --shadow:0 4px 18px rgba(0,0,0,.35);
+  }
+  *{box-sizing:border-box;}
+  html,body{margin:0;height:100%;background:var(--bg);color:var(--text);
+    font-family:'Inter',-apple-system,system-ui,'Segoe UI',sans-serif;
+    font-size:13px;-webkit-font-smoothing:antialiased;}
+  #app{display:grid;grid-template-columns:280px 1fr 340px;height:100vh;gap:0;}
+  .panel{overflow-y:auto;overflow-x:hidden;background:var(--bg-2);
+    border-right:1px solid var(--line);}
+  .panel:last-child{border-right:none;border-left:1px solid var(--line);}
+  .panel::-webkit-scrollbar{width:8px;}
+  .panel::-webkit-scrollbar-track{background:transparent;}
+  .panel::-webkit-scrollbar-thumb{background:var(--line-2);border-radius:4px;}
+  .panel::-webkit-scrollbar-thumb:hover{background:var(--dim);}
+  #stage{position:relative;background:radial-gradient(circle at 50% 30%, #1a1f2a 0%, var(--bg) 80%);}
+  canvas{display:block;width:100%;height:100%;}
+
+  .section{padding:14px 16px;border-bottom:1px solid var(--line);}
+  .section-header{display:flex;align-items:center;justify-content:space-between;
+    margin-bottom:10px;font-size:11px;font-weight:600;
+    text-transform:uppercase;letter-spacing:.8px;color:var(--accent);}
+  .section-header .count{color:var(--muted);font-weight:500;}
+
+  label.field{display:block;font-size:11px;color:var(--muted);
+    margin-bottom:4px;margin-top:8px;}
+  label.field:first-of-type{margin-top:0;}
+
+  input[type=file]{font-size:11px;color:var(--muted);width:100%;
+    background:var(--bg-3);border:1px dashed var(--line-2);
+    padding:8px;border-radius:var(--radius-sm);cursor:pointer;}
+  input[type=file]::file-selector-button{
+    background:var(--bg-4);color:var(--text);border:none;
+    padding:4px 10px;border-radius:4px;cursor:pointer;margin-right:8px;
+    font-size:11px;}
+  input[type=file]::file-selector-button:hover{background:var(--accent-soft);color:var(--accent-2);}
+
+  button{background:var(--accent);color:#0e1014;border:none;
+    padding:9px 14px;cursor:pointer;border-radius:var(--radius-sm);
+    font-weight:600;font-size:12px;width:100%;margin-top:10px;
+    transition:filter .15s, transform .1s;}
+  button:hover{filter:brightness(1.1);}
+  button:active{transform:translateY(1px);}
+  button.secondary{background:var(--bg-4);color:var(--text);}
+  button.secondary:hover{background:var(--line-2);}
+
+  input[type=text],input[type=number]{
+    background:var(--bg-3);color:var(--text);
+    border:1px solid var(--line);border-radius:4px;
+    padding:5px 8px;font-size:12px;font-family:inherit;
+    transition:border-color .15s;}
+  input[type=text]:focus,input[type=number]:focus{
+    outline:none;border-color:var(--accent);}
+
+  input[type=range]{
+    -webkit-appearance:none;appearance:none;background:transparent;
+    flex:1;height:18px;cursor:pointer;}
+  input[type=range]::-webkit-slider-runnable-track{
+    height:4px;background:var(--bg-4);border-radius:2px;}
+  input[type=range]::-webkit-slider-thumb{
+    -webkit-appearance:none;width:14px;height:14px;
+    background:var(--accent);border-radius:50%;
+    margin-top:-5px;box-shadow:0 0 0 2px var(--bg-2);
+    transition:transform .1s;}
+  input[type=range]::-webkit-slider-thumb:hover{transform:scale(1.15);}
+  input[type=range]::-moz-range-track{height:4px;background:var(--bg-4);border-radius:2px;}
+  input[type=range]::-moz-range-thumb{width:14px;height:14px;background:var(--accent);
+    border:none;border-radius:50%;box-shadow:0 0 0 2px var(--bg-2);}
+
+  input[type=color]{
+    -webkit-appearance:none;appearance:none;
+    width:24px;height:24px;border:1px solid var(--line-2);
+    border-radius:5px;padding:0;background:none;cursor:pointer;
+    overflow:hidden;}
+  input[type=color]::-webkit-color-swatch-wrapper{padding:0;}
+  input[type=color]::-webkit-color-swatch{border:none;border-radius:4px;}
+
+  input[type=checkbox]{
+    -webkit-appearance:none;appearance:none;
+    width:16px;height:16px;background:var(--bg-3);
+    border:1px solid var(--line-2);border-radius:4px;
+    cursor:pointer;position:relative;flex-shrink:0;
+    transition:background .15s,border-color .15s;}
+  input[type=checkbox]:checked{background:var(--accent);border-color:var(--accent);}
+  input[type=checkbox]:checked::after{
+    content:'';position:absolute;left:4px;top:1px;
+    width:4px;height:8px;border:solid #0e1014;
+    border-width:0 2px 2px 0;transform:rotate(45deg);}
+
+  .item{
+    display:grid;grid-template-columns:auto 1fr auto;
+    align-items:center;gap:8px;padding:7px 10px;margin:4px 0;
+    background:var(--bg-3);border:1px solid transparent;
+    border-radius:var(--radius-sm);transition:border-color .15s,background .15s;}
+  .item:hover{border-color:var(--line-2);background:var(--bg-4);}
+  .item.modified{border-color:var(--accent-soft);background:linear-gradient(90deg,var(--accent-soft),var(--bg-3) 30%);}
+  .item .name{
+    font-size:12px;color:var(--text);overflow:hidden;
+    text-overflow:ellipsis;white-space:nowrap;font-family:'JetBrains Mono',ui-monospace,monospace;}
+  .item .controls{
+    display:flex;align-items:center;gap:6px;}
+  .item-row2{
+    display:flex;align-items:center;gap:8px;padding:0 10px 7px 36px;}
+  .item-row2 input[type=range]{flex:1;}
+  .item-row2 input[type=number]{width:58px;text-align:right;}
+
+  .item-card{
+    background:var(--bg-3);border:1px solid transparent;border-radius:var(--radius-sm);
+    margin:5px 0;transition:border-color .15s;overflow:hidden;position:relative;}
+  .item-card[data-depth="1"]{margin-left:14px;}
+  .item-card[data-depth="2"]{margin-left:28px;}
+  .item-card[data-depth="3"]{margin-left:42px;}
+  .item-card[data-depth="4"]{margin-left:56px;}
+  .item-card[data-depth="5"]{margin-left:70px;}
+  .item-card[data-depth^="1"]::before,
+  .item-card[data-depth^="2"]::before,
+  .item-card[data-depth^="3"]::before,
+  .item-card[data-depth^="4"]::before,
+  .item-card[data-depth^="5"]::before{
+    content:'';position:absolute;left:-10px;top:0;bottom:0;
+    border-left:1px solid var(--line-2);}
+  .tree-toggle{
+    width:14px;height:14px;display:inline-flex;align-items:center;justify-content:center;
+    cursor:pointer;color:var(--muted);font-size:10px;user-select:none;flex-shrink:0;
+    transition:transform .15s,color .15s;}
+  .tree-toggle:hover{color:var(--text);}
+  .tree-toggle.empty{visibility:hidden;}
+  .tree-toggle.collapsed{transform:rotate(-90deg);}
+  .item-card:hover{border-color:var(--line-2);}
+  .item-card.modified{border-color:var(--accent);box-shadow:0 0 0 1px var(--accent-soft);}
+  .item-card .header{
+    display:flex;align-items:center;gap:8px;padding:8px 10px;}
+  .item-card .name{
+    flex:1;font-size:12px;font-family:'JetBrains Mono',ui-monospace,monospace;
+    overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:var(--text);}
+  .item-card .body{
+    display:flex;align-items:center;gap:8px;padding:0 10px 8px;}
+  .item-card .body input[type=range]{flex:1;}
+  .item-card .body input[type=number]{width:60px;text-align:right;}
+
+  #search{
+    width:100%;background:var(--bg-3);color:var(--text);
+    border:1px solid var(--line);border-radius:var(--radius-sm);
+    padding:9px 12px;font-size:12px;font-family:inherit;
+    margin-bottom:10px;transition:border-color .15s;}
+  #search:focus{outline:none;border-color:var(--accent);}
+  #search::placeholder{color:var(--dim);}
+
+  #status{
+    font-family:'JetBrains Mono',ui-monospace,monospace;
+    font-size:11px;color:var(--muted);
+    background:var(--bg-3);padding:8px 10px;
+    border-radius:var(--radius-sm);max-height:140px;overflow:auto;
+    white-space:pre-wrap;line-height:1.5;}
+
+  .row{display:flex;align-items:center;gap:8px;margin:6px 0;font-size:12px;}
+  .row > label{flex:0 0 60px;color:var(--muted);font-size:11px;}
+  .row > input[type=range]{flex:1;}
+  .row > input[type=number]{width:55px;}
+
+  .toolbar{
+    position:absolute;top:12px;right:12px;display:flex;gap:6px;z-index:10;
+    background:rgba(20,24,32,.85);backdrop-filter:blur(10px);
+    padding:6px;border:1px solid var(--line);border-radius:var(--radius);
+    box-shadow:var(--shadow);}
+  .toolbar button{
+    width:auto;margin:0;padding:6px 10px;font-size:11px;
+    background:transparent;color:var(--muted);}
+  .toolbar button:hover{background:var(--bg-4);color:var(--text);}
+
+  .badge{display:inline-block;padding:1px 6px;font-size:10px;
+    background:var(--accent-soft);color:var(--accent-2);
+    border-radius:10px;margin-left:6px;}
+</style>
+</head>
+<body>
+<div id="app">
+  <div class="panel">
+    <div class="section">
+      <div class="section-header">Load Model</div>
+      <label class="field">moc3 file</label>
+      <input type="file" id="mocFile" accept=".moc3">
+      <label class="field">Textures (multi-select)</label>
+      <input type="file" id="texFiles" accept="image/png" multiple>
+      <label class="field">Physics (optional)</label>
+      <input type="file" id="physFile" accept=".json">
+      <label class="field">Names JSON (optional, for auto-renaming)</label>
+      <input type="file" id="namesFile" accept=".json">
+      <button id="loadBtn">Load Model</button>
+    </div>
+
+    <div class="section">
+      <div class="section-header">Render</div>
+      <div class="row"><label>Scale</label><input type="range" id="scale" min="0.05" max="2" step="0.01" value="0.4"></div>
+      <div class="row"><label>Pos X</label><input type="range" id="posx" min="-1" max="1" step="0.01" value="0"></div>
+      <div class="row"><label>Pos Y</label><input type="range" id="posy" min="-1" max="1" step="0.01" value="0"></div>
+      <div class="row"><label>BG</label><input type="color" id="bg" value="#0e1014"></div>
+      <button class="secondary" id="resetBtn">Reset all overrides</button>
+    </div>
+
+    <div class="section">
+      <div class="section-header">Auto-rename</div>
+      <button class="secondary" id="autoNamePartsBtn" title="Use drawable names from names.json to suggest part names">Auto-name parts from drawables</button>
+    </div>
+
+    <div class="section">
+      <div class="section-header">Export</div>
+      <button id="saveMocBtn">Save patched .moc3</button>
+      <button class="secondary" id="savePresetBtn">Save preset JSON</button>
+      <label class="field" style="margin-top:10px;">Load preset</label>
+      <input type="file" id="loadPresetInput" accept=".json">
+    </div>
+
+    <div class="section">
+      <div class="section-header">Status</div>
+      <div id="status">Idle.</div>
+    </div>
+  </div>
+
+  <div id="stage">
+    <div class="toolbar">
+      <button id="centerBtn" title="Re-center model">Center</button>
+      <button id="snapBtn" title="Save canvas as PNG">Snapshot</button>
+    </div>
+  </div>
+
+  <div class="panel">
+    <div class="section" style="position:sticky;top:0;background:var(--bg-2);z-index:5;border-bottom:1px solid var(--line);">
+      <input id="search" placeholder="🔍  Filter parts and parameters...">
+    </div>
+    <div class="section">
+      <div class="section-header">
+        <span>Parts <span class="badge" id="partsCount">0</span></span>
+      </div>
+      <div id="parts"></div>
+    </div>
+    <div class="section">
+      <div class="section-header">
+        <span>Parameters <span class="badge" id="paramsCount">0</span></span>
+      </div>
+      <div id="params"></div>
+    </div>
+  </div>
+</div>
+
+<script src="https://cubism.live2d.com/sdk-web/cubismcore/live2dcubismcore.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/pixi.js@6.5.10/dist/browser/pixi.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/pixi-live2d-display@0.4.0/dist/cubism4.min.js"></script>
+<script>
+const { Live2DModel, Cubism4ModelSettings } = PIXI.live2d;
+const stage = document.getElementById('stage');
+const statusEl = document.getElementById('status');
+const log = m => { statusEl.textContent = m; console.log(m); };
+
+const app = new PIXI.Application({
+  resizeTo: stage,
+  backgroundColor: 0x0e1014,
+  antialias: true,
+  autoDensity: true,
+  resolution: window.devicePixelRatio || 1,
+  preserveDrawingBuffer: true,
+});
+stage.appendChild(app.view);
+
+let currentModel = null;
+let currentMocBuffer = null;       // ArrayBuffer of loaded moc3 (original)
+let currentMocFileName = 'patched.moc3';
+let originalDefaults = null;       // { partOpacities:Float32Array, paramDefaults:Float32Array }
+let mocOffsets = null;             // { partOpacityOffset, paramDefaultOffset }
+let namesData = null;              // { drawables: [...], parts: [...], parameters: [...] }
+const partOverrides = {};   // id -> opacity
+const paramOverrides = {};  // id -> value
+const colorOverrides = {};  // id -> [r,g,b,a] (multiplyColor for all drawables under this part)
+const nameOverrides = {};   // originalId -> newId (only for parts; written into moc3 PART_IDS section)
+
+document.getElementById('bg').addEventListener('input', e => {
+  app.renderer.backgroundColor = parseInt(e.target.value.slice(1), 16);
+});
+
+// Read via arrayBuffer() + base64 instead of FileReader.readAsDataURL —
+// FileReader fails with NotReadableError on flaky filesystems (cloud-sync,
+// FUSE/NTFS) mid-read. arrayBuffer() is more robust. Blob URLs aren't an
+// option because pixi-live2d-display's settings resolver mangles the
+// `blob:` scheme when resolving relative to the model3.json base URL.
+async function fileToDataURL(file, mime){
+  const buf = await file.arrayBuffer();
+  const bytes = new Uint8Array(buf);
+  // Chunked base64 encode to avoid "Maximum call stack size" on large files.
+  let bin = '';
+  const CHUNK = 0x8000;
+  for(let i = 0; i < bytes.length; i += CHUNK){
+    bin += String.fromCharCode.apply(null, bytes.subarray(i, i + CHUNK));
+  }
+  const effectiveMime = mime || file.type || 'application/octet-stream';
+  return 'data:' + effectiveMime + ';base64,' + btoa(bin);
+}
+
+async function loadModel(){
+  const mocFile = document.getElementById('mocFile').files[0];
+  const texFiles = [...document.getElementById('texFiles').files];
+  const physFile = document.getElementById('physFile').files[0];
+  if(!mocFile || texFiles.length===0){ log('Select moc3 + at least one texture'); return; }
+
+  if(currentModel){
+    app.stage.removeChild(currentModel);
+    currentModel.destroy();
+    currentModel = null;
+  }
+  Object.keys(partOverrides).forEach(k=>delete partOverrides[k]);
+  Object.keys(paramOverrides).forEach(k=>delete paramOverrides[k]);
+
+  log('Encoding files...');
+  // keep raw moc3 buffer for later patching/saving
+  currentMocBuffer = await mocFile.arrayBuffer();
+  currentMocFileName = mocFile.name;
+  const mocUrl = await fileToDataURL(mocFile, 'application/octet-stream');
+  // sort texture files by name so "00_*", "01_*" come in order
+  texFiles.sort((a,b) => a.name.localeCompare(b.name));
+  const texUrls = await Promise.all(texFiles.map(f => fileToDataURL(f, 'image/png')));
+  // 1x1 transparent PNG fallback for missing slots
+  const TRANSPARENT_PX = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkAAIAAAoAAv/lxKUAAAAASUVORK5CYII=';
+  const physJson = physFile ? JSON.parse(await physFile.text()) : null;
+
+  // pad up to 8 slots with transparent placeholder so we never undershoot
+  const paddedTex = [...texUrls];
+  while(paddedTex.length < 8) paddedTex.push(TRANSPARENT_PX);
+
+  const json = {
+    Version: 3,
+    FileReferences: {
+      Moc: mocUrl,
+      Textures: paddedTex,
+    }
+  };
+  if(physJson){
+    json.FileReferences.Physics = 'data:application/json;base64,' + btoa(JSON.stringify(physJson));
+  }
+
+  const settings = new Cubism4ModelSettings({
+    url: 'inline.model3.json',
+    ...json,
+  });
+
+  log('Loading...');
+  try {
+    const model = await Live2DModel.from(settings, { autoInteract: false, autoUpdate: true });
+    currentModel = model;
+    app.stage.addChild(model);
+
+    // Kill everything that would overwrite our values each frame
+    const im = model.internalModel;
+    try { im.motionManager.stopAllMotions(); } catch(e){}
+    try { im.motionManager.update = () => false; } catch(e){}
+    try { if(im.motionManager.expressionManager) im.motionManager.expressionManager.update = () => false; } catch(e){}
+    im.breath = null;
+    im.eyeBlink = null;
+    im.physics = null;
+    im.pose = null;
+    im.focusController = { update: ()=>{}, focus: ()=>{}, x:0, y:0 };
+
+    // Snapshot original defaults from the freshly loaded model (before any override)
+    const rawForSnap = getRaw(model);
+    originalDefaults = {
+      partOpacities: new Float32Array(rawForSnap.parts.opacities),
+      paramDefaults: new Float32Array(rawForSnap.parameters.defaultValues),
+      paramMins: new Float32Array(rawForSnap.parameters.minimumValues),
+      paramMaxs: new Float32Array(rawForSnap.parameters.maximumValues),
+      partIds: Array.from(rawForSnap.parts.ids),
+      paramIds: Array.from(rawForSnap.parameters.ids),
+    };
+    mocOffsets = locateMocOffsets(currentMocBuffer, originalDefaults);
+    if(mocOffsets){
+      console.log('moc3 offsets located:', mocOffsets);
+    } else {
+      console.warn('Could not locate moc3 offsets — patching disabled.');
+    }
+
+    fitModel();
+    buildPanels();
+    // Apply overrides via PIXI ticker (runs before render every frame)
+    const tickHandler = () => { applyOverrides(); };
+    app.ticker.add(tickHandler);
+    model.on('destroy', () => app.ticker.remove(tickHandler));
+    const raw = getRaw(model);
+    const drawables = raw.drawables;
+    let maxTex = -1; const usage = {};
+    for(let i=0;i<drawables.count;i++){
+      const t = drawables.textureIndices[i];
+      if(t>maxTex) maxTex = t;
+      usage[t] = (usage[t]||0)+1;
+    }
+    const needed = maxTex+1;
+    log(`Parts=${raw.parts.count} Params=${raw.parameters.count} Drawables=${drawables.count} | TEXTURES NEEDED=${needed} (provided ${texFiles.length}) | usage=${JSON.stringify(usage)}`);
+    if(needed !== texFiles.length){
+      log(`⚠ MISMATCH: model expects ${needed} textures but you provided ${texFiles.length}. Reload with correct count/order.`);
+    }
+  } catch(e){
+    log('Error: '+e.message); console.error(e);
+  }
+}
+
+function fitModel(){
+  if(!currentModel) return;
+  const s = parseFloat(document.getElementById('scale').value);
+  const x = parseFloat(document.getElementById('posx').value);
+  const y = parseFloat(document.getElementById('posy').value);
+  currentModel.scale.set(s);
+  currentModel.x = app.view.width/(window.devicePixelRatio||1) * (0.5 + x*0.5) - currentModel.width/2;
+  currentModel.y = app.view.height/(window.devicePixelRatio||1) * (0.5 + y*0.5) - currentModel.height/2;
+}
+['scale','posx','posy'].forEach(id => document.getElementById(id).addEventListener('input', fitModel));
+window.addEventListener('resize', fitModel);
+
+stage.addEventListener('wheel', e => {
+  e.preventDefault();
+  const step = 0.0015;
+  if(e.shiftKey){
+    const x = document.getElementById('posx');
+    x.value = Math.max(-1, Math.min(1, parseFloat(x.value) + e.deltaY * step));
+  } else {
+    const y = document.getElementById('posy');
+    y.value = Math.max(-1, Math.min(1, parseFloat(y.value) - e.deltaY * step));
+  }
+  fitModel();
+}, { passive: false });
+
+function getRaw(model){
+  const cm = model.internalModel.coreModel;
+  // pixi-live2d-display: cm may be the raw Live2DCubismCore.Model OR the wrapper CubismModel
+  if(cm.parts && cm.parts.ids) return cm;
+  if(cm._model && cm._model.parts) return cm._model;
+  // fallback: walk known properties
+  for(const k of Object.keys(cm)){
+    if(cm[k] && cm[k].parts && cm[k].parts.ids) return cm[k];
+  }
+  throw new Error('Cannot locate raw Cubism model on coreModel');
+}
+
+function applyOverrides(){
+  if(!currentModel) return;
+  const raw = getRaw(currentModel);
+  const parts = raw.parts;
+  for(let i=0;i<parts.count;i++){
+    const id = parts.ids[i];
+    if(id in partOverrides) parts.opacities[i] = partOverrides[id];
+  }
+  const ps = raw.parameters;
+  for(let i=0;i<ps.count;i++){
+    const id = ps.ids[i];
+    if(id in paramOverrides) ps.values[i] = paramOverrides[id];
+  }
+  // Per-part multiply color: write to every drawable whose parentPartIndex matches
+  if(Object.keys(colorOverrides).length){
+    const dr = raw.drawables;
+    if(dr && dr.multiplyColors && dr.parentPartIndices){
+      // build partIndex -> color map
+      const idxColor = new Map();
+      for(let pi=0; pi<parts.count; pi++){
+        const id = parts.ids[pi];
+        if(id in colorOverrides) idxColor.set(pi, colorOverrides[id]);
+      }
+      if(idxColor.size){
+        for(let i=0;i<dr.count;i++){
+          const pi = dr.parentPartIndices[i];
+          const c = idxColor.get(pi);
+          if(c){
+            const o = i*4;
+            dr.multiplyColors[o]   = c[0];
+            dr.multiplyColors[o+1] = c[1];
+            dr.multiplyColors[o+2] = c[2];
+            dr.multiplyColors[o+3] = c[3];
+          }
+        }
+      }
+    }
+  }
+}
+
+function hexToRgb(h){
+  const v = parseInt(h.slice(1),16);
+  return [((v>>16)&255)/255, ((v>>8)&255)/255, (v&255)/255];
+}
+function rgbToHex(r,g,b){
+  const t = v => Math.max(0,Math.min(255,Math.round(v*255))).toString(16).padStart(2,'0');
+  return '#'+t(r)+t(g)+t(b);
+}
+
+function buildPanels(){
+  const raw = getRaw(currentModel);
+  const parts = raw.parts;
+  const ps = raw.parameters;
+  const partsDiv = document.getElementById('parts');
+  const paramsDiv = document.getElementById('params');
+  if(!partsDiv._renameBound){
+    partsDiv.addEventListener('dblclick', e => {
+      const span = e.target.closest('.name');
+      if(!span || span.dataset.editing) return;
+      span.dataset.editing = '1';
+      const orig = span.dataset.orig;
+      const card = span.closest('.item-card');
+      const inp = document.createElement('input');
+      inp.type = 'text';
+      inp.value = span.textContent;
+      inp.style.cssText = 'flex:1;background:var(--bg-4);color:var(--text);border:1px solid var(--accent);border-radius:4px;padding:3px 6px;font-size:12px;font-family:JetBrains Mono,ui-monospace,monospace;';
+      inp.maxLength = 31;
+      span.style.display = 'none';
+      span.parentNode.insertBefore(inp, span);
+      inp.focus(); inp.select();
+      const commit = save => {
+        if(save){
+          const v = inp.value.trim();
+          if(v && v !== orig){
+            nameOverrides[orig] = v;
+            span.textContent = v;
+            card.classList.add('modified');
+          } else {
+            delete nameOverrides[orig];
+            span.textContent = orig;
+          }
+        }
+        delete span.dataset.editing;
+        span.style.display = '';
+        inp.remove();
+      };
+      inp.addEventListener('blur', () => commit(true));
+      inp.addEventListener('keydown', ev => {
+        if(ev.key === 'Enter'){ ev.preventDefault(); inp.blur(); }
+        else if(ev.key === 'Escape'){ commit(false); }
+      });
+    });
+    partsDiv._renameBound = true;
+  }
+  partsDiv.innerHTML = '';
+  paramsDiv.innerHTML = '';
+  document.getElementById('partsCount').textContent = parts.count;
+  document.getElementById('paramsCount').textContent = ps.count;
+
+  // Build parent → children tree from parts.parentIndices
+  const childrenOf = new Map(); // parentIdx -> [childIdx]
+  const roots = [];
+  for(let i=0;i<parts.count;i++){
+    const p = parts.parentIndices ? parts.parentIndices[i] : -1;
+    if(p < 0 || p >= parts.count){
+      roots.push(i);
+    } else {
+      if(!childrenOf.has(p)) childrenOf.set(p, []);
+      childrenOf.get(p).push(i);
+    }
+  }
+  const order = []; // {idx, depth}
+  const walk = (i, depth) => {
+    order.push({idx:i, depth});
+    const ch = childrenOf.get(i);
+    if(ch) for(const c of ch) walk(c, depth + 1);
+  };
+  for(const r of roots) walk(r, 0);
+
+  for(const {idx:i, depth} of order){
+    const id = parts.ids[i];
+    const op = parts.opacities[i];
+    const hasChildren = childrenOf.has(i);
+    const card = document.createElement('div');
+    card.className = 'item-card';
+    card.dataset.name = id.toLowerCase();
+    card.dataset.depth = depth;
+    card.dataset.partIndex = i;
+    const displayName = nameOverrides[id] || id;
+    card.innerHTML = `
+      <div class="header">
+        <span class="tree-toggle ${hasChildren?'':'empty'}" title="${hasChildren?'Collapse / expand':''}">▾</span>
+        <input type="checkbox" ${op>0.5?'checked':''} title="Toggle visibility">
+        <span class="name" title="${id} — double-click to rename" data-orig="${id}">${displayName}</span>
+        <input type="color" value="#ffffff" title="Multiply color">
+      </div>
+      <div class="body">
+        <input type="range" min="0" max="1" step="0.01" value="${op}">
+        <input type="number" min="0" max="1" step="0.01" value="${op.toFixed(2)}">
+      </div>`;
+    const chk = card.querySelector('input[type=checkbox]');
+    const col = card.querySelector('input[type=color]');
+    const rng = card.querySelector('input[type=range]');
+    const num = card.querySelector('input[type=number]');
+
+    const setOpacity = v => {
+      v = Math.max(0, Math.min(1, v));
+      partOverrides[id] = v;
+      rng.value = v; num.value = v.toFixed(2);
+      chk.checked = v > 0.5;
+      card.classList.toggle('modified', v !== op || (id in colorOverrides));
+    };
+    const setColor = hex => {
+      const [r,g,b] = hexToRgb(hex);
+      colorOverrides[id] = [r,g,b,1];
+      col.value = hex;
+      card.classList.add('modified');
+    };
+
+    chk.addEventListener('change', e => setOpacity(e.target.checked?1:0));
+    rng.addEventListener('input', e => setOpacity(parseFloat(e.target.value)));
+    num.addEventListener('input', e => setOpacity(parseFloat(e.target.value)));
+    col.addEventListener('input', e => setColor(e.target.value));
+
+    if(hasChildren){
+      const tog = card.querySelector('.tree-toggle');
+      tog.addEventListener('click', () => {
+        const collapsed = tog.classList.toggle('collapsed');
+        // hide/show all descendants in DOM order until depth <= current
+        let n = card.nextElementSibling;
+        while(n && parseInt(n.dataset.depth||'0') > depth){
+          n.style.display = collapsed ? 'none' : '';
+          n = n.nextElementSibling;
+        }
+      });
+    }
+
+    partsDiv.appendChild(card);
+  }
+
+  for(let i=0;i<ps.count;i++){
+    const id = ps.ids[i];
+    const min = ps.minimumValues[i];
+    const max = ps.maximumValues[i];
+    const def = ps.defaultValues[i];
+    const card = document.createElement('div');
+    card.className = 'item-card';
+    card.dataset.name = id.toLowerCase();
+    card.innerHTML = `
+      <div class="header">
+        <span class="name" title="${id}">${id}</span>
+        <span style="font-size:10px;color:var(--dim);font-family:'JetBrains Mono',monospace;">${min.toFixed(1)} → ${max.toFixed(1)}</span>
+      </div>
+      <div class="body">
+        <input type="range" min="${min}" max="${max}" step="0.01" value="${def}">
+        <input type="number" min="${min}" max="${max}" step="0.01" value="${def.toFixed(2)}">
+      </div>`;
+    const rng = card.querySelector('input[type=range]');
+    const num = card.querySelector('input[type=number]');
+    const set = v => {
+      paramOverrides[id] = v;
+      rng.value = v; num.value = (+v).toFixed(2);
+      card.classList.toggle('modified', Math.abs(v - def) > 0.001);
+    };
+    rng.addEventListener('input', e => set(parseFloat(e.target.value)));
+    num.addEventListener('input', e => set(parseFloat(e.target.value)));
+    paramsDiv.appendChild(card);
+  }
+}
+
+document.getElementById('search').addEventListener('input', e => {
+  const q = e.target.value.toLowerCase();
+  document.querySelectorAll('#parts .item-card, #params .item-card').forEach(r => {
+    r.style.display = r.dataset.name.includes(q) ? '' : 'none';
+  });
+});
+
+document.getElementById('loadBtn').addEventListener('click', loadModel);
+document.getElementById('resetBtn').addEventListener('click', () => {
+  Object.keys(partOverrides).forEach(k=>delete partOverrides[k]);
+  Object.keys(paramOverrides).forEach(k=>delete paramOverrides[k]);
+  Object.keys(colorOverrides).forEach(k=>delete colorOverrides[k]);
+  Object.keys(nameOverrides).forEach(k=>delete nameOverrides[k]);
+  // also reset multiplyColors back to white
+  if(currentModel){
+    const dr = getRaw(currentModel).drawables;
+    if(dr && dr.multiplyColors){
+      for(let i=0;i<dr.count;i++){
+        dr.multiplyColors[i*4]   = 1;
+        dr.multiplyColors[i*4+1] = 1;
+        dr.multiplyColors[i*4+2] = 1;
+        dr.multiplyColors[i*4+3] = 1;
+      }
+    }
+    buildPanels();
+  }
+});
+
+document.getElementById('centerBtn').addEventListener('click', () => {
+  document.getElementById('posx').value = 0;
+  document.getElementById('posy').value = 0;
+  document.getElementById('scale').value = 0.4;
+  fitModel();
+});
+
+// --- moc3 offset search & patching ---------------------------------------
+function findFloatSequence(buf, sequence, eps = 1e-6, startOffset = 0){
+  const view = new DataView(buf);
+  const total = buf.byteLength;
+  const n = sequence.length;
+  const last = total - n*4;
+  outer: for(let off = startOffset; off <= last; off += 4){
+    for(let i = 0; i < n; i++){
+      const v = view.getFloat32(off + i*4, true);
+      const t = sequence[i];
+      if(v === t) continue;
+      if(Math.abs(v - t) > eps) continue outer;
+    }
+    return off;
+  }
+  return -1;
+}
+
+function isSequenceUnique(buf, sequence){
+  const first = findFloatSequence(buf, sequence);
+  if(first < 0) return false;
+  const second = findFloatSequence(buf, sequence, 1e-6, first + 4);
+  return second < 0;
+}
+
+function locateMocOffsets(buf, defaults){
+  const partIdsLoc = locateIdsRegion(buf, defaults.partIds);
+  // Search PART_OPACITIES right after PART_IDS section (typical moc3 layout).
+  // If part opacities are all the same value (e.g. all 1.0), an unconstrained search
+  // would match elsewhere (drawable opacities etc).
+  let partOff = -1;
+  if(partIdsLoc){
+    const after = partIdsLoc.offset + defaults.partIds.length * partIdsLoc.slotSize;
+    partOff = findFloatSequence(buf, defaults.partOpacities, 1e-6, after);
+  }
+  if(partOff < 0) partOff = findFloatSequence(buf, defaults.partOpacities);
+
+  // Locate parameter section via PARAMETER_IDS, then derive max/min/default offsets
+  // by their fixed layout (three N-float arrays back-to-back, in order: max, min, default).
+  // Verify against runtime arrays so we never write into the wrong slot.
+  const paramIdsLoc = locateIdsRegion(buf, defaults.paramIds);
+  let paramOff = -1;
+  if(paramIdsLoc){
+    paramOff = locateParamDefaultOffset(buf, paramIdsLoc, defaults);
+  }
+  if(paramOff < 0){
+    // Fallback: legacy fuzzy search (kept so we still try something on unusual layouts)
+    paramOff = findFloatSequence(buf, defaults.paramDefaults, 1e-6,
+      partIdsLoc ? partIdsLoc.offset + defaults.partIds.length * partIdsLoc.slotSize : 0);
+    if(paramOff < 0) paramOff = findFloatSequence(buf, defaults.paramDefaults);
+  }
+
+  if(partOff < 0 || paramOff < 0) return null;
+  return {
+    partOpacityOffset: partOff,
+    paramDefaultOffset: paramOff,
+    partIds: partIdsLoc,
+    paramIds: paramIdsLoc,
+    partOpacityUnique: isSequenceUnique(buf, defaults.partOpacities),
+    paramDefaultUnique: isSequenceUnique(buf, defaults.paramDefaults),
+  };
+}
+
+// In moc3 v3+, the parameter section stores three parallel float arrays
+// after PARAMETER_IDS, in the order: max, min, default. We scan forward
+// from the end of PARAMETER_IDS in 4-byte steps until we find an offset
+// where all three runtime arrays match — that pins the default offset
+// unambiguously even when individual arrays would have multiple matches.
+function locateParamDefaultOffset(buf, idsLoc, defaults){
+  const view = new DataView(buf);
+  const N = defaults.paramIds.length;
+  const after = idsLoc.offset + N * idsLoc.slotSize;
+  const blockBytes = N * 4;
+  const last = buf.byteLength - 3 * blockBytes;
+  const eps = 1e-6;
+  const matches = (off, arr) => {
+    for(let i = 0; i < N; i++){
+      const v = view.getFloat32(off + i*4, true);
+      const t = arr[i];
+      if(v === t) continue;
+      if(Math.abs(v - t) > eps) return false;
+    }
+    return true;
+  };
+  for(let off = after; off <= last; off += 4){
+    if(!matches(off, defaults.paramMaxs)) continue;
+    if(!matches(off + blockBytes, defaults.paramMins)) continue;
+    if(!matches(off + 2*blockBytes, defaults.paramDefaults)) continue;
+    return off + 2*blockBytes;
+  }
+  return -1;
+}
+
+function locateIdsRegion(buf, ids){
+  // moc3 stores IDs in fixed-size slots. Try common slot sizes.
+  const u8 = new Uint8Array(buf);
+  const enc = new TextEncoder();
+  const total = buf.byteLength;
+  const id0 = enc.encode(ids[0]);
+  if(ids.length === 0) return null;
+  for(const slot of [64, 32, 128, 256]){
+    if(slot < id0.length + 1) continue;
+    const lastStart = total - ids.length * slot;
+    outer: for(let off = 0; off <= lastStart; off += 4){
+      for(let i = 0; i < id0.length; i++){
+        if(u8[off + i] !== id0[i]) continue outer;
+      }
+      if(u8[off + id0.length] !== 0) continue outer;
+      for(let k = 1; k < ids.length; k++){
+        const pos = off + k * slot;
+        const t = enc.encode(ids[k]);
+        if(t.length >= slot) continue outer;
+        for(let i = 0; i < t.length; i++){
+          if(u8[pos + i] !== t[i]) continue outer;
+        }
+        if(u8[pos + t.length] !== 0) continue outer;
+      }
+      return { offset: off, slotSize: slot };
+    }
+  }
+  return null;
+}
+
+function downloadBlob(blob, filename){
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = filename;
+  document.body.appendChild(a);
+  a.click();
+  setTimeout(() => { URL.revokeObjectURL(a.href); a.remove(); }, 100);
+}
+
+document.getElementById('saveMocBtn').addEventListener('click', () => {
+  if(!currentModel || !currentMocBuffer){ log('Load a model first.'); return; }
+  if(!mocOffsets){ log('moc3 offsets not located — cannot patch this file.'); return; }
+  const raw = getRaw(currentModel);
+  const out = currentMocBuffer.slice(0); // clone
+  const view = new DataView(out);
+
+  // Patch part opacities: use override if set, else current (original) value
+  for(let i = 0; i < raw.parts.count; i++){
+    const id = raw.parts.ids[i];
+    const v = (id in partOverrides) ? partOverrides[id] : originalDefaults.partOpacities[i];
+    view.setFloat32(mocOffsets.partOpacityOffset + i*4, v, true);
+  }
+  // Patch parameter default values
+  for(let i = 0; i < raw.parameters.count; i++){
+    const id = raw.parameters.ids[i];
+    const v = (id in paramOverrides) ? paramOverrides[id] : originalDefaults.paramDefaults[i];
+    view.setFloat32(mocOffsets.paramDefaultOffset + i*4, v, true);
+  }
+  // Patch part IDs (renames)
+  if(Object.keys(nameOverrides).length){
+    if(!mocOffsets.partIds){
+      log('⚠ Could not locate PART_IDS section — names not patched.');
+    } else {
+      const u8 = new Uint8Array(out);
+      const enc = new TextEncoder();
+      const { offset, slotSize } = mocOffsets.partIds;
+      for(let i = 0; i < raw.parts.count; i++){
+        const orig = originalDefaults.partIds[i];
+        const newId = nameOverrides[orig] || orig;
+        const bytes = enc.encode(newId);
+        if(bytes.length >= slotSize){
+          log(`⚠ "${newId}" too long for ${slotSize-1} byte slot — skipped.`);
+          continue;
+        }
+        const slotOff = offset + i * slotSize;
+        for(let k = 0; k < slotSize; k++) u8[slotOff + k] = 0;
+        for(let k = 0; k < bytes.length; k++) u8[slotOff + k] = bytes[k];
+      }
+    }
+  }
+
+  const fname = currentMocFileName.replace(/\.moc3$/i, '') + '.patched.moc3';
+  downloadBlob(new Blob([out], {type:'application/octet-stream'}), fname);
+  log('Saved ' + fname);
+});
+
+document.getElementById('savePresetBtn').addEventListener('click', () => {
+  const preset = {
+    moc3: currentMocFileName,
+    parts: { ...partOverrides },
+    parameters: { ...paramOverrides },
+    colors: { ...colorOverrides },
+    names: { ...nameOverrides },
+  };
+  downloadBlob(new Blob([JSON.stringify(preset, null, 2)], {type:'application/json'}),
+    (currentMocFileName.replace(/\.moc3$/i,'') || 'preset') + '.preset.json');
+});
+
+document.getElementById('loadPresetInput').addEventListener('change', async e => {
+  const f = e.target.files[0];
+  if(!f) return;
+  const preset = JSON.parse(await f.text());
+  Object.assign(partOverrides, preset.parts || {});
+  Object.assign(paramOverrides, preset.parameters || {});
+  Object.assign(colorOverrides, preset.colors || {});
+  Object.assign(nameOverrides, preset.names || {});
+  if(currentModel) buildPanels();  // rebuild to reflect modified state
+  // re-apply UI values from overrides
+  document.querySelectorAll('#parts .item-card, #params .item-card').forEach(card => {
+    const id = card.querySelector('.name').getAttribute('title');
+    if(id in partOverrides){
+      const v = partOverrides[id];
+      const rng = card.querySelector('input[type=range]');
+      const num = card.querySelector('input[type=number]');
+      const chk = card.querySelector('input[type=checkbox]');
+      if(rng){ rng.value = v; }
+      if(num){ num.value = (+v).toFixed(2); }
+      if(chk){ chk.checked = v > 0.5; }
+      card.classList.add('modified');
+    }
+    if(id in paramOverrides){
+      const v = paramOverrides[id];
+      card.querySelector('input[type=range]').value = v;
+      card.querySelector('input[type=number]').value = (+v).toFixed(2);
+      card.classList.add('modified');
+    }
+    if(id in colorOverrides){
+      const c = colorOverrides[id];
+      const col = card.querySelector('input[type=color]');
+      if(col) col.value = rgbToHex(c[0], c[1], c[2]);
+      card.classList.add('modified');
+    }
+  });
+  log('Preset loaded.');
+});
+
+document.getElementById('namesFile').addEventListener('change', async e => {
+  const f = e.target.files[0];
+  if(!f) return;
+  try {
+    namesData = JSON.parse(await f.text());
+    log(`Names loaded: ${namesData.drawables?.length||0} drawables, ${namesData.parts?.length||0} parts.`);
+  } catch(err){ log('Invalid names JSON: ' + err.message); }
+});
+
+function longestCommonPrefix(strs){
+  if(!strs.length) return '';
+  let p = strs[0];
+  for(const s of strs.slice(1)){
+    while(s.indexOf(p) !== 0){ p = p.slice(0, -1); if(!p) return ''; }
+  }
+  return p;
+}
+
+function trimToBoundary(s){
+  // trim trailing chars to last camelCase / underscore / digit boundary so we don't end mid-word
+  if(s.length < 2) return s;
+  const m = s.match(/^(.*?)(?:[A-Z][a-z]*|[a-z]+|_|\d+)?$/);
+  return s.replace(/[a-z]+$/, '').replace(/_+$/, '') || s;
+}
+
+document.getElementById('autoNamePartsBtn').addEventListener('click', () => {
+  if(!currentModel){ log('Load a model first.'); return; }
+  if(!namesData || !namesData.drawables){ log('Load names JSON first.'); return; }
+  const raw = getRaw(currentModel);
+  const dr = raw.drawables;
+  if(!dr || !dr.parentPartIndices){ log('Drawables have no parentPartIndices.'); return; }
+  const drawableNames = namesData.drawables;
+  if(drawableNames.length !== dr.count){
+    log(`⚠ Names JSON has ${drawableNames.length} drawables but model has ${dr.count}. Mismatch — naming may be wrong.`);
+  }
+
+  // Group drawable names by parent part index
+  const partDrawables = new Map();
+  for(let di = 0; di < dr.count; di++){
+    const pi = dr.parentPartIndices[di];
+    if(pi < 0) continue;
+    const name = drawableNames[di];
+    if(!name) continue;
+    if(!partDrawables.has(pi)) partDrawables.set(pi, []);
+    partDrawables.get(pi).push(name);
+  }
+
+  let renamed = 0;
+  for(let pi = 0; pi < raw.parts.count; pi++){
+    const origId = raw.parts.ids[pi];
+    const dnames = partDrawables.get(pi);
+    if(!dnames || !dnames.length) continue;
+    let suggested;
+    if(dnames.length === 1){
+      suggested = dnames[0];
+    } else {
+      const lcp = longestCommonPrefix(dnames);
+      // strip dangling lowercase or numeric tail to land on a clean word boundary
+      let trimmed = lcp.replace(/(?:[a-z]+|\d+)$/, '');
+      if(!trimmed) trimmed = lcp;
+      // if trimmed too short fall back to first drawable
+      suggested = trimmed.length >= 3 ? trimmed : dnames[0];
+    }
+    if(suggested && suggested !== origId){
+      nameOverrides[origId] = suggested;
+      renamed++;
+    }
+  }
+  log(`Auto-named ${renamed} parts.`);
+  if(currentModel) buildPanels();
+});
+
+document.getElementById('snapBtn').addEventListener('click', () => {
+  app.renderer.render(app.stage);
+  const url = app.view.toDataURL('image/png');
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = 'live2d-snapshot-' + Date.now() + '.png';
+  a.click();
+});
+</script>
+</body>
+</html>

@@ -1,0 +1,91 @@
+<!doctype html>
+<html lang="it">
+<head>
+<meta charset="utf-8">
+<title>Omega Chat</title>
+<link rel="stylesheet" href="styles.css">
+</head>
+<body>
+<div id="app">
+  <!-- LEFT: chat -->
+  <div class="panel chat-panel">
+    <div class="section section-header-bar">
+      <span>Chat</span>
+      <button class="ghost" id="clearChatBtn" title="Pulisci conversazione">clear</button>
+    </div>
+    <div id="messages" class="messages"></div>
+    <div class="composer">
+      <textarea id="chatInput" rows="2" placeholder="Scrivi a Omega... (Invio per inviare, Shift+Invio per a capo)"></textarea>
+      <button id="sendBtn">Invia</button>
+    </div>
+  </div>
+
+  <!-- CENTER: live2d stage -->
+  <div id="stage">
+    <div class="stage-toolbar">
+      <button class="ghost" id="resetLive2DBtn" title="Reset al pose idle">reset pose</button>
+    </div>
+    <div id="stageStatus" class="stage-status">caricamento...</div>
+  </div>
+
+  <!-- RIGHT: debug -->
+  <div class="panel debug-panel">
+    <div class="section">
+      <div class="section-header">Modello Ollama</div>
+      <select id="modelSelect"></select>
+      <label class="field-row"><span>reasoning</span>
+        <select id="reasoningSelect">
+          <option value="low" selected>low</option>
+          <option value="medium">medium</option>
+          <option value="high">high</option>
+        </select>
+      </label>
+      <label class="field-row"><span>think</span>
+        <input type="checkbox" id="thinkChk">
+      </label>
+      <button class="secondary" id="reloadPromptBtn" title="Ricarica system_prompt.txt dal server (lato server: ricarica al prossimo invio)">ricarica system prompt</button>
+    </div>
+    <div class="section">
+      <div class="section-header">TTS (voce)</div>
+      <label class="field-row"><span>abilita</span>
+        <input type="checkbox" id="ttsChk">
+      </label>
+      <label class="field-row"><span>voce</span>
+        <select id="ttsVoiceSelect"></select>
+      </label>
+      <label class="field-row"><span>velocità</span>
+        <input type="number" id="ttsSpeed" min="0.5" max="2.0" step="0.05" value="1.0">
+      </label>
+    </div>
+    <div class="section">
+      <div class="section-header"><span>Abbigliamento</span><button class="ghost" id="outfitResetBtn" title="Ripristina outfit predefinito">reset</button></div>
+      <div id="outfitControls" class="outfit-grid"></div>
+    </div>
+    <div class="section">
+      <div class="section-header"><span>Action log</span><span class="count" id="actionLogCount">0</span></div>
+      <div id="actionLog" class="action-log"></div>
+    </div>
+    <div class="section">
+      <div class="section-header"><span>Raw stream</span><button class="ghost" id="clearRawBtn">clear</button></div>
+      <div id="rawStream" class="action-log small"></div>
+    </div>
+    <div class="section">
+      <div class="section-header"><span>Parametri mancanti</span></div>
+      <div id="missingParams" class="action-log small"></div>
+    </div>
+  </div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/marked@12.0.2/marked.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/dompurify@3.0.11/dist/purify.min.js"></script>
+<script src="https://cubism.live2d.com/sdk-web/cubismcore/live2dcubismcore.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/pixi.js@6.5.10/dist/browser/pixi.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/pixi-live2d-display@0.4.0/dist/cubism4.min.js"></script>
+<script src="js/live2d.js"></script>
+<script src="js/actions.js"></script>
+<script src="js/outfit.js"></script>
+<script src="js/ollama.js"></script>
+<script src="js/tts.js"></script>
+<script src="js/app.js"></script>
+</body>
+</html>

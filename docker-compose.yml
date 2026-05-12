@@ -1,0 +1,81 @@
+# Omega Chat — three-service stack.
+#
+#   php     : serves webapp/ on :8000, proxies /api/chat to ollama
+#   ollama  : LLM backend on :11434 (internal), pulls models listed below
+#   kokoro  : TTS sidecar on :8001 (internal; browser reaches it via PHP proxy)
+#
+# Run:    docker compose up --build
+# Open:   http://localhost:8000
+#
+# NVIDIA GPU is enabled for the ollama service. If you don't have an NVIDIA
+# host / nvidia-container-toolkit installed, comment out the `deploy` block
+# under `ollama`.
+
+services:
+  ollama:
+    # Only started when you explicitly request the "local" profile:
+    #   docker compose --profile local up --build
+    # Leave it out and set OLLAMA_URL in .env (or the environment) to point
+    # at a remote / bare-metal Ollama instance instead.
+    profiles: [local]
+    build:
+      context: .
+      dockerfile: docker/ollama.Dockerfile
+      network: host
+    container_name: omega-ollama
+    restart: unless-stopped
+    environment:
+      # Comma-separated list of models pulled on first boot. Edit this to
+      # change which models the chat / RAG embedding use. Pulls are idempotent.
+      OLLAMA_MODELS_TO_PULL: "qwen2.5:7b,nomic-embed-text"
+    volumes:
+      - ollama_data:/root/.ollama
+    networks: [omega]
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://127.0.0.1:11434/api/tags"]
+      interval: 10s
+      timeout: 3s
+      retries: 30
+      start_period: 30s
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: all
+              capabilities: [gpu]
+
+  kokoro:
+    build:
+      context: .
+      dockerfile: docker/kokoro.Dockerfile
+      network: host
+    container_name: omega-kokoro
+    restart: unless-stopped
+    volumes:
+      - kokoro_cache:/root/.cache
+    networks: [omega]
+
+  php:
+    build:
+      context: .
+      dockerfile: docker/php.Dockerfile
+      network: host
+    container_name: omega-php
+    restart: unless-stopped
+    ports:
+      - "8000:8000"
+    environment:
+      # Override via .env or the shell environment to point at a remote Ollama.
+      # When running --profile local this can stay as-is (resolves inside the
+      # docker network); for the VM-only stack set it to the bare-metal IP.
+      OLLAMA_URL: "${OLLAMA_URL:-http://ollama:11434}"
+      KOKORO_URL: "http://kokoro:8001"
+    networks: [omega]
+
+networks:
+  omega:
+
+volumes:
+  ollama_data:
+  kokoro_cache:

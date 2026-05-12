@@ -1,0 +1,11 @@
+.git
+.gitignore
+Junk/
+live2d_raw/
+tools/
+viewer/
+tts/.venv/
+**/__pycache__/
+**/*.pyc
+.DS_Store
+*.log
