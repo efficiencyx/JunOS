@@ -17,7 +17,7 @@ window.Actions = (function () {
 
   // ---- Parsing ------------------------------------------------------------
   // Match: [ACTION:name] or [ACTION:name|k=v|k=v]
-  const ACTION_RE = /\[ACTION:\s*([a-zA-Z_][\w]*)\s*((?:\|[^=\]|]+=[^|\]]*)*)\s*\]/gi;
+  const ACTION_RE = /\[\s*ACTION\s*:\s*([a-zA-Z_][\w]*)\s*((?:\|[^=\]|]+=[^|\]]*)*)\s*\]/gi;
 
   function parseActions(text) {
     const actions = [];

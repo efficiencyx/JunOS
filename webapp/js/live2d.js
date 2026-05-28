@@ -19,7 +19,9 @@ window.Live2D = (function () {
   const forcedPartOpacity = new Map(); // partId -> opacity (re-stamped each tick)
 
   let userZoom = 1;
+  let userOffsetX = 0;
   let userOffsetY = 0;
+  let hasUserPos = false;   // true once the user drags her or a saved position loads
 
   let lastTickMs = performance.now();
   let onMissingParam = null;        // callback(name)
@@ -91,11 +93,11 @@ window.Live2D = (function () {
 
   async function init({ stageEl, onStatus }) {
     onStatus = onStatus || (() => {});
-    onStatus('Inizializzo PIXI...');
+    onStatus('Initializing PIXI...');
 
     app = new PIXI.Application({
       resizeTo: stageEl,
-      backgroundColor: 0x0e1014,
+      backgroundAlpha: 0,          // transparent canvas: model floats on the page background
       antialias: true,
       autoDensity: true,
       resolution: window.devicePixelRatio || 1,
@@ -110,7 +112,7 @@ window.Live2D = (function () {
     // per-drawable in our drawMesh hook below.
     installColorShaderPatch(app.renderer.gl);
 
-    onStatus('Carico assets Live2D...');
+    onStatus('Loading Live2D assets...');
     const [mocUrl, t0, t1, t2] = await Promise.all([
       fetchAsDataURL('assets/interaction_model.moc3', 'application/octet-stream'),
       fetchAsDataURL('assets/00_texture_00.png', 'image/png'),
@@ -139,7 +141,7 @@ window.Live2D = (function () {
       FileReferences: { Moc: mocUrl, Textures: textures },
     });
 
-    onStatus('Costruisco il modello...');
+    onStatus('Building model...');
     model = await Live2DModel.from(settings, { autoInteract: false, autoUpdate: true });
     app.stage.addChild(model);
 
@@ -166,21 +168,55 @@ window.Live2D = (function () {
       currentValues.set(id, raw.parameters.defaultValues[i]);
     }
 
+    loadPos();
     fitModel();
     window.addEventListener('resize', fitModel);
 
-    stageEl.addEventListener('wheel', (e) => {
+    // Zoom (shift+wheel) / vertical pan (wheel) while the pointer is over her.
+    // The canvas is click-through, so we listen on the window and hit-test.
+    window.addEventListener('wheel', (e) => {
+      if (!isOverModel(e.clientX, e.clientY)) return;
       e.preventDefault();
       if (e.shiftKey) {
-        const desired = Math.max(0.2, Math.min(5, userZoom * Math.exp(-e.deltaY * 0.001)));
+        const desired = Math.max(0.2, Math.min(5, userZoom * Math.exp(-e.deltaY * 0.00025)));
         const factor = desired / userZoom;
         userZoom = desired;
+        userOffsetX *= factor;
         userOffsetY *= factor;
       } else {
-        userOffsetY -= e.deltaY;
+        userOffsetY -= e.deltaY * 0.25;
       }
+      hasUserPos = true;
       fitModel();
+      savePos();
     }, { passive: false });
+
+    // Drag to move her anywhere on the page.
+    let dragging = false, dragPX = 0, dragPY = 0, dragOX = 0, dragOY = 0;
+    window.addEventListener('pointerdown', (e) => {
+      if (e.button !== 0) return;
+      if (isInteractiveTarget(e.target)) return;
+      if (!isOverModel(e.clientX, e.clientY)) return;
+      dragging = true;
+      dragPX = e.clientX; dragPY = e.clientY;
+      dragOX = userOffsetX; dragOY = userOffsetY;
+      hasUserPos = true;
+      document.body.classList.add('l2d-dragging');
+    });
+    window.addEventListener('pointermove', (e) => {
+      if (!dragging) return;
+      userOffsetX = dragOX + (e.clientX - dragPX);
+      userOffsetY = dragOY + (e.clientY - dragPY);
+      fitModel();
+    });
+    const endDrag = () => {
+      if (!dragging) return;
+      dragging = false;
+      document.body.classList.remove('l2d-dragging');
+      savePos();
+    };
+    window.addEventListener('pointerup', endDrag);
+    window.addEventListener('pointercancel', endDrag);
 
     app.ticker.add(tick);
 
@@ -307,30 +343,73 @@ window.Live2D = (function () {
       unscreen(name) { forcedScreenColor.delete(name); },
     };
 
-    onStatus(`OK — ${raw.parameters.count} param, ${raw.parts.count} parti`);
+    onStatus(`OK — ${raw.parameters.count} params, ${raw.parts.count} parts`);
     return { paramIds: Array.from(paramIndex.keys()) };
   }
 
   function fitModel() {
     if (!model || !app) return;
-    const stageW = app.view.width / (window.devicePixelRatio || 1);
-    const stageH = app.view.height / (window.devicePixelRatio || 1);
+    const dpr = window.devicePixelRatio || 1;
+    const stageW = app.view.width / dpr;
+    const stageH = app.view.height / dpr;
     const margin = 0.92;
     const sx = (stageW * margin) / model.internalModel.width;
     const sy = (stageH * margin) / model.internalModel.height;
     const s = Math.min(sx, sy) * userZoom;
+    const modelW = model.internalModel.width * s;
     const modelH = model.internalModel.height * s;
-    const maxOffset = Math.max(0, (modelH - stageH) / 2 + stageH * 0.4);
-    userOffsetY = Math.max(-maxOffset, Math.min(maxOffset, userOffsetY));
+    const baseX = stageW / 2 - modelW / 2;
+    const baseY = stageH / 2 - modelH / 2;
+    // Until the user positions her, float to the right of the centered chat.
+    if (!hasUserPos) { userOffsetX = stageW * 0.26; userOffsetY = 0; }
+    // Keep at least KEEP px of the model on screen in every direction.
+    const KEEP = 120;
+    const mx = Math.max(-modelW + KEEP, Math.min(stageW - KEEP, baseX + userOffsetX));
+    const my = Math.max(-modelH + KEEP, Math.min(stageH - KEEP, baseY + userOffsetY));
+    userOffsetX = mx - baseX;
+    userOffsetY = my - baseY;
     model.scale.set(s);
-    model.x = stageW / 2 - (model.internalModel.width * s) / 2;
-    model.y = stageH / 2 - modelH / 2 + userOffsetY;
+    model.x = mx;
+    model.y = my;
   }
 
   function clamp(id, v) {
     const lo = paramMin.get(id), hi = paramMax.get(id);
     if (lo === undefined) return v;
     return Math.max(lo, Math.min(hi, v));
+  }
+
+  function isOverModel(clientX, clientY) {
+    if (!model || !app) return false;
+    const r = app.view.getBoundingClientRect();
+    const x = clientX - r.left, y = clientY - r.top;
+    const b = model.getBounds();
+    return x >= b.x && x <= b.x + b.width && y >= b.y && y <= b.y + b.height;
+  }
+
+  // Don't start a drag when the press lands on an actual UI control she overlaps.
+  function isInteractiveTarget(t) {
+    return !!(t && t.closest && t.closest(
+      'button, a, input, textarea, select, .composer, .conv-sidebar, .settings-drawer, .app-header, .prompt-chips'
+    ));
+  }
+
+  function savePos() {
+    try {
+      localStorage.setItem('l2d.pos', JSON.stringify({ x: userOffsetX, y: userOffsetY, z: userZoom }));
+    } catch (e) {}
+  }
+
+  function loadPos() {
+    try {
+      const s = JSON.parse(localStorage.getItem('l2d.pos') || 'null');
+      if (s && typeof s.x === 'number') {
+        userOffsetX = s.x;
+        userOffsetY = typeof s.y === 'number' ? s.y : 0;
+        if (s.z) userZoom = s.z;
+        hasUserPos = true;
+      }
+    } catch (e) {}
   }
 
   function setOnMissingParam(cb) { onMissingParam = cb; }

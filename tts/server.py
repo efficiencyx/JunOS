@@ -1,5 +1,5 @@
 """
-Local TTS sidecar for Omega Chat. Wraps Kokoro-82M behind a small FastAPI
+Local TTS sidecar for Jun OS. Wraps Kokoro-82M behind a small FastAPI
 server on :8001. The webapp's js/tts.js calls /tts with a sentence at a
 time and plays the returned WAV through an AudioContext.
 
@@ -18,12 +18,21 @@ Run:
 import io
 import logging
 import os
+from typing import Annotated
 
 import numpy as np
 import soundfile as sf
-from fastapi import FastAPI, HTTPException, Response
+from fastapi import FastAPI, HTTPException, Request, Response
 from fastapi.middleware.cors import CORSMiddleware
-from pydantic import BaseModel, Field
+from fastapi.responses import JSONResponse
+
+try:
+    # Pydantic v2
+    from pydantic import BaseModel, Field, StringConstraints
+    _pydantic_v2 = True
+except ImportError:
+    from pydantic import BaseModel, Field, constr  # type: ignore[assignment]
+    _pydantic_v2 = False
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s: %(message)s")
 log = logging.getLogger("tts")
@@ -58,19 +67,51 @@ VOICES = [
 DEFAULT_VOICE = "af_heart"
 SAMPLE_RATE = 24000
 
+# CORS origin from env — restrict to the actual frontend origin in production.
+_cors_origin = os.environ.get("CORS_ORIGIN", "http://nginx")
+
 app = FastAPI()
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
-    allow_methods=["*"],
-    allow_headers=["*"],
+    allow_origins=[_cors_origin],
+    allow_methods=["POST", "GET"],
+    allow_headers=["Content-Type"],
 )
 
 
-class TTSReq(BaseModel):
-    text: str
-    voice: str = DEFAULT_VOICE
-    speed: float = Field(default=1.0, ge=0.5, le=2.0)
+# ── Global exception handler — never leak tracebacks to clients ───────────────
+
+@app.exception_handler(Exception)
+async def global_exception_handler(request: Request, exc: Exception) -> JSONResponse:
+    log.exception("unhandled exception on %s %s", request.method, request.url.path)
+    return JSONResponse({"error": "synthesis_failed"}, status_code=500)
+
+
+# ── Request model ─────────────────────────────────────────────────────────────
+
+if _pydantic_v2:
+    class TTSReq(BaseModel):
+        text: Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=2000)]
+        voice: str = DEFAULT_VOICE
+        speed: float = Field(default=1.0, ge=0.5, le=2.0)
+else:
+    class TTSReq(BaseModel):  # type: ignore[no-redef]
+        text: constr(strip_whitespace=True, min_length=1, max_length=2000)  # type: ignore[valid-type]
+        voice: str = DEFAULT_VOICE
+        speed: float = Field(default=1.0, ge=0.5, le=2.0)
+
+
+@app.on_event("startup")
+def prewarm():
+    # Synthesize a tiny utterance so the Kokoro pipeline + default voice are
+    # loaded before the first real request, avoiding the cold-start delay.
+    try:
+        pipeline = get_pipeline()
+        for _gs, _ps, _audio in pipeline("Hi.", voice=DEFAULT_VOICE, speed=1.0):
+            pass
+        log.info("pre-warm done (voice=%s)", DEFAULT_VOICE)
+    except Exception:
+        log.exception("pre-warm failed (non-fatal)")
 
 
 @app.get("/health")
@@ -85,7 +126,7 @@ def voices():
 
 @app.post("/tts")
 def tts(req: TTSReq):
-    text = (req.text or "").strip()
+    text = req.text  # already stripped by StringConstraints / constr
     if not text:
         return Response(status_code=204)
 

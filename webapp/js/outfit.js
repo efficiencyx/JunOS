@@ -109,9 +109,11 @@ window.Outfit = (function () {
 
   function save() {
     try { localStorage.setItem(STORAGE_KEY, JSON.stringify(state)); } catch (e) {}
+    if (window.Prefs) Prefs.pushToServer();
   }
   function saveColors() {
     try { localStorage.setItem(COLOR_KEY, JSON.stringify(colors)); } catch (e) {}
+    if (window.Prefs) Prefs.pushToServer();
   }
 
   function applyAll() {
@@ -212,7 +214,7 @@ window.Outfit = (function () {
     colorWrap.className = 'outfit-colors';
     const title = document.createElement('div');
     title.className = 'outfit-colors-title';
-    title.textContent = 'Colori';
+    title.textContent = 'Colors';
     colorWrap.appendChild(title);
 
     for (const g of COLOR_GROUPS) {
@@ -244,8 +246,8 @@ window.Outfit = (function () {
     const worn = ITEMS.filter(it => state[it.key]);
     const bare = ITEMS.filter(it => !state[it.key]);
     const phrase = (arr) => arr.map(it => it.label.toLowerCase()).join(', ');
-    if (worn.length === 0) return 'Jun is currently fully nude (wearing nothing).';
-    let s = `Jun is currently wearing: ${phrase(worn)}.`;
+    if (worn.length === 0) return 'You are currently fully nude (wearing nothing).';
+    let s = `You are currently wearing: ${phrase(worn)}.`;
     if (bare.length) s += ` Not wearing: ${phrase(bare)}.`;
     return s;
   }

@@ -1,0 +1,102 @@
+# omega-tls.conf.template — HTTPS with certbot (TLS_MODE=on)
+# Expanded by nginx 1.27 envsubst at container boot.
+
+limit_req_zone  $binary_remote_addr zone=api:10m   rate=10r/s;
+limit_conn_zone $binary_remote_addr zone=conns:10m;
+
+# ── HTTP: ACME challenge passthrough + redirect ───────────────────────────────
+server {
+    listen 80;
+    server_name ${DOMAIN};
+
+    server_tokens off;
+
+    # Let certbot webroot challenges through
+    location /.well-known/acme-challenge/ {
+        root /var/www/certbot;
+    }
+
+    # Everything else → HTTPS
+    location / {
+        return 301 https://${DOMAIN}$request_uri;
+    }
+}
+
+# ── HTTPS ─────────────────────────────────────────────────────────────────────
+server {
+    listen 443 ssl;
+    http2  on;
+    server_name ${DOMAIN};
+
+    server_tokens off;
+
+    ssl_certificate     /etc/letsencrypt/live/${DOMAIN}/fullchain.pem;
+    ssl_certificate_key /etc/letsencrypt/live/${DOMAIN}/privkey.pem;
+    ssl_protocols       TLSv1.2 TLSv1.3;
+    ssl_ciphers         HIGH:!aNULL:!MD5;
+    ssl_session_cache   shared:SSL:10m;
+
+    root  /var/www/omega;
+    index index.html;
+
+    client_max_body_size 16k;
+
+    # ── Security headers (HSTS included for TLS) ──────────────────────────────
+    add_header Strict-Transport-Security  "max-age=31536000; includeSubDomains" always;
+    add_header X-Content-Type-Options     "nosniff"                             always;
+    add_header X-Frame-Options            "DENY"                                always;
+    add_header Referrer-Policy            "strict-origin-when-cross-origin"     always;
+    add_header Permissions-Policy         "microphone=(), camera=(), geolocation=()" always;
+    add_header Content-Security-Policy    "default-src 'self'; script-src 'self' 'unsafe-eval' https://cdn.jsdelivr.net https://cubism.live2d.com; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; media-src 'self' blob:; connect-src 'self' data:; worker-src 'self' blob:; frame-ancestors 'none'; base-uri 'self'" always;
+
+    # ── Health probe ─────────────────────────────────────────────────────────
+    location = /health {
+        return 200 "ok";
+        add_header Content-Type text/plain;
+    }
+
+    # ── SSE chat endpoint — buffering MUST be off for incremental streaming ──
+    location = /api/chat.php {
+        limit_req zone=api burst=20 nodelay;
+        client_max_body_size 256k;
+
+        proxy_buffering     off;
+        fastcgi_buffering   off;
+        fastcgi_read_timeout 600s;
+        fastcgi_keep_conn   on;
+
+        add_header X-Accel-Buffering no always;
+
+        include fastcgi_params;
+        fastcgi_param SCRIPT_FILENAME /var/www/omega/api/chat.php;
+        fastcgi_pass  php:9000;
+    }
+
+    # ── TTS proxy ─────────────────────────────────────────────────────────────
+    location = /api/tts.php {
+        limit_req zone=api burst=10 nodelay;
+        client_max_body_size 16k;
+
+        include fastcgi_params;
+        fastcgi_param SCRIPT_FILENAME /var/www/omega/api/tts.php;
+        fastcgi_pass  php:9000;
+    }
+
+    # ── All other /api/*.php endpoints ────────────────────────────────────────
+    location ~ ^/api/.+\.php$ {
+        limit_req zone=api burst=10;
+        client_max_body_size 16k;
+
+        include fastcgi_params;
+        fastcgi_param SCRIPT_FILENAME /var/www/omega$fastcgi_script_name;
+        fastcgi_pass  php:9000;
+    }
+
+    # ── Block direct PHP access outside /api/ ─────────────────────────────────
+    location ~ \.php$ { return 404; }
+
+    # ── Static files ──────────────────────────────────────────────────────────
+    location / {
+        try_files $uri $uri/ =404;
+    }
+}
