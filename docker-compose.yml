@@ -1,23 +1,78 @@
-# Omega Chat — three-service stack.
+name: omega
+
+# One-command local dev:
+#   docker compose up -d
+# Production with auto-TLS (public domain required):
+#   DOMAIN=example.com EMAIL=ops@example.com TLS_MODE=on \
+#     docker compose --profile prod up -d
 #
-#   php     : serves webapp/ on :8000, proxies /api/chat to ollama
-#   ollama  : LLM backend on :11434 (internal), pulls models listed below
-#   kokoro  : TTS sidecar on :8001 (internal; browser reaches it via PHP proxy)
-#
-# Run:    docker compose up --build
-# Open:   http://localhost:8000
-#
-# NVIDIA GPU is enabled for the ollama service. If you don't have an NVIDIA
-# host / nvidia-container-toolkit installed, comment out the `deploy` block
-# under `ollama`.
+# NVIDIA GPU passthrough is wired on the ollama service.
+# If you don't have nvidia-container-toolkit installed, comment out the
+# `deploy` block under `ollama`.
 
 services:
+
+  # ── nginx (reverse proxy + static files) ───────────────────────────────────
+  nginx:
+    build:
+      context: .
+      dockerfile: docker/nginx.Dockerfile
+    container_name: omega-nginx
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+    environment:
+      DOMAIN:    "${DOMAIN:-localhost}"
+      TLS_MODE:  "${TLS_MODE:-off}"
+    volumes:
+      - letsencrypt:/etc/letsencrypt:ro
+      - certbot_webroot:/var/www/certbot:ro
+    depends_on:
+      php:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://127.0.0.1/health"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+      start_period: 10s
+    security_opt:
+      - "no-new-privileges:true"
+    networks: [omega]
+
+  # ── php-fpm (API endpoints) ─────────────────────────────────────────────────
+  php:
+    build:
+      context: .
+      dockerfile: docker/php.Dockerfile
+    container_name: omega-php
+    restart: unless-stopped
+    expose:
+      - "9000"
+    environment:
+      OLLAMA_URL: "${OLLAMA_URL:-http://ollama:11434}"
+      KOKORO_URL: "${KOKORO_URL:-http://kokoro:8001}"
+    volumes:
+      - omega_state:/var/lib/omega
+      - ./tools:/var/www/omega/tools:ro
+    depends_on:
+      ollama:
+        condition: service_healthy
+      kokoro:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "cgi-fcgi", "-bind", "-connect", "127.0.0.1:9000"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+      start_period: 15s
+    security_opt:
+      - "no-new-privileges:true"
+    networks: [omega]
+
+  # ── ollama (LLM backend — internal only) ────────────────────────────────────
   ollama:
-    # Only started when you explicitly request the "local" profile:
-    #   docker compose --profile local up --build
-    # Leave it out and set OLLAMA_URL in .env (or the environment) to point
-    # at a remote / bare-metal Ollama instance instead.
-    profiles: [local]
     build:
       context: .
       dockerfile: docker/ollama.Dockerfile
@@ -25,18 +80,22 @@ services:
     container_name: omega-ollama
     restart: unless-stopped
     environment:
-      # Comma-separated list of models pulled on first boot. Edit this to
-      # change which models the chat / RAG embedding use. Pulls are idempotent.
-      OLLAMA_MODELS_TO_PULL: "qwen2.5:7b,nomic-embed-text"
+      # Comma-separated list of models pulled on first boot.
+      # Pulls are idempotent — restarts don't re-download cached weights.
+      OLLAMA_MODELS_TO_PULL: "${OLLAMA_MODELS_TO_PULL:-hf.co/efficiencyx/jun-14b:Q4_K_M,nomic-embed-text}"
     volumes:
       - ollama_data:/root/.ollama
-    networks: [omega]
     healthcheck:
       test: ["CMD", "curl", "-fsS", "http://127.0.0.1:11434/api/tags"]
       interval: 10s
       timeout: 3s
       retries: 30
       start_period: 30s
+    security_opt:
+      - "no-new-privileges:true"
+    networks: [omega]
+    # NVIDIA GPU passthrough — requires nvidia-container-toolkit on the host.
+    # Comment out this `deploy` block if you don't have it installed.
     deploy:
       resources:
         reservations:
@@ -45,6 +104,7 @@ services:
               count: all
               capabilities: [gpu]
 
+  # ── kokoro (TTS sidecar — internal only) ────────────────────────────────────
   kokoro:
     build:
       context: .
@@ -52,30 +112,45 @@ services:
       network: host
     container_name: omega-kokoro
     restart: unless-stopped
+    environment:
+      CORS_ORIGIN: "${CORS_ORIGIN:-http://nginx}"
     volumes:
       - kokoro_cache:/root/.cache
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://127.0.0.1:8001/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 30
+      start_period: 300s
+    security_opt:
+      - "no-new-privileges:true"
     networks: [omega]
 
-  php:
+  # ── certbot (auto-TLS renewal — prod profile only) ──────────────────────────
+  certbot:
     build:
       context: .
-      dockerfile: docker/php.Dockerfile
-      network: host
-    container_name: omega-php
+      dockerfile: docker/certbot.Dockerfile
+    container_name: omega-certbot
+    profiles: [prod]
     restart: unless-stopped
-    ports:
-      - "8000:8000"
     environment:
-      # Override via .env or the shell environment to point at a remote Ollama.
-      # When running --profile local this can stay as-is (resolves inside the
-      # docker network); for the VM-only stack set it to the bare-metal IP.
-      OLLAMA_URL: "${OLLAMA_URL:-http://ollama:11434}"
-      KOKORO_URL: "http://kokoro:8001"
+      DOMAIN: "${DOMAIN:-localhost}"
+      EMAIL:  "${EMAIL:-admin@localhost}"
+    volumes:
+      - letsencrypt:/etc/letsencrypt
+      - certbot_webroot:/var/www/certbot
     networks: [omega]
 
-networks:
-  omega:
-
+# ── Volumes ──────────────────────────────────────────────────────────────────
 volumes:
   ollama_data:
   kokoro_cache:
+  omega_state:
+  letsencrypt:
+  certbot_webroot:
+
+# ── Network ──────────────────────────────────────────────────────────────────
+networks:
+  omega:
+    name: omega

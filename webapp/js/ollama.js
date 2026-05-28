@@ -7,9 +7,9 @@ window.Ollama = (function () {
     return r.json();
   }
 
-  // chat({messages, model}, {onToken, onDone, onError})
+  // chat({messages, model, conversation_id}, {onToken, onDone, onError})
   // Returns a function to abort.
-  function chat({ messages, model, reasoning, think, outfit_context }, { onToken, onDone, onError }) {
+  function chat({ messages, model, reasoning, think, outfit_context, conversation_id, idle, client_time }, { onToken, onDone, onError, onDebug }) {
     const ctrl = new AbortController();
 
     (async () => {
@@ -17,7 +17,7 @@ window.Ollama = (function () {
         const res = await fetch('api/chat.php', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ messages, model, reasoning, think, outfit_context }),
+          body: JSON.stringify({ messages, model, reasoning, think, outfit_context, conversation_id, idle, client_time }),
           signal: ctrl.signal,
         });
         if (!res.ok || !res.body) {
@@ -48,6 +48,7 @@ window.Ollama = (function () {
               try {
                 const obj = JSON.parse(payload);
                 if (obj.error) { onError && onError(new Error(obj.error)); continue; }
+                if (obj.debug) { onDebug && onDebug(obj.debug); continue; }
                 if (typeof obj.token === 'string') onToken && onToken(obj.token);
               } catch (e) { /* ignore parse errors */ }
             }

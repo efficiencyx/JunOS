@@ -1,5 +1,5 @@
 {
-  "_comment": "Mappa azioni semantiche -> parametri Live2D del modello interaction_model. Il frontend deve fare lerp dal valore corrente al target in 'duration' ms. Valori dei parametri sono nel range [-1,1] o [0,1] secondo le convenzioni Cubism standard. I parametri inesistenti vanno semplicemente ignorati.",
+  "_comment": "Maps semantic actions -> Live2D parameters of the interaction_model. The frontend must lerp from the current value to the target over 'duration' ms. Parameter values are in the [-1,1] or [0,1] range per standard Cubism conventions. Nonexistent parameters are simply ignored.",
 
   "look_at": {
     "user": {
@@ -72,10 +72,9 @@
   "blush": { "_param": "ParamBlush", "_scale": ["intensity"] },
 
   "lean": {
-    "left":    { "ParamBodyX": -1, "_scale": ["amount"] },
-    "right":   { "ParamBodyX":  1, "_scale": ["amount"] },
-    "forward": { "ParamBodyZ":  10, "_scale": ["amount"] },
-    "back":    { "ParamBodyZ": -10, "_scale": ["amount"] }
+    "left":    { "ParamHeadX": -0.4, "_scale": ["amount"] },
+    "right":   { "ParamHeadX":  0.4, "_scale": ["amount"] },
+    "back":    { "ParamHeadY":  0.4, "_scale": ["amount"] }
   },
   "idle": {
     "ParamHeadX": 0, "ParamHeadY": 0, "ParamHeadZ": 0,
@@ -90,7 +89,7 @@
     "sleepy":  { "_loop_param": "ParamBodyY", "_amplitude": 0.2, "_period_ms": 5000 }
   },
 
-  "_comment_arm_gesture": "ParamArmLGesture / ParamArmRGesture sono discreti: 1=point/rest, 2=open palm/wave, 3=intuition/smart moment.",
+  "_comment_arm_gesture": "ParamArmLGesture / ParamArmRGesture are discrete: 1=point/rest, 2=open palm/wave, 3=intuition/smart moment.",
   "wave": {
     "ParamArmRUp": 1, "ParamArmRGesture": 2,
     "_sequence": [
@@ -159,7 +158,7 @@
   }},
   "pillow":  { "_resolve": { "on": { "ParamPillow": 1 }, "off": { "ParamPillow": 0 } } },
 
-  "_comment_outfit": "Esclusioni: BOTTOM={skirt,pants,dress} mutuamente esclusivi; 'dress' esclude anche shirt/hoodie (è un capo intero). shirt+hoodie sono compatibili (felpa sopra maglietta). Underwear (bra, panties) e shoes sono indipendenti. 'skirt_up' e 'panties_aside' sono modificatori sullo stato corrente.",
+  "_comment_outfit": "Exclusions: BOTTOM={skirt,pants,dress} are mutually exclusive; 'dress' also excludes shirt/hoodie (it is a full outfit). shirt+hoodie are compatible (hoodie over t-shirt). Underwear (bra, panties) and shoes are independent. 'skirt_up' and 'panties_aside' are modifiers on the current state.",
   "outfit": {
     "_resolve": {
       "shirt.on":    { "ParamShirtEnabled": 1, "ParamDress2Enabled": 0 },

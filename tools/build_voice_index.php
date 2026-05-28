@@ -2,22 +2,27 @@
 /**
  * Build voice RAG index from bot_lines.txt.
  *
- * Usage:  php tools/build_voice_index.php
+ * Usage:  php tools/build_voice_index.php [--dry-run]
  *
  * Reads:  bot_lines.txt (repo root)
  * Writes: webapp/voice_corpus.txt   — one cleaned line per row
  *         webapp/voice_index.bin    — packed float32 vectors, row-aligned
  *         webapp/voice_meta.json    — {model, dim, count, generated_at}
  *
- * Requires Ollama running on localhost:11434 with nomic-embed-text pulled.
+ * Requires Ollama running (configurable via OLLAMA_URL env) with nomic-embed-text pulled.
+ *
+ * Options:
+ *   --dry-run   Print cleaned line count and exit before making any HTTP requests.
  */
 
 define('EMBEDDING_MODEL',  'nomic-embed-text');
-define('OLLAMA_EMBED_URL', 'http://localhost:11434/api/embeddings');
+define('OLLAMA_EMBED_URL', rtrim(getenv('OLLAMA_URL') ?: 'http://localhost:11434', '/') . '/api/embeddings');
 define('BOT_LINES_PATH',   __DIR__ . '/bot_lines.txt');
-define('CORPUS_OUT',       __DIR__ . '/../webapp/voice_corpus.txt');
-define('BIN_OUT',          __DIR__ . '/../webapp/voice_index.bin');
-define('META_OUT',         __DIR__ . '/../webapp/voice_meta.json');
+// Support both Docker (webapp/* copied to /var/www/omega/) and bare-metal layouts
+$webappDir = is_dir(__DIR__ . '/../webapp') ? __DIR__ . '/../webapp' : __DIR__ . '/..';
+define('CORPUS_OUT',       $webappDir . '/voice_corpus.txt');
+define('BIN_OUT',          $webappDir . '/voice_index.bin');
+define('META_OUT',         $webappDir . '/voice_meta.json');
 
 // ── helpers ──────────────────────────────────────────────────────────────────
 
@@ -105,6 +110,14 @@ $cleaned = array_values(array_unique($cleaned));
 
 $total = count($cleaned);
 echo "Cleaned corpus: {$total} lines (from " . count($raw) . " raw).\n";
+
+// ── dry-run early exit ────────────────────────────────────────────────────────
+
+$dryRun = in_array('--dry-run', $argv ?? [], true);
+if ($dryRun) {
+    echo "Dry-run mode: no HTTP requests will be made. Exiting.\n";
+    exit(0);
+}
 
 // ── embed ─────────────────────────────────────────────────────────────────────
 

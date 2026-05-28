@@ -60,7 +60,7 @@ window.TTS = (function () {
       if (!r.ok) throw new Error(`http ${r.status}`);
       return await r.json();
     } catch (e) {
-      onLog('warn', `TTS /voices fallita: ${e.message} (sidecar acceso?)`);
+      onLog('warn', `TTS /voices failed: ${e.message} (sidecar running?)`);
       return { voices: [], default: voice };
     }
   }
@@ -166,7 +166,7 @@ window.TTS = (function () {
       } catch (e) {
         if (e.name === 'AbortError') { job.status = 'cancelled'; return; }
         job.status = 'error';
-        onLog('warn', `TTS errore: ${e.message}`);
+        onLog('warn', `TTS error: ${e.message}`);
         pump();
       }
     })();

@@ -1,18 +1,21 @@
 <?php
-header('Content-Type: application/json');
-header('Cache-Control: no-cache');
+require_once __DIR__ . '/_lib.php';
 
-$ollamaUrl = rtrim(getenv('OLLAMA_URL') ?: 'http://localhost:11434', '/');
+header('Content-Type: application/json');
+header('Cache-Control: public, max-age=10');
+
+omega_rate_limit('models', 30, 60);
+
+$ollamaUrl = rtrim(omega_env('OLLAMA_URL', 'http://localhost:11434'), '/');
 $ch = curl_init($ollamaUrl . '/api/tags');
 curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
 curl_setopt($ch, CURLOPT_CONNECTTIMEOUT, 5);
 curl_setopt($ch, CURLOPT_TIMEOUT, 10);
 $res = curl_exec($ch);
 if ($res === false) {
-    http_response_code(502);
-    echo json_encode(['error' => 'ollama unreachable: ' . curl_error($ch)]);
+    omega_log(['msg' => 'ollama_tags_error', 'err' => curl_error($ch)]);
     curl_close($ch);
-    exit;
+    omega_json_error(502, 'upstream_unavailable');
 }
 curl_close($ch);
 
