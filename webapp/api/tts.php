@@ -5,9 +5,9 @@
 
 require_once __DIR__ . '/_lib.php';
 
-omega_require_user();
+require_user();
 
-$kokoroUrl = rtrim(omega_env('KOKORO_URL', 'http://localhost:8001'), '/');
+$kokoroUrl = rtrim(env_str('KOKORO_URL', 'http://localhost:8001'), '/');
 $action = $_GET['action'] ?? '';
 
 if ($action === 'voices') {
@@ -50,12 +50,11 @@ if ($action === 'voices') {
 
     if ($code >= 500) {
         http_response_code(502);
-        omega_log(['msg' => 'kokoro_voices_error', 'upstream_code' => $code]);
+        log_event(['msg' => 'kokoro_voices_error', 'upstream_code' => $code]);
         echo json_encode(['error' => 'tts_failed']);
         exit;
     }
 
-    // Store in cache
     if (function_exists('apcu_store')) {
         apcu_store($cacheKey, $res, 60);
     } else {
@@ -70,39 +69,29 @@ if ($action === 'voices') {
 }
 
 if ($action === 'tts') {
-    omega_require_post();
-    omega_require_content_type('application/json');
+    require_post();
+    require_content_type('application/json');
 
-    omega_rate_limit('tts', 60, 60);
+    rate_limit('tts', 60, 60);
 
-    $rawBody = omega_read_body(8 * 1024);
+    $rawBody = read_body(8 * 1024);
     $body = json_decode($rawBody, true);
+    if (!is_array($body)) fail(400, 'invalid_request');
 
-    if (!is_array($body)) {
-        omega_json_error(400, 'invalid_request');
-    }
-
-    // Validate text: non-empty string ≤ 2000 chars
     $text = $body['text'] ?? null;
     if (!is_string($text) || trim($text) === '' || strlen($text) > 2000) {
-        omega_json_error(400, 'invalid_request');
+        fail(400, 'invalid_request');
     }
 
-    // Validate voice: matches /^[a-z]{2}_[a-z]+$/
     $voice = $body['voice'] ?? null;
-    if ($voice !== null) {
-        if (!is_string($voice) || !preg_match('/^[a-z]{2}_[a-z]+$/', $voice)) {
-            omega_json_error(400, 'invalid_request');
-        }
+    if ($voice !== null && (!is_string($voice) || !preg_match('/^[a-z]{2}_[a-z]+$/', $voice))) {
+        fail(400, 'invalid_request');
     }
 
-    // Validate speed: float in [0.5, 2.0]
     $speed = $body['speed'] ?? null;
     if ($speed !== null) {
         $speed = filter_var($speed, FILTER_VALIDATE_FLOAT);
-        if ($speed === false || $speed < 0.5 || $speed > 2.0) {
-            omega_json_error(400, 'invalid_request');
-        }
+        if ($speed === false || $speed < 0.5 || $speed > 2.0) fail(400, 'invalid_request');
     }
 
     $ch = curl_init($kokoroUrl . '/tts');
@@ -125,8 +114,8 @@ if ($action === 'tts') {
     }
 
     if ($code >= 500) {
-        omega_log(['msg' => 'kokoro_tts_error', 'upstream_code' => $code]);
-        omega_json_error(502, 'tts_failed');
+        log_event(['msg' => 'kokoro_tts_error', 'upstream_code' => $code]);
+        fail(502, 'tts_failed');
     }
 
     http_response_code($code);

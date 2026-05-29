@@ -1,15 +1,14 @@
 <?php
-// Per-user preferences. GET returns the stored JSON object (or {}),
-// PUT replaces it. Body is opaque JSON capped at 16 KB so the frontend can
-// add new keys (theme, default model, reasoning level, …) without touching
-// the schema.
+// Per-user preferences blob. GET returns the stored JSON ({} if none), PUT
+// replaces it. The body is opaque (capped at 16 KB) so the frontend can stash
+// whatever keys it wants without a schema migration.
 require_once __DIR__ . '/_lib.php';
 
 header('Content-Type: application/json');
-omega_rate_limit('prefs', 60, 60);
+rate_limit('prefs', 60, 60);
 
-$user   = omega_require_user();
-$db     = omega_db();
+$user = require_user();
+$db = db();
 $method = $_SERVER['REQUEST_METHOD'];
 
 if ($method === 'GET') {
@@ -23,12 +22,10 @@ if ($method === 'GET') {
 }
 
 if ($method === 'PUT') {
-    $raw = omega_read_body(16 * 1024);
-    $parsed = json_decode($raw, true);
-    if (!is_array($parsed)) {
-        omega_json_error(400, 'invalid_request');
-    }
-    // Re-encode to canonicalise & strip any non-UTF-8 garbage.
+    $parsed = json_decode(read_body(16 * 1024), true);
+    if (!is_array($parsed)) fail(400, 'invalid_request');
+
+    // round-trip through json_encode to drop any non-UTF-8 junk
     $canonical = json_encode($parsed, JSON_UNESCAPED_UNICODE);
     $db->prepare(
         'INSERT INTO preferences (user_id, data) VALUES (?, ?)
@@ -38,4 +35,4 @@ if ($method === 'PUT') {
     exit;
 }
 
-omega_json_error(405, 'method_not_allowed');
+fail(405, 'method_not_allowed');
