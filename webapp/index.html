@@ -1,91 +1,325 @@
 <!doctype html>
-<html lang="it">
+<html lang="en">
 <head>
 <meta charset="utf-8">
-<title>Omega Chat</title>
-<link rel="stylesheet" href="styles.css">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Jun OS</title>
+<link rel="stylesheet" href="styles.css?v=14">
+<script src="js/boot-gate.js?v=1"></script>
 </head>
 <body>
-<div id="app">
-  <!-- LEFT: chat -->
-  <div class="panel chat-panel">
-    <div class="section section-header-bar">
-      <span>Chat</span>
-      <button class="ghost" id="clearChatBtn" title="Pulisci conversazione">clear</button>
-    </div>
-    <div id="messages" class="messages"></div>
-    <div class="composer">
-      <textarea id="chatInput" rows="2" placeholder="Scrivi a Omega... (Invio per inviare, Shift+Invio per a capo)"></textarea>
-      <button id="sendBtn">Invia</button>
-    </div>
-  </div>
 
-  <!-- CENTER: live2d stage -->
-  <div id="stage">
-    <div class="stage-toolbar">
-      <button class="ghost" id="resetLive2DBtn" title="Reset al pose idle">reset pose</button>
-    </div>
-    <div id="stageStatus" class="stage-status">caricamento...</div>
-  </div>
-
-  <!-- RIGHT: debug -->
-  <div class="panel debug-panel">
-    <div class="section">
-      <div class="section-header">Modello Ollama</div>
-      <select id="modelSelect"></select>
-      <label class="field-row"><span>reasoning</span>
-        <select id="reasoningSelect">
-          <option value="low" selected>low</option>
-          <option value="medium">medium</option>
-          <option value="high">high</option>
-        </select>
-      </label>
-      <label class="field-row"><span>think</span>
-        <input type="checkbox" id="thinkChk">
-      </label>
-      <button class="secondary" id="reloadPromptBtn" title="Ricarica system_prompt.txt dal server (lato server: ricarica al prossimo invio)">ricarica system prompt</button>
-    </div>
-    <div class="section">
-      <div class="section-header">TTS (voce)</div>
-      <label class="field-row"><span>abilita</span>
-        <input type="checkbox" id="ttsChk">
-      </label>
-      <label class="field-row"><span>voce</span>
-        <select id="ttsVoiceSelect"></select>
-      </label>
-      <label class="field-row"><span>velocità</span>
-        <input type="number" id="ttsSpeed" min="0.5" max="2.0" step="0.05" value="1.0">
-      </label>
-    </div>
-    <div class="section">
-      <div class="section-header"><span>Abbigliamento</span><button class="ghost" id="outfitResetBtn" title="Ripristina outfit predefinito">reset</button></div>
-      <div id="outfitControls" class="outfit-grid"></div>
-    </div>
-    <div class="section">
-      <div class="section-header"><span>Action log</span><span class="count" id="actionLogCount">0</span></div>
-      <div id="actionLog" class="action-log"></div>
-    </div>
-    <div class="section">
-      <div class="section-header"><span>Raw stream</span><button class="ghost" id="clearRawBtn">clear</button></div>
-      <div id="rawStream" class="action-log small"></div>
-    </div>
-    <div class="section">
-      <div class="section-header"><span>Parametri mancanti</span></div>
-      <div id="missingParams" class="action-log small"></div>
-    </div>
+<div id="ageGate" hidden>
+  <div class="age-gate-panel">
+    <h1>Adult content</h1>
+    <p>This site may display explicit content intended for adults only. You must be 18 or older to continue.</p>
+    <button id="ageGateAccept">I am 18 or older</button>
+    <button id="ageGateLeave">Leave</button>
   </div>
 </div>
 
+<!-- Auth screen: shown when no valid session exists -->
+<div id="authScreen" hidden>
+  <div class="auth-panel">
+    <div class="auth-logo" aria-hidden="true">Ω</div>
+    <h1 class="auth-title">Jun OS</h1>
+    <div class="auth-tabs" role="tablist">
+      <button class="auth-tab active" id="authTabLogin" role="tab" aria-selected="true" aria-controls="authFormLogin">Login</button>
+      <button class="auth-tab" id="authTabSignup" role="tab" aria-selected="false" aria-controls="authFormSignup">Sign up</button>
+    </div>
+
+    <form id="authFormLogin" class="auth-form" aria-labelledby="authTabLogin">
+      <label class="auth-field">
+        <span>Email</span>
+        <input type="email" id="loginEmail" autocomplete="email" required>
+      </label>
+      <label class="auth-field">
+        <span>Password</span>
+        <input type="password" id="loginPassword" autocomplete="current-password" required>
+      </label>
+      <div class="auth-error" id="loginError" hidden></div>
+      <button type="submit" class="auth-submit" id="loginBtn">Login</button>
+    </form>
+
+    <form id="authFormSignup" class="auth-form" hidden aria-labelledby="authTabSignup">
+      <label class="auth-field">
+        <span>Email</span>
+        <input type="email" id="signupEmail" autocomplete="email" required>
+      </label>
+      <label class="auth-field">
+        <span>Password <small>(min 8 chars)</small></span>
+        <input type="password" id="signupPassword" autocomplete="new-password" required minlength="8">
+      </label>
+      <label class="auth-check">
+        <input type="checkbox" id="signupAdult" required>
+        <span>I am 18 or older and consent to adult content</span>
+      </label>
+      <div class="auth-error" id="signupError" hidden></div>
+      <button type="submit" class="auth-submit" id="signupBtn">Create account</button>
+    </form>
+  </div>
+</div>
+
+<!-- Boot overlay: shown to logged-in users until Ollama is reachable -->
+<div id="bootOverlay" class="boot-overlay" data-ready="1" aria-hidden="true" role="status" aria-live="polite">
+  <div class="boot-mesh" aria-hidden="true">
+    <span class="boot-blob boot-blob-a"></span>
+    <span class="boot-blob boot-blob-b"></span>
+    <span class="boot-blob boot-blob-c"></span>
+  </div>
+  <div class="boot-grid" aria-hidden="true"></div>
+  <div class="boot-card">
+    <div class="boot-logo" aria-hidden="true">
+      <svg class="boot-ring boot-ring-outer" viewBox="0 0 100 100">
+        <circle cx="50" cy="50" r="46" />
+      </svg>
+      <svg class="boot-ring boot-ring-inner" viewBox="0 0 100 100">
+        <circle cx="50" cy="50" r="38" />
+      </svg>
+      <span class="boot-omega">Ω</span>
+    </div>
+    <div class="boot-text">
+      <div class="boot-title">Jun OS</div>
+      <div class="boot-status" id="bootStatus">
+        <span class="boot-status-label">Waking up Jun</span>
+        <span class="boot-dots" aria-hidden="true"><i></i><i></i><i></i></span>
+      </div>
+      <div class="boot-hint" id="bootHint">Connecting to AI provider</div>
+    </div>
+    <div class="boot-progress" aria-hidden="true"><span></span></div>
+  </div>
+</div>
+
+<!-- Fixed toast container -->
+<div id="toasts" aria-live="polite" aria-atomic="false"></div>
+
+<!-- Drawer backdrop -->
+<div id="drawerBackdrop" class="drawer-backdrop" aria-hidden="true"></div>
+
+<!-- Off-canvas settings drawer -->
+<aside id="settingsDrawer" class="settings-drawer" aria-label="Settings">
+  <div class="drawer-header">
+    <span class="drawer-title">Settings</span>
+    <button class="ghost" id="closeSettingsBtn" title="Close settings" aria-label="Close">✕</button>
+  </div>
+  <div class="drawer-body">
+
+    <details class="drawer-section" open>
+      <summary class="section-summary">Model &amp; Reasoning</summary>
+      <div class="section">
+        <select id="modelSelect" aria-label="Ollama model"></select>
+        <label class="field-row">
+          <span>Reasoning</span>
+          <select id="reasoningSelect" aria-label="Reasoning level">
+            <option value="low" selected>low</option>
+            <option value="medium">medium</option>
+            <option value="high">high</option>
+          </select>
+        </label>
+        <label class="field-row">
+          <span>Think</span>
+          <input type="checkbox" id="thinkChk" aria-label="Enable chain-of-thought">
+        </label>
+        <button class="secondary" id="reloadPromptBtn" title="Reload system_prompt.txt from the server">
+          Reload system prompt
+        </button>
+      </div>
+    </details>
+
+    <details class="drawer-section">
+      <summary class="section-summary">TTS (voice)</summary>
+      <div class="section">
+        <label class="field-row">
+          <span>Enable</span>
+          <input type="checkbox" id="ttsChk" aria-label="Enable TTS">
+        </label>
+        <label class="field-row">
+          <span>Voice</span>
+          <select id="ttsVoiceSelect" aria-label="TTS voice"></select>
+        </label>
+        <label class="field-row">
+          <span>Speed</span>
+          <input type="number" id="ttsSpeed" min="0.5" max="2.0" step="0.05" value="1.0" aria-label="TTS speed">
+        </label>
+      </div>
+    </details>
+
+    <details class="drawer-section">
+      <summary class="section-summary">Outfit</summary>
+      <div class="section">
+        <div id="outfitControls" class="outfit-grid"></div>
+        <button class="secondary" id="outfitResetBtn" title="Restore default outfit">
+          Reset outfit
+        </button>
+      </div>
+    </details>
+
+    <details class="drawer-section">
+      <summary class="section-summary">
+        Action log
+        <span class="count" id="actionLogCount">0</span>
+      </summary>
+      <div class="section">
+        <div id="actionLog" class="action-log"></div>
+      </div>
+    </details>
+
+    <details class="drawer-section">
+      <summary class="section-summary">Raw stream</summary>
+      <div class="section">
+        <div class="section-toolbar">
+          <button class="ghost" id="clearRawBtn">clear</button>
+        </div>
+        <div id="rawStream" class="action-log small"></div>
+      </div>
+    </details>
+
+    <details class="drawer-section">
+      <summary class="section-summary">System prompt (debug)</summary>
+      <div class="section">
+        <div class="section-hint">The full prompt sent to the model on the last message, including injected date/time and retrieved context.</div>
+        <div id="debugSystemPrompt" class="action-log small">Send a message to capture the system prompt.</div>
+      </div>
+    </details>
+
+    <details class="drawer-section">
+      <summary class="section-summary">Missing parameters</summary>
+      <div class="section">
+        <div id="missingParams" class="action-log small"></div>
+      </div>
+    </details>
+
+    <details class="drawer-section">
+      <summary class="section-summary">Account</summary>
+      <div class="section">
+        <button class="secondary" id="signOutBtn" title="Sign out">Sign out</button>
+      </div>
+    </details>
+
+  </div><!-- /drawer-body -->
+</aside>
+
+<!-- ============================================================ -->
+<!-- App shell -->
+<!-- ============================================================ -->
+<div id="app">
+
+  <header class="app-header">
+    <div class="header-right">
+      <span id="statusPill" class="status-pill status-idle">idle</span>
+      <button class="ghost" id="resetLive2DBtn" title="Reset to idle pose" aria-label="Reset pose">reset pose</button>
+      <button class="ghost icon-btn" id="openSettingsBtn" title="Open settings" aria-label="Open settings">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
+      </button>
+    </div>
+  </header>
+
+  <main class="app-main">
+
+    <!-- Sidebar: conversation history & nav -->
+    <nav id="conversationSidebar" class="conv-sidebar" aria-label="Conversations">
+      <div class="sidebar-toolbar">
+        <span class="sidebar-brand">
+          <span class="sidebar-brand-mark" aria-hidden="true">Ω</span>
+          <span class="sidebar-brand-name">Jun</span>
+        </span>
+        <button class="sidebar-toggle" id="collapseSidebarBtn" title="Toggle sidebar" aria-label="Toggle sidebar" type="button">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="3" width="18" height="18" rx="2"/><line x1="9" y1="3" x2="9" y2="21"/></svg>
+        </button>
+      </div>
+      <div class="sidebar-section sidebar-top">
+        <button class="sidebar-item primary" id="newChatBtn" title="New conversation">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 1 1 3 3L7 19l-4 1 1-4z"/></svg>
+          <span>New chat</span>
+        </button>
+        <button class="sidebar-item" id="searchChatsBtn" title="Search chats" type="button">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="11" cy="11" r="7"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+          <span>Search chats</span>
+        </button>
+      </div>
+
+      <div class="sidebar-section sidebar-scroll">
+        <div class="sidebar-label">Recent</div>
+        <ul id="conversationList" class="conv-list" role="list"></ul>
+      </div>
+
+      <div class="sidebar-footer">
+        <button class="user-chip" id="userChipBtn" type="button" title="Open settings">
+          <span class="user-avatar" id="userAvatar">?</span>
+          <span class="user-info">
+            <span class="user-name" id="userEmail">…</span>
+          </span>
+        </button>
+      </div>
+    </nav>
+
+    <!-- Center: chat panel -->
+    <section class="chat-panel" aria-label="Chat">
+
+      <!-- Empty state (hidden when messages exist) -->
+      <div class="messages-empty" id="messagesEmpty" aria-hidden="false">
+        <p class="empty-title">Hello, I am Jun.</p>
+        <p class="empty-sub">How can I help you today?</p>
+      </div>
+
+      <div id="messages" class="messages" aria-live="polite" aria-label="Messages"></div>
+
+      <div class="composer-area">
+        <div class="composer">
+          <button class="composer-icon" id="composerAttach" type="button" title="Attach" aria-label="Attach">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+          </button>
+          <textarea id="chatInput" rows="1"
+            placeholder="Write to Jun…"
+            aria-label="Message"></textarea>
+          <button id="sendBtn" class="composer-send" aria-label="Send">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="12" y1="19" x2="12" y2="5"/><polyline points="5 12 12 5 19 12"/></svg>
+          </button>
+        </div>
+        <div class="prompt-chips" id="promptChips">
+          <button class="chip" data-prompt="Tell me something interesting.">
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 2l1.9 5.8L20 9l-4.5 3.6L17 19l-5-3.2L7 19l1.5-6.4L4 9l6.1-1.2z"/></svg>
+            <span>Tell me something interesting</span>
+          </button>
+          <button class="chip" data-prompt="How are you today?">
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"/></svg>
+            <span>How are you today?</span>
+          </button>
+          <button class="chip" data-prompt="Let's chat a bit.">
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
+            <span>Let's chat a bit</span>
+          </button>
+        </div>
+      </div>
+    </section>
+
+    <!-- Right: Live2D stage -->
+    <section id="stage" aria-label="Live2D stage">
+      <!-- Skeleton shimmer overlay while model loads -->
+      <div class="stage-skeleton" id="stageSkeleton" aria-hidden="true"></div>
+
+      <div id="stageStatus" class="stage-status">loading…</div>
+    </section>
+
+  </main>
+</div>
+
+<!-- CDN scripts — load order preserved from original -->
 <script src="https://cdn.jsdelivr.net/npm/marked@12.0.2/marked.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/dompurify@3.0.11/dist/purify.min.js"></script>
 <script src="https://cubism.live2d.com/sdk-web/cubismcore/live2dcubismcore.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/pixi.js@6.5.10/dist/browser/pixi.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/pixi-live2d-display@0.4.0/dist/cubism4.min.js"></script>
-<script src="js/live2d.js"></script>
-<script src="js/actions.js"></script>
-<script src="js/outfit.js"></script>
-<script src="js/ollama.js"></script>
-<script src="js/tts.js"></script>
-<script src="js/app.js"></script>
+<script src="js/auth.js?v=6"></script>
+<script src="js/prefs.js?v=1"></script>
+<script src="js/live2d.js?v=4"></script>
+<script src="js/actions.js?v=6"></script>
+<script src="js/outfit.js?v=6"></script>
+<script src="js/ollama.js?v=7"></script>
+<script src="js/tts.js?v=6"></script>
+<!-- ui.js must load before app.js -->
+<script src="js/ui.js?v=6"></script>
+<script src="js/history.js?v=6"></script>
+<script src="js/app.js?v=8"></script>
 </body>
 </html>

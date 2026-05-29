@@ -3,8 +3,8 @@
 
 window.Actions = (function () {
   let actionMap = null;
-  let onLog = null;     // (level, text) — level: 'ok' | 'warn' | 'err'
-  // Known kwarg keys that select a sub-node in the action map (in priority order).
+  let onLog = null; // (level, text), level is 'ok' | 'warn' | 'err'
+  // Kwarg keys that can select a sub-node in the action map, in priority order.
   const NAV_KEYS = ['target','dir','type','shape','emotion','side','state','speed','style','item','enable','gesture','duration'];
 
   async function load(url) {
@@ -15,9 +15,8 @@ window.Actions = (function () {
   function setLogger(cb) { onLog = cb; }
   function log(level, msg) { if (onLog) onLog(level, msg); }
 
-  // ---- Parsing ------------------------------------------------------------
-  // Match: [ACTION:name] or [ACTION:name|k=v|k=v]
-  const ACTION_RE = /\[ACTION:\s*([a-zA-Z_][\w]*)\s*((?:\|[^=\]|]+=[^|\]]*)*)\s*\]/gi;
+  // Matches [ACTION:name] or [ACTION:name|k=v|k=v]
+  const ACTION_RE = /\[\s*ACTION\s*:\s*([a-zA-Z_][\w]*)\s*((?:\|[^=\]|]+=[^|\]]*)*)\s*\]/gi;
 
   function parseActions(text) {
     const actions = [];
@@ -44,8 +43,6 @@ window.Actions = (function () {
     return text.replace(ACTION_RE, '').replace(/[ \t]+\n/g, '\n').replace(/\n{3,}/g, '\n\n');
   }
 
-  // ---- Resolution ---------------------------------------------------------
-
   function isEffectNode(node) {
     if (!node || typeof node !== 'object') return false;
     for (const k of Object.keys(node)) {
@@ -67,30 +64,29 @@ window.Actions = (function () {
   }
 
   function resolveResolve(resolveDict, kwargs) {
-    // Build candidate keys from kwargs values, trying common orderings.
+    // Resolve-key candidates, NAV_KEYS first (in priority order) then the rest.
     const valuesInOrder = [];
     for (const navKey of NAV_KEYS) {
       if (kwargs[navKey] !== undefined) valuesInOrder.push(kwargs[navKey]);
     }
-    // Also add any other kwargs not in NAV_KEYS, last.
     for (const k of Object.keys(kwargs)) {
       if (!NAV_KEYS.includes(k) && !valuesInOrder.includes(kwargs[k])) valuesInOrder.push(kwargs[k]);
     }
-    // Try the joined dotted key, then permutations of length up to N.
+
     if (valuesInOrder.length) {
       const joined = valuesInOrder.join('.');
       if (joined in resolveDict) return resolveDict[joined];
-      // single-value resolves (e.g. "on", "off")
+      // single-value resolves, e.g. "on" / "off"
       for (const v of valuesInOrder) {
         if (v in resolveDict) return resolveDict[v];
       }
-      // reverse pairs
       if (valuesInOrder.length >= 2) {
         const rev = [...valuesInOrder].reverse().join('.');
         if (rev in resolveDict) return resolveDict[rev];
       }
     }
-    // Last resort: scan resolve keys, pick the one whose tokens are subset of kwarg values.
+
+    // Last resort: any key whose tokens are all present among the kwarg values.
     const valSet = new Set(valuesInOrder);
     for (const key of Object.keys(resolveDict)) {
       const toks = key.split('.');
@@ -103,7 +99,6 @@ window.Actions = (function () {
   // (LLM tends to emit [ACTION:smile] instead of [ACTION:mouth|shape=smile]).
   const FALLBACK_CONTAINERS = ['mouth', 'emote', 'brow', 'look', 'lean', 'tail_wiggle', 'breath'];
 
-  // Navigate into action_map: starting from action name, drill into sub-keys based on kwargs.
   function resolveAction(name, kwargs) {
     if (!actionMap) {
       log('warn', `azione sconosciuta: ${name}`);
@@ -133,7 +128,6 @@ window.Actions = (function () {
       }
       if (!advanced) break;
     }
-    // If node is _resolve container, do resolve lookup.
     if (node && typeof node === 'object' && node._resolve) {
       const { _resolve, ...rest } = node;
       if (!isEffectNode(rest)) {
@@ -152,7 +146,6 @@ window.Actions = (function () {
     return node;
   }
 
-  // Compute scale factor from kwargs given _scale list.
   function scaleFactor(node, kwargs) {
     if (!node._scale || !Array.isArray(node._scale)) return 1;
     let f = 1;
@@ -169,9 +162,8 @@ window.Actions = (function () {
     if (!node || typeof node !== 'object') return;
 
     const scale = scaleFactor(node, kwargs);
-    const relative = !!node._relative;
 
-    // _compose: apply other actions first.
+    // _compose runs the referenced actions first.
     if (Array.isArray(node._compose)) {
       for (const path of node._compose) {
         const sub = lookupPath(path);
@@ -180,39 +172,31 @@ window.Actions = (function () {
       }
     }
 
-    // _param: a single named parameter, value = scale (or scale relative).
+    // _param sets a single named parameter to the scale value. The _relative
+    // flag is currently a no-op: without param read-back there's nothing to add
+    // a delta to, so relative and absolute behave the same here.
     if (node._param) {
-      const param = node._param;
-      if (relative) {
-        // Approximate "relative": just set toward current + delta. Without read-back simplicity
-        // we treat as additive on default.
-        Live2D.setTarget(param, scale);
-      } else {
-        Live2D.setTarget(param, scale);
-      }
+      Live2D.setTarget(node._param, scale);
     }
 
-    // Direct Param* keys.
     for (const [k, v] of Object.entries(node)) {
       if (!k.startsWith('Param')) continue;
       if (typeof v !== 'number') continue;
       Live2D.setTarget(k, v * scale);
     }
 
-    // _loop_param: oscillation.
     if (node._loop_param) {
       const amp = (node._amplitude !== undefined ? node._amplitude : 0.5) * (scale || 1);
       const per = node._period_ms || 1500;
       Live2D.startLoop(node._loop_param, amp, per);
     }
 
-    // _sequence: time-spaced keyframes.
     if (Array.isArray(node._sequence)) {
       const steps = sequenceToSteps(node._sequence, scale);
       Live2D.scheduleSequence(steps);
     }
 
-    // _loop with _repeats: expand into a sequence (mouth speak, etc).
+    // _loop + _repeats: expand the loop body into one long sequence (e.g. mouth speak).
     if (Array.isArray(node._loop)) {
       const repeats = node._repeats || 3;
       const steps = [];

@@ -4,65 +4,65 @@
 
 window.Outfit = (function () {
   const STORAGE_KEY = 'omega.outfit.v1';
-  const COLOR_KEY   = 'omega.outfit.colors.v1';
+  const COLOR_KEY = 'omega.outfit.colors.v1';
 
-  // Each item: param-backed boolean. `excludes` = other keys to force off when this turns on.
-  // `description` is the phrase used in the prompt context.
-  // `colorPatterns` (optional): substring patterns matching drawable IDs to tint
-  //   when the user picks a color. `colorExcludes` removes false positives.
+  // Each item is a param-backed boolean. `excludes` lists other keys to force
+  // off when this one turns on. `colorPatterns` are substrings matched against
+  // drawable IDs to tint when the user picks a color, and `colorExcludes`
+  // trims false positives from that match.
   const ITEMS = [
-    { key: 'shirt',   label: 'Shirt',     param: 'ParamShirtEnabled',   defaultOn: true,  excludes: ['dress'],
+    { key: 'shirt', label: 'Shirt', param: 'ParamShirtEnabled', defaultOn: true, excludes: ['dress'],
       colorPatterns: ['shirt'] },
-    { key: 'hoodie',  label: 'Hoodie',    param: 'ParamHoodieEnabled',  defaultOn: false, excludes: ['dress'],
+    { key: 'hoodie', label: 'Hoodie', param: 'ParamHoodieEnabled', defaultOn: false, excludes: ['dress'],
       colorPatterns: ['hoodie'] },
-    { key: 'dress',   label: 'Dress',     param: 'ParamDress2Enabled',  defaultOn: false, excludes: ['shirt','hoodie','skirt','pants'],
+    { key: 'dress', label: 'Dress', param: 'ParamDress2Enabled', defaultOn: false, excludes: ['shirt','hoodie','skirt','pants'],
       colorPatterns: ['dress'] },
-    { key: 'skirt',   label: 'Skirt',     param: 'ParamSkirtEnabled',   defaultOn: true,  excludes: ['pants','dress'],
+    { key: 'skirt', label: 'Skirt', param: 'ParamSkirtEnabled', defaultOn: true, excludes: ['pants','dress'],
       colorPatterns: ['skirt'] },
-    { key: 'pants',   label: 'Pants',     param: 'ParamPantsEnabled',   defaultOn: false, excludes: ['skirt','dress'],
+    { key: 'pants', label: 'Pants', param: 'ParamPantsEnabled', defaultOn: false, excludes: ['skirt','dress'],
       colorPatterns: ['pants'] },
-    // 'bra' substring also matches SkinBraChest* (which is skin under the bra,
-    // not the bra itself) — exclude 'skin' so the breast skin keeps skin tone.
-    { key: 'bra',     label: 'Bra',       param: 'ParamBraEnabled',     defaultOn: true,
+    // The 'bra' substring also hits SkinBraChest* (the skin under the bra, not
+    // the bra itself), so exclude 'skin' to keep that area skin-toned.
+    { key: 'bra', label: 'Bra', param: 'ParamBraEnabled', defaultOn: true,
       colorPatterns: ['bra'], colorExcludes: ['skin'] },
-    { key: 'panties', label: 'Panties',   param: 'ParamPantiesEnabled', defaultOn: true,
+    { key: 'panties', label: 'Panties', param: 'ParamPantiesEnabled', defaultOn: true,
       colorPatterns: ['panties'] },
-    { key: 'shoe_l',  label: 'Left shoe', param: 'ParamShoeLOn',        defaultOn: true,
+    { key: 'shoe_l', label: 'Left shoe', param: 'ParamShoeLOn', defaultOn: true,
       colorPatterns: ['shoe_l'] },
-    { key: 'shoe_r',  label: 'Right shoe',param: 'ParamShoeROn',        defaultOn: true,
+    { key: 'shoe_r', label: 'Right shoe', param: 'ParamShoeROn', defaultOn: true,
       colorPatterns: ['shoe_r'] },
   ];
 
   // Patterns tuned to this model's actual drawable IDs (see console dump).
-  // All skin parts are prefixed `Skin*`; pose-time skin layers are `Attach*`.
-  // MCHand* / MCForearm* are the partner-character hands.
-  // Hair styles use `H0_` … `H4_` prefixes plus `*Hair*`.
-  // Cat ears split Front/Mid/Back; eyes have Iris/Pupil/EyeBall/highlight.
+  // Skin parts are prefixed Skin*, pose-time skin layers Attach*; MCHand* and
+  // MCForearm* are the partner character's hands. Hair uses H0_..H4_ prefixes
+  // plus *Hair*. Cat ears split Front/Mid/Back, eyes into Iris/Pupil/EyeBall/highlight.
+  // Order matters here: applyColors paints groups in sequence, so a narrow group
+  // listed after a broad one overrides it.
   const COLOR_GROUPS = [
     { key: 'skin', label: 'Skin',
       includes: ['skin','attach','mchand','mcforearm','nipple','blush','moddableface','moddableback'],
       excludes: [] },
 
-    // Hair: catches all H<digit>_ styles plus anything with "hair".
+    // Catches all H<digit>_ styles plus anything containing "hair".
     { key: 'hair', label: 'Hair',
       includes: ['h0_','h1_','h2_','h3_','h4_','hair'],
       excludes: ['hairband','hairpin','hairtie','hairclip','hairbow'] },
 
-    // Cat ears: broad, then per-layer narrow overrides.
-    { key: 'ear',       label: 'Ear (all)',  includes: ['catear','pointyear'], excludes: [] },
-    { key: 'ear_back',  label: 'Ear back',   includes: ['catearback'],         excludes: [] },
-    { key: 'ear_mid',   label: 'Ear inside', includes: ['catearmid'],          excludes: [] },
-    { key: 'ear_front', label: 'Ear front',  includes: ['catearfront'],        excludes: [] },
+    // Cat ears: broad group first, then per-layer overrides.
+    { key: 'ear', label: 'Ear (all)', includes: ['catear','pointyear'], excludes: [] },
+    { key: 'ear_back', label: 'Ear back', includes: ['catearback'], excludes: [] },
+    { key: 'ear_mid', label: 'Ear inside', includes: ['catearmid'], excludes: [] },
+    { key: 'ear_front', label: 'Ear front', includes: ['catearfront'], excludes: [] },
 
-    // Body tail (TailMain*); H4_Tail is part of the hair group.
+    // Body tail is TailMain*; H4_Tail belongs to the hair group instead.
     { key: 'tail', label: 'Tail', includes: ['tailmain'], excludes: [] },
 
     { key: 'eyebrows', label: 'Eyebrows', includes: ['brow'], excludes: [] },
 
-    // Eye stack: sclera/iris/pupil/highlight, each overrides the previous.
-    { key: 'eye_sclera',    label: 'Eye white', includes: ['eyeball'],  excludes: [] },
-    { key: 'eye_iris',      label: 'Eye iris',  includes: ['iris'],     excludes: [] },
-    { key: 'eye_pupil',     label: 'Eye pupil', includes: ['pupil'],    excludes: [] },
+    { key: 'eye_sclera', label: 'Eye white', includes: ['eyeball'], excludes: [] },
+    { key: 'eye_iris', label: 'Eye iris', includes: ['iris'], excludes: [] },
+    { key: 'eye_pupil', label: 'Eye pupil', includes: ['pupil'], excludes: [] },
     { key: 'eye_highlight', label: 'Eye shine', includes: ['highlight'], excludes: [] },
 
     { key: 'lips', label: 'Lips', includes: ['lip'], excludes: [] },
@@ -70,7 +70,6 @@ window.Outfit = (function () {
     { key: 'mouth_interior', label: 'Mouth interior',
       includes: ['innermouth','tounge','tongue','teeth','saliva'], excludes: [] },
 
-    // Wardrobe items (clothing pieces).
     ...ITEMS.filter(it => it.colorPatterns).map(it => ({
       key: it.key, label: it.label,
       includes: it.colorPatterns, excludes: it.colorExcludes || [],
@@ -80,7 +79,7 @@ window.Outfit = (function () {
   const state = {};
   for (const it of ITEMS) state[it.key] = it.defaultOn;
 
-  // colors[groupKey] = '#rrggbb' or null (no override).
+  // colors[groupKey] is '#rrggbb' or null when there's no override.
   const colors = {};
   for (const g of COLOR_GROUPS) colors[g.key] = null;
 
@@ -109,9 +108,11 @@ window.Outfit = (function () {
 
   function save() {
     try { localStorage.setItem(STORAGE_KEY, JSON.stringify(state)); } catch (e) {}
+    if (window.Prefs) Prefs.pushToServer();
   }
   function saveColors() {
     try { localStorage.setItem(COLOR_KEY, JSON.stringify(colors)); } catch (e) {}
+    if (window.Prefs) Prefs.pushToServer();
   }
 
   function applyAll() {
@@ -193,7 +194,6 @@ window.Outfit = (function () {
     rootEl.innerHTML = '';
     rootEl.classList.remove('outfit-grid');
 
-    // Toggle grid (existing behavior).
     const grid = document.createElement('div');
     grid.className = 'outfit-grid';
     for (const it of ITEMS) {
@@ -207,17 +207,16 @@ window.Outfit = (function () {
     }
     rootEl.appendChild(grid);
 
-    // Color pickers (skin + one per clothing item).
     const colorWrap = document.createElement('div');
     colorWrap.className = 'outfit-colors';
     const title = document.createElement('div');
     title.className = 'outfit-colors-title';
-    title.textContent = 'Colori';
+    title.textContent = 'Colors';
     colorWrap.appendChild(title);
 
     for (const g of COLOR_GROUPS) {
-      const matchCount = Live2D.findDrawables ? Live2D.findDrawables(g.includes, g.excludes).length : 0;
       const matchedIds = Live2D.findDrawables ? Live2D.findDrawables(g.includes, g.excludes) : [];
+      const matchCount = matchedIds.length;
       const row = document.createElement('div');
       row.className = 'outfit-color-row';
       row.title = matchedIds.length ? matchedIds.join('\n') : '(nessun drawable corrispondente)';
@@ -227,9 +226,9 @@ window.Outfit = (function () {
         <input type="color" data-color-key="${g.key}" value="${colors[g.key] || '#ffffff'}">
         <button class="ghost outfit-color-clear ${colors[g.key] ? 'active' : ''}" data-color-clear="${g.key}" title="Rimuovi tinta">×</button>
       `;
-      const cp  = row.querySelector('input[type="color"]');
+      const cp = row.querySelector('input[type="color"]');
       const clr = row.querySelector('button[data-color-clear]');
-      cp.addEventListener('input',  () => { setColor(g.key, cp.value); clr.classList.add('active'); });
+      cp.addEventListener('input', () => { setColor(g.key, cp.value); clr.classList.add('active'); });
       cp.addEventListener('change', () => { setColor(g.key, cp.value); clr.classList.add('active'); });
       clr.addEventListener('click', () => { setColor(g.key, null); cp.value = '#ffffff'; clr.classList.remove('active'); });
       colorWrap.appendChild(row);
@@ -239,13 +238,13 @@ window.Outfit = (function () {
     if (resetBtn) resetBtn.addEventListener('click', reset);
   }
 
-  // Phrase for the system prompt.
+  // Builds the wardrobe phrase injected into the system prompt.
   function describe() {
     const worn = ITEMS.filter(it => state[it.key]);
     const bare = ITEMS.filter(it => !state[it.key]);
     const phrase = (arr) => arr.map(it => it.label.toLowerCase()).join(', ');
-    if (worn.length === 0) return 'Jun is currently fully nude (wearing nothing).';
-    let s = `Jun is currently wearing: ${phrase(worn)}.`;
+    if (worn.length === 0) return 'You are currently fully nude (wearing nothing).';
+    let s = `You are currently wearing: ${phrase(worn)}.`;
     if (bare.length) s += ` Not wearing: ${phrase(bare)}.`;
     return s;
   }
@@ -281,7 +280,7 @@ window.Outfit = (function () {
           setKey(item, stateOn); break;
         case 'shoes':
           setKey('shoe_l', stateOn); setKey('shoe_r', stateOn); break;
-        case 'shoe_left':  setKey('shoe_l', stateOn); break;
+        case 'shoe_left': setKey('shoe_l', stateOn); break;
         case 'shoe_right': setKey('shoe_r', stateOn); break;
         case 'nude':
           if (stateOn) for (const it of ITEMS) setKey(it.key, false);

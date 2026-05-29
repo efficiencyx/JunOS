@@ -8,6 +8,7 @@ RUN apt-get update \
       espeak-ng \
       libsndfile1 \
       ca-certificates \
+      curl \
  && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app

@@ -1,37 +1,45 @@
 """
-Local TTS sidecar for Omega Chat. Wraps Kokoro-82M behind a small FastAPI
-server on :8001. The webapp's js/tts.js calls /tts with a sentence at a
-time and plays the returned WAV through an AudioContext.
+Local TTS sidecar for Jun OS. Wraps Kokoro-82M behind a small FastAPI server
+on :8001. The webapp's js/tts.js posts a sentence at a time to /tts and plays
+the returned WAV through an AudioContext.
 
-Requirements:
-  - Python 3.10+
-  - espeak-ng installed on the system (Kokoro uses it as a fallback G2P).
-      Arch:    sudo pacman -S espeak-ng
-      Debian:  sudo apt install espeak-ng
-      macOS:   brew install espeak-ng
-  - pip install -r requirements.txt
-
-Run:
-  python server.py
+Needs espeak-ng on the system (Kokoro's fallback G2P) and the deps in
+requirements.txt. Then: python server.py
 """
 
 import io
 import logging
 import os
+from typing import Annotated
 
 import numpy as np
 import soundfile as sf
-from fastapi import FastAPI, HTTPException, Response
+from fastapi import FastAPI, Request, Response
 from fastapi.middleware.cors import CORSMiddleware
-from pydantic import BaseModel, Field
+from fastapi.responses import JSONResponse
+from pydantic import BaseModel, Field, StringConstraints
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s: %(message)s")
 log = logging.getLogger("tts")
 
-# Lazy-load Kokoro so --help / import errors surface clearly.
+SAMPLE_RATE = 24000
+DEFAULT_VOICE = "af_heart"
+
+# Kokoro-82M's EN voices. Not all are equally trained but all of them load;
+# /voices feeds this list to the frontend dropdown.
+VOICES = [
+    "af_heart", "af_bella", "af_aoede", "af_kore", "af_nicole",
+    "af_nova", "af_river", "af_sarah", "af_sky", "af_alloy", "af_jessica",
+    "am_adam", "am_echo", "am_eric", "am_fenrir", "am_liam",
+    "am_michael", "am_onyx", "am_puck",
+    "bf_alice", "bf_emma", "bf_isabella", "bf_lily",
+    "bm_daniel", "bm_fable", "bm_george", "bm_lewis",
+]
+
 _pipeline = None
 
 def get_pipeline():
+    # Loaded lazily so import-time failures (missing espeak-ng etc.) surface clearly.
     global _pipeline
     if _pipeline is None:
         from kokoro import KPipeline
@@ -40,37 +48,39 @@ def get_pipeline():
         log.info("Kokoro ready.")
     return _pipeline
 
-# Voices shipped with Kokoro-82M (subset that covers EN; not all are equally
-# trained, but they all load). The frontend uses /voices to populate a dropdown.
-VOICES = [
-    # American female
-    "af_heart", "af_bella", "af_aoede", "af_kore", "af_nicole",
-    "af_nova", "af_river", "af_sarah", "af_sky", "af_alloy",
-    "af_jessica",
-    # American male
-    "am_adam", "am_echo", "am_eric", "am_fenrir", "am_liam",
-    "am_michael", "am_onyx", "am_puck",
-    # British female
-    "bf_alice", "bf_emma", "bf_isabella", "bf_lily",
-    # British male
-    "bm_daniel", "bm_fable", "bm_george", "bm_lewis",
-]
-DEFAULT_VOICE = "af_heart"
-SAMPLE_RATE = 24000
 
 app = FastAPI()
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
-    allow_methods=["*"],
-    allow_headers=["*"],
+    allow_origins=[os.environ.get("CORS_ORIGIN", "http://nginx")],
+    allow_methods=["POST", "GET"],
+    allow_headers=["Content-Type"],
 )
 
 
+@app.exception_handler(Exception)
+async def on_unhandled(request: Request, exc: Exception) -> JSONResponse:
+    # Anything that slips through becomes a generic 500 — no tracebacks to clients.
+    log.exception("unhandled exception on %s %s", request.method, request.url.path)
+    return JSONResponse({"error": "synthesis_failed"}, status_code=500)
+
+
 class TTSReq(BaseModel):
-    text: str
+    text: Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=2000)]
     voice: str = DEFAULT_VOICE
     speed: float = Field(default=1.0, ge=0.5, le=2.0)
+
+
+@app.on_event("startup")
+def prewarm():
+    # Synthesize one tiny utterance up front so the first real request doesn't
+    # eat the cold-start cost of loading the pipeline + default voice.
+    try:
+        for _gs, _ps, _audio in get_pipeline()("Hi.", voice=DEFAULT_VOICE, speed=1.0):
+            pass
+        log.info("pre-warm done (voice=%s)", DEFAULT_VOICE)
+    except Exception:
+        log.exception("pre-warm failed (non-fatal)")
 
 
 @app.get("/health")
@@ -85,30 +95,26 @@ def voices():
 
 @app.post("/tts")
 def tts(req: TTSReq):
-    text = (req.text or "").strip()
-    if not text:
+    if not req.text:
         return Response(status_code=204)
 
     voice = req.voice if req.voice in VOICES else DEFAULT_VOICE
-    pipeline = get_pipeline()
 
     chunks = []
-    try:
-        for _gs, _ps, audio in pipeline(text, voice=voice, speed=req.speed):
-            if audio is None:
-                continue
-            if hasattr(audio, "detach"):
-                audio = audio.detach().cpu().numpy()
-            chunks.append(np.asarray(audio, dtype=np.float32))
-    except Exception as e:
-        log.exception("synthesis failed")
-        raise HTTPException(status_code=500, detail=str(e))
+    for _gs, _ps, audio in get_pipeline()(req.text, voice=voice, speed=req.speed):
+        if audio is None:
+            continue
+        if hasattr(audio, "detach"):
+            audio = audio.detach().cpu().numpy()
+        chunks.append(np.asarray(audio, dtype=np.float32))
 
     if not chunks:
         return Response(status_code=204)
 
     audio = np.concatenate(chunks)
-    # Light peak normalize to avoid clipping when Kokoro returns >1.0 samples.
+
+    # Kokoro occasionally returns samples above 1.0; pull the peak back down so
+    # the WAV doesn't clip.
     peak = float(np.max(np.abs(audio))) if audio.size else 0.0
     if peak > 1.0:
         audio = audio / peak

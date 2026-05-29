@@ -8,7 +8,7 @@ __pycache__/
 .venv/
 tts/.venv/
 
-# editor / OS
+# editor / OS / tooling
 .idea/
 .vscode/
 .DS_Store
@@ -21,6 +21,12 @@ node_modules/
 # project-specific
 Junk/
 webapp/assets/*~
+
+# generated library cache (unsloth) — don't commit
+unsloth_compiled_cache/
+
+# raw Live2D source assets — kept locally, not in the repo
+live2d_raw/
 
 # heavy artifacts kept on disk but not in initial baseline
 webapp/voice_index.bin

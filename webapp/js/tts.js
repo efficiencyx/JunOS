@@ -24,10 +24,10 @@ window.TTS = (function () {
   // status: 'pending' | 'ready' | 'playing' | 'done' | 'cancelled' | 'error'
   let jobs = [];
   let nextId = 1;
-  let playingJobId = 0;        // id currently playing, 0 if none
-  let currentSource = null;    // AudioBufferSourceNode in flight
+  let playingJobId = 0;     // id currently playing, 0 if none
+  let currentSource = null; // AudioBufferSourceNode in flight
   let rafId = 0;
-  let sentenceBuf = '';        // text not yet split into a sentence
+  let sentenceBuf = '';     // text accumulated but not yet split into a sentence
 
   function ensureCtx() {
     if (audioCtx) return audioCtx;
@@ -60,17 +60,14 @@ window.TTS = (function () {
       if (!r.ok) throw new Error(`http ${r.status}`);
       return await r.json();
     } catch (e) {
-      onLog('warn', `TTS /voices fallita: ${e.message} (sidecar acceso?)`);
+      onLog('warn', `TTS /voices failed: ${e.message} (sidecar running?)`);
       return { voices: [], default: voice };
     }
   }
 
-  // ---- Sentence splitting -------------------------------------------------
-  // Cuts at . ! ? \n. We don't try to be clever about abbreviations — Kokoro
-  // tolerates fragments and the user can pick a different splitting strategy
-  // later if it matters. We avoid cutting inside an [ACTION:...] block, but
-  // app.js already strips action blocks before calling feed(), so the input
-  // here is plain visible text.
+  // Cuts at . ! ? \n. No abbreviation handling — Kokoro tolerates fragments.
+  // app.js strips [ACTION:...] blocks before feed(), so the input here is
+  // already plain visible text.
   const BREAK_RE = /([.!?\n])/;
   function pullSentences(s) {
     const out = [];
@@ -86,7 +83,6 @@ window.TTS = (function () {
     return { sentences: out, remainder: rest };
   }
 
-  // ---- Sanitize text before synthesis -------------------------------------
   // Kokoro's G2P chokes on emojis (errors or produces phoneme garbage that
   // desyncs the queue), and any [ACTION:...] fragment that survived the
   // stream-buffer would get read out loud. Strip both, plus markdown noise.
@@ -128,11 +124,9 @@ window.TTS = (function () {
     if (clean) enqueue(clean);
   }
 
-  // ---- Job pipeline --------------------------------------------------------
-
   function enqueue(text) {
     ensureCtx();
-    // Resume the AudioContext on first use (Chrome's autoplay policy).
+    // Chrome's autoplay policy leaves the context suspended until a gesture.
     if (audioCtx.state === 'suspended') audioCtx.resume().catch(() => {});
 
     const id = nextId++;
@@ -166,7 +160,7 @@ window.TTS = (function () {
       } catch (e) {
         if (e.name === 'AbortError') { job.status = 'cancelled'; return; }
         job.status = 'error';
-        onLog('warn', `TTS errore: ${e.message}`);
+        onLog('warn', `TTS error: ${e.message}`);
         pump();
       }
     })();
@@ -213,8 +207,7 @@ window.TTS = (function () {
     src.start();
   }
 
-  // ---- Lipsync: RMS of analyser → ParamMouthOpen ---------------------------
-
+  // Lipsync: RMS of the analyser drives ParamMouthOpen.
   function startLipsyncLoop() {
     if (rafId) return;
     const tick = () => {
@@ -243,8 +236,6 @@ window.TTS = (function () {
     if (rafId) { cancelAnimationFrame(rafId); rafId = 0; }
     if (window.Live2D && Live2D.setMouthOverride) Live2D.setMouthOverride(null);
   }
-
-  // ---- Stop / cleanup ------------------------------------------------------
 
   function stop() {
     sentenceBuf = '';

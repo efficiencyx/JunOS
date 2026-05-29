@@ -1,11 +1,17 @@
 .git
 .gitignore
+.editorconfig
+.github/
 Junk/
 live2d_raw/
+live2d_raw/raw_sources/
 tools/
 viewer/
+docs/
 tts/.venv/
 **/__pycache__/
 **/*.pyc
 .DS_Store
 *.log
+*.md
+LICENSE
