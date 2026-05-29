@@ -26,7 +26,7 @@ window.Live2D = (function () {
   let lastTickMs = performance.now();
   let onMissingParam = null;        // callback(name)
   const reportedMissing = new Set();
-  let publicTint = null;            // populated in init(); see below
+  let publicTint = null;            // tinting API object, built in init()
 
   function getRaw(m) {
     const cm = m.internalModel.coreModel;
@@ -37,8 +37,6 @@ window.Live2D = (function () {
     }
     throw new Error('Cannot locate raw Cubism model');
   }
-
-  // ---- Color shader patch (Cubism 4.2-style multiply + screen colors) -----
 
   function looksLikeCubismFrag(src) {
     return typeof src === 'string'
@@ -229,10 +227,10 @@ window.Live2D = (function () {
     }
     console.log('[Live2D] clothing params:', info);
 
-    // ---- Render-time hooks: forced opacity + per-drawable color uniforms ----
+    // Render-time hooks: forced opacity + per-drawable color uniforms.
     const forcedDrawableOpacity = new Map(); // drawableId -> opacity
-    const forcedMultiplyColor   = new Map(); // drawableId -> [r,g,b,a]
-    const forcedScreenColor     = new Map(); // drawableId -> [r,g,b,a]
+    const forcedMultiplyColor = new Map();   // drawableId -> [r,g,b,a]
+    const forcedScreenColor = new Map();     // drawableId -> [r,g,b,a]
     const r = model.internalModel.renderer;
     const gl = app.renderer.gl;
     const ONE = [1, 1, 1, 1];
@@ -422,8 +420,6 @@ window.Live2D = (function () {
     if (onMissingParam) onMissingParam(param);
   }
 
-  // ---- Public API ---------------------------------------------------------
-
   function setTarget(param, value) {
     if (!paramIndex.has(param)) { reportMissing(param); return false; }
     targetParams.set(param, clamp(param, value));
@@ -502,8 +498,7 @@ window.Live2D = (function () {
     }
   }
 
-  // ---- Idle ambient animation: breathing, blinking, subtle sways ----------
-
+  // Idle ambient animation: breathing, blinking, subtle sways.
   let idleActive = false;
   let blinkTimeout = null;
   let fidgetTimeout = null;
@@ -599,7 +594,7 @@ window.Live2D = (function () {
 
   function stopIdle() {
     idleActive = false;
-    if (blinkTimeout)  { clearTimeout(blinkTimeout);  blinkTimeout  = null; }
+    if (blinkTimeout) { clearTimeout(blinkTimeout); blinkTimeout = null; }
     if (fidgetTimeout) { clearTimeout(fidgetTimeout); fidgetTimeout = null; }
   }
 
