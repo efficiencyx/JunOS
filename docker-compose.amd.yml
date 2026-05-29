@@ -1,0 +1,23 @@
+# AMD ROCm overlay — needs the amdgpu kernel driver on the host (no
+# nvidia-container-toolkit). Builds Ollama from the rocm image and hands the
+# container the GPU devices.
+#   docker compose -f docker-compose.yml -f docker-compose.amd.yml up -d
+# (./start.sh applies this automatically when it finds /dev/kfd, and fills in
+#  VIDEO_GID / RENDER_GID from the host so the GPU nodes are accessible.)
+#
+# For consumer cards that ROCm doesn't list as officially supported, set
+# HSA_OVERRIDE_GFX_VERSION (e.g. 11.0.0 for RDNA3, 10.3.0 for RDNA2) before
+# launching — start.sh passes it through.
+services:
+  ollama:
+    build:
+      args:
+        OLLAMA_BASE: ollama/ollama:rocm
+    devices:
+      - /dev/kfd
+      - /dev/dri
+    group_add:
+      - "${VIDEO_GID:-video}"
+      - "${RENDER_GID:-render}"
+    environment:
+      - HSA_OVERRIDE_GFX_VERSION

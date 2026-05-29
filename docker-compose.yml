@@ -1,14 +1,15 @@
 name: omega
 
-# One-command local dev:
-#   docker compose up -d
-# Production with auto-TLS (public domain required):
-#   DOMAIN=example.com EMAIL=ops@example.com TLS_MODE=on \
-#     docker compose --profile prod up -d
+# Recommended one-command start (auto-detects NVIDIA / AMD / CPU):
+#   ./start.sh
 #
-# NVIDIA GPU passthrough is wired on the ollama service.
-# If you don't have nvidia-container-toolkit installed, comment out the
-# `deploy` block under `ollama`.
+# This base file targets CPU and works everywhere. GPU acceleration is layered
+# on via overlays that ./start.sh selects for you:
+#   docker compose -f docker-compose.yml -f docker-compose.nvidia.yml up -d
+#   docker compose -f docker-compose.yml -f docker-compose.amd.yml    up -d
+#
+# Production with auto-TLS (public domain required):
+#   DOMAIN=example.com EMAIL=ops@example.com TLS_MODE=on COMPOSE_PROFILES=prod ./start.sh
 
 services:
 
@@ -94,15 +95,8 @@ services:
     security_opt:
       - "no-new-privileges:true"
     networks: [omega]
-    # NVIDIA GPU passthrough — requires nvidia-container-toolkit on the host.
-    # Comment out this `deploy` block if you don't have it installed.
-    deploy:
-      resources:
-        reservations:
-          devices:
-            - driver: nvidia
-              count: all
-              capabilities: [gpu]
+    # GPU acceleration is added by docker-compose.nvidia.yml / .amd.yml.
+    # On its own this service runs on CPU.
 
   # ── kokoro (TTS sidecar — internal only) ────────────────────────────────────
   kokoro:
