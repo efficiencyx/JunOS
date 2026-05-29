@@ -31,14 +31,12 @@ window.Ollama = (function () {
           const { value, done } = await reader.read();
           if (done) break;
           buf += dec.decode(value, { stream: true });
-          // Split on SSE event boundary (blank line).
+          // SSE events are separated by a blank line.
           let idx;
           while ((idx = buf.indexOf('\n\n')) >= 0) {
             const event = buf.slice(0, idx);
             buf = buf.slice(idx + 2);
-            // Each event line starts with "data: ".
-            const lines = event.split('\n');
-            for (const line of lines) {
+            for (const line of event.split('\n')) {
               if (!line.startsWith('data:')) continue;
               const payload = line.slice(5).trim();
               if (payload === '[DONE]') {

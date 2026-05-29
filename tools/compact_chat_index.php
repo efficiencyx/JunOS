@@ -1,45 +1,29 @@
 <?php
-/**
- * Compact / backfill the per-user chat-history RAG index.
- *
- * Usage:
- *   docker compose exec php php tools/compact_chat_index.php
- *   php tools/compact_chat_index.php          # bare-metal
- *
- * What it does:
- *   1. Embeds messages that are missing a matching message_embeddings row
- *      (typically: messages written while Ollama was down).
- *   2. Removes message_embeddings rows whose message no longer exists
- *      (the FK cascade should already cover this, but be defensive).
- *   3. Skips messages shorter than 8 chars (low-info acks like "ok").
- *
- * Requires Ollama running (configurable via OLLAMA_URL env) with
- * nomic-embed-text pulled.
- */
+// Backfills message_embeddings for messages that never got embedded (usually
+// because Ollama was down when they were written) and drops orphan rows.
+// Run it from cron or by hand:  php tools/compact_chat_index.php
+// Needs Ollama up (OLLAMA_URL) with nomic-embed-text pulled.
 
-// Support both Docker (webapp/* copied to /var/www/omega/) and bare-metal (webapp/ subdir) layouts
+// webapp/* lives under /var/www/omega/ in Docker but next to us bare-metal.
 $libPath = __DIR__ . '/../webapp/api/_lib.php';
-if (!is_readable($libPath)) {
-    $libPath = __DIR__ . '/../api/_lib.php';
-}
+if (!is_readable($libPath)) $libPath = __DIR__ . '/../api/_lib.php';
 require_once $libPath;
 
 $OLLAMA_URL = rtrim(getenv('OLLAMA_URL') ?: 'http://localhost:11434', '/');
-$EMBED_URL  = $OLLAMA_URL . '/api/embeddings';
 
-// Reusable curl handle (mirrors tools/build_voice_index.php).
-$ch = curl_init($EMBED_URL);
+// One curl handle reused for every line.
+$ch = curl_init($OLLAMA_URL . '/api/embeddings');
 curl_setopt_array($ch, [
-    CURLOPT_POST           => true,
-    CURLOPT_HTTPHEADER     => ['Content-Type: application/json'],
+    CURLOPT_POST => true,
+    CURLOPT_HTTPHEADER => ['Content-Type: application/json'],
     CURLOPT_RETURNTRANSFER => true,
-    CURLOPT_TIMEOUT        => 30,
+    CURLOPT_TIMEOUT => 30,
     CURLOPT_CONNECTTIMEOUT => 5,
 ]);
 
 function embed_via(string $text, $ch): ?array {
     curl_setopt($ch, CURLOPT_POSTFIELDS, json_encode([
-        'model'  => OMEGA_EMBED_MODEL,
+        'model' => EMBED_MODEL,
         'prompt' => $text,
     ], JSON_UNESCAPED_UNICODE));
     $resp = curl_exec($ch);
@@ -52,16 +36,16 @@ function embed_via(string $text, $ch): ?array {
     return array_values(array_map('floatval', $obj['embedding']));
 }
 
-$db = omega_db();
+$db = db();
 
-// ── 1. Drop orphaned embeddings ──────────────────────────────────────────────
+// orphans: the FK cascade should handle these, but clean up just in case
 $orphans = $db->exec(
     'DELETE FROM message_embeddings
       WHERE message_id NOT IN (SELECT id FROM messages)'
 );
 echo "Orphans removed: {$orphans}\n";
 
-// ── 2. Backfill missing embeddings ───────────────────────────────────────────
+// anything missing an embedding, skipping tiny low-info acks ("ok", "lol")
 $sel = $db->prepare(
     'SELECT m.id, m.content, c.user_id
        FROM messages m
@@ -87,7 +71,7 @@ $ins = $db->prepare(
 );
 
 $backfilled = 0;
-$failed     = 0;
+$failed = 0;
 foreach ($rows as $i => $row) {
     $vec = embed_via((string)$row['content'], $ch);
     if ($vec === null) {
@@ -99,7 +83,7 @@ foreach ($rows as $i => $row) {
             (int)$row['id'],
             (int)$row['user_id'],
             pack('f*', ...$vec),
-            OMEGA_EMBED_MODEL,
+            EMBED_MODEL,
             count($vec),
         ]);
         $backfilled++;
@@ -116,5 +100,5 @@ echo "\n";
 curl_close($ch);
 
 echo "Backfilled: {$backfilled}\n";
-echo "Failed:     {$failed}\n";
+echo "Failed: {$failed}\n";
 echo "Done.\n";

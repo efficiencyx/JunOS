@@ -1,5 +1,5 @@
-// ui.js — chrome helpers: toasts, status pill, settings drawer.
-// Loaded as a plain script before app.js so window.ui is available globally.
+// Chrome helpers: toasts, status pill, settings drawer, confirm dialog.
+// Loaded as a plain script before app.js so window.ui is global.
 
 window.ui = (function () {
   var toastTimer = {};
@@ -16,7 +16,6 @@ window.ui = (function () {
     el.id = id;
     el.textContent = msg;
 
-    // Close button
     var closeBtn = document.createElement('button');
     closeBtn.className = 'toast-close';
     closeBtn.textContent = '×';

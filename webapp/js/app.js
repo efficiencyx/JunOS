@@ -89,7 +89,6 @@
     }, AUTO_RESET_MS);
   }
 
-  // Configure marked: GFM, line breaks → <br>, no auto-linking of headers etc.
   if (window.marked) {
     marked.setOptions({ gfm: true, breaks: true });
   }
@@ -152,12 +151,9 @@
     stageStatus.textContent = text;
   }
 
-  // ---- Streaming buffer with inline [ACTION:...] extraction ---------------
-  // Holds accumulated text, finds complete actions (closed by ']'), dispatches them
-  // and removes them from the visible text. If a partial '[ACTION:' is at the tail
-  // we keep it in the buffer until closed.
-  // The marker we look for. We must hold back any tail that *could* be the start
-  // of this marker so it isn't emitted as visible text.
+  // Inline [ACTION:...] extraction from the streaming text. Accumulate text, dispatch
+  // complete actions (closed by ']'), and hold back any tail that could be the start of
+  // a marker so it isn't emitted as visible text until we know whether it's an action.
   // Whitespace-tolerant: accepts [ACTION:, [ ACTION:, [ACTION :, [ ACTION :, any case.
   const MARK_RE = /\[\s*ACTION\s*:/i;
   // Trailing partial that could still grow into MARK_RE. Anchored at end-of-string.
@@ -219,8 +215,6 @@
       },
     };
   }
-
-  // ---- Send flow ----------------------------------------------------------
 
   function sendMessage() {
     const text = chatInput.value.trim();
@@ -330,8 +324,6 @@
     }
   }
 
-  // ---- Conversation sidebar -----------------------------------------------
-
   async function refreshSidebar() {
     if (!window.History) return;
     const ul = document.getElementById('conversationList');
@@ -428,8 +420,6 @@
     }
   }
 
-  // ---- Wire UI ------------------------------------------------------------
-
   sendBtn.addEventListener('click', sendMessage);
   chatInput.addEventListener('keydown', e => {
     if (e.key === 'Enter' && !e.shiftKey) {
@@ -498,11 +488,10 @@
   });
 
   // Settings drawer
-  if (openSettingsBtn)  openSettingsBtn.addEventListener('click',  () => ui.toggleDrawer(true));
+  if (openSettingsBtn) openSettingsBtn.addEventListener('click', () => ui.toggleDrawer(true));
   if (closeSettingsBtn) closeSettingsBtn.addEventListener('click', () => ui.toggleDrawer(false));
-  if (drawerBackdrop)   drawerBackdrop.addEventListener('click',   () => ui.toggleDrawer(false));
+  if (drawerBackdrop) drawerBackdrop.addEventListener('click', () => ui.toggleDrawer(false));
 
-  // User chip in sidebar footer → opens settings drawer
   const userChipBtn = document.getElementById('userChipBtn');
   if (userChipBtn) userChipBtn.addEventListener('click', () => ui.toggleDrawer(true));
 
@@ -529,15 +518,13 @@
     });
   });
 
-  // ---- Bootstrap ----------------------------------------------------------
-
   ui.setStatus('idle', 'idle');
 
-  // ── Auth gate ─────────────────────────────────────────────────────────────
-  const authScreen  = document.getElementById('authScreen');
-  const authTabLogin  = document.getElementById('authTabLogin');
+  // Auth gate
+  const authScreen = document.getElementById('authScreen');
+  const authTabLogin = document.getElementById('authTabLogin');
   const authTabSignup = document.getElementById('authTabSignup');
-  const authFormLogin  = document.getElementById('authFormLogin');
+  const authFormLogin = document.getElementById('authFormLogin');
   const authFormSignup = document.getElementById('authFormSignup');
   const signOutBtn = document.getElementById('signOutBtn');
 
@@ -578,14 +565,14 @@
     const el = document.getElementById(id);
     if (!el) return;
     if (msg) { el.textContent = msg; el.hidden = false; }
-    else      { el.hidden = true; el.textContent = ''; }
+    else { el.hidden = true; el.textContent = ''; }
   }
 
   if (authFormLogin) {
     authFormLogin.addEventListener('submit', async (e) => {
       e.preventDefault();
       setAuthError('loginError', '');
-      const email    = document.getElementById('loginEmail').value.trim();
+      const email = document.getElementById('loginEmail').value.trim();
       const password = document.getElementById('loginPassword').value;
       const btn = document.getElementById('loginBtn');
       btn.disabled = true;
@@ -604,8 +591,8 @@
     authFormSignup.addEventListener('submit', async (e) => {
       e.preventDefault();
       setAuthError('signupError', '');
-      const email        = document.getElementById('signupEmail').value.trim();
-      const password     = document.getElementById('signupPassword').value;
+      const email = document.getElementById('signupEmail').value.trim();
+      const password = document.getElementById('signupPassword').value;
       const adultConsent = document.getElementById('signupAdult').checked;
       const btn = document.getElementById('signupBtn');
       btn.disabled = true;
@@ -650,9 +637,9 @@
     showBoot();
 
     // Populate sidebar user chip from session.
-    const emailEl  = document.getElementById('userEmail');
+    const emailEl = document.getElementById('userEmail');
     const avatarEl = document.getElementById('userAvatar');
-    if (me.user && emailEl)  emailEl.textContent  = me.user.email || '';
+    if (me.user && emailEl) emailEl.textContent = me.user.email || '';
     if (me.user && avatarEl) avatarEl.textContent = (me.user.email || '?').charAt(0);
 
     // Pull server-side preferences into localStorage before any module reads
