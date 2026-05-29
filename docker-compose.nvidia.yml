@@ -1,0 +1,12 @@
+# NVIDIA overlay — requires nvidia-container-toolkit on the host.
+#   docker compose -f docker-compose.yml -f docker-compose.nvidia.yml up -d
+# (./start.sh applies this automatically when it finds an NVIDIA GPU.)
+services:
+  ollama:
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: all
+              capabilities: [gpu]
