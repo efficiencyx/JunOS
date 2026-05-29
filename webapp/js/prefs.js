@@ -53,7 +53,7 @@ window.Prefs = (function () {
         body: JSON.stringify(data),
       });
     } catch (e) {
-      // Drop silently; next change will retry. Optionally retry on `online` event.
+      // Drop silently; the next change (or the `online` listener below) retries.
     }
   }
 
