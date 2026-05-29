@@ -199,7 +199,6 @@ Watch `docker compose logs ollama`. The entrypoint pre-warms the first non-embed
 │   ├── voice_corpus.txt       Cleaned voice exemplars (generated)
 │   ├── voice_index.bin        Packed float32 embedding vectors (generated)
 │   └── index.html             Single-page app entry point
-├── viewer/                    Standalone Live2D test harness (no chat, no PHP)
 ├── docker-compose.yml
 ├── .env.example
 └── README.md
