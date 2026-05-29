@@ -72,7 +72,7 @@ curl -fsSL https://raw.githubusercontent.com/efficiencyx/JunOS/main/install.sh |
 irm https://raw.githubusercontent.com/efficiencyx/JunOS/main/install.ps1 | iex
 ```
 
-Either one clones the repo, creates `.env`, autodetects your GPU, and starts the stack. Open <http://localhost> once it's up.
+Either one checks for **git + Docker** (and offers to install them if missing — winget on Windows, your package manager on Linux/macOS), clones the repo, creates `.env`, autodetects your GPU, and starts the stack. If it has to install Docker, it brings the daemon up and continues on its own — on Windows that means it opens a fresh window, waits for Docker, and finishes there. Open <http://localhost> once it's up.
 
 > Piping a script straight into your shell runs remote code. That's normal for installers, but if you'd rather check first, read [`install.sh`](install.sh) / [`install.ps1`](install.ps1) and just do the manual steps below — they're identical.
 
