@@ -13,6 +13,7 @@
 ![Docker](https://img.shields.io/badge/Docker-compose-2496ED?logo=docker&logoColor=white)
 ![Live2D](https://img.shields.io/badge/Live2D-Cubism%204-ff7096)
 ![Ollama](https://img.shields.io/badge/LLM-Ollama-black)
+![Platforms](https://img.shields.io/badge/platforms-Linux%20%7C%20macOS%20%7C%20Windows-informational)
 ![No build step](https://img.shields.io/badge/frontend-no%20build%20step-success)
 
 [Features](#features) · [Quickstart](#quickstart) · [Architecture](#architecture) · [Configuration](#configuration) · [Troubleshooting](#troubleshooting)
@@ -55,17 +56,39 @@ Everything runs locally. One `docker compose up -d` brings up the LLM, the TTS, 
 
 ## Quickstart
 
-Local, no TLS:
+You need **Docker** (with Compose) and **git**. That's it.
+
+### One line
+
+**Linux / macOS / WSL**
+
+```sh
+curl -fsSL https://raw.githubusercontent.com/efficiencyx/JunOS/main/install.sh | bash
+```
+
+**Windows (PowerShell)**
+
+```powershell
+irm https://raw.githubusercontent.com/efficiencyx/JunOS/main/install.ps1 | iex
+```
+
+Either one clones the repo, creates `.env`, autodetects your GPU, and starts the stack. Open <http://localhost> once it's up.
+
+> Piping a script straight into your shell runs remote code. That's normal for installers, but if you'd rather check first, read [`install.sh`](install.sh) / [`install.ps1`](install.ps1) and just do the manual steps below — they're identical.
+
+### Manual
 
 ```sh
 git clone https://github.com/efficiencyx/JunOS.git
 cd JunOS
 cp .env.example .env
-./start.sh
+./start.sh           # Windows: ./start.ps1
 # open http://localhost
 ```
 
-`start.sh` detects your GPU (NVIDIA / AMD / none) and brings the stack up with the right configuration — see [GPU support](#gpu-support). Prefer raw compose? `docker compose up -d` works too and runs on CPU.
+`start.sh` / `start.ps1` detects your GPU (NVIDIA / AMD / none) and brings the stack up with the right configuration — see [GPU support](#gpu-support). Prefer raw compose? `docker compose up -d` works too and runs on CPU.
+
+> **Windows:** if PowerShell blocks the script, run it once as `powershell -ExecutionPolicy Bypass -File start.ps1` (the `irm | iex` installer already handles this for you).
 
 On first boot Ollama pulls whatever is listed in `OLLAMA_MODELS_TO_PULL` — by default `hf.co/efficiencyx/Jun-14B:Q4_K_M` and `nomic-embed-text`, roughly 6 GB. Follow along with `docker compose logs -f ollama`.
 
@@ -222,7 +245,8 @@ Watch `docker compose logs ollama`. The entrypoint pre-warms the first non-embed
 │   ├── action_map.json        Semantic action → Live2D parameter map
 │   ├── system_prompt.txt      Character persona + ACTION syntax (read server-side)
 │   └── index.html             Single-page app entry point
-├── start.sh                   One-command launcher (GPU autodetect)
+├── install.sh / install.ps1   One-line bootstrap (clone + start)
+├── start.sh / start.ps1       Launcher with GPU autodetect (Linux / Windows)
 ├── docker-compose.yml         Base stack (CPU)
 ├── docker-compose.nvidia.yml  NVIDIA overlay
 ├── docker-compose.amd.yml     AMD ROCm overlay
