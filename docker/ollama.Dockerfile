@@ -1,4 +1,8 @@
-FROM ollama/ollama:latest
+# Base image is swappable so the same Dockerfile builds for CPU/NVIDIA
+# (ollama/ollama:latest) or AMD ROCm (ollama/ollama:rocm). start.sh / the
+# compose overlays set this; it defaults to the CUDA+CPU image.
+ARG OLLAMA_BASE=ollama/ollama:latest
+FROM ${OLLAMA_BASE}
 
 # curl for the readiness probe in the entrypoint.
 RUN apt-get update \

@@ -61,9 +61,11 @@ Local, no TLS:
 git clone https://github.com/efficiencyx/JunOS.git
 cd JunOS
 cp .env.example .env
-docker compose up -d
+./start.sh
 # open http://localhost
 ```
+
+`start.sh` detects your GPU (NVIDIA / AMD / none) and brings the stack up with the right configuration — see [GPU support](#gpu-support). Prefer raw compose? `docker compose up -d` works too and runs on CPU.
 
 On first boot Ollama pulls whatever is listed in `OLLAMA_MODELS_TO_PULL` — by default `hf.co/efficiencyx/Jun-14B:Q4_K_M` and `nomic-embed-text`, roughly 6 GB. Follow along with `docker compose logs -f ollama`.
 
@@ -74,11 +76,10 @@ The chat is usable as soon as `docker compose ps` reports every service healthy 
 You'll need a domain whose A record points at the server's public IP, with ports 80 and 443 open.
 
 ```sh
-DOMAIN=yourdomain.com EMAIL=you@yourdomain.com TLS_MODE=on \
-  docker compose --profile prod up -d
+DOMAIN=yourdomain.com EMAIL=you@yourdomain.com TLS_MODE=on COMPOSE_PROFILES=prod ./start.sh
 ```
 
-This adds a `certbot` sidecar that runs `certbot certonly --webroot` on start, then loops on `certbot renew` every 12 hours. Certificates land in the `letsencrypt` volume, which nginx mounts at `/etc/letsencrypt`, and it serves 443 with HSTS once they're issued.
+`COMPOSE_PROFILES=prod` enables the `certbot` sidecar; GPU detection still applies. This adds a `certbot` sidecar that runs `certbot certonly --webroot` on start, then loops on `certbot renew` every 12 hours. Certificates land in the `letsencrypt` volume, which nginx mounts at `/etc/letsencrypt`, and it serves 443 with HSTS once they're issued.
 
 > **Heads up on Let's Encrypt rate limits:** 5 duplicate issuances per domain per week. While testing, point `DOMAIN` at a staging subdomain or add `--staging` in `docker/certbot-entrypoint.sh`.
 
@@ -139,21 +140,34 @@ docker compose exec -e OLLAMA_URL=http://ollama:11434 php \
 
 This embeds each line with `nomic-embed-text`, writes packed float32 vectors to `webapp/voice_index.bin`, and refreshes `webapp/voice_corpus.txt`. A missing or stale index is handled gracefully — retrieval is skipped and chat still works.
 
-### GPU passthrough
+### GPU support
 
-The `ollama` service reserves an NVIDIA device:
+`./start.sh` auto-detects the GPU and picks the matching compose overlay. The base `docker-compose.yml` is CPU-only and runs anywhere; acceleration is layered on top.
 
-```yaml
-deploy:
-  resources:
-    reservations:
-      devices:
-        - driver: nvidia
-          count: all
-          capabilities: [gpu]
+| Backend | How `start.sh` detects it | What it does |
+|---|---|---|
+| **NVIDIA** | `nvidia-smi` works, or `/proc/driver/nvidia` exists | Adds `docker-compose.nvidia.yml` (reserves the NVIDIA device). Needs [nvidia-container-toolkit](https://docs.nvidia.com/datacenter/cloud-native/container-toolkit/latest/install-guide.html). |
+| **AMD** | `/dev/kfd` + `/dev/dri/renderD*` present | Adds `docker-compose.amd.yml` (builds Ollama from `ollama/ollama:rocm`, passes `/dev/kfd` + `/dev/dri`, joins the host `video`/`render` groups). Needs the `amdgpu` driver. |
+| **CPU** | nothing else matched | Base compose only. |
+
+Force a backend with `GPU=nvidia|amd|cpu ./start.sh`. To run it by hand instead of the script:
+
+```sh
+# NVIDIA
+docker compose -f docker-compose.yml -f docker-compose.nvidia.yml up -d
+# AMD (start.sh fills these in for you)
+VIDEO_GID=$(getent group video | cut -d: -f3) \
+RENDER_GID=$(stat -c '%g' /dev/dri/renderD128) \
+  docker compose -f docker-compose.yml -f docker-compose.amd.yml up -d
 ```
 
-This needs [nvidia-container-toolkit](https://docs.nvidia.com/datacenter/cloud-native/container-toolkit/latest/install-guide.html) on the host. Without it, delete that block and Ollama runs on CPU.
+**AMD consumer cards:** if ROCm doesn't officially list your GPU, set `HSA_OVERRIDE_GFX_VERSION` (e.g. `11.0.0` for RDNA3, `10.3.0` for RDNA2) — `start.sh` passes it through:
+
+```sh
+HSA_OVERRIDE_GFX_VERSION=11.0.0 ./start.sh
+```
+
+**Intel GPUs (Arc / iGPU):** the upstream `ollama/ollama` image has no Intel acceleration, so `start.sh` falls back to CPU on Intel-only machines. For GPU offload you'd swap the `ollama` service for Intel's [IPEX-LLM](https://github.com/intel-analytics/ipex-llm) Ollama build (exposes the same API on `:11434`, needs `/dev/dri` + oneAPI level-zero). It's a heavier, separate setup and isn't wired in here.
 
 ## Troubleshooting
 
@@ -208,7 +222,10 @@ Watch `docker compose logs ollama`. The entrypoint pre-warms the first non-embed
 │   ├── action_map.json        Semantic action → Live2D parameter map
 │   ├── system_prompt.txt      Character persona + ACTION syntax (read server-side)
 │   └── index.html             Single-page app entry point
-├── docker-compose.yml
+├── start.sh                   One-command launcher (GPU autodetect)
+├── docker-compose.yml         Base stack (CPU)
+├── docker-compose.nvidia.yml  NVIDIA overlay
+├── docker-compose.amd.yml     AMD ROCm overlay
 └── .env.example
 ```
 
