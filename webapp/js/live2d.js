@@ -382,7 +382,10 @@ window.Live2D = (function () {
     const r = app.view.getBoundingClientRect();
     const x = clientX - r.left, y = clientY - r.top;
     const b = model.getBounds();
-    return x >= b.x && x <= b.x + b.width && y >= b.y && y <= b.y + b.height;
+    // Narrow the hit area to 50% of her width, kept centred; full height.
+    const hw = b.width * 0.5;
+    const hx = b.x + (b.width - hw) / 2;
+    return x >= hx && x <= hx + hw && y >= b.y && y <= b.y + b.height;
   }
 
   // Don't start a drag when the press lands on an actual UI control she overlaps.
