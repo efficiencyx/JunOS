@@ -111,8 +111,8 @@ $queryVec = $lastUserMsg !== '' ? embed_text($lastUserMsg) : null;
 
 // Pull the closest voice exemplars from the prebuilt corpus and append them to
 // the prompt. Quietly returns the prompt untouched if the index isn't built.
-function voice_retrieve(string $systemPrompt, ?array $queryVec): string {
-    if ($queryVec === null) return $systemPrompt;
+function voice_retrieve(string $systemPrompt, string $lastUserMsg): string {
+    if ($lastUserMsg === '') return $systemPrompt;
 
     try {
         $metaPath = __DIR__ . '/../voice_meta.json';
@@ -121,6 +121,13 @@ function voice_retrieve(string $systemPrompt, ?array $queryVec): string {
         if (!is_readable($metaPath) || !is_readable($corpusPath) || !is_readable($binPath)) {
             return $systemPrompt;
         }
+
+        // The corpus is embedded with the "search_document" prefix; the query
+        // needs the matching "search_query" one for nomic to rank sensibly.
+        // This is a dedicated embedding, separate from the prefix-free $queryVec
+        // used for history recall and the stored message_embeddings rows.
+        $queryVec = embed_text($lastUserMsg, 'search_query');
+        if ($queryVec === null) return $systemPrompt;
 
         static $idx = null;
         if ($idx === null && function_exists('apcu_fetch')) {
@@ -154,10 +161,17 @@ function voice_retrieve(string $systemPrompt, ?array $queryVec): string {
         }
         arsort($scores);
 
+        // Floor: a cosine below this means nothing in the corpus is actually
+        // close, so without it we'd inject the 8 least-bad lines and they'd read
+        // as random. Retune if the corpus is re-embedded. scores are sorted
+        // descending, so the first miss means every later one misses too.
+        $MIN_SCORE = 0.5;
         $bullets = [];
-        foreach (array_slice($scores, 0, 8, true) as $i => $_) {
+        foreach (array_slice($scores, 0, 8, true) as $i => $score) {
+            if ($score < $MIN_SCORE) break;
             $bullets[] = '- "' . $idx['lines'][$i] . '"';
         }
+        if (!$bullets) return $systemPrompt; // nothing close enough; skip the block
 
         return rtrim($systemPrompt)
             . "\n\n## Voice Reference\nExamples of how Jun phrased things in similar moments."
@@ -264,7 +278,7 @@ function chat_history_retrieve(int $userId, int $currentConvId, array $queryVec,
     }
 }
 
-$systemPrompt = voice_retrieve($systemPrompt, $queryVec);
+$systemPrompt = voice_retrieve($systemPrompt, $lastUserMsg);
 
 if ($queryVec !== null) {
     $recalled = array_filter(
