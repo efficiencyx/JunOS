@@ -38,7 +38,7 @@ Browser
   chat.php (php-fpm)
        │  injects system_prompt.txt
        │  strips client system role
-       │  appends recalled prior context (history RAG)
+       │  appends lore facts + recalled prior context (RAG)
        │
        │  curl CURLOPT_WRITEFUNCTION ──────── NDJSON stream ──────▶ ollama /api/chat
        │  (per-chunk callback)                                       (HTTP/1.1, streaming)
@@ -242,11 +242,49 @@ Neither service publishes a port to the host. The Kokoro sidecar additionally en
 
 ---
 
-## RAG: cross-conversation recall
+## RAG
 
 Character voice is handled by the fine-tuned model itself, so there is no voice
-RAG. The one retrieval step left is factual recall across the user's past
-conversations, in `chat_history_retrieve` (`webapp/api/chat.php`).
+RAG. Two retrievers remain, both in `webapp/api/chat.php`, each appending its own
+block to the system prompt:
+
+- **Lore RAG** (`lore_retrieve`) — grounds replies in curated game canon.
+- **Cross-conversation recall** (`chat_history_retrieve`) — recalls this user's
+  own past conversations.
+
+### Lore RAG (`## World facts (canon)`)
+
+The fine-tune gives Jun her voice but blurs or invents specific world details, so
+canon facts are retrieved instead of baked in.
+
+The corpus is `tools/lore_dataset.jsonl` — curated game-lore Q&A in neutral wiki
+voice, with out-of-universe meta (developer, platform, version, etc.) filtered out
+so Jun never breaks the fourth wall. `tools/build_lore_index.php` flattens each
+Q&A into a question→answer pair and embeds **the question** as `search_document`,
+writing `webapp/lore_index.bin` (packed float32), `webapp/lore_corpus.txt` (the
+answers, row-aligned) and `webapp/lore_meta.json`.
+
+At request time:
+
+1. The live message is embedded as `search_query` (the matching nomic prefix — a dedicated embedding, separate from the prefix-free vector used below).
+2. Cosine-ranked against the question vectors; the top-4 are kept above a 0.6 floor. Below that the user isn't really asking about lore, so nothing is injected.
+3. The answers for the surviving hits become the `## World facts (canon)` block, framed as established truths to weave in — not to recite.
+
+```
+ user message ──embed(search_query)──▶ cosine vs question vectors
+                                              │
+                                       top-4, score ≥ 0.6
+                                              │
+                                       inject the ANSWERS as canon facts
+```
+
+Keying on the question (not the answer) keeps retrieval symmetric: a real user
+question matches the closest canon question. The index is regenerated only when
+the dataset changes; a missing index degrades gracefully (block omitted).
+
+### Cross-conversation recall (`## Recalled prior context`)
+
+Factual recall across the user's past conversations, in `chat_history_retrieve`.
 
 On every `/api/chat.php` request:
 
