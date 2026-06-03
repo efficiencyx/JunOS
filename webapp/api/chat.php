@@ -105,30 +105,39 @@ for ($i = count($body['messages']) - 1; $i >= 0; $i--) {
     }
 }
 
-// One embedding, reused for voice RAG, history RAG and the message_embeddings
-// row we write below. Null whenever Ollama can't embed.
+// One embedding, reused for history RAG and the message_embeddings row we
+// write below. Null whenever Ollama can't embed.
 $queryVec = $lastUserMsg !== '' ? embed_text($lastUserMsg) : null;
 
-// Pull the closest voice exemplars from the prebuilt corpus and append them to
-// the prompt. Quietly returns the prompt untouched if the index isn't built.
-function voice_retrieve(string $systemPrompt, ?array $queryVec): string {
-    if ($queryVec === null) return $systemPrompt;
+// Ground the reply in curated game lore. The index keys on canon QUESTIONS, so
+// we match the live message against the closest question and inject its answer
+// as an established fact. The model carries Jun's voice from fine-tuning; this
+// only supplies facts it would otherwise blur or invent. Quietly returns the
+// prompt untouched if the index isn't built or nothing is close enough.
+function lore_retrieve(string $systemPrompt, string $lastUserMsg): string {
+    if ($lastUserMsg === '') return $systemPrompt;
 
     try {
-        $metaPath = __DIR__ . '/../voice_meta.json';
-        $corpusPath = __DIR__ . '/../voice_corpus.txt';
-        $binPath = __DIR__ . '/../voice_index.bin';
+        $metaPath = __DIR__ . '/../lore_meta.json';
+        $corpusPath = __DIR__ . '/../lore_corpus.txt';
+        $binPath = __DIR__ . '/../lore_index.bin';
         if (!is_readable($metaPath) || !is_readable($corpusPath) || !is_readable($binPath)) {
             return $systemPrompt;
         }
 
+        // Corpus questions are embedded as "search_document"; the live query
+        // needs the matching "search_query" prefix. Dedicated embedding, kept
+        // separate from the prefix-free $queryVec used for history/storage.
+        $queryVec = embed_text($lastUserMsg, 'search_query');
+        if ($queryVec === null) return $systemPrompt;
+
         static $idx = null;
         if ($idx === null && function_exists('apcu_fetch')) {
-            $idx = apcu_fetch('voice_index_v1') ?: null;
+            $idx = apcu_fetch('lore_index_v1') ?: null;
         }
         if ($idx === null) {
             $meta = json_decode(file_get_contents($metaPath), true);
-            $lines = file($corpusPath, FILE_IGNORE_NEW_LINES);
+            $answers = file($corpusPath, FILE_IGNORE_NEW_LINES);
             $dim = (int)($meta['dim'] ?? 0);
             $count = (int)($meta['count'] ?? 0);
             if ($dim <= 0 || $count <= 0) return $systemPrompt;
@@ -138,11 +147,10 @@ function voice_retrieve(string $systemPrompt, ?array $queryVec): string {
             $flat = unpack('f*', $binContent); // 1-indexed
             $vectors = [];
             for ($i = 0; $i < $count; $i++) {
-                $base = $i * $dim + 1;
-                $vectors[] = array_slice($flat, $base - 1, $dim);
+                $vectors[] = array_slice($flat, $i * $dim, $dim);
             }
-            $idx = ['lines' => $lines, 'vectors' => $vectors, 'dim' => $dim];
-            if (function_exists('apcu_store')) apcu_store('voice_index_v1', $idx, 0);
+            $idx = ['answers' => $answers, 'vectors' => $vectors, 'dim' => $dim];
+            if (function_exists('apcu_store')) apcu_store('lore_index_v1', $idx, 0);
         }
 
         $qNorm = sqrt(array_sum(array_map(fn($x) => $x * $x, $queryVec))) ?: 1.0;
@@ -154,18 +162,25 @@ function voice_retrieve(string $systemPrompt, ?array $queryVec): string {
         }
         arsort($scores);
 
+        // Floor: question<->question matches rank high when relevant, so below
+        // this the user isn't really asking about lore — inject nothing rather
+        // than force facts onto an unrelated turn. Tune if recall feels off.
+        $MIN_SCORE = 0.6;
         $bullets = [];
-        foreach (array_slice($scores, 0, 8, true) as $i => $_) {
-            $bullets[] = '- "' . $idx['lines'][$i] . '"';
+        foreach (array_slice($scores, 0, 4, true) as $i => $score) {
+            if ($score < $MIN_SCORE) break; // sorted desc: first miss => rest miss
+            $bullets[] = '- ' . $idx['answers'][$i];
         }
+        if (!$bullets) return $systemPrompt; // nothing relevant; skip the block
 
         return rtrim($systemPrompt)
-            . "\n\n## Voice Reference\nExamples of how Jun phrased things in similar moments."
-            . " Match the cadence, register, and brevity. Do not copy verbatim.\n"
+            . "\n\n## World facts (canon)\nEstablished truths about your world and past, relevant to what Anon just said."
+            . " Treat them as true and weave them in naturally in your own voice — never recite them verbatim, list them, or mention they come from any reference."
+            . " If they don't fit the moment, ignore them.\n"
             . implode("\n", $bullets);
     } catch (Throwable $e) {
-        // RAG is decorative — never let it take the whole reply down with it.
-        log_event(['msg' => 'voice_retrieve_error', 'err' => $e->getMessage()]);
+        // RAG is supplementary — never let it take the whole reply down with it.
+        log_event(['msg' => 'lore_retrieve_error', 'err' => $e->getMessage()]);
         return $systemPrompt;
     }
 }
@@ -264,7 +279,7 @@ function chat_history_retrieve(int $userId, int $currentConvId, array $queryVec,
     }
 }
 
-$systemPrompt = voice_retrieve($systemPrompt, $queryVec);
+$systemPrompt = lore_retrieve($systemPrompt, $lastUserMsg);
 
 if ($queryVec !== null) {
     $recalled = array_filter(

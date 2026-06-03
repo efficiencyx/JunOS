@@ -1,36 +1,24 @@
 <?php
-// Embeds bot_lines.txt into the voice RAG index that chat.php reads at request
-// time. Outputs voice_corpus.txt, voice_index.bin (packed float32, row-aligned)
-// and voice_meta.json. Pass --dry-run to just check the cleaned line count.
-// Needs Ollama up (OLLAMA_URL) with nomic-embed-text pulled.
+// Embeds the curated game-lore Q&A (tools/lore_dataset.jsonl) into the lore RAG
+// index that chat.php reads at request time. We key retrieval on the QUESTION
+// (embedded as "search_document") and inject the ANSWER as a canonical fact, so
+// a live user message ("search_query") matches the closest canon question and
+// Jun gets its answer to draw on. Outputs lore_corpus.txt (answers, one per
+// row), lore_index.bin (packed float32, row-aligned) and lore_meta.json.
+// Pass --dry-run to just count the pairs. Needs Ollama up (OLLAMA_URL) with
+// nomic-embed-text pulled.
 
 define('EMBEDDING_MODEL', 'nomic-embed-text');
 define('OLLAMA_EMBED_URL', rtrim(getenv('OLLAMA_URL') ?: 'http://localhost:11434', '/') . '/api/embeddings');
-define('BOT_LINES_PATH', __DIR__ . '/bot_lines.txt');
+define('DATASET_PATH', __DIR__ . '/lore_dataset.jsonl');
 // webapp/* is copied to /var/www/omega/ in Docker, sits beside us bare-metal
 $webappDir = is_dir(__DIR__ . '/../webapp') ? __DIR__ . '/../webapp' : __DIR__ . '/..';
-define('CORPUS_OUT', $webappDir . '/voice_corpus.txt');
-define('BIN_OUT', $webappDir . '/voice_index.bin');
-define('META_OUT', $webappDir . '/voice_meta.json');
+define('CORPUS_OUT', $webappDir . '/lore_corpus.txt');
+define('BIN_OUT', $webappDir . '/lore_index.bin');
+define('META_OUT', $webappDir . '/lore_meta.json');
 
-function clean_line(string $raw): string {
-    // Strip "Bot: " prefix (case-exact as exported).
-    if (str_starts_with($raw, 'Bot: ')) {
-        $line = substr($raw, 5);
-    } elseif (str_starts_with($raw, 'Bot:')) {
-        $line = substr($raw, 4);
-    } else {
-        return ''; // not a bot line
-    }
-
-    $line = str_replace(['{f_playerName}', '{f_PlayerName}'], 'Anon', $line);
-    $line = str_replace(['{f_botName}', '{f_BotName}'], 'Jun', $line);
-    $line = str_replace('{{wi}}', ' ', $line); // pause marker becomes a space
-
-    // anything with a leftover {…} template is junk we can't resolve
-    if (preg_match('/\{[^}]+\}/', $line)) return '';
-
-    return preg_replace('/\s+/', ' ', trim($line));
+function collapse(string $s): string {
+    return trim(preg_replace('/\s+/', ' ', $s));
 }
 
 function embed(string $text): ?array {
@@ -62,33 +50,42 @@ function embed(string $text): ?array {
     return array_values(array_map('floatval', $obj['embedding']));
 }
 
-if (!is_readable(BOT_LINES_PATH)) {
-    fprintf(STDERR, "Cannot read: %s\n", BOT_LINES_PATH);
+if (!is_readable(DATASET_PATH)) {
+    fprintf(STDERR, "Cannot read: %s\n", DATASET_PATH);
     exit(1);
 }
 
-$raw = file(BOT_LINES_PATH, FILE_IGNORE_NEW_LINES | FILE_SKIP_EMPTY_LINES);
+// Flatten every (user -> assistant) turn into a {question, answer} pair. The
+// question is the retrieval key; the answer is what we inject. Multi-turn rows
+// become several pairs. Dedup identical questions, keep first-seen order.
+$pairs = [];
+$seen = [];
+$rawLines = 0;
+foreach (file(DATASET_PATH, FILE_IGNORE_NEW_LINES | FILE_SKIP_EMPTY_LINES) as $line) {
+    $rawLines++;
+    $obj = json_decode($line, true);
+    if (!is_array($obj) || !isset($obj['messages']) || !is_array($obj['messages'])) continue;
 
-$cleaned = [];
-$interjectionCount = 0;
-$interjectionMax = 5; // keep only a handful of bare-punctuation lines
-
-foreach ($raw as $rawLine) {
-    $line = clean_line(trim($rawLine));
-    if ($line === '') continue;
-
-    if (mb_strlen($line) <= 3) {
-        if ($interjectionCount >= $interjectionMax) continue;
-        $interjectionCount++;
+    $pendingQ = null;
+    foreach ($obj['messages'] as $m) {
+        $role = $m['role'] ?? '';
+        $content = collapse((string)($m['content'] ?? ''));
+        if ($content === '') { $pendingQ = null; continue; }
+        if ($role === 'user') {
+            $pendingQ = $content;
+        } elseif ($role === 'assistant' && $pendingQ !== null) {
+            $key = mb_strtolower($pendingQ);
+            if (!isset($seen[$key])) {
+                $seen[$key] = true;
+                $pairs[] = ['q' => $pendingQ, 'a' => $content];
+            }
+            $pendingQ = null;
+        }
     }
-
-    $cleaned[] = $line;
 }
 
-$cleaned = array_values(array_unique($cleaned)); // dedupe, keep first-seen order
-
-$total = count($cleaned);
-echo "Cleaned corpus: {$total} lines (from " . count($raw) . " raw).\n";
+$total = count($pairs);
+echo "Pairs: {$total} (from {$rawLines} dataset rows).\n";
 
 if (in_array('--dry-run', $argv ?? [], true)) {
     echo "Dry-run mode: no HTTP requests will be made. Exiting.\n";
@@ -119,19 +116,23 @@ if (!isset($pingObj['embedding'])) {
 
 $dim = count($pingObj['embedding']);
 echo "Embedding model: " . EMBEDDING_MODEL . " ({$dim}-dim).\n";
-echo "Embedding {$total} lines...\n";
+echo "Embedding {$total} questions...\n";
 
+$answers = [];
 $allVecs = [];
 $failed = 0;
 
-foreach ($cleaned as $i => $line) {
-    $vec = embed($line);
+foreach ($pairs as $i => $p) {
+    // "search_document" must match the "search_query" prefix chat.php uses at
+    // retrieval time — without the pair, nomic-embed-text ranks poorly.
+    $vec = embed('search_document: ' . $p['q']);
     if ($vec === null) {
         $failed++;
         $allVecs[] = array_fill(0, $dim, 0.0); // zero-fill keeps rows aligned
     } else {
         $allVecs[] = $vec;
     }
+    $answers[] = $p['a'];
 
     if (($i + 1) % 50 === 0 || ($i + 1) === $total) {
         printf("\r  %d / %d", $i + 1, $total);
@@ -140,7 +141,7 @@ foreach ($cleaned as $i => $line) {
 echo "\n";
 
 if ($failed > 0) {
-    fprintf(STDERR, "Warning: %d lines failed to embed (stored as zero vectors).\n", $failed);
+    fprintf(STDERR, "Warning: %d questions failed to embed (stored as zero vectors).\n", $failed);
 }
 
 // flatten row-major (vector i lives at offset i*dim) and pack as float32
@@ -150,7 +151,7 @@ foreach ($allVecs as $vec) {
 }
 $binData = pack('f*', ...$flat);
 
-file_put_contents(CORPUS_OUT, implode("\n", $cleaned));
+file_put_contents(CORPUS_OUT, implode("\n", $answers));
 file_put_contents(BIN_OUT, $binData);
 file_put_contents(META_OUT, json_encode([
     'model' => EMBEDDING_MODEL,
@@ -161,7 +162,7 @@ file_put_contents(META_OUT, json_encode([
 
 $sizeMB = round(strlen($binData) / 1048576, 2);
 echo "Wrote:\n";
-echo "  " . CORPUS_OUT . "  (" . $total . " lines)\n";
+echo "  " . CORPUS_OUT . "  ({$total} answers)\n";
 echo "  " . BIN_OUT    . "  ({$sizeMB} MB)\n";
 echo "  " . META_OUT   . "\n";
 echo "Done.\n";
