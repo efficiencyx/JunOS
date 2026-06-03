@@ -38,7 +38,7 @@ Browser
   chat.php (php-fpm)
        │  injects system_prompt.txt
        │  strips client system role
-       │  builds RAG voice block
+       │  appends lore facts + recalled prior context (RAG)
        │
        │  curl CURLOPT_WRITEFUNCTION ──────── NDJSON stream ──────▶ ollama /api/chat
        │  (per-chunk callback)                                       (HTTP/1.1, streaming)
@@ -242,21 +242,55 @@ Neither service publishes a port to the host. The Kokoro sidecar additionally en
 
 ---
 
-## RAG voice exemplar injection
+## RAG
+
+Character voice is handled by the fine-tuned model itself, so there is no voice
+RAG. Two retrievers remain, both in `webapp/api/chat.php`, each appending its own
+block to the system prompt:
+
+- **Lore RAG** (`lore_retrieve`) — grounds replies in curated game canon.
+- **Cross-conversation recall** (`chat_history_retrieve`) — recalls this user's
+  own past conversations.
+
+### Lore RAG (`## World facts (canon)`)
+
+The fine-tune gives Jun her voice but blurs or invents specific world details, so
+canon facts are retrieved instead of baked in.
+
+The corpus is `tools/lore_dataset.jsonl` — curated game-lore Q&A in neutral wiki
+voice, with out-of-universe meta (developer, platform, version, etc.) filtered out
+so Jun never breaks the fourth wall. `tools/build_lore_index.php` flattens each
+Q&A into a question→answer pair and embeds **the question** as `search_document`,
+writing `webapp/lore_index.bin` (packed float32), `webapp/lore_corpus.txt` (the
+answers, row-aligned) and `webapp/lore_meta.json`.
+
+At request time:
+
+1. The live message is embedded as `search_query` (the matching nomic prefix — a dedicated embedding, separate from the prefix-free vector used below).
+2. Cosine-ranked against the question vectors; the top-4 are kept above a 0.6 floor. Below that the user isn't really asking about lore, so nothing is injected.
+3. The answers for the surviving hits become the `## World facts (canon)` block, framed as established truths to weave in — not to recite.
+
+```
+ user message ──embed(search_query)──▶ cosine vs question vectors
+                                              │
+                                       top-4, score ≥ 0.6
+                                              │
+                                       inject the ANSWERS as canon facts
+```
+
+Keying on the question (not the answer) keeps retrieval symmetric: a real user
+question matches the closest canon question. The index is regenerated only when
+the dataset changes; a missing index degrades gracefully (block omitted).
+
+### Cross-conversation recall (`## Recalled prior context`)
+
+Factual recall across the user's past conversations, in `chat_history_retrieve`.
 
 On every `/api/chat.php` request:
 
-1. The user's latest message is embedded with `nomic-embed-text` via `POST ollama:11434/api/embeddings`.
-2. The embedding is cosine-compared against all vectors in `webapp/voice_index.bin` (packed float32, built by `tools/build_voice_index.php`).
-3. The top-8 most similar lines from `webapp/voice_corpus.txt` are formatted as a "Voice Reference" block and prepended to the system prompt.
+1. The user's latest message is embedded with `nomic-embed-text` via `POST ollama:11434/api/embeddings`. The same vector is reused for retrieval and stored in `message_embeddings` for future lookups.
+2. It is cosine-compared against this user's stored message embeddings from **other** conversations (most recent 5000), and the top-5 hits are kept above a 0.45 similarity floor.
+3. Each hit is widened into a window of surrounding turns (1 before, 3 after) so a match lands with its context; overlapping windows in the same conversation are merged.
+4. The resulting excerpts are formatted as a "Recalled prior context" block and appended to the system prompt, for factual recall only — the model is told not to repeat or paraphrase Jun's prior lines.
 
-This anchors the LLM's output style to real character voice samples without fine-tuning. The retrieval is wrapped in a `try/catch`; a missing or corrupted index file degrades gracefully — the system prompt is sent without the voice block and the chat continues normally.
-
-The index is rebuilt with:
-
-```sh
-docker compose exec -e OLLAMA_URL=http://ollama:11434 php \
-  php tools/build_voice_index.php
-```
-
-The script also accepts a `--dry-run` flag to validate the corpus without writing output files.
+The retrieval is wrapped in a `try/catch`; if Ollama can't embed or the query is empty, the block is simply omitted and the chat continues normally. Embeddings missed at write time (e.g. Ollama was briefly down) are backfilled by `tools/compact_chat_index.php`.
