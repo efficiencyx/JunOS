@@ -125,7 +125,9 @@ $allVecs = [];
 $failed = 0;
 
 foreach ($cleaned as $i => $line) {
-    $vec = embed($line);
+    // "search_document" must match the "search_query" prefix chat.php uses at
+    // retrieval time — without the pair, nomic-embed-text ranks poorly.
+    $vec = embed('search_document: ' . $line);
     if ($vec === null) {
         $failed++;
         $allVecs[] = array_fill(0, $dim, 0.0); // zero-fill keeps rows aligned
