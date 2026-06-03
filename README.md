@@ -45,8 +45,7 @@ Everything runs locally. One `docker compose up -d` brings up the LLM, the TTS, 
 
 - **Mid-stream `[ACTION:...]` extraction** — tags are parsed while the response is still streaming, so the character reacts before the sentence even finishes, with no perceptible lag.
 - **Audio-driven lipsync** — TTS RMS amplitude maps straight onto `ParamMouthOpen`, bypassing the lerp smoothing so the mouth stays tight to the audio.
-- **Voice style via RAG** — `nomic-embed-text` ranks voice exemplars from `bot_lines.txt` and injects the closest matches into every prompt, keeping her phrasing in character.
-- **Cross-conversation memory** — past messages are embedded and recalled by similarity, so she can reference things said in earlier chats.
+- **Cross-conversation memory** — past messages are embedded with `nomic-embed-text` and recalled by similarity, so she can reference things said in earlier chats.
 - **Accounts & history** — signup/login with server-side sessions, per-user conversation list, and an adult-content gate at signup.
 - **Outfit & color customization** — toggle clothing parts and apply tint groups live from the settings drawer.
 - **Runs fully local** — Ollama for inference, Kokoro for speech, SQLite for storage. Nothing leaves the box.
@@ -137,7 +136,7 @@ For the full request walkthrough — token streaming, the ACTION stream buffer, 
 ### Chat lifecycle (short version)
 
 1. The browser `POST`s the conversation to `/api/chat.php`.
-2. PHP builds the system prompt: `system_prompt.txt` (read fresh each request), the current time, the top voice exemplars (cosine-ranked), and any recalled context from past conversations.
+2. PHP builds the system prompt: `system_prompt.txt` (read fresh each request), the current time, and any recalled context from past conversations (cosine-ranked).
 3. Ollama streams NDJSON, which PHP re-frames as `data: {"token":"..."}` SSE events and flushes immediately.
 4. `js/app.js` watches the stream for `[ACTION:` markers, holds back partial markers so they never render, and dispatches each action the moment its closing `]` arrives.
 5. `js/actions.js` resolves the action against `action_map.json`; `js/live2d.js` lerps the model's parameters toward the new targets every frame.
@@ -151,17 +150,6 @@ For the full request walkthrough — token streaming, the ACTION stream buffer, 
 2. Document the new action's syntax in `webapp/system_prompt.txt` so the model knows when to use it.
 
 No rebuild needed — the backend reads `system_prompt.txt` on every request and the browser fetches the action map at load. On boot, `validateActionMap` in `app.js` logs any `Param*` keys missing from the loaded model.
-
-### Rebuild the voice RAG index
-
-The index is built from `tools/bot_lines.txt` (one `Bot: ...` line per example):
-
-```sh
-docker compose exec -e OLLAMA_URL=http://ollama:11434 php \
-  php tools/build_voice_index.php
-```
-
-This embeds each line with `nomic-embed-text`, writes packed float32 vectors to `webapp/voice_index.bin`, and refreshes `webapp/voice_corpus.txt`. A missing or stale index is handled gracefully — retrieval is skipped and chat still works.
 
 ### GPU support
 
@@ -236,7 +224,7 @@ Watch `docker compose logs ollama`. The entrypoint pre-warms the first non-embed
 .
 ├── docker/                    Dockerfiles, nginx templates, entrypoints
 ├── tts/                       Kokoro TTS sidecar (FastAPI, server.py)
-├── tools/                     Voice-index builder, chat-index compaction, admin scripts
+├── tools/                     Chat-index compaction, admin scripts
 ├── docs/                      architecture.md + screenshots/
 ├── webapp/                    Everything served by nginx / php-fpm
 │   ├── api/                   chat.php, auth.php, conversations.php, prefs.php, tts.php, models.php, _lib.php
