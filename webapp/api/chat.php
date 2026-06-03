@@ -105,84 +105,9 @@ for ($i = count($body['messages']) - 1; $i >= 0; $i--) {
     }
 }
 
-// One embedding, reused for voice RAG, history RAG and the message_embeddings
-// row we write below. Null whenever Ollama can't embed.
+// One embedding, reused for history RAG and the message_embeddings row we
+// write below. Null whenever Ollama can't embed.
 $queryVec = $lastUserMsg !== '' ? embed_text($lastUserMsg) : null;
-
-// Pull the closest voice exemplars from the prebuilt corpus and append them to
-// the prompt. Quietly returns the prompt untouched if the index isn't built.
-function voice_retrieve(string $systemPrompt, string $lastUserMsg): string {
-    if ($lastUserMsg === '') return $systemPrompt;
-
-    try {
-        $metaPath = __DIR__ . '/../voice_meta.json';
-        $corpusPath = __DIR__ . '/../voice_corpus.txt';
-        $binPath = __DIR__ . '/../voice_index.bin';
-        if (!is_readable($metaPath) || !is_readable($corpusPath) || !is_readable($binPath)) {
-            return $systemPrompt;
-        }
-
-        // The corpus is embedded with the "search_document" prefix; the query
-        // needs the matching "search_query" one for nomic to rank sensibly.
-        // This is a dedicated embedding, separate from the prefix-free $queryVec
-        // used for history recall and the stored message_embeddings rows.
-        $queryVec = embed_text($lastUserMsg, 'search_query');
-        if ($queryVec === null) return $systemPrompt;
-
-        static $idx = null;
-        if ($idx === null && function_exists('apcu_fetch')) {
-            $idx = apcu_fetch('voice_index_v1') ?: null;
-        }
-        if ($idx === null) {
-            $meta = json_decode(file_get_contents($metaPath), true);
-            $lines = file($corpusPath, FILE_IGNORE_NEW_LINES);
-            $dim = (int)($meta['dim'] ?? 0);
-            $count = (int)($meta['count'] ?? 0);
-            if ($dim <= 0 || $count <= 0) return $systemPrompt;
-
-            $binContent = file_get_contents($binPath);
-            if (!$binContent) return $systemPrompt;
-            $flat = unpack('f*', $binContent); // 1-indexed
-            $vectors = [];
-            for ($i = 0; $i < $count; $i++) {
-                $base = $i * $dim + 1;
-                $vectors[] = array_slice($flat, $base - 1, $dim);
-            }
-            $idx = ['lines' => $lines, 'vectors' => $vectors, 'dim' => $dim];
-            if (function_exists('apcu_store')) apcu_store('voice_index_v1', $idx, 0);
-        }
-
-        $qNorm = sqrt(array_sum(array_map(fn($x) => $x * $x, $queryVec))) ?: 1.0;
-        $scores = [];
-        foreach ($idx['vectors'] as $i => $v) {
-            $dot = 0.0; $vNorm = 0.0;
-            foreach ($v as $j => $vj) { $dot += $vj * $queryVec[$j]; $vNorm += $vj * $vj; }
-            $scores[$i] = $dot / ($qNorm * (sqrt($vNorm) ?: 1.0));
-        }
-        arsort($scores);
-
-        // Floor: a cosine below this means nothing in the corpus is actually
-        // close, so without it we'd inject the 8 least-bad lines and they'd read
-        // as random. Retune if the corpus is re-embedded. scores are sorted
-        // descending, so the first miss means every later one misses too.
-        $MIN_SCORE = 0.5;
-        $bullets = [];
-        foreach (array_slice($scores, 0, 8, true) as $i => $score) {
-            if ($score < $MIN_SCORE) break;
-            $bullets[] = '- "' . $idx['lines'][$i] . '"';
-        }
-        if (!$bullets) return $systemPrompt; // nothing close enough; skip the block
-
-        return rtrim($systemPrompt)
-            . "\n\n## Voice Reference\nExamples of how Jun phrased things in similar moments."
-            . " Match the cadence, register, and brevity. Do not copy verbatim.\n"
-            . implode("\n", $bullets);
-    } catch (Throwable $e) {
-        // RAG is decorative — never let it take the whole reply down with it.
-        log_event(['msg' => 'voice_retrieve_error', 'err' => $e->getMessage()]);
-        return $systemPrompt;
-    }
-}
 
 // Cross-conversation recall: find this user's earlier messages closest to the
 // current query, then widen each hit into a small window of surrounding turns.
@@ -277,8 +202,6 @@ function chat_history_retrieve(int $userId, int $currentConvId, array $queryVec,
         return [];
     }
 }
-
-$systemPrompt = voice_retrieve($systemPrompt, $lastUserMsg);
 
 if ($queryVec !== null) {
     $recalled = array_filter(

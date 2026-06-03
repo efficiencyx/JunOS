@@ -111,15 +111,9 @@ const EMBED_MODEL = 'nomic-embed-text';
 
 // Returns the embedding vector for $text, or null if Ollama is unreachable or
 // gives us something we can't parse. Every caller has to cope with null.
-function embed_text(string $text, string $task = ''): ?array {
+function embed_text(string $text): ?array {
     $text = trim($text);
     if ($text === '') return null;
-
-    // nomic-embed-text only ranks sensibly when the text carries a task
-    // instruction prefix ("search_query" for the live query, "search_document"
-    // for indexed corpus/documents). Retrieval callers pass one; storage paths
-    // that must stay byte-compatible with existing rows leave it empty.
-    $prompt = $task !== '' ? $task . ': ' . $text : $text;
 
     $baseUrl = rtrim(env_str('OLLAMA_URL', 'http://localhost:11434'), '/');
 
@@ -138,7 +132,7 @@ function embed_text(string $text, string $task = ''): ?array {
     curl_setopt_array($ch, [
         CURLOPT_POST => true,
         CURLOPT_HTTPHEADER => ['Content-Type: application/json'],
-        CURLOPT_POSTFIELDS => json_encode(['model' => EMBED_MODEL, 'prompt' => $prompt]),
+        CURLOPT_POSTFIELDS => json_encode(['model' => EMBED_MODEL, 'prompt' => $text]),
         CURLOPT_RETURNTRANSFER => true,
         CURLOPT_TIMEOUT => 30,
         CURLOPT_CONNECTTIMEOUT => 10,
