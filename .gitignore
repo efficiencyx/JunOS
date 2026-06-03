@@ -28,8 +28,10 @@ unsloth_compiled_cache/
 # raw Live2D source assets — kept locally, not in the repo
 live2d_raw/
 
-# heavy artifacts kept on disk but not in initial baseline
-webapp/voice_index.bin
+# lore RAG index — generated from tools/lore_dataset.jsonl by build_lore_index.php
+webapp/lore_corpus.txt
+webapp/lore_index.bin
+webapp/lore_meta.json
 
 # deploy state (created at runtime)
 data/
