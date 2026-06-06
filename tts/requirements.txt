@@ -1,4 +1,6 @@
 kokoro>=0.9.4
+pocket-tts>=2.1
+torch>=2.5
 fastapi>=0.110
 uvicorn[standard]>=0.27
 soundfile>=0.12

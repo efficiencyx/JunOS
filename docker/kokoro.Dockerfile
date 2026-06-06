@@ -1,6 +1,6 @@
-# Kokoro TTS sidecar. CPU build by default — Kokoro-82M is small enough to
-# hit comfortable real-time on CPU. For CUDA, install a torch wheel from the
-# pytorch CUDA index before `pip install -r requirements.txt`.
+# TTS sidecar (Kokoro-82M + pocket-tts). CPU build by default — both models are
+# small enough to hit comfortable real-time on CPU. For CUDA, swap the torch
+# install below for a wheel from the pytorch CUDA index.
 FROM python:3.11-slim
 
 RUN apt-get update \
@@ -14,7 +14,9 @@ RUN apt-get update \
 WORKDIR /app
 
 COPY tts/requirements.txt /app/requirements.txt
-RUN pip install --no-cache-dir -r /app/requirements.txt
+# Install the CPU torch wheel first so pocket-tts/kokoro don't drag in CUDA wheels.
+RUN pip install --no-cache-dir torch --index-url https://download.pytorch.org/whl/cpu \
+ && pip install --no-cache-dir -r /app/requirements.txt
 
 COPY tts/server.py /app/server.py
 

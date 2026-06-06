@@ -3,7 +3,7 @@
 // server on change so a second browser sees the same outfit / colors / TTS.
 //
 // Reserved keys:
-//   omega.outfit.v1, omega.outfit.colors.v1, tts.enabled, tts.voice, tts.speed
+//   omega.outfit.v1, omega.outfit.colors.v1, tts.enabled, tts.engine, tts.voice, tts.speed
 // Future: model, reasoning_level, theme.
 
 window.Prefs = (function () {
@@ -11,6 +11,7 @@ window.Prefs = (function () {
     'omega.outfit.v1',
     'omega.outfit.colors.v1',
     'tts.enabled',
+    'tts.engine',
     'tts.voice',
     'tts.speed',
   ];
