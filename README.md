@@ -17,7 +17,7 @@
 ![No build step](https://img.shields.io/badge/frontend-no%20build%20step-success)
 ![Made by fans](https://img.shields.io/badge/made%20by-fans-ff7096)
 
-[Features](#what-it-does) · [Quickstart](#get-her-running) · [The models](#the-models) · [Architecture](#under-the-hood) · [Troubleshooting](#when-things-go-sideways)
+[Features](#what-it-does) · [Quickstart](#get-her-running) · [Colab](#try-her-free-on-google-colab) · [The models](#the-models) · [Architecture](#under-the-hood) · [Troubleshooting](#when-things-go-sideways)
 
 </div>
 
@@ -64,7 +64,23 @@ If you just want to meet her, the [Quickstart](#get-her-running) below gets you 
 
 ## Get her running
 
-You need **Docker** (with Compose) and **git**. That's genuinely it.
+No GPU, no Docker, nothing to install? Skip straight to the [Colab Quickstart](#try-her-free-on-google-colab) and meet her in your browser. Otherwise, to run her on your own machine you need **Docker** (with Compose) and **git**. That's genuinely it.
+
+
+## Try her free on Google Colab
+
+Don't have a GPU (or just want to kick the tyres before committing)? Run the whole stack on a **free Colab T4** — no Docker, no install, nothing on your machine. You just need a Google account.
+
+[![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/efficiencyx/Jun/blob/main/colab.ipynb)
+
+1. Click the badge above to open [`colab.ipynb`](colab.ipynb) in Colab.
+2. Turn on the GPU: **Runtime → Change runtime type → T4 GPU → Save** (if it already says *Connect T4*, you're set).
+3. **Runtime → Run all**, then wait for the ✅ on each step — the slow bit is the first run downloading the model (a few GB, ~3–6 min).
+4. Scroll to **Step 3** and click the public link it prints. Say hi. 🎉
+
+Two knobs in the notebook cells: **Model** (`auto` picks the 14B since Colab can handle it, or force 7B for snappier replies) and **Voice** (text-to-speech on/off — adds ~2 min on first run). The link is a free **Cloudflare tunnel** (no signup); if it 404s for a moment, give it ~30 s and reload, or just re-run Step 3 for a fresh one.
+
+> ⚠️ **It's a disposable demo.** Colab wipes the session when it ends, so accounts, chat history, and downloaded weights don't survive between runs. For something persistent, run her [locally](#get-her-running).
 
 ### The lazy way (one line)
 
