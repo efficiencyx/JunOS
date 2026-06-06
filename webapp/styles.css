@@ -654,6 +654,33 @@ input[type="checkbox"] {
   color: var(--muted);
 }
 .msg.assistant a { color: var(--accent); }
+.msg-think {
+  margin: 0 0 8px;
+  border-left: 2px solid var(--border-2);
+  background: var(--bg-elev);
+  border-radius: var(--radius-sm);
+  font-size: 12px;
+}
+.msg-think > summary {
+  cursor: pointer;
+  list-style: none;
+  padding: 6px 10px;
+  color: var(--dim);
+  font-size: 11px;
+  letter-spacing: .02em;
+  text-transform: uppercase;
+}
+.msg-think > summary::-webkit-details-marker { display: none; }
+.msg-think > summary::before { content: '▸ '; }
+.msg-think[open] > summary::before { content: '▾ '; }
+.msg-think-body {
+  padding: 0 10px 8px;
+  color: var(--muted);
+  white-space: pre-wrap;
+  line-height: 1.5;
+  font-family: 'JetBrains Mono', ui-monospace, monospace;
+  font-size: 11px;
+}
 .msg.error {
   background: #3a1f23;
   color: var(--danger);
@@ -828,108 +855,181 @@ body.l2d-dragging { cursor: grabbing; user-select: none; }
 /* ================================================================
    Settings drawer
    ================================================================ */
+/* ================================================================
+   Settings — centered modal with a category nav (ChatGPT-style).
+   ui.toggleDrawer() toggles .open on #settingsDrawer + #drawerBackdrop,
+   so the side-drawer markup became a dialog without touching that JS.
+   ================================================================ */
 .settings-drawer {
   position: fixed;
-  top: 0;
-  right: 0;
-  bottom: 0;
-  width: var(--drawer-w);
-  max-width: 100vw;
+  top: 50%; left: 50%;
+  transform: translate(-50%, -47%) scale(.98);
+  width: min(780px, 94vw);
+  height: min(580px, 88vh);
   background: var(--bg-elev);
-  border-left: 1px solid var(--border);
+  border: 1px solid var(--border);
+  border-radius: 18px;
   box-shadow: var(--shadow-lg);
-  transform: translateX(100%);
-  transition: transform 220ms cubic-bezier(.4,0,.2,1);
   z-index: 200;
   display: flex;
-  flex-direction: column;
   overflow: hidden;
+  opacity: 0;
+  visibility: hidden;
+  pointer-events: none;
+  transition: opacity 200ms ease, transform 220ms cubic-bezier(.2,.7,.2,1), visibility 200ms;
 }
-.settings-drawer.open { transform: translateX(0); }
+.settings-drawer.open {
+  opacity: 1;
+  visibility: visible;
+  pointer-events: auto;
+  transform: translate(-50%, -50%) scale(1);
+}
 
 .drawer-backdrop {
   position: fixed;
   inset: 0;
-  background: rgba(0,0,0,.45);
+  background: rgba(0,0,0,.55);
+  backdrop-filter: blur(2px);
+  -webkit-backdrop-filter: blur(2px);
   z-index: 199;
   opacity: 0;
   pointer-events: none;
-  transition: opacity 220ms;
+  transition: opacity 200ms;
 }
 .drawer-backdrop.open { opacity: 1; pointer-events: auto; }
 
-.drawer-header {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  padding: 0 var(--space-4);
-  height: var(--header-h);
-  border-bottom: 1px solid var(--border);
+/* Left: category nav */
+.settings-nav {
+  width: 222px;
   flex-shrink: 0;
+  background: var(--bg-3);
+  border-right: 1px solid var(--border);
+  display: flex;
+  flex-direction: column;
+  padding: var(--space-3);
+  overflow-y: auto;
 }
-.drawer-title {
-  font-size: 13px;
-  font-weight: 700;
-  letter-spacing: .4px;
-  text-transform: uppercase;
-  color: var(--accent);
+.settings-close {
+  align-self: flex-start;
+  display: grid; place-items: center;
+  width: 32px; height: 32px;
+  padding: 0;
+  border: none;
+  border-radius: 50%;
+  background: var(--bg-4);
+  color: var(--muted);
+  cursor: pointer;
+  transition: background .15s, color .15s;
 }
+.settings-close:hover { background: var(--bg-hover); color: var(--fg); }
+.settings-navlist { display: flex; flex-direction: column; gap: 2px; margin-top: var(--space-4); }
+.settings-navitem {
+  display: flex; align-items: center; gap: 10px;
+  padding: 9px 12px;
+  border: none;
+  border-radius: 10px;
+  background: transparent;
+  color: var(--muted);
+  font-family: inherit;
+  font-size: 14px;
+  font-weight: 500;
+  text-align: left;
+  cursor: pointer;
+  transition: background .14s, color .14s;
+}
+.settings-navitem svg { flex-shrink: 0; opacity: .8; }
+.settings-navitem:hover { background: var(--bg-hover); color: var(--fg); }
+.settings-navitem.active { background: var(--bg-elev); color: var(--fg); box-shadow: inset 0 0 0 1px var(--border); }
 
-.drawer-body {
+/* Right: panels */
+.settings-main { flex: 1; min-width: 0; display: flex; flex-direction: column; }
+.settings-main-head {
+  flex-shrink: 0;
+  padding: 20px var(--space-5) 14px;
+  border-bottom: 1px solid var(--border);
+}
+.settings-main-title { margin: 0; font-size: 21px; font-weight: 600; color: var(--fg); }
+.settings-main-body {
   flex: 1;
   overflow-y: auto;
-  padding: var(--space-2) 0 var(--space-6);
+  padding: var(--space-1) var(--space-5) var(--space-5);
 }
+.settings-panel { display: flex; flex-direction: column; }
+.settings-panel[hidden] { display: none; }
 
-/* ================================================================
-   Drawer sections (collapsible <details>)
-   ================================================================ */
-.drawer-section {
-  border-bottom: 1px solid var(--border);
-}
-.drawer-section:last-child { border-bottom: none; }
-
-.section-summary {
+/* Rows: label + description on the left, control on the right */
+.set-row {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 10px var(--space-4);
-  font-size: 11px;
-  font-weight: 600;
-  text-transform: uppercase;
-  letter-spacing: .8px;
-  color: var(--accent);
+  gap: var(--space-4);
+  padding: 15px 0;
+  border-bottom: 1px solid var(--border);
+}
+.set-row:last-child { border-bottom: none; }
+.set-row-text { min-width: 0; }
+.set-row-title { font-size: 14px; color: var(--fg); }
+.set-row-desc { font-size: 12.5px; color: var(--dim); margin-top: 3px; line-height: 1.5; }
+.set-row-desc code {
+  font-family: ui-monospace, monospace; font-size: 11.5px;
+  background: var(--bg-3); padding: 1px 5px; border-radius: 4px;
+}
+.set-row-control { flex-shrink: 0; display: flex; align-items: center; }
+.set-row-control select {
+  max-width: 240px;
+  background: var(--bg-3);
+  border: 1px solid var(--border);
+  color: var(--fg);
+  border-radius: 8px;
+  padding: 7px 10px;
+  font-family: inherit;
+  font-size: 13px;
   cursor: pointer;
-  user-select: none;
-  list-style: none;
-  gap: var(--space-2);
 }
-.section-summary::-webkit-details-marker { display: none; }
-.section-summary::after {
-  content: '›';
-  font-size: 14px;
-  margin-left: auto;
-  transition: transform 200ms;
-  color: var(--muted);
+.set-row-control input[type="number"] {
+  width: 88px;
+  background: var(--bg-3);
+  border: 1px solid var(--border);
+  color: var(--fg);
+  border-radius: 8px;
+  padding: 7px 10px;
+  font-size: 13px;
+}
+
+/* Full-width blocks: outfit + developer logs */
+.set-block { padding: 16px 0; border-bottom: 1px solid var(--border); }
+.set-block:last-child { border-bottom: none; }
+.set-block-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 10px; }
+.set-block .set-row-desc { margin: 4px 0 12px; }
+.set-block .outfit-grid { margin: 12px 0; }
+.set-block > .secondary { margin-top: 12px; }
+.set-block .count { color: var(--muted); font-weight: 500; font-size: 12px; }
+
+/* Toggle switch (for checkboxes given .toggle) */
+input[type="checkbox"].toggle {
+  appearance: none; -webkit-appearance: none;
+  width: 40px; height: 23px;
+  border-radius: 999px;
+  background: var(--bg-4);
+  border: 1px solid var(--border-2);
+  position: relative;
+  cursor: pointer;
   flex-shrink: 0;
+  transition: background .18s, border-color .18s;
 }
-details[open] > .section-summary::after { transform: rotate(90deg); }
-.section-summary:hover { color: var(--accent-2); background: var(--bg-3); }
+input[type="checkbox"].toggle::after {
+  content: "";
+  position: absolute; top: 50%; left: 3px;
+  transform: translateY(-50%);
+  width: 17px; height: 17px;
+  border-radius: 50%;
+  background: #fff;
+  transition: left .18s;
+}
+input[type="checkbox"].toggle:checked { background: var(--accent); border-color: var(--accent); }
+input[type="checkbox"].toggle:checked::after { left: 20px; }
 
-.section-summary .count {
-  color: var(--muted);
-  font-weight: 500;
-}
-
-.section {
-  padding: 10px var(--space-4) var(--space-3);
-}
-
-.section-toolbar {
-  display: flex;
-  justify-content: flex-end;
-  margin-bottom: var(--space-1);
-}
+.secondary.danger { color: var(--danger); border-color: var(--danger); }
 
 /* ================================================================
    Action log / raw stream
@@ -1108,8 +1208,16 @@ details[open] > .section-summary::after { transform: rotate(90deg); }
 
   .settings-drawer {
     width: 100vw;
-    border-left: none;
+    height: 100vh;
+    max-width: none;
+    border: none;
+    border-radius: 0;
   }
+  .settings-nav { width: 60px; padding: var(--space-2); }
+  .settings-navitem span { display: none; }
+  .settings-navitem { justify-content: center; padding: 11px; }
+  .settings-main-head { padding: 16px var(--space-4) 12px; }
+  .settings-main-body { padding: var(--space-1) var(--space-4) var(--space-4); }
 
   #toasts { right: var(--space-2); left: var(--space-2); max-width: none; }
   .toast  { max-width: none; }
@@ -1134,6 +1242,12 @@ details[open] > .section-summary::after { transform: rotate(90deg); }
 /* ============================================================
    Boot overlay — shown until Ollama responds with models.
    ============================================================ */
+/* ============================================================
+   Boot overlay — soft "Jun OS" chrome wrapping a live terminal.
+   Live status hooks (driven by app.js + boot-fx.js):
+   #bootStatus .boot-status-label, #bootHint[data-tone], and data-ready
+   toggling the fade-out.
+   ============================================================ */
 .boot-overlay {
   position: fixed;
   inset: 0;
@@ -1141,8 +1255,7 @@ details[open] > .section-summary::after { transform: rotate(90deg); }
   display: flex;
   align-items: center;
   justify-content: center;
-  background:
-    radial-gradient(1200px 800px at 50% 40%, #161b27 0%, var(--bg) 60%, #07080c 100%);
+  background: radial-gradient(900px 620px at 50% 36%, #1b1c1e 0%, var(--bg) 58%, #0c0c0d 100%);
   overflow: hidden;
   opacity: 1;
   transition: opacity 600ms ease, visibility 600ms;
@@ -1153,188 +1266,249 @@ details[open] > .section-summary::after { transform: rotate(90deg); }
   visibility: hidden;
 }
 
-/* Animated gradient mesh blobs */
-.boot-mesh { position: absolute; inset: 0; filter: blur(70px); opacity: .55; }
-.boot-blob {
+/* Soft brand-gradient halo, breathing behind the mark. */
+.boot-glow {
   position: absolute;
-  width: 520px; height: 520px;
+  width: 460px; height: 460px;
   border-radius: 50%;
-  mix-blend-mode: screen;
-  will-change: transform;
+  background: var(--grad-soft);
+  filter: blur(120px);
+  opacity: .14;
+  pointer-events: none;
+  animation: bootGlow 6s ease-in-out infinite;
 }
-.boot-blob-a {
-  background: radial-gradient(circle, #7c9eff 0%, transparent 60%);
-  top: -120px; left: -120px;
-  animation: bootDrift 18s ease-in-out infinite alternate;
-}
-.boot-blob-b {
-  background: radial-gradient(circle, #b487ff 0%, transparent 60%);
-  bottom: -160px; right: -120px;
-  animation: bootDrift 22s ease-in-out infinite alternate-reverse;
-}
-.boot-blob-c {
-  background: radial-gradient(circle, #5ad1c0 0%, transparent 60%);
-  top: 40%; left: 40%;
-  width: 360px; height: 360px;
-  animation: bootDrift 26s ease-in-out infinite alternate;
-}
-@keyframes bootDrift {
-  0%   { transform: translate(0,0)        scale(1); }
-  50%  { transform: translate(60px,-40px) scale(1.15); }
-  100% { transform: translate(-50px,80px) scale(.95); }
+@keyframes bootGlow {
+  0%, 100% { opacity: .1;  transform: scale(.95); }
+  50%      { opacity: .18; transform: scale(1.05); }
 }
 
-/* Subtle vector grid */
-.boot-grid {
-  position: absolute; inset: 0;
-  background-image:
-    linear-gradient(rgba(255,255,255,.04) 1px, transparent 1px),
-    linear-gradient(90deg, rgba(255,255,255,.04) 1px, transparent 1px);
-  background-size: 48px 48px;
-  mask-image: radial-gradient(circle at center, #000 0%, transparent 70%);
-  -webkit-mask-image: radial-gradient(circle at center, #000 0%, transparent 70%);
-}
-
-/* Glass card */
-.boot-card {
-  position: relative;
+.boot-console {
+  position: relative; z-index: 1;
+  width: min(380px, 86vw);
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: var(--space-5);
-  padding: 36px 44px 28px;
-  min-width: 320px;
-  border-radius: 18px;
-  background: linear-gradient(180deg, rgba(28,32,44,.72), rgba(18,22,32,.72));
-  border: 1px solid rgba(255,255,255,.07);
-  box-shadow:
-    0 30px 80px rgba(0,0,0,.55),
-    inset 0 1px 0 rgba(255,255,255,.06);
-  backdrop-filter: blur(14px) saturate(140%);
-  -webkit-backdrop-filter: blur(14px) saturate(140%);
-  animation: bootCardIn 600ms cubic-bezier(.2,.7,.2,1) both;
+  gap: var(--space-4);
 }
+.boot-overlay:not([data-ready]) .boot-console {
+  animation: bootCardIn 560ms cubic-bezier(.2,.7,.2,1) both;
+}
+
+/* Ω mark in the brand gradient — same treatment as the sidebar logo. */
+.boot-sigil-wrap { display: grid; place-items: center; }
+.boot-sigil {
+  font-family: ui-serif, Georgia, serif;
+  font-size: 64px;
+  font-weight: 600;
+  line-height: 1;
+  background: var(--grad);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+  animation: bootSigilPulse 3s ease-in-out infinite;
+}
+@keyframes bootSigilPulse {
+  0%, 100% { opacity: .92; transform: scale(1); }
+  50%      { opacity: 1;   transform: scale(1.035); }
+}
+
+.boot-brand {
+  text-align: center;
+  display: flex; flex-direction: column; gap: 4px;
+  margin-bottom: 2px;
+}
+.boot-brand-name {
+  font-size: 19px;
+  font-weight: 500;
+  color: var(--fg);
+  letter-spacing: -.01em;
+}
+.boot-brand-tag {
+  font-size: 12px;
+  color: var(--dim);
+  letter-spacing: .02em;
+}
+
+/* Terminal window — title bar + body with the typed boot log + live status. */
+.boot-term {
+  --term-bg:     #0b0b0c;
+  --term-bar:    #232427;
+  --term-fg:     #e6e6e6;
+  --term-dim:    #8e9295;
+  --term-accent: #7c9eff;
+  --term-prompt: #cfd6dd;
+  --term-ring:   rgba(124,158,255,.22);
+  width: 100%;
+  text-align: left;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--term-bg);
+  box-shadow: var(--shadow);
+  overflow: hidden;
+  font-family: ui-monospace, 'SFMono-Regular', 'JetBrains Mono', 'Cascadia Code', Menlo, Consolas, monospace;
+}
+.boot-term-bar {
+  position: relative;
+  display: flex; align-items: center; gap: 8px;
+  height: 36px; padding: 0 12px;
+  background: var(--term-bar);
+  border-bottom: 1px solid rgba(0,0,0,.45);
+}
+/* Window chrome (.term-lights / .term-title / .term-winctl) + the per-OS
+   themes are shared with the auth terminal — defined in the auth block below. */
+.boot-term-body {
+  position: relative;
+  overflow: hidden;
+  padding: 13px 14px;
+  display: flex; flex-direction: column; gap: 6px;
+  font-size: 12.5px;
+  line-height: 1.55;
+  animation: bootCrtFlicker 7s steps(1) infinite;
+}
+/* CRT scanlines over the screen only (not the window chrome). */
+.boot-term-body::after {
+  content: "";
+  position: absolute; inset: 0; z-index: 2;
+  pointer-events: none;
+  background: repeating-linear-gradient(0deg, transparent 0 2px, rgba(0,0,0,.16) 2px 3px);
+  opacity: .5;
+  mix-blend-mode: multiply;
+}
+/* Slow refresh band sweeping down the screen. */
+.boot-term-body::before {
+  content: "";
+  position: absolute; left: 0; right: 0; top: -50%; height: 50%; z-index: 1;
+  pointer-events: none;
+  background: linear-gradient(180deg, transparent, rgba(124,158,255,.05), transparent);
+  animation: bootCrtSweep 4.5s linear infinite;
+}
+@keyframes bootCrtSweep {
+  0%   { transform: translateY(0); }
+  100% { transform: translateY(300%); }
+}
+@keyframes bootCrtFlicker {
+  0%, 95%, 100% { opacity: 1; }
+  96% { opacity: .9; }
+  97% { opacity: 1; }
+  98% { opacity: .94; }
+  99% { opacity: 1; }
+}
+
+/* Subsystem boot log — lines type in sequence, OK badge pops when done. */
+.boot-log {
+  list-style: none; margin: 0; padding: 0;
+  display: flex; flex-direction: column; gap: 6px;
+}
+.boot-log li {
+  display: flex; align-items: center; gap: 8px;
+  color: var(--term-dim);
+  opacity: 1;
+  transition: opacity .2s ease;
+}
+/* While typing (JS adds .typing), hide upcoming lines until their turn. */
+.boot-term.typing .boot-log li        { opacity: 0; }
+.boot-term.typing .boot-log li.live   { opacity: 1; }
+.boot-prompt { color: var(--term-prompt); font-weight: 600; user-select: none; }
+.boot-prompt::before { content: "$"; }
+.boot-cmd { color: var(--term-fg); white-space: pre; }
+.boot-ok {
+  margin-left: auto;
+  font-size: 10px; font-weight: 700; letter-spacing: .1em;
+  color: var(--ok);
+  padding: 1px 6px; border-radius: 4px;
+  border: 1px solid rgba(123,216,143,.32);
+  background: rgba(123,216,143,.12);
+  transition: opacity .25s ease;
+}
+.boot-term.typing .boot-ok          { opacity: 0; }
+.boot-term.typing .boot-log li.done .boot-ok { opacity: 1; }
+
+/* The live status + hint stay hidden until the whole log has run. */
+.boot-live, .boot-hint { transition: opacity .25s ease; }
+.boot-term.typing .boot-live,
+.boot-term.typing .boot-hint { opacity: 0; }
+.boot-term.typing.log-done .boot-live,
+.boot-term.typing.log-done .boot-hint { opacity: 1; }
+
+/* Live status line — boot-fx types into .boot-status-label; caret blinks. */
+.boot-live {
+  display: flex; align-items: center; gap: 8px;
+  margin-top: 2px;
+}
+.boot-status { color: var(--term-fg); font-weight: 500; }
+.boot-caret {
+  width: 7px; height: 14px; flex-shrink: 0;
+  margin-left: -4px;
+  background: var(--term-accent);
+  animation: bootBlink 1.05s steps(1) infinite;
+}
+@keyframes bootBlink {
+  0%, 49%   { opacity: 1; }
+  50%, 100% { opacity: 0; }
+}
+
+.boot-hint {
+  margin-top: 3px;
+  font-size: 11.5px;
+  color: var(--term-dim);
+}
+.boot-hint::before { content: "# "; opacity: .55; }
+.boot-hint[data-tone="err"] { color: var(--warn); }
+.boot-hint[data-tone="ok"]  { color: var(--ok); }
+
+/* Indeterminate progress in the brand gradient. */
+.boot-progress {
+  position: relative;
+  width: 100%; height: 3px;
+  background: var(--bg-4);
+  border-radius: var(--radius-pill);
+  overflow: hidden;
+}
+.boot-progress > span {
+  position: absolute;
+  top: 0; bottom: 0; left: 0;
+  width: 40%;
+  border-radius: var(--radius-pill);
+  background: var(--grad);
+  animation: bootSlide 1.6s ease-in-out infinite;
+}
+@keyframes bootSlide {
+  0%   { transform: translateX(-110%); }
+  100% { transform: translateX(330%); }
+}
+
+/* Boot succeeded: dive into the terminal while the rest of the chrome fades. */
+.boot-console.finishing .boot-sigil-wrap,
+.boot-console.finishing .boot-brand,
+.boot-console.finishing .boot-progress {
+  transition: opacity .4s ease, transform .4s ease;
+  opacity: 0;
+  transform: translateY(-6px);
+}
+.boot-term.zoom {
+  position: relative; z-index: 2;
+  transform-origin: center center;
+  animation: bootZoom 720ms cubic-bezier(.55, 0, .3, 1) forwards;
+}
+@keyframes bootZoom {
+  0%   { transform: scale(1);    opacity: 1; }
+  28%  { transform: scale(.965); opacity: 1; }   /* slight pull-back */
+  100% { transform: scale(2.4);  opacity: 0; }
+}
+
+/* Shared with the age gate + auth panels below — keep defined. */
 @keyframes bootCardIn {
   from { opacity: 0; transform: translateY(12px) scale(.98); }
   to   { opacity: 1; transform: none; }
 }
 
-/* Logo: Ω with two counter-rotating rings */
-.boot-logo {
-  position: relative;
-  width: 108px; height: 108px;
-  display: grid; place-items: center;
-}
-.boot-ring {
-  position: absolute; inset: 0;
-  width: 100%; height: 100%;
-  fill: none;
-  stroke-linecap: round;
-}
-.boot-ring circle {
-  fill: none;
-  stroke: url(#bootGrad); /* fallback below */
-  stroke-width: 2;
-}
-.boot-ring-outer circle {
-  stroke: rgba(124,158,255,.85);
-  stroke-width: 2;
-  stroke-dasharray: 70 220;
-  transform-origin: 50% 50%;
-  animation: bootSpin 2.6s linear infinite;
-  filter: drop-shadow(0 0 6px rgba(124,158,255,.55));
-}
-.boot-ring-inner circle {
-  stroke: rgba(180,135,255,.7);
-  stroke-width: 1.5;
-  stroke-dasharray: 30 180;
-  transform-origin: 50% 50%;
-  animation: bootSpin 1.8s linear infinite reverse;
-  filter: drop-shadow(0 0 5px rgba(180,135,255,.45));
-}
-@keyframes bootSpin {
-  to { transform: rotate(360deg); }
-}
-.boot-omega {
-  font-family: ui-serif, Georgia, serif;
-  font-size: 44px;
-  font-weight: 500;
-  line-height: 1;
-  background: linear-gradient(180deg, #e6e8ee, #9eb6ff);
-  -webkit-background-clip: text;
-  background-clip: text;
-  color: transparent;
-  text-shadow: 0 0 24px rgba(124,158,255,.35);
-  animation: bootPulse 2.6s ease-in-out infinite;
-}
-@keyframes bootPulse {
-  0%, 100% { opacity: .92; transform: scale(1); }
-  50%      { opacity: 1;   transform: scale(1.04); }
-}
-
-.boot-text { text-align: center; display: flex; flex-direction: column; gap: 6px; }
-.boot-title {
-  font-size: 13px;
-  font-weight: 600;
-  letter-spacing: 3px;
-  text-transform: uppercase;
-  color: var(--muted);
-}
-.boot-status {
-  display: inline-flex;
-  align-items: baseline;
-  gap: 4px;
-  font-size: 16px;
-  font-weight: 500;
-  color: var(--fg);
-}
-.boot-dots { display: inline-flex; gap: 3px; margin-left: 2px; }
-.boot-dots i {
-  width: 4px; height: 4px;
-  border-radius: 50%;
-  background: var(--accent);
-  display: inline-block;
-  animation: bootDot 1.2s ease-in-out infinite;
-}
-.boot-dots i:nth-child(2) { animation-delay: .15s; }
-.boot-dots i:nth-child(3) { animation-delay: .3s; }
-@keyframes bootDot {
-  0%, 60%, 100% { opacity: .25; transform: translateY(0); }
-  30%           { opacity: 1;   transform: translateY(-3px); }
-}
-.boot-hint {
-  font-size: 12px;
-  color: var(--dim);
-  font-variant-numeric: tabular-nums;
-}
-.boot-hint[data-tone="err"] { color: var(--danger); }
-.boot-hint[data-tone="ok"]  { color: var(--ok); }
-
-/* Indeterminate progress bar */
-.boot-progress {
-  position: relative;
-  width: 220px; height: 2px;
-  background: rgba(255,255,255,.06);
-  border-radius: 2px;
-  overflow: hidden;
-}
-.boot-progress > span {
-  position: absolute;
-  top: 0; left: 0;
-  width: 40%; height: 100%;
-  background: linear-gradient(90deg, transparent, var(--accent), transparent);
-  animation: bootSlide 1.6s ease-in-out infinite;
-}
-@keyframes bootSlide {
-  0%   { transform: translateX(-100%); }
-  100% { transform: translateX(350%); }
-}
-
 @media (prefers-reduced-motion: reduce) {
-  .boot-blob, .boot-ring-outer circle, .boot-ring-inner circle,
-  .boot-omega, .boot-dots i, .boot-progress > span {
+  .boot-glow, .boot-sigil, .boot-caret, .boot-progress > span,
+  .boot-term-body, .boot-term-body::before,
+  .boot-overlay:not([data-ready]) .boot-console {
     animation: none !important;
   }
+  .boot-caret { opacity: 1; }
 }
 
 /* ============================================================
@@ -1424,117 +1598,209 @@ html[data-pre-auth] #app { visibility: hidden; }
 }
 #authScreen[hidden] { display: none; }
 
-.auth-panel {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: var(--space-4);
-  padding: 36px 40px 32px;
+/* Auth terminal — base theme (mac-like); per-OS overrides further down.
+   --term-* vars are swapped by .auth-term[data-os=…]. */
+.auth-term {
+  --term-bg:     #0c0c0d;
+  --term-bar:    #232427;
+  --term-fg:     #e6e6e6;
+  --term-dim:    #8e9295;
+  --term-accent: #7c9eff;
+  --term-prompt: #cfd6dd;
+  --term-ring:   rgba(124,158,255,.22);
   width: 100%;
-  max-width: 400px;
-  border-radius: 18px;
-  background: linear-gradient(180deg, rgba(28,32,44,.82), rgba(18,22,32,.82));
-  border: 1px solid rgba(255,255,255,.07);
-  box-shadow: 0 30px 80px rgba(0,0,0,.55), inset 0 1px 0 rgba(255,255,255,.06);
-  backdrop-filter: blur(14px) saturate(140%);
-  -webkit-backdrop-filter: blur(14px) saturate(140%);
+  max-width: 440px;
+  margin: 16px;
+  border-radius: 12px;
+  overflow: hidden;
+  border: 1px solid rgba(255,255,255,.08);
+  box-shadow: 0 40px 100px rgba(0,0,0,.6), inset 0 1px 0 rgba(255,255,255,.05);
+  color: var(--term-fg);
+  font-family: ui-monospace, 'SFMono-Regular', 'JetBrains Mono', 'Cascadia Code', Menlo, Consolas, monospace;
   animation: bootCardIn 500ms cubic-bezier(.2,.7,.2,1) both;
 }
 
+/* Title bar. Default: traffic lights left, centered title (macOS Terminal). */
+.auth-term-bar {
+  position: relative;
+  display: flex; align-items: center; gap: 8px;
+  height: 38px; padding: 0 12px;
+  background: var(--term-bar);
+  border-bottom: 1px solid rgba(0,0,0,.45);
+}
+.term-title {
+  position: absolute; left: 0; right: 0;
+  text-align: center;
+  font-size: 12px; color: var(--term-dim);
+  pointer-events: none;
+  padding: 0 70px;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.term-lights { display: inline-flex; gap: 8px; z-index: 1; }
+.term-lights i { width: 12px; height: 12px; border-radius: 50%; display: inline-block; }
+.term-lights i:nth-child(1) { background: #ff5f57; }
+.term-lights i:nth-child(2) { background: #febc2e; }
+.term-lights i:nth-child(3) { background: #28c840; }
+.term-winctl { display: none; margin-left: auto; gap: 16px; z-index: 1; }
+.term-winctl i { font-style: normal; font-size: 12px; line-height: 1; color: var(--term-dim); }
+
+/* Body */
+.auth-term-body {
+  background: var(--term-bg);
+  padding: 22px 22px 24px;
+  display: flex; flex-direction: column; gap: 16px;
+  font-size: 12.5px; line-height: 1.5;
+}
+
+.auth-head { display: flex; align-items: center; gap: 12px; }
 .auth-logo {
-  font-size: 36px;
-  font-weight: 900;
-  color: var(--accent, #8b7cf6);
-  line-height: 1;
+  font-family: ui-serif, Georgia, serif;
+  font-size: 40px; font-weight: 600; line-height: 1;
+  background: var(--grad);
+  -webkit-background-clip: text; background-clip: text; color: transparent;
+  filter: drop-shadow(0 1px 6px rgba(0,0,0,.5));
+}
+.auth-wordmark { font-size: 17px; font-weight: 600; letter-spacing: .14em; color: var(--term-fg); }
+
+.auth-motd { display: flex; flex-direction: column; gap: 3px; }
+.auth-dim { color: var(--term-dim); }
+.auth-os-name { color: var(--term-accent); font-weight: 700; font-style: normal; }
+.auth-caret {
+  display: inline-block; width: 7px; height: 13px; vertical-align: -2px;
+  margin-left: 5px; background: var(--term-accent);
+  animation: bootBlink 1.05s steps(1) infinite;
 }
 
-.auth-title {
-  margin: 0;
-  font-size: 20px;
-  font-weight: 700;
-  color: var(--fg);
-  letter-spacing: .01em;
-}
-
+/* Tabs as shell sub-commands */
 .auth-tabs {
-  display: flex;
-  gap: var(--space-1);
-  background: var(--bg-2);
-  border-radius: 8px;
-  padding: 3px;
-  width: 100%;
+  display: flex; gap: 20px;
+  border-bottom: 1px solid rgba(255,255,255,.08);
+}
+.auth-tab {
+  background: none; border: none; cursor: pointer;
+  font-family: inherit; font-size: 13px; color: var(--term-dim);
+  padding: 4px 1px 7px; position: relative;
+  transition: color .15s;
+}
+.auth-tab::before { content: "> "; opacity: .45; }
+.auth-tab.active { color: var(--term-fg); }
+.auth-tab.active::after {
+  content: ""; position: absolute; left: 0; right: 0; bottom: -1px; height: 2px;
+  background: var(--term-accent);
 }
 
-.auth-tab {
-  flex: 1;
-  padding: 6px 0;
-  font-size: 13px;
-  font-weight: 500;
-  background: transparent;
-  border: none;
+/* Forms */
+.auth-form { display: flex; flex-direction: column; gap: 14px; }
+.auth-form[hidden] { display: none; }
+.auth-field { display: flex; flex-direction: column; gap: 6px; }
+.auth-flabel { font-size: 12px; color: var(--term-dim); }
+.auth-flabel small { opacity: .7; }
+.auth-ps::before { content: "$"; color: var(--term-prompt); font-weight: 700; margin-right: 3px; }
+.auth-field input {
+  width: 100%; box-sizing: border-box;
+  font-family: inherit; font-size: 14px;
+  color: var(--term-fg);
+  background: rgba(255,255,255,.045);
+  border: 1px solid rgba(255,255,255,.1);
   border-radius: 6px;
-  color: var(--muted);
+  padding: 9px 11px;
+  outline: none;
+  caret-color: var(--term-accent);
+  transition: border-color .15s, box-shadow .15s;
+}
+.auth-field input:focus {
+  border-color: var(--term-accent);
+  box-shadow: 0 0 0 3px var(--term-ring);
+}
+
+.auth-check {
+  display: flex; align-items: flex-start; gap: 10px;
+  font-size: 12.5px; color: var(--term-dim); cursor: pointer;
+}
+.auth-check input { margin-top: 2px; flex-shrink: 0; accent-color: var(--term-accent); }
+
+.auth-error {
+  font-size: 12.5px; color: #ff8a8a;
+  padding: 8px 10px;
+  background: rgba(255,90,90,.1);
+  border: 1px solid rgba(255,90,90,.3);
+  border-radius: 6px;
+}
+.auth-error::before { content: "✗ "; }
+.auth-error[hidden] { display: none; }
+
+.auth-submit {
+  width: 100%; margin-top: 2px;
+  font-family: inherit; font-size: 13.5px; font-weight: 700; letter-spacing: .02em;
+  padding: 10px 0; border-radius: 6px;
+  background: transparent;
+  color: var(--term-accent);
+  border: 1px solid var(--term-accent);
   cursor: pointer;
   transition: background .15s, color .15s;
 }
-.auth-tab.active {
-  background: var(--bg-3);
-  color: var(--fg);
-}
+.auth-submit::before { content: "➜ "; }
+.auth-submit:hover:not(:disabled) { background: var(--term-accent); color: var(--term-bg); }
+.auth-submit:disabled { opacity: .55; cursor: default; }
 
-.auth-form {
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-3);
-  width: 100%;
-}
-.auth-form[hidden] { display: none; }
+/* ============================================================
+   OS themes — shared by the auth + boot terminals (data-os set by app.js).
+   :is() lets one rule paint both terminals.
+   ============================================================ */
 
-.auth-field {
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-  font-size: 13px;
-  color: var(--muted);
+/* ---- macOS — Terminal.app (dark) ---- */
+:is(.auth-term, .boot-term)[data-os="mac"] {
+  --term-bg: #1e1e1e;
+  --term-bar: #343434;
+  --term-accent: #3ac06a;
+  --term-prompt: #d8d8d8;
+  --term-ring: rgba(58,192,106,.22);
 }
-.auth-field input {
-  width: 100%;
-  padding: 8px 10px;
-  font-size: 14px;
-  background: var(--bg-2);
-  border: 1px solid var(--border);
-  border-radius: 8px;
-  color: var(--fg);
-  outline: none;
-  box-sizing: border-box;
-  transition: border-color .15s;
-}
-.auth-field input:focus { border-color: var(--accent, #8b7cf6); }
+.auth-term[data-os="mac"] .auth-ps::before,
+.boot-term[data-os="mac"] .boot-prompt::before { content: "%"; }
 
-.auth-check {
-  display: flex;
-  align-items: flex-start;
-  gap: var(--space-2);
-  font-size: 13px;
-  color: var(--muted);
-  cursor: pointer;
+/* ---- Windows — PowerShell (classic blue) ---- */
+:is(.auth-term, .boot-term)[data-os="windows"] {
+  --term-bg: #012456;
+  --term-bar: #2b2b2b;
+  --term-fg: #eeeeee;
+  --term-dim: #b7c4d8;
+  --term-accent: #ffd866;
+  --term-prompt: #ffe9a8;
+  --term-ring: rgba(255,216,102,.22);
 }
-.auth-check input { margin-top: 2px; flex-shrink: 0; }
+:is(.auth-term, .boot-term)[data-os="windows"] .term-lights { display: none; }
+:is(.auth-term, .boot-term)[data-os="windows"] .term-winctl { display: inline-flex; }
+:is(.auth-term, .boot-term)[data-os="windows"] .term-title { position: static; text-align: left; padding: 0; margin-right: auto; }
+:is(.auth-term, .boot-term)[data-os="windows"] .term-winctl .wc-close:hover { color: #ff6b6b; }
+.auth-term[data-os="windows"] .auth-ps::before,
+.boot-term[data-os="windows"] .boot-prompt::before { content: ">"; }
 
-.auth-error {
-  font-size: 13px;
-  color: #f87171;
-  padding: 6px 10px;
-  background: rgba(248,113,113,.08);
-  border: 1px solid rgba(248,113,113,.2);
-  border-radius: 6px;
+/* ---- Linux — Ubuntu GNOME Terminal (aubergine) ---- */
+:is(.auth-term, .boot-term)[data-os="linux"] {
+  --term-bg: #300a24;
+  --term-bar: #2c2c2c;
+  --term-fg: #eeeeee;
+  --term-dim: #c0a8ba;
+  --term-accent: #e95420;
+  --term-prompt: #5fd35f;
+  --term-ring: rgba(233,84,32,.22);
 }
+:is(.auth-term, .boot-term)[data-os="linux"] .term-lights { display: none; }
+:is(.auth-term, .boot-term)[data-os="linux"] .term-winctl { display: inline-flex; gap: 8px; }
+:is(.auth-term, .boot-term)[data-os="linux"] .term-title { position: static; text-align: left; padding: 0; margin-right: auto; }
+:is(.auth-term, .boot-term)[data-os="linux"] .term-winctl i {
+  width: 20px; height: 20px; border-radius: 50%;
+  display: grid; place-items: center; font-size: 9px;
+  background: rgba(255,255,255,.12); color: #e6e6e6;
+}
+:is(.auth-term, .boot-term)[data-os="linux"] .term-winctl .wc-close { background: #e95420; color: #fff; }
+.auth-term[data-os="linux"] .auth-ps::before,
+.boot-term[data-os="linux"] .boot-prompt::before { content: "$"; }
 
-.auth-submit {
-  width: 100%;
-  padding: 10px 0;
-  font-size: 14px;
-  font-weight: 600;
+@media (prefers-reduced-motion: reduce) {
+  .auth-term { animation: none !important; }
+  .auth-caret { animation: none !important; opacity: 1; }
 }
 
 /* ================================================================

@@ -11,6 +11,7 @@ window.TTS = (function () {
   const TTS_URL = '/api/tts.php';
 
   let enabled = false;
+  let engine = 'kokoro';
   let voice = 'af_heart';
   let speed = 1.0;
   let onLog = () => {};
@@ -50,6 +51,7 @@ window.TTS = (function () {
   }
   function isEnabled() { return enabled; }
 
+  function setEngine(e) { if (e) engine = e; }
   function setVoice(v) { if (v) voice = v; }
   function setSpeed(s) { speed = Math.max(0.5, Math.min(2.0, s || 1.0)); }
   function setLogger(fn) { onLog = fn || (() => {}); }
@@ -61,7 +63,7 @@ window.TTS = (function () {
       return await r.json();
     } catch (e) {
       onLog('warn', `TTS /voices failed: ${e.message} (sidecar running?)`);
-      return { voices: [], default: voice };
+      return { engines: {}, default_engine: engine };
     }
   }
 
@@ -86,7 +88,7 @@ window.TTS = (function () {
   // Kokoro's G2P chokes on emojis (errors or produces phoneme garbage that
   // desyncs the queue), and any [ACTION:...] fragment that survived the
   // stream-buffer would get read out loud. Strip both, plus markdown noise.
-  const ACTION_RE = /\[ACTION:[^\]]*\]?/gi;
+  const ACTION_RE = /\[ACTIONS?:[^\]]*\]?/gi;
   const MARKDOWN_NOISE_RE = /[*_~`#>]+/g;
   // \p{Extended_Pictographic} covers all emojis; ️ is the variation
   // selector that turns a few base glyphs into emoji form; ‍ is the
@@ -144,7 +146,7 @@ window.TTS = (function () {
         const res = await fetch(`${TTS_URL}?action=tts`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ text, voice, speed }),
+          body: JSON.stringify({ text, voice, speed, engine }),
           signal: ctrl.signal,
         });
         if (!res.ok) {
@@ -257,7 +259,7 @@ window.TTS = (function () {
 
   return {
     setEnabled, isEnabled,
-    setVoice, setSpeed,
+    setEngine, setVoice, setSpeed,
     setLogger,
     listVoices,
     feed, flush, stop,

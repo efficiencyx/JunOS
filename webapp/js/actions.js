@@ -15,8 +15,8 @@ window.Actions = (function () {
   function setLogger(cb) { onLog = cb; }
   function log(level, msg) { if (onLog) onLog(level, msg); }
 
-  // Matches [ACTION:name] or [ACTION:name|k=v|k=v]
-  const ACTION_RE = /\[\s*ACTION\s*:\s*([a-zA-Z_][\w]*)\s*((?:\|[^=\]|]+=[^|\]]*)*)\s*\]/gi;
+  // Matches [ACTION:name] or [ACTION:name|k=v|k=v]. Plural [ACTIONS:...] also accepted.
+  const ACTION_RE = /\[\s*ACTIONS?\s*:\s*([a-zA-Z_][\w]*)\s*((?:\|[^=\]|]+=[^|\]]*)*)\s*\]/gi;
 
   function parseActions(text) {
     const actions = [];
