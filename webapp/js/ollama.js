@@ -9,7 +9,7 @@ window.Ollama = (function () {
 
   // chat({messages, model, conversation_id}, {onToken, onDone, onError})
   // Returns a function to abort.
-  function chat({ messages, model, reasoning, think, outfit_context, conversation_id, idle, client_time }, { onToken, onDone, onError, onDebug }) {
+  function chat({ messages, model, reasoning, think, outfit_context, conversation_id, idle, client_time }, { onToken, onThinking, onDone, onError, onDebug }) {
     const ctrl = new AbortController();
 
     (async () => {
@@ -47,6 +47,7 @@ window.Ollama = (function () {
                 const obj = JSON.parse(payload);
                 if (obj.error) { onError && onError(new Error(obj.error)); continue; }
                 if (obj.debug) { onDebug && onDebug(obj.debug); continue; }
+                if (typeof obj.thinking === 'string') { onThinking && onThinking(obj.thinking); continue; }
                 if (typeof obj.token === 'string') onToken && onToken(obj.token);
               } catch (e) { /* ignore parse errors */ }
             }

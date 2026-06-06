@@ -20,6 +20,7 @@
   const stageSkeleton = document.getElementById('stageSkeleton');
   const resetLive2DBtn = document.getElementById('resetLive2DBtn');
   const ttsChk = document.getElementById('ttsChk');
+  const ttsEngineSelect = document.getElementById('ttsEngineSelect');
   const ttsVoiceSelect = document.getElementById('ttsVoiceSelect');
   const ttsSpeedInput = document.getElementById('ttsSpeed');
   const messagesEmpty = document.getElementById('messagesEmpty');
@@ -155,9 +156,10 @@
   // complete actions (closed by ']'), and hold back any tail that could be the start of
   // a marker so it isn't emitted as visible text until we know whether it's an action.
   // Whitespace-tolerant: accepts [ACTION:, [ ACTION:, [ACTION :, [ ACTION :, any case.
-  const MARK_RE = /\[\s*ACTION\s*:/i;
+  // Also tolerates the plural [ACTIONS:] the LLM sometimes emits.
+  const MARK_RE = /\[\s*ACTIONS?\s*:/i;
   // Trailing partial that could still grow into MARK_RE. Anchored at end-of-string.
-  const PARTIAL_RE = /\[\s*(?:A(?:C(?:T(?:I(?:O(?:N\s*:?)?)?)?)?)?)?$/i;
+  const PARTIAL_RE = /\[\s*(?:A(?:C(?:T(?:I(?:O(?:N(?:S?\s*:?)?)?)?)?)?)?)?$/i;
 
   function findMark(s, from = 0) {
     const m = s.slice(from).match(MARK_RE);
@@ -240,15 +242,46 @@
     cancelAutoReset();
 
     const draft = appendMsg('assistant', '');
+    // Reply text renders into its own body element so the thinking panel above it
+    // survives the per-token innerHTML rewrite.
+    const body = document.createElement('div');
+    body.className = 'msg-body';
+    draft.appendChild(body);
     const typing = document.createElement('span');
     typing.className = 'typing';
-    draft.appendChild(typing);
+    body.appendChild(typing);
+
+    // Lazily created the first time a thinking token arrives (only when Think is on).
+    let thinkEl = null, thinkBody = null, thinking = '';
+    function pushThinking(t) {
+      if (!thinkEl) {
+        thinkEl = document.createElement('details');
+        thinkEl.className = 'msg-think';
+        thinkEl.open = true;
+        const summary = document.createElement('summary');
+        summary.textContent = 'Thinking…';
+        thinkBody = document.createElement('div');
+        thinkBody.className = 'msg-think-body';
+        thinkEl.append(summary, thinkBody);
+        draft.insertBefore(thinkEl, body);
+      }
+      thinking += t;
+      thinkBody.textContent = thinking;
+      messagesEl.scrollTop = messagesEl.scrollHeight;
+    }
+    let thinkSettled = false;
+    function settleThinking() {
+      if (!thinkEl || thinkSettled) return;
+      thinkSettled = true;
+      thinkEl.open = false;
+      thinkEl.querySelector('summary').textContent = 'Thought process';
+    }
 
     let visible = '';
     const stream = makeStreamBuffer(clean => {
       visible += clean;
-      draft.innerHTML = renderMarkdown(visible);
-      draft.appendChild(typing);
+      body.innerHTML = renderMarkdown(visible);
+      body.appendChild(typing);
       messagesEl.scrollTop = messagesEl.scrollHeight;
       if (window.TTS) TTS.feed(clean);
     });
@@ -285,9 +318,11 @@
             debugSystemPromptEl.textContent = dbg.system_prompt;
           }
         },
-        onToken: (tok) => { appendRaw(tok); stream.push(tok); },
+        onThinking: (t) => { appendRaw(t); pushThinking(t); },
+        onToken: (tok) => { settleThinking(); appendRaw(tok); stream.push(tok); },
         onDone: async () => {
           stream.flush();
+          settleThinking();
           if (window.TTS) TTS.flush();
           typing.remove();
           if (visible.trim()) messages.push({ role: 'assistant', content: visible });
@@ -495,6 +530,31 @@
   const userChipBtn = document.getElementById('userChipBtn');
   if (userChipBtn) userChipBtn.addEventListener('click', () => ui.toggleDrawer(true));
 
+  // Settings modal: switch category panels via the left nav.
+  const settingsNavItems = document.querySelectorAll('.settings-navitem');
+  const settingsPanels = document.querySelectorAll('.settings-panel');
+  const settingsPanelTitle = document.getElementById('settingsPanelTitle');
+  settingsNavItems.forEach((item) => {
+    item.addEventListener('click', () => {
+      const key = item.dataset.panel;
+      settingsNavItems.forEach((n) => {
+        const on = n === item;
+        n.classList.toggle('active', on);
+        n.setAttribute('aria-selected', on ? 'true' : 'false');
+      });
+      settingsPanels.forEach((p) => { p.hidden = p.dataset.panel !== key; });
+      const label = item.querySelector('span');
+      if (settingsPanelTitle && label) settingsPanelTitle.textContent = label.textContent;
+    });
+  });
+
+  // Escape closes the settings modal.
+  document.addEventListener('keydown', (e) => {
+    if (e.key !== 'Escape') return;
+    const d = document.getElementById('settingsDrawer');
+    if (d && d.classList.contains('open')) ui.toggleDrawer(false);
+  });
+
   // Sidebar collapse toggle (persists across reloads)
   const appMain = document.querySelector('.app-main');
   const collapseBtn = document.getElementById('collapseSidebarBtn');
@@ -527,6 +587,39 @@
   const authFormLogin = document.getElementById('authFormLogin');
   const authFormSignup = document.getElementById('authFormSignup');
   const signOutBtn = document.getElementById('signOutBtn');
+
+  // Flavor the auth terminal after the user's OS: macOS Terminal, Windows
+  // PowerShell, or a Linux (Ubuntu) shell. Purely cosmetic — data-os drives CSS.
+  function detectOS() {
+    const p = (navigator.userAgentData && navigator.userAgentData.platform)
+      || navigator.platform || navigator.userAgent || '';
+    const s = p.toLowerCase();
+    if (/mac|iphone|ipad|ipod/.test(s)) return 'mac';
+    if (/win/.test(s)) return 'windows';
+    return 'linux';
+  }
+  (function flavorTerminals() {
+    const os = detectOS();
+    const authTitles = { mac: 'jun — -zsh — 80×24', windows: 'Windows PowerShell', linux: 'jun@junbuntu: ~' };
+    const bootTitles = { mac: 'jun — boot — 80×24', windows: 'Windows PowerShell', linux: 'jun@junbuntu: ~/boot' };
+    const names = { mac: 'macOS', windows: 'Windows', linux: 'Linux' };
+
+    const authTerm = document.getElementById('authTerm');
+    if (authTerm) {
+      authTerm.setAttribute('data-os', os);
+      const t = document.getElementById('authTermTitle');
+      if (t) t.textContent = authTitles[os];
+      const n = authTerm.querySelector('.auth-os-name');
+      if (n) n.textContent = names[os];
+    }
+
+    const bootTerm = document.querySelector('.boot-term');
+    if (bootTerm) {
+      bootTerm.setAttribute('data-os', os);
+      const bt = bootTerm.querySelector('.term-title');
+      if (bt) bt.textContent = bootTitles[os];
+    }
+  })();
 
   function showAuthScreen() {
     if (authScreen) authScreen.hidden = false;
@@ -621,6 +714,7 @@
       bo.removeAttribute('data-ready');
       bo.setAttribute('aria-hidden', 'false');
     }
+    if (window.BootFX) BootFX.start();
   }
 
   (async function bootstrap() {
@@ -631,9 +725,10 @@
       return;
     }
 
-    // Session confirmed: reveal the app shell and the AI-provider boot overlay.
-    // Unlogged visitors never reach this, so they never see provider loading.
-    document.documentElement.removeAttribute('data-pre-auth');
+    // Session confirmed: show the boot overlay. The app shell stays hidden
+    // (data-pre-auth) underneath it until dismissBoot reveals it, so the app
+    // never flickers through the overlay's fade-in. Unlogged visitors never
+    // reach this, so they never see provider loading.
     showBoot();
 
     // Populate sidebar user chip from session.
@@ -690,22 +785,51 @@
       const savedEnabled = localStorage.getItem('tts.enabled') === '1';
       const savedVoice = localStorage.getItem('tts.voice') || '';
       const savedSpeed = parseFloat(localStorage.getItem('tts.speed') || '1.0');
+      const savedEngine = localStorage.getItem('tts.engine') || 'kokoro';
       TTS.setSpeed(savedSpeed);
       if (ttsSpeedInput) ttsSpeedInput.value = String(savedSpeed);
 
-      try {
-        const v = await TTS.listVoices();
-        const voices = v.voices || [];
-        const def = savedVoice || v.default || (voices[0] || 'af_heart');
+      let engines = {};
+      // Fill the voice dropdown for one engine and pick a voice for it.
+      // `preferred` wins if it's one of the engine's voices, else the engine default.
+      function populateVoices(engineKey, preferred) {
+        const info = engines[engineKey] || { voices: [], default: '' };
+        const voices = info.voices || [];
+        const def = (preferred && voices.includes(preferred)) ? preferred
+          : (voices.includes(info.default) ? info.default : (voices[0] || ''));
         if (ttsVoiceSelect) {
           ttsVoiceSelect.innerHTML = voices.map(name =>
             `<option value="${escapeHtml(name)}">${escapeHtml(name)}</option>`).join('');
-          if (voices.includes(def)) ttsVoiceSelect.value = def;
+          if (def) ttsVoiceSelect.value = def;
         }
         TTS.setVoice(def);
-        if (voices.length) logAction('ok', `TTS ready: ${voices.length} voices`);
+        return def;
+      }
+
+      try {
+        const v = await TTS.listVoices();
+        engines = v.engines || {};
+        const engineKey = engines[savedEngine] ? savedEngine
+          : (engines[v.default_engine] ? v.default_engine : Object.keys(engines)[0] || 'kokoro');
+        TTS.setEngine(engineKey);
+        if (ttsEngineSelect) ttsEngineSelect.value = engineKey;
+        const def = populateVoices(engineKey, savedVoice);
+        const count = (engines[engineKey] && engines[engineKey].voices || []).length;
+        if (count) logAction('ok', `TTS ready: ${engineKey}, ${count} voices (default ${def})`);
       } catch (e) {
         logAction('warn', 'TTS sidecar unreachable (start tts/run.sh)');
+      }
+
+      if (ttsEngineSelect) {
+        ttsEngineSelect.addEventListener('change', () => {
+          const engineKey = ttsEngineSelect.value;
+          TTS.setEngine(engineKey);
+          localStorage.setItem('tts.engine', engineKey);
+          // Switching engine resets to that engine's default voice.
+          const def = populateVoices(engineKey, '');
+          localStorage.setItem('tts.voice', def);
+          if (window.Prefs) Prefs.pushToServer();
+        });
       }
 
       if (ttsChk) {
@@ -739,7 +863,10 @@
     const bootStatusLabel = document.querySelector('#bootStatus .boot-status-label');
     const bootHint = document.getElementById('bootHint');
     const setBoot = (label, hint, tone) => {
-      if (bootStatusLabel && label) bootStatusLabel.textContent = label;
+      if (label) {
+        if (window.BootFX) BootFX.typeStatus(label);
+        else if (bootStatusLabel) bootStatusLabel.textContent = label;
+      }
       if (bootHint && hint != null) {
         bootHint.textContent = hint;
         if (tone) bootHint.setAttribute('data-tone', tone);
@@ -748,11 +875,17 @@
     };
     const dismissBoot = () => {
       if (!bootOverlay) return;
+      // Reveal the app shell underneath the still-opaque overlay, so the
+      // zoom/fade-out hands straight off to the app (no flicker before it).
+      document.documentElement.removeAttribute('data-pre-auth');
       setBoot('Ready', 'Connected', 'ok');
-      setTimeout(() => {
+      const hide = () => {
         bootOverlay.setAttribute('data-ready', '1');
         bootOverlay.setAttribute('aria-hidden', 'true');
-      }, 350);
+      };
+      // Once the log + "Ready" have shown, zoom into the terminal, then dismiss.
+      if (window.BootFX && BootFX.finish) BootFX.finish(hide);
+      else setTimeout(hide, 350);
     };
 
     async function waitForOllama() {

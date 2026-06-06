@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Jun OS</title>
-<link rel="stylesheet" href="styles.css?v=14">
+<link rel="stylesheet" href="styles.css?v=22">
 <script src="js/boot-gate.js?v=1"></script>
 </head>
 <body>
@@ -18,74 +18,106 @@
   </div>
 </div>
 
-<!-- Auth screen: shown when no valid session exists -->
+<!-- Auth screen: shown when no valid session exists. Styled as an OS-flavored
+     terminal — app.js sets data-os (mac / windows / linux) + the title/os name. -->
 <div id="authScreen" hidden>
-  <div class="auth-panel">
-    <div class="auth-logo" aria-hidden="true">Ω</div>
-    <h1 class="auth-title">Jun OS</h1>
-    <div class="auth-tabs" role="tablist">
-      <button class="auth-tab active" id="authTabLogin" role="tab" aria-selected="true" aria-controls="authFormLogin">Login</button>
-      <button class="auth-tab" id="authTabSignup" role="tab" aria-selected="false" aria-controls="authFormSignup">Sign up</button>
+  <div class="auth-term" id="authTerm" data-os="linux">
+    <div class="auth-term-bar">
+      <span class="term-lights" aria-hidden="true"><i></i><i></i><i></i></span>
+      <span class="term-title" id="authTermTitle">jun@omega: ~/access</span>
+      <span class="term-winctl" aria-hidden="true"><i class="wc-min">─</i><i class="wc-max">▢</i><i class="wc-close">✕</i></span>
     </div>
 
-    <form id="authFormLogin" class="auth-form" aria-labelledby="authTabLogin">
-      <label class="auth-field">
-        <span>Email</span>
-        <input type="email" id="loginEmail" autocomplete="email" required>
-      </label>
-      <label class="auth-field">
-        <span>Password</span>
-        <input type="password" id="loginPassword" autocomplete="current-password" required>
-      </label>
-      <div class="auth-error" id="loginError" hidden></div>
-      <button type="submit" class="auth-submit" id="loginBtn">Login</button>
-    </form>
+    <div class="auth-term-body">
+      <div class="auth-head" aria-hidden="true">
+        <span class="auth-logo">Ω</span>
+        <span class="auth-wordmark">JUN&nbsp;OS</span>
+      </div>
 
-    <form id="authFormSignup" class="auth-form" hidden aria-labelledby="authTabSignup">
-      <label class="auth-field">
-        <span>Email</span>
-        <input type="email" id="signupEmail" autocomplete="email" required>
-      </label>
-      <label class="auth-field">
-        <span>Password <small>(min 8 chars)</small></span>
-        <input type="password" id="signupPassword" autocomplete="new-password" required minlength="8">
-      </label>
-      <label class="auth-check">
-        <input type="checkbox" id="signupAdult" required>
-        <span>I am 18 or older and consent to adult content</span>
-      </label>
-      <div class="auth-error" id="signupError" hidden></div>
-      <button type="submit" class="auth-submit" id="signupBtn">Create account</button>
-    </form>
+      <div class="auth-motd">
+        <div class="auth-motd-line">Welcome to Jun OS · omega build</div>
+        <div class="auth-motd-line auth-dim">shell detected: <b class="auth-os-name">linux</b> — authenticate to continue<span class="auth-caret" aria-hidden="true"></span></div>
+      </div>
+
+      <div class="auth-tabs" role="tablist">
+        <button class="auth-tab active" id="authTabLogin" role="tab" aria-selected="true" aria-controls="authFormLogin" type="button">login</button>
+        <button class="auth-tab" id="authTabSignup" role="tab" aria-selected="false" aria-controls="authFormSignup" type="button">signup</button>
+      </div>
+
+      <form id="authFormLogin" class="auth-form" aria-labelledby="authTabLogin">
+        <label class="auth-field">
+          <span class="auth-flabel"><span class="auth-ps" aria-hidden="true"></span> email</span>
+          <input type="email" id="loginEmail" autocomplete="email" spellcheck="false" required>
+        </label>
+        <label class="auth-field">
+          <span class="auth-flabel"><span class="auth-ps" aria-hidden="true"></span> password</span>
+          <input type="password" id="loginPassword" autocomplete="current-password" required>
+        </label>
+        <div class="auth-error" id="loginError" hidden></div>
+        <button type="submit" class="auth-submit" id="loginBtn">authenticate</button>
+      </form>
+
+      <form id="authFormSignup" class="auth-form" hidden aria-labelledby="authTabSignup">
+        <label class="auth-field">
+          <span class="auth-flabel"><span class="auth-ps" aria-hidden="true"></span> email</span>
+          <input type="email" id="signupEmail" autocomplete="email" spellcheck="false" required>
+        </label>
+        <label class="auth-field">
+          <span class="auth-flabel"><span class="auth-ps" aria-hidden="true"></span> password <small>(min 8 chars)</small></span>
+          <input type="password" id="signupPassword" autocomplete="new-password" required minlength="8">
+        </label>
+        <label class="auth-check">
+          <input type="checkbox" id="signupAdult" required>
+          <span>I am 18 or older and consent to adult content</span>
+        </label>
+        <div class="auth-error" id="signupError" hidden></div>
+        <button type="submit" class="auth-submit" id="signupBtn">create account</button>
+      </form>
+    </div>
   </div>
 </div>
 
-<!-- Boot overlay: shown to logged-in users until Ollama is reachable -->
+<!-- Boot overlay: shown to logged-in users until Ollama is reachable.
+     Soft Jun-OS chrome (Ω mark + halo) wrapping a live terminal. The status is
+     driven by app.js via #bootStatus .boot-status-label and #bootHint; boot-fx.js
+     types the log lines and the status. boot-log rows are decorative. -->
 <div id="bootOverlay" class="boot-overlay" data-ready="1" aria-hidden="true" role="status" aria-live="polite">
-  <div class="boot-mesh" aria-hidden="true">
-    <span class="boot-blob boot-blob-a"></span>
-    <span class="boot-blob boot-blob-b"></span>
-    <span class="boot-blob boot-blob-c"></span>
-  </div>
-  <div class="boot-grid" aria-hidden="true"></div>
-  <div class="boot-card">
-    <div class="boot-logo" aria-hidden="true">
-      <svg class="boot-ring boot-ring-outer" viewBox="0 0 100 100">
-        <circle cx="50" cy="50" r="46" />
-      </svg>
-      <svg class="boot-ring boot-ring-inner" viewBox="0 0 100 100">
-        <circle cx="50" cy="50" r="38" />
-      </svg>
-      <span class="boot-omega">Ω</span>
+  <div class="boot-glow" aria-hidden="true"></div>
+
+  <div class="boot-console">
+    <div class="boot-sigil-wrap" aria-hidden="true">
+      <span class="boot-sigil">Ω</span>
     </div>
-    <div class="boot-text">
-      <div class="boot-title">Jun OS</div>
-      <div class="boot-status" id="bootStatus">
-        <span class="boot-status-label">Waking up Jun</span>
-        <span class="boot-dots" aria-hidden="true"><i></i><i></i><i></i></span>
+
+    <div class="boot-brand">
+      <span class="boot-brand-name">Jun OS</span>
+      <span class="boot-brand-tag">omega · cold start</span>
+    </div>
+
+    <div class="boot-term" data-os="mac">
+      <div class="boot-term-bar" aria-hidden="true">
+        <span class="term-lights"><i></i><i></i><i></i></span>
+        <span class="term-title">jun@omega: ~/boot</span>
+        <span class="term-winctl"><i class="wc-min">─</i><i class="wc-max">▢</i><i class="wc-close">✕</i></span>
       </div>
-      <div class="boot-hint" id="bootHint">Connecting to AI provider</div>
+      <div class="boot-term-body">
+        <ul class="boot-log" aria-hidden="true">
+          <li style="--i:0"><span class="boot-prompt"></span><span class="boot-cmd" data-text="init omega_state">init omega_state</span><span class="boot-ok">OK</span></li>
+          <li style="--i:1"><span class="boot-prompt"></span><span class="boot-cmd" data-text="link neural-core · ollama">link neural-core · ollama</span><span class="boot-ok">OK</span></li>
+          <li style="--i:2"><span class="boot-prompt"></span><span class="boot-cmd" data-text="load live2d-rig · cubism4">load live2d-rig · cubism4</span><span class="boot-ok">OK</span></li>
+          <li style="--i:3"><span class="boot-prompt"></span><span class="boot-cmd" data-text="boot voice-synth · kokoro">boot voice-synth · kokoro</span><span class="boot-ok">OK</span></li>
+          <li style="--i:4"><span class="boot-prompt"></span><span class="boot-cmd" data-text="index lore-corpus · rag">index lore-corpus · rag</span><span class="boot-ok">OK</span></li>
+        </ul>
+
+        <div class="boot-live">
+          <span class="boot-prompt"></span>
+          <span class="boot-status" id="bootStatus"><span class="boot-status-label">Waking up Jun</span></span><span class="boot-caret" aria-hidden="true"></span>
+        </div>
+
+        <div class="boot-hint" id="bootHint">connecting to AI provider</div>
+      </div>
     </div>
+
     <div class="boot-progress" aria-hidden="true"><span></span></div>
   </div>
 </div>
@@ -97,106 +129,163 @@
 <div id="drawerBackdrop" class="drawer-backdrop" aria-hidden="true"></div>
 
 <!-- Off-canvas settings drawer -->
-<aside id="settingsDrawer" class="settings-drawer" aria-label="Settings">
-  <div class="drawer-header">
-    <span class="drawer-title">Settings</span>
-    <button class="ghost" id="closeSettingsBtn" title="Close settings" aria-label="Close">✕</button>
-  </div>
-  <div class="drawer-body">
+<aside id="settingsDrawer" class="settings-drawer" aria-label="Settings" role="dialog" aria-modal="true">
 
-    <details class="drawer-section" open>
-      <summary class="section-summary">Model &amp; Reasoning</summary>
-      <div class="section">
-        <select id="modelSelect" aria-label="Ollama model"></select>
-        <label class="field-row">
-          <span>Reasoning</span>
-          <select id="reasoningSelect" aria-label="Reasoning level">
-            <option value="low" selected>low</option>
-            <option value="medium">medium</option>
-            <option value="high">high</option>
-          </select>
-        </label>
-        <label class="field-row">
-          <span>Think</span>
-          <input type="checkbox" id="thinkChk" aria-label="Enable chain-of-thought">
-        </label>
-        <button class="secondary" id="reloadPromptBtn" title="Reload system_prompt.txt from the server">
-          Reload system prompt
-        </button>
-      </div>
-    </details>
+  <!-- Left: category nav -->
+  <nav class="settings-nav" aria-label="Settings categories">
+    <button class="settings-close" id="closeSettingsBtn" title="Close settings" aria-label="Close">
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" aria-hidden="true"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+    </button>
+    <div class="settings-navlist" role="tablist">
+      <button class="settings-navitem active" data-panel="general" role="tab" aria-selected="true">
+        <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.6a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
+        <span>General</span>
+      </button>
+      <button class="settings-navitem" data-panel="voice" role="tab" aria-selected="false">
+        <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/><line x1="12" y1="19" x2="12" y2="23"/></svg>
+        <span>Voice</span>
+      </button>
+      <button class="settings-navitem" data-panel="appearance" role="tab" aria-selected="false">
+        <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20.38 3.46 16 2a4 4 0 0 1-8 0L3.62 3.46a2 2 0 0 0-1.34 2.23l.58 3.47a1 1 0 0 0 .99.84H6v10a2 2 0 0 0 2 2h8a2 2 0 0 0 2-2V10h2.15a1 1 0 0 0 .99-.84l.58-3.47a2 2 0 0 0-1.34-2.23z"/></svg>
+        <span>Appearance</span>
+      </button>
+      <button class="settings-navitem" data-panel="developer" role="tab" aria-selected="false">
+        <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="16 18 22 12 16 6"/><polyline points="8 6 2 12 8 18"/></svg>
+        <span>Developer</span>
+      </button>
+      <button class="settings-navitem" data-panel="account" role="tab" aria-selected="false">
+        <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
+        <span>Account</span>
+      </button>
+    </div>
+  </nav>
 
-    <details class="drawer-section">
-      <summary class="section-summary">TTS (voice)</summary>
-      <div class="section">
-        <label class="field-row">
-          <span>Enable</span>
-          <input type="checkbox" id="ttsChk" aria-label="Enable TTS">
-        </label>
-        <label class="field-row">
-          <span>Voice</span>
-          <select id="ttsVoiceSelect" aria-label="TTS voice"></select>
-        </label>
-        <label class="field-row">
-          <span>Speed</span>
-          <input type="number" id="ttsSpeed" min="0.5" max="2.0" step="0.05" value="1.0" aria-label="TTS speed">
-        </label>
-      </div>
-    </details>
+  <!-- Right: panels -->
+  <div class="settings-main">
+    <header class="settings-main-head">
+      <h2 class="settings-main-title" id="settingsPanelTitle">General</h2>
+    </header>
+    <div class="settings-main-body">
 
-    <details class="drawer-section">
-      <summary class="section-summary">Outfit</summary>
-      <div class="section">
-        <div id="outfitControls" class="outfit-grid"></div>
-        <button class="secondary" id="outfitResetBtn" title="Restore default outfit">
-          Reset outfit
-        </button>
-      </div>
-    </details>
-
-    <details class="drawer-section">
-      <summary class="section-summary">
-        Action log
-        <span class="count" id="actionLogCount">0</span>
-      </summary>
-      <div class="section">
-        <div id="actionLog" class="action-log"></div>
-      </div>
-    </details>
-
-    <details class="drawer-section">
-      <summary class="section-summary">Raw stream</summary>
-      <div class="section">
-        <div class="section-toolbar">
-          <button class="ghost" id="clearRawBtn">clear</button>
+      <section class="settings-panel active" data-panel="general">
+        <div class="set-row">
+          <div class="set-row-text">
+            <div class="set-row-title">Model</div>
+            <div class="set-row-desc">Which installed Ollama model answers.</div>
+          </div>
+          <div class="set-row-control"><select id="modelSelect" aria-label="Ollama model"></select></div>
         </div>
-        <div id="rawStream" class="action-log small"></div>
-      </div>
-    </details>
+        <div class="set-row">
+          <div class="set-row-text">
+            <div class="set-row-title">Reasoning</div>
+            <div class="set-row-desc">How much effort the model spends thinking.</div>
+          </div>
+          <div class="set-row-control">
+            <select id="reasoningSelect" aria-label="Reasoning level">
+              <option value="low" selected>low</option>
+              <option value="medium">medium</option>
+              <option value="high">high</option>
+            </select>
+          </div>
+        </div>
+        <div class="set-row">
+          <div class="set-row-text">
+            <div class="set-row-title">Think</div>
+            <div class="set-row-desc">Show the model's chain-of-thought as it streams.</div>
+          </div>
+          <div class="set-row-control"><input type="checkbox" id="thinkChk" class="toggle" aria-label="Enable chain-of-thought"></div>
+        </div>
+        <div class="set-row">
+          <div class="set-row-text">
+            <div class="set-row-title">System prompt</div>
+            <div class="set-row-desc">Reload <code>system_prompt.txt</code> from the server.</div>
+          </div>
+          <div class="set-row-control"><button class="secondary" id="reloadPromptBtn" title="Reload system_prompt.txt from the server">Reload</button></div>
+        </div>
+      </section>
 
-    <details class="drawer-section">
-      <summary class="section-summary">System prompt (debug)</summary>
-      <div class="section">
-        <div class="section-hint">The full prompt sent to the model on the last message, including injected date/time and retrieved context.</div>
-        <div id="debugSystemPrompt" class="action-log small">Send a message to capture the system prompt.</div>
-      </div>
-    </details>
+      <section class="settings-panel" data-panel="voice" hidden>
+        <div class="set-row">
+          <div class="set-row-text">
+            <div class="set-row-title">Enable voice</div>
+            <div class="set-row-desc">Speak replies aloud.</div>
+          </div>
+          <div class="set-row-control"><input type="checkbox" id="ttsChk" class="toggle" aria-label="Enable TTS"></div>
+        </div>
+        <div class="set-row">
+          <div class="set-row-text">
+            <div class="set-row-title">Engine</div>
+            <div class="set-row-desc">Which speech synthesis engine to use.</div>
+          </div>
+          <div class="set-row-control"><select id="ttsEngineSelect" aria-label="TTS engine">
+            <option value="kokoro">Kokoro</option>
+            <option value="pockettts">Pocket-TTS</option>
+          </select></div>
+        </div>
+        <div class="set-row">
+          <div class="set-row-text">
+            <div class="set-row-title">Voice</div>
+            <div class="set-row-desc">Which voice to use.</div>
+          </div>
+          <div class="set-row-control"><select id="ttsVoiceSelect" aria-label="TTS voice"></select></div>
+        </div>
+        <div class="set-row">
+          <div class="set-row-text">
+            <div class="set-row-title">Speed</div>
+            <div class="set-row-desc">Playback rate, 0.5×–2.0×.</div>
+          </div>
+          <div class="set-row-control"><input type="number" id="ttsSpeed" min="0.5" max="2.0" step="0.05" value="1.0" aria-label="TTS speed"></div>
+        </div>
+      </section>
 
-    <details class="drawer-section">
-      <summary class="section-summary">Missing parameters</summary>
-      <div class="section">
-        <div id="missingParams" class="action-log small"></div>
-      </div>
-    </details>
+      <section class="settings-panel" data-panel="appearance" hidden>
+        <div class="set-block">
+          <div class="set-row-title">Outfit</div>
+          <div class="set-row-desc">Toggle clothing layers and pick colors for Jun.</div>
+          <div id="outfitControls" class="outfit-grid"></div>
+          <button class="secondary" id="outfitResetBtn" title="Restore default outfit">Reset outfit</button>
+        </div>
+      </section>
 
-    <details class="drawer-section">
-      <summary class="section-summary">Account</summary>
-      <div class="section">
-        <button class="secondary" id="signOutBtn" title="Sign out">Sign out</button>
-      </div>
-    </details>
+      <section class="settings-panel" data-panel="developer" hidden>
+        <div class="set-block">
+          <div class="set-block-head">
+            <div class="set-row-title">Action log</div>
+            <span class="count" id="actionLogCount">0</span>
+          </div>
+          <div id="actionLog" class="action-log"></div>
+        </div>
+        <div class="set-block">
+          <div class="set-block-head">
+            <div class="set-row-title">Raw stream</div>
+            <button class="ghost" id="clearRawBtn">clear</button>
+          </div>
+          <div id="rawStream" class="action-log small"></div>
+        </div>
+        <div class="set-block">
+          <div class="set-row-title">System prompt</div>
+          <div class="set-row-desc">The full prompt sent on the last message, including injected date/time and retrieved context.</div>
+          <div id="debugSystemPrompt" class="action-log small">Send a message to capture the system prompt.</div>
+        </div>
+        <div class="set-block">
+          <div class="set-row-title">Missing parameters</div>
+          <div class="set-row-desc">Live2D params referenced by action_map.json but absent from the model.</div>
+          <div id="missingParams" class="action-log small"></div>
+        </div>
+      </section>
 
-  </div><!-- /drawer-body -->
+      <section class="settings-panel" data-panel="account" hidden>
+        <div class="set-row">
+          <div class="set-row-text">
+            <div class="set-row-title">Sign out</div>
+            <div class="set-row-desc">End this session on this device.</div>
+          </div>
+          <div class="set-row-control"><button class="secondary danger" id="signOutBtn" title="Sign out">Sign out</button></div>
+        </div>
+      </section>
+
+    </div>
+  </div>
 </aside>
 
 <!-- ============================================================ -->
@@ -316,10 +405,11 @@
 <script src="js/actions.js?v=6"></script>
 <script src="js/outfit.js?v=6"></script>
 <script src="js/ollama.js?v=7"></script>
-<script src="js/tts.js?v=6"></script>
+<script src="js/tts.js?v=7"></script>
 <!-- ui.js must load before app.js -->
 <script src="js/ui.js?v=6"></script>
 <script src="js/history.js?v=6"></script>
-<script src="js/app.js?v=8"></script>
+<script src="js/boot-fx.js?v=3"></script>
+<script src="js/app.js?v=13"></script>
 </body>
 </html>
