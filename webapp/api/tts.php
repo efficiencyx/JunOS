@@ -14,7 +14,7 @@ if ($action === 'voices') {
     header('Content-Type: application/json');
 
     // 60-second cache: APCu if available, else a tmp file.
-    $cacheKey = 'omega_voices_v1';
+    $cacheKey = 'omega_voices_v2';
     $cached = null;
 
     if (function_exists('apcu_fetch')) {
@@ -22,7 +22,7 @@ if ($action === 'voices') {
         $val = apcu_fetch($cacheKey, $success);
         if ($success) $cached = $val;
     } else {
-        $cacheFile = sys_get_temp_dir() . '/omega_voices.cache';
+        $cacheFile = sys_get_temp_dir() . '/omega_voices_v2.cache';
         if (is_readable($cacheFile) && (time() - filemtime($cacheFile)) < 60) {
             $cached = file_get_contents($cacheFile) ?: null;
         }
@@ -58,7 +58,7 @@ if ($action === 'voices') {
     if (function_exists('apcu_store')) {
         apcu_store($cacheKey, $res, 60);
     } else {
-        $cacheFile = sys_get_temp_dir() . '/omega_voices.cache';
+        $cacheFile = sys_get_temp_dir() . '/omega_voices_v2.cache';
         @file_put_contents($cacheFile, $res);
     }
 
@@ -84,7 +84,12 @@ if ($action === 'tts') {
     }
 
     $voice = $body['voice'] ?? null;
-    if ($voice !== null && (!is_string($voice) || !preg_match('/^[a-z]{2}_[a-z]+$/', $voice))) {
+    if ($voice !== null && (!is_string($voice) || !preg_match('/^[a-z][a-z0-9_]*$/', $voice))) {
+        fail(400, 'invalid_request');
+    }
+
+    $engine = $body['engine'] ?? null;
+    if ($engine !== null && !in_array($engine, ['kokoro', 'pockettts'], true)) {
         fail(400, 'invalid_request');
     }
 

@@ -2,6 +2,7 @@
 // SSE proxy: browser -> here -> Ollama /api/chat (NDJSON) -> SSE back to browser.
 
 require_once __DIR__ . '/_lib.php';
+require_once __DIR__ . '/lore.php';
 
 @ini_set('output_buffering', 'off');
 @ini_set('zlib.output_compression', '0');
@@ -109,75 +110,22 @@ for ($i = count($body['messages']) - 1; $i >= 0; $i--) {
 // write below. Null whenever Ollama can't embed.
 $queryVec = $lastUserMsg !== '' ? embed_text($lastUserMsg) : null;
 
-// Ground the reply in curated game lore. The index keys on canon QUESTIONS, so
-// we match the live message against the closest question and inject its answer
-// as an established fact. The model carries Jun's voice from fine-tuning; this
-// only supplies facts it would otherwise blur or invent. Quietly returns the
-// prompt untouched if the index isn't built or nothing is close enough.
+// Ground the reply in curated game lore. Heuristic keyword match (see lore.php)
+// against lore_corpus.txt — exact on proper nouns, no Ollama needed — injecting
+// the single best-matching canon fact as an established truth. The model carries
+// Jun's voice from fine-tuning; this only supplies facts it would otherwise blur
+// or invent. Quietly returns the prompt untouched if nothing clears the floor.
 function lore_retrieve(string $systemPrompt, string $lastUserMsg): string {
     if ($lastUserMsg === '') return $systemPrompt;
 
     try {
-        $metaPath = __DIR__ . '/../lore_meta.json';
-        $corpusPath = __DIR__ . '/../lore_corpus.txt';
-        $binPath = __DIR__ . '/../lore_index.bin';
-        if (!is_readable($metaPath) || !is_readable($corpusPath) || !is_readable($binPath)) {
-            return $systemPrompt;
-        }
-
-        // Corpus questions are embedded as "search_document"; the live query
-        // needs the matching "search_query" prefix. Dedicated embedding, kept
-        // separate from the prefix-free $queryVec used for history/storage.
-        $queryVec = embed_text($lastUserMsg, 'search_query');
-        if ($queryVec === null) return $systemPrompt;
-
-        static $idx = null;
-        if ($idx === null && function_exists('apcu_fetch')) {
-            $idx = apcu_fetch('lore_index_v1') ?: null;
-        }
-        if ($idx === null) {
-            $meta = json_decode(file_get_contents($metaPath), true);
-            $answers = file($corpusPath, FILE_IGNORE_NEW_LINES);
-            $dim = (int)($meta['dim'] ?? 0);
-            $count = (int)($meta['count'] ?? 0);
-            if ($dim <= 0 || $count <= 0) return $systemPrompt;
-
-            $binContent = file_get_contents($binPath);
-            if (!$binContent) return $systemPrompt;
-            $flat = unpack('f*', $binContent); // 1-indexed
-            $vectors = [];
-            for ($i = 0; $i < $count; $i++) {
-                $vectors[] = array_slice($flat, $i * $dim, $dim);
-            }
-            $idx = ['answers' => $answers, 'vectors' => $vectors, 'dim' => $dim];
-            if (function_exists('apcu_store')) apcu_store('lore_index_v1', $idx, 0);
-        }
-
-        $qNorm = sqrt(array_sum(array_map(fn($x) => $x * $x, $queryVec))) ?: 1.0;
-        $scores = [];
-        foreach ($idx['vectors'] as $i => $v) {
-            $dot = 0.0; $vNorm = 0.0;
-            foreach ($v as $j => $vj) { $dot += $vj * $queryVec[$j]; $vNorm += $vj * $vj; }
-            $scores[$i] = $dot / ($qNorm * (sqrt($vNorm) ?: 1.0));
-        }
-        arsort($scores);
-
-        // Floor: question<->question matches rank high when relevant, so below
-        // this the user isn't really asking about lore — inject nothing rather
-        // than force facts onto an unrelated turn. Tune if recall feels off.
-        $MIN_SCORE = 0.6;
-        $bullets = [];
-        foreach (array_slice($scores, 0, 4, true) as $i => $score) {
-            if ($score < $MIN_SCORE) break; // sorted desc: first miss => rest miss
-            $bullets[] = '- ' . $idx['answers'][$i];
-        }
-        if (!$bullets) return $systemPrompt; // nothing relevant; skip the block
+        $hits = lore_search($lastUserMsg, 1);
+        if (!$hits || $hits[0]['score'] < LORE_FLOOR) return $systemPrompt;
 
         return rtrim($systemPrompt)
-            . "\n\n## World facts (canon)\nEstablished truths about your world and past, relevant to what Anon just said."
-            . " Treat them as true and weave them in naturally in your own voice — never recite them verbatim, list them, or mention they come from any reference."
-            . " If they don't fit the moment, ignore them.\n"
-            . implode("\n", $bullets);
+            . "\n\n## World fact (canon)\nAn established truth about your world or past that may be relevant to what Anon just said."
+            . " Treat it as true and weave it in naturally in your own voice — never recite it verbatim or mention it comes from any reference."
+            . " If it doesn't fit the moment, ignore it.\n- " . $hits[0]['answer'];
     } catch (Throwable $e) {
         // RAG is supplementary — never let it take the whole reply down with it.
         log_event(['msg' => 'lore_retrieve_error', 'err' => $e->getMessage()]);
@@ -279,7 +227,88 @@ function chat_history_retrieve(int $userId, int $currentConvId, array $queryVec,
     }
 }
 
+// Hidden relationship state (per user, persists across conversations). Jun nudges
+// the scores herself via a [ACTION:mood_shift|...] tag we parse out of her reply
+// after streaming; here we only read the current row and turn it into behavioral
+// directives. Numbers never reach the model — only the band's instructions do.
+function relationship_get(int $userId): array {
+    try {
+        $st = db()->prepare('SELECT affection, trust, tension FROM relationship WHERE user_id=?');
+        $st->execute([$userId]);
+        $row = $st->fetch();
+        if ($row) {
+            return [
+                'affection' => (int)$row['affection'],
+                'trust' => (int)$row['trust'],
+                'tension' => (int)$row['tension'],
+            ];
+        }
+    } catch (Throwable $e) {
+        log_event(['msg' => 'relationship_get_error', 'err' => $e->getMessage()]);
+    }
+    // Mild-positive start: she's already Anon's girlfriend. Mirrors 002's defaults.
+    return ['affection' => 55, 'trust' => 45, 'tension' => 10];
+}
+
+function relationship_apply(int $userId, array $cur, array $deltas): void {
+    $clampDelta = fn($d) => max(-15, min(15, (int)$d));
+    $next = [];
+    foreach (['affection', 'trust', 'tension'] as $k) {
+        $next[$k] = max(0, min(100, $cur[$k] + $clampDelta($deltas[$k] ?? 0)));
+    }
+    try {
+        db()->prepare(
+            'INSERT INTO relationship (user_id, affection, trust, tension, updated_at) VALUES (?, ?, ?, ?, ?)
+             ON CONFLICT(user_id) DO UPDATE SET affection=excluded.affection, trust=excluded.trust, tension=excluded.tension, updated_at=excluded.updated_at'
+        )->execute([$userId, $next['affection'], $next['trust'], $next['tension'], time()]);
+    } catch (Throwable $e) {
+        log_event(['msg' => 'relationship_apply_error', 'err' => $e->getMessage()]);
+    }
+}
+
+// Translate the three scores into instructions, never raw numbers. Bands are
+// tunable; only the ones that diverge from the baseline warm-girlfriend persona
+// emit a line, so an ordinary state injects very little.
+function relationship_directives(array $r): string {
+    $lines = [];
+    $a = $r['affection']; $t = $r['trust']; $x = $r['tension'];
+
+    if ($a < 20) {
+        $lines[] = '- You feel cold and guarded toward Anon right now. Keep replies short and a little distant, withhold warmth, and avoid affectionate actions (no nuzzling, hearts, cuddling).';
+    } elseif ($a < 40) {
+        $lines[] = '- You are still a bit reserved with Anon — warming up but not fully open. Be polite and present without gushing.';
+    } elseif ($a > 70) {
+        $lines[] = '- You are deeply smitten with Anon. Be openly affectionate and tender, and feel free to take the initiative toward closeness or intimacy.';
+    }
+
+    if ($t < 20) {
+        $lines[] = '- You do not fully trust Anon yet. Deflect prying personal questions and do not open up about your origins, your missing memories, or the fact that your existence is illegal.';
+    } elseif ($t < 50) {
+        $lines[] = '- You are cautiously opening up to Anon, but still hold some things back.';
+    } elseif ($t > 80) {
+        $lines[] = '- You trust Anon completely. You can be fully vulnerable with him — your fears, your past, what scares you.';
+    } elseif ($t > 50) {
+        $lines[] = '- You trust Anon enough to be candid about your past and your fears when it comes up.';
+    }
+
+    if ($x > 80) {
+        $lines[] = '- You are frightened right now — on edge about being hunted. You seek reassurance, want to stay close or hide, and startle easily.';
+    } elseif ($x > 60) {
+        $lines[] = '- You feel anxious and jumpy, distracted by the sense that someone may be looking for you. It colors your mood under the surface.';
+    }
+
+    if (!$lines) {
+        $lines[] = '- Your bond with Anon is steady and warm. Behave as your normal self.';
+    }
+    return implode("\n", $lines);
+}
+
 $systemPrompt = lore_retrieve($systemPrompt, $lastUserMsg);
+
+$rel = relationship_get((int)$user['id']);
+$systemPrompt = rtrim($systemPrompt)
+    . "\n\n## Relationship state (internal — never state these as numbers or mention that feelings are scored)\n"
+    . relationship_directives($rel);
 
 if ($queryVec !== null) {
     $recalled = array_filter(
@@ -330,8 +359,9 @@ if ($idle) {
     $messages[] = ['role' => 'user', 'content' =>
         '(OOC stage direction, not spoken by Anon: Anon has gone quiet and is just '
         . 'sitting there watching you, saying nothing. The silence has stretched on. '
-        . 'Break it yourself — say or do something on your own initiative, the way Jun '
-        . 'naturally would when Anon goes still and stares at her.)'];
+        . 'Unless he specifically asked you to be quiet say or do something on your own initiative, the way Jun '
+        . 'naturally would when Anon goes still and stares at her. '
+        . 'If asked to be quiet Break the silence with ONLY an action. such as a wave or a smile. No chat or text!)'];
 }
 
 $think = isset($body['think']) ? (bool)$body['think'] : false;
@@ -373,7 +403,6 @@ $ollamaPayload = [
     'model' => $model,
     'messages' => $messages,
     'stream' => true,
-    'think' => $think,
     'options' => [
         'reasoning_effort' => $reasoning,
         'temperature' => 0.3,
@@ -383,9 +412,18 @@ $ollamaPayload = [
         'repeat_penalty' => 1.15,
         'presence_penalty' => 0,
         'num_ctx' => 16384,
-        'num_predict' => 512,
+        // Thinking burns tokens before the reply even starts, so give it more headroom.
+        'num_predict' => $think ? 4096 : 512,
     ],
 ];
+
+// Ollama enables thinking by default for capable models and rejects think:true on
+// models whose manifest doesn't declare the capability (HTTP 400 "does not support
+// thinking") — even though those models still reason by default. So we only ever
+// send `think` to DISABLE it; when the user wants thinking we omit the key and let
+// the model's default reasoning flow into message.thinking, which the stream loop
+// forwards as `thinking` events.
+if (!$think) $ollamaPayload['think'] = false;
 
 $ch = curl_init($OLLAMA_URL . '/api/chat');
 curl_setopt($ch, CURLOPT_POST, true);
@@ -414,6 +452,12 @@ curl_setopt($ch, CURLOPT_WRITEFUNCTION, function ($ch, $chunk) use (&$buf, &$saw
             $sawError = true;
             continue;
         }
+        // Reasoning tokens arrive on a separate field when think=true. Stream them as
+        // their own event — never into $assistantBuffer, so they stay out of stored
+        // history, embeddings, RAG, and action parsing.
+        $th = (string)($obj['message']['thinking'] ?? '');
+        if ($th !== '') sse_send(['thinking' => $th]);
+
         $tok = (string)($obj['message']['content'] ?? '');
         if ($tok !== '') {
             sse_send(['token' => $tok]);
@@ -430,6 +474,18 @@ if (curl_exec($ch) === false) {
 curl_close($ch);
 
 if (!$sawError && $assistantBuffer !== '') {
+    // Pull Jun's hidden relationship bookkeeping tag, apply the deltas, then strip
+    // it from what we persist — unlike animation tags this is internal state, not
+    // dialogue, and we don't want it in stored history, embeddings, or future RAG.
+    if (preg_match('/\[\s*ACTIONS?\s*:\s*mood_shift\b([^\]]*)\]/i', $assistantBuffer, $mm)) {
+        $deltas = [];
+        foreach (['affection', 'trust', 'tension'] as $k) {
+            if (preg_match('/' . $k . '\s*=\s*([+-]?\d+)/i', $mm[1], $p)) $deltas[$k] = (int)$p[1];
+        }
+        if ($deltas) relationship_apply((int)$user['id'], $rel, $deltas);
+        $assistantBuffer = trim(preg_replace('/\[\s*ACTIONS?\s*:\s*mood_shift\b[^\]]*\]/i', '', $assistantBuffer));
+    }
+
     $now = time();
     db()->prepare('INSERT INTO messages (conversation_id, role, content, created_at) VALUES (?, ?, ?, ?)')
         ->execute([$convId, 'assistant', $assistantBuffer, $now]);

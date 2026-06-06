@@ -1,0 +1,185 @@
+<?php
+// Heuristic (keyword) lore retrieval. Replaces the old embedding search, which
+// silently broke once the index and the live query path went through two
+// different nomic-embed-text pulls (bare-metal vs the docker ollama): common
+// words still matched, but proper nouns like "Annalie" embedded inconsistently
+// and never landed, so name lookups returned nothing.
+//
+// Plain term overlap sidesteps all of that — it's exact on names, deterministic,
+// and needs no Ollama, no .bin index, no rebuild. We weight matches by IDF (rare
+// lore terms count, ubiquitous ones don't) and boost proper nouns mined from the
+// corpus's own capitalization, which gives the precision the cosine floor never
+// had: chit-chat scores ~0, a single distinctive lore term clears the floor. A
+// Levenshtein fallback on names absorbs typos ("Annallie" -> Annalie).
+//
+// Shared by chat.php (live injection) and api/lore_test.php (the debug page) so
+// both score identically.
+
+const LORE_PROPER_BOOST   = 2.0;  // a term that's a proper noun in the corpus
+const LORE_FLOOR          = 3.0;  // min score to inject; tune via lore_test.html
+const LORE_FUZZY_PENALTY  = 0.6;  // discount on a typo-corrected (fuzzy) term
+const LORE_FUZZY_MIN_IDF  = 2.0;  // only fuzzy-match distinctive (rare) names
+
+// Ordinary English + conversational filler. IDF can't drop these on its own:
+// words like "morning" or "look" are rare *in the lore* even though they're
+// common in chat, so they'd otherwise score high. Listed explicitly instead.
+const LORE_STOP = [
+    'a','an','and','are','as','at','be','been','being','but','by','can','could','did','do','does',
+    'doing','done','for','from','had','has','have','having','he','her','hers','him','his','how','i',
+    'if','in','into','is','it','its','just','like','me','my','no','not','of','off','on','once','only',
+    'or','our','out','over','she','should','so','some','such','than','that','the','their','them','then',
+    'there','these','they','this','those','to','too','up','us','was','we','were','what','when','where',
+    'which','who','whom','why','will','with','would','you','your','yours','am','about','above','after',
+    'again','against','all','any','because','before','below','between','both','during','each','few',
+    'more','most','other','own','same','through','under','until','very','s','t','re','ve','ll','d','m','o',
+    'hi','hey','hello','yo','good','morning','evening','night','afternoon','thanks','thank','please','ok',
+    'okay','yeah','yep','nope','lol','haha','hmm','oh','ah','well','now','today','tomorrow','yesterday',
+    'let','lets','want','wanna','gonna','get','got','go','going','come','came','nice','cool','great',
+    'cute','hot','sexy','love','tired','happy','sad','bored','fun','funny','grab','coffee','tea','drink',
+    'eat','look','see','say','said','tell','told','know','think','feel','make','made','give','take',
+    'need','mean','sound','seem','talk','ask','call','help','try','use','find','keep','put','show','turn',
+    'work','play','hope','guess','suppose','wonder','miss','wait','really','very','much','many','lot',
+    'kind','sort','thing','stuff','way','bit','sure','maybe','perhaps','also','even','still','back',
+    'around','here',
+];
+
+// Split into lowercase stems with byte offsets: ASCII alnum runs, length >= 2,
+// minus stopwords, trailing plural "s" stripped so "shops"/"shop" agree.
+// Returns [[stem, originalWord, byteOffset], ...] — the original (for casing)
+// and offset (for sentence position) are used when mining proper nouns.
+function lore_tokens(string $s): array {
+    static $stop = null;
+    if ($stop === null) $stop = array_flip(LORE_STOP);
+
+    preg_match_all('/[A-Za-z0-9]+/', $s, $m, PREG_OFFSET_CAPTURE);
+    $out = [];
+    foreach ($m[0] as [$w, $off]) {
+        $lw = strtolower($w);
+        if (strlen($lw) < 2 || isset($stop[$lw])) continue;
+        $stem = (strlen($lw) > 3 && $lw[strlen($lw) - 1] === 's') ? substr($lw, 0, -1) : $lw;
+        $out[] = [$stem, $w, $off];
+    }
+    return $out;
+}
+
+// Build (and cache) the keyword index from lore_corpus.txt: per-doc term counts,
+// IDF per term, the proper-noun set, and the fuzzy-match vocabulary (distinctive
+// names). Returns null if the corpus is missing.
+function lore_index(): ?array {
+    static $idx = false; // false = not built yet; array|null afterwards
+    if ($idx !== false) return $idx;
+
+    if (function_exists('apcu_fetch')) {
+        $cached = apcu_fetch('lore_kw_v2');
+        if (is_array($cached)) return $idx = $cached;
+    }
+
+    $path = __DIR__ . '/../lore_corpus.txt';
+    if (!is_readable($path)) return $idx = null;
+    $answers = file($path, FILE_IGNORE_NEW_LINES | FILE_SKIP_EMPTY_LINES);
+    if (!$answers) return $idx = null;
+    $n = count($answers);
+
+    $cap = []; $low = []; $df = []; $docTf = [];
+    foreach ($answers as $a) {
+        $tf = [];
+        foreach (lore_tokens($a) as [$stem, $orig, $off]) {
+            $tf[$stem] = ($tf[$stem] ?? 0) + 1;
+            // Count capitalization only mid-sentence: a name like "Annalie" turns
+            // up capitalized after another word, whereas "However"/"Coming" only
+            // lead sentences. Sentence-initial caps carry no proper-noun signal.
+            $j = $off - 1;
+            while ($j >= 0 && $a[$j] === ' ') $j--;
+            $initial = ($j < 0) || strpos('.!?:"', $a[$j]) !== false;
+            if (ctype_upper($orig[0]) && !$initial) $cap[$stem] = ($cap[$stem] ?? 0) + 1;
+            elseif (!ctype_upper($orig[0]))         $low[$stem] = ($low[$stem] ?? 0) + 1;
+        }
+        $docTf[] = $tf;
+        foreach ($tf as $stem => $_) $df[$stem] = ($df[$stem] ?? 0) + 1;
+    }
+
+    $idfMap = [];
+    foreach ($df as $stem => $c) $idfMap[$stem] = log($n / $c);
+
+    $proper = [];
+    foreach ($cap as $stem => $c) {
+        if ($c >= 2 && $c >= ($low[$stem] ?? 0)) $proper[$stem] = true;
+    }
+    // Fuzzy only against distinctive proper nouns (real names), so typos resolve
+    // to "Annalie"/"Shanice" but an ordinary word can't be dragged onto a
+    // capitalized common word.
+    $fuzzy = [];
+    foreach ($proper as $stem => $_) {
+        if (($idfMap[$stem] ?? 0) >= LORE_FUZZY_MIN_IDF) $fuzzy[] = $stem;
+    }
+
+    $built = ['answers' => $answers, 'docTf' => $docTf, 'idf' => $idfMap,
+              'proper' => $proper, 'fuzzy' => $fuzzy];
+    if (function_exists('apcu_store')) apcu_store('lore_kw_v2', $built, 0);
+    return $idx = $built;
+}
+
+// Nearest distinctive name within a length-scaled edit distance, or null. Only
+// kicks in for query words with no exact corpus hit.
+function lore_fuzzy(string $tok, array $vocab): ?string {
+    $len = strlen($tok);
+    if ($len < 4) return null;                  // too short to correct safely
+    $max = $len <= 7 ? 1 : 2;
+    $best = null; $bestD = $max + 1;
+    foreach ($vocab as $v) {
+        if (abs(strlen($v) - $len) > $max) continue;
+        $d = levenshtein($tok, $v);
+        if ($d <= $max && $d < $bestD) { $best = $v; $bestD = $d; }
+    }
+    return $best;
+}
+
+// Resolve each query token to a corpus term: exact hit, else nearest name typo.
+// Returns [['token'=>orig, 'term'=>stem|null, 'fuzzy'=>bool], ...].
+function lore_resolve(array $idx, string $query): array {
+    $res = [];
+    foreach (lore_tokens($query) as [$stem, $orig]) {
+        if (isset($idx['idf'][$stem])) {
+            $res[] = ['token' => $orig, 'term' => $stem, 'fuzzy' => false];
+        } else {
+            $hit = lore_fuzzy($stem, $idx['fuzzy']);
+            $res[] = ['token' => $orig, 'term' => $hit, 'fuzzy' => $hit !== null];
+        }
+    }
+    return $res;
+}
+
+// Rank corpus answers against $query by summed IDF of overlapping terms (proper
+// nouns boosted, typo-corrected terms discounted, a mild term-frequency bump).
+// Returns up to $topK ['score','answer'] rows, highest first.
+function lore_search(string $query, int $topK = 1): array {
+    $idx = lore_index();
+    if ($idx === null) return [];
+
+    $terms = []; // stem => weight factor (1.0 exact, LORE_FUZZY_PENALTY fuzzy)
+    foreach (lore_resolve($idx, $query) as $r) {
+        if ($r['term'] === null) continue;
+        $f = $r['fuzzy'] ? LORE_FUZZY_PENALTY : 1.0;
+        $terms[$r['term']] = max($terms[$r['term']] ?? 0.0, $f);
+    }
+    if (!$terms) return [];
+
+    $scores = [];
+    foreach ($idx['docTf'] as $i => $tf) {
+        $s = 0.0;
+        foreach ($terms as $stem => $factor) {
+            if (!isset($tf[$stem])) continue;
+            $w = $idx['idf'][$stem] * (isset($idx['proper'][$stem]) ? LORE_PROPER_BOOST : 1.0) * $factor;
+            $s += $w * (1 + 0.3 * log($tf[$stem]));
+        }
+        if ($s > 0) $scores[$i] = $s;
+    }
+    if (!$scores) return [];
+
+    arsort($scores);
+    $out = [];
+    foreach (array_slice($scores, 0, $topK, true) as $i => $score) {
+        $out[] = ['score' => round($score, 4), 'answer' => $idx['answers'][$i]];
+    }
+    return $out;
+}

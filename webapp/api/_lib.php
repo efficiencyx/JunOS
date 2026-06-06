@@ -170,15 +170,22 @@ function db(): PDO {
     ]);
     $pdo->exec('PRAGMA journal_mode=WAL; PRAGMA foreign_keys=ON;');
 
-    // Run migrations on a fresh database (no schema_version row yet).
-    $hasSchema = false;
+    // Apply any migrations/NNN_*.sql newer than the current schema version. A
+    // fresh DB reads 0 (no schema_version table yet) and gets every file in
+    // order; each migration owns its own INSERT INTO schema_version.
+    $current = 0;
     try {
-        $hasSchema = $pdo->query('SELECT v FROM schema_version LIMIT 1')->fetchColumn() !== false;
+        $v = $pdo->query('SELECT MAX(v) FROM schema_version')->fetchColumn();
+        if ($v !== false && $v !== null) $current = (int)$v;
     } catch (PDOException $e) {
-        // table doesn't exist -> fall through and init
+        // table doesn't exist -> treat as version 0 and run everything
     }
-    if (!$hasSchema) {
-        $pdo->exec(file_get_contents(__DIR__ . '/migrations/001_init.sql'));
+    $files = glob(__DIR__ . '/migrations/*.sql');
+    sort($files);
+    foreach ($files as $file) {
+        if (!preg_match('/(\d+)_[^\/]*\.sql$/', basename($file), $m)) continue;
+        if ((int)$m[1] <= $current) continue;
+        $pdo->exec(file_get_contents($file));
     }
 
     return $pdo;

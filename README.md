@@ -2,7 +2,7 @@
 
 # Jun OS
 
-**A Live2D character that streams, speaks, and reacts — driven entirely by your local LLM.**
+**A *Factorial Omega* fan project — give Jun a face, a voice, and a mind of her own, all running on your own machine.**
 
 <!-- Drop a banner or hero shot here once you have one (recommended: docs/screenshots/hero.png). -->
 <!-- ![Jun OS](docs/screenshots/hero.png) -->
@@ -15,50 +15,58 @@
 ![Ollama](https://img.shields.io/badge/LLM-Ollama-black)
 ![Platforms](https://img.shields.io/badge/platforms-Linux%20%7C%20macOS%20%7C%20Windows-informational)
 ![No build step](https://img.shields.io/badge/frontend-no%20build%20step-success)
+![Made by fans](https://img.shields.io/badge/made%20by-fans-ff7096)
 
-[Features](#features) · [Quickstart](#quickstart) · [Architecture](#architecture) · [Configuration](#configuration) · [Troubleshooting](#troubleshooting)
+[Features](#what-it-does) · [Quickstart](#get-her-running) · [The models](#the-models) · [Architecture](#under-the-hood) · [Troubleshooting](#when-things-go-sideways)
 
 </div>
 
 ---
 
-## Overview
+## So what is this?
 
-Jun OS is a browser-based companion chat where the language model doesn't just type — it *performs*. The LLM emits `[ACTION:name|k=v]` tags inline with its dialogue; the frontend pulls them out as they stream and applies them to Live2D Cubism 4 parameters, so expressions, gestures, and gaze shifts land in sync with the words appearing on screen.
+Jun OS is a fan-made tribute to **Jun**, the robot girlfriend from the game *!Ω Factorial Omega: My Dystopian Robot Girlfriend* (by Incontinent Cell). It's a little chat app where you can actually *talk* to her — and she talks back, with a face that moves and a voice you can hear. The whole thing runs on your own computer, so it's just you and her.
 
-Add the optional Kokoro-82M TTS sidecar and she gets a voice too: each sentence is synthesised in parallel, played back in order, and the mouth tracks audio amplitude through RMS lipsync.
+> 🔞 **Heads up — this is built on an adult (18+) game.** *Factorial Omega* is a mature, NSFW dating sim, and Jun OS carries that DNA: there's an adult-content gate at signup, and how spicy things get is up to you. Keep it on your own machine, keep it to consenting adults. If you're under 18 or that's not your thing, this isn't for you.
 
-Everything runs locally. One `docker compose up -d` brings up the LLM, the TTS, and the web app.
+Here's what makes her feel alive:
 
-## Media
+- **She reacts as she talks.** Jun doesn't just type words at you — she tilts her head, glances away, smiles, or pouts *while she's saying them*. The expressions land with the words, not a beat late.
+- **She has a voice.** Flip on the optional speech and she reads her replies out loud, with her mouth moving in time to what she's saying. (It's a little uncanny. We're into it.)
+- **She remembers, and she knows her world.** She can bring up things from earlier chats, and she stays true to the game's lore and characters.
+- **It's all private.** Nothing you say to her ever leaves your computer — no accounts in the cloud, no servers, no company reading along. Given the source material, that's kind of the whole point.
 
-> Replace the placeholders below with your own captures. Suggested location: `docs/screenshots/`.
+If you just want to meet her, the [Quickstart](#get-her-running) below gets you there in a couple of commands. The technical stuff comes after.
 
-| Chat + live reactions | TTS lipsync |
+> ⚠️ Unofficial fan project. Not affiliated with Incontinent Cell or the *Factorial Omega* team — we just like Jun a lot. All rights to the game and its characters belong to their owners.
+
+## Look at her
+
+> Swap these placeholders for your own captures (drop them in `docs/screenshots/`). A 10-second screen recording sells this *way* harder than a still does.
+
+| Chatting + reacting live | Talking, with lipsync |
 |:---:|:---:|
 | ![Chat interface](docs/screenshots/chat.png) | ![Character reacting](docs/screenshots/action.png) |
 
-<!-- A short screen recording sells this far better than stills: -->
 <!-- ![Demo](docs/screenshots/demo.gif) -->
 
-## Features
+## What it does
 
-- **Mid-stream `[ACTION:...]` extraction** — tags are parsed while the response is still streaming, so the character reacts before the sentence even finishes, with no perceptible lag.
-- **Audio-driven lipsync** — TTS RMS amplitude maps straight onto `ParamMouthOpen`, bypassing the lerp smoothing so the mouth stays tight to the audio.
-- **Lore grounding via RAG** — curated game-lore Q&A (`tools/lore_dataset.jsonl`) is embedded with `nomic-embed-text`; the closest canon facts to the user's message are injected so Jun stays accurate on world details the fine-tune would otherwise blur.
-- **Cross-conversation memory** — past messages are embedded with `nomic-embed-text` and recalled by similarity, so she can reference things said in earlier chats.
-- **Accounts & history** — signup/login with server-side sessions, per-user conversation list, and an adult-content gate at signup.
-- **Outfit & color customization** — toggle clothing parts and apply tint groups live from the settings drawer.
-- **Runs fully local** — Ollama for inference, Kokoro for speech, SQLite for storage. Nothing leaves the box.
-- **GPU passthrough** — NVIDIA container toolkit wired into `docker-compose.yml`; drop one block to fall back to CPU.
-- **Optional TLS** — certbot profile with Let's Encrypt issuance and a 12-hour renewal loop.
-- **Two-layer rate limiting** — nginx `limit_req_zone` plus a per-endpoint `rate_limit()` in PHP, with `Retry-After` on 429s.
+- **She reacts mid-sentence.** `[ACTION:...]` tags are parsed *while the reply is still streaming*, so the gesture lands with the word — not two seconds after. This is the magic trick the whole thing is built around.
+- **She talks, and her mouth means it.** TTS audio amplitude (RMS) drives `ParamMouthOpen` directly, skipping the smoothing pass so the lips stay glued to the sound.
+- **She knows her lore.** Curated *Factorial Omega* canon (`tools/lore_dataset.jsonl`) is embedded and retrieved per-message, so Jun stays accurate on the world details a fine-tune would otherwise smudge.
+- **She remembers you.** Past messages get embedded and recalled by similarity, so she can bring up things you said in earlier chats. Spooky-cute, not spooky-creepy.
+- **Accounts & history.** Sign up, log in, keep your conversations. Server-side sessions, per-user history, and an adult-content gate at signup.
+- **Dress her up.** Toggle clothing parts and recolor tint groups live, right from the settings drawer.
+- **100% local.** Ollama for the thinking, Kokoro for the voice, SQLite for the memory. Air-gap it if you want.
+- **Use your GPU (or don't).** NVIDIA, AMD, or plain CPU — the launcher figures out which and configures itself.
+- **Grown-up infra under the cute exterior.** Optional TLS via certbot, two-layer rate limiting, the works.
 
-## Quickstart
+## Get her running
 
-You need **Docker** (with Compose) and **git**. That's it.
+You need **Docker** (with Compose) and **git**. That's genuinely it.
 
-### One line
+### The lazy way (one line)
 
 **Linux / macOS / WSL**
 
@@ -72,11 +80,11 @@ curl -fsSL https://raw.githubusercontent.com/efficiencyx/Jun/main/install.sh | b
 irm https://raw.githubusercontent.com/efficiencyx/Jun/main/install.ps1 | iex
 ```
 
-Either one checks for **git + Docker** (and offers to install them if missing — winget on Windows, your package manager on Linux/macOS), clones the repo, creates `.env`, autodetects your GPU, and starts the stack. If it has to install Docker, it brings the daemon up and continues on its own — on Windows that means it opens a fresh window, waits for Docker, and finishes there. Open <http://localhost> once it's up.
+This checks for **git + Docker** (and offers to install them if they're missing — winget on Windows, your package manager elsewhere), clones the repo, writes a `.env`, sniffs out your GPU, and brings the whole stack up. If it has to install Docker from scratch it'll start the daemon and carry on by itself — on Windows it pops a fresh window, waits for Docker, and finishes there. Then open <http://localhost> and say hi.
 
-> Piping a script straight into your shell runs remote code. That's normal for installers, but if you'd rather check first, read [`install.sh`](install.sh) / [`install.ps1`](install.ps1) and just do the manual steps below — they're identical.
+> Piping a script into your shell runs remote code. Totally normal for installers, but if that makes you twitch, read [`install.sh`](install.sh) / [`install.ps1`](install.ps1) and just do the manual steps below — they're the same thing, by hand.
 
-### Manual
+### The careful way (manual)
 
 ```sh
 git clone https://github.com/efficiencyx/Jun.git
@@ -86,41 +94,52 @@ cp .env.example .env
 # open http://localhost
 ```
 
-`start.sh` / `start.ps1` detects your GPU (NVIDIA / AMD / none) and brings the stack up with the right configuration — see [GPU support](#gpu-support). Prefer raw compose? `docker compose up -d` works too and runs on CPU.
+`start.sh` / `start.ps1` detects your GPU (NVIDIA / AMD / none) and brings everything up with the right config — see [GPU support](#picking-your-gpu). Want to skip the launcher? `docker compose up -d` works too and runs on CPU.
 
-> **Windows:** if PowerShell blocks the script, run it once as `powershell -ExecutionPolicy Bypass -File start.ps1` (the `irm | iex` installer already handles this for you).
+> **Windows:** if PowerShell slaps down the script, run it once as `powershell -ExecutionPolicy Bypass -File start.ps1` (the `irm | iex` installer already handles this for you).
 
-On first boot Ollama pulls whatever is listed in `OLLAMA_MODELS_TO_PULL` — by default `hf.co/efficiencyx/Jun-14B:Q4_K_M` and `nomic-embed-text`, roughly 6 GB. Follow along with `docker compose logs -f ollama`.
+On first boot Ollama pulls whatever's in `OLLAMA_MODELS_TO_PULL` — by default `hf.co/efficiencyx/Jun-14B:Q4_K_M` and `nomic-embed-text`, roughly 6 GB. Watch it crawl in with `docker compose logs -f ollama`.
 
-The chat is usable as soon as `docker compose ps` reports every service healthy — typically 30–90 seconds, less if the weights are already cached in the `ollama_data` volume.
+She's ready the moment `docker compose ps` says everything's healthy — usually 30–90 seconds, faster if the weights are already cached in the `ollama_data` volume.
 
-### Production (with TLS)
+### Putting her on the internet (TLS)
 
-You'll need a domain whose A record points at the server's public IP, with ports 80 and 443 open.
+Got a domain pointed at your server's public IP, with ports 80 and 443 open?
 
 ```sh
 DOMAIN=yourdomain.com EMAIL=you@yourdomain.com TLS_MODE=on COMPOSE_PROFILES=prod ./start.sh
 ```
 
-`COMPOSE_PROFILES=prod` enables the `certbot` sidecar; GPU detection still applies. This adds a `certbot` sidecar that runs `certbot certonly --webroot` on start, then loops on `certbot renew` every 12 hours. Certificates land in the `letsencrypt` volume, which nginx mounts at `/etc/letsencrypt`, and it serves 443 with HSTS once they're issued.
+`COMPOSE_PROFILES=prod` flips on the `certbot` sidecar (GPU detection still applies). It runs `certbot certonly --webroot` on start, then loops `certbot renew` every 12 hours. Certs land in the `letsencrypt` volume, nginx mounts it at `/etc/letsencrypt`, and you get 443 with HSTS once they're issued.
 
-> **Heads up on Let's Encrypt rate limits:** 5 duplicate issuances per domain per week. While testing, point `DOMAIN` at a staging subdomain or add `--staging` in `docker/certbot-entrypoint.sh`.
+> **Mind the Let's Encrypt rate limits:** 5 duplicate issuances per domain per week. While testing, point `DOMAIN` at a staging subdomain or drop `--staging` into `docker/certbot-entrypoint.sh`.
 
-## Configuration
+## The models
 
-All configuration is environment variables (see `.env.example`):
+Jun's brain is a pair of fine-tunes we trained and published on Hugging Face. The launcher picks one for you based on your VRAM, but here they are if you want to poke at them directly:
 
-| Variable | Description | Default |
+| Model | Size | Who it's for | Link |
+|---|---|---|---|
+| **Jun-14B** | 14B params | ≥12 GB VRAM — the smarter, more in-character one | [efficiencyx/Jun-14B](https://huggingface.co/efficiencyx/Jun-14B) |
+| **Jun** | 7B params | Everything smaller — lighter, still very much Jun | [efficiencyx/Jun](https://huggingface.co/efficiencyx/Jun) |
+
+`docker/ollama-entrypoint.sh` reads your total GPU VRAM on first boot and grabs the one that fits (**≥12 GB → 14B**, otherwise **7B**), plus `nomic-embed-text` for the lore/memory embeddings. Override the auto-pick with an explicit `OLLAMA_MODELS_TO_PULL` list, or force one with `JUN_MODEL=...`. The frontend lists whatever Ollama actually has and picks a sensible default, so it adapts to whichever one landed.
+
+## Knobs to turn
+
+Everything's environment variables (see `.env.example`):
+
+| Variable | What it does | Default |
 |---|---|---|
 | `DOMAIN` | Public hostname for nginx `server_name` and certbot | `localhost` |
-| `EMAIL` | Contact email for Let's Encrypt registration | `admin@localhost` |
-| `TLS_MODE` | `on` enables HTTPS + the certbot profile; `off` serves plain HTTP | `off` |
-| `OLLAMA_URL` | Base URL the PHP container uses to reach Ollama | `http://ollama:11434` |
-| `OLLAMA_MODELS_TO_PULL` | Comma-separated models pulled on first boot | `hf.co/efficiencyx/Jun-14B:Q4_K_M,nomic-embed-text` |
-| `KOKORO_URL` | URL the PHP TTS proxy uses to reach the Kokoro sidecar | `http://kokoro:8001` |
-| `CORS_ORIGIN` | `Access-Control-Allow-Origin` for the Kokoro sidecar | `http://nginx` |
+| `EMAIL` | Contact email for Let's Encrypt | `admin@localhost` |
+| `TLS_MODE` | `on` = HTTPS + certbot profile; `off` = plain HTTP | `off` |
+| `OLLAMA_URL` | Where PHP finds Ollama | `http://ollama:11434` |
+| `OLLAMA_MODELS_TO_PULL` | Models pulled on first boot | `hf.co/efficiencyx/Jun-14B:Q4_K_M,nomic-embed-text` |
+| `KOKORO_URL` | Where the PHP TTS proxy finds the voice sidecar | `http://kokoro:8001` |
+| `CORS_ORIGIN` | `Access-Control-Allow-Origin` for the voice sidecar | `http://nginx` |
 
-## Architecture
+## Under the hood
 
 ```
 Browser ──HTTP/SSE──▶ nginx ──FastCGI──▶ php-fpm ──HTTP──▶ ollama :11434
@@ -130,50 +149,43 @@ Browser ──HTTP/SSE──▶ nginx ──FastCGI──▶ php-fpm ──HTTP�
                         └── serves /var/www/omega/ (static assets, JS, Live2D model)
 ```
 
-**Stack:** PHP 8.2 (Ollama SSE proxy + RAG) · Python FastAPI + Kokoro-82M (TTS sidecar) · plain HTML/JS/CSS frontend with PIXI.js + pixi-live2d-display + Cubism 4 SDK from CDN · SQLite · nginx + php-fpm.
+**The stack:** PHP 8.2 (the Ollama SSE proxy + RAG) · Python FastAPI + Kokoro-82M (the voice) · plain HTML/JS/CSS up front with PIXI.js + pixi-live2d-display + the Cubism 4 SDK from CDN · SQLite · nginx + php-fpm. No build step, no bundler, no node_modules black hole.
 
-For the full request walkthrough — token streaming, the ACTION stream buffer, the Live2D tick loop, and the TTS pipeline — see [`docs/architecture.md`](docs/architecture.md).
+Want the gory details — token streaming, the ACTION stream buffer, the Live2D tick loop, the TTS pipeline? It's all in [`docs/architecture.md`](docs/architecture.md).
 
-### Chat lifecycle (short version)
+### What happens when you hit send
 
-1. The browser `POST`s the conversation to `/api/chat.php`.
-2. PHP builds the system prompt: `system_prompt.txt` (read fresh each request), the current time, the closest canon lore facts, and any recalled context from past conversations (all cosine-ranked).
-3. Ollama streams NDJSON, which PHP re-frames as `data: {"token":"..."}` SSE events and flushes immediately.
-4. `js/app.js` watches the stream for `[ACTION:` markers, holds back partial markers so they never render, and dispatches each action the moment its closing `]` arrives.
-5. `js/actions.js` resolves the action against `action_map.json`; `js/live2d.js` lerps the model's parameters toward the new targets every frame.
-6. Optionally, `js/tts.js` splits the clean text into sentences, fetches audio per sentence from `/api/tts.php`, plays them in order, and drives `ParamMouthOpen` from the analyser's RMS.
+1. The browser `POST`s your conversation to `/api/chat.php`.
+2. PHP assembles the system prompt fresh: `system_prompt.txt` (read every request), the current time, the closest canon lore facts, and any recalled bits from past chats (all cosine-ranked).
+3. Ollama streams NDJSON back; PHP re-frames it as `data: {"token":"..."}` SSE events and flushes each one immediately.
+4. `js/app.js` watches the stream for `[ACTION:` markers, hides any half-typed marker so it never renders, and fires each action the instant its closing `]` shows up.
+5. `js/actions.js` resolves that action against `action_map.json`; `js/live2d.js` lerps the model's parameters toward the new pose every frame.
+6. If the voice is on, `js/tts.js` splits the clean text into sentences, fetches audio per sentence from `/api/tts.php`, plays them in order, and drives `ParamMouthOpen` from the analyser's RMS.
 
-## Extending
+## Make her your own
 
-### Add a new ACTION
+### Rebuild the lore index
 
-1. Add a node to `webapp/action_map.json`. The key is the action name; nested keys are navigated via kwargs (`dir`, `target`, `emotion`, …). The existing entries cover the patterns: direct `Param*` values, `_sequence`, `_loop_param`, `_compose`, and `_param`/`_scale`.
-2. Document the new action's syntax in `webapp/system_prompt.txt` so the model knows when to use it.
-
-No rebuild needed — the backend reads `system_prompt.txt` on every request and the browser fetches the action map at load. On boot, `validateActionMap` in `app.js` logs any `Param*` keys missing from the loaded model.
-
-### Build the lore RAG index
-
-The index is built from `tools/lore_dataset.jsonl` (curated game-lore Q&A, one JSON object per line). It must be regenerated whenever that dataset changes:
+The index comes from `tools/lore_dataset.jsonl` (curated *Factorial Omega* Q&A, one JSON object per line). Regenerate it whenever you edit that dataset:
 
 ```sh
 docker compose exec -e OLLAMA_URL=http://ollama:11434 php \
   php tools/build_lore_index.php
 ```
 
-This flattens each Q&A into a question→answer pair, embeds the questions with `nomic-embed-text`, and writes `webapp/lore_index.bin` (packed float32), `webapp/lore_corpus.txt` (the answers) and `webapp/lore_meta.json`. Add `--dry-run` to count pairs without calling Ollama. A missing index is handled gracefully — retrieval is skipped and chat still works.
+This flattens each Q&A into a question→answer pair, embeds the questions with `nomic-embed-text`, and writes `webapp/lore_index.bin` (packed float32), `webapp/lore_corpus.txt` (the answers), and `webapp/lore_meta.json`. Add `--dry-run` to count pairs without touching Ollama. A missing index is fine — retrieval just gets skipped and chat carries on.
 
-### GPU support
+### Picking your GPU
 
-`./start.sh` auto-detects the GPU and picks the matching compose overlay. The base `docker-compose.yml` is CPU-only and runs anywhere; acceleration is layered on top.
+`./start.sh` auto-detects your GPU and grabs the matching compose overlay. The base `docker-compose.yml` is CPU-only and runs anywhere; acceleration layers on top.
 
-| Backend | How `start.sh` detects it | What it does |
+| Backend | How `start.sh` spots it | What it does |
 |---|---|---|
-| **NVIDIA** | `nvidia-smi` works, or `/proc/driver/nvidia` exists | Adds `docker-compose.nvidia.yml` (reserves the NVIDIA device). Needs [nvidia-container-toolkit](https://docs.nvidia.com/datacenter/cloud-native/container-toolkit/latest/install-guide.html). |
-| **AMD** | `/dev/kfd` + `/dev/dri/renderD*` present | Adds `docker-compose.amd.yml` (builds Ollama from `ollama/ollama:rocm`, passes `/dev/kfd` + `/dev/dri`, joins the host `video`/`render` groups). Needs the `amdgpu` driver. |
+| **NVIDIA** | `nvidia-smi` works, or `/proc/driver/nvidia` exists | Adds `docker-compose.nvidia.yml`. Needs [nvidia-container-toolkit](https://docs.nvidia.com/datacenter/cloud-native/container-toolkit/latest/install-guide.html). |
+| **AMD** | `/dev/kfd` + `/dev/dri/renderD*` present | Adds `docker-compose.amd.yml` (Ollama from `ollama/ollama:rocm`, passes `/dev/kfd` + `/dev/dri`, joins the host `video`/`render` groups). Needs the `amdgpu` driver. |
 | **CPU** | nothing else matched | Base compose only. |
 
-Force a backend with `GPU=nvidia|amd|cpu ./start.sh`. To run it by hand instead of the script:
+Force a backend with `GPU=nvidia|amd|cpu ./start.sh`. To do it by hand:
 
 ```sh
 # NVIDIA
@@ -190,52 +202,52 @@ RENDER_GID=$(stat -c '%g' /dev/dri/renderD128) \
 HSA_OVERRIDE_GFX_VERSION=11.0.0 ./start.sh
 ```
 
-**Intel GPUs (Arc / iGPU):** the upstream `ollama/ollama` image has no Intel acceleration, so `start.sh` falls back to CPU on Intel-only machines. For GPU offload you'd swap the `ollama` service for Intel's [IPEX-LLM](https://github.com/intel-analytics/ipex-llm) Ollama build (exposes the same API on `:11434`, needs `/dev/dri` + oneAPI level-zero). It's a heavier, separate setup and isn't wired in here.
+**Intel GPUs (Arc / iGPU):** the upstream `ollama/ollama` image has no Intel acceleration, so `start.sh` falls back to CPU on Intel-only machines. For GPU offload you'd swap the `ollama` service for Intel's [IPEX-LLM](https://github.com/intel-analytics/ipex-llm) Ollama build (same API on `:11434`, needs `/dev/dri` + oneAPI level-zero). It's a heavier, separate setup and isn't wired in here.
 
-## Troubleshooting
+## When things go sideways
 
 <details>
-<summary><b>SSE looks buffered — responses arrive all at once</b></summary>
+<summary><b>Replies arrive all at once instead of streaming</b></summary>
 
-Check that the `/api/chat.php` location has `proxy_buffering off;` and `fastcgi_buffering off;`, and that `X-Accel-Buffering: no` is set. A load balancer in front of nginx can re-introduce buffering.
+Something's buffering the SSE. Make sure the `/api/chat.php` location has `proxy_buffering off;` and `fastcgi_buffering off;`, and that `X-Accel-Buffering: no` is set. A load balancer in front of nginx can sneak buffering back in.
 </details>
 
 <details>
-<summary><b>CSP violations in the console</b></summary>
+<summary><b>CSP violations spamming the console</b></summary>
 
-A CDN URL is being blocked. Whitelist the specific origin under `Content-Security-Policy` (`script-src` / `style-src`) in `docker/nginx/templates/omega.conf.template`. Don't widen to `*`.
+A CDN URL is getting blocked. Whitelist the specific origin under `Content-Security-Policy` (`script-src` / `style-src`) in `docker/nginx/templates/omega.conf.template`. Don't widen it to `*`.
 </details>
 
 <details>
-<summary><b>Live2D character is invisible</b></summary>
+<summary><b>Jun is invisible</b></summary>
 
-Open the console — a missing texture shows as a 404. Confirm `webapp/assets/*.png` exist and the nginx root points at `/var/www/omega/`.
+Open the console — a missing texture shows up as a 404. Confirm `webapp/assets/*.png` exist and the nginx root points at `/var/www/omega/`.
 </details>
 
 <details>
-<summary><b>429s on chat</b></summary>
+<summary><b>Getting 429s while chatting</b></summary>
 
-The rate limiter tripped. Raise both layers: `limit_req_zone` in the nginx template and `rate_limit('chat', 30, 60)` in `webapp/api/chat.php`. The tighter of the two wins.
+The rate limiter tripped. Raise *both* layers: `limit_req_zone` in the nginx template and `rate_limit('chat', 30, 60)` in `webapp/api/chat.php`. The stricter one wins.
 </details>
 
 <details>
-<summary><b>Kokoro TTS not working</b></summary>
+<summary><b>No voice</b></summary>
 
 Check `docker compose logs kokoro`. The first run downloads ~300 MB of weights. From inside the stack, `docker compose exec nginx wget -qO- http://kokoro:8001/health` should return `{"ok":true}`. The Kokoro port is intentionally not exposed to the host.
 </details>
 
 <details>
-<summary><b>Ollama model still loading</b></summary>
+<summary><b>Model's taking forever to load</b></summary>
 
-Watch `docker compose logs ollama`. The entrypoint pre-warms the first non-embedding model with an empty prompt to load weights into VRAM. A `pre-warm failed` line is non-fatal — the model loads on the first real message.
+Watch `docker compose logs ollama`. The entrypoint pre-warms the first non-embedding model with an empty prompt to pull weights into VRAM. A `pre-warm failed` line is non-fatal — she'll load on your first real message.
 </details>
 
-## Project layout
+## Where everything lives
 
 ```
 .
 ├── docker/                    Dockerfiles, nginx templates, entrypoints
-├── tts/                       Kokoro TTS sidecar (FastAPI, server.py)
+├── tts/                       Kokoro voice sidecar (FastAPI, server.py)
 ├── tools/                     Lore-index builder + dataset, chat-index compaction, admin scripts
 ├── docs/                      architecture.md + screenshots/
 ├── webapp/                    Everything served by nginx / php-fpm
@@ -243,7 +255,7 @@ Watch `docker compose logs ollama`. The entrypoint pre-warms the first non-embed
 │   ├── js/                    app.js, live2d.js, actions.js, ollama.js, tts.js, outfit.js, ui.js, …
 │   ├── assets/                Live2D model files (*.moc3, *.physics3.json, *.png)
 │   ├── action_map.json        Semantic action → Live2D parameter map
-│   ├── system_prompt.txt      Character persona + ACTION syntax (read server-side)
+│   ├── system_prompt.txt      Jun's persona + ACTION syntax (read server-side)
 │   └── index.html             Single-page app entry point
 ├── install.sh / install.ps1   One-line bootstrap (clone + start)
 ├── start.sh / start.ps1       Launcher with GPU autodetect (Linux / Windows)
@@ -253,14 +265,15 @@ Watch `docker compose logs ollama`. The entrypoint pre-warms the first non-embed
 └── .env.example
 ```
 
-## Credits
+## Standing on the shoulders of
 
 - [PIXI.js](https://pixijs.com/) — WebGL 2D renderer
 - [pixi-live2d-display](https://github.com/guansss/pixi-live2d-display) — Live2D integration for PIXI
-- [Live2D Cubism SDK](https://www.live2d.com/en/sdk/about/) — character model runtime
-- [Kokoro-82M](https://huggingface.co/hexgrad/Kokoro-82M) — lightweight TTS model
+- [Live2D Cubism SDK](https://www.live2d.com/en/sdk/about/) — the character model runtime
+- [Kokoro-82M](https://huggingface.co/hexgrad/Kokoro-82M) — the lightweight TTS that gives her a voice
 - [Ollama](https://ollama.com/) — local LLM inference
+- And of course [**Factorial Omega**](), for giving us Jun in the first place. 💛
 
 ## License
 
-Released under the MIT License — see [LICENSE](LICENSE).
+MIT — see [LICENSE](LICENSE). This is an unofficial, non-commercial fan project; all *Factorial Omega* rights belong to their respective owners.
