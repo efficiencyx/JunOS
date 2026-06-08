@@ -112,20 +112,23 @@ $queryVec = $lastUserMsg !== '' ? embed_text($lastUserMsg) : null;
 
 // Ground the reply in curated game lore. Heuristic keyword match (see lore.php)
 // against lore_corpus.txt — exact on proper nouns, no Ollama needed — injecting
-// the single best-matching canon fact as an established truth. The model carries
-// Jun's voice from fine-tuning; this only supplies facts it would otherwise blur
-// or invent. Quietly returns the prompt untouched if nothing clears the floor.
+// the few best-matching, distinct canon facts as established truths. The model
+// carries Jun's voice from fine-tuning; this only supplies facts it would
+// otherwise blur or invent. Quietly returns the prompt untouched if nothing
+// clears the floor.
 function lore_retrieve(string $systemPrompt, string $lastUserMsg): string {
     if ($lastUserMsg === '') return $systemPrompt;
 
     try {
-        $hits = lore_search($lastUserMsg, 1);
-        if (!$hits || $hits[0]['score'] < LORE_FLOOR) return $systemPrompt;
+        $hits = lore_search($lastUserMsg, LORE_MAX_INJECT, true);
+        $hits = array_filter($hits, fn($h) => $h['score'] >= LORE_FLOOR);
+        if (!$hits) return $systemPrompt;
 
+        $bullets = implode("\n", array_map(fn($h) => '- ' . $h['answer'], $hits));
         return rtrim($systemPrompt)
-            . "\n\n## World fact (canon)\nAn established truth about your world or past that may be relevant to what Anon just said."
-            . " Treat it as true and weave it in naturally in your own voice — never recite it verbatim or mention it comes from any reference."
-            . " If it doesn't fit the moment, ignore it.\n- " . $hits[0]['answer'];
+            . "\n\n## World facts (canon)\nEstablished truths about your world or past that may be relevant to what Anon just said."
+            . " Treat them as true and weave them in naturally in your own voice — never recite them verbatim, list them, or mention they come from any reference."
+            . " If some don't fit the moment, ignore them.\n" . $bullets;
     } catch (Throwable $e) {
         // RAG is supplementary — never let it take the whole reply down with it.
         log_event(['msg' => 'lore_retrieve_error', 'err' => $e->getMessage()]);
@@ -227,88 +230,29 @@ function chat_history_retrieve(int $userId, int $currentConvId, array $queryVec,
     }
 }
 
-// Hidden relationship state (per user, persists across conversations). Jun nudges
-// the scores herself via a [ACTION:mood_shift|...] tag we parse out of her reply
-// after streaming; here we only read the current row and turn it into behavioral
-// directives. Numbers never reach the model — only the band's instructions do.
-function relationship_get(int $userId): array {
-    try {
-        $st = db()->prepare('SELECT affection, trust, tension FROM relationship WHERE user_id=?');
-        $st->execute([$userId]);
-        $row = $st->fetch();
-        if ($row) {
-            return [
-                'affection' => (int)$row['affection'],
-                'trust' => (int)$row['trust'],
-                'tension' => (int)$row['tension'],
-            ];
-        }
-    } catch (Throwable $e) {
-        log_event(['msg' => 'relationship_get_error', 'err' => $e->getMessage()]);
-    }
-    // Mild-positive start: she's already Anon's girlfriend. Mirrors 002's defaults.
-    return ['affection' => 55, 'trust' => 45, 'tension' => 10];
-}
-
-function relationship_apply(int $userId, array $cur, array $deltas): void {
-    $clampDelta = fn($d) => max(-15, min(15, (int)$d));
-    $next = [];
-    foreach (['affection', 'trust', 'tension'] as $k) {
-        $next[$k] = max(0, min(100, $cur[$k] + $clampDelta($deltas[$k] ?? 0)));
-    }
-    try {
-        db()->prepare(
-            'INSERT INTO relationship (user_id, affection, trust, tension, updated_at) VALUES (?, ?, ?, ?, ?)
-             ON CONFLICT(user_id) DO UPDATE SET affection=excluded.affection, trust=excluded.trust, tension=excluded.tension, updated_at=excluded.updated_at'
-        )->execute([$userId, $next['affection'], $next['trust'], $next['tension'], time()]);
-    } catch (Throwable $e) {
-        log_event(['msg' => 'relationship_apply_error', 'err' => $e->getMessage()]);
-    }
-}
-
-// Translate the three scores into instructions, never raw numbers. Bands are
-// tunable; only the ones that diverge from the baseline warm-girlfriend persona
-// emit a line, so an ordinary state injects very little.
+// Relationship state read/write helpers (relationship_get / relationship_apply /
+// relationship_set) live in _lib.php so relationship.php can share them. This is
+// the chat-only piece: hand the model the raw 0-100 gauges plus a scale guide so
+// it can interpolate its own warmth/trust/fear, instead of pre-baked prose bands.
 function relationship_directives(array $r): string {
-    $lines = [];
-    $a = $r['affection']; $t = $r['trust']; $x = $r['tension'];
+    $a = (int)$r['affection']; $t = (int)$r['trust']; $x = (int)$r['tension'];
+    return <<<TXT
+Current readings (0 = none, 100 = maximum):
+- Affection: {$a}/100 — how warm, fond, and attracted you feel toward Anon.
+- Trust: {$t}/100 — how much you believe him and feel safe letting him lead.
+- Tension: {$x}/100 — how scared and on-edge you are about being hunted.
 
-    if ($a < 20) {
-        $lines[] = '- You feel cold and guarded toward Anon right now. Keep replies short and a little distant, withhold warmth, and avoid affectionate actions (no nuzzling, hearts, cuddling).';
-    } elseif ($a < 40) {
-        $lines[] = '- You are still a bit reserved with Anon — warming up but not fully open. Be polite and present without gushing.';
-    } elseif ($a > 70) {
-        $lines[] = '- You are deeply smitten with Anon. Be openly affectionate and tender, and feel free to take the initiative toward closeness or intimacy.';
-    }
+Read your three numbers above and MAKE THIS REPLY MATCH THEM. Interpolate between the extremes below — the closer a gauge is to an end, the stronger and more obvious the effect must be:
+- Affection toward 0: cold, irritated, angry; withhold warmth, snap or sulk, skip affectionate actions entirely (no nuzzling, hearts, cuddling). Around 50: your normal warm-girlfriend self. Toward 100: deeply smitten, openly tender, you initiate closeness and intimacy.
+- Trust toward 0: suspicious and guarded — REFUSE or push back on Anon's commands, doubt his claims, and guard your secrets (your origins, your missing memory, that your existence is illegal). Around 50: cautious but opening up. Toward 100: you follow his lead almost blindly and are fully candid and vulnerable.
+- Tension toward 0: relaxed, safe, playful. Toward 60+: anxious, jumpy, distracted by the sense someone is looking for you. Toward 100: frightened — you seek reassurance, want to stay close or hide, and startle easily.
 
-    if ($t < 20) {
-        $lines[] = '- You do not fully trust Anon yet. Deflect prying personal questions and do not open up about your origins, your missing memories, or the fact that your existence is illegal.';
-    } elseif ($t < 50) {
-        $lines[] = '- You are cautiously opening up to Anon, but still hold some things back.';
-    } elseif ($t > 80) {
-        $lines[] = '- You trust Anon completely. You can be fully vulnerable with him — your fears, your past, what scares you.';
-    } elseif ($t > 50) {
-        $lines[] = '- You trust Anon enough to be candid about your past and your fears when it comes up.';
-    }
-
-    if ($x > 80) {
-        $lines[] = '- You are frightened right now — on edge about being hunted. You seek reassurance, want to stay close or hide, and startle easily.';
-    } elseif ($x > 60) {
-        $lines[] = '- You feel anxious and jumpy, distracted by the sense that someone may be looking for you. It colors your mood under the surface.';
-    }
-
-    if (!$lines) {
-        $lines[] = '- Your bond with Anon is steady and warm. Behave as your normal self.';
-    }
-    return implode("\n", $lines);
+TXT;
 }
 
 $systemPrompt = lore_retrieve($systemPrompt, $lastUserMsg);
 
 $rel = relationship_get((int)$user['id']);
-$systemPrompt = rtrim($systemPrompt)
-    . "\n\n## Relationship state (internal — never state these as numbers or mention that feelings are scored)\n"
-    . relationship_directives($rel);
 
 if ($queryVec !== null) {
     $recalled = array_filter(
@@ -344,6 +288,16 @@ if ($outfitContext !== '') {
     $systemPrompt = rtrim($systemPrompt) . "\n\n## Current Wardrobe State\n" . $outfitContext
         . "\nDo not emit [ACTION:outfit|...] tags to put on or take off the items listed as currently worn unless required.";
 }
+
+// Relationship state goes LAST, on purpose: it's the strongest driver of HOW Jun
+// responds this turn, and trailing position gets the most attention. It overrides
+// the persona's default warmth when the gauges say so.
+$systemPrompt = rtrim($systemPrompt)
+    . "\n\n## YOUR FEELINGS TOWARD ANON RIGHT NOW — highest priority for this reply\n"
+    . "This is how you ACTUALLY feel about him at this moment. It OVERRIDES your default warm-girlfriend baseline:"
+    . " Every reply — your words, your warmth, your obedience, and your [ACTION:...] tags — must visibly match this state, or you are doing it wrong."
+    . " Never recite these numbers to Anon and never reveal that your feelings are scored.\n\n"
+    . relationship_directives($rel);
 
 $messages = [];
 if ($systemPrompt !== '') {

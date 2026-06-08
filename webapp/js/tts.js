@@ -30,6 +30,19 @@ window.TTS = (function () {
   let rafId = 0;
   let sentenceBuf = '';     // text accumulated but not yet split into a sentence
 
+  // Fires once the queue drains after Jun has been speaking, so callers can start
+  // their idle clock from when she stops talking rather than when the text streamed.
+  let speaking = false;
+  let onAllDone = () => {};
+  function setOnAllDone(fn) { onAllDone = fn || (() => {}); }
+  function isSpeaking() {
+    return playingJobId !== 0 ||
+      jobs.some(j => j.status === 'pending' || j.status === 'ready' || j.status === 'playing');
+  }
+  function checkDrain() {
+    if (speaking && !isSpeaking()) { speaking = false; onAllDone(); }
+  }
+
   function ensureCtx() {
     if (audioCtx) return audioCtx;
     audioCtx = new (window.AudioContext || window.webkitAudioContext)();
@@ -140,6 +153,7 @@ window.TTS = (function () {
       audioBuffer: null,
     };
     jobs.push(job);
+    speaking = true;
 
     job.blobPromise = (async () => {
       try {
@@ -176,7 +190,7 @@ window.TTS = (function () {
     while (jobs.length && (jobs[0].status === 'done' || jobs[0].status === 'cancelled' || jobs[0].status === 'error')) {
       jobs.shift();
     }
-    if (!jobs.length) return;
+    if (!jobs.length) { checkDrain(); return; }
     const head = jobs[0];
     if (head.status !== 'ready') return;  // still synthesizing
     playJob(head);
@@ -241,6 +255,7 @@ window.TTS = (function () {
 
   function stop() {
     sentenceBuf = '';
+    speaking = false;
     for (const j of jobs) {
       if (j.status === 'pending' || j.status === 'ready') {
         try { j.abort.abort(); } catch (e) {}
@@ -263,5 +278,6 @@ window.TTS = (function () {
     setLogger,
     listVoices,
     feed, flush, stop,
+    isSpeaking, setOnAllDone,
   };
 })();

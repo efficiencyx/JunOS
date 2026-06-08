@@ -6,9 +6,9 @@
 -- cold first meeting.
 CREATE TABLE relationship (
   user_id    INTEGER PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE,
-  affection  INTEGER NOT NULL DEFAULT 55,
-  trust      INTEGER NOT NULL DEFAULT 45,
-  tension    INTEGER NOT NULL DEFAULT 10,
+  affection  INTEGER NOT NULL DEFAULT 50,
+  trust      INTEGER NOT NULL DEFAULT 50,
+  tension    INTEGER NOT NULL DEFAULT 30,
   updated_at INTEGER NOT NULL
 );
 INSERT INTO schema_version(v) VALUES (2);

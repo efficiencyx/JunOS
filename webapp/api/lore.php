@@ -11,14 +11,13 @@
 // corpus's own capitalization, which gives the precision the cosine floor never
 // had: chit-chat scores ~0, a single distinctive lore term clears the floor. A
 // Levenshtein fallback on names absorbs typos ("Annallie" -> Annalie).
-//
-// Shared by chat.php (live injection) and api/lore_test.php (the debug page) so
-// both score identically.
 
 const LORE_PROPER_BOOST   = 2.0;  // a term that's a proper noun in the corpus
-const LORE_FLOOR          = 3.0;  // min score to inject; tune via lore_test.html
+const LORE_FLOOR          = 3.0;  // min score to inject
 const LORE_FUZZY_PENALTY  = 0.6;  // discount on a typo-corrected (fuzzy) term
 const LORE_FUZZY_MIN_IDF  = 2.0;  // only fuzzy-match distinctive (rare) names
+const LORE_MAX_INJECT     = 5;    // up to this many *distinct* facts injected
+const LORE_DEDUP_JACCARD  = 0.5;  // candidates sharing this much vocab collapse
 
 // Ordinary English + conversational filler. IDF can't drop these on its own:
 // words like "morning" or "look" are rare *in the lore* even though they're
@@ -149,10 +148,21 @@ function lore_resolve(array $idx, string $query): array {
     return $res;
 }
 
+// Jaccard overlap of two term-count maps' key sets — used to fold near-duplicate
+// answers (the corpus has many rephrasings of the same fact) into one.
+function lore_jaccard(array $a, array $b): float {
+    $inter = 0;
+    foreach ($a as $k => $_) if (isset($b[$k])) $inter++;
+    $union = count($a) + count($b) - $inter;
+    return $union > 0 ? $inter / $union : 0.0;
+}
+
 // Rank corpus answers against $query by summed IDF of overlapping terms (proper
 // nouns boosted, typo-corrected terms discounted, a mild term-frequency bump).
-// Returns up to $topK ['score','answer'] rows, highest first.
-function lore_search(string $query, int $topK = 1): array {
+// Returns up to $topK ['score','answer'] rows, highest first. With $dedup set,
+// answers too similar to an already-picked one are skipped, so you get $topK
+// *distinct* facts rather than $topK rephrasings of the same one.
+function lore_search(string $query, int $topK = 1, bool $dedup = false): array {
     $idx = lore_index();
     if ($idx === null) return [];
 
@@ -178,8 +188,17 @@ function lore_search(string $query, int $topK = 1): array {
 
     arsort($scores);
     $out = [];
-    foreach (array_slice($scores, 0, $topK, true) as $i => $score) {
+    $kept = []; // token sets already chosen, for dedup
+    foreach ($scores as $i => $score) {
+        if ($dedup) {
+            $ts = $idx['docTf'][$i];
+            foreach ($kept as $ks) {
+                if (lore_jaccard($ts, $ks) >= LORE_DEDUP_JACCARD) continue 2;
+            }
+            $kept[] = $ts;
+        }
         $out[] = ['score' => round($score, 4), 'answer' => $idx['answers'][$i]];
+        if (count($out) >= $topK) break;
     }
     return $out;
 }
