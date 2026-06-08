@@ -250,6 +250,30 @@
       <section class="settings-panel" data-panel="developer" hidden>
         <div class="set-block">
           <div class="set-block-head">
+            <div class="set-row-title">Relationship (mood switcher)</div>
+            <button class="ghost" id="moodRefreshBtn" title="Reload current values">refresh</button>
+          </div>
+          <div class="set-row-desc">Live affection / trust / tension. Drag to override temporarily; Jun reacts on her next reply.</div>
+          <div class="mood-controls">
+            <label class="mood-row">
+              <span class="mood-label">Affection</span>
+              <input type="range" id="moodAffection" min="0" max="100" step="1" value="50">
+              <span class="mood-val" id="moodAffectionVal">50</span>
+            </label>
+            <label class="mood-row">
+              <span class="mood-label">Trust</span>
+              <input type="range" id="moodTrust" min="0" max="100" step="1" value="50">
+              <span class="mood-val" id="moodTrustVal">50</span>
+            </label>
+            <label class="mood-row">
+              <span class="mood-label">Tension</span>
+              <input type="range" id="moodTension" min="0" max="100" step="1" value="30">
+              <span class="mood-val" id="moodTensionVal">30</span>
+            </label>
+          </div>
+        </div>
+        <div class="set-block">
+          <div class="set-block-head">
             <div class="set-row-title">Action log</div>
             <span class="count" id="actionLogCount">0</span>
           </div>

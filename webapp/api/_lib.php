@@ -230,3 +230,59 @@ function start_session(int $userId): string {
     ]);
     return $token;
 }
+
+// Hidden per-user relationship state (one row per user; persists across all of
+// that user's conversations). Scores are 0-100. chat.php injects behavioral
+// directives from these and nudges them via Jun's [ACTION:mood_shift|...] tag;
+// relationship.php reads/sets them for the developer panel.
+const RELATIONSHIP_DEFAULTS = ['affection' => 50, 'trust' => 50, 'tension' => 30];
+
+function relationship_get(int $userId): array {
+    try {
+        $st = db()->prepare('SELECT affection, trust, tension FROM relationship WHERE user_id=?');
+        $st->execute([$userId]);
+        $row = $st->fetch();
+        if ($row) {
+            return [
+                'affection' => (int)$row['affection'],
+                'trust' => (int)$row['trust'],
+                'tension' => (int)$row['tension'],
+            ];
+        }
+    } catch (Throwable $e) {
+        log_event(['msg' => 'relationship_get_error', 'err' => $e->getMessage()]);
+    }
+    return RELATIONSHIP_DEFAULTS; // mild-positive start: she's already his girlfriend
+}
+
+// Persist absolute scores (each clamped to 0-100). Used by the dev switcher and
+// as the write path for relationship_apply's deltas.
+function relationship_set(int $userId, array $values): void {
+    $clamp = fn($n) => max(0, min(100, (int)$n));
+    try {
+        db()->prepare(
+            'INSERT INTO relationship (user_id, affection, trust, tension, updated_at) VALUES (?, ?, ?, ?, ?)
+             ON CONFLICT(user_id) DO UPDATE SET affection=excluded.affection, trust=excluded.trust, tension=excluded.tension, updated_at=excluded.updated_at'
+        )->execute([
+            $userId,
+            $clamp($values['affection'] ?? RELATIONSHIP_DEFAULTS['affection']),
+            $clamp($values['trust'] ?? RELATIONSHIP_DEFAULTS['trust']),
+            $clamp($values['tension'] ?? RELATIONSHIP_DEFAULTS['tension']),
+            time(),
+        ]);
+    } catch (Throwable $e) {
+        log_event(['msg' => 'relationship_set_error', 'err' => $e->getMessage()]);
+    }
+}
+
+// Apply per-turn deltas on top of $cur, then persist. Capped at ±50/turn: normal
+// turns are 0-5, but the prompt lets Jun swing 30-50 on big events (sold, cheated
+// on, abandoned), so the cap has to allow that while still blocking absurd jumps.
+function relationship_apply(int $userId, array $cur, array $deltas): void {
+    $clampDelta = fn($d) => max(-50, min(50, (int)$d));
+    $next = [];
+    foreach (['affection', 'trust', 'tension'] as $k) {
+        $next[$k] = $cur[$k] + $clampDelta($deltas[$k] ?? 0);
+    }
+    relationship_set($userId, $next);
+}
