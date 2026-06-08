@@ -57,7 +57,7 @@ if (isset($body['model']) && is_string($body['model']) && $body['model'] !== '')
 
 $reasoning = 'low';
 if (isset($body['reasoning'])) {
-    if (!in_array($body['reasoning'], ['low', 'medium', 'high'], true)) sse_fail('invalid_request');
+    if (!in_array($body['reasoning'], ['auto', 'low', 'medium', 'high'], true)) sse_fail('invalid_request');
     $reasoning = (string)$body['reasoning'];
 }
 
@@ -364,10 +364,67 @@ if ($idle) {
         . 'If asked to be quiet Break the silence with ONLY an action. such as a wave or a smile. No chat or text!)'];
 }
 
+/**
+ * Decide whether a turn is worth chain-of-thought — no extra model call, just a
+ * look at the last user message. Default is OFF: reasoning only switches on (and
+ * scales up) when the message shows concrete signs of a task that benefits from
+ * deliberation — analytical asks, math/time arithmetic, several questions at
+ * once, or a long, detailed request. Everything else (greetings, banter, short
+ * replies) stays snappy and cheap.
+ *
+ * @return array{0:string,1:bool,2:string} [effort, think, reason]
+ */
+function route_reasoning(string $msg, bool $idle): array {
+    // Idle nudges carry no user turn to reason about — keep them snappy.
+    if ($idle || trim($msg) === '') return ['low', false, 'idle/empty'];
+
+    $m = mb_strtolower(trim($msg));
+    $wordCount = count(preg_split('/\s+/u', $m, -1, PREG_SPLIT_NO_EMPTY));
+    $questions = substr_count($m, '?');
+    $signals = [];
+
+    // Explicit "do some thinking" verbs and analytical asks.
+    if (preg_match('/\b(explain|why|how (?:do|does|did|can|would|should|to)|calculat|'
+        . 'comput|solve|prove|deriv|reason|analy[sz]|compare|difference between|'
+        . 'step by step|walk me through|figure out|work out|plan|strateg|debug|'
+        . 'optimi[sz]|translate|summar|pros and cons|which is better|trade-?off)\b/u', $m)) {
+        $signals[] = 'analytical';
+    }
+
+    // Arithmetic / quantitative asks, including the app's "how long since" time math.
+    if (preg_match('#\d+\s*[-+*/x×÷%=]\s*\d+#u', $m)
+        || preg_match('/\b(how many|how much|how long|how old|days? (?:since|ago|until)|'
+            . 'hours? (?:since|ago)|what time|percentage|average|total)\b/u', $m)) {
+        $signals[] = 'quantitative';
+    }
+
+    // Several distinct questions in one turn, or a long, detailed request.
+    if ($questions >= 2) $signals[] = 'multi-question';
+    if ($wordCount >= 25) $signals[] = 'long';
+
+    if (!$signals) return ['low', false, 'simple'];
+
+    // One signal earns a light think; stacking signals (or a very long ask) earns more.
+    $effort = (count($signals) >= 2 || $wordCount >= 60) ? 'high' : 'medium';
+    return [$effort, true, implode('+', $signals)];
+}
+
 $think = isset($body['think']) ? (bool)$body['think'] : false;
 
-// Let the UI inspect exactly what we assembled.
-sse_send(['debug' => ['system_prompt' => $systemPrompt]]);
+// "auto" hands the reasoning decision to a fast, zero-cost heuristic so trivial
+// turns ("hi", "how are you?") skip chain-of-thought entirely while genuinely
+// involved requests still get it. Most of a companion chat is small talk, and
+// thinking burns tokens before the reply even starts — so this is where the real
+// savings are. Picks both the effort level and whether to think at all, and
+// overrides whatever `think` the client sent (the manual checkbox only applies in
+// the explicit low/medium/high modes).
+$route = 'manual';
+if ($reasoning === 'auto') {
+    [$reasoning, $think, $route] = route_reasoning($lastUserMsg, $idle);
+}
+
+// Let the UI inspect exactly what we assembled, including the routing decision.
+sse_send(['debug' => ['system_prompt' => $systemPrompt, 'reasoning' => $reasoning, 'think' => $think, 'route' => $route]]);
 
 $now = time();
 $db = db();
