@@ -15,6 +15,17 @@
   const rawStreamEl = document.getElementById('rawStream');
   const clearRawBtn = document.getElementById('clearRawBtn');
   const debugSystemPromptEl = document.getElementById('debugSystemPrompt');
+  const moodInputs = {
+    affection: document.getElementById('moodAffection'),
+    trust: document.getElementById('moodTrust'),
+    tension: document.getElementById('moodTension'),
+  };
+  const moodVals = {
+    affection: document.getElementById('moodAffectionVal'),
+    trust: document.getElementById('moodTrustVal'),
+    tension: document.getElementById('moodTensionVal'),
+  };
+  const moodRefreshBtn = document.getElementById('moodRefreshBtn');
   const stageEl = document.getElementById('stage');
   const stageStatus = document.getElementById('stageStatus');
   const stageSkeleton = document.getElementById('stageSkeleton');
@@ -38,10 +49,10 @@
 
   // Idle nudge: if Anon goes quiet, prompt Jun to speak first. The reply timer is
   // armed only once the model finishes streaming (in onDone/onError), so a long
-  // reply can't trip it early. 30s after a reply lands, or 45s after the app is
+  // reply can't trip it early. 60s after a reply lands, or 45s after the app is
   // ready / a conversation is opened. Capped so Jun doesn't keep talking to an
   // empty room forever — resets when Anon interacts.
-  const IDLE_AFTER_REPLY_MS = 30000;
+  const IDLE_AFTER_REPLY_MS = 60000;
   const IDLE_AFTER_JOIN_MS  = 45000;
   const TYPING_POLL_MS = 5000;
   const MAX_IDLE_NUDGES = 3;
@@ -74,6 +85,16 @@
       idleNudgeStreak++;
       runChat({ idle: true });
     }, delayMs);
+  }
+
+  // Start the post-reply idle clock from when Jun *stops talking*, not when the text
+  // finished streaming: with TTS on (and especially with thinking, where replies run
+  // long) she keeps speaking for many seconds after the stream ends, which would
+  // otherwise eat most of the idle window. When she's still speaking, defer to the
+  // TTS drain callback below; otherwise arm immediately as before.
+  function armIdleAfterReply() {
+    if (window.TTS && TTS.isSpeaking && TTS.isSpeaking()) return;
+    scheduleIdleNudge(IDLE_AFTER_REPLY_MS);
   }
 
   function cancelAutoReset() {
@@ -331,7 +352,9 @@
           ui.setStatus('idle', 'idle');
           updateEmptyState();
           scheduleAutoReset();
-          scheduleIdleNudge(IDLE_AFTER_REPLY_MS);
+          armIdleAfterReply();
+          // Jun may have nudged her mood this turn; refresh the dev panel if open.
+          if (moodInputs.affection && moodInputs.affection.offsetParent !== null) loadMood();
           if (window.History) await refreshSidebar();
         },
         onError: async (err) => {
@@ -344,7 +367,7 @@
           finalize();
           updateEmptyState();
           scheduleAutoReset();
-          scheduleIdleNudge(IDLE_AFTER_REPLY_MS);
+          armIdleAfterReply();
           if (window.History) await refreshSidebar();
         },
       }
@@ -455,6 +478,14 @@
     }
   }
 
+  // In "auto" mode the server decides whether to think, so the manual Think
+  // toggle does nothing — grey it out to make that obvious.
+  function syncThinkToggle() {
+    thinkChk.disabled = reasoningSelect.value === 'auto';
+  }
+  reasoningSelect.addEventListener('change', syncThinkToggle);
+  syncThinkToggle();
+
   sendBtn.addEventListener('click', sendMessage);
   chatInput.addEventListener('keydown', e => {
     if (e.key === 'Enter' && !e.shiftKey) {
@@ -545,8 +576,54 @@
       settingsPanels.forEach((p) => { p.hidden = p.dataset.panel !== key; });
       const label = item.querySelector('span');
       if (settingsPanelTitle && label) settingsPanelTitle.textContent = label.textContent;
+      if (key === 'developer') loadMood(); // pull fresh scores when the panel opens
     });
   });
+
+  // Mood switcher (developer panel): show the live relationship scores and let a
+  // dev override them. GET on open / after each reply, PUT (debounced) on drag.
+  function renderMood(state) {
+    for (const k of ['affection', 'trust', 'tension']) {
+      if (state && typeof state[k] === 'number') {
+        if (moodInputs[k]) moodInputs[k].value = state[k];
+        if (moodVals[k]) moodVals[k].textContent = state[k];
+      }
+    }
+  }
+  async function loadMood() {
+    if (!moodInputs.affection) return;
+    try {
+      const r = await fetch('/api/relationship.php', { credentials: 'same-origin' });
+      if (r.ok) renderMood(await r.json());
+    } catch (e) { /* offline: leave sliders as-is */ }
+  }
+  let moodPushTimer = null;
+  function pushMood() {
+    const body = {};
+    for (const k of ['affection', 'trust', 'tension']) {
+      body[k] = moodInputs[k] ? parseInt(moodInputs[k].value, 10) || 0 : 0;
+    }
+    if (moodPushTimer) clearTimeout(moodPushTimer);
+    moodPushTimer = setTimeout(async () => {
+      try {
+        const r = await fetch('/api/relationship.php', {
+          method: 'PUT',
+          credentials: 'same-origin',
+          headers: { 'content-type': 'application/json' },
+          body: JSON.stringify(body),
+        });
+        if (r.ok) renderMood(await r.json()); // reflect server-side clamping
+      } catch (e) { /* drop; next drag retries */ }
+    }, 300);
+  }
+  for (const k of ['affection', 'trust', 'tension']) {
+    if (!moodInputs[k]) continue;
+    moodInputs[k].addEventListener('input', () => {
+      if (moodVals[k]) moodVals[k].textContent = moodInputs[k].value;
+    });
+    moodInputs[k].addEventListener('change', pushMood);
+  }
+  if (moodRefreshBtn) moodRefreshBtn.addEventListener('click', loadMood);
 
   // Escape closes the settings modal.
   document.addEventListener('keydown', (e) => {
@@ -782,6 +859,8 @@
     // TTS bootstrap: load voice list from sidecar, restore prefs, wire UI.
     if (window.TTS) {
       TTS.setLogger(logAction);
+      // Once Jun finishes speaking a reply, start the idle clock from there.
+      if (TTS.setOnAllDone) TTS.setOnAllDone(() => scheduleIdleNudge(IDLE_AFTER_REPLY_MS));
       const savedEnabled = localStorage.getItem('tts.enabled') === '1';
       const savedVoice = localStorage.getItem('tts.voice') || '';
       const savedSpeed = parseFloat(localStorage.getItem('tts.speed') || '1.0');

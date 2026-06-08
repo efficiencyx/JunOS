@@ -151,13 +151,6 @@
   },
   "nuzzle": { "ParamFaceRubEnable": 1, "_sequence": [{"ParamFaceRubMoveX": -0.5, "_t": 250}, {"ParamFaceRubMoveX": 0.5, "_t": 250}, {"ParamFaceRubMoveX": 0, "ParamFaceRubEnable": 0, "_t": 250}] },
 
-  "blanket": { "_resolve": { "on": { "ParamBlanketSitting": 1 }, "off": { "ParamBlanketSitting": 0 } } },
-  "cuddle":  { "_resolve": {
-      "on":  { "ParamBlanketCuddle": 1, "ParamArmLCuddleUp": 1 },
-      "off": { "ParamBlanketCuddle": 0, "ParamArmLCuddleUp": 0, "ParamArmLCuddleDown": 0 }
-  }},
-  "pillow":  { "_resolve": { "on": { "ParamPillow": 1 }, "off": { "ParamPillow": 0 } } },
-
   "_comment_outfit": "Exclusions: BOTTOM={skirt,pants,dress} are mutually exclusive; 'dress' also excludes shirt/hoodie (it is a full outfit). shirt+hoodie are compatible (hoodie over t-shirt). Underwear (bra, panties) and shoes are independent. 'skirt_up' and 'panties_aside' are modifiers on the current state.",
   "outfit": {
     "_resolve": {

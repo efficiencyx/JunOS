@@ -178,11 +178,12 @@
         <div class="set-row">
           <div class="set-row-text">
             <div class="set-row-title">Reasoning</div>
-            <div class="set-row-desc">How much effort the model spends thinking.</div>
+            <div class="set-row-desc">How much effort the model spends thinking. Auto decides per message — thinking only on the hard ones.</div>
           </div>
           <div class="set-row-control">
             <select id="reasoningSelect" aria-label="Reasoning level">
-              <option value="low" selected>low</option>
+              <option value="auto" selected>auto</option>
+              <option value="low">low</option>
               <option value="medium">medium</option>
               <option value="high">high</option>
             </select>
@@ -191,7 +192,7 @@
         <div class="set-row">
           <div class="set-row-text">
             <div class="set-row-title">Think</div>
-            <div class="set-row-desc">Show the model's chain-of-thought as it streams.</div>
+            <div class="set-row-desc">Show the model's chain-of-thought as it streams. Ignored when Reasoning is auto.</div>
           </div>
           <div class="set-row-control"><input type="checkbox" id="thinkChk" class="toggle" aria-label="Enable chain-of-thought"></div>
         </div>
@@ -248,6 +249,30 @@
       </section>
 
       <section class="settings-panel" data-panel="developer" hidden>
+        <div class="set-block">
+          <div class="set-block-head">
+            <div class="set-row-title">Relationship (mood switcher)</div>
+            <button class="ghost" id="moodRefreshBtn" title="Reload current values">refresh</button>
+          </div>
+          <div class="set-row-desc">Live affection / trust / tension. Drag to override temporarily; Jun reacts on her next reply.</div>
+          <div class="mood-controls">
+            <label class="mood-row">
+              <span class="mood-label">Affection</span>
+              <input type="range" id="moodAffection" min="0" max="100" step="1" value="50">
+              <span class="mood-val" id="moodAffectionVal">50</span>
+            </label>
+            <label class="mood-row">
+              <span class="mood-label">Trust</span>
+              <input type="range" id="moodTrust" min="0" max="100" step="1" value="50">
+              <span class="mood-val" id="moodTrustVal">50</span>
+            </label>
+            <label class="mood-row">
+              <span class="mood-label">Tension</span>
+              <input type="range" id="moodTension" min="0" max="100" step="1" value="30">
+              <span class="mood-val" id="moodTensionVal">30</span>
+            </label>
+          </div>
+        </div>
         <div class="set-block">
           <div class="set-block-head">
             <div class="set-row-title">Action log</div>

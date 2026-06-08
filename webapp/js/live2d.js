@@ -470,7 +470,6 @@ window.Live2D = (function () {
     'ParamShirtEnabled', 'ParamBraEnabled', 'ParamPantiesEnabled',
     'ParamSkirtEnabled', 'ParamHoodieEnabled', 'ParamPantsEnabled',
     'ParamDress2Enabled', 'ParamShoeLOn', 'ParamShoeROn',
-    'ParamBlanketCuddle', 'ParamBlanketSitting', 'ParamPillow',
     'ParamHandholdingLEnable', 'ParamHandholdingREnable',
     'ParamCuddleHandholdingEnable', 'ParamFaceRubEnable',
   ]);

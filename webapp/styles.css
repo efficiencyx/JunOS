@@ -1005,6 +1005,13 @@ body.l2d-dragging { cursor: grabbing; user-select: none; }
 .set-block > .secondary { margin-top: 12px; }
 .set-block .count { color: var(--muted); font-weight: 500; font-size: 12px; }
 
+/* Mood switcher (developer panel) */
+.mood-controls { display: flex; flex-direction: column; gap: 12px; }
+.mood-row { display: grid; grid-template-columns: 72px 1fr 34px; align-items: center; gap: 12px; cursor: pointer; }
+.mood-row .mood-label { font-size: 13px; color: var(--muted); }
+.mood-row input[type="range"] { width: 100%; accent-color: var(--accent); cursor: pointer; }
+.mood-row .mood-val { font-variant-numeric: tabular-nums; text-align: right; font-size: 13px; color: var(--accent-2); }
+
 /* Toggle switch (for checkboxes given .toggle) */
 input[type="checkbox"].toggle {
   appearance: none; -webkit-appearance: none;
