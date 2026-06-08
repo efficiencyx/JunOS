@@ -455,6 +455,14 @@
     }
   }
 
+  // In "auto" mode the server decides whether to think, so the manual Think
+  // toggle does nothing — grey it out to make that obvious.
+  function syncThinkToggle() {
+    thinkChk.disabled = reasoningSelect.value === 'auto';
+  }
+  reasoningSelect.addEventListener('change', syncThinkToggle);
+  syncThinkToggle();
+
   sendBtn.addEventListener('click', sendMessage);
   chatInput.addEventListener('keydown', e => {
     if (e.key === 'Enter' && !e.shiftKey) {

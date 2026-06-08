@@ -178,11 +178,12 @@
         <div class="set-row">
           <div class="set-row-text">
             <div class="set-row-title">Reasoning</div>
-            <div class="set-row-desc">How much effort the model spends thinking.</div>
+            <div class="set-row-desc">How much effort the model spends thinking. Auto decides per message — thinking only on the hard ones.</div>
           </div>
           <div class="set-row-control">
             <select id="reasoningSelect" aria-label="Reasoning level">
-              <option value="low" selected>low</option>
+              <option value="auto" selected>auto</option>
+              <option value="low">low</option>
               <option value="medium">medium</option>
               <option value="high">high</option>
             </select>
@@ -191,7 +192,7 @@
         <div class="set-row">
           <div class="set-row-text">
             <div class="set-row-title">Think</div>
-            <div class="set-row-desc">Show the model's chain-of-thought as it streams.</div>
+            <div class="set-row-desc">Show the model's chain-of-thought as it streams. Ignored when Reasoning is auto.</div>
           </div>
           <div class="set-row-control"><input type="checkbox" id="thinkChk" class="toggle" aria-label="Enable chain-of-thought"></div>
         </div>
