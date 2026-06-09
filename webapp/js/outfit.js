@@ -41,13 +41,22 @@ window.Outfit = (function () {
   // listed after a broad one overrides it.
   const COLOR_GROUPS = [
     { key: 'skin', label: 'Skin',
-      includes: ['skin','attach','mchand','mcforearm','nipple','blush','moddableface','moddableback'],
+      includes: ['skin','attach','mchand','mcforearm','nipple','moddableface','moddableback'],
       excludes: [] },
 
-    // Catches all H<digit>_ styles plus anything containing "hair".
+    // Blush is split out of skin so it can carry its own reddish tint. It uses
+    // an additive (screen) blend instead of multiply — a red multiply just
+    // darkens the cheeks into a shadow, while screen adds color for a real flush.
+    { key: 'blush', label: 'Blush', includes: ['blush'], excludes: [],
+      tintMode: 'screen', defaultColor: '#ff3a3a' },
+
+    // Catches all H<digit>_ styles plus anything containing "hair". The
+    // HairHologram drawable is split into its own group below, so exclude it.
     { key: 'hair', label: 'Hair',
       includes: ['h0_','h1_','h2_','h3_','h4_','hair'],
-      excludes: ['hairband','hairpin','hairtie','hairclip','hairbow'] },
+      excludes: ['hairband','hairpin','hairtie','hairclip','hairbow','hairhologram'] },
+
+    { key: 'hair_hologram', label: 'Hair hologram', includes: ['hairhologram'], excludes: [] },
 
     // Cat ears: broad group first, then per-layer overrides.
     { key: 'ear', label: 'Ear (all)', includes: ['catear','pointyear'], excludes: [] },
@@ -79,9 +88,10 @@ window.Outfit = (function () {
   const state = {};
   for (const it of ITEMS) state[it.key] = it.defaultOn;
 
-  // colors[groupKey] is '#rrggbb' or null when there's no override.
+  // colors[groupKey] is '#rrggbb' or null when there's no override. A group may
+  // declare a `defaultColor` that seeds the tint until the user changes/clears it.
   const colors = {};
-  for (const g of COLOR_GROUPS) colors[g.key] = null;
+  for (const g of COLOR_GROUPS) colors[g.key] = g.defaultColor || null;
 
   function load() {
     try {
@@ -139,10 +149,18 @@ window.Outfit = (function () {
     for (const g of COLOR_GROUPS) {
       for (const id of Live2D.findDrawables(g.includes, g.excludes)) touched.add(id);
     }
-    for (const id of touched) Live2D.setDrawableTint(id, null);
+    for (const id of touched) {
+      Live2D.setDrawableTint(id, null);
+      if (Live2D.setDrawableScreen) Live2D.setDrawableScreen(id, null);
+    }
     for (const g of COLOR_GROUPS) {
       const rgb = hexToRgb01(colors[g.key]);
-      if (rgb) Live2D.tintByPattern(g.includes, g.excludes, rgb);
+      if (!rgb) continue;
+      if (g.tintMode === 'screen' && Live2D.screenByPattern) {
+        Live2D.screenByPattern(g.includes, g.excludes, rgb);
+      } else {
+        Live2D.tintByPattern(g.includes, g.excludes, rgb);
+      }
     }
   }
 
@@ -182,7 +200,7 @@ window.Outfit = (function () {
 
   function reset() {
     for (const it of ITEMS) state[it.key] = it.defaultOn;
-    for (const g of COLOR_GROUPS) colors[g.key] = null;
+    for (const g of COLOR_GROUPS) colors[g.key] = g.defaultColor || null;
     save();
     saveColors();
     applyAll();
