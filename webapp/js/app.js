@@ -327,6 +327,7 @@
     } : null;
 
     ui.setStatus('streaming', 'streaming');
+    if (window.DevHud) DevHud.beginGen();
     appendRaw('--- ' + new Date().toLocaleTimeString() + (idle ? ' (idle nudge)' : '') + ' ---\n');
     abortFn = Ollama.chat(
       { messages: [...messages], model: modelSelect.value,
@@ -339,8 +340,9 @@
             debugSystemPromptEl.textContent = dbg.system_prompt;
           }
         },
+        onStats: (s) => { if (window.DevHud) DevHud.setGenStats(s); },
         onThinking: (t) => { appendRaw(t); pushThinking(t); },
-        onToken: (tok) => { settleThinking(); appendRaw(tok); stream.push(tok); },
+        onToken: (tok) => { settleThinking(); if (window.DevHud) DevHud.tickToken(); appendRaw(tok); stream.push(tok); },
         onDone: async () => {
           stream.flush();
           settleThinking();
@@ -820,6 +822,7 @@
 
     Actions.setLogger(logAction);
     Live2D.setOnMissingParam(logMissing);
+    if (window.DevHud) DevHud.init();
 
     try {
       const live2dInfo = await Live2D.init({ stageEl, onStatus: (m) => setStageStatus(m) });
