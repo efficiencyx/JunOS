@@ -416,7 +416,7 @@ $ollamaPayload = [
     'stream' => true,
     'options' => [
         'reasoning_effort' => $reasoning,
-        'temperature' => 0.3,
+        'temperature' => 1,
         'top_p' => 0.95,
         'top_k' => 80,
         'min_p' => 0.01,
@@ -447,9 +447,10 @@ curl_setopt($ch, CURLOPT_CONNECTTIMEOUT, 10);
 $buf = '';
 $sawError = false;
 $assistantBuffer = '';
+$stats = null;
 
 // Ollama streams NDJSON; re-frame each complete line as an SSE token event.
-curl_setopt($ch, CURLOPT_WRITEFUNCTION, function ($ch, $chunk) use (&$buf, &$sawError, &$assistantBuffer) {
+curl_setopt($ch, CURLOPT_WRITEFUNCTION, function ($ch, $chunk) use (&$buf, &$sawError, &$assistantBuffer, &$stats) {
     $buf .= $chunk;
     while (($nl = strpos($buf, "\n")) !== false) {
         $line = trim(substr($buf, 0, $nl));
@@ -462,6 +463,18 @@ curl_setopt($ch, CURLOPT_WRITEFUNCTION, function ($ch, $chunk) use (&$buf, &$saw
             sse_send(['error' => (string)$obj['error']]);
             $sawError = true;
             continue;
+        }
+        // The terminal line (done:true) carries timing/token counters. Forward them so
+        // the dev HUD can show tokens/s without us computing anything client-side.
+        if (!empty($obj['done']) && isset($obj['eval_count'])) {
+            $stats = [
+                'eval_count'           => (int)($obj['eval_count'] ?? 0),
+                'eval_duration'        => (int)($obj['eval_duration'] ?? 0),
+                'prompt_eval_count'    => (int)($obj['prompt_eval_count'] ?? 0),
+                'prompt_eval_duration' => (int)($obj['prompt_eval_duration'] ?? 0),
+                'total_duration'       => (int)($obj['total_duration'] ?? 0),
+                'load_duration'        => (int)($obj['load_duration'] ?? 0),
+            ];
         }
         // Reasoning tokens arrive on a separate field when think=true. Stream them as
         // their own event — never into $assistantBuffer, so they stay out of stored
@@ -483,6 +496,12 @@ if (curl_exec($ch) === false) {
     sse_send(['error' => 'upstream_unavailable']);
 }
 curl_close($ch);
+
+if ($stats !== null) {
+    $stats['num_ctx'] = (int)($ollamaPayload['options']['num_ctx'] ?? 0);
+    $stats['model'] = $model;
+    sse_send(['stats' => $stats]);
+}
 
 if (!$sawError && $assistantBuffer !== '') {
     // Pull Jun's hidden relationship bookkeeping tag, apply the deltas, then strip

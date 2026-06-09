@@ -51,9 +51,12 @@ window.Live2D = (function () {
       /(uniform\s+vec4\s+u_baseColor\s*;)/,
       '$1\nuniform vec4 u_multiplyColor;\nuniform vec4 u_screenColor;'
     );
+    // Textures are premultiplied-alpha here, so the screen term must be scaled
+    // by c.a — otherwise transparent texels get colored and the whole drawable
+    // quad shows up as a solid tinted square.
     const helper = '\nvec4 omegaTint(vec4 c) {\n'
       + '  c.rgb = c.rgb * u_multiplyColor.rgb;\n'
-      + '  c.rgb = c.rgb + u_screenColor.rgb - c.rgb * u_screenColor.rgb;\n'
+      + '  c.rgb = c.rgb + u_screenColor.rgb * c.a - c.rgb * u_screenColor.rgb;\n'
       + '  return c;\n'
       + '}\n';
     src = src.replace(
@@ -315,6 +318,10 @@ window.Live2D = (function () {
       setMultiply(drawableId, rgb) {
         if (rgb) forcedMultiplyColor.set(drawableId, [rgb[0], rgb[1], rgb[2], 1]);
         else forcedMultiplyColor.delete(drawableId);
+      },
+      setScreen(drawableId, rgb) {
+        if (rgb) forcedScreenColor.set(drawableId, [rgb[0], rgb[1], rgb[2], 1]);
+        else forcedScreenColor.delete(drawableId);
       },
       listDrawables() { return Array.from(raw.drawables.ids); },
     };
@@ -710,12 +717,25 @@ window.Live2D = (function () {
     return ids;
   }
 
+  // Additive (screen) tint — adds color rather than darkening, so it reads as a
+  // glow/flush instead of a shadow. Used for blush. rgb=null clears.
+  function screenByPattern(includes, excludes, rgb) {
+    if (!publicTint) return [];
+    const ids = findDrawables(includes, excludes);
+    for (const id of ids) publicTint.setScreen(id, rgb);
+    return ids;
+  }
+
   function listDrawables() {
     return publicTint ? publicTint.listDrawables() : [];
   }
 
   function setDrawableTint(id, rgb) {
     if (publicTint) publicTint.setMultiply(id, rgb);
+  }
+
+  function setDrawableScreen(id, rgb) {
+    if (publicTint) publicTint.setScreen(id, rgb);
   }
 
   function debugParam(param) {
@@ -744,9 +764,11 @@ window.Live2D = (function () {
     fitModel,
     debugParam,
     tintByPattern,
+    screenByPattern,
     findDrawables,
     listDrawables,
     setDrawableTint,
+    setDrawableScreen,
     setMouthOverride,
   };
 })();
