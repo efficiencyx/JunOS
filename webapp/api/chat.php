@@ -88,15 +88,22 @@ if (!$owns->fetchColumn()) sse_fail('forbidden');
 
 rate_limit('chat', 30, 60);
 
+// The system message must stay byte-identical across turns: Ollama reuses the
+// KV cache for the longest unchanged prompt PREFIX, and the system message is
+// the very first thing in the prompt. Anything per-turn (clock, lore, recall,
+// wardrobe, gauges) goes into $contextParts instead, which is sent as a
+// trailing system message AFTER the history — so only the tail of the prompt
+// is re-evaluated each turn instead of the whole conversation.
 $promptPath = __DIR__ . '/../system_prompt.txt';
-$systemPrompt = is_readable($promptPath) ? file_get_contents($promptPath) : '';
+$systemPrompt = is_readable($promptPath) ? rtrim(file_get_contents($promptPath)) : '';
+
+$contextParts = [];
 
 // Hand the model the current wall-clock so it can reason about "today",
 // "tonight" etc. The browser's clock matches the user's timezone; fall back
 // to the server clock when it didn't send one.
 $nowStr = $clientTime !== '' ? $clientTime : date('l, F j, Y \a\t g:i A T');
-$systemPrompt = rtrim($systemPrompt)
-    . "\n\n## Current date and time\nIt is currently " . $nowStr . ".\nYou can use this to calculate how much time it passed from a message to another, or you can use it to interact better with anon. E.g: Hey jun, what time is it?\nYou must use this date/time (You are allowed to round minutes) while chatting about time";
+$contextParts[] = "## Current date and time\nIt is currently " . $nowStr . ".\nYou can use this to calculate how much time it passed from a message to another, or you can use it to interact better with anon. E.g: Hey jun, what time is it?\nYou must use this date/time (You are allowed to round minutes) while chatting about time";
 
 $lastUserMsg = '';
 for ($i = count($body['messages']) - 1; $i >= 0; $i--) {
@@ -111,28 +118,26 @@ for ($i = count($body['messages']) - 1; $i >= 0; $i--) {
 $queryVec = $lastUserMsg !== '' ? embed_text($lastUserMsg) : null;
 
 // Ground the reply in curated game lore. Heuristic keyword match (see lore.php)
-// against lore_corpus.txt — exact on proper nouns, no Ollama needed — injecting
-// the few best-matching, distinct canon facts as established truths. The model
+// against lore_corpus.txt — exact on proper nouns, no Ollama needed — returning
+// the few best-matching, distinct canon facts as a context block. The model
 // carries Jun's voice from fine-tuning; this only supplies facts it would
-// otherwise blur or invent. Quietly returns the prompt untouched if nothing
-// clears the floor.
-function lore_retrieve(string $systemPrompt, string $lastUserMsg): string {
-    if ($lastUserMsg === '') return $systemPrompt;
+// otherwise blur or invent. Quietly returns '' if nothing clears the floor.
+function lore_retrieve(string $lastUserMsg): string {
+    if ($lastUserMsg === '') return '';
 
     try {
         $hits = lore_search($lastUserMsg, LORE_MAX_INJECT, true);
         $hits = array_filter($hits, fn($h) => $h['score'] >= LORE_FLOOR);
-        if (!$hits) return $systemPrompt;
+        if (!$hits) return '';
 
         $bullets = implode("\n", array_map(fn($h) => '- ' . $h['answer'], $hits));
-        return rtrim($systemPrompt)
-            . "\n\n## World facts (canon)\nEstablished truths about your world or past that may be relevant to what Anon just said."
+        return "## World facts (canon)\nEstablished truths about your world or past that may be relevant to what Anon just said."
             . " Treat them as true and weave them in naturally in your own voice — never recite them verbatim, list them, or mention they come from any reference."
             . " If some don't fit the moment, ignore them.\n" . $bullets;
     } catch (Throwable $e) {
         // RAG is supplementary — never let it take the whole reply down with it.
         log_event(['msg' => 'lore_retrieve_error', 'err' => $e->getMessage()]);
-        return $systemPrompt;
+        return '';
     }
 }
 
@@ -250,7 +255,8 @@ Read your three numbers above and MAKE THIS REPLY MATCH THEM. Interpolate betwee
 TXT;
 }
 
-$systemPrompt = lore_retrieve($systemPrompt, $lastUserMsg);
+$loreBlock = lore_retrieve($lastUserMsg);
+if ($loreBlock !== '') $contextParts[] = $loreBlock;
 
 $rel = relationship_get((int)$user['id']);
 
@@ -263,8 +269,9 @@ if ($queryVec !== null) {
     foreach ($recalled as $r) {
         $lines = [];
         foreach ($r['messages'] as $m) {
-            // Drop [ACTION:...] tags so the model can't parrot old action syntax.
-            $snippet = preg_replace('/\[ACTION:[^\]]*\]/', '', $m['content']);
+            // Drop action tags (compact [A:...] and legacy [ACTION:...]) so the
+            // model can't parrot old action syntax.
+            $snippet = preg_replace('/\[\s*A(?:CTIONS?)?\s*:[^\]]*\]/i', '', $m['content']);
             $snippet = trim(preg_replace('/\s+/', ' ', $snippet));
             if ($snippet === '') continue;
             if (mb_strlen($snippet) > 200) $snippet = mb_substr($snippet, 0, 197) . '…';
@@ -275,8 +282,7 @@ if ($queryVec !== null) {
         }
     }
     if ($blocks) {
-        $systemPrompt = rtrim($systemPrompt)
-            . "\n\n## Recalled prior context\nNotes from earlier conversations with Anon, for factual recall only — what was discussed, decided, or mentioned."
+        $contextParts[] = "## Recalled prior context\nNotes from earlier conversations with Anon, for factual recall only — what was discussed, decided, or mentioned."
             . " These are REFERENCE, not script: never repeat or paraphrase Jun's prior lines, and treat later turns within an excerpt as overriding earlier ones."
             . " If nothing here is relevant to the current message, ignore it.\n"
             . implode("\n", $blocks);
@@ -285,19 +291,21 @@ if ($queryVec !== null) {
 
 // Whatever the user picked in the wardrobe UI, so Jun knows what she's wearing.
 if ($outfitContext !== '') {
-    $systemPrompt = rtrim($systemPrompt) . "\n\n## Current Wardrobe State\n" . $outfitContext
-        . "\nDo not emit [ACTION:outfit|...] tags to put on or take off the items listed as currently worn unless required.";
+    $contextParts[] = "## Current Wardrobe State\n" . $outfitContext
+        . "\nDo not emit [A:outfit|...] tags to put on or take off the items listed as currently worn unless required.";
 }
 
 // Relationship state goes LAST, on purpose: it's the strongest driver of HOW Jun
 // responds this turn, and trailing position gets the most attention. It overrides
 // the persona's default warmth when the gauges say so.
-$systemPrompt = rtrim($systemPrompt)
-    . "\n\n## YOUR FEELINGS TOWARD ANON RIGHT NOW — highest priority for this reply\n"
+$contextParts[] = "## YOUR FEELINGS TOWARD ANON RIGHT NOW — highest priority for this reply\n"
     . "This is how you ACTUALLY feel about him at this moment. It OVERRIDES your default warm-girlfriend baseline:"
-    . " Every reply — your words, your warmth, your obedience, and your [ACTION:...] tags — must visibly match this state, or you are doing it wrong."
+    . " Every reply — your words, your warmth, your obedience, and your [A:...] tags — must visibly match this state, or you are doing it wrong."
     . " Never recite these numbers to Anon and never reveal that your feelings are scored.\n\n"
     . relationship_directives($rel);
+
+$liveContext = "# Live context for THIS reply (from the system, not spoken by Anon)\n\n"
+    . implode("\n\n", $contextParts);
 
 $messages = [];
 if ($systemPrompt !== '') {
@@ -317,6 +325,12 @@ if ($idle) {
         . 'naturally would when Anon goes still and stares at her. '
         . 'If asked to be quiet Break the silence with ONLY an action. such as a wave or a smile. No chat or text!)'];
 }
+
+// Trailing position on purpose, twice over: (a) it's the only per-turn part of
+// the prompt, so everything before it — static system prompt + stable history —
+// stays KV-cached between turns; (b) the end of the prompt gets the most
+// attention, which is exactly where the live gauges belong.
+$messages[] = ['role' => 'system', 'content' => $liveContext];
 
 /**
  * Decide whether a turn is worth chain-of-thought — no extra model call, just a
@@ -378,7 +392,9 @@ if ($reasoning === 'auto') {
 }
 
 // Let the UI inspect exactly what we assembled, including the routing decision.
-sse_send(['debug' => ['system_prompt' => $systemPrompt, 'reasoning' => $reasoning, 'think' => $think, 'route' => $route]]);
+// system_prompt is the static prefix message; live_context is the trailing
+// per-turn system message.
+sse_send(['debug' => ['system_prompt' => $systemPrompt, 'live_context' => $liveContext, 'reasoning' => $reasoning, 'think' => $think, 'route' => $route]]);
 
 $now = time();
 $db = db();
@@ -507,13 +523,13 @@ if (!$sawError && $assistantBuffer !== '') {
     // Pull Jun's hidden relationship bookkeeping tag, apply the deltas, then strip
     // it from what we persist — unlike animation tags this is internal state, not
     // dialogue, and we don't want it in stored history, embeddings, or future RAG.
-    if (preg_match('/\[\s*ACTIONS?\s*:\s*mood_shift\b([^\]]*)\]/i', $assistantBuffer, $mm)) {
+    if (preg_match('/\[\s*A(?:CTIONS?)?\s*:\s*mood_shift\b([^\]]*)\]/i', $assistantBuffer, $mm)) {
         $deltas = [];
         foreach (['affection', 'trust', 'tension'] as $k) {
             if (preg_match('/' . $k . '\s*=\s*([+-]?\d+)/i', $mm[1], $p)) $deltas[$k] = (int)$p[1];
         }
         if ($deltas) relationship_apply((int)$user['id'], $rel, $deltas);
-        $assistantBuffer = trim(preg_replace('/\[\s*ACTIONS?\s*:\s*mood_shift\b[^\]]*\]/i', '', $assistantBuffer));
+        $assistantBuffer = trim(preg_replace('/\[\s*A(?:CTIONS?)?\s*:\s*mood_shift\b[^\]]*\]/i', '', $assistantBuffer));
     }
 
     $now = time();
