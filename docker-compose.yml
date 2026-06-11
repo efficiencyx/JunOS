@@ -91,6 +91,13 @@ services:
       OLLAMA_NUM_PARALLEL: "${OLLAMA_NUM_PARALLEL:-1}"
       OLLAMA_MAX_LOADED_MODELS: "${OLLAMA_MAX_LOADED_MODELS:-2}"
       OLLAMA_KEEP_ALIVE: "${OLLAMA_KEEP_ALIVE:-5m}"
+      # Quantize the KV cache to 8-bit: roughly halves KV memory at
+      # num_ctx=16384 (more room for layers on-GPU) with negligible quality
+      # loss. Ollama only honors OLLAMA_KV_CACHE_TYPE when flash attention is
+      # on; on backends without flash-attention support it logs a warning and
+      # falls back to f16. Set OLLAMA_KV_CACHE_TYPE=f16 to opt out.
+      OLLAMA_FLASH_ATTENTION: "${OLLAMA_FLASH_ATTENTION:-1}"
+      OLLAMA_KV_CACHE_TYPE: "${OLLAMA_KV_CACHE_TYPE:-q8_0}"
     volumes:
       - ollama_data:/root/.ollama
     healthcheck:
