@@ -173,14 +173,14 @@
     stageStatus.textContent = text;
   }
 
-  // Inline [ACTION:...] extraction from the streaming text. Accumulate text, dispatch
+  // Inline action-tag extraction from the streaming text. Accumulate text, dispatch
   // complete actions (closed by ']'), and hold back any tail that could be the start of
   // a marker so it isn't emitted as visible text until we know whether it's an action.
-  // Whitespace-tolerant: accepts [ACTION:, [ ACTION:, [ACTION :, [ ACTION :, any case.
-  // Also tolerates the plural [ACTIONS:] the LLM sometimes emits.
-  const MARK_RE = /\[\s*ACTIONS?\s*:/i;
+  // Whitespace-tolerant and case-insensitive. Accepts the compact [A: marker plus the
+  // legacy [ACTION: / [ACTIONS: forms still present in stored history and the fine-tune.
+  const MARK_RE = /\[\s*A(?:CTIONS?)?\s*:/i;
   // Trailing partial that could still grow into MARK_RE. Anchored at end-of-string.
-  const PARTIAL_RE = /\[\s*(?:A(?:C(?:T(?:I(?:O(?:N(?:S?\s*:?)?)?)?)?)?)?)?$/i;
+  const PARTIAL_RE = /\[\s*(?:A(?:C(?:T(?:I(?:O(?:N(?:S)?)?)?)?)?)?\s*)?$/i;
 
   function findMark(s, from = 0) {
     const m = s.slice(from).match(MARK_RE);
@@ -229,7 +229,7 @@
       },
       flush() {
         if (buf.length) {
-          // Drop a dangling unclosed [ACTION:..., emit everything else.
+          // Drop a dangling unclosed action tag, emit everything else.
           const start = findMark(buf);
           if (start >= 0) onCleanText(buf.slice(0, start));
           else onCleanText(buf);
@@ -337,7 +337,10 @@
       {
         onDebug: (dbg) => {
           if (dbg && typeof dbg.system_prompt === 'string') {
-            debugSystemPromptEl.textContent = dbg.system_prompt;
+            debugSystemPromptEl.textContent = dbg.system_prompt
+              + (typeof dbg.live_context === 'string'
+                  ? '\n\n========== LIVE CONTEXT (trailing system message) ==========\n\n' + dbg.live_context
+                  : '');
           }
         },
         onStats: (s) => { if (window.DevHud) DevHud.setGenStats(s); },
