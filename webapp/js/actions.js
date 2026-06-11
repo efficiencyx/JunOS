@@ -1,5 +1,8 @@
 // Action parser + resolver.
-// Parses [ACTION:name|key=value|...] from LLM stream and dispatches to Live2D.
+// Parses action tags from the LLM stream and dispatches to Live2D.
+// Two syntaxes are accepted:
+//   compact (current prompt): [A:name|value|value]   — positional values
+//   legacy  (old prompt + stored history + fine-tune): [ACTION:name|key=value|...]
 
 window.Actions = (function () {
   let actionMap = null;
@@ -15,8 +18,45 @@ window.Actions = (function () {
   function setLogger(cb) { onLog = cb; }
   function log(level, msg) { if (onLog) onLog(level, msg); }
 
-  // Matches [ACTION:name] or [ACTION:name|k=v|k=v]. Plural [ACTIONS:...] also accepted.
-  const ACTION_RE = /\[\s*ACTIONS?\s*:\s*([a-zA-Z_][\w]*)\s*((?:\|[^=\]|]+=[^|\]]*)*)\s*\]/gi;
+  // Matches [A:name], [A:name|v|v], [ACTION:name|k=v|...]. Plural [ACTIONS:...] also accepted.
+  const ACTION_RE = /\[\s*A(?:CTIONS?)?\s*:\s*([a-zA-Z_][\w]*)\s*((?:\|[^\]|]*)*)\s*\]/gi;
+
+  // Positional value order for the compact syntax. [A:tilt_head|left|0.4] maps
+  // left→dir, 0.4→amount. key=value parts are still honored and never consume
+  // a positional slot, so mixed and legacy tags parse identically.
+  const POS_KEYS = {
+    look_at:     ['target'],
+    look:        ['dir'],
+    tilt_head:   ['dir', 'amount'],
+    brow:        ['emotion'],
+    mouth:       ['shape'],
+    emote:       ['type'],
+    blush:       ['intensity'],
+    speak:       ['duration'],
+    lean:        ['dir', 'amount'],
+    breath:      ['style'],
+    heavy_breath:['style'],
+    ear:         ['side', 'state'],
+    spread_legs: ['intensity'],
+    arm_gesture: ['side', 'gesture'],
+    handhold:    ['side', 'enable'],
+    self_touch:  ['zone'],
+    moan:        ['type'],
+    outfit:      ['item', 'state'],
+    mood:        ['level'],
+  };
+
+  // Kwargs the model may omit entirely; the tag still resolves.
+  const DEFAULTS = {
+    look_at:   { target: 'user' },
+    tilt_head: { amount: '0.3' },
+    blush:     { intensity: '0.5' },
+    lean:      { amount: '0.5' },
+    ear:       { side: 'both' },
+    handhold:  { side: 'both', enable: 'true' },
+    breath:    { style: 'calm' },
+    moan:      { type: 'soft' },
+  };
 
   function parseActions(text) {
     const actions = [];
@@ -26,13 +66,24 @@ window.Actions = (function () {
       const name = m[1];
       const kwargs = {};
       const tail = m[2] || '';
-      const parts = tail.split('|').filter(p => p.length > 0);
+      const parts = tail.split('|').map(p => p.trim()).filter(p => p.length > 0);
+      const posKeys = POS_KEYS[name] || [];
+      let pos = 0;
       for (const p of parts) {
         const eq = p.indexOf('=');
-        if (eq < 0) continue;
-        const k = p.slice(0, eq).trim();
-        const v = p.slice(eq + 1).trim().replace(/^["']|["']$/g, '');
-        kwargs[k] = v;
+        if (eq >= 0) {
+          const k = p.slice(0, eq).trim();
+          const v = p.slice(eq + 1).trim().replace(/^["']|["']$/g, '');
+          kwargs[k] = v;
+        } else if (pos < posKeys.length) {
+          kwargs[posKeys[pos++]] = p.replace(/^["']|["']$/g, '');
+        }
+      }
+      const defs = DEFAULTS[name];
+      if (defs) {
+        for (const [k, v] of Object.entries(defs)) {
+          if (kwargs[k] === undefined) kwargs[k] = v;
+        }
       }
       actions.push({ name, kwargs, raw: m[0], index: m.index, end: m.index + m[0].length });
     }
