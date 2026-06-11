@@ -60,8 +60,8 @@ services:
     depends_on:
       ollama:
         condition: service_healthy
-      kokoro:
-        condition: service_healthy
+    # Note: php does NOT depend on kokoro. The TTS sidecar is an optional
+    # `voice` profile; php/the frontend degrade gracefully when it's absent.
     healthcheck:
       test: ["CMD", "cgi-fcgi", "-bind", "-connect", "127.0.0.1:9000"]
       interval: 10s
@@ -83,7 +83,7 @@ services:
     environment:
       # Comma-separated list of models pulled on first boot.
       # Pulls are idempotent — restarts don't re-download cached weights.
-      OLLAMA_MODELS_TO_PULL: "${OLLAMA_MODELS_TO_PULL:-hf.co/efficiencyx/jun-14b:Q4_K_M,nomic-embed-text}"
+      OLLAMA_MODELS_TO_PULL: "${OLLAMA_MODELS_TO_PULL:-hf.co/unsloth/gemma-4-12B-it-qat-GGUF:UD-Q4_K_XL,nomic-embed-text}"
       # Memory caps. Without these, ollama defaults to 4 parallel slots and
       # allocates a full num_ctx (16384) KV cache PER slot — so RAM climbs as you
       # keep chatting and more slots warm up. Pin to one slot, allow exactly the
@@ -112,13 +112,16 @@ services:
     # GPU acceleration is added by docker-compose.nvidia.yml / .amd.yml.
     # On its own this service runs on CPU.
 
-  # ── kokoro (TTS sidecar — internal only) ────────────────────────────────────
+  # ── kokoro (TTS sidecar — internal only, optional `voice` profile) ──────────
+  # Only started when the `voice` profile is active (start.sh adds it unless
+  # VOICE=off). With it off the stack runs text-only and skips this build.
   kokoro:
     build:
       context: .
       dockerfile: docker/kokoro.Dockerfile
       network: host
     container_name: omega-kokoro
+    profiles: [voice]
     restart: unless-stopped
     environment:
       CORS_ORIGIN: "${CORS_ORIGIN:-http://nginx}"

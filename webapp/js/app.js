@@ -998,7 +998,12 @@
     const m = await waitForOllama();
     modelSelect.innerHTML = m.models.map(n =>
       `<option value="${escapeHtml(n)}">${escapeHtml(n)}</option>`).join('');
-    const prefer = ['Jun-14B:Q4_K_M', 'hf.co/efficiencyx/jun-14b:Q4_K_M', 'llama3.1:8b', 'llama3.1:latest'];
+    const prefer = [
+      'hf.co/unsloth/gemma-4-12B-it-qat-GGUF:UD-Q4_K_XL',
+      'hf.co/unsloth/gemma-4-E4B-it-qat-GGUF:UD-Q4_K_XL',
+      'hf.co/unsloth/gemma-4-E2B-it-qat-GGUF:UD-Q4_K_XL',
+      'Jun-14B:Q4_K_M', 'hf.co/efficiencyx/jun-14b:Q4_K_M', 'llama3.1:8b', 'llama3.1:latest',
+    ];
     const isChat = (n) => !/embed/i.test(n);
     const picked = prefer.find(p => m.models.includes(p)) || m.models.find(isChat) || m.models[0];
     if (picked) modelSelect.value = picked;

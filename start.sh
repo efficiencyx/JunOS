@@ -5,6 +5,7 @@
 #
 #   ./start.sh                     # auto-detect
 #   GPU=cpu ./start.sh             # force a specific backend: nvidia | amd | cpu
+#   VOICE=off ./start.sh           # skip the Kokoro TTS sidecar (default: on, from .env)
 #   HSA_OVERRIDE_GFX_VERSION=11.0.0 ./start.sh        # AMD consumer-card override
 #   COMPOSE_PROFILES=prod TLS_MODE=on DOMAIN=example.com EMAIL=you@example.com ./start.sh
 #
@@ -27,8 +28,18 @@ detect_gpu() {
   fi
 }
 
+# Voice (TTS) is a compose profile so it can be left out entirely. VOICE in the
+# environment wins; otherwise read what install.sh wrote to .env; default on.
+voice="${VOICE:-}"
+if [ -z "$voice" ] && [ -f .env ]; then
+  voice="$(grep -E '^VOICE=' .env | tail -n1 | cut -d= -f2- | tr -d '[:space:]')"
+fi
+voice="${voice:-on}"
+
 gpu="$(detect_gpu)"
 files=(-f docker-compose.yml)
+profiles=()
+[ "$voice" = on ] && profiles+=(--profile voice)
 
 case "$gpu" in
   nvidia)
@@ -53,6 +64,7 @@ echo "GPU detected: $gpu"
 if [ "$gpu" = amd ]; then
   echo "  video gid=$VIDEO_GID, render gid=$RENDER_GID${HSA_OVERRIDE_GFX_VERSION:+, HSA_OVERRIDE_GFX_VERSION=$HSA_OVERRIDE_GFX_VERSION}"
 fi
+echo "Voice (TTS): $voice"
 
 set -x
-exec docker compose "${files[@]}" up -d --build "$@"
+exec docker compose "${files[@]}" "${profiles[@]}" up -d --build "$@"
