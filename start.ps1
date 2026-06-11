@@ -5,6 +5,7 @@
 #
 #   ./start.ps1                       # auto-detect
 #   ./start.ps1 -Gpu cpu              # force a backend: nvidia | amd | cpu
+#   $env:VOICE='off'; ./start.ps1     # skip the Kokoro TTS sidecar (default: on, from .env)
 #   ./start.ps1 up -d --no-build      # extra args are forwarded to compose
 #
 # Production + TLS:
@@ -38,8 +39,19 @@ function Get-GpuKind {
     return 'cpu'
 }
 
+# Voice (TTS) is a compose profile. $env:VOICE wins; else read what install.ps1
+# wrote to .env; default on.
+$voice = $env:VOICE
+if (-not $voice -and (Test-Path .env)) {
+    $line = Select-String -Path .env -Pattern '^VOICE=' | Select-Object -Last 1
+    if ($line) { $voice = ($line.Line -replace '^VOICE=', '').Trim() }
+}
+if (-not $voice) { $voice = 'on' }
+
 $kind = Get-GpuKind
 $files = @('-f', 'docker-compose.yml')
+$profiles = @()
+if ($voice -eq 'on') { $profiles += @('--profile', 'voice') }
 
 switch ($kind) {
     'nvidia' {
@@ -55,7 +67,8 @@ switch ($kind) {
 }
 
 Write-Host "GPU detected: $kind"
+Write-Host "Voice (TTS): $voice"
 
-$argv = $files + @('up', '-d', '--build') + $ComposeArgs
+$argv = $files + $profiles + @('up', '-d', '--build') + $ComposeArgs
 & docker compose @argv
 exit $LASTEXITCODE
