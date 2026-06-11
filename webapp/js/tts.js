@@ -99,9 +99,10 @@ window.TTS = (function () {
   }
 
   // Kokoro's G2P chokes on emojis (errors or produces phoneme garbage that
-  // desyncs the queue), and any [ACTION:...] fragment that survived the
-  // stream-buffer would get read out loud. Strip both, plus markdown noise.
-  const ACTION_RE = /\[ACTIONS?:[^\]]*\]?/gi;
+  // desyncs the queue), and any action-tag fragment ([A:...] or legacy
+  // [ACTION:...]) that survived the stream-buffer would get read out loud.
+  // Strip both, plus markdown noise.
+  const ACTION_RE = /\[\s*A(?:CTIONS?)?\s*:[^\]]*\]?/gi;
   const MARKDOWN_NOISE_RE = /[*_~`#>]+/g;
   // \p{Extended_Pictographic} covers all emojis; ️ is the variation
   // selector that turns a few base glyphs into emoji form; ‍ is the

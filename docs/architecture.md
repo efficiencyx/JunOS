@@ -36,9 +36,11 @@ Browser
        │
        ▼
   chat.php (php-fpm)
-       │  injects system_prompt.txt
+       │  injects system_prompt.txt (static, byte-identical every turn)
        │  strips client system role
-       │  appends lore facts + recalled prior context (RAG)
+       │  appends a trailing "live context" system message AFTER the history
+       │  (clock, lore facts, recalled prior context, wardrobe, gauges) so the
+       │  static prefix + history stay in Ollama's KV prompt cache between turns
        │
        │  curl CURLOPT_WRITEFUNCTION ──────── NDJSON stream ──────▶ ollama /api/chat
        │  (per-chunk callback)                                       (HTTP/1.1, streaming)
@@ -71,7 +73,7 @@ Without all three, tokens may arrive in one batch at end-of-message even though 
 
 ## Action extraction state machine
 
-`makeStreamBuffer` in `webapp/js/app.js` is a streaming state machine that intercepts `[ACTION:...]` tags before they reach the chat renderer.
+`makeStreamBuffer` in `webapp/js/app.js` is a streaming state machine that intercepts action tags before they reach the chat renderer. Two syntaxes are recognized: the compact `[A:name|value|value]` form the prompt now asks for (positional values, mapped to kwargs via the `POS_KEYS` table in `actions.js`, with omitted kwargs filled from `DEFAULTS`), and the legacy `[ACTION:name|key=value|...]` form still present in stored history and the fine-tune's training data.
 
 ### States
 
@@ -88,10 +90,10 @@ PASSTHROUGH ──── sees '[' ──────▶ MAYBE_ACTION
 
 ### Partial marker holdback
 
-The marker `[ACTION:` is 8 bytes. While in `PASSTHROUGH`, any trailing bytes that could be the start of `[ACTION:` are held in a lookahead buffer rather than emitted. This means:
+The marker is `[A:` (or the legacy `[ACTION:` / `[ACTIONS:`). While in `PASSTHROUGH`, any trailing bytes that could be the start of a marker are held in a lookahead buffer rather than emitted. This means:
 
 - A lone `[` at the end of a token chunk is held until the next token confirms or denies it.
-- If the next token begins with `ACTION:`, the machine transitions to `IN_MARKER` and the held bytes are discarded (never shown to the user).
+- If the next token continues into `A:` / `ACTION:`, the machine transitions to `IN_MARKER` and the held bytes are discarded (never shown to the user).
 - If the next token does not continue the marker pattern, the held bytes are flushed to the chat renderer.
 
 This gives zero false positives in the rendered text: action tags never appear as visible characters.
@@ -246,7 +248,8 @@ Neither service publishes a port to the host. The Kokoro sidecar additionally en
 
 Character voice is handled by the fine-tuned model itself, so there is no voice
 RAG. Two retrievers remain, both in `webapp/api/chat.php`, each appending its own
-block to the system prompt:
+block to the trailing live-context message (not the system prompt — that stays
+static so Ollama's KV prompt cache holds across turns):
 
 - **Lore RAG** (`lore_retrieve`) — grounds replies in curated game canon.
 - **Cross-conversation recall** (`chat_history_retrieve`) — recalls this user's
@@ -291,6 +294,6 @@ On every `/api/chat.php` request:
 1. The user's latest message is embedded with `nomic-embed-text` via `POST ollama:11434/api/embeddings`. The same vector is reused for retrieval and stored in `message_embeddings` for future lookups.
 2. It is cosine-compared against this user's stored message embeddings from **other** conversations (most recent 5000), and the top-5 hits are kept above a 0.45 similarity floor.
 3. Each hit is widened into a window of surrounding turns (1 before, 3 after) so a match lands with its context; overlapping windows in the same conversation are merged.
-4. The resulting excerpts are formatted as a "Recalled prior context" block and appended to the system prompt, for factual recall only — the model is told not to repeat or paraphrase Jun's prior lines.
+4. The resulting excerpts are formatted as a "Recalled prior context" block and appended to the live-context message, for factual recall only — the model is told not to repeat or paraphrase Jun's prior lines.
 
 The retrieval is wrapped in a `try/catch`; if Ollama can't embed or the query is empty, the block is simply omitted and the chat continues normally. Embeddings missed at write time (e.g. Ollama was briefly down) are backfilled by `tools/compact_chat_index.php`.

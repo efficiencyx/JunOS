@@ -233,7 +233,7 @@ function start_session(int $userId): string {
 
 // Hidden per-user relationship state (one row per user; persists across all of
 // that user's conversations). Scores are 0-100. chat.php injects behavioral
-// directives from these and nudges them via Jun's [ACTION:mood_shift|...] tag;
+// directives from these and nudges them via Jun's [A:mood_shift|...] tag;
 // relationship.php reads/sets them for the developer panel.
 const RELATIONSHIP_DEFAULTS = ['affection' => 50, 'trust' => 50, 'tension' => 30];
 
