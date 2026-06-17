@@ -239,6 +239,31 @@
     };
   }
 
+  // Second stage after makeStreamBuffer: resolve {f_playerName}/{f_botName} to the
+  // user's chosen names. Buffers a trailing partial placeholder across chunks so a
+  // split token (e.g. "{f_play" + "erName}") substitutes cleanly and never flashes
+  // its raw form in the chat or gets read aloud by TTS.
+  function makeNameFilter(emit) {
+    let buf = '';
+    return {
+      push(chunk) {
+        buf += chunk;
+        const hold = window.Names ? Names.pendingPartial(buf) : 0;
+        if (buf.length > hold) {
+          const out = buf.slice(0, buf.length - hold);
+          emit(window.Names ? Names.apply(out) : out);
+          buf = buf.slice(buf.length - hold);
+        }
+      },
+      flush() {
+        if (buf.length) {
+          emit(window.Names ? Names.apply(buf) : buf);
+          buf = '';
+        }
+      },
+    };
+  }
+
   function sendMessage() {
     const text = chatInput.value.trim();
     if (!text) return;
@@ -298,13 +323,22 @@
       thinkEl.querySelector('summary').textContent = 'Thought process';
     }
 
+    // `visible` is the raw, action-stripped text WITH {f_*} name placeholders left
+    // intact — that's what we store in history so the model keeps seeing the
+    // placeholders it was trained on. `shown` is the name-resolved text that the
+    // user actually reads and hears; the name filter substitutes between them.
     let visible = '';
-    const stream = makeStreamBuffer(clean => {
-      visible += clean;
-      body.innerHTML = renderMarkdown(visible);
+    let shown = '';
+    const names = makeNameFilter(sub => {
+      shown += sub;
+      body.innerHTML = renderMarkdown(shown);
       body.appendChild(typing);
       messagesEl.scrollTop = messagesEl.scrollHeight;
-      if (window.TTS) TTS.feed(clean);
+      if (window.TTS) TTS.feed(sub);
+    });
+    const stream = makeStreamBuffer(clean => {
+      visible += clean;
+      names.push(clean);
     });
 
     sendBtn.disabled = true;
@@ -348,6 +382,7 @@
         onToken: (tok) => { settleThinking(); if (window.DevHud) DevHud.tickToken(); appendRaw(tok); stream.push(tok); },
         onDone: async () => {
           stream.flush();
+          names.flush();
           settleThinking();
           if (window.TTS) TTS.flush();
           typing.remove();
@@ -364,6 +399,7 @@
         },
         onError: async (err) => {
           stream.flush();
+          names.flush();
           if (window.TTS) TTS.flush();
           typing.remove();
           if (!visible.trim()) draft.remove();
@@ -474,7 +510,8 @@
           const sb = makeStreamBuffer(clean => { visible += clean; });
           sb.push(row.content);
           sb.flush();
-          el.innerHTML = renderMarkdown(visible);
+          // Render with names resolved; keep the raw placeholders in history.
+          el.innerHTML = renderMarkdown(window.Names ? Names.apply(visible) : visible);
           messages.push({ role: 'assistant', content: visible });
         }
       }
@@ -557,6 +594,29 @@
     // Server reads prompt fresh each request, so this is mostly a hint.
     logAction('ok', 'system prompt will be reloaded on next send');
   });
+
+  // Persona name fields: prefill from the current names, persist + sync on change,
+  // and re-render the open conversation so existing bubbles pick up the new name.
+  // Called once during bootstrap, after Names.load().
+  function wireNameSettings() {
+    const playerInput = document.getElementById('playerNameInput');
+    const botInput = document.getElementById('botNameInput');
+    if (!window.Names) return;
+    if (playerInput) { playerInput.value = Names.getPlayer(); playerInput.placeholder = Names.DEFAULT_PLAYER; }
+    if (botInput) { botInput.value = Names.getBot(); botInput.placeholder = Names.DEFAULT_BOT; }
+    function commit() {
+      if (playerInput) Names.setPlayer(playerInput.value);
+      if (botInput) Names.setBot(botInput.value);
+      // Reflect normalization (blank reverts to the default cast).
+      if (playerInput) playerInput.value = Names.getPlayer();
+      if (botInput) botInput.value = Names.getBot();
+      if (window.Prefs) Prefs.pushToServer();
+      // Repaint already-rendered bubbles with the new names; skip mid-stream.
+      if (!abortFn && currentConversationId != null) loadConversation(currentConversationId);
+    }
+    if (playerInput) playerInput.addEventListener('change', commit);
+    if (botInput) botInput.addEventListener('change', commit);
+  }
 
   // Settings drawer
   if (openSettingsBtn) openSettingsBtn.addEventListener('click', () => ui.toggleDrawer(true));
@@ -822,6 +882,8 @@
     // Pull server-side preferences into localStorage before any module reads
     // tracked keys (Outfit, TTS), so a second browser picks up A's settings.
     if (window.Prefs) await Prefs.pullFromServer();
+    if (window.Names) Names.load();
+    wireNameSettings();
 
     Actions.setLogger(logAction);
     Live2D.setOnMissingParam(logMissing);

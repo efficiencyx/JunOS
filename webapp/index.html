@@ -170,6 +170,20 @@
       <section class="settings-panel active" data-panel="general">
         <div class="set-row">
           <div class="set-row-text">
+            <div class="set-row-title">Your name</div>
+            <div class="set-row-desc">What Jun calls you. Leave blank for the default (Anon).</div>
+          </div>
+          <div class="set-row-control"><input type="text" id="playerNameInput" maxlength="32" placeholder="Anon" autocomplete="off" aria-label="Your name"></div>
+        </div>
+        <div class="set-row">
+          <div class="set-row-text">
+            <div class="set-row-title">Companion name</div>
+            <div class="set-row-desc">What you call her. Leave blank for the default (Jun).</div>
+          </div>
+          <div class="set-row-control"><input type="text" id="botNameInput" maxlength="32" placeholder="Jun" autocomplete="off" aria-label="Companion name"></div>
+        </div>
+        <div class="set-row">
+          <div class="set-row-text">
             <div class="set-row-title">Model</div>
             <div class="set-row-desc">Which installed Ollama model answers.</div>
           </div>
@@ -432,7 +446,8 @@
 <script src="https://cdn.jsdelivr.net/npm/pixi.js@6.5.10/dist/browser/pixi.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/pixi-live2d-display@0.4.0/dist/cubism4.min.js"></script>
 <script src="js/auth.js?v=6"></script>
-<script src="js/prefs.js?v=1"></script>
+<script src="js/prefs.js?v=2"></script>
+<script src="js/names.js?v=1"></script>
 <script src="js/live2d.js?v=4"></script>
 <script src="js/actions.js?v=6"></script>
 <script src="js/outfit.js?v=6"></script>
@@ -443,6 +458,6 @@
 <script src="js/history.js?v=6"></script>
 <script src="js/devhud.js?v=2"></script>
 <script src="js/boot-fx.js?v=3"></script>
-<script src="js/app.js?v=14"></script>
+<script src="js/app.js?v=15"></script>
 </body>
 </html>
