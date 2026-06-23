@@ -528,6 +528,15 @@
   reasoningSelect.addEventListener('change', syncThinkToggle);
   syncThinkToggle();
 
+  // Persist model settings so they survive reloads / follow the account.
+  function persistPref(key, value) {
+    localStorage.setItem(key, value);
+    if (window.Prefs) Prefs.pushToServer();
+  }
+  modelSelect.addEventListener('change', () => persistPref('model', modelSelect.value));
+  reasoningSelect.addEventListener('change', () => persistPref('reasoning_level', reasoningSelect.value));
+  thinkChk.addEventListener('change', () => persistPref('think', thinkChk.checked ? '1' : '0'));
+
   sendBtn.addEventListener('click', sendMessage);
   chatInput.addEventListener('keydown', e => {
     if (e.key === 'Enter' && !e.shiftKey) {
@@ -885,6 +894,17 @@
     if (window.Names) Names.load();
     wireNameSettings();
 
+    // Restore saved model settings (model itself is restored by the picker once
+    // Ollama's installed list is known, below).
+    const savedReasoning = localStorage.getItem('reasoning_level');
+    if (savedReasoning && [...reasoningSelect.options].some(o => o.value === savedReasoning)) {
+      reasoningSelect.value = savedReasoning;
+    }
+    if (localStorage.getItem('think') !== null) {
+      thinkChk.checked = localStorage.getItem('think') === '1';
+    }
+    syncThinkToggle();
+
     Actions.setLogger(logAction);
     Live2D.setOnMissingParam(logMissing);
     if (window.DevHud) DevHud.init();
@@ -1067,7 +1087,12 @@
       'Jun-14B:Q4_K_M', 'hf.co/efficiencyx/jun-14b:Q4_K_M', 'llama3.1:8b', 'llama3.1:latest',
     ];
     const isChat = (n) => !/embed/i.test(n);
-    const picked = prefer.find(p => m.models.includes(p)) || m.models.find(isChat) || m.models[0];
+    // A previously chosen model wins, as long as it's still installed.
+    const saved = localStorage.getItem('model');
+    const picked = (saved && m.models.includes(saved))
+      || prefer.find(p => m.models.includes(p))
+      || m.models.find(isChat)
+      || m.models[0];
     if (picked) modelSelect.value = picked;
     dismissBoot();
 

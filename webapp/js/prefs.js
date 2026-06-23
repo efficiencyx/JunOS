@@ -4,8 +4,8 @@
 //
 // Reserved keys:
 //   omega.outfit.v1, omega.outfit.colors.v1, omega.names.player, omega.names.bot,
-//   tts.enabled, tts.engine, tts.voice, tts.speed
-// Future: model, reasoning_level, theme.
+//   tts.enabled, tts.engine, tts.voice, tts.speed, model, reasoning_level, think
+// Future: theme.
 
 window.Prefs = (function () {
   const TRACKED = [
@@ -17,6 +17,9 @@ window.Prefs = (function () {
     'tts.engine',
     'tts.voice',
     'tts.speed',
+    'model',
+    'reasoning_level',
+    'think',
   ];
 
   function debounce(fn, ms) {

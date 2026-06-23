@@ -326,11 +326,26 @@ if ($idle) {
         . 'If asked to be quiet Break the silence with ONLY an action. such as a wave or a smile. No chat or text!)'];
 }
 
-// Trailing position on purpose, twice over: (a) it's the only per-turn part of
-// the prompt, so everything before it — static system prompt + stable history —
-// stays KV-cached between turns; (b) the end of the prompt gets the most
-// attention, which is exactly where the live gauges belong.
-$messages[] = ['role' => 'system', 'content' => $liveContext];
+// The live context goes in the FINAL user turn rather than its own message.
+// Trailing position is on purpose, twice over: (a) it's the only per-turn part
+// of the prompt, so everything before it — static system prompt + stable
+// history — stays KV-cached between turns; (b) the end of the prompt gets the
+// most attention, which is exactly where the live gauges belong.
+//
+// It must NOT be a separate trailing message. Strict chat templates (Mistral /
+// Ministral) raise a hard error on a system role that isn't first, AND on two
+// same-role turns in a row — so both a trailing `system` and a trailing second
+// `user` message make Ollama 500 and the reply comes back empty. Folding the
+// context into the last user message keeps the user/assistant alternation those
+// templates require; it self-labels as "(from the system, not spoken by Anon)"
+// so the model still reads it as a directive. The last message is always a user
+// turn here (the new message, or the idle stage-direction above).
+$lastIdx = count($messages) - 1;
+if ($lastIdx >= 0 && $messages[$lastIdx]['role'] === 'user') {
+    $messages[$lastIdx]['content'] .= "\n\n" . $liveContext;
+} else {
+    $messages[] = ['role' => 'user', 'content' => $liveContext];
+}
 
 /**
  * Decide whether a turn is worth chain-of-thought — no extra model call, just a
@@ -432,15 +447,20 @@ $ollamaPayload = [
     'stream' => true,
     'options' => [
         'reasoning_effort' => $reasoning,
-        'temperature' => 0.6,
+        'temperature' => 1,
         'top_p' => 0.95,
         'top_k' => 80,
         'min_p' => 0.01,
         'repeat_penalty' => 1.15,
         'presence_penalty' => 0,
         'num_ctx' => 16384,
-        // Thinking burns tokens before the reply even starts, so give it more headroom.
-        'num_predict' => $think ? 4096 : 512,
+        // num_predict caps TOTAL generated tokens, and a reasoning model's hidden
+        // chain-of-thought counts against it. A verbose reasoner (gpt-oss at medium/
+        // high effort) can burn the whole budget on the thinking channel and stop
+        // with done_reason=length BEFORE emitting any answer — the user then sees a
+        // thought process and an empty reply. So when thinking we lift the cap (-1)
+        // and let num_ctx bound generation; non-thinking turns stay snappy.
+        'num_predict' => $think ? -1 : 512,
     ],
 ];
 
@@ -464,9 +484,10 @@ $buf = '';
 $sawError = false;
 $assistantBuffer = '';
 $stats = null;
+$doneReason = '';
 
 // Ollama streams NDJSON; re-frame each complete line as an SSE token event.
-curl_setopt($ch, CURLOPT_WRITEFUNCTION, function ($ch, $chunk) use (&$buf, &$sawError, &$assistantBuffer, &$stats) {
+curl_setopt($ch, CURLOPT_WRITEFUNCTION, function ($ch, $chunk) use (&$buf, &$sawError, &$assistantBuffer, &$stats, &$doneReason) {
     $buf .= $chunk;
     while (($nl = strpos($buf, "\n")) !== false) {
         $line = trim(substr($buf, 0, $nl));
@@ -482,6 +503,9 @@ curl_setopt($ch, CURLOPT_WRITEFUNCTION, function ($ch, $chunk) use (&$buf, &$saw
         }
         // The terminal line (done:true) carries timing/token counters. Forward them so
         // the dev HUD can show tokens/s without us computing anything client-side.
+        if (!empty($obj['done'])) {
+            $doneReason = (string)($obj['done_reason'] ?? '');
+        }
         if (!empty($obj['done']) && isset($obj['eval_count'])) {
             $stats = [
                 'eval_count'           => (int)($obj['eval_count'] ?? 0),
@@ -517,6 +541,14 @@ if ($stats !== null) {
     $stats['num_ctx'] = (int)($ollamaPayload['options']['num_ctx'] ?? 0);
     $stats['model'] = $model;
     sse_send(['stats' => $stats]);
+}
+
+// A reply with no answer text — never let it surface as silence. The usual cause
+// is a reasoning model that spent its whole generation budget on the thinking
+// channel (done_reason=length); flag that distinctly so the UI can hint at it.
+if (!$sawError && $assistantBuffer === '') {
+    log_event(['msg' => 'empty_reply', 'model' => $model, 'done_reason' => $doneReason, 'think' => $think]);
+    sse_send(['error' => $doneReason === 'length' ? 'reply_truncated_in_thinking' : 'empty_reply']);
 }
 
 if (!$sawError && $assistantBuffer !== '') {
