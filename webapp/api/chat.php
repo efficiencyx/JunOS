@@ -162,12 +162,18 @@ TXT;
 }
 
 
+function should_offer_tools(string $msg): bool {
+    $m = mb_strtolower(trim($msg));
+    if (preg_match('/https?:\/\//i', $msg)) return true;
+    if (preg_match('/\b(remember this|remember that|please remember|can you remember|memorize|save this|make a note|note this|my favorite|i prefer|i like|i dislike)\b/u', $m)) return true;
+    if (preg_match('/\b(search|recall|look up|fetch|open|read|check)\b/u', $m) && preg_match('/\b(chat history|previous chats?|earlier|last time|website|url|web|internet|latest|current|news|today)\b/u', $m)) return true;
+    if (preg_match('/\b(what did|what was|what were|did i|did we|do you remember)\b/u', $m) && preg_match('/\b(before|previously|earlier|last time|last chat|past chats?)\b/u', $m)) return true;
+    return false;
+}
+
 function memory_file_path(int $userId): string {
-    $dir = '/var/lib/omega/memory';
-    if (!is_dir($dir) || !is_writable($dir)) {
-        $dir = sys_get_temp_dir() . '/omega_memory';
-        if (!is_dir($dir)) @mkdir($dir, 0700, true);
-    }
+    $dir = rtrim(env_str('MEMORY_DIR', '/var/lib/jun/memory'), '/');
+    if (!is_dir($dir)) @mkdir($dir, 0700, true);
     if (!is_dir($dir) || !is_writable($dir)) {
         throw new RuntimeException('memory_dir_unwritable');
     }
@@ -176,7 +182,7 @@ function memory_file_path(int $userId): string {
 
 function memory_append(int $userId, string $memory, string $category): array {
     $memory = trim(preg_replace('/\s+/', ' ', $memory));
-    $category = trim(preg_replace('/[^a-z0-9_\-]/i', '', $category));
+    $category = trim(preg_replace('/[^a-z0-9]+/i', '_', $category), '_');
     if ($category === '') $category = 'general';
     if ($memory === '') return ['error' => 'memory_required'];
     if (mb_strlen($memory) > 800) $memory = mb_substr($memory, 0, 797) . '…';
@@ -218,19 +224,95 @@ function memory_recent_context(int $userId, int $limit = 20): string {
     }
 }
 
-function is_public_http_url(string $url): bool {
+function resolve_public_http_url(string $url): array {
     $parts = parse_url($url);
-    if (!is_array($parts) || !in_array(strtolower($parts['scheme'] ?? ''), ['http', 'https'], true)) return false;
+    if (!is_array($parts) || !in_array(strtolower($parts['scheme'] ?? ''), ['http', 'https'], true)) return ['error' => 'url_must_be_public_http_or_https'];
+    if (($parts['user'] ?? '') !== '' || ($parts['pass'] ?? '') !== '') return ['error' => 'url_credentials_not_allowed'];
     $host = $parts['host'] ?? '';
-    if ($host === '' || strlen($url) > 2048) return false;
-    $records = @dns_get_record($host, DNS_A + DNS_AAAA);
-    if (!$records) return false;
-    foreach ($records as $r) {
-        $ip = $r['ip'] ?? $r['ipv6'] ?? '';
-        if ($ip === '') continue;
-        if (filter_var($ip, FILTER_VALIDATE_IP, FILTER_FLAG_NO_PRIV_RANGE | FILTER_FLAG_NO_RES_RANGE) === false) return false;
+    if ($host === '' || strlen($url) > 2048) return ['error' => 'url_invalid'];
+
+    $ips = [];
+    if (filter_var($host, FILTER_VALIDATE_IP)) {
+        $ips[] = $host;
+    } else {
+        $records = @dns_get_record($host, DNS_A + DNS_AAAA);
+        if (!$records) return ['error' => 'dns_lookup_failed'];
+        foreach ($records as $r) {
+            $ip = $r['ip'] ?? $r['ipv6'] ?? '';
+            if ($ip !== '') $ips[] = $ip;
+        }
     }
-    return true;
+    $ips = array_values(array_unique($ips));
+    if (!$ips) return ['error' => 'dns_lookup_failed'];
+    foreach ($ips as $ip) {
+        if (filter_var($ip, FILTER_VALIDATE_IP, FILTER_FLAG_NO_PRIV_RANGE | FILTER_FLAG_NO_RES_RANGE) === false) {
+            return ['error' => 'url_must_resolve_to_public_ip'];
+        }
+    }
+
+    $scheme = strtolower((string)$parts['scheme']);
+    $port = (int)($parts['port'] ?? ($scheme === 'https' ? 443 : 80));
+    if (($scheme === 'http' && $port !== 80) || ($scheme === 'https' && $port !== 443)) return ['error' => 'non_standard_port_not_allowed'];
+    return ['ok' => true, 'host' => $host, 'port' => $port, 'ip' => $ips[0]];
+}
+
+function make_absolute_url(string $base, string $location): string {
+    $location = trim($location);
+    if (preg_match('/^https?:\/\//i', $location)) return $location;
+    $b = parse_url($base);
+    if (!is_array($b) || empty($b['scheme']) || empty($b['host'])) return $location;
+    if (substr($location, 0, 2) === '//') return $b['scheme'] . ':' . $location;
+    if (substr($location, 0, 1) === '/') return $b['scheme'] . '://' . $b['host'] . $location;
+    $path = $b['path'] ?? '/';
+    $dir = preg_replace('#/[^/]*$#', '/', $path) ?: '/';
+    return $b['scheme'] . '://' . $b['host'] . $dir . $location;
+}
+
+function web_fetch_public(string $url): array {
+    $maxBytes = 512 * 1024;
+    $current = $url;
+    for ($hop = 0; $hop <= 3; $hop++) {
+        $resolved = resolve_public_http_url($current);
+        if (empty($resolved['ok'])) return $resolved;
+        $body = '';
+        $tooLarge = false;
+        $location = '';
+        $ch = curl_init($current);
+        $opts = [
+            CURLOPT_FOLLOWLOCATION => false,
+            CURLOPT_RETURNTRANSFER => false,
+            CURLOPT_TIMEOUT => 12,
+            CURLOPT_CONNECTTIMEOUT => 5,
+            CURLOPT_USERAGENT => 'JunToolFetcher/1.0',
+            CURLOPT_RESOLVE => [$resolved['host'] . ':' . $resolved['port'] . ':' . $resolved['ip']],
+            CURLOPT_HEADERFUNCTION => function ($ch, string $header) use (&$location): int {
+                if (stripos($header, 'Location:') === 0) $location = trim(substr($header, 9));
+                return strlen($header);
+            },
+            CURLOPT_WRITEFUNCTION => function ($ch, string $chunk) use (&$body, &$tooLarge, $maxBytes): int {
+                if (strlen($body) + strlen($chunk) > $maxBytes) { $tooLarge = true; return 0; }
+                $body .= $chunk;
+                return strlen($chunk);
+            },
+        ];
+        if (defined('CURLOPT_PROTOCOLS')) $opts[CURLOPT_PROTOCOLS] = CURLPROTO_HTTP | CURLPROTO_HTTPS;
+        if (defined('CURLOPT_REDIR_PROTOCOLS')) $opts[CURLOPT_REDIR_PROTOCOLS] = CURLPROTO_HTTP | CURLPROTO_HTTPS;
+        curl_setopt_array($ch, $opts);
+        $ok = curl_exec($ch);
+        $err = curl_error($ch);
+        $code = (int)curl_getinfo($ch, CURLINFO_RESPONSE_CODE);
+        $ctype = (string)curl_getinfo($ch, CURLINFO_CONTENT_TYPE);
+        curl_close($ch);
+        if ($ok === false) return ['error' => $tooLarge ? 'response_too_large' : 'fetch_failed', 'detail' => $err];
+        if (in_array($code, [301, 302, 303, 307, 308], true) && $location !== '') {
+            if ($hop === 3) return ['error' => 'too_many_redirects'];
+            $current = make_absolute_url($current, $location);
+            continue;
+        }
+        $text = trim(preg_replace('/\s+/', ' ', strip_tags($body)));
+        return ['status' => $code, 'content_type' => $ctype, 'url' => $current, 'bytes_read' => strlen($body), 'text' => mb_substr($text, 0, 6000)];
+    }
+    return ['error' => 'too_many_redirects'];
 }
 
 function run_tool_call(string $name, array $args, array $user, int $convId): string {
@@ -265,17 +347,7 @@ function run_tool_call(string $name, array $args, array $user, int $convId): str
         }
         if ($name === 'web_fetch') {
             $url = trim((string)($args['url'] ?? ''));
-            if (!is_public_http_url($url)) return json_encode(['error' => 'url_must_be_public_http_or_https']);
-            $ch = curl_init($url);
-            curl_setopt_array($ch, [CURLOPT_RETURNTRANSFER => true, CURLOPT_FOLLOWLOCATION => true, CURLOPT_MAXREDIRS => 3, CURLOPT_TIMEOUT => 12, CURLOPT_CONNECTTIMEOUT => 5, CURLOPT_USERAGENT => 'OmegaToolFetcher/1.0']);
-            $resp = curl_exec($ch);
-            if ($resp === false) { $err = curl_error($ch); curl_close($ch); return json_encode(['error' => 'fetch_failed', 'detail' => $err]); }
-            $code = (int)curl_getinfo($ch, CURLINFO_RESPONSE_CODE);
-            $ctype = (string)curl_getinfo($ch, CURLINFO_CONTENT_TYPE);
-            curl_close($ch);
-            $text = strip_tags((string)$resp);
-            $text = trim(preg_replace('/\s+/', ' ', $text));
-            return json_encode(['status' => $code, 'content_type' => $ctype, 'text' => mb_substr($text, 0, 6000)], JSON_UNESCAPED_UNICODE);
+            return json_encode(web_fetch_public($url), JSON_UNESCAPED_UNICODE);
         }
         return json_encode(['error' => 'unknown_tool']);
     } catch (Throwable $e) {
@@ -294,18 +366,6 @@ function ollama_chat_once(string $url, array $payload): array {
     return is_array($obj) ? $obj : ['error' => 'bad_json'];
 }
 
-$contextParts = [];
-
-// Hand the model the current wall-clock so it can reason about "today",
-// "tonight" etc. The browser's clock matches the user's timezone; fall back
-// to the server clock when it didn't send one.
-$nowStr = $clientTime !== '' ? $clientTime : date('l, F j, Y \a\t g:i A T');
-$contextParts[] = tool_context_block();
-$memoryBlock = memory_recent_context((int)$user['id']);
-if ($memoryBlock !== '') $contextParts[] = $memoryBlock;
-
-$contextParts[] = "## Current date and time\nIt is currently " . $nowStr . ".\nYou can use this to calculate how much time it passed from a message to another, or you can use it to interact better with anon. E.g: Hey jun, what time is it?\nYou must use this date/time (You are allowed to round minutes) while chatting about time";
-
 $lastUserMsg = '';
 for ($i = count($body['messages']) - 1; $i >= 0; $i--) {
     if (($body['messages'][$i]['role'] ?? '') === 'user') {
@@ -313,6 +373,19 @@ for ($i = count($body['messages']) - 1; $i >= 0; $i--) {
         break;
     }
 }
+$toolsOffered = should_offer_tools($lastUserMsg);
+
+$contextParts = [];
+
+// Hand the model the current wall-clock so it can reason about "today",
+// "tonight" etc. The browser's clock matches the user's timezone; fall back
+// to the server clock when it didn't send one.
+$nowStr = $clientTime !== '' ? $clientTime : date('l, F j, Y \a\t g:i A T');
+if ($toolsOffered) $contextParts[] = tool_context_block();
+$memoryBlock = memory_recent_context((int)$user['id']);
+if ($memoryBlock !== '') $contextParts[] = $memoryBlock;
+
+$contextParts[] = "## Current date and time\nIt is currently " . $nowStr . ".\nYou can use this to calculate how much time it passed from a message to another, or you can use it to interact better with anon. E.g: Hey jun, what time is it?\nYou must use this date/time (You are allowed to round minutes) while chatting about time";
 
 // One embedding, reused for history RAG and the message_embeddings row we
 // write below. Null whenever Ollama can't embed.
@@ -674,16 +747,13 @@ $ollamaPayload = [
 if (!$think) $ollamaPayload['think'] = false;
 
 // Give the model a bounded chance to call tools before the final streamed reply.
-// We only run this preflight for turns that look like recall/current-data asks,
-// avoiding a second Ollama request on ordinary companion-chat small talk.
-function should_offer_tools(string $msg): bool {
-    $m = mb_strtolower($msg);
-    return preg_match('/https?:\/\//i', $msg)
-        || preg_match('/\b(latest|current|today|now|live|recent|news|fetch|website|url|web|internet|remember|memorize|note|preference|favorite|recall|previous|earlier|last time|before|chat history)\b/u', $m);
-}
-
-if (should_offer_tools($lastUserMsg)) {
+// We only run this preflight for explicit recall/current-data/memory asks,
+// avoiding a second Ollama request on ordinary companion-chat small talk. Tool
+// role messages stay inside this preflight only; the final streamed call gets a
+// plain context block so strict chat templates don't need to render tool roles.
+if ($toolsOffered) {
     $toolMessages = $messages;
+    $toolResultBlocks = [];
     for ($toolRound = 0; $toolRound < 2; $toolRound++) {
         $toolPayload = $ollamaPayload;
         $toolPayload['messages'] = $toolMessages;
@@ -707,11 +777,21 @@ if (should_offer_tools($lastUserMsg)) {
                 $args = is_array($decoded) ? $decoded : [];
             }
             if (!is_array($args)) $args = [];
-            $toolMessages[] = ['role' => 'tool', 'content' => run_tool_call($name, $args, $user, $convId)];
+            $result = run_tool_call($name, $args, $user, $convId);
+            $toolMessages[] = ['role' => 'tool', 'content' => $result];
+            $toolResultBlocks[] = '- ' . $name . ': ' . mb_substr($result, 0, 6500);
         }
     }
-    $messages = $toolMessages;
-    $ollamaPayload['messages'] = $messages;
+    if ($toolResultBlocks) {
+        $toolContext = "\n\n## Tool results for THIS reply\nUse these tool outputs as fresh context. Do not expose raw JSON unless Anon asks.\n" . implode("\n", $toolResultBlocks);
+        $lastMsgIdx = count($messages) - 1;
+        if ($lastMsgIdx >= 0 && $messages[$lastMsgIdx]['role'] === 'user') {
+            $messages[$lastMsgIdx]['content'] .= $toolContext;
+        } else {
+            $messages[] = ['role' => 'user', 'content' => $toolContext];
+        }
+        $ollamaPayload['messages'] = $messages;
+    }
 }
 
 $ch = curl_init($OLLAMA_URL . '/api/chat');
