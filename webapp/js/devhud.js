@@ -1,6 +1,6 @@
 // Floating developer HUD: live tokens/s + token counts from the chat stream, plus
 // VRAM / model RAM / host RAM and the loaded model, polled from api/stats.php while
-// open. Toggled from the Developer settings panel or Ctrl+Shift+D. Device-local —
+// open. Toggled from the Developer settings panel or Ctrl+Shift+D. Device-local -
 // the visibility flag lives in localStorage and isn't synced across browsers.
 
 window.DevHud = (function () {
@@ -18,7 +18,7 @@ window.DevHud = (function () {
   let gen = { t0: 0, tFirst: 0, tokens: 0, final: null };
 
   function fmtBytes(n) {
-    if (!n) return '—';
+    if (!n) return '-';
     const u = ['B', 'KB', 'MB', 'GB', 'TB'];
     let i = 0;
     while (n >= 1024 && i < u.length - 1) { n /= 1024; i++; }
@@ -27,7 +27,7 @@ window.DevHud = (function () {
 
   function row(label, id) {
     return `<div class="devhud-row"><span class="devhud-k">${label}</span>` +
-           `<span class="devhud-v" id="devhud-${id}">—</span></div>`;
+           `<span class="devhud-v" id="devhud-${id}">-</span></div>`;
   }
 
   function build() {
@@ -148,14 +148,14 @@ window.DevHud = (function () {
       } else {
         put('model', 'none loaded');
       }
-    } catch (e) { /* upstream down — leave stale values */ }
+    } catch (e) { /* upstream down - leave stale values */ }
   }
 
   // --- chat stream hooks (called from app.js) ---
 
   function beginGen() {
     gen = { t0: performance.now(), tFirst: 0, tokens: 0, final: null };
-    put('tps', '…'); put('ttft', '…'); put('gentok', '0'); put('ptok', '—'); put('ctx', '—');
+    put('tps', '…'); put('ttft', '…'); put('gentok', '0'); put('ptok', '-'); put('ctx', '-');
   }
 
   function tickToken() {

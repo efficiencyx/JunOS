@@ -17,6 +17,10 @@ window.Live2D = (function () {
   const loops = new Map();          // paramId -> { amplitude, period_ms, phase_start_ms, base }
   const pendingSequences = [];      // [{ param, value, fire_at_ms }]
   const forcedPartOpacity = new Map(); // partId -> opacity (re-stamped each tick)
+  // Keep these outside init so hit-testing sees the same forced visibility as
+  // the renderer. The wardrobe also uses the highlight map for hovered pieces.
+  const forcedDrawableOpacity = new Map(); // drawableId -> opacity override
+  const drawableHighlights = new Map();    // drawableId -> screen RGB
 
   let userZoom = 1;
   let userOffsetX = 0;
@@ -52,9 +56,10 @@ window.Live2D = (function () {
       '$1\nuniform vec4 u_multiplyColor;\nuniform vec4 u_screenColor;'
     );
     // Textures are premultiplied-alpha here, so the screen term must be scaled
-    // by c.a — otherwise transparent texels get colored and the whole drawable
+    // by c.a - otherwise transparent texels get colored and the whole drawable
     // quad shows up as a solid tinted square.
     const helper = '\nvec4 omegaTint(vec4 c) {\n'
+      + '  c.rgb = min(c.rgb, vec3(c.a));\n'
       + '  c.rgb = c.rgb * u_multiplyColor.rgb;\n'
       + '  c.rgb = c.rgb + u_screenColor.rgb * c.a - c.rgb * u_screenColor.rgb;\n'
       + '  return c;\n'
@@ -92,8 +97,8 @@ window.Live2D = (function () {
     return `data:${mime};base64,${btoa(bin)}`;
   }
 
-  async function init({ stageEl, onStatus }) {
-    onStatus = onStatus || (() => {});
+  async function init({ stageEl, onStatus, ignoreSavedPos }) {
+    onStatus = onStatus || (() => { });
     onStatus('Initializing PIXI...');
 
     app = new PIXI.Application({
@@ -116,20 +121,20 @@ window.Live2D = (function () {
     onStatus('Loading Live2D assets...');
     const [mocUrl, t0, t1, t2] = await Promise.all([
       fetchAsDataURL('assets/interaction_model.moc3', 'application/octet-stream'),
-      fetchAsDataURL('assets/00_texture_00.png', 'image/png'),
-      fetchAsDataURL('assets/01_texture_01.png', 'image/png'),
-      fetchAsDataURL('assets/02_texture_02.png', 'image/png'),
+      fetchAsDataURL('assets/texture_00.png', 'image/png'),
+      fetchAsDataURL('assets/texture_01.png', 'image/png'),
+      fetchAsDataURL('assets/texture_02.png', 'image/png'),
     ]);
     const TRANSPARENT = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkAAIAAAoAAv/lxKUAAAAASUVORK5CYII=';
     const textures = [t0, t1, t2];
     while (textures.length < 8) textures.push(TRANSPARENT);
 
-    // Cubism textures are straight-alpha; PIXI 6 default (UNPACK) premultiplies on
-    // upload, producing dark fringes around eye/mouth alpha edges. Preload each URL
-    // as a BaseTexture with alphaMode = NPM so pixi-live2d-display hits the cache.
+    // The extracted atlas mixes premultiplied and straight-alpha edge pixels.
+    // Upload it as PMA, then normalize each sampled pixel in the shader so
+    // neither representation can produce a bright or dark fringe.
     for (const url of textures) {
       PIXI.BaseTexture.from(url, {
-        alphaMode: PIXI.ALPHA_MODES.UNPACK,
+        alphaMode: PIXI.ALPHA_MODES.PMA,
         mipmap: PIXI.MIPMAP_MODES.OFF,
         wrapMode: PIXI.WRAP_MODES.CLAMP,
         scaleMode: PIXI.SCALE_MODES.LINEAR,
@@ -148,14 +153,14 @@ window.Live2D = (function () {
 
     // Kill internal updaters that would overwrite our targets every frame.
     const im = model.internalModel;
-    try { im.motionManager.stopAllMotions(); } catch (e) {}
-    try { im.motionManager.update = () => false; } catch (e) {}
-    try { if (im.motionManager.expressionManager) im.motionManager.expressionManager.update = () => false; } catch (e) {}
+    try { im.motionManager.stopAllMotions(); } catch (e) { }
+    try { im.motionManager.update = () => false; } catch (e) { }
+    try { if (im.motionManager.expressionManager) im.motionManager.expressionManager.update = () => false; } catch (e) { }
     im.breath = null;
     im.eyeBlink = null;
     im.physics = null;
     im.pose = null;
-    im.focusController = { update: () => {}, focus: () => {}, x: 0, y: 0 };
+    im.focusController = { update: () => { }, focus: () => { }, x: 0, y: 0 };
 
     raw = getRaw(model);
     paramIndex = new Map();
@@ -169,7 +174,12 @@ window.Live2D = (function () {
       currentValues.set(id, raw.parameters.defaultValues[i]);
     }
 
+    installVariantCompositor();
+
     loadPos();
+    // Dedicated pages (wardrobe.html) center her in their own stage instead of
+    // inheriting the chat page's saved position.
+    if (ignoreSavedPos) { userOffsetX = 0; userOffsetY = 0; userZoom = 1; hasUserPos = true; }
     fitModel();
     window.addEventListener('resize', fitModel);
 
@@ -196,6 +206,8 @@ window.Live2D = (function () {
     let dragging = false, dragPX = 0, dragPY = 0, dragOX = 0, dragOY = 0;
     window.addEventListener('pointerdown', (e) => {
       if (e.button !== 0) return;
+      // Wardrobe mode: presses on the model start an item-removal drag instead of a pan.
+      if (document.body.classList.contains('wardrobe-open')) return;
       if (isInteractiveTarget(e.target)) return;
       if (!isOverModel(e.clientX, e.clientY)) return;
       dragging = true;
@@ -222,7 +234,7 @@ window.Live2D = (function () {
     app.ticker.add(tick);
 
     // Debug clothing toggle params: print min/max/default.
-    const clothingParams = ['ParamShirtEnabled','ParamBraEnabled','ParamPantiesEnabled','ParamSkirtEnabled','ParamHoodieEnabled','ParamPantsEnabled','ParamDress2Enabled','ParamShoeLOn','ParamShoeROn'];
+    const clothingParams = ['ParamShirtEnabled', 'ParamBraEnabled', 'ParamPantiesEnabled', 'ParamSkirtEnabled', 'ParamHoodieEnabled', 'ParamPantsEnabled', 'ParamDress2Enabled', 'ParamShoeLOn', 'ParamShoeROn'];
     const info = {};
     for (const p of clothingParams) {
       if (paramIndex.has(p)) info[p] = { min: paramMin.get(p), max: paramMax.get(p), def: paramDefault.get(p) };
@@ -231,7 +243,7 @@ window.Live2D = (function () {
     console.log('[Live2D] clothing params:', info);
 
     // Render-time hooks: forced opacity + per-drawable color uniforms.
-    const forcedDrawableOpacity = new Map(); // drawableId -> opacity
+    let forcedOrderBelow = [];               // [belowId, aboveId] pairs, re-applied each frame
     const forcedMultiplyColor = new Map();   // drawableId -> [r,g,b,a]
     const forcedScreenColor = new Map();     // drawableId -> [r,g,b,a]
     const r = model.internalModel.renderer;
@@ -254,15 +266,38 @@ window.Live2D = (function () {
         if (d && d.opacities && forcedDrawableOpacity.size) {
           for (const [id, op] of forcedDrawableOpacity) {
             const i = d.ids.indexOf(id);
-            if (i >= 0) d.opacities[i] = op;
+            if (i < 0) continue;
+            d.opacities[i] = op;
+            // Force-SHOW: some outfits (e.g. Dress1) are hidden purely by
+            // opacity 0, which makes update() clear their IsVisible flag so the
+            // Framework skips them. Re-set the flag so a forced opacity>0 can
+            // actually render. (op<=0 leaves the flag; it just draws transparent.)
+            if (op > 0.0001) d.dynamicFlags[i] |= 0x01;
+          }
+        }
+        // Draw-order overrides: guarantee `below` renders under `above` by
+        // swapping their rig-assigned render orders when they're inverted.
+        // Runs before both our visibleOrder sort and the Framework's own
+        // per-frame sorted list, so the two stay consistent.
+        if (d && forcedOrderBelow.length) {
+          const ro = d.renderOrders;
+          for (const [below, above] of forcedOrderBelow) {
+            const bi = d.ids.indexOf(below), ai = d.ids.indexOf(above);
+            if (bi >= 0 && ai >= 0 && ro[bi] > ro[ai]) {
+              const t = ro[bi]; ro[bi] = ro[ai]; ro[ai] = t;
+            }
           }
         }
         visibleOrder.length = 0;
         if (d) {
           const tmp = [];
           for (let i = 0; i < d.count; i++) {
+            // Match the Framework's draw loop exactly: it skips on the IsVisible
+            // dynamic flag only, NOT on opacity. Filtering by opacity here would
+            // drop drawables we force to opacity 0 (e.g. shoe toggle) that the
+            // Framework still draws, desyncing the per-drawable tint cursor.
             const visible = (d.dynamicFlags[i] & 0x01) !== 0;
-            if (visible && d.opacities[i] > 0.0001) tmp.push(i);
+            if (visible) tmp.push(i);
           }
           tmp.sort((a, b) => d.renderOrders[a] - d.renderOrders[b]);
           for (let k = 0; k < tmp.length; k++) visibleOrder.push(tmp[k]);
@@ -304,7 +339,18 @@ window.Live2D = (function () {
           }
           if (cache.mloc || cache.sloc) {
             const mc = (currentDrawableId && forcedMultiplyColor.get(currentDrawableId)) || ONE;
-            const sc = (currentDrawableId && forcedScreenColor.get(currentDrawableId)) || ZERO;
+            const baseScreen = (currentDrawableId && forcedScreenColor.get(currentDrawableId)) || ZERO;
+            const highlight = currentDrawableId && drawableHighlights.get(currentDrawableId);
+            // Compose a hover highlight with any existing screen tint instead
+            // of clobbering it (for example, the blush color group).
+            const sc = highlight
+              ? [
+                1 - (1 - baseScreen[0]) * (1 - highlight[0]),
+                1 - (1 - baseScreen[1]) * (1 - highlight[1]),
+                1 - (1 - baseScreen[2]) * (1 - highlight[2]),
+                1,
+              ]
+              : baseScreen;
             if (cache.mloc) gl.uniform4f(cache.mloc, mc[0], mc[1], mc[2], mc[3]);
             if (cache.sloc) gl.uniform4f(cache.sloc, sc[0], sc[1], sc[2], sc[3]);
           }
@@ -323,10 +369,21 @@ window.Live2D = (function () {
         if (rgb) forcedScreenColor.set(drawableId, [rgb[0], rgb[1], rgb[2], 1]);
         else forcedScreenColor.delete(drawableId);
       },
+      setHighlight(drawableId, rgb) {
+        if (rgb) drawableHighlights.set(drawableId, [rgb[0], rgb[1], rgb[2]]);
+        else drawableHighlights.delete(drawableId);
+      },
+      setOpacity(drawableId, op) {
+        // op=null clears the override (rig decides visibility); op=0 force-hides.
+        if (op == null) forcedDrawableOpacity.delete(drawableId);
+        else forcedDrawableOpacity.set(drawableId, op);
+      },
       listDrawables() { return Array.from(raw.drawables.ids); },
+      setOrderBelow(pairs) { forcedOrderBelow = pairs || []; },
     };
 
-    window.__l2d = { model, raw,
+    window.__l2d = {
+      model, raw,
       hide(name) { forcedDrawableOpacity.set(name, 0); },
       show(name) { forcedDrawableOpacity.delete(name); },
       hideAll() { for (const id of raw.drawables.ids) forcedDrawableOpacity.set(id, 0); },
@@ -348,7 +405,7 @@ window.Live2D = (function () {
       unscreen(name) { forcedScreenColor.delete(name); },
     };
 
-    onStatus(`OK — ${raw.parameters.count} params, ${raw.parts.count} parts`);
+    onStatus(`OK - ${raw.parameters.count} params, ${raw.parts.count} parts`);
     return { paramIds: Array.from(paramIndex.keys()) };
   }
 
@@ -398,14 +455,16 @@ window.Live2D = (function () {
   // Don't start a drag when the press lands on an actual UI control she overlaps.
   function isInteractiveTarget(t) {
     return !!(t && t.closest && t.closest(
-      'button, a, input, textarea, select, .composer, .conv-sidebar, .settings-drawer, .app-header, .prompt-chips'
+      'button, a, input, textarea, select, .composer, .conv-sidebar, .settings-drawer, .app-header, .prompt-chips, .wardrobe-overlay'
     ));
   }
 
   function savePos() {
+    // Wardrobe-page zoom/pan is transient - never clobber the chat page's position.
+    if (document.body.classList.contains('wardrobe-open')) return;
     try {
       localStorage.setItem('l2d.pos', JSON.stringify({ x: userOffsetX, y: userOffsetY, z: userZoom }));
-    } catch (e) {}
+    } catch (e) { }
   }
 
   function loadPos() {
@@ -417,7 +476,7 @@ window.Live2D = (function () {
         if (s.z) userZoom = s.z;
         hasUserPos = true;
       }
-    } catch (e) {}
+    } catch (e) { }
   }
 
   function setOnMissingParam(cb) { onMissingParam = cb; }
@@ -472,7 +531,7 @@ window.Live2D = (function () {
   // Params whose value represents persistent on/off state (clothing & props).
   // resetIdle() must NOT snap these back to default.
   // NB: transient pose-y wardrobe params (ParamSkirtUp, ParamPantiesX) are
-  // intentionally NOT here — those should reset along with the body pose.
+  // intentionally NOT here - those should reset along with the body pose.
   const STATEFUL_PARAMS = new Set([
     'ParamShirtEnabled', 'ParamBraEnabled', 'ParamPantiesEnabled',
     'ParamSkirtEnabled', 'ParamHoodieEnabled', 'ParamPantsEnabled',
@@ -546,17 +605,17 @@ window.Live2D = (function () {
   // Two kinds: 'loop' = sin oscillation; 'pose' = move to value, hold, return.
   const FIDGETS = [
     // Oscillating bits.
-    { kind: 'loop', param: 'ParamTailWiggle', amp: 0.5, period: 900,  duration: 2400 },
-    { kind: 'loop', param: 'ParamEarsWiggle', amp: 0.4, period: 700,  duration: 1400 },
-    { kind: 'loop', param: 'ParamHeadX',      amp: 1.2, period: 4200, duration: 4200 },
-    { kind: 'loop', param: 'ParamHeadY',      amp: 0.8, period: 3800, duration: 3800 },
-    { kind: 'loop', param: 'ParamEyeballLX',  amp: 0.3, period: 2600, duration: 2600, pair: 'ParamEyeballRX' },
-    { kind: 'loop', param: 'ParamBodyX',      amp: 0.2, period: 5000, duration: 5000 },
+    { kind: 'loop', param: 'ParamTailWiggle', amp: 0.5, period: 900, duration: 2400 },
+    { kind: 'loop', param: 'ParamEarsWiggle', amp: 0.4, period: 700, duration: 1400 },
+    { kind: 'loop', param: 'ParamHeadX', amp: 1.2, period: 4200, duration: 4200 },
+    { kind: 'loop', param: 'ParamHeadY', amp: 0.8, period: 3800, duration: 3800 },
+    { kind: 'loop', param: 'ParamEyeballLX', amp: 0.3, period: 2600, duration: 2600, pair: 'ParamEyeballRX' },
+    { kind: 'loop', param: 'ParamBodyX', amp: 0.2, period: 5000, duration: 5000 },
     // Pose-and-return: shift a leg, raise an arm slightly, rotate an arm.
-    { kind: 'pose', param: 'ParamLegL',   value: 0.35, hold: 1800 },
-    { kind: 'pose', param: 'ParamLegR',   value: 0.35, hold: 1800 },
-    { kind: 'pose', param: 'ParamLegL',   value: -0.25, hold: 1500 },
-    { kind: 'pose', param: 'ParamLegR',   value: -0.25, hold: 1500 },
+    { kind: 'pose', param: 'ParamLegL', value: 0.35, hold: 1800 },
+    { kind: 'pose', param: 'ParamLegR', value: 0.35, hold: 1800 },
+    { kind: 'pose', param: 'ParamLegL', value: -0.25, hold: 1500 },
+    { kind: 'pose', param: 'ParamLegR', value: -0.25, hold: 1500 },
     { kind: 'pose', param: 'ParamArmLUp', value: 0.25, hold: 1600 },
     { kind: 'pose', param: 'ParamArmRUp', value: 0.25, hold: 1600 },
     { kind: 'pose', param: 'ParamArmLRot', value: 0.3, hold: 1400 },
@@ -717,7 +776,7 @@ window.Live2D = (function () {
     return ids;
   }
 
-  // Additive (screen) tint — adds color rather than darkening, so it reads as a
+  // Additive (screen) tint - adds color rather than darkening, so it reads as a
   // glow/flush instead of a shadow. Used for blush. rgb=null clears.
   function screenByPattern(includes, excludes, rgb) {
     if (!publicTint) return [];
@@ -730,12 +789,285 @@ window.Live2D = (function () {
     return publicTint ? publicTint.listDrawables() : [];
   }
 
+  // ---- Variant texture compositor -------------------------------------------
+  // Game-faithful alternative clothing (cf. MakeItemTextureFromParts): swaps a
+  // drawable's region of the shared atlas with an alternative texture, matching
+  // the drawable's UV rectangle, then re-uploads that atlas texture. The moc3's
+  // per-drawable UVs give the exact rectangle, so variant sprites (which are
+  // authored to fill that rect) drop in 1:1.
+  const _texOverride = new Map();   // drawableId -> { img, overlay } | null
+  const _uvRect = new Map();        // drawableId -> {tex,u0,v0,w,h}
+  const _baseCanvas = [];           // texIndex -> canvas of the pristine atlas
+  const _imgCache = new Map();      // url -> Promise<HTMLImageElement>
+  const _originalSource = [];       // texIndex -> original HTMLImageElement source
+
+  function installVariantCompositor() {
+    _uvRect.clear();
+    const D = raw.drawables, uvs = D.vertexUvs, ti = D.textureIndices;
+    for (let d = 0; d < D.count; d++) {
+      const uv = uvs[d];
+      let u0 = 1, u1 = 0, v0 = 1, v1 = 0;
+      for (let k = 0; k < uv.length; k += 2) {
+        const u = uv[k], v = uv[k + 1];
+        if (u < u0) u0 = u; if (u > u1) u1 = u;
+        if (v < v0) v0 = v; if (v > v1) v1 = v;
+      }
+      _uvRect.set(D.ids[d], { tex: ti[d], u0, v0, w: u1 - u0, h: v1 - v0 });
+    }
+  }
+
+  function _loadImg(url) {
+    if (_imgCache.has(url)) return _imgCache.get(url);
+    const p = new Promise((res, rej) => {
+      const im = new Image();
+      im.onload = () => res(im);
+      im.onerror = rej;
+      im.src = url;
+    });
+    _imgCache.set(url, p);
+    return p;
+  }
+
+  // Canvas copy of an image with alpha binarized (any coverage -> fully
+  // opaque). Used as an erase mask by alphaClip variants.
+  function _alphaMask(img) {
+    const c = document.createElement('canvas');
+    c.width = img.naturalWidth || img.width;
+    c.height = img.naturalHeight || img.height;
+    const x = c.getContext('2d');
+    x.drawImage(img, 0, 0);
+    const d = x.getImageData(0, 0, c.width, c.height);
+    const px = d.data;
+    for (let i = 3; i < px.length; i += 4) if (px[i]) px[i] = 255;
+    x.putImageData(d, 0, 0);
+    return c;
+  }
+
+  function _baseAtlas(texIndex) {
+    if (_baseCanvas[texIndex]) return _baseCanvas[texIndex];
+    // Snapshot the *original* atlas image before any compositing.
+    // model.textures[] are Pixi Texture objects wrapping BaseTextures.
+    const bt = model.textures[texIndex].baseTexture;
+    const src = bt.resource.source;               // HTMLImageElement or canvas
+    _originalSource[texIndex] = src;              // Keep reference to original image element
+    const c = document.createElement('canvas');
+    c.width = src.naturalWidth || src.width;
+    c.height = src.naturalHeight || src.height;
+    c.getContext('2d').drawImage(src, 0, 0);
+    _baseCanvas[texIndex] = c;
+    return c;
+  }
+
+  // The live-composited atlas canvas that replaces the BaseTexture source.
+  // We keep one persistent canvas per texture index so we're not thrashing GC.
+  const _liveCanvas = [];
+
+  function _uploadTexture(texIndex, canvas) {
+    // pixi-live2d-display's _render() loop caches the GL texture object in
+    // baseTexture._glTextures[contextUID] and only re-uploads when that entry
+    // is missing (or on a GL context change). To force it to re-upload our
+    // composited canvas we:
+    //  1. Swap the resource's source to our canvas
+    //  2. Delete the cached _glTextures entry so the next _render() frame
+    //     triggers renderer.texture.bind() → which re-uploads from source
+    const bt = model.textures[texIndex].baseTexture;
+    bt.alphaMode = PIXI.ALPHA_MODES.PMA;
+    const res = bt.resource;
+    res.source = canvas;
+    res.width = canvas.width;
+    res.height = canvas.height;
+    // Invalidate Pixi's GL texture cache for this BaseTexture.
+    const uid = model.glContextID;
+    if (uid >= 0 && bt._glTextures[uid]) {
+      delete bt._glTextures[uid];
+    }
+    return true;
+  }
+
+  function _restoreOriginalTexture(texIndex, origSource) {
+    const bt = model.textures[texIndex].baseTexture;
+    bt.alphaMode = PIXI.ALPHA_MODES.PMA;
+    const res = bt.resource;
+    res.source = origSource;
+    res.width = origSource.naturalWidth || origSource.width;
+    res.height = origSource.naturalHeight || origSource.height;
+    // Invalidate Pixi's GL texture cache for this BaseTexture.
+    const uid = model.glContextID;
+    if (uid >= 0 && bt._glTextures[uid]) {
+      delete bt._glTextures[uid];
+    }
+  }
+
+  function recompositeTexture(texIndex) {
+    // Check if we have any active overrides for this texture index
+    let hasOverride = false;
+    for (const [id, entry] of _texOverride) {
+      const r = _uvRect.get(id);
+      if (r && r.tex === texIndex && entry) {
+        hasOverride = true;
+        break;
+      }
+    }
+
+    if (!hasOverride) {
+      // No overrides active: restore the original clean PNG image element!
+      const orig = _originalSource[texIndex];
+      if (orig) {
+        _restoreOriginalTexture(texIndex, orig);
+        return;
+      }
+    }
+
+    const base = _baseAtlas(texIndex), W = base.width, H = base.height;
+    // Reuse a persistent canvas to avoid allocating a new one each swap.
+    if (!_liveCanvas[texIndex]) {
+      const c = document.createElement('canvas');
+      c.width = W; c.height = H;
+      _liveCanvas[texIndex] = c;
+    }
+    const c = _liveCanvas[texIndex];
+    const ctx = c.getContext('2d');
+    ctx.clearRect(0, 0, W, H);
+    ctx.drawImage(base, 0, 0);
+    const active = [];
+    for (const [id, entry] of _texOverride) {
+      const r = _uvRect.get(id);
+      if (!r || r.tex !== texIndex || !entry) continue;
+      // Cubism UV v is bottom-origin (v=0 bottom of the PNG), so the top of the
+      // canvas rect corresponds to the largest v (v0 + h). Verified against the
+      // atlas: this lands exactly on the baked garment region. (The runtime's
+      // vertexUvs are v-flipped relative to the raw moc3 floats - don't "fix"
+      // this to r.v0 * H; that mirrors every override into the wrong place.)
+      active.push({ entry, x: r.u0 * W, yTop: (1 - (r.v0 + r.h)) * H, w: r.w * W, h: r.h * H });
+    }
+    // Two passes: erase everything first, then paint. Interleaving them lets
+    // one drawable's clear wipe art another override just painted into an
+    // overlapping atlas rect (the limb Attach* rects overlap heavily), which
+    // shows up as transparent holes on the model.
+    for (const a of active) {
+      if (a.entry.overlay) continue;   // decorations paint on top of the base
+      if (a.entry.alphaClip) {
+        // Erase only where the variant art has coverage: these rects share
+        // texels with drawables that are NOT overridden (e.g. base skin), so a
+        // full bounding-rect clear would punch transparent holes in those too.
+        // Erase with a BINARIZED alpha mask, not the art itself: erasing with
+        // the art attenuates base texels under semi-transparent pixels twice
+        // (base*(1-a)^2 after the paint pass), which turns the art's soft
+        // shadows (e.g. the mech knee joints) nearly black.
+        if (!a.entry.mask) a.entry.mask = _alphaMask(a.entry.img);
+        ctx.globalCompositeOperation = 'destination-out';
+        ctx.drawImage(a.entry.mask, a.x, a.yTop, a.w, a.h);
+        ctx.globalCompositeOperation = 'source-over';
+      } else {
+        // Full replacement (e.g. mini skirt): the whole baked region must go,
+        // even where the new art is transparent.
+        ctx.clearRect(a.x, a.yTop, a.w, a.h);
+      }
+    }
+    for (const a of active) ctx.drawImage(a.entry.img, a.x, a.yTop, a.w, a.h);
+    _uploadTexture(texIndex, c);
+  }
+
+  // Replace (url) or clear (null) a single drawable's atlas region, then rebake.
+  // If overlay=true, the variant is painted on top of the base (for decorations).
+  async function setDrawableTexture(drawableId, url, overlay) {
+    const r = _uvRect.get(drawableId);
+    if (!r) return;
+    if (url) _texOverride.set(drawableId, { img: await _loadImg(url), overlay: !!overlay });
+    else _texOverride.delete(drawableId);
+    recompositeTexture(r.tex);
+  }
+
+  // Batch form: map of { drawableId: { url, overlay, alphaClip } | url | null }.
+  // Recomposites each affected atlas once. Used by the outfit variant pickers.
+  async function setDrawableTextures(map) {
+    const texes = new Set();
+    await Promise.all(Object.entries(map).map(async ([id, val]) => {
+      const r = _uvRect.get(id);
+      if (!r) return;
+      // val can be a string (url), an object { url, overlay, alphaClip }, or null.
+      const url = val && typeof val === 'object' ? val.url : val;
+      const overlay = val && typeof val === 'object' ? !!val.overlay : false;
+      const alphaClip = val && typeof val === 'object' ? !!val.alphaClip : false;
+      if (url) _texOverride.set(id, { img: await _loadImg(url), overlay, alphaClip });
+      else _texOverride.delete(id);
+      texes.add(r.tex);
+    }));
+    for (const t of texes) recompositeTexture(t);
+  }
+
   function setDrawableTint(id, rgb) {
     if (publicTint) publicTint.setMultiply(id, rgb);
   }
 
   function setDrawableScreen(id, rgb) {
     if (publicTint) publicTint.setScreen(id, rgb);
+  }
+
+  // Force a drawable's opacity independent of the rig. op=null clears the
+  // override; op=0 hides. Used for items (e.g. shoes) whose on/off parameter
+  // isn't wired to the drawable's opacity in this moc3.
+  function setDrawableOpacity(id, op) {
+    if (publicTint) publicTint.setOpacity(id, op);
+  }
+
+  // Replace the active draw-order overrides: array of [belowId, aboveId] pairs
+  // (each pair guarantees `below` renders under `above`). [] clears.
+  function setDrawableOrderBelow(pairs) {
+    if (publicTint) publicTint.setOrderBelow(pairs);
+  }
+  function opacityByPattern(includes, excludes, op) {
+    const ids = findDrawables(includes, excludes);
+    for (const id of ids) setDrawableOpacity(id, op);
+    return ids;
+  }
+
+  // Topmost visible drawable under a client-space point (point-in-triangle over
+  // the drawable meshes, highest renderOrder wins). `onlyIds` restricts the
+  // search to a set of drawable ids (e.g. the currently worn clothing).
+  function drawableAt(clientX, clientY, onlyIds) {
+    if (!model || !raw || !app) return null;
+    const rect = app.view.getBoundingClientRect();
+    const p = model.toModelPosition(new PIXI.Point(clientX - rect.left, clientY - rect.top));
+    const D = raw.drawables;
+    const only = onlyIds ? (onlyIds instanceof Set ? onlyIds : new Set(onlyIds)) : null;
+    let best = null, bestOrder = -Infinity;
+    for (let i = 0; i < D.count; i++) {
+      if (only && !only.has(D.ids[i])) continue;
+      const forcedOpacity = forcedDrawableOpacity.get(D.ids[i]);
+      const opacity = forcedOpacity == null ? D.opacities[i] : forcedOpacity;
+      // Force-shown wardrobe layers can be invisible to the raw rig but still
+      // render because the renderer restores their visibility flag every frame.
+      const visible = (D.dynamicFlags[i] & 0x01) || (forcedOpacity != null && forcedOpacity > 0.0001);
+      if (!visible || opacity < 0.01) continue;
+      if (D.renderOrders[i] <= bestOrder) continue;
+      const vp = D.vertexPositions[i], ix = D.indices[i];
+      for (let k = 0; k < ix.length; k += 3) {
+        const a = ix[k] * 2, b = ix[k + 1] * 2, c = ix[k + 2] * 2;
+        const s1 = (vp[b] - vp[a]) * (p.y - vp[a + 1]) - (vp[b + 1] - vp[a + 1]) * (p.x - vp[a]);
+        const s2 = (vp[c] - vp[b]) * (p.y - vp[b + 1]) - (vp[c + 1] - vp[b + 1]) * (p.x - vp[b]);
+        const s3 = (vp[a] - vp[c]) * (p.y - vp[c + 1]) - (vp[a + 1] - vp[c + 1]) * (p.x - vp[c]);
+        if ((s1 >= 0 && s2 >= 0 && s3 >= 0) || (s1 <= 0 && s2 <= 0 && s3 <= 0)) {
+          best = D.ids[i]; bestOrder = D.renderOrders[i]; break;
+        }
+      }
+    }
+    return best;
+  }
+
+  // Thumbnail of a drawable's atlas region (the same UV rect the variant
+  // compositor uses), as a data URL scaled to fit `size`. Used by the wardrobe.
+  function drawableThumb(drawableId, size = 72) {
+    const r = _uvRect.get(drawableId);
+    if (!r || !model) return null;
+    const base = _baseAtlas(r.tex), W = base.width, H = base.height;
+    const w = Math.max(1, r.w * W), h = Math.max(1, r.h * H);
+    const s = Math.min(size / w, size / h, 1);
+    const c = document.createElement('canvas');
+    c.width = Math.max(1, Math.round(w * s));
+    c.height = Math.max(1, Math.round(h * s));
+    c.getContext('2d').drawImage(base, r.u0 * W, (1 - (r.v0 + r.h)) * H, w, h, 0, 0, c.width, c.height);
+    return c.toDataURL();
   }
 
   function debugParam(param) {
@@ -769,6 +1101,17 @@ window.Live2D = (function () {
     listDrawables,
     setDrawableTint,
     setDrawableScreen,
+    setDrawableHighlight(drawableId, rgb) {
+      if (publicTint) publicTint.setHighlight(drawableId, rgb);
+    },
+    setDrawableOpacity,
+    setDrawableOrderBelow,
+    opacityByPattern,
+    setDrawableTexture,
+    setDrawableTextures,
     setMouthOverride,
+    isOverModel,
+    drawableAt,
+    drawableThumb,
   };
 })();

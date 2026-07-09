@@ -1,6 +1,6 @@
 <?php
 // Dev HUD backend: loaded-model VRAM/RAM footprint (Ollama /api/ps) + host memory.
-// Polled every few seconds while the HUD is open, so keep it cheap and never fatal —
+// Polled every few seconds while the HUD is open, so keep it cheap and never fatal -
 // any upstream hiccup returns the half we could gather, not an error page.
 require_once __DIR__ . '/_lib.php';
 

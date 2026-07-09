@@ -1,4 +1,4 @@
-# Jun OS — Architecture
+# Jun OS architecture
 
 This document is the long-form reference for the system. For a quick orientation see the README.
 
@@ -24,7 +24,7 @@ This document is the long-form reference for the system. For a quick orientation
   Optional (profile=prod): certbot sidecar for Let's Encrypt issuance + renewal
 ```
 
-nginx serves static files from `/var/www/omega/` and FastCGI-proxies `*.php` requests to the php-fpm container. Ollama and Kokoro are internal-only — their ports are not published to the host.
+nginx serves static files from `/var/www/omega/` and FastCGI-proxies `*.php` requests to the php-fpm container. Ollama and the voice sidecar are internal-only; their ports are not published to the host. The voice sidecar on `:8001` fronts two swappable engines, Kokoro-82M (default) and kyutai pocket-tts, selected per request; the compose `voice` profile (env `VOICE=on`) decides whether it runs at all.
 
 ---
 
@@ -50,6 +50,10 @@ Browser
        │    echo 'data: {"token":"..."}\n\n'
        │    flush()
        │
+       │  after the stream ends: parse the hidden relationship bookkeeping tag
+       │  from the full reply, clamp+apply its affection/trust/tension deltas to
+       │  the user's row, and strip the tag so it never reaches the browser
+       │
        ▼
   nginx (proxy_buffering off, fastcgi_buffering off, X-Accel-Buffering: no)
        │
@@ -63,9 +67,9 @@ The PHP `CURLOPT_WRITEFUNCTION` callback receives raw bytes from the Ollama HTTP
 
 The three critical headers that ensure tokens arrive incrementally rather than buffered:
 
-- **`proxy_buffering off`** — prevents nginx from accumulating the FastCGI response
-- **`fastcgi_buffering off`** — prevents nginx's FastCGI module from buffering the upstream
-- **`X-Accel-Buffering: no`** — hint consumed by nginx and some CDN layers
+- **`proxy_buffering off`**: prevents nginx from accumulating the FastCGI response
+- **`fastcgi_buffering off`**: prevents nginx's FastCGI module from buffering the upstream
+- **`X-Accel-Buffering: no`**: hint consumed by nginx and some CDN layers
 
 Without all three, tokens may arrive in one batch at end-of-message even though the server is streaming them correctly.
 
@@ -80,7 +84,7 @@ Without all three, tokens may arrive in one batch at end-of-message even though 
 ```
 PASSTHROUGH ──── sees '[' ──────▶ MAYBE_ACTION
                                        │
-                          partial '[ACTION:' matched ──▶ IN_MARKER
+                          partial '[A:' (or legacy '[ACTION:') matched ──▶ IN_MARKER
                                        │
                           partial does not match ──▶ flush held bytes, PASSTHROUGH
                                                           │
@@ -104,6 +108,10 @@ When a closing `]` is received, the bracketed text is immediately passed to `Act
 
 Malformed or unrecognised tags are logged to the debug panel and silently dropped.
 
+### Name templating stage
+
+The clean text emerging from the action buffer passes through a second streaming filter, `makeNameFilter` in `webapp/js/app.js`, before it reaches the chat renderer and TTS. It resolves `{f_playerName}` / `{f_botName}` placeholders to the user's chosen names (via `webapp/js/names.js`). Like the action marker holdback, it buffers a trailing *partial* placeholder across token chunks, so a split like `"{f_play"` + `"erName}"` substitutes cleanly and never flashes its raw form in the chat or gets read aloud by TTS.
+
 ---
 
 ## Live2D engine internals
@@ -126,16 +134,25 @@ This prevents those systems from overwriting `coreModel.parameters.values` betwe
 
 The `tick()` function runs on every PIXI `app.ticker` frame. Order matters:
 
-1. **Fire pending sequences** — any `{param, value, fire_at_ms}` entry whose deadline has passed is written into `targetParams`.
-2. **Lerp** — for each param in `currentValues`, exponential smoothing toward `targetParams`:
+1. **Fire pending sequences**: any `{param, value, fire_at_ms}` entry whose deadline has passed is written into `targetParams`.
+2. **Lerp**: for each param in `currentValues`, exponential smoothing toward `targetParams`:
    ```
    alpha = 1 - exp(-dt / LERP_TAU_MS)   // LERP_TAU_MS = 150 ms
    current = current + alpha * (target - current)
    ```
-3. **Write to raw params** — `raw.parameters.values[idx] = current`.
-4. **Overwrite with active loops** — sin oscillations are written directly, bypassing the lerped current value. This keeps loops visually crisp.
-5. **Overwrite `ParamEyeOpen` for blink** — if a blink phase is active, the eye open value is set directly from the blink timeline (close 70 ms / hold 50 ms / open 120 ms ramp). Using lerp for blinks would smear the closure into an invisible dip at normal tau.
-6. **Overwrite `ParamMouthOpen` for lipsync** — if `setMouthOverride` has been called (TTS audio playing), the mouth value is set from the RMS measurement, bypassing lerp entirely so the lip track is tight.
+3. **Write to raw params**: `raw.parameters.values[idx] = current`.
+4. **Overwrite with active loops**: sin oscillations are written directly, bypassing the lerped current value. This keeps loops visually crisp.
+5. **Overwrite `ParamEyeOpen` for blink**: if a blink phase is active, the eye open value is set directly from the blink timeline (close 70 ms / hold 50 ms / open 120 ms ramp). Using lerp for blinks would smear the closure into an invisible dip at normal tau.
+6. **Overwrite `ParamMouthOpen` for lipsync**: if `setMouthOverride` has been called (TTS audio playing), the mouth value is set from the RMS measurement, bypassing lerp entirely so the lip track is tight.
+7. **Re-stamp forced part opacities**: the `forcedPartOpacity` Map (partId → opacity) is written straight into `raw.parts.opacities` every tick. The rig otherwise reasserts its own part opacity each frame, so a one-shot write would be clobbered; re-stamping is how the wardrobe force-shows/hides parts (e.g. the alt dress `dress1`, which has no enable param and is hidden by opacity 0 in the rig).
+
+### Wardrobe: parts, tint, and variants
+
+`webapp/js/outfit.js` drives the wardrobe by three mechanisms, none of which touch the LLM (the current state is injected into the system prompt server-side so Jun knows what she's wearing):
+
+- **Enable params**: most items are a param-backed boolean (`ParamShirtEnabled`, `ParamSkirtEnabled`, …) with `excludes` that force conflicting items off.
+- **Forced opacity**: items with no enable param (the alt dress) are shown/hidden through the `forcedPartOpacity` re-stamp step above.
+- **Recolor**: Live2D's texture sampler is wrapped at load time by injecting an `omegaTint()` helper into the fragment shader (`texture2D(s_texture0, …)` → `omegaTint(texture2D(...))`), so drawables matching a color group's patterns are tinted live without editing textures. The three base textures (`assets/texture_00..02.png`) are loaded as straight-alpha data URLs; the `variants/` PNGs (miniskirt, socks, stockings) swap in as alternate pieces.
 
 ### Loop parameters
 
@@ -155,9 +172,9 @@ base + amplitude * sin(2π * elapsed_ms / period_ms)
 
 `startIdle()` sets up three concurrent behaviours:
 
-- **Breath** — a constant `_loop_param` on `ParamBodyY` with a 4-second period and small amplitude.
-- **Blink** — a `setInterval` that fires `scheduleSequence([close, hold, open])` randomly every 3–7 seconds.
-- **Fidget** — a `setTimeout` chain that picks a random entry from the `FIDGETS` array every 4–10 seconds. Fidgets are either `loop` (short oscillation: tail wiggle, head sway, eye glance) or `pose` (set a target, hold, return to default: leg shift, arm raise).
+- **Breath**: a constant `_loop_param` on `ParamBodyY` with a 4-second period and small amplitude.
+- **Blink**: a `setInterval` that fires `scheduleSequence([close, hold, open])` randomly every 3–7 seconds.
+- **Fidget**: a `setTimeout` chain that picks a random entry from the `FIDGETS` array every 4–10 seconds. Fidgets are either `loop` (short oscillation: tail wiggle, head sway, eye glance) or `pose` (set a target, hold, return to default: leg shift, arm raise).
 
 `resetIdle()` clears all targets, loops, and sequences back to model defaults. It does not restart idle; callers that want idle to resume must follow with `startIdle()`.
 
@@ -177,7 +194,9 @@ Tokens are appended to a buffer. When a sentence-ending character (`.`, `!`, `?`
 
 ### Parallel synthesis, ordered playback
 
-Each queued sentence triggers an immediate `fetch POST /api/tts.php`. The PHP endpoint validates the request (text ≤ 2000 chars, voice pattern, speed range) and forwards it to the Kokoro sidecar. Responses arrive out-of-order since synthesis time varies by sentence length.
+Each queued sentence triggers an immediate `fetch POST /api/tts.php`. The PHP endpoint validates the request (text ≤ 2000 chars, voice pattern, speed range, engine) and forwards it to the voice sidecar. Responses arrive out-of-order since synthesis time varies by sentence length.
+
+The sidecar (`tts/server.py`) fronts two engines chosen per request by the `engine` field: **kokoro** (Kokoro-82M, default, ~27 EN voices, needs espeak-ng) and **pockettts** (kyutai pocket-tts, ~100M, CPU-friendly, English + 5 languages). `TTS_DEVICE` (`cpu`|`cuda`|`auto`) picks the torch device; Kokoro pre-warms one utterance at startup while pocket-tts loads lazily on its first request. `GET /voices` exposes both engines' voice lists and defaults so the UI can offer an engine + voice picker.
 
 Results are decoded into `AudioBuffer`s and inserted into a `Map` keyed by submission index. A playback cursor advances only when the buffer at the current index is ready, ensuring sentences always play in the order they were generated even if a later sentence finishes synthesis faster.
 
@@ -229,9 +248,9 @@ HSTS (`Strict-Transport-Security: max-age=31536000`) is added only when `TLS_MOD
 
 `webapp/api/_lib.php` provides:
 
-- **`omega_read_body($maxBytes)`** — checks `Content-Length` before reading and rejects oversized requests with 413 before touching `php://input`. Reads at most `$maxBytes + 1` bytes and rejects if longer, protecting against streams that lie about their size.
-- **`omega_rate_limit($bucket, $maxPerWindow, $windowSec)`** — flat-file token bucket under `/var/lib/omega/rl/`. Files are locked with `flock(LOCK_EX)` to prevent race conditions. Returns 429 + `Retry-After` header on miss. The state directory is mounted as the `omega_state` named volume so limits persist across container restarts.
-- **`omega_json_error($code, $machineMsg)`** — emits `{error, code, request_id}`. Never echoes `curl_error` output, exception messages, or file paths. Real errors are logged to stderr via `omega_log` and surfaced through `docker logs`.
+- **`omega_read_body($maxBytes)`**: checks `Content-Length` before reading and rejects oversized requests with 413 before touching `php://input`. Reads at most `$maxBytes + 1` bytes and rejects if longer, protecting against streams that lie about their size.
+- **`omega_rate_limit($bucket, $maxPerWindow, $windowSec)`**: flat-file token bucket under `/var/lib/omega/rl/`. Files are locked with `flock(LOCK_EX)` to prevent race conditions. Returns 429 + `Retry-After` header on miss. The state directory is mounted as the `omega_state` named volume so limits persist across container restarts.
+- **`omega_json_error($code, $machineMsg)`**: emits `{error, code, request_id}`. Never echoes `curl_error` output, exception messages, or file paths. Real errors are logged to stderr via `omega_log` and surfaced through `docker logs`.
 
 Endpoint-specific caps:
 - `chat.php`: body ≤ 256 KB, messages ≤ 80, each content ≤ 16 KB, rate limit 30/min
@@ -240,50 +259,67 @@ Endpoint-specific caps:
 
 ### Kokoro/Ollama isolation
 
-Neither service publishes a port to the host. The Kokoro sidecar additionally enforces `CORS_ORIGIN` via FastAPI `CORSMiddleware` — the browser never talks to Kokoro directly; all requests go through `webapp/api/tts.php`.
+Neither service publishes a port to the host. The Kokoro sidecar additionally enforces `CORS_ORIGIN` via FastAPI `CORSMiddleware`; the browser never talks to Kokoro directly; all requests go through `webapp/api/tts.php`.
 
 ---
 
 ## RAG
 
 Character voice is handled by the fine-tuned model itself, so there is no voice
-RAG. Two retrievers remain, both in `webapp/api/chat.php`, each appending its own
-block to the trailing live-context message (not the system prompt — that stays
+RAG. Two retrievers remain, driven from `webapp/api/chat.php`, each appending its
+own block to the trailing live-context message (not the system prompt, which stays
 static so Ollama's KV prompt cache holds across turns):
 
-- **Lore RAG** (`lore_retrieve`) — grounds replies in curated game canon.
-- **Cross-conversation recall** (`chat_history_retrieve`) — recalls this user's
-  own past conversations.
+- **Lore RAG** (`lore_retrieve` → `lore_search` in `webapp/api/lore.php`): grounds
+  replies in curated game canon via keyword matching.
+- **Cross-conversation recall** (`chat_history_retrieve`): recalls this user's
+  own past conversations via embeddings.
 
 ### Lore RAG (`## World facts (canon)`)
 
 The fine-tune gives Jun her voice but blurs or invents specific world details, so
 canon facts are retrieved instead of baked in.
 
-The corpus is `tools/lore_dataset.jsonl` — curated game-lore Q&A in neutral wiki
+The corpus is `tools/lore_dataset.jsonl`: curated game-lore Q&A in neutral wiki
 voice, with out-of-universe meta (developer, platform, version, etc.) filtered out
 so Jun never breaks the fourth wall. `tools/build_lore_index.php` flattens each
-Q&A into a question→answer pair and embeds **the question** as `search_document`,
-writing `webapp/lore_index.bin` (packed float32), `webapp/lore_corpus.txt` (the
-answers, row-aligned) and `webapp/lore_meta.json`.
+Q&A into a question→answer pair and writes `webapp/lore_corpus.txt` (the answers,
+one per line).
 
-At request time:
+**Retrieval is a heuristic keyword match, not an embedding search.** The earlier
+cosine version silently broke: the offline index and the live query path went
+through two *different* `nomic-embed-text` pulls (bare-metal build vs. the docker
+Ollama), so common words still matched but proper nouns like "Annalie" embedded
+inconsistently and name lookups returned nothing. Plain term overlap sidesteps all
+of it: exact on names, deterministic, and needing no Ollama, no `.bin` index, no
+rebuild.
 
-1. The live message is embedded as `search_query` (the matching nomic prefix — a dedicated embedding, separate from the prefix-free vector used below).
-2. Cosine-ranked against the question vectors; the top-4 are kept above a 0.6 floor. Below that the user isn't really asking about lore, so nothing is injected.
-3. The answers for the surviving hits become the `## World facts (canon)` block, framed as established truths to weave in — not to recite.
+`lore_search` (in `lore.php`) builds a cached keyword index over the corpus (per-doc
+term counts, IDF, a proper-noun set mined from the corpus's own capitalization) and
+scores the user message against it:
+
+1. Tokenize to lowercase stems (≥2 chars, plural `s` stripped), dropping an explicit
+   stopword list of ordinary chat filler ("morning", "coffee", "love") that is rare
+   *in the lore* and would otherwise score high on IDF alone.
+2. Score each doc by IDF-weighted term overlap, with a ×2 boost for terms that are
+   proper nouns in the corpus. A Levenshtein fallback fuzzy-matches distinctive
+   (high-IDF) names so typos still land ("Annallie" → Annalie).
+3. Keep up to `LORE_MAX_INJECT` (5) **distinct** hits above the `LORE_FLOOR` (3.0),
+   collapsing candidates that share too much vocabulary (Jaccard ≥ 0.5). Chit-chat
+   scores ~0 and injects nothing; a single distinctive lore term clears the floor.
+4. The surviving answers become the `## World facts (canon)` block, framed as
+   established truths to weave in, not to recite.
 
 ```
- user message ──embed(search_query)──▶ cosine vs question vectors
-                                              │
-                                       top-4, score ≥ 0.6
+ user message ──tokenize/stopword──▶ IDF-weighted overlap vs keyword index
+                                              │   (+proper-noun boost, fuzzy names)
+                                       top-5 distinct, score ≥ 3.0
                                               │
                                        inject the ANSWERS as canon facts
 ```
 
-Keying on the question (not the answer) keeps retrieval symmetric: a real user
-question matches the closest canon question. The index is regenerated only when
-the dataset changes; a missing index degrades gracefully (block omitted).
+The index rebuilds itself from the corpus on demand (cached via APCu when
+available); a missing corpus degrades gracefully (block omitted).
 
 ### Cross-conversation recall (`## Recalled prior context`)
 
@@ -294,6 +330,26 @@ On every `/api/chat.php` request:
 1. The user's latest message is embedded with `nomic-embed-text` via `POST ollama:11434/api/embeddings`. The same vector is reused for retrieval and stored in `message_embeddings` for future lookups.
 2. It is cosine-compared against this user's stored message embeddings from **other** conversations (most recent 5000), and the top-5 hits are kept above a 0.45 similarity floor.
 3. Each hit is widened into a window of surrounding turns (1 before, 3 after) so a match lands with its context; overlapping windows in the same conversation are merged.
-4. The resulting excerpts are formatted as a "Recalled prior context" block and appended to the live-context message, for factual recall only — the model is told not to repeat or paraphrase Jun's prior lines.
+4. The resulting excerpts are formatted as a "Recalled prior context" block and appended to the live-context message, for factual recall only; the model is told not to repeat or paraphrase Jun's prior lines.
 
-The retrieval is wrapped in a `try/catch`; if Ollama can't embed or the query is empty, the block is simply omitted and the chat continues normally. Embeddings missed at write time (e.g. Ollama was briefly down) are backfilled by `tools/compact_chat_index.php`.
+The retrieval is wrapped in a `try/catch`; if Ollama can't embed or the query is empty, the block is omitted and the chat continues normally. Embeddings missed at write time (e.g. Ollama was briefly down) are backfilled by `tools/compact_chat_index.php`.
+
+---
+
+## Relationship state
+
+Jun keeps a hidden, per-user relationship that colours her mood and drifts with how she's treated. State lives in the `relationship` table: one row per user, three integer scores clamped to 0–100:
+
+| Score | Default | Meaning |
+|---|---|---|
+| `affection` | 50 | warmth ↔ coldness |
+| `trust` | 50 | openness ↔ guardedness |
+| `tension` | 30 | tension/fear in the room |
+
+Helpers live in `webapp/api/_lib.php` (`relationship_get` / `relationship_set` / `relationship_apply`, shared with `relationship.php`). It's a closed loop across a chat turn:
+
+1. **Inject.** On each `/api/chat.php` request, `relationship_directives()` turns the three scores into plain-language behavior guidance (e.g. affection toward 0 → cold, irritated, withhold warmth, skip affectionate actions; ~50 → normal warm-girlfriend; toward 100 → deeply smitten, initiates closeness). This is appended to the **trailing live-context message**, not the static system prefix, so the KV prompt cache still holds across turns. The prompt tells her to interpolate her own warmth/trust/fear from the numbers, never to recite them, and never to reveal her feelings are scored.
+2. **Update.** Jun's reply carries a hidden relationship bookkeeping tag with per-score *deltas*. After the stream completes, `chat.php` parses it, `relationship_apply` adds the deltas onto the current row and clamps to 0–100, and the tag is stripped so it never reaches the browser (nor TTS).
+3. **Dev override.** `webapp/api/relationship.php` exposes `GET` (current scores) and `PUT` (set absolute values, clamped): the developer "mood switcher" wired to the debug HUD (`webapp/js/devhud.js`), so a state can be forced without playing through the conversation.
+
+Because the state is the user's own, `relationship.php` needs only a valid session (rate-limited 60/min), no extra role gate.

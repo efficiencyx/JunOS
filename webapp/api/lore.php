@@ -5,7 +5,7 @@
 // words still matched, but proper nouns like "Annalie" embedded inconsistently
 // and never landed, so name lookups returned nothing.
 //
-// Plain term overlap sidesteps all of that — it's exact on names, deterministic,
+// Plain term overlap sidesteps all of that - it's exact on names, deterministic,
 // and needs no Ollama, no .bin index, no rebuild. We weight matches by IDF (rare
 // lore terms count, ubiquitous ones don't) and boost proper nouns mined from the
 // corpus's own capitalization, which gives the precision the cosine floor never
@@ -44,7 +44,7 @@ const LORE_STOP = [
 
 // Split into lowercase stems with byte offsets: ASCII alnum runs, length >= 2,
 // minus stopwords, trailing plural "s" stripped so "shops"/"shop" agree.
-// Returns [[stem, originalWord, byteOffset], ...] — the original (for casing)
+// Returns [[stem, originalWord, byteOffset], ...] - the original (for casing)
 // and offset (for sentence position) are used when mining proper nouns.
 function lore_tokens(string $s): array {
     static $stop = null;
@@ -148,7 +148,7 @@ function lore_resolve(array $idx, string $query): array {
     return $res;
 }
 
-// Jaccard overlap of two term-count maps' key sets — used to fold near-duplicate
+// Jaccard overlap of two term-count maps' key sets - used to fold near-duplicate
 // answers (the corpus has many rephrasings of the same fact) into one.
 function lore_jaccard(array $a, array $b): float {
     $inter = 0;

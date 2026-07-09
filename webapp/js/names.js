@@ -51,14 +51,14 @@ window.Names = (function () {
 
   // Length of a trailing partial placeholder that could still complete on the
   // next token (e.g. "{f_pla"), so a streaming buffer can hold it back instead of
-  // flashing the raw fragment before substituting. Lowercased canon — the stream
+  // flashing the raw fragment before substituting. Lowercased canon - the stream
   // never carries spaces inside a placeholder, so an exact prefix match suffices.
   const TOKENS = ['{f_playername}', '{f_botname}'];
   function pendingPartial(buf) {
     const open = buf.lastIndexOf('{');
     if (open < 0) return 0;
     const tail = buf.slice(open).toLowerCase();
-    if (tail.indexOf('}') !== -1) return 0; // already closed — nothing pending
+    if (tail.indexOf('}') !== -1) return 0; // already closed - nothing pending
     for (const tok of TOKENS) {
       if (tok.startsWith(tail)) return buf.length - open;
     }

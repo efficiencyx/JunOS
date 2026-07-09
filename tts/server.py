@@ -2,8 +2,8 @@
 Local TTS sidecar for Jun OS. A small FastAPI server on :8001 that fronts two
 swappable engines, picked per-request by the `engine` field:
 
-  - kokoro    — Kokoro-82M (default). Needs espeak-ng on the system.
-  - pockettts — kyutai-labs pocket-tts (100M, CPU, English + 5 langs).
+  - kokoro    - Kokoro-82M (default). Needs espeak-ng on the system.
+  - pockettts - kyutai-labs pocket-tts (100M, CPU, English + 5 langs).
 
 The webapp's js/tts.js posts a sentence at a time to /tts and plays the returned
 WAV through an AudioContext. /voices exposes both engines' voice lists so the UI
@@ -53,6 +53,28 @@ DEFAULT_ENGINE = "kokoro"
 _pipeline = None       # Kokoro KPipeline
 _pocket_model = None   # pocket-tts TTSModel
 _pocket_states = {}    # voice name -> precomputed voice state (load is non-trivial)
+_device = None         # resolved once: "cpu" or "cuda"
+
+
+def get_device():
+    # TTS_DEVICE picks where torch runs: cpu | cuda | auto (default). "auto" uses
+    # CUDA when the wheel exposes it - this also covers ROCm builds, whose HIP
+    # backend masquerades as torch.cuda. The image ships a CPU-only torch unless
+    # the nvidia/amd compose overlay rebuilds it against a GPU wheel, so on a
+    # plain build "auto" always resolves to cpu.
+    global _device
+    if _device is None:
+        choice = os.environ.get("TTS_DEVICE", "auto").strip().lower()
+        if choice in ("cpu", "cuda"):
+            _device = choice
+        else:
+            try:
+                import torch
+                _device = "cuda" if torch.cuda.is_available() else "cpu"
+            except Exception:
+                _device = "cpu"
+        log.info("TTS device: %s (TTS_DEVICE=%s)", _device, choice)
+    return _device
 
 
 def get_pipeline():
@@ -60,20 +82,33 @@ def get_pipeline():
     global _pipeline
     if _pipeline is None:
         from kokoro import KPipeline
-        log.info("loading Kokoro pipeline (lang_code='a' / American English)...")
-        _pipeline = KPipeline(lang_code="a")
+        device = get_device()
+        log.info("loading Kokoro pipeline (lang_code='a' / American English) on %s...", device)
+        _pipeline = KPipeline(lang_code="a", device=device)
         log.info("Kokoro ready.")
     return _pipeline
 
 
 def get_pocket_model():
     # load_model() is relatively slow and downloads weights into HF_HOME on first
-    # call, so we keep it lazy — the engine is only paid for if actually selected.
+    # call, so we keep it lazy - the engine is only paid for if actually selected.
     global _pocket_model
     if _pocket_model is None:
+        import inspect
         from pocket_tts import TTSModel
-        log.info("loading pocket-tts model...")
-        _pocket_model = TTSModel.load_model()
+        device = get_device()
+        # Not every pocket-tts release exposes a `device` kwarg; pass it only when
+        # the signature accepts it, otherwise fall back to a post-load .to(device).
+        kwargs = {}
+        if "device" in inspect.signature(TTSModel.load_model).parameters:
+            kwargs["device"] = device
+        log.info("loading pocket-tts model on %s...", device)
+        _pocket_model = TTSModel.load_model(**kwargs)
+        if not kwargs and device != "cpu" and hasattr(_pocket_model, "to"):
+            try:
+                _pocket_model.to(device)
+            except Exception:
+                log.warning("pocket-tts: could not move model to %s; using its default device", device)
         log.info("pocket-tts ready (sample_rate=%s).", _pocket_model.sample_rate)
     return _pocket_model
 
@@ -97,7 +132,7 @@ app.add_middleware(
 
 @app.exception_handler(Exception)
 async def on_unhandled(request: Request, exc: Exception) -> JSONResponse:
-    # Anything that slips through becomes a generic 500 — no tracebacks to clients.
+    # Anything that slips through becomes a generic 500 - no tracebacks to clients.
     log.exception("unhandled exception on %s %s", request.method, request.url.path)
     return JSONResponse({"error": "synthesis_failed"}, status_code=500)
 
