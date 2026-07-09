@@ -1,6 +1,6 @@
 <?php
 // Per-user relationship state. GET returns the current scores (defaults if no
-// row yet); PUT sets them to absolute values — the developer "mood switcher".
+// row yet); PUT sets them to absolute values - the developer "mood switcher".
 // State is the user's own, so no extra role gate beyond a valid session.
 require_once __DIR__ . '/_lib.php';
 

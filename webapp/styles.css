@@ -2,7 +2,7 @@
    Design tokens
    ================================================================ */
 :root {
-  /* Gemini-inspired dark palette: near-black main canvas, warm-grey elevated surfaces */
+  /* Dark palette: near-black main canvas, warm-grey elevated surfaces */
   --bg:         #131314;
   --bg-elev:    #1e1f20;
   --bg-2:       #131314;
@@ -182,7 +182,7 @@ input[type="checkbox"] {
 .field-row select { width: auto; flex: 1; }
 
 /* ================================================================
-   App shell — header
+   App shell - header
    ================================================================ */
 #app {
   position: relative;
@@ -251,7 +251,7 @@ input[type="checkbox"] {
 .status-error     { background: #3a1f23; color: var(--danger); }
 
 /* ================================================================
-   Main layout — sidebar + chat + stage
+   Main layout - sidebar + chat + stage
    ================================================================ */
 .app-main {
   flex: 1;
@@ -331,8 +331,8 @@ input[type="checkbox"] {
 }
 .sidebar-toggle:hover { background: var(--bg-3); color: var(--fg); filter: none; }
 
-/* Collapsed state — only icons visible, sidebar 56px wide.
-   Uses ONLY animatable properties (gap, padding, opacity) — never justify-content,
+/* Collapsed state - only icons visible, sidebar 56px wide.
+   Uses ONLY animatable properties (gap, padding, opacity) - never justify-content,
    which is discrete and snaps mid-transition. */
 .app-main.sidebar-collapsed .sidebar-toolbar { padding: 4px 2px 0; justify-content: center; }
 .app-main.sidebar-collapsed .sidebar-brand { display: none; }
@@ -452,7 +452,7 @@ input[type="checkbox"] {
 .conv-delete:hover { background: rgba(255,138,138,.14); color: var(--danger); }
 .conv-delete:focus-visible { opacity: 1; }
 
-/* Sidebar footer — user chip */
+/* Sidebar footer - user chip */
 .sidebar-footer {
   border-top: 1px solid var(--border);
   padding-top: var(--space-2);
@@ -856,7 +856,7 @@ body.l2d-dragging { cursor: grabbing; user-select: none; }
    Settings drawer
    ================================================================ */
 /* ================================================================
-   Settings — centered modal with a category nav (ChatGPT-style).
+   Settings - centered modal with a category nav.
    ui.toggleDrawer() toggles .open on #settingsDrawer + #drawerBackdrop,
    so the side-drawer markup became a dialog without touching that JS.
    ================================================================ */
@@ -1088,6 +1088,25 @@ input[type="checkbox"].toggle:checked::after { left: 20px; }
 .outfit-row span { color: var(--muted); }
 .outfit-row input:checked + span { color: var(--fg); }
 
+.outfit-variants { margin-top: 10px; padding-top: 10px; border-top: 1px solid var(--border); }
+.outfit-variant-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 3px 4px;
+  font-size: 12px;
+}
+.outfit-variant-row .outfit-variant-label { flex: 1; color: var(--fg); }
+.outfit-variant-row select {
+  flex: 0 0 auto;
+  background: var(--bg);
+  color: var(--fg);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  padding: 3px 6px;
+  font-size: 12px;
+}
+
 .outfit-colors { margin-top: 10px; padding-top: 10px; border-top: 1px solid var(--border); }
 .outfit-colors-title {
   font-size: 10px;
@@ -1181,7 +1200,7 @@ input[type="checkbox"].toggle:checked::after { left: 20px; }
 .toast-close:hover { opacity: 1; background: transparent; filter: none; }
 
 /* ================================================================
-   Mobile — stack vertically at ≤ 900px
+   Mobile - stack vertically at ≤ 900px
    ================================================================ */
 @media (max-width: 900px) {
   html, body { overflow: auto; }
@@ -1247,10 +1266,10 @@ input[type="checkbox"].toggle:checked::after { left: 20px; }
 .section-header .count { color: var(--muted); font-weight: 500; }
 
 /* ============================================================
-   Boot overlay — shown until Ollama responds with models.
+   Boot overlay - shown until Ollama responds with models.
    ============================================================ */
 /* ============================================================
-   Boot overlay — soft "Jun OS" chrome wrapping a live terminal.
+   Boot overlay - soft "Jun OS" chrome wrapping a live terminal.
    Live status hooks (driven by app.js + boot-fx.js):
    #bootStatus .boot-status-label, #bootHint[data-tone], and data-ready
    toggling the fade-out.
@@ -1301,7 +1320,7 @@ input[type="checkbox"].toggle:checked::after { left: 20px; }
   animation: bootCardIn 560ms cubic-bezier(.2,.7,.2,1) both;
 }
 
-/* Ω mark in the brand gradient — same treatment as the sidebar logo. */
+/* Ω mark in the brand gradient - same treatment as the sidebar logo. */
 .boot-sigil-wrap { display: grid; place-items: center; }
 .boot-sigil {
   font-family: ui-serif, Georgia, serif;
@@ -1336,7 +1355,7 @@ input[type="checkbox"].toggle:checked::after { left: 20px; }
   letter-spacing: .02em;
 }
 
-/* Terminal window — title bar + body with the typed boot log + live status. */
+/* Terminal window - title bar + body with the typed boot log + live status. */
 .boot-term {
   --term-bg:     #0b0b0c;
   --term-bar:    #232427;
@@ -1362,7 +1381,7 @@ input[type="checkbox"].toggle:checked::after { left: 20px; }
   border-bottom: 1px solid rgba(0,0,0,.45);
 }
 /* Window chrome (.term-lights / .term-title / .term-winctl) + the per-OS
-   themes are shared with the auth terminal — defined in the auth block below. */
+   themes are shared with the auth terminal - defined in the auth block below. */
 .boot-term-body {
   position: relative;
   overflow: hidden;
@@ -1401,7 +1420,7 @@ input[type="checkbox"].toggle:checked::after { left: 20px; }
   99% { opacity: 1; }
 }
 
-/* Subsystem boot log — lines type in sequence, OK badge pops when done. */
+/* Subsystem boot log - lines type in sequence, OK badge pops when done. */
 .boot-log {
   list-style: none; margin: 0; padding: 0;
   display: flex; flex-direction: column; gap: 6px;
@@ -1437,7 +1456,7 @@ input[type="checkbox"].toggle:checked::after { left: 20px; }
 .boot-term.typing.log-done .boot-live,
 .boot-term.typing.log-done .boot-hint { opacity: 1; }
 
-/* Live status line — boot-fx types into .boot-status-label; caret blinks. */
+/* Live status line - boot-fx types into .boot-status-label; caret blinks. */
 .boot-live {
   display: flex; align-items: center; gap: 8px;
   margin-top: 2px;
@@ -1503,7 +1522,7 @@ input[type="checkbox"].toggle:checked::after { left: 20px; }
   100% { transform: scale(2.4);  opacity: 0; }
 }
 
-/* Shared with the age gate + auth panels below — keep defined. */
+/* Shared with the age gate + auth panels below - keep defined. */
 @keyframes bootCardIn {
   from { opacity: 0; transform: translateY(12px) scale(.98); }
   to   { opacity: 1; transform: none; }
@@ -1519,7 +1538,7 @@ input[type="checkbox"].toggle:checked::after { left: 20px; }
 }
 
 /* ============================================================
-   Age gate — full-screen consent modal, z above boot overlay
+   Age gate - full-screen consent modal, z above boot overlay
    ============================================================ */
 html[data-age-gated] #bootOverlay,
 html[data-age-gated] #authScreen,
@@ -1605,7 +1624,7 @@ html[data-pre-auth] #app { visibility: hidden; }
 }
 #authScreen[hidden] { display: none; }
 
-/* Auth terminal — base theme (mac-like); per-OS overrides further down.
+/* Auth terminal - base theme (mac-like); per-OS overrides further down.
    --term-* vars are swapped by .auth-term[data-os=…]. */
 .auth-term {
   --term-bg:     #0c0c0d;
@@ -1751,11 +1770,11 @@ html[data-pre-auth] #app { visibility: hidden; }
 .auth-submit:disabled { opacity: .55; cursor: default; }
 
 /* ============================================================
-   OS themes — shared by the auth + boot terminals (data-os set by app.js).
+   OS themes - shared by the auth + boot terminals (data-os set by app.js).
    :is() lets one rule paint both terminals.
    ============================================================ */
 
-/* ---- macOS — Terminal.app (dark) ---- */
+/* ---- macOS - Terminal.app (dark) ---- */
 :is(.auth-term, .boot-term)[data-os="mac"] {
   --term-bg: #1e1e1e;
   --term-bar: #343434;
@@ -1766,7 +1785,7 @@ html[data-pre-auth] #app { visibility: hidden; }
 .auth-term[data-os="mac"] .auth-ps::before,
 .boot-term[data-os="mac"] .boot-prompt::before { content: "%"; }
 
-/* ---- Windows — PowerShell (classic blue) ---- */
+/* ---- Windows - PowerShell (classic blue) ---- */
 :is(.auth-term, .boot-term)[data-os="windows"] {
   --term-bg: #012456;
   --term-bar: #2b2b2b;
@@ -1783,7 +1802,7 @@ html[data-pre-auth] #app { visibility: hidden; }
 .auth-term[data-os="windows"] .auth-ps::before,
 .boot-term[data-os="windows"] .boot-prompt::before { content: ">"; }
 
-/* ---- Linux — Ubuntu GNOME Terminal (aubergine) ---- */
+/* ---- Linux - Ubuntu GNOME Terminal (aubergine) ---- */
 :is(.auth-term, .boot-term)[data-os="linux"] {
   --term-bg: #300a24;
   --term-bar: #2c2c2c;
@@ -1881,7 +1900,7 @@ html[data-pre-auth] #app { visibility: hidden; }
 }
 .confirm-ok.danger:hover { background: var(--danger); color: #2a0d0d; }
 
-/* Developer metrics HUD — floating overlay, toggled from the Developer panel. */
+/* Developer metrics HUD - floating overlay, toggled from the Developer panel. */
 .devhud {
   position: fixed;
   top: calc(var(--header-h) + 10px);

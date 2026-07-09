@@ -51,7 +51,7 @@
   // armed only once the model finishes streaming (in onDone/onError), so a long
   // reply can't trip it early. 60s after a reply lands, or 45s after the app is
   // ready / a conversation is opened. Capped so Jun doesn't keep talking to an
-  // empty room forever — resets when Anon interacts.
+  // empty room forever - resets when Anon interacts.
   const IDLE_AFTER_REPLY_MS = 60000;
   const IDLE_AFTER_JOIN_MS  = 45000;
   const TYPING_POLL_MS = 5000;
@@ -79,7 +79,7 @@
       idleTimer = null;
       if (abortFn) return;                 // a stream is running; it re-arms on done
       if (document.hidden) { scheduleIdleNudge(delayMs); return; } // tab hidden, recheck later
-      // Anon has a half-written message sitting in the box — he's composing, not
+      // Anon has a half-written message sitting in the box - he's composing, not
       // idle. Don't talk over him; check again later.
       if (chatInput.value.trim() !== '') { scheduleIdleNudge(delayMs); return; }
       idleNudgeStreak++;
@@ -267,13 +267,13 @@
   function sendMessage() {
     const text = chatInput.value.trim();
     if (!text) return;
-    // If a stream is in flight, only an *idle nudge* may be interrupted — abort it
+    // If a stream is in flight, only an *idle nudge* may be interrupted - abort it
     // so Anon's real message wins. A genuine reply in progress is left alone.
     if (abortFn) {
       if (!cancelActiveIdleNudge) return;
       cancelActiveIdleNudge();
     }
-    resetIdleNudge(); // Anon spoke — Jun is allowed to nudge again later
+    resetIdleNudge(); // Anon spoke - Jun is allowed to nudge again later
     chatInput.value = '';
     appendMsg('user', text);
     messages.push({ role: 'user', content: text });
@@ -324,7 +324,7 @@
     }
 
     // `visible` is the raw, action-stripped text WITH {f_*} name placeholders left
-    // intact — that's what we store in history so the model keeps seeing the
+    // intact - that's what we store in history so the model keeps seeing the
     // placeholders it was trained on. `shown` is the name-resolved text that the
     // user actually reads and hears; the name filter substitutes between them.
     let visible = '';
@@ -488,7 +488,7 @@
   async function loadConversation(id) {
     currentConversationId = id;
     cancelAutoReset();
-    resetIdleNudge(); // fresh context — let Jun nudge again
+    resetIdleNudge(); // fresh context - let Jun nudge again
     if (window.TTS) TTS.stop();
     messages.length = 0;
     messagesEl.innerHTML = '';
@@ -521,7 +521,7 @@
   }
 
   // In "auto" mode the server decides whether to think, so the manual Think
-  // toggle does nothing — grey it out to make that obvious.
+  // toggle does nothing - grey it out to make that obvious.
   function syncThinkToggle() {
     thinkChk.disabled = reasoningSelect.value === 'auto';
   }
@@ -740,7 +740,7 @@
   const signOutBtn = document.getElementById('signOutBtn');
 
   // Flavor the auth terminal after the user's OS: macOS Terminal, Windows
-  // PowerShell, or a Linux (Ubuntu) shell. Purely cosmetic — data-os drives CSS.
+  // PowerShell, or a Linux (Ubuntu) shell. Purely cosmetic - data-os drives CSS.
   function detectOS() {
     const p = (navigator.userAgentData && navigator.userAgentData.platform)
       || navigator.platform || navigator.userAgent || '';
@@ -751,8 +751,8 @@
   }
   (function flavorTerminals() {
     const os = detectOS();
-    const authTitles = { mac: 'jun — -zsh — 80×24', windows: 'Windows PowerShell', linux: 'jun@junbuntu: ~' };
-    const bootTitles = { mac: 'jun — boot — 80×24', windows: 'Windows PowerShell', linux: 'jun@junbuntu: ~/boot' };
+    const authTitles = { mac: 'jun - -zsh - 80×24', windows: 'Windows PowerShell', linux: 'jun@junbuntu: ~' };
+    const bootTitles = { mac: 'jun - boot - 80×24', windows: 'Windows PowerShell', linux: 'jun@junbuntu: ~/boot' };
     const names = { mac: 'macOS', windows: 'Windows', linux: 'Linux' };
 
     const authTerm = document.getElementById('authTerm');
@@ -824,7 +824,7 @@
         const r = await Auth.login(email, password);
         if (r.ok) { location.reload(); return; }
         const j = await r.json().catch(() => ({}));
-        const msgs = { invalid_credentials: 'Wrong email or password.', rate_limit_exceeded: 'Too many attempts — wait a minute.' };
+        const msgs = { invalid_credentials: 'Wrong email or password.', rate_limit_exceeded: 'Too many attempts - wait a minute.' };
         setAuthError('loginError', msgs[j.error] || 'Login failed.');
       } catch { setAuthError('loginError', 'Network error.'); }
       btn.disabled = false;
@@ -844,7 +844,7 @@
         const r = await Auth.signup(email, password, adultConsent);
         if (r.ok) { location.reload(); return; }
         const j = await r.json().catch(() => ({}));
-        const msgs = { email_taken: 'That email is already registered.', invalid_email: 'Invalid email address.', password_too_short: 'Password must be at least 8 characters.', adult_consent_required: 'You must confirm you are 18 or older.', rate_limit_exceeded: 'Too many attempts — wait a minute.' };
+        const msgs = { email_taken: 'That email is already registered.', invalid_email: 'Invalid email address.', password_too_short: 'Password must be at least 8 characters.', adult_consent_required: 'You must confirm you are 18 or older.', rate_limit_exceeded: 'Too many attempts - wait a minute.' };
         setAuthError('signupError', msgs[j.error] || 'Sign up failed.');
       } catch { setAuthError('signupError', 'Network error.'); }
       btn.disabled = false;
@@ -869,7 +869,7 @@
   }
 
   (async function bootstrap() {
-    // Check session before anything else — redirect to auth screen if not logged in.
+    // Check session before anything else - redirect to auth screen if not logged in.
     const me = await Auth.me().catch(() => null);
     if (!me) {
       showAuthScreen();
@@ -936,6 +936,8 @@
         document.getElementById('outfitResetBtn'),
       );
       Outfit.applyAll();
+      const wBtn = document.getElementById('wardrobeBtn');
+      if (wBtn) wBtn.addEventListener('click', () => { location.href = 'wardrobe.html'; });
     } catch (e) {
       console.error(e);
       if (stageSkeleton) stageSkeleton.classList.add('hidden');
@@ -1068,10 +1070,10 @@
         try {
           const m = await Ollama.listModels();
           if (m && m.models && m.models.length) return m;
-          setBoot('Pulling models', 'No models installed yet — `ollama pull <model>`', 'err');
+          setBoot('Pulling models', 'No models installed yet - `ollama pull <model>`', 'err');
         } catch (e) {
           const phase = phases[Math.min(attempt - 1, phases.length - 1)];
-          setBoot(phase, 'Jun is still sleeping — retrying…', 'err');
+          setBoot(phase, 'Jun is still sleeping - retrying…', 'err');
         }
         await new Promise(r => setTimeout(r, Math.min(1000 + attempt * 250, 3000)));
       }
@@ -1081,10 +1083,13 @@
     modelSelect.innerHTML = m.models.map(n =>
       `<option value="${escapeHtml(n)}">${escapeHtml(n)}</option>`).join('');
     const prefer = [
+      'hf.co/efficiencyx/Jun-Lora-v2-GGUF:Q8_0',
+      'hf.co/efficiencyx/Jun-Lora-v2-GGUF:Q6_K',
+      'hf.co/efficiencyx/Jun-Lora-v2-GGUF:Q4_K_M',
       'hf.co/unsloth/gemma-4-12B-it-qat-GGUF:UD-Q4_K_XL',
       'hf.co/unsloth/gemma-4-E4B-it-qat-GGUF:UD-Q4_K_XL',
       'hf.co/unsloth/gemma-4-E2B-it-qat-GGUF:UD-Q4_K_XL',
-      'Jun-14B:Q4_K_M', 'hf.co/efficiencyx/jun-14b:Q4_K_M', 'llama3.1:8b', 'llama3.1:latest',
+      'llama3.1:8b', 'llama3.1:latest',
     ];
     const isChat = (n) => !/embed/i.test(n);
     // A previously chosen model wins, as long as it's still installed.

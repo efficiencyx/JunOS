@@ -3,7 +3,7 @@
 //
 // Pipeline (per chat reply):
 //   feed(textChunk) accumulates and emits sentences at . ! ? \n boundaries
-//   each sentence becomes a Job with an id (monotonic) — kicked off in parallel
+//   each sentence becomes a Job with an id (monotonic) - kicked off in parallel
 //   jobs play in submission order regardless of which finishes first
 //   stop() aborts in-flight fetches, halts current source, releases the mouth
 
@@ -80,7 +80,7 @@ window.TTS = (function () {
     }
   }
 
-  // Cuts at . ! ? \n. No abbreviation handling — Kokoro tolerates fragments.
+  // Cuts at . ! ? \n. No abbreviation handling - Kokoro tolerates fragments.
   // app.js strips [ACTION:...] blocks before feed(), so the input here is
   // already plain visible text.
   const BREAK_RE = /([.!?\n])/;
