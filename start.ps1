@@ -58,7 +58,7 @@ switch ($kind) {
         $files += @('-f', 'docker-compose.nvidia.yml')
     }
     'amd' {
-        Write-Warning 'AMD ROCm in Docker is a Linux path (needs /dev/kfd). On Windows this usually falls back to CPU — proceeding anyway.'
+        Write-Warning 'AMD ROCm in Docker is a Linux path (needs /dev/kfd). On Windows this usually falls back to CPU - proceeding anyway.'
         # Placeholder GIDs so the overlay interpolates; the device mounts decide if it actually runs.
         if (-not $env:VIDEO_GID)  { $env:VIDEO_GID = '44' }
         if (-not $env:RENDER_GID) { $env:RENDER_GID = '105' }

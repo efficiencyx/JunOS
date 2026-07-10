@@ -2,13 +2,13 @@
 # Push the local webapp/ into the running containers without rebuilding images.
 #
 # The webapp lives in two images: nginx serves the static files (html/js/css/
-# assets) and php-fpm executes api/*.php — both out of /var/www/omega. So a sync
+# assets) and php-fpm executes api/*.php - both out of /var/www/omega. So a sync
 # has to update both containers. The php image runs opcache with
 # validate_timestamps=0, meaning it won't notice changed .php files on its own,
 # so after copying we restart php-fpm to flush the bytecode cache.
 #
 #   ./sync-webapp.sh            # sync everything (static + php), restart php-fpm
-#   ./sync-webapp.sh -s         # static only (js/css/html/assets) — no php, no restart
+#   ./sync-webapp.sh -s         # static only (js/css/html/assets) - no php, no restart
 set -eu
 
 ROOT=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
@@ -30,7 +30,7 @@ done
 running() { [ "$(docker inspect -f '{{.State.Running}}' "$1" 2>/dev/null)" = true ]; }
 
 if ! running "$NGINX"; then
-  echo "✗ $NGINX is not running — start the stack first (./start.sh)." >&2
+  echo "✗ $NGINX is not running - start the stack first (./start.sh)." >&2
   exit 1
 fi
 
@@ -49,7 +49,7 @@ if running "$PHP"; then
   echo "→ restarting php-fpm (flushes opcache)"
   docker restart "$PHP" >/dev/null
 else
-  echo "✗ $PHP not running — skipped php sync." >&2
+  echo "✗ $PHP not running - skipped php sync." >&2
 fi
 
 echo "✓ done. Hard-refresh the browser (Ctrl-Shift-R) to drop cached js/css."

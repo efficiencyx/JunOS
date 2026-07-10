@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Boot ollama serve, wait until the HTTP API answers, then `ollama pull`
 # whatever is listed in OLLAMA_MODELS_TO_PULL (comma-separated). Models
-# already present locally are skipped — `ollama pull` is idempotent and
+# already present locally are skipped - `ollama pull` is idempotent and
 # cheap when the manifest is already cached.
 
 set -e

@@ -124,7 +124,7 @@ $failed = 0;
 
 foreach ($pairs as $i => $p) {
     // "search_document" must match the "search_query" prefix chat.php uses at
-    // retrieval time — without the pair, nomic-embed-text ranks poorly.
+    // retrieval time - without the pair, nomic-embed-text ranks poorly.
     $vec = embed('search_document: ' . $p['q']);
     if ($vec === null) {
         $failed++;

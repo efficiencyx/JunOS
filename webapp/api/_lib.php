@@ -123,7 +123,7 @@ function embed_text(string $text, string $task = ''): ?array {
 
     $baseUrl = rtrim(env_str('OLLAMA_URL', 'http://localhost:11434'), '/');
 
-    // Resolve the host ourselves first — curl's DNS occasionally stalls inside
+    // Resolve the host ourselves first - curl's DNS occasionally stalls inside
     // the docker network and we'd rather not wait out the timeout.
     $parts = parse_url($baseUrl);
     if (isset($parts['host'])) {

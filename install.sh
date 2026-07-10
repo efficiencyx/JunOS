@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 #
 # Bootstrap installer. Clones Jun OS (if not already present), prepares .env,
-# and launches it via start.sh — which autodetects your GPU.
+# and launches it via start.sh - which autodetects your GPU.
 #
 #   curl -fsSL https://raw.githubusercontent.com/efficiencyx/Jun/main/install.sh | bash
 #
@@ -14,7 +14,7 @@
 # Override either non-interactively: JUN_MODEL=12b|e4b|e2b|<full-ref> VOICE=on|off.
 #
 # Overrides: JUN_REPO, JUN_DIR, JUN_REF. Set JUN_YES=1 to skip prompts.
-# Prefer to read before you run? That's the right instinct — open the file
+# Prefer to read before you run? That's the right instinct - open the file
 # first, then clone the repo and run ./start.sh yourself.
 
 set -euo pipefail
@@ -69,10 +69,10 @@ banner() {
     printf '  %s└%s┘%s\n\n' "$DIM" "$(_rule ─)" "$R"
     printf '   %s%sΩ%s  %s%sJUN OS%s\n\n' "$B" "$PURPLE" "$R" "$B" "$ACCENT" "$R"
     printf '   %sWelcome to Jun OS%s %s·%s %somega build%s\n' "$MUTED" "$R" "$DIM" "$R" "$DIM" "$R"
-    printf '   %sshell detected:%s %s%s%s %s—%s installer\n\n' "$DIM" "$R" "$B$ACCENT" "$os_name" "$R" "$DIM" "$R"
+    printf '   %sshell detected:%s %s%s%s %s-%s installer\n\n' "$DIM" "$R" "$B$ACCENT" "$os_name" "$R" "$DIM" "$R"
 }
 
-# Section header — the green `$` shell prompt from the auth screen.
+# Section header - the green `$` shell prompt from the auth screen.
 step()  { printf '   %s$%s %s%s%s\n' "$OK" "$R" "$B" "$1" "$R"; }
 ok()    { printf '     %s✓%s %s%s%s\n' "$OK" "$R" "$MUTED" "$1" "$R"; }
 note()  { printf '     %s%s%s\n' "$DIM" "$1" "$R"; }
@@ -117,13 +117,13 @@ run() {
 # ── Model catalog ────────────────────────────────────────────────────────────
 # Short aliases the menu and JUN_MODEL accept; anything else is taken verbatim
 # as an explicit Ollama ref.
-MODEL_12B="hf.co/unsloth/gemma-4-12B-it-qat-GGUF:UD-Q4_K_XL"   # best, >8GB VRAM
+MODEL_12B="hf.co/efficiencyx/Jun-Lora-v2-GGUF:Q4_K_M"          # best, >8GB VRAM (Jun finetune of Gemma 4 12B)
 MODEL_E4B="hf.co/unsloth/gemma-4-E4B-it-qat-GGUF:UD-Q4_K_XL"   # fast, ~6GB VRAM
 MODEL_E2B="hf.co/unsloth/gemma-4-E2B-it-qat-GGUF:UD-Q4_K_XL"   # fastest, CPU-ok
 
 resolve_model() {  # alias|full-ref -> full-ref
     case "$(printf '%s' "$1" | tr '[:upper:]' '[:lower:]')" in
-        12b|best|"")     echo "$MODEL_12B" ;;
+        12b|jun|best|"") echo "$MODEL_12B" ;;
         e4b|balanced|fast) echo "$MODEL_E4B" ;;
         e2b|fastest|cpu) echo "$MODEL_E2B" ;;
         *)               echo "$1" ;;
@@ -181,9 +181,9 @@ configure() {
         case "$rec" in 12b) rec_name="gemma 12B";; e4b) rec_name="gemma E4B";; *) rec_name="gemma E2B";; esac
         {
             printf '\n     %sselect a model%s\n' "$B" "$R"
-            printf '       %s1%s  gemma 12B  %s—%s best quality, needs >8GB VRAM\n'  "$ACCENT" "$R" "$DIM" "$R"
-            printf '       %s2%s  gemma E4B  %s—%s fast, decent quality, ~6GB VRAM\n' "$ACCENT" "$R" "$DIM" "$R"
-            printf '       %s3%s  gemma E2B  %s—%s fastest, lower quality, runs on CPU\n' "$ACCENT" "$R" "$DIM" "$R"
+            printf '       %s1%s  gemma 12B  %s-%s best quality, needs >8GB VRAM\n'  "$ACCENT" "$R" "$DIM" "$R"
+            printf '       %s2%s  gemma E4B  %s-%s fast, decent quality, ~6GB VRAM\n' "$ACCENT" "$R" "$DIM" "$R"
+            printf '       %s3%s  gemma E2B  %s-%s fastest, lower quality, runs on CPU\n' "$ACCENT" "$R" "$DIM" "$R"
             [ -n "$vram" ] && printf '       %sdetected %sMB VRAM%s\n' "$DIM" "$vram" "$R"
             printf '     %s$%s choice %s[%senter = %s%s]%s %s→%s ' \
                 "$OK" "$R" "$DIM" "$R" "$rec_name" "$DIM" "$R" "$ACCENT" "$R"
@@ -302,7 +302,7 @@ confirm_deps() {
 
     PM="$(pkg_manager)"
     if [ "$PM" = none ]; then
-        fail_ "no supported package manager — install manually and re-run:"
+        fail_ "no supported package manager - install manually and re-run:"
         for c in "${missing[@]}"; do printf '       %s%-7s%s %s%s%s\n' "$ACCENT" "$c" "$R" "$DIM" "$(manual_url "$c")" "$R" >&2; done
         exit 1
     fi
@@ -320,7 +320,7 @@ confirm_deps() {
         fail_ "re-run in an interactive terminal (or set JUN_YES=1) to install them."
         exit 1
     fi
-    [ "$proceed" = 1 ] || { note "okay, leaving it to you — install the tools above and re-run."; exit 1; }
+    [ "$proceed" = 1 ] || { note "okay, leaving it to you - install the tools above and re-run."; exit 1; }
 
     if [ "$PM" != brew ] && [ "$SUDO" = "" ] && [ "$(id -u)" -ne 0 ]; then
         fail_ "installing packages needs root, and sudo isn't available."
@@ -362,11 +362,11 @@ configure
 if docker_run docker info >/dev/null 2>&1; then
     step "boot stack"
     run "build & start containers (first run pulls models, can take a while)" docker_run ./start.sh
-    printf '\n   %s$%s %s%sready%s %s—%s open %shttp://localhost%s\n\n' \
+    printf '\n   %s$%s %s%sready%s %s-%s open %shttp://localhost%s\n\n' \
         "$OK" "$R" "$B" "$OK" "$R" "$DIM" "$R" "$B$ACCENT" "$R"
 else
     printf '\n'
-    warn_ "Docker isn't reachable yet — finish its setup and run ./start.sh from $DIR."
+    warn_ "Docker isn't reachable yet - finish its setup and run ./start.sh from $DIR."
     if [ "$OS" != "Darwin" ]; then
         note "you may also need to log out and back in for the 'docker' group to apply."
     fi

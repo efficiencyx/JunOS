@@ -1,7 +1,7 @@
 // Action parser + resolver.
 // Parses action tags from the LLM stream and dispatches to Live2D.
 // Two syntaxes are accepted:
-//   compact (current prompt): [A:name|value|value]   — positional values
+//   compact (current prompt): [A:name|value|value]   - positional values
 //   legacy  (old prompt + stored history + fine-tune): [ACTION:name|key=value|...]
 
 window.Actions = (function () {

@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Jun OS</title>
-<link rel="stylesheet" href="styles.css?v=22">
+<link rel="stylesheet" href="styles.css?v=24">
 <script src="js/boot-gate.js?v=1"></script>
 </head>
 <body>
@@ -19,7 +19,7 @@
 </div>
 
 <!-- Auth screen: shown when no valid session exists. Styled as an OS-flavored
-     terminal — app.js sets data-os (mac / windows / linux) + the title/os name. -->
+     terminal - app.js sets data-os (mac / windows / linux) + the title/os name. -->
 <div id="authScreen" hidden>
   <div class="auth-term" id="authTerm" data-os="linux">
     <div class="auth-term-bar">
@@ -36,7 +36,7 @@
 
       <div class="auth-motd">
         <div class="auth-motd-line">Welcome to Jun OS · omega build</div>
-        <div class="auth-motd-line auth-dim">shell detected: <b class="auth-os-name">linux</b> — authenticate to continue<span class="auth-caret" aria-hidden="true"></span></div>
+        <div class="auth-motd-line auth-dim">shell detected: <b class="auth-os-name">linux</b> - authenticate to continue<span class="auth-caret" aria-hidden="true"></span></div>
       </div>
 
       <div class="auth-tabs" role="tablist">
@@ -192,7 +192,7 @@
         <div class="set-row">
           <div class="set-row-text">
             <div class="set-row-title">Reasoning</div>
-            <div class="set-row-desc">How much effort the model spends thinking. Auto decides per message — thinking only on the hard ones.</div>
+            <div class="set-row-desc">How much effort the model spends thinking. Auto decides per message - thinking only on the hard ones.</div>
           </div>
           <div class="set-row-control">
             <select id="reasoningSelect" aria-label="Reasoning level">
@@ -258,6 +258,7 @@
           <div class="set-row-title">Outfit</div>
           <div class="set-row-desc">Toggle clothing layers and pick colors for Jun.</div>
           <div id="outfitControls" class="outfit-grid"></div>
+          <button class="secondary" id="wardrobeBtn" title="Open the visual wardrobe">Open wardrobe</button>
           <button class="secondary" id="outfitResetBtn" title="Restore default outfit">Reset outfit</button>
         </div>
       </section>
@@ -439,7 +440,7 @@
   </main>
 </div>
 
-<!-- CDN scripts — load order preserved from original -->
+<!-- CDN scripts - load order preserved from original -->
 <script src="https://cdn.jsdelivr.net/npm/marked@12.0.2/marked.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/dompurify@3.0.11/dist/purify.min.js"></script>
 <script src="https://cubism.live2d.com/sdk-web/cubismcore/live2dcubismcore.min.js"></script>
@@ -448,9 +449,9 @@
 <script src="js/auth.js?v=6"></script>
 <script src="js/prefs.js?v=2"></script>
 <script src="js/names.js?v=1"></script>
-<script src="js/live2d.js?v=4"></script>
+<script src="js/live2d.js?v=14"></script>
 <script src="js/actions.js?v=6"></script>
-<script src="js/outfit.js?v=6"></script>
+<script src="js/outfit.js?v=15"></script>
 <script src="js/ollama.js?v=8"></script>
 <script src="js/tts.js?v=7"></script>
 <!-- ui.js must load before app.js -->
@@ -458,6 +459,6 @@
 <script src="js/history.js?v=6"></script>
 <script src="js/devhud.js?v=2"></script>
 <script src="js/boot-fx.js?v=3"></script>
-<script src="js/app.js?v=15"></script>
+<script src="js/app.js?v=17"></script>
 </body>
 </html>

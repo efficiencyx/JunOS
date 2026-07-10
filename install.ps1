@@ -1,7 +1,7 @@
 #!/usr/bin/env pwsh
 #
 # Bootstrap installer for Windows. Clones Jun OS (if not already present),
-# prepares .env, and launches it via start.ps1 — which autodetects your GPU.
+# prepares .env, and launches it via start.ps1 - which autodetects your GPU.
 #
 #   irm https://raw.githubusercontent.com/efficiencyx/Jun/main/install.ps1 | iex
 #
@@ -13,7 +13,7 @@
 #
 # Overrides: $env:JUN_REPO, $env:JUN_DIR, $env:JUN_REF.
 # Set $env:JUN_YES='1' to skip prompts (assume yes).
-# Prefer to read before you run? Sensible — open the file first, then clone
+# Prefer to read before you run? Sensible - open the file first, then clone
 # the repo and run ./start.ps1 yourself.
 
 $ErrorActionPreference = 'Stop'
@@ -31,14 +31,14 @@ $manualUrls = @{
 
 # Short aliases the menu and $env:JUN_MODEL accept; anything else is verbatim.
 $models = @{
-    '12b' = 'hf.co/unsloth/gemma-4-12B-it-qat-GGUF:UD-Q4_K_XL'   # best, >8GB VRAM
+    '12b' = 'hf.co/efficiencyx/Jun-Lora-v2-GGUF:Q4_K_M'          # best, >8GB VRAM (Jun finetune of Gemma 4 12B)
     'e4b' = 'hf.co/unsloth/gemma-4-E4B-it-qat-GGUF:UD-Q4_K_XL'   # fast, ~6GB VRAM
     'e2b' = 'hf.co/unsloth/gemma-4-E2B-it-qat-GGUF:UD-Q4_K_XL'   # fastest, CPU-ok
 }
 
 function Resolve-Model([string]$a) {
     switch -Regex ($a.ToLower()) {
-        '^(12b|best)$'         { return $models['12b'] }
+        '^(12b|jun|best)$'     { return $models['12b'] }
         '^(e4b|balanced|fast)$' { return $models['e4b'] }
         '^(e2b|fastest|cpu)$'  { return $models['e2b'] }
         default                { return $a }
@@ -123,7 +123,7 @@ function Confirm-Deps {
     Write-Host ""
     Write-Warning ("These required tools aren't installed: {0}" -f ($missing -join ', '))
 
-    # Without winget we can't install for them — point at the downloads and stop.
+    # Without winget we can't install for them - point at the downloads and stop.
     if (-not (Get-Command winget -ErrorAction SilentlyContinue)) {
         Write-Host "winget (App Installer) isn't available, so install them manually and re-run:"
         foreach ($c in $missing) { Write-Host ("  {0,-7} {1}" -f $c, $manualUrls[$c]) }

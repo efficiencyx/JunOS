@@ -1,4 +1,4 @@
-# omega-tls.conf.template — HTTPS with certbot (TLS_MODE=on)
+# omega-tls.conf.template - HTTPS with certbot (TLS_MODE=on)
 # Expanded by nginx 1.27 envsubst at container boot.
 
 limit_req_zone  $binary_remote_addr zone=api:10m   rate=10r/s;
@@ -55,7 +55,7 @@ server {
         add_header Content-Type text/plain;
     }
 
-    # ── SSE chat endpoint — buffering MUST be off for incremental streaming ──
+    # ── SSE chat endpoint - buffering MUST be off for incremental streaming ──
     location = /api/chat.php {
         limit_req zone=api burst=20 nodelay;
         client_max_body_size 256k;

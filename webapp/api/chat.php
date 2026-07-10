@@ -49,7 +49,7 @@ foreach ($body['messages'] as $m) {
     if (!is_string($content) || strlen($content) > 16 * 1024) sse_fail('invalid_request');
 }
 
-$model = 'hf.co/efficiencyx/Jun-14B:Q4_K_M';
+$model = 'hf.co/efficiencyx/Jun-Lora-v2-GGUF:Q4_K_M';
 if (isset($body['model']) && is_string($body['model']) && $body['model'] !== '') {
     if (!preg_match('/^[a-z0-9._:\\/\-]{1,64}$/i', $body['model'])) sse_fail('invalid_request');
     $model = $body['model'];
@@ -92,7 +92,7 @@ rate_limit('chat', 30, 60);
 // KV cache for the longest unchanged prompt PREFIX, and the system message is
 // the very first thing in the prompt. Anything per-turn (clock, lore, recall,
 // wardrobe, gauges) goes into $contextParts instead, which is sent as a
-// trailing system message AFTER the history — so only the tail of the prompt
+// trailing system message AFTER the history - so only the tail of the prompt
 // is re-evaluated each turn instead of the whole conversation.
 $promptPath = __DIR__ . '/../system_prompt.txt';
 $systemPrompt = is_readable($promptPath) ? rtrim(file_get_contents($promptPath)) : '';
@@ -392,7 +392,7 @@ $contextParts[] = "## Current date and time\nIt is currently " . $nowStr . ".\nY
 $queryVec = $lastUserMsg !== '' ? embed_text($lastUserMsg) : null;
 
 // Ground the reply in curated game lore. Heuristic keyword match (see lore.php)
-// against lore_corpus.txt — exact on proper nouns, no Ollama needed — returning
+// against lore_corpus.txt - exact on proper nouns, no Ollama needed - returning
 // the few best-matching, distinct canon facts as a context block. The model
 // carries Jun's voice from fine-tuning; this only supplies facts it would
 // otherwise blur or invent. Quietly returns '' if nothing clears the floor.
@@ -406,10 +406,10 @@ function lore_retrieve(string $lastUserMsg): string {
 
         $bullets = implode("\n", array_map(fn($h) => '- ' . $h['answer'], $hits));
         return "## World facts (canon)\nEstablished truths about your world or past that may be relevant to what Anon just said."
-            . " Treat them as true and weave them in naturally in your own voice — never recite them verbatim, list them, or mention they come from any reference."
+            . " Treat them as true and weave them in naturally in your own voice - never recite them verbatim, list them, or mention they come from any reference."
             . " If some don't fit the moment, ignore them.\n" . $bullets;
     } catch (Throwable $e) {
-        // RAG is supplementary — never let it take the whole reply down with it.
+        // RAG is supplementary - never let it take the whole reply down with it.
         log_event(['msg' => 'lore_retrieve_error', 'err' => $e->getMessage()]);
         return '';
     }
@@ -517,14 +517,14 @@ function relationship_directives(array $r): string {
     $a = (int)$r['affection']; $t = (int)$r['trust']; $x = (int)$r['tension'];
     return <<<TXT
 Current readings (0 = none, 100 = maximum):
-- Affection: {$a}/100 — how warm, fond, and attracted you feel toward Anon.
-- Trust: {$t}/100 — how much you believe him and feel safe letting him lead.
-- Tension: {$x}/100 — how scared and on-edge you are about being hunted.
+- Affection: {$a}/100 - how warm, fond, and attracted you feel toward Anon.
+- Trust: {$t}/100 - how much you believe him and feel safe letting him lead.
+- Tension: {$x}/100 - how scared and on-edge you are about being hunted.
 
-Read your three numbers above and MAKE THIS REPLY MATCH THEM. Interpolate between the extremes below — the closer a gauge is to an end, the stronger and more obvious the effect must be:
+Read your three numbers above and MAKE THIS REPLY MATCH THEM. Interpolate between the extremes below - the closer a gauge is to an end, the stronger and more obvious the effect must be:
 - Affection toward 0: cold, irritated, angry; withhold warmth, snap or sulk, skip affectionate actions entirely (no nuzzling, hearts, cuddling). Around 50: your normal warm-girlfriend self. Toward 100: deeply smitten, openly tender, you initiate closeness and intimacy.
-- Trust toward 0: suspicious and guarded — REFUSE or push back on Anon's commands, doubt his claims, and guard your secrets (your origins, your missing memory, that your existence is illegal). Around 50: cautious but opening up. Toward 100: you follow his lead almost blindly and are fully candid and vulnerable.
-- Tension toward 0: relaxed, safe, playful. Toward 60+: anxious, jumpy, distracted by the sense someone is looking for you. Toward 100: frightened — you seek reassurance, want to stay close or hide, and startle easily.
+- Trust toward 0: suspicious and guarded - REFUSE or push back on Anon's commands, doubt his claims, and guard your secrets (your origins, your missing memory, that your existence is illegal). Around 50: cautious but opening up. Toward 100: you follow his lead almost blindly and are fully candid and vulnerable.
+- Tension toward 0: relaxed, safe, playful. Toward 60+: anxious, jumpy, distracted by the sense someone is looking for you. Toward 100: frightened - you seek reassurance, want to stay close or hide, and startle easily.
 
 TXT;
 }
@@ -556,7 +556,7 @@ if ($queryVec !== null) {
         }
     }
     if ($blocks) {
-        $contextParts[] = "## Recalled prior context\nNotes from earlier conversations with Anon, for factual recall only — what was discussed, decided, or mentioned."
+        $contextParts[] = "## Recalled prior context\nNotes from earlier conversations with Anon, for factual recall only - what was discussed, decided, or mentioned."
             . " These are REFERENCE, not script: never repeat or paraphrase Jun's prior lines, and treat later turns within an excerpt as overriding earlier ones."
             . " If nothing here is relevant to the current message, ignore it.\n"
             . implode("\n", $blocks);
@@ -572,9 +572,9 @@ if ($outfitContext !== '') {
 // Relationship state goes LAST, on purpose: it's the strongest driver of HOW Jun
 // responds this turn, and trailing position gets the most attention. It overrides
 // the persona's default warmth when the gauges say so.
-$contextParts[] = "## YOUR FEELINGS TOWARD ANON RIGHT NOW — highest priority for this reply\n"
+$contextParts[] = "## YOUR FEELINGS TOWARD ANON RIGHT NOW - highest priority for this reply\n"
     . "This is how you ACTUALLY feel about him at this moment. It OVERRIDES your default warm-girlfriend baseline:"
-    . " Every reply — your words, your warmth, your obedience, and your [A:...] tags — must visibly match this state, or you are doing it wrong."
+    . " Every reply - your words, your warmth, your obedience, and your [A:...] tags - must visibly match this state, or you are doing it wrong."
     . " Never recite these numbers to Anon and never reveal that your feelings are scored.\n\n"
     . relationship_directives($rel);
 
@@ -602,13 +602,13 @@ if ($idle) {
 
 // The live context goes in the FINAL user turn rather than its own message.
 // Trailing position is on purpose, twice over: (a) it's the only per-turn part
-// of the prompt, so everything before it — static system prompt + stable
-// history — stays KV-cached between turns; (b) the end of the prompt gets the
+// of the prompt, so everything before it - static system prompt + stable
+// history - stays KV-cached between turns; (b) the end of the prompt gets the
 // most attention, which is exactly where the live gauges belong.
 //
 // It must NOT be a separate trailing message. Strict chat templates (Mistral /
 // Ministral) raise a hard error on a system role that isn't first, AND on two
-// same-role turns in a row — so both a trailing `system` and a trailing second
+// same-role turns in a row - so both a trailing `system` and a trailing second
 // `user` message make Ollama 500 and the reply comes back empty. Folding the
 // context into the last user message keeps the user/assistant alternation those
 // templates require; it self-labels as "(from the system, not spoken by Anon)"
@@ -622,17 +622,17 @@ if ($lastIdx >= 0 && $messages[$lastIdx]['role'] === 'user') {
 }
 
 /**
- * Decide whether a turn is worth chain-of-thought — no extra model call, just a
+ * Decide whether a turn is worth chain-of-thought - no extra model call, just a
  * look at the last user message. Default is OFF: reasoning only switches on (and
  * scales up) when the message shows concrete signs of a task that benefits from
- * deliberation — analytical asks, math/time arithmetic, several questions at
+ * deliberation - analytical asks, math/time arithmetic, several questions at
  * once, or a long, detailed request. Everything else (greetings, banter, short
  * replies) stays snappy and cheap.
  *
  * @return array{0:string,1:bool,2:string} [effort, think, reason]
  */
 function route_reasoning(string $msg, bool $idle): array {
-    // Idle nudges carry no user turn to reason about — keep them snappy.
+    // Idle nudges carry no user turn to reason about - keep them snappy.
     if ($idle || trim($msg) === '') return ['low', false, 'idle/empty'];
 
     $m = mb_strtolower(trim($msg));
@@ -671,7 +671,7 @@ $think = isset($body['think']) ? (bool)$body['think'] : false;
 // "auto" hands the reasoning decision to a fast, zero-cost heuristic so trivial
 // turns ("hi", "how are you?") skip chain-of-thought entirely while genuinely
 // involved requests still get it. Most of a companion chat is small talk, and
-// thinking burns tokens before the reply even starts — so this is where the real
+// thinking burns tokens before the reply even starts - so this is where the real
 // savings are. Picks both the effort level and whether to think at all, and
 // overrides whatever `think` the client sent (the manual checkbox only applies in
 // the explicit low/medium/high modes).
@@ -688,7 +688,7 @@ sse_send(['debug' => ['system_prompt' => $systemPrompt, 'live_context' => $liveC
 $now = time();
 $db = db();
 
-// Idle nudges carry no new user message — the real one was already saved on its
+// Idle nudges carry no new user message - the real one was already saved on its
 // own request, embedding and title included.
 if (!$idle) {
     $db->prepare('INSERT INTO messages (conversation_id, role, content, created_at) VALUES (?, ?, ?, ?)')
@@ -731,7 +731,7 @@ $ollamaPayload = [
         // num_predict caps TOTAL generated tokens, and a reasoning model's hidden
         // chain-of-thought counts against it. A verbose reasoner (gpt-oss at medium/
         // high effort) can burn the whole budget on the thinking channel and stop
-        // with done_reason=length BEFORE emitting any answer — the user then sees a
+        // with done_reason=length BEFORE emitting any answer - the user then sees a
         // thought process and an empty reply. So when thinking we lift the cap (-1)
         // and let num_ctx bound generation; non-thinking turns stay snappy.
         'num_predict' => $think ? -1 : 512,
@@ -740,7 +740,7 @@ $ollamaPayload = [
 
 // Ollama enables thinking by default for capable models and rejects think:true on
 // models whose manifest doesn't declare the capability (HTTP 400 "does not support
-// thinking") — even though those models still reason by default. So we only ever
+// thinking") - even though those models still reason by default. So we only ever
 // send `think` to DISABLE it; when the user wants thinking we omit the key and let
 // the model's default reasoning flow into message.thinking, which the stream loop
 // forwards as `thinking` events.
@@ -839,7 +839,7 @@ curl_setopt($ch, CURLOPT_WRITEFUNCTION, function ($ch, $chunk) use (&$buf, &$saw
             ];
         }
         // Reasoning tokens arrive on a separate field when think=true. Stream them as
-        // their own event — never into $assistantBuffer, so they stay out of stored
+        // their own event - never into $assistantBuffer, so they stay out of stored
         // history, embeddings, RAG, and action parsing.
         $th = (string)($obj['message']['thinking'] ?? '');
         if ($th !== '') sse_send(['thinking' => $th]);
@@ -865,7 +865,7 @@ if ($stats !== null) {
     sse_send(['stats' => $stats]);
 }
 
-// A reply with no answer text — never let it surface as silence. The usual cause
+// A reply with no answer text - never let it surface as silence. The usual cause
 // is a reasoning model that spent its whole generation budget on the thinking
 // channel (done_reason=length); flag that distinctly so the UI can hint at it.
 if (!$sawError && $assistantBuffer === '') {
@@ -875,7 +875,7 @@ if (!$sawError && $assistantBuffer === '') {
 
 if (!$sawError && $assistantBuffer !== '') {
     // Pull Jun's hidden relationship bookkeeping tag, apply the deltas, then strip
-    // it from what we persist — unlike animation tags this is internal state, not
+    // it from what we persist - unlike animation tags this is internal state, not
     // dialogue, and we don't want it in stored history, embeddings, or future RAG.
     if (preg_match('/\[\s*A(?:CTIONS?)?\s*:\s*mood_shift\b([^\]]*)\]/i', $assistantBuffer, $mm)) {
         $deltas = [];

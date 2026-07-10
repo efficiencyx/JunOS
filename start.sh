@@ -6,6 +6,7 @@
 #   ./start.sh                     # auto-detect
 #   GPU=cpu ./start.sh             # force a specific backend: nvidia | amd | cpu
 #   VOICE=off ./start.sh           # skip the Kokoro TTS sidecar (default: on, from .env)
+#   TTS_DEVICE=cpu ./start.sh      # keep the TTS sidecar on CPU even on a GPU box (default: auto)
 #   HSA_OVERRIDE_GFX_VERSION=11.0.0 ./start.sh        # AMD consumer-card override
 #   COMPOSE_PROFILES=prod TLS_MODE=on DOMAIN=example.com EMAIL=you@example.com ./start.sh
 #
@@ -45,7 +46,7 @@ case "$gpu" in
   nvidia)
     files+=(-f docker-compose.nvidia.yml)
     if ! command -v nvidia-smi >/dev/null 2>&1; then
-      echo "warning: NVIDIA selected but nvidia-smi not found — you also need" >&2
+      echo "warning: NVIDIA selected but nvidia-smi not found - you also need" >&2
       echo "         nvidia-container-toolkit installed, or run GPU=cpu ./start.sh" >&2
     fi
     ;;

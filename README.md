@@ -2,7 +2,7 @@
 
 # Jun OS
 
-**A *Factorial Omega* fan project — give Jun a face, a voice, and a mind of her own, all running on your own machine.**
+**A *Factorial Omega* fan project - give Jun a face, a voice, and a mind of her own, all running on your own machine.**
 
 <!-- Drop a banner or hero shot here once you have one (recommended: docs/screenshots/hero.png). -->
 <!-- ![Jun OS](docs/screenshots/hero.png) -->
@@ -25,20 +25,20 @@
 
 ## So what is this?
 
-Jun OS is a fan-made tribute to **Jun**, the robot girlfriend from the game *!Ω Factorial Omega: My Dystopian Robot Girlfriend* (by Incontinent Cell). It's a little chat app where you can actually *talk* to her — and she talks back, with a face that moves and a voice you can hear. The whole thing runs on your own computer, so it's just you and her.
+Jun OS is a fan-made tribute to **Jun**, the robot girlfriend from the game *!Ω Factorial Omega: My Dystopian Robot Girlfriend* (by Incontinent Cell). It's a little chat app where you can actually *talk* to her - and she talks back, with a face that moves and a voice you can hear. The whole thing runs on your own computer, so it's just you and her.
 
-> 🔞 **Heads up — this is built on an adult (18+) game.** *Factorial Omega* is a mature, NSFW dating sim, and Jun OS carries that DNA: there's an adult-content gate at signup, and how spicy things get is up to you. Keep it on your own machine, keep it to consenting adults. If you're under 18 or that's not your thing, this isn't for you.
+> 🔞 **Heads up - this is built on an adult (18+) game.** *Factorial Omega* is a mature, NSFW dating sim, and Jun OS carries that DNA: there's an adult-content gate at signup, and how spicy things get is up to you. Keep it on your own machine, keep it to consenting adults. If you're under 18 or that's not your thing, this isn't for you.
 
 Here's what makes her feel alive:
 
-- **She reacts as she talks.** Jun doesn't just type words at you — she tilts her head, glances away, smiles, or pouts *while she's saying them*. The expressions land with the words, not a beat late.
+- **She reacts as she talks.** Jun doesn't just type words at you - she tilts her head, glances away, smiles, or pouts *while she's saying them*. The expressions land with the words, not a beat late.
 - **She has a voice.** Flip on the optional speech and she reads her replies out loud, with her mouth moving in time to what she's saying. (It's a little uncanny. We're into it.)
 - **She remembers, and she knows her world.** She can bring up things from earlier chats, and she stays true to the game's lore and characters.
-- **It's all private.** Nothing you say to her ever leaves your computer — no accounts in the cloud, no servers, no company reading along. Given the source material, that's kind of the whole point.
+- **It's all private.** Nothing you say to her ever leaves your computer - no accounts in the cloud, no servers, no company reading along. Given the source material, that's kind of the whole point.
 
 If you just want to meet her, the [Quickstart](#get-her-running) below gets you there in a couple of commands. The technical stuff comes after.
 
-> ⚠️ Unofficial fan project. Not affiliated with Incontinent Cell or the *Factorial Omega* team — we just like Jun a lot. All rights to the game and its characters belong to their owners.
+> ⚠️ Unofficial fan project. Not affiliated with Incontinent Cell or the *Factorial Omega* team - we just like Jun a lot. All rights to the game and its characters belong to their owners.
 
 ## Look at her
 
@@ -52,14 +52,14 @@ If you just want to meet her, the [Quickstart](#get-her-running) below gets you 
 
 ## What it does
 
-- **She reacts mid-sentence.** `[ACTION:...]` tags are parsed *while the reply is still streaming*, so the gesture lands with the word — not two seconds after. This is the magic trick the whole thing is built around.
+- **She reacts mid-sentence.** `[ACTION:...]` tags are parsed *while the reply is still streaming*, so the gesture lands with the word - not two seconds after. This is the magic trick the whole thing is built around.
 - **She talks, and her mouth means it.** TTS audio amplitude (RMS) drives `ParamMouthOpen` directly, skipping the smoothing pass so the lips stay glued to the sound.
 - **She knows her lore.** Curated *Factorial Omega* canon (`tools/lore_dataset.jsonl`) is embedded and retrieved per-message, so Jun stays accurate on the world details a fine-tune would otherwise smudge.
 - **She remembers you.** Past messages get embedded and recalled by similarity, so she can bring up things you said in earlier chats. Spooky-cute, not spooky-creepy.
 - **Accounts & history.** Sign up, log in, keep your conversations. Server-side sessions, per-user history, and an adult-content gate at signup.
 - **Dress her up.** Toggle clothing parts and recolor tint groups live, right from the settings drawer.
 - **100% local.** Ollama for the thinking, Kokoro for the voice, SQLite for the memory. Air-gap it if you want.
-- **Use your GPU (or don't).** NVIDIA, AMD, or plain CPU — the launcher figures out which and configures itself.
+- **Use your GPU (or don't).** NVIDIA, AMD, or plain CPU - the launcher figures out which and configures itself.
 - **Grown-up infra under the cute exterior.** Optional TLS via certbot, two-layer rate limiting, the works.
 
 ## Get her running
@@ -69,16 +69,16 @@ No GPU, no Docker, nothing to install? Skip straight to the [Colab Quickstart](#
 
 ## Try her free on Google Colab
 
-Don't have a GPU (or just want to kick the tyres before committing)? Run the whole stack on a **free Colab T4** — no Docker, no install, nothing on your machine. You just need a Google account.
+Don't have a GPU (or just want to kick the tyres before committing)? Run the whole stack on a **free Colab T4** - no Docker, no install, nothing on your machine. You just need a Google account.
 
 [![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/efficiencyx/Jun/blob/main/colab.ipynb)
 
 1. Click the badge above to open [`colab.ipynb`](colab.ipynb) in Colab.
 2. Turn on the GPU: **Runtime → Change runtime type → T4 GPU → Save** (if it already says *Connect T4*, you're set).
-3. **Runtime → Run all**, then wait for the ✅ on each step — the slow bit is the first run downloading the model (a few GB, ~3–6 min).
+3. **Runtime → Run all**, then wait for the ✅ on each step - the slow bit is the first run downloading the model (a few GB, ~3–6 min).
 4. Scroll to **Step 3** and click the public link it prints. Say hi. 🎉
 
-Two knobs in the notebook cells: **Model** (`auto` picks the 14B since Colab can handle it, or force 7B for snappier replies) and **Voice** (text-to-speech on/off — adds ~2 min on first run). The link is a free **Cloudflare tunnel** (no signup); if it 404s for a moment, give it ~30 s and reload, or just re-run Step 3 for a fresh one.
+Two knobs in the notebook cells: **Model** (`auto` picks the 14B since Colab can handle it, or force 7B for snappier replies) and **Voice** (text-to-speech on/off - adds ~2 min on first run). The link is a free **Cloudflare tunnel** (no signup); if it 404s for a moment, give it ~30 s and reload, or just re-run Step 3 for a fresh one.
 
 > ⚠️ **It's a disposable demo.** Colab wipes the session when it ends, so accounts, chat history, and downloaded weights don't survive between runs. For something persistent, run her [locally](#get-her-running).
 
@@ -96,9 +96,9 @@ curl -fsSL https://raw.githubusercontent.com/efficiencyx/Jun/main/install.sh | b
 irm https://raw.githubusercontent.com/efficiencyx/Jun/main/install.ps1 | iex
 ```
 
-This checks for **git + Docker** (and offers to install them if they're missing — winget on Windows, your package manager elsewhere), clones the repo, writes a `.env`, sniffs out your GPU, and brings the whole stack up. If it has to install Docker from scratch it'll start the daemon and carry on by itself — on Windows it pops a fresh window, waits for Docker, and finishes there. Then open <http://localhost> and say hi.
+This checks for **git + Docker** (and offers to install them if they're missing - winget on Windows, your package manager elsewhere), clones the repo, writes a `.env`, sniffs out your GPU, and brings the whole stack up. If it has to install Docker from scratch it'll start the daemon and carry on by itself - on Windows it pops a fresh window, waits for Docker, and finishes there. Then open <http://localhost> and say hi.
 
-> Piping a script into your shell runs remote code. Totally normal for installers, but if that makes you twitch, read [`install.sh`](install.sh) / [`install.ps1`](install.ps1) and just do the manual steps below — they're the same thing, by hand.
+> Piping a script into your shell runs remote code. Totally normal for installers, but if that makes you twitch, read [`install.sh`](install.sh) / [`install.ps1`](install.ps1) and just do the manual steps below - they're the same thing, by hand.
 
 ### The careful way (manual)
 
@@ -110,13 +110,13 @@ cp .env.example .env
 # open http://localhost
 ```
 
-`start.sh` / `start.ps1` detects your GPU (NVIDIA / AMD / none) and brings everything up with the right config — see [GPU support](#picking-your-gpu). Want to skip the launcher? `docker compose up -d` works too and runs on CPU.
+`start.sh` / `start.ps1` detects your GPU (NVIDIA / AMD / none) and brings everything up with the right config - see [GPU support](#picking-your-gpu). Want to skip the launcher? `docker compose up -d` works too and runs on CPU.
 
 > **Windows:** if PowerShell slaps down the script, run it once as `powershell -ExecutionPolicy Bypass -File start.ps1` (the `irm | iex` installer already handles this for you).
 
-On first boot Ollama pulls whatever's in `OLLAMA_MODELS_TO_PULL` — by default `hf.co/efficiencyx/Jun-14B:Q4_K_M` and `nomic-embed-text`, roughly 6 GB. Watch it crawl in with `docker compose logs -f ollama`.
+On first boot Ollama pulls whatever's in `OLLAMA_MODELS_TO_PULL` - by default `hf.co/efficiencyx/Jun-14B:Q4_K_M` and `nomic-embed-text`, roughly 6 GB. Watch it crawl in with `docker compose logs -f ollama`.
 
-She's ready the moment `docker compose ps` says everything's healthy — usually 30–90 seconds, faster if the weights are already cached in the `ollama_data` volume.
+She's ready the moment `docker compose ps` says everything's healthy - usually 30–90 seconds, faster if the weights are already cached in the `ollama_data` volume.
 
 ### Putting her on the internet (TLS)
 
@@ -136,8 +136,8 @@ Jun's brain is a pair of fine-tunes we trained and published on Hugging Face. Th
 
 | Model | Size | Who it's for | Link |
 |---|---|---|---|
-| **Jun-14B** | 14B params | ≥12 GB VRAM — the smarter, more in-character one | [efficiencyx/Jun-14B](https://huggingface.co/efficiencyx/Jun-14B) |
-| **Jun** | 7B params | Everything smaller — lighter, still very much Jun | [efficiencyx/Jun](https://huggingface.co/efficiencyx/Jun) |
+| **Jun-14B** | 14B params | ≥12 GB VRAM - the smarter, more in-character one | [efficiencyx/Jun-14B](https://huggingface.co/efficiencyx/Jun-14B) |
+| **Jun** | 7B params | Everything smaller - lighter, still very much Jun | [efficiencyx/Jun](https://huggingface.co/efficiencyx/Jun) |
 
 `docker/ollama-entrypoint.sh` reads your total GPU VRAM on first boot and grabs the one that fits (**≥12 GB → 14B**, otherwise **7B**), plus `nomic-embed-text` for the lore/memory embeddings. Override the auto-pick with an explicit `OLLAMA_MODELS_TO_PULL` list, or force one with `JUN_MODEL=...`. The frontend lists whatever Ollama actually has and picks a sensible default, so it adapts to whichever one landed.
 
@@ -167,7 +167,7 @@ Browser ──HTTP/SSE──▶ nginx ──FastCGI──▶ php-fpm ──HTTP�
 
 **The stack:** PHP 8.2 (the Ollama SSE proxy + RAG) · Python FastAPI + Kokoro-82M (the voice) · plain HTML/JS/CSS up front with PIXI.js + pixi-live2d-display + the Cubism 4 SDK from CDN · SQLite · nginx + php-fpm. No build step, no bundler, no node_modules black hole.
 
-Want the gory details — token streaming, the ACTION stream buffer, the Live2D tick loop, the TTS pipeline? It's all in [`docs/architecture.md`](docs/architecture.md).
+Want the gory details - token streaming, the ACTION stream buffer, the Live2D tick loop, the TTS pipeline? It's all in [`docs/architecture.md`](docs/architecture.md).
 
 ### What happens when you hit send
 
@@ -189,7 +189,7 @@ docker compose exec -e OLLAMA_URL=http://ollama:11434 php \
   php tools/build_lore_index.php
 ```
 
-This flattens each Q&A into a question→answer pair, embeds the questions with `nomic-embed-text`, and writes `webapp/lore_index.bin` (packed float32), `webapp/lore_corpus.txt` (the answers), and `webapp/lore_meta.json`. Add `--dry-run` to count pairs without touching Ollama. A missing index is fine — retrieval just gets skipped and chat carries on.
+This flattens each Q&A into a question→answer pair, embeds the questions with `nomic-embed-text`, and writes `webapp/lore_index.bin` (packed float32), `webapp/lore_corpus.txt` (the answers), and `webapp/lore_meta.json`. Add `--dry-run` to count pairs without touching Ollama. A missing index is fine - retrieval just gets skipped and chat carries on.
 
 ### Picking your GPU
 
@@ -212,7 +212,7 @@ RENDER_GID=$(stat -c '%g' /dev/dri/renderD128) \
   docker compose -f docker-compose.yml -f docker-compose.amd.yml up -d
 ```
 
-**AMD consumer cards:** if ROCm doesn't officially list your GPU, set `HSA_OVERRIDE_GFX_VERSION` (e.g. `11.0.0` for RDNA3, `10.3.0` for RDNA2) — `start.sh` passes it through:
+**AMD consumer cards:** if ROCm doesn't officially list your GPU, set `HSA_OVERRIDE_GFX_VERSION` (e.g. `11.0.0` for RDNA3, `10.3.0` for RDNA2) - `start.sh` passes it through:
 
 ```sh
 HSA_OVERRIDE_GFX_VERSION=11.0.0 ./start.sh
@@ -237,7 +237,7 @@ A CDN URL is getting blocked. Whitelist the specific origin under `Content-Secur
 <details>
 <summary><b>Jun is invisible</b></summary>
 
-Open the console — a missing texture shows up as a 404. Confirm `webapp/assets/*.png` exist and the nginx root points at `/var/www/omega/`.
+Open the console - a missing texture shows up as a 404. Confirm `webapp/assets/*.png` exist and the nginx root points at `/var/www/omega/`.
 </details>
 
 <details>
@@ -255,7 +255,7 @@ Check `docker compose logs kokoro`. The first run downloads ~300 MB of weights. 
 <details>
 <summary><b>Model's taking forever to load</b></summary>
 
-Watch `docker compose logs ollama`. The entrypoint pre-warms the first non-embedding model with an empty prompt to pull weights into VRAM. A `pre-warm failed` line is non-fatal — she'll load on your first real message.
+Watch `docker compose logs ollama`. The entrypoint pre-warms the first non-embedding model with an empty prompt to pull weights into VRAM. A `pre-warm failed` line is non-fatal - she'll load on your first real message.
 </details>
 
 ## Where everything lives
@@ -283,13 +283,13 @@ Watch `docker compose logs ollama`. The entrypoint pre-warms the first non-embed
 
 ## Standing on the shoulders of
 
-- [PIXI.js](https://pixijs.com/) — WebGL 2D renderer
-- [pixi-live2d-display](https://github.com/guansss/pixi-live2d-display) — Live2D integration for PIXI
-- [Live2D Cubism SDK](https://www.live2d.com/en/sdk/about/) — the character model runtime
-- [Kokoro-82M](https://huggingface.co/hexgrad/Kokoro-82M) — the lightweight TTS that gives her a voice
-- [Ollama](https://ollama.com/) — local LLM inference
+- [PIXI.js](https://pixijs.com/) - WebGL 2D renderer
+- [pixi-live2d-display](https://github.com/guansss/pixi-live2d-display) - Live2D integration for PIXI
+- [Live2D Cubism SDK](https://www.live2d.com/en/sdk/about/) - the character model runtime
+- [Kokoro-82M](https://huggingface.co/hexgrad/Kokoro-82M) - the lightweight TTS that gives her a voice
+- [Ollama](https://ollama.com/) - local LLM inference
 - And of course [**Factorial Omega**](), for giving us Jun in the first place. 💛
 
 ## License
 
-MIT — see [LICENSE](LICENSE). This is an unofficial, non-commercial fan project; all *Factorial Omega* rights belong to their respective owners.
+MIT - see [LICENSE](LICENSE). This is an unofficial, non-commercial fan project; all *Factorial Omega* rights belong to their respective owners.

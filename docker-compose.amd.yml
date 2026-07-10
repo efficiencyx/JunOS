@@ -1,4 +1,4 @@
-# AMD ROCm overlay — needs the amdgpu kernel driver on the host (no
+# AMD ROCm overlay - needs the amdgpu kernel driver on the host (no
 # nvidia-container-toolkit). Builds Ollama from the rocm image and hands the
 # container the GPU devices.
 #   docker compose -f docker-compose.yml -f docker-compose.amd.yml up -d
@@ -7,12 +7,28 @@
 #
 # For consumer cards that ROCm doesn't list as officially supported, set
 # HSA_OVERRIDE_GFX_VERSION (e.g. 11.0.0 for RDNA3, 10.3.0 for RDNA2) before
-# launching — start.sh passes it through.
+# launching - start.sh passes it through.
 services:
   ollama:
     build:
       args:
         OLLAMA_BASE: ollama/ollama:rocm
+    devices:
+      - /dev/kfd
+      - /dev/dri
+    group_add:
+      - "${VIDEO_GID:-video}"
+      - "${RENDER_GID:-render}"
+    environment:
+      - HSA_OVERRIDE_GFX_VERSION
+
+  # TTS sidecar on the GPU: rebuild against a ROCm torch wheel and hand it the
+  # GPU device nodes. The ROCm torch build exposes its HIP backend as torch.cuda,
+  # so TTS_DEVICE=auto/cuda both target the GPU; set TTS_DEVICE=cpu to opt out.
+  kokoro:
+    build:
+      args:
+        TORCH_INDEX: https://download.pytorch.org/whl/rocm6.2
     devices:
       - /dev/kfd
       - /dev/dri
