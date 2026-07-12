@@ -155,6 +155,13 @@ if ($env:OLLAMA_MODELS_TO_PULL) {
         if (-not $m) { continue }
         Write-Host "==> Pulling $m"
         & ollama pull $m
+        if ($LASTEXITCODE -ne 0 -and $m -match '^hf\.co/') {
+            # Older Ollama builds reject the hf.co alias ("realm host
+            # huggingface.co does not match original host hf.co").
+            $m = $m -replace '^hf\.co/', 'huggingface.co/'
+            Write-Host "==> Retrying as $m"
+            & ollama pull $m
+        }
         if ($LASTEXITCODE -ne 0) { Write-Warning "pull failed: $m (continuing)" }
         if (-not $chatModel -and $m -ne 'nomic-embed-text') { $chatModel = $m }
     }
@@ -202,6 +209,16 @@ if (-not (Test-Path $phpExe)) {
 $old = Get-TrackedProcess $oldPids 'php'
 if ($old) { Stop-Process -Id $old.Id -Force -ErrorAction SilentlyContinue }
 
+# Sanity-check php.exe before launching it hidden: a missing VC++ runtime
+# kills it with no visible error (NTSTATUS 0xC0000135 = missing DLL).
+& $phpExe -v *> $null
+if ($LASTEXITCODE -ne 0) {
+    if ($LASTEXITCODE -eq -1073741515) {
+        throw "php.exe can't start: the Microsoft Visual C++ runtime is missing. Install the 'Microsoft Visual C++ 2015-2022 Redistributable (x64)' (winget install Microsoft.VCRedist.2015+.x64) and re-run."
+    }
+    throw "php.exe failed its self-check (exit code $LASTEXITCODE). Try re-running install.ps1."
+}
+
 Write-Host "==> Starting web server on $SiteUrl"
 $env:OLLAMA_URL             = $OllamaUrl
 $env:KOKORO_URL             = 'http://127.0.0.1:8001'
@@ -210,13 +227,21 @@ $env:OMEGA_STATE_DIR        = $StateDir
 # single-worker, so requests made while a chat reply is streaming (e.g. TTS)
 # queue until it finishes. Acceptable for a single local user.
 $env:PHP_CLI_SERVER_WORKERS = '8'
-Start-Tracked 'php' $phpExe @('-S', "127.0.0.1:$Port", '-t', (Join-Path $PSScriptRoot 'webapp')) | Out-Null
+$phpProc = Start-Tracked 'php' $phpExe @('-S', "127.0.0.1:$Port", '-t', (Join-Path $PSScriptRoot 'webapp'))
 
 $newPids | ConvertTo-Json | Set-Content $PidFile
 
 $deadline = (Get-Date).AddSeconds(20)
 while (-not (Test-Http $SiteUrl)) {
-    if ((Get-Date) -gt $deadline) { throw "web server did not come up on $SiteUrl (see runtime\logs\php.err.log)" }
+    if ($phpProc.HasExited -or (Get-Date) -gt $deadline) {
+        $err = Join-Path $LogDir 'php.err.log'
+        if (Test-Path $err) {
+            Write-Host '--- last lines of runtime\logs\php.err.log ---'
+            Get-Content $err -Tail 10 | Write-Host
+        }
+        $why = if ($phpProc.HasExited) { "php exited (code $($phpProc.ExitCode))" } else { 'timed out' }
+        throw "web server did not come up on ${SiteUrl}: $why"
+    }
     Start-Sleep -Seconds 1
 }
 
