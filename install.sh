@@ -117,9 +117,9 @@ run() {
 # ── Model catalog ────────────────────────────────────────────────────────────
 # Short aliases the menu and JUN_MODEL accept; anything else is taken verbatim
 # as an explicit Ollama ref.
-MODEL_12B="hf.co/efficiencyx/Jun-Lora-v2-GGUF:Q4_K_M"          # best, >8GB VRAM (Jun finetune of Gemma 4 12B)
-MODEL_E4B="hf.co/unsloth/gemma-4-E4B-it-qat-GGUF:UD-Q4_K_XL"   # fast, ~6GB VRAM
-MODEL_E2B="hf.co/unsloth/gemma-4-E2B-it-qat-GGUF:UD-Q4_K_XL"   # fastest, CPU-ok
+MODEL_12B="hf.co/efficiencyx/Jun-Lora-v2-GGUF:Q4_K_M"
+MODEL_E4B="hf.co/efficiencyx/Jun-LoRA-V3-E4B-GGUF:Q4_K_M"
+MODEL_E2B="hf.co/efficiencyx/Jun-LoRA-v3-E2B-GGUF:Q4_K_M"
 
 resolve_model() {  # alias|full-ref -> full-ref
     case "$(printf '%s' "$1" | tr '[:upper:]' '[:lower:]')" in
@@ -143,13 +143,17 @@ detect_vram_mb() {
     fi
 }
 
-# Map detected VRAM to a recommended alias. Unknown/none -> CPU-friendly E2B.
-recommend_alias() {
+# Map detected VRAM to the conservative quant at each recommended tier.
+# Unknown/none -> CPU-friendly E2B Q4_K_M.
+recommend_model() {
     local mb="$1"
-    [ -z "$mb" ] && { echo e2b; return; }
-    if   [ "$mb" -ge 8500 ]; then echo 12b
-    elif [ "$mb" -ge 6000 ]; then echo e4b
-    else                          echo e2b
+    [ -z "$mb" ] && { echo "$MODEL_E2B"; return; }
+    if   [ "$mb" -ge 15500 ]; then echo "hf.co/efficiencyx/Jun-Lora-v2-GGUF:Q6_K"
+    elif [ "$mb" -ge 11500 ]; then echo "hf.co/efficiencyx/Jun-LoRA-V3-E4B-GGUF:Q8_0"
+    elif [ "$mb" -ge 9500 ]; then echo "hf.co/efficiencyx/Jun-LoRA-V3-E4B-GGUF:Q6_K"
+    elif [ "$mb" -ge 7500 ]; then echo "$MODEL_E4B"
+    elif [ "$mb" -ge 5500 ]; then echo "hf.co/efficiencyx/Jun-LoRA-v3-E2B-GGUF:Q6_K"
+    else                               echo "$MODEL_E2B"
     fi
 }
 
@@ -169,30 +173,29 @@ set_env() {
 # Ask which model + whether voice, then persist both into .env. Non-interactive
 # (piped, JUN_YES=1, or per-field env override) keeps the one-command flow.
 configure() {
-    local vram rec rec_name alias voice
+    local vram rec alias voice
     vram="$(detect_vram_mb)"
-    rec="$(recommend_alias "$vram")"
+    rec="$(recommend_model "$vram")"
 
     step "configure"
 
     if [ -n "${JUN_MODEL:-}" ] || [ "${JUN_YES:-}" = "1" ] || [ ! -r /dev/tty ]; then
-        alias="${JUN_MODEL:-12b}"   # one-command default: gemma 12B
+        alias="${JUN_MODEL:-$rec}"
     else
-        case "$rec" in 12b) rec_name="gemma 12B";; e4b) rec_name="gemma E4B";; *) rec_name="gemma E2B";; esac
         {
             printf '\n     %sselect a model%s\n' "$B" "$R"
-            printf '       %s1%s  gemma 12B  %s-%s best quality, needs >8GB VRAM\n'  "$ACCENT" "$R" "$DIM" "$R"
-            printf '       %s2%s  gemma E4B  %s-%s fast, decent quality, ~6GB VRAM\n' "$ACCENT" "$R" "$DIM" "$R"
-            printf '       %s3%s  gemma E2B  %s-%s fastest, lower quality, runs on CPU\n' "$ACCENT" "$R" "$DIM" "$R"
+            printf '       %s1%s  Jun 12B  %s-%s highest quality\n' "$ACCENT" "$R" "$DIM" "$R"
+            printf '       %s2%s  Jun E4B  %s-%s balanced\n' "$ACCENT" "$R" "$DIM" "$R"
+            printf '       %s3%s  Jun E2B  %s-%s lightest / CPU-friendly\n' "$ACCENT" "$R" "$DIM" "$R"
             [ -n "$vram" ] && printf '       %sdetected %sMB VRAM%s\n' "$DIM" "$vram" "$R"
-            printf '     %s$%s choice %s[%senter = %s%s]%s %s→%s ' \
-                "$OK" "$R" "$DIM" "$R" "$rec_name" "$DIM" "$R" "$ACCENT" "$R"
+            printf '     %s$%s choice %s[enter = recommended %s]%s %s→%s ' \
+                "$OK" "$R" "$DIM" "$rec" "$R" "$ACCENT" "$R"
         } > /dev/tty
         read -r ans < /dev/tty || ans=""
         case "$ans" in
             1) alias=12b ;; 2) alias=e4b ;; 3) alias=e2b ;;
             "") alias="$rec" ;;
-            *) printf '     %s✗%s unrecognized choice, using %s\n' "$DANGER" "$R" "$rec_name" > /dev/tty; alias="$rec" ;;
+            *) printf '     %s✗%s unrecognized choice, using recommended model\n' "$DANGER" "$R" > /dev/tty; alias="$rec" ;;
         esac
     fi
 

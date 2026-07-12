@@ -22,6 +22,13 @@ function env_str(string $key, string $default = ''): string {
     return ($v !== false && $v !== '') ? $v : $default;
 }
 
+// Writable dir for the SQLite DB and rate-limit files. Docker keeps the
+// default; bare-metal installs (Windows) point OMEGA_STATE_DIR into the
+// install folder so everything stays uninstallable in one place.
+function state_dir(): string {
+    return rtrim(env_str('OMEGA_STATE_DIR', '/var/lib/omega'), '/\\');
+}
+
 function log_event(array $ctx): void {
     $ctx = array_merge([
         'ts' => date('c'),
@@ -66,7 +73,8 @@ function read_body(int $maxBytes): string {
 function rate_limit(string $bucket, int $maxPerWindow, int $windowSec): void {
     $key = sha1($bucket . '|' . client_ip());
 
-    $dir = '/var/lib/omega/rl';
+    $dir = state_dir() . '/rl';
+    if (!is_dir($dir)) @mkdir($dir, 0700, true);
     if (!is_dir($dir) || !is_writable($dir)) {
         $dir = sys_get_temp_dir() . '/omega_rl';
         if (!is_dir($dir)) @mkdir($dir, 0700, true);
@@ -163,7 +171,9 @@ function db(): PDO {
     static $pdo = null;
     if ($pdo !== null) return $pdo;
 
-    $path = is_writable('/var/lib/omega') ? '/var/lib/omega/omega.sqlite' : sys_get_temp_dir() . '/omega.sqlite';
+    $base = state_dir();
+    if (!is_dir($base)) @mkdir($base, 0700, true);
+    $path = is_writable($base) ? $base . '/omega.sqlite' : sys_get_temp_dir() . '/omega.sqlite';
     $pdo = new PDO('sqlite:' . $path, null, null, [
         PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION,
         PDO::ATTR_DEFAULT_FETCH_MODE => PDO::FETCH_ASSOC,
@@ -205,6 +215,55 @@ function current_user(): ?array {
     );
     $stmt->execute([$token, time()]);
     return $user = $stmt->fetch() ?: null;
+}
+
+function memory_file_path(int $userId): string {
+    $dir = rtrim(env_str('MEMORY_DIR', '/var/lib/jun/memory'), '/');
+    if (!is_dir($dir)) @mkdir($dir, 0700, true);
+    if (!is_dir($dir) || !is_writable($dir)) {
+        throw new RuntimeException('memory_dir_unwritable');
+    }
+    return $dir . '/user-' . $userId . '.jsonl';
+}
+
+function memory_append(int $userId, string $memory, string $category): array {
+    $memory = trim(preg_replace('/\s+/', ' ', $memory));
+    $category = trim(preg_replace('/[^a-z0-9]+/i', '_', $category), '_');
+    if ($category === '') $category = 'general';
+    if ($memory === '') return ['error' => 'memory_required'];
+    if (mb_strlen($memory) > 800) $memory = mb_substr($memory, 0, 797) . '…';
+    if (mb_strlen($category) > 40) $category = mb_substr($category, 0, 40);
+
+    $entry = ['created_at' => time(), 'category' => $category, 'memory' => $memory];
+    $path = memory_file_path($userId);
+    $fp = fopen($path, 'ab');
+    if ($fp === false) return ['error' => 'memory_open_failed'];
+    flock($fp, LOCK_EX);
+    fwrite($fp, json_encode($entry, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES) . "\n");
+    flock($fp, LOCK_UN);
+    fclose($fp);
+    @chmod($path, 0600);
+    return ['ok' => true, 'entry' => $entry];
+}
+
+// All valid entries with their line index (the id used for deletes).
+function memory_list(int $userId): array {
+    $path = memory_file_path($userId);
+    if (!is_readable($path)) return [];
+    $lines = file($path, FILE_IGNORE_NEW_LINES | FILE_SKIP_EMPTY_LINES);
+    if (!$lines) return [];
+    $out = [];
+    foreach ($lines as $i => $line) {
+        $obj = json_decode($line, true);
+        if (!is_array($obj) || trim((string)($obj['memory'] ?? '')) === '') continue;
+        $out[] = [
+            'id' => $i,
+            'created_at' => (int)($obj['created_at'] ?? 0),
+            'category' => (string)($obj['category'] ?? 'general'),
+            'memory' => (string)$obj['memory'],
+        ];
+    }
+    return $out;
 }
 
 function require_user(): array {

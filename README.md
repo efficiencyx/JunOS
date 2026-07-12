@@ -64,7 +64,7 @@ If you just want to meet her, the [Quickstart](#get-her-running) below gets you 
 
 ## Get her running
 
-No GPU, no Docker, nothing to install? Skip straight to the [Colab Quickstart](#try-her-free-on-google-colab) and meet her in your browser. Otherwise, to run her on your own machine you need **Docker** (with Compose) and **git**. That's genuinely it.
+No GPU, no Docker, nothing to install? Skip straight to the [Colab Quickstart](#try-her-free-on-google-colab) and meet her in your browser. Otherwise, to run her on your own machine: on **Linux / macOS** you need **Docker** (with Compose) and **git** - that's genuinely it. On **Windows** she runs **bare metal, no Docker at all**: the installer sets up Ollama + a portable PHP + an optional voice engine, and keeps everything in one folder so uninstalling is just `./uninstall.ps1`.
 
 
 ## Try her free on Google Colab
@@ -93,10 +93,12 @@ curl -fsSL https://raw.githubusercontent.com/efficiencyx/Jun/main/install.sh | b
 **Windows (PowerShell)**
 
 ```powershell
-irm https://raw.githubusercontent.com/efficiencyx/Jun/main/install.ps1 | iex
+powershell -NoProfile -ExecutionPolicy Bypass -Command "irm https://raw.githubusercontent.com/efficiencyx/Jun/main/install.ps1 | iex"
 ```
 
-This checks for **git + Docker** (and offers to install them if they're missing - winget on Windows, your package manager elsewhere), clones the repo, writes a `.env`, sniffs out your GPU, and brings the whole stack up. If it has to install Docker from scratch it'll start the daemon and carry on by itself - on Windows it pops a fresh window, waits for Docker, and finishes there. Then open <http://localhost> and say hi.
+On **Linux / macOS** this checks for **git + Docker** (and offers to install them via your package manager), clones the repo, writes a `.env`, sniffs out your GPU, and brings the whole stack up. Then open <http://localhost> and say hi.
+
+On **Windows** there's no Docker involved. The installer checks for **git + Ollama** (offering to winget them - those two are the *only* machine-wide installs, each with a normal uninstaller in Settings > Apps), then keeps everything else inside the `Jun` folder: a portable PHP, the voice engine's Python venv, downloaded model weights, and your chat history all live under `Jun\runtime\`. No stray folders. Open <http://127.0.0.1:8080> and say hi; `./start.ps1 stop` shuts her down, and `./uninstall.ps1` removes the lot (asking before it touches anything machine-wide).
 
 > Piping a script into your shell runs remote code. Totally normal for installers, but if that makes you twitch, read [`install.sh`](install.sh) / [`install.ps1`](install.ps1) and just do the manual steps below - they're the same thing, by hand.
 
@@ -110,11 +112,22 @@ cp .env.example .env
 # open http://localhost
 ```
 
-`start.sh` / `start.ps1` detects your GPU (NVIDIA / AMD / none) and brings everything up with the right config - see [GPU support](#picking-your-gpu). Want to skip the launcher? `docker compose up -d` works too and runs on CPU.
+On Linux/macOS, `start.sh` detects your GPU (NVIDIA / AMD / none) and brings everything up with the right config - see [GPU support](#picking-your-gpu). Want to skip the launcher? `docker compose up -d` works too and runs on CPU.
+
+On Windows, `start.ps1` runs bare metal: it starts (or reuses) Ollama natively - which uses your GPU on its own, no overlays needed - plus the web server and the optional voice sidecar, then opens <http://127.0.0.1:8080>. Note the manual path still needs `install.ps1` to have run once (it downloads the portable PHP and sets up the voice venv).
+
+> **Her body isn't in this repo.** The Live2D model and textures belong to *My Dystopian Robot Girlfriend* and aren't redistributed here. Rebuild them from your own copy of the game before first launch:
+>
+> ```sh
+> pip install UnityPy Pillow
+> python3 tools/recover_assets.py --game /path/to/your/game/install
+> ```
+>
+> This writes `webapp/assets/` locally. Those files are **for your own use** - please don't republish them (commit them to a public fork, ship them in a release, mirror them). `webapp/assets/` is in `.gitignore` so it won't get pushed by accident. See the NOTICE in [`LICENSE`](LICENSE).
 
 > **Windows:** if PowerShell slaps down the script, run it once as `powershell -ExecutionPolicy Bypass -File start.ps1` (the `irm | iex` installer already handles this for you).
 
-On first boot Ollama pulls whatever's in `OLLAMA_MODELS_TO_PULL` - by default `hf.co/efficiencyx/Jun-14B:Q4_K_M` and `nomic-embed-text`, roughly 6 GB. Watch it crawl in with `docker compose logs -f ollama`.
+On first boot Ollama pulls whatever's in `OLLAMA_MODELS_TO_PULL` - by default the CPU-friendly `hf.co/efficiencyx/Jun-LoRA-v3-E2B-GGUF:Q4_K_M` and `nomic-embed-text`. Watch it crawl in with `docker compose logs -f ollama` (on Windows the pull runs right in your terminal).
 
 She's ready the moment `docker compose ps` says everything's healthy - usually 30–90 seconds, faster if the weights are already cached in the `ollama_data` volume.
 
@@ -132,14 +145,18 @@ DOMAIN=yourdomain.com EMAIL=you@yourdomain.com TLS_MODE=on COMPOSE_PROFILES=prod
 
 ## The models
 
-Jun's brain is a pair of fine-tunes we trained and published on Hugging Face. The launcher picks one for you based on your VRAM, but here they are if you want to poke at them directly:
+Jun's brain is available in 12B, E4B, and E2B fine-tunes on Hugging Face. The installer picks a conservative quant for your VRAM; use the next option in a row when the rest of your workload leaves enough room.
 
-| Model | Size | Who it's for | Link |
-|---|---|---|---|
-| **Jun-14B** | 14B params | ≥12 GB VRAM - the smarter, more in-character one | [efficiencyx/Jun-14B](https://huggingface.co/efficiencyx/Jun-14B) |
-| **Jun** | 7B params | Everything smaller - lighter, still very much Jun | [efficiencyx/Jun](https://huggingface.co/efficiencyx/Jun) |
+| VRAM | Default | Higher-quality alternative |
+|---:|---|---|
+| 4 GB | E2B Q4_K_M | E2B Q6_K |
+| 6 GB | E2B Q6_K | E2B Q8_0 |
+| 8 GB | E4B Q4_K_M | E4B Q6_K |
+| 10 GB | E4B Q6_K | E4B Q8_0 |
+| 12 GB | E4B Q8_0 | 12B Q4_K_M |
+| 16 GB | 12B Q6_K | 12B Q8_0 |
 
-`docker/ollama-entrypoint.sh` reads your total GPU VRAM on first boot and grabs the one that fits (**≥12 GB → 14B**, otherwise **7B**), plus `nomic-embed-text` for the lore/memory embeddings. Override the auto-pick with an explicit `OLLAMA_MODELS_TO_PULL` list, or force one with `JUN_MODEL=...`. The frontend lists whatever Ollama actually has and picks a sensible default, so it adapts to whichever one landed.
+Use `JUN_MODEL=12b`, `JUN_MODEL=e4b`, or `JUN_MODEL=e2b` to select a family at its Q4_K_M quant, or pass a complete Ollama reference to choose an exact quant. The frontend lists whatever Ollama actually has and picks a sensible default.
 
 ## Knobs to turn
 
@@ -151,7 +168,7 @@ Everything's environment variables (see `.env.example`):
 | `EMAIL` | Contact email for Let's Encrypt | `admin@localhost` |
 | `TLS_MODE` | `on` = HTTPS + certbot profile; `off` = plain HTTP | `off` |
 | `OLLAMA_URL` | Where PHP finds Ollama | `http://ollama:11434` |
-| `OLLAMA_MODELS_TO_PULL` | Models pulled on first boot | `hf.co/efficiencyx/Jun-14B:Q4_K_M,nomic-embed-text` |
+| `OLLAMA_MODELS_TO_PULL` | Models pulled on first boot | `hf.co/efficiencyx/Jun-LoRA-v3-E2B-GGUF:Q4_K_M,nomic-embed-text` |
 | `KOKORO_URL` | Where the PHP TTS proxy finds the voice sidecar | `http://kokoro:8001` |
 | `CORS_ORIGIN` | `Access-Control-Allow-Origin` for the voice sidecar | `http://nginx` |
 
@@ -273,8 +290,9 @@ Watch `docker compose logs ollama`. The entrypoint pre-warms the first non-embed
 │   ├── action_map.json        Semantic action → Live2D parameter map
 │   ├── system_prompt.txt      Jun's persona + ACTION syntax (read server-side)
 │   └── index.html             Single-page app entry point
-├── install.sh / install.ps1   One-line bootstrap (clone + start)
-├── start.sh / start.ps1       Launcher with GPU autodetect (Linux / Windows)
+├── install.sh / install.ps1   One-line bootstrap (Linux: Docker · Windows: bare metal)
+├── start.sh / start.ps1       Launchers (start.sh: GPU autodetect + compose · start.ps1: native processes)
+├── uninstall.ps1              Windows uninstaller (stops everything, deletes the folder)
 ├── docker-compose.yml         Base stack (CPU)
 ├── docker-compose.nvidia.yml  NVIDIA overlay
 ├── docker-compose.amd.yml     AMD ROCm overlay

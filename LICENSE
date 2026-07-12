@@ -19,3 +19,21 @@ AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
 LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
+
+--------------------------------------------------------------------------------
+
+NOTICE — Third-party game assets
+
+The MIT license above covers the source code in this repository ONLY.
+
+It does NOT cover the Live2D model, textures, or any other art assets belonging
+to the game "My Dystopian Robot Girlfriend" and its creator. Those assets are
+NOT included in this repository. They are rebuilt on your own machine from your
+own copy of the game by tools/recover_assets.py, and remain the property of
+their original author.
+
+You may extract these assets for local, personal use with this project. You may
+NOT redistribute or republish them — do not commit them to a public fork, a
+release, a mirror, or any other public location. If you fork this project, keep
+webapp/assets/ out of your published tree (it is already in .gitignore for this
+reason). Respect the wishes of the original creator.

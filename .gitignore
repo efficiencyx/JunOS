@@ -18,9 +18,16 @@ tts/.venv/
 node_modules/
 *.log
 
+# bare-metal Windows install (portable PHP, TTS venv, models, chat state, logs)
+runtime/
+
 # project-specific
 Junk/
-webapp/assets/*~
+
+# Game-ripped Live2D assets — rebuilt locally with tools/recover_assets.py,
+# NOT redistributed with this repo (see the NOTICE in LICENSE). Kept out of
+# git so a fork can't accidentally republish them.
+webapp/assets/
 
 # generated library cache (unsloth) — don't commit
 unsloth_compiled_cache/
