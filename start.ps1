@@ -211,7 +211,8 @@ if ($old) { Stop-Process -Id $old.Id -Force -ErrorAction SilentlyContinue }
 
 # Sanity-check php.exe before launching it hidden: a missing VC++ runtime
 # kills it with no visible error (NTSTATUS 0xC0000135 = missing DLL).
-& $phpExe -v *> $null
+# Run through cmd so PHP warnings on stderr can't trip ErrorActionPreference.
+cmd /c "`"$phpExe`" -v >nul 2>&1"
 if ($LASTEXITCODE -ne 0) {
     if ($LASTEXITCODE -eq -1073741515) {
         throw "php.exe can't start: the Microsoft Visual C++ runtime is missing. Install the 'Microsoft Visual C++ 2015-2022 Redistributable (x64)' (winget install Microsoft.VCRedist.2015+.x64) and re-run."

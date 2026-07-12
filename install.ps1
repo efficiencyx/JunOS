@@ -229,8 +229,6 @@ function Install-Php {
         'extension=openssl'
         'extension=pdo_sqlite'
         'extension=sqlite3'
-        'zend_extension=opcache'
-        'opcache.enable=1'
         'post_max_size=512K'
         'upload_max_filesize=1M'
         'memory_limit=128M'
@@ -244,7 +242,7 @@ function Install-Php {
     }
     $ini | Set-Content (Join-Path $phpDir 'php.ini')
 
-    & $phpExe -v | Select-Object -First 1 | Write-Host
+    cmd /c "`"$phpExe`" -v 2>&1" | Select-Object -First 1 | Write-Host
     if ($LASTEXITCODE -ne 0) {
         Write-Warning 'php.exe did not run. If you saw a VCRUNTIME140.dll error, install the Microsoft Visual C++ 2015-2022 Redistributable (x64) and re-run.'
     }
