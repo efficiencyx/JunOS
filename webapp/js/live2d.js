@@ -812,8 +812,32 @@ window.Live2D = (function () {
         if (u < u0) u0 = u; if (u > u1) u1 = u;
         if (v < v0) v0 = v; if (v > v1) v1 = v;
       }
-      _uvRect.set(D.ids[d], { tex: ti[d], u0, v0, w: u1 - u0, h: v1 - v0 });
+      _uvRect.set(D.ids[d], { tex: ti[d], u0, v0, w: u1 - u0, h: v1 - v0, d });
     }
+  }
+
+  // Path2D of a drawable's mesh triangles in atlas pixel space, cached.
+  // Compositing clips to this so an override can never spill onto neighboring
+  // drawables: UV *bounding rects* overlap heavily in this atlas (hands, bra,
+  // feet share rect area with unrelated items), and painting a full rect
+  // stamps the override's art onto all of them.
+  const _meshPath = new Map();     // drawableId -> Path2D
+  function meshPath(id, W, H) {
+    if (_meshPath.has(id)) return _meshPath.get(id);
+    const r = _uvRect.get(id);
+    const D = raw.drawables;
+    const uv = D.vertexUvs[r.d], ix = D.indices[r.d];
+    const p = new Path2D();
+    // Same v convention as the rect math above: runtime uvs, y = (1 - v) * H.
+    for (let k = 0; k < ix.length; k += 3) {
+      const a = ix[k] * 2, b = ix[k + 1] * 2, c = ix[k + 2] * 2;
+      p.moveTo(uv[a] * W, (1 - uv[a + 1]) * H);
+      p.lineTo(uv[b] * W, (1 - uv[b + 1]) * H);
+      p.lineTo(uv[c] * W, (1 - uv[c + 1]) * H);
+      p.closePath();
+    }
+    _meshPath.set(id, p);
+    return p;
   }
 
   function _loadImg(url) {
@@ -938,7 +962,7 @@ window.Live2D = (function () {
       // atlas: this lands exactly on the baked garment region. (The runtime's
       // vertexUvs are v-flipped relative to the raw moc3 floats - don't "fix"
       // this to r.v0 * H; that mirrors every override into the wrong place.)
-      active.push({ entry, x: r.u0 * W, yTop: (1 - (r.v0 + r.h)) * H, w: r.w * W, h: r.h * H });
+      active.push({ id, entry, x: r.u0 * W, yTop: (1 - (r.v0 + r.h)) * H, w: r.w * W, h: r.h * H });
     }
     // Two passes: erase everything first, then paint. Interleaving them lets
     // one drawable's clear wipe art another override just painted into an
@@ -946,6 +970,8 @@ window.Live2D = (function () {
     // shows up as transparent holes on the model.
     for (const a of active) {
       if (a.entry.overlay) continue;   // decorations paint on top of the base
+      ctx.save();
+      ctx.clip(meshPath(a.id, W, H));
       if (a.entry.alphaClip) {
         // Erase only where the variant art has coverage: these rects share
         // texels with drawables that are NOT overridden (e.g. base skin), so a
@@ -963,8 +989,14 @@ window.Live2D = (function () {
         // even where the new art is transparent.
         ctx.clearRect(a.x, a.yTop, a.w, a.h);
       }
+      ctx.restore();
     }
-    for (const a of active) ctx.drawImage(a.entry.img, a.x, a.yTop, a.w, a.h);
+    for (const a of active) {
+      ctx.save();
+      ctx.clip(meshPath(a.id, W, H));
+      ctx.drawImage(a.entry.img, a.x, a.yTop, a.w, a.h);
+      ctx.restore();
+    }
     _uploadTexture(texIndex, c);
   }
 
@@ -1029,6 +1061,11 @@ window.Live2D = (function () {
     if (!model || !raw || !app) return null;
     const rect = app.view.getBoundingClientRect();
     const p = model.toModelPosition(new PIXI.Point(clientX - rect.left, clientY - rect.top));
+    // toModelPosition yields model-canvas pixels (y down); vertexPositions are
+    // in Cubism unit space (origin-centered, y up). Convert before hit-testing.
+    const ci = raw.canvasinfo;
+    p.x = (p.x - ci.CanvasOriginX) / ci.PixelsPerUnit;
+    p.y = (ci.CanvasOriginY - p.y) / ci.PixelsPerUnit;
     const D = raw.drawables;
     const only = onlyIds ? (onlyIds instanceof Set ? onlyIds : new Set(onlyIds)) : null;
     let best = null, bestOrder = -Infinity;
