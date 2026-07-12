@@ -651,7 +651,102 @@
       const label = item.querySelector('span');
       if (settingsPanelTitle && label) settingsPanelTitle.textContent = label.textContent;
       if (key === 'developer') loadMood(); // pull fresh scores when the panel opens
+      if (key === 'memory') loadMemories();
     });
+  });
+
+  // Memory panel: list / add / delete the durable notes memory_write saves.
+  const memoryList = document.getElementById('memoryList');
+  const memoryCount = document.getElementById('memoryCount');
+  async function loadMemories() {
+    if (!memoryList) return;
+    memoryList.textContent = 'Loading…';
+    try {
+      const r = await fetch('/api/memory.php', { credentials: 'same-origin' });
+      if (!r.ok) throw new Error('http ' + r.status);
+      renderMemories((await r.json()).memories || []);
+    } catch (e) {
+      memoryList.textContent = 'Could not load memories.';
+    }
+  }
+  function renderMemories(items) {
+    if (memoryCount) memoryCount.textContent = items.length;
+    memoryList.replaceChildren();
+    if (!items.length) {
+      memoryList.textContent = 'No memories yet. Ask Jun to remember something, or add one below.';
+      return;
+    }
+    for (const m of items.slice().reverse()) {
+      const row = document.createElement('div');
+      row.className = 'memory-item';
+      const meta = document.createElement('div');
+      meta.className = 'memory-meta';
+      const date = m.created_at ? new Date(m.created_at * 1000).toLocaleDateString() : '';
+      meta.textContent = `${date} · ${m.category}`;
+      const text = document.createElement('div');
+      text.className = 'memory-text';
+      text.textContent = m.memory;
+      const del = document.createElement('button');
+      del.className = 'ghost memory-del';
+      del.title = 'Delete this memory';
+      del.setAttribute('aria-label', 'Delete memory');
+      del.textContent = '✕';
+      del.addEventListener('click', async () => {
+        del.disabled = true;
+        try {
+          const r = await fetch('/api/memory.php', {
+            method: 'DELETE',
+            credentials: 'same-origin',
+            headers: { 'content-type': 'application/json' },
+            body: JSON.stringify({ id: m.id, created_at: m.created_at }),
+          });
+          if (!r.ok) throw new Error('http ' + r.status);
+        } catch (e) {
+          logAction('err', 'failed to delete memory');
+        }
+        loadMemories(); // reload either way: ids shift after any change
+      });
+      row.append(meta, text, del);
+      memoryList.appendChild(row);
+    }
+  }
+  const memoryAddBtn = document.getElementById('memoryAddBtn');
+  const memoryAddInput = document.getElementById('memoryAddInput');
+  const memoryAddCategory = document.getElementById('memoryAddCategory');
+  async function addMemory() {
+    const memory = (memoryAddInput?.value || '').trim();
+    if (!memory) return;
+    try {
+      const r = await fetch('/api/memory.php', {
+        method: 'POST',
+        credentials: 'same-origin',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ memory, category: (memoryAddCategory?.value || '').trim() || 'general' }),
+      });
+      if (!r.ok) throw new Error('http ' + r.status);
+      memoryAddInput.value = '';
+    } catch (e) {
+      logAction('err', 'failed to add memory');
+    }
+    loadMemories();
+  }
+  if (memoryAddBtn) memoryAddBtn.addEventListener('click', addMemory);
+  if (memoryAddInput) memoryAddInput.addEventListener('keydown', (e) => { if (e.key === 'Enter') addMemory(); });
+  const memoryClearBtn = document.getElementById('memoryClearBtn');
+  if (memoryClearBtn) memoryClearBtn.addEventListener('click', async () => {
+    if (!window.confirm('Delete ALL saved memories? This cannot be undone.')) return;
+    try {
+      const r = await fetch('/api/memory.php', {
+        method: 'DELETE',
+        credentials: 'same-origin',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ all: true }),
+      });
+      if (!r.ok) throw new Error('http ' + r.status);
+    } catch (e) {
+      logAction('err', 'failed to clear memories');
+    }
+    loadMemories();
   });
 
   // Mood switcher (developer panel): show the live relationship scores and let a
@@ -1086,15 +1181,18 @@
       'hf.co/efficiencyx/Jun-Lora-v2-GGUF:Q8_0',
       'hf.co/efficiencyx/Jun-Lora-v2-GGUF:Q6_K',
       'hf.co/efficiencyx/Jun-Lora-v2-GGUF:Q4_K_M',
-      'hf.co/unsloth/gemma-4-12B-it-qat-GGUF:UD-Q4_K_XL',
-      'hf.co/unsloth/gemma-4-E4B-it-qat-GGUF:UD-Q4_K_XL',
-      'hf.co/unsloth/gemma-4-E2B-it-qat-GGUF:UD-Q4_K_XL',
+      'hf.co/efficiencyx/Jun-LoRA-V3-E4B-GGUF:Q8_0',
+      'hf.co/efficiencyx/Jun-LoRA-V3-E4B-GGUF:Q6_K',
+      'hf.co/efficiencyx/Jun-LoRA-V3-E4B-GGUF:Q4_K_M',
+      'hf.co/efficiencyx/Jun-LoRA-v3-E2B-GGUF:Q8_0',
+      'hf.co/efficiencyx/Jun-LoRA-v3-E2B-GGUF:Q6_K',
+      'hf.co/efficiencyx/Jun-LoRA-v3-E2B-GGUF:Q4_K_M',
       'llama3.1:8b', 'llama3.1:latest',
     ];
     const isChat = (n) => !/embed/i.test(n);
     // A previously chosen model wins, as long as it's still installed.
     const saved = localStorage.getItem('model');
-    const picked = (saved && m.models.includes(saved))
+    const picked = (saved && m.models.includes(saved) ? saved : null)
       || prefer.find(p => m.models.includes(p))
       || m.models.find(isChat)
       || m.models[0];

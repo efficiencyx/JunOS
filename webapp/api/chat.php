@@ -171,34 +171,7 @@ function should_offer_tools(string $msg): bool {
     return false;
 }
 
-function memory_file_path(int $userId): string {
-    $dir = rtrim(env_str('MEMORY_DIR', '/var/lib/jun/memory'), '/');
-    if (!is_dir($dir)) @mkdir($dir, 0700, true);
-    if (!is_dir($dir) || !is_writable($dir)) {
-        throw new RuntimeException('memory_dir_unwritable');
-    }
-    return $dir . '/user-' . $userId . '.jsonl';
-}
-
-function memory_append(int $userId, string $memory, string $category): array {
-    $memory = trim(preg_replace('/\s+/', ' ', $memory));
-    $category = trim(preg_replace('/[^a-z0-9]+/i', '_', $category), '_');
-    if ($category === '') $category = 'general';
-    if ($memory === '') return ['error' => 'memory_required'];
-    if (mb_strlen($memory) > 800) $memory = mb_substr($memory, 0, 797) . '…';
-    if (mb_strlen($category) > 40) $category = mb_substr($category, 0, 40);
-
-    $entry = ['created_at' => time(), 'category' => $category, 'memory' => $memory];
-    $path = memory_file_path($userId);
-    $fp = fopen($path, 'ab');
-    if ($fp === false) return ['error' => 'memory_open_failed'];
-    flock($fp, LOCK_EX);
-    fwrite($fp, json_encode($entry, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES) . "\n");
-    flock($fp, LOCK_UN);
-    fclose($fp);
-    @chmod($path, 0600);
-    return ['ok' => true, 'entry' => $entry];
-}
+// memory_file_path / memory_append live in _lib.php (shared with memory.php).
 
 function memory_recent_context(int $userId, int $limit = 20): string {
     try {
@@ -734,7 +707,7 @@ $ollamaPayload = [
         // with done_reason=length BEFORE emitting any answer - the user then sees a
         // thought process and an empty reply. So when thinking we lift the cap (-1)
         // and let num_ctx bound generation; non-thinking turns stay snappy.
-        'num_predict' => $think ? -1 : 512,
+        'num_predict' => $think ? -1 : 128,
     ],
 ];
 

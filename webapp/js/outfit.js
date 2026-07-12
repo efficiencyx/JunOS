@@ -105,11 +105,11 @@ window.Outfit = (function () {
 
     { key: 'hair_hologram', label: 'Hair hologram', includes: ['hairhologram'], excludes: [] },
 
-    // Cat ears: broad group first, then per-layer overrides.
-    { key: 'ear', label: 'Ear (all)', includes: ['catear','pointyear'], excludes: [] },
-    { key: 'ear_back', label: 'Ear back', includes: ['catearback'], excludes: [] },
-    { key: 'ear_mid', label: 'Ear inside', includes: ['catearmid'], excludes: [] },
-    { key: 'ear_front', label: 'Ear front', includes: ['catearfront'], excludes: [] },
+    // The game exposes CatEarMain and CatEarSecondary color slots. In this
+    // model the secondary slot is the inner/fluff layer, kept disjoint from
+    // the front/back main layers so clearing either slot restores its default.
+    { key: 'ear', label: 'Ear', includes: ['catearback','catearfront','pointyear'], excludes: [] },
+    { key: 'ear_mid', label: 'Fluff', includes: ['catearmid'], excludes: [] },
 
     // Body tail is TailMain*; H4_Tail belongs to the hair group instead.
     { key: 'tail', label: 'Tail', includes: ['tailmain'], excludes: [] },
@@ -139,6 +139,18 @@ window.Outfit = (function () {
   // declare a `defaultColor` that seeds the tint until the user changes/clears it.
   const colors = {};
   for (const g of COLOR_GROUPS) colors[g.key] = g.defaultColor || null;
+
+  // A wardrobe item can own several game color slots. Keep those slots on the
+  // same tile and open them in one picker instead of scattering independent
+  // controls around the color studio.
+  const ITEM_COLOR_GROUPS = {
+    ...Object.fromEntries(ITEMS.filter(it => it.colorPatterns).map(it => [it.key, [it.key]])),
+    cat_ears: ['ear', 'ear_mid'],
+    pointy_ears: ['ear'],
+    tail: ['tail'],
+    hair_hologram: ['hair_hologram'],
+    hair_h0: ['hair'], hair_h1: ['hair'], hair_h2: ['hair'], hair_h3: ['hair'], hair_h4: ['hair'],
+  };
 
   // Limb variants ripped from the game's PackedTexturesContainer assets:
   // per-drawable crops of the packed variant textures, saved one PNG per
@@ -331,8 +343,9 @@ window.Outfit = (function () {
     'nippiercing', 'navelpiercing', 'headband',
   ];
 
-  function applyAll() {
-    if (Live2D.opacityByPattern) Live2D.opacityByPattern(ALWAYS_HIDDEN, [], 0);
+  // Just the param/opacity flips for the boolean items. Cheap: no texture
+  // recompositing, no tint repaint. This is all an equip/unequip needs.
+  function applyItems() {
     for (const it of ITEMS) {
       if (it.param) Live2D.setTarget(it.param, state[it.key] ? 1 : 0);
       // For items whose param doesn't drive drawable opacity, override directly.
@@ -346,13 +359,22 @@ window.Outfit = (function () {
           state[it.key] ? visOn : visOff);
       }
     }
+  }
+
+  function applyAll() {
+    if (Live2D.opacityByPattern) Live2D.opacityByPattern(ALWAYS_HIDDEN, [], 0);
+    applyItems();
     applyVariants();
     applyColors();
+    // Modded items go last so they win over variant overrides on shared drawables.
+    if (window.Mods) Mods.applyAll();
   }
 
   // Swap each slot's drawables to the selected variant texture (or clear to the
-  // baked default). Runs the compositor once per slot.
-  function applyVariants() {
+  // baked default). Runs the compositor once per slot. Pass `onlyKey` to touch
+  // a single slot (recompositing an atlas is expensive - don't redo the other
+  // slots when only one changed).
+  function applyVariants(onlyKey) {
     if (!Live2D.setDrawableTextures) return;
     // Collect draw-order pairs from every active option in one go.
     if (Live2D.setDrawableOrderBelow) {
@@ -360,6 +382,7 @@ window.Outfit = (function () {
         VARIANTS.flatMap(v => v.options[variantState[v.key] || 0].order || []));
     }
     for (const v of VARIANTS) {
+      if (onlyKey && v.key !== onlyKey) continue;
       const opt = v.options[variantState[v.key] || 0];
       const map = {};
       for (const d of v.drawables) map[d] = (opt.textures && opt.textures[d]) || null;
@@ -385,7 +408,7 @@ window.Outfit = (function () {
     if (!v || !v.options[index]) return;
     variantState[key] = index;
     saveVariants();
-    applyVariants();
+    applyVariants(key);
     applyColors();
     syncUI();
   }
@@ -432,7 +455,10 @@ window.Outfit = (function () {
       for (const ex of it.excludes) state[ex] = false;
     }
     save();
-    applyAll();
+    // Only the boolean params/opacities change on an equip toggle; skip the
+    // variant compositor + tint repaint (they redraw and re-upload whole
+    // atlases, which caused a visible stutter on every un/equip).
+    applyItems();
     syncUI();
   }
 
@@ -441,6 +467,330 @@ window.Outfit = (function () {
     colors[key] = hex || null;
     saveColors();
     applyColors();
+    refreshColorButtons();
+  }
+
+  function normalizeHex(value) {
+    const raw = String(value || '').trim();
+    const short = /^#?([0-9a-f]{3})$/i.exec(raw);
+    if (short) return '#' + [...short[1]].map(c => c + c).join('').toLowerCase();
+    const full = /^#?([0-9a-f]{6})$/i.exec(raw);
+    return full ? '#' + full[1].toLowerCase() : null;
+  }
+
+  function hexToHsv(hex) {
+    const [r, g, b] = hexToRgb01(hex) || [1, 1, 1];
+    const max = Math.max(r, g, b), min = Math.min(r, g, b), d = max - min;
+    let h = 0;
+    if (d && max === r) h = 60 * (((g - b) / d) % 6);
+    else if (d && max === g) h = 60 * ((b - r) / d + 2);
+    else if (d) h = 60 * ((r - g) / d + 4);
+    if (h < 0) h += 360;
+    return { h, s: max ? d / max : 0, v: max };
+  }
+
+  function hsvToHex({ h, s, v }) {
+    const c = v * s, x = c * (1 - Math.abs(((h / 60) % 2) - 1)), m = v - c;
+    let rgb;
+    if (h < 60) rgb = [c, x, 0];
+    else if (h < 120) rgb = [x, c, 0];
+    else if (h < 180) rgb = [0, c, x];
+    else if (h < 240) rgb = [0, x, c];
+    else if (h < 300) rgb = [x, 0, c];
+    else rgb = [c, 0, x];
+    return '#' + rgb.map(n => Math.round((n + m) * 255).toString(16).padStart(2, '0')).join('');
+  }
+
+  const colorGroup = (key) => COLOR_GROUPS.find(g => g.key === key);
+
+  function paintColorButton(button) {
+    const keys = (button.dataset.colorKeys || '').split(',').filter(Boolean);
+    const values = keys.map(key => colors[key] || null);
+    button.classList.toggle('set', values.some(Boolean));
+    button.querySelectorAll('.color-preview-segment').forEach((segment, i) => {
+      segment.classList.toggle('unset', !values[i]);
+      segment.style.background = values[i] || '';
+    });
+  }
+
+  function refreshColorButtons() {
+    document.querySelectorAll('[data-color-keys]').forEach(paintColorButton);
+    if (!containerEl) return;
+    containerEl.querySelectorAll('button[data-color-clear]').forEach(button => {
+      const keys = button.dataset.colorClear.split(',').filter(Boolean);
+      button.classList.toggle('active', keys.some(key => !!colors[key]));
+    });
+  }
+
+  let colorPickerEl = null, colorPickerAnchor = null, pickerState = null;
+  const COLOR_PRESETS = ['#f6d6c8', '#ef8fa9', '#c76ee8', '#7754d8', '#4b7bd8', '#41a9a2', '#76ae57', '#e2b34c', '#d76b42', '#34273f'];
+
+  function closeColorPicker(focusAnchor) {
+    if (!colorPickerEl || colorPickerEl.hidden) return;
+    colorPickerEl.hidden = true;
+    if (focusAnchor && colorPickerAnchor) colorPickerAnchor.focus();
+    colorPickerAnchor = null;
+    pickerState = null;
+  }
+
+  function positionColorPicker() {
+    const anchor = colorPickerAnchor.getBoundingClientRect();
+    const width = colorPickerEl.offsetWidth, height = colorPickerEl.offsetHeight;
+    let left = anchor.right - width, top = anchor.bottom + 8;
+    if (top + height > innerHeight - 8) top = anchor.top - height - 8;
+    colorPickerEl.style.left = `${Math.max(8, Math.min(left, innerWidth - width - 8))}px`;
+    colorPickerEl.style.top = `${Math.max(8, Math.min(top, innerHeight - height - 8))}px`;
+  }
+
+  function pickerColor(index = pickerState.index) {
+    return pickerState.values ? pickerState.values[index] : colors[pickerState.keys[index]];
+  }
+
+  function commitPickerColor(hex) {
+    if (pickerState.values) {
+      pickerState.values[pickerState.index] = hex || null;
+      pickerState.onChange(pickerState.index, hex || null);
+    } else {
+      setColor(pickerState.keys[pickerState.index], hex);
+    }
+  }
+
+  function updatePickerUI() {
+    if (!pickerState) return;
+    const hex = pickerColor();
+    const shown = hex || hsvToHex(pickerState.hsv);
+    colorPickerEl.style.setProperty('--picker-hue', `hsl(${pickerState.hsv.h} 100% 50%)`);
+    const svThumb = colorPickerEl.querySelector('.ocp-sv-thumb');
+    svThumb.style.left = `${pickerState.hsv.s * 100}%`;
+    svThumb.style.top = `${(1 - pickerState.hsv.v) * 100}%`;
+    colorPickerEl.querySelector('.ocp-hue-thumb').style.left = `${pickerState.hsv.h / 3.6}%`;
+    colorPickerEl.querySelector('.ocp-sv').setAttribute('aria-valuetext',
+      `Saturation ${Math.round(pickerState.hsv.s * 100)}%, brightness ${Math.round(pickerState.hsv.v * 100)}%`);
+    colorPickerEl.querySelector('.ocp-hue').setAttribute('aria-valuenow', String(Math.round(pickerState.hsv.h)));
+    colorPickerEl.querySelector('.ocp-current').style.background = shown;
+    const input = colorPickerEl.querySelector('.ocp-hex');
+    input.value = shown.toUpperCase();
+    input.classList.remove('invalid');
+    const clear = colorPickerEl.querySelector('.ocp-clear');
+    clear.disabled = !hex;
+    clear.textContent = hex ? 'Use default' : 'Using default';
+    colorPickerEl.querySelectorAll('.ocp-channel').forEach((button, i) => {
+      button.classList.toggle('active', i === pickerState.index);
+      button.setAttribute('aria-selected', String(i === pickerState.index));
+      const dot = button.querySelector('i'), value = pickerColor(i);
+      dot.classList.toggle('unset', !value);
+      dot.style.background = value || '';
+    });
+  }
+
+  function selectPickerChannel(index) {
+    if (!pickerState || !pickerState.labels[index]) return;
+    pickerState.index = index;
+    pickerState.hsv = hexToHsv(pickerColor(index) || '#ffffff');
+    updatePickerUI();
+  }
+
+  function applyPickerHsv() {
+    commitPickerColor(hsvToHex(pickerState.hsv));
+    updatePickerUI();
+  }
+
+  function beginColorPointer(event, element, onMove) {
+    if (event.button !== 0) return;
+    event.preventDefault();
+    const id = event.pointerId;
+    const move = (e) => { if (e.pointerId === id) onMove(e, element.getBoundingClientRect()); };
+    const end = (e) => {
+      if (e.pointerId !== id) return;
+      element.removeEventListener('pointermove', move);
+      element.removeEventListener('pointerup', end);
+      element.removeEventListener('pointercancel', end);
+    };
+    element.setPointerCapture(id);
+    element.addEventListener('pointermove', move);
+    element.addEventListener('pointerup', end);
+    element.addEventListener('pointercancel', end);
+    move(event);
+  }
+
+  function buildColorPicker() {
+    if (colorPickerEl) return;
+    colorPickerEl = document.createElement('div');
+    colorPickerEl.className = 'omega-color-picker';
+    colorPickerEl.hidden = true;
+    colorPickerEl.setAttribute('role', 'dialog');
+    colorPickerEl.setAttribute('aria-label', 'Color picker');
+    colorPickerEl.innerHTML = `
+      <div class="ocp-head"><div><b class="ocp-title"></b><span>Item colors</span></div><button type="button" class="ocp-close" aria-label="Close color picker">×</button></div>
+      <div class="ocp-channels" role="tablist"></div>
+      <div class="ocp-sv" role="slider" tabindex="0" aria-label="Saturation and brightness"><i class="ocp-sv-thumb"></i></div>
+      <div class="ocp-hue" role="slider" tabindex="0" aria-label="Hue"><i class="ocp-hue-thumb"></i></div>
+      <div class="ocp-value-row"><i class="ocp-current"></i><input class="ocp-hex" type="text" maxlength="7" spellcheck="false" aria-label="Hex color"></div>
+      <div class="ocp-presets" aria-label="Color presets"></div><button type="button" class="ocp-clear">Use default</button>`;
+    document.body.appendChild(colorPickerEl);
+    colorPickerEl.querySelector('.ocp-close').addEventListener('click', () => closeColorPicker(true));
+    const sv = colorPickerEl.querySelector('.ocp-sv');
+    sv.addEventListener('pointerdown', (e) => beginColorPointer(e, sv, (ev, rect) => {
+      pickerState.hsv.s = Math.max(0, Math.min(1, (ev.clientX - rect.left) / rect.width));
+      pickerState.hsv.v = Math.max(0, Math.min(1, 1 - (ev.clientY - rect.top) / rect.height));
+      applyPickerHsv();
+    }));
+    sv.addEventListener('keydown', (e) => {
+      const step = e.shiftKey ? 0.1 : 0.02;
+      if (e.key === 'ArrowLeft') pickerState.hsv.s -= step;
+      else if (e.key === 'ArrowRight') pickerState.hsv.s += step;
+      else if (e.key === 'ArrowUp') pickerState.hsv.v += step;
+      else if (e.key === 'ArrowDown') pickerState.hsv.v -= step;
+      else return;
+      e.preventDefault();
+      pickerState.hsv.s = Math.max(0, Math.min(1, pickerState.hsv.s));
+      pickerState.hsv.v = Math.max(0, Math.min(1, pickerState.hsv.v));
+      applyPickerHsv();
+    });
+    const hue = colorPickerEl.querySelector('.ocp-hue');
+    hue.addEventListener('pointerdown', (e) => beginColorPointer(e, hue, (ev, rect) => {
+      pickerState.hsv.h = Math.max(0, Math.min(359.99, (ev.clientX - rect.left) / rect.width * 360));
+      applyPickerHsv();
+    }));
+    hue.addEventListener('keydown', (e) => {
+      if (e.key !== 'ArrowLeft' && e.key !== 'ArrowRight') return;
+      e.preventDefault();
+      pickerState.hsv.h = (pickerState.hsv.h + (e.key === 'ArrowRight' ? 3 : 357)) % 360;
+      applyPickerHsv();
+    });
+    const hexInput = colorPickerEl.querySelector('.ocp-hex');
+    const submitHex = () => {
+      const hex = normalizeHex(hexInput.value);
+      if (!hex) { hexInput.classList.add('invalid'); return; }
+      pickerState.hsv = hexToHsv(hex);
+      commitPickerColor(hex);
+      updatePickerUI();
+    };
+    hexInput.addEventListener('change', submitHex);
+    hexInput.addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); submitHex(); } });
+    colorPickerEl.querySelector('.ocp-clear').addEventListener('click', () => {
+      commitPickerColor(null);
+      pickerState.hsv = hexToHsv('#ffffff');
+      updatePickerUI();
+    });
+    const presets = colorPickerEl.querySelector('.ocp-presets');
+    for (const color of COLOR_PRESETS) {
+      const button = document.createElement('button');
+      button.type = 'button';
+      button.style.background = color;
+      button.title = color.toUpperCase();
+      button.setAttribute('aria-label', `Use ${color}`);
+      button.addEventListener('click', () => {
+        pickerState.hsv = hexToHsv(color);
+        commitPickerColor(color);
+        updatePickerUI();
+      });
+      presets.appendChild(button);
+    }
+    document.addEventListener('pointerdown', (e) => {
+      if (!colorPickerEl.hidden && !colorPickerEl.contains(e.target) && !(colorPickerAnchor && colorPickerAnchor.contains(e.target))) closeColorPicker(false);
+    });
+    document.addEventListener('keydown', (e) => {
+      if (e.key === 'Escape' && !colorPickerEl.hidden) { e.stopPropagation(); closeColorPicker(true); }
+    }, true);
+    window.addEventListener('resize', () => closeColorPicker(false));
+    window.addEventListener('scroll', () => closeColorPicker(false), true);
+  }
+
+  function showColorPicker(anchor, label, state) {
+    buildColorPicker();
+    colorPickerAnchor = anchor;
+    pickerState = { ...state, index: 0, hsv: hexToHsv('#ffffff') };
+    if (!pickerState.labels.length) return;
+    colorPickerEl.querySelector('.ocp-title').textContent = label;
+    const channels = colorPickerEl.querySelector('.ocp-channels');
+    channels.innerHTML = '';
+    channels.hidden = pickerState.labels.length < 2;
+    pickerState.labels.forEach((channelLabel, index) => {
+      const button = document.createElement('button');
+      button.type = 'button';
+      button.className = 'ocp-channel';
+      button.setAttribute('role', 'tab');
+      const dot = document.createElement('i'), text = document.createElement('span');
+      text.textContent = channelLabel;
+      button.append(dot, text);
+      button.addEventListener('click', () => selectPickerChannel(index));
+      channels.appendChild(button);
+    });
+    colorPickerEl.hidden = false;
+    selectPickerChannel(0);
+    positionColorPicker();
+  }
+
+  function openColorPicker(anchor, keys, label) {
+    const validKeys = keys.filter(key => key in colors);
+    showColorPicker(anchor, label, {
+      keys: validKeys,
+      labels: validKeys.map(key => (colorGroup(key) || {}).label || key),
+    });
+  }
+
+  function makeItemColorButton(label, slotLabels, initialValues, onChange, className = 'wd-swatch') {
+    const values = slotLabels.map((_, i) => initialValues[i] || null);
+    const button = document.createElement('button');
+    button.type = 'button';
+    button.className = className;
+    button.title = `${label} colors · right-click to clear`;
+    button.setAttribute('aria-label', `Choose ${label} colors`);
+    const segments = slotLabels.map(() => {
+      const segment = document.createElement('i');
+      segment.className = 'color-preview-segment';
+      button.appendChild(segment);
+      return segment;
+    });
+    const paint = () => {
+      button.classList.toggle('set', values.some(Boolean));
+      segments.forEach((segment, i) => {
+        segment.classList.toggle('unset', !values[i]);
+        segment.style.background = values[i] || '';
+      });
+    };
+    const setExternal = (index, hex) => {
+      values[index] = hex || null;
+      paint();
+      onChange(index, hex || null);
+    };
+    paint();
+    button.addEventListener('pointerdown', (e) => e.stopPropagation());
+    button.addEventListener('click', (e) => {
+      e.stopPropagation();
+      showColorPicker(button, label, { values, labels: slotLabels, onChange: setExternal });
+    });
+    button.addEventListener('contextmenu', (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      slotLabels.forEach((_, index) => setExternal(index, null));
+    });
+    return button;
+  }
+
+  function makeColorButton(groupKeys, label, className) {
+    const button = document.createElement('button');
+    button.type = 'button';
+    button.className = className;
+    button.dataset.colorKeys = groupKeys.join(',');
+    button.dataset.colorLabel = label.toLowerCase();
+    button.title = `${label} colors · right-click to clear`;
+    button.setAttribute('aria-label', `Choose ${label} colors`);
+    for (let i = 0; i < groupKeys.length; i++) {
+      const segment = document.createElement('i');
+      segment.className = 'color-preview-segment';
+      button.appendChild(segment);
+    }
+    paintColorButton(button);
+    button.addEventListener('pointerdown', (e) => e.stopPropagation());
+    button.addEventListener('click', (e) => { e.stopPropagation(); openColorPicker(button, groupKeys, label); });
+    button.addEventListener('contextmenu', (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      groupKeys.forEach(key => setColor(key, null));
+    });
+    return button;
   }
 
   let containerEl = null;
@@ -451,12 +801,7 @@ window.Outfit = (function () {
       const cb = containerEl.querySelector(`input[type="checkbox"][data-key="${it.key}"]`);
       if (cb) cb.checked = state[it.key];
     }
-    for (const g of COLOR_GROUPS) {
-      const cp = containerEl.querySelector(`input[type="color"][data-color-key="${g.key}"]`);
-      const btn = containerEl.querySelector(`button[data-color-clear="${g.key}"]`);
-      if (cp) cp.value = colors[g.key] || '#ffffff';
-      if (btn) btn.classList.toggle('active', !!colors[g.key]);
-    }
+    refreshColorButtons();
     for (const v of VARIANTS) {
       const sel = containerEl.querySelector(`select[data-variant-key="${v.key}"]`);
       if (sel) sel.value = String(variantState[v.key] || 0);
@@ -529,23 +874,33 @@ window.Outfit = (function () {
     title.textContent = 'Colors';
     colorWrap.appendChild(title);
 
+    // The settings panel uses the same custom picker as the visual wardrobe.
+    // Cat-ear main/fluff slots are represented by one bundled row.
     for (const g of COLOR_GROUPS) {
-      const matchedIds = Live2D.findDrawables ? Live2D.findDrawables(g.includes, g.excludes) : [];
-      const matchCount = matchedIds.length;
+      if (g.key === 'ear_mid') continue;
+      const keys = g.key === 'ear' ? ITEM_COLOR_GROUPS.cat_ears : [g.key];
+      const groups = keys.map(colorGroup).filter(Boolean);
+      const matchedIds = new Set(groups.flatMap(group =>
+        Live2D.findDrawables ? Live2D.findDrawables(group.includes, group.excludes) : []));
+      const label = g.key === 'ear' ? 'Cat ears' : g.label;
       const row = document.createElement('div');
       row.className = 'outfit-color-row';
-      row.title = matchedIds.length ? matchedIds.join('\n') : '(nessun drawable corrispondente)';
-      row.innerHTML = `
-        <span class="outfit-color-label">${g.label}</span>
-        <span class="outfit-color-count ${matchCount === 0 ? 'zero' : ''}">${matchCount}</span>
-        <input type="color" data-color-key="${g.key}" value="${colors[g.key] || '#ffffff'}">
-        <button class="ghost outfit-color-clear ${colors[g.key] ? 'active' : ''}" data-color-clear="${g.key}" title="Rimuovi tinta">×</button>
-      `;
-      const cp = row.querySelector('input[type="color"]');
-      const clr = row.querySelector('button[data-color-clear]');
-      cp.addEventListener('input', () => { setColor(g.key, cp.value); clr.classList.add('active'); });
-      cp.addEventListener('change', () => { setColor(g.key, cp.value); clr.classList.add('active'); });
-      clr.addEventListener('click', () => { setColor(g.key, null); cp.value = '#ffffff'; clr.classList.remove('active'); });
+      row.title = matchedIds.size ? [...matchedIds].join('\n') : '(no matching drawable)';
+      const labelEl = document.createElement('span');
+      labelEl.className = 'outfit-color-label';
+      labelEl.textContent = label;
+      const count = document.createElement('span');
+      count.className = `outfit-color-count ${matchedIds.size === 0 ? 'zero' : ''}`;
+      count.textContent = String(matchedIds.size);
+      const trigger = makeColorButton(keys, label, 'outfit-color-trigger');
+      const clear = document.createElement('button');
+      clear.type = 'button';
+      clear.className = 'ghost outfit-color-clear';
+      clear.dataset.colorClear = keys.join(',');
+      clear.title = 'Remove tint';
+      clear.textContent = '×';
+      clear.addEventListener('click', () => keys.forEach(key => setColor(key, null)));
+      row.append(labelEl, count, trigger, clear);
       colorWrap.appendChild(row);
     }
     rootEl.appendChild(colorWrap);
@@ -604,10 +959,20 @@ window.Outfit = (function () {
     if (src) wdMoveGhost(x, y);
   }
 
-  function makeTile(label, thumbSrc, onEquip) {
+  // Small tint control pinned to a tile's top-right corner. Multi-slot items
+  // display a split preview and open every slot in the same custom picker.
+  function makeSwatch(groupKeys, label) {
+    return makeColorButton(groupKeys, label, 'wd-swatch');
+  }
+
+  function makeTile(label, thumbSrc, onEquip, colorKeys) {
     const tile = document.createElement('div');
     tile.className = 'wd-tile';
+    tile.tabIndex = 0;
+    tile.setAttribute('role', 'button');
+    tile.setAttribute('aria-label', `Toggle ${label}`);
     tile.innerHTML = `${thumbSrc ? `<img draggable="false" src="${thumbSrc}">` : '<div class="wd-noimg">?</div>'}<span>${label}</span>`;
+    if (colorKeys && colorKeys.length) tile.appendChild(makeSwatch(colorKeys, label));
     // Custom pointer drag (not HTML5 DnD): works on touch and gives us the ghost.
     tile.addEventListener('pointerdown', (e) => {
       if (e.button !== 0) return;
@@ -632,39 +997,73 @@ window.Outfit = (function () {
       tile.addEventListener('pointermove', move);
       tile.addEventListener('pointerup', up);
     });
+    tile.addEventListener('keydown', (e) => {
+      if (e.key !== 'Enter' && e.key !== ' ') return;
+      e.preventDefault();
+      onEquip(true);
+    });
     return tile;
   }
 
   function buildWardrobe() {
     wdOverlay = document.createElement('div');
     wdOverlay.className = 'wardrobe-overlay';
-    wdOverlay.innerHTML = `<div class="wd-head"><span>Wardrobe</span>
-      <span class="wd-hint">Hover a worn piece to highlight it - drag it to remove it</span>
-      <button class="ghost wd-close" title="Close">×</button></div>
-      <div class="wd-body"></div>`;
+    wdOverlay.innerHTML = `<div class="wd-head">
+        <div class="wd-titles"><span class="wd-title">Wardrobe</span>
+        <span class="wd-hint">Click to toggle · drag onto Jun to wear</span></div>
+        <div class="wd-actions"><button class="ghost wd-reset" type="button" title="Restore the default outfit">Reset</button>
+        <button class="ghost wd-close" type="button" aria-label="Close wardrobe" title="Close">×</button></div></div>
+      <div class="wd-main"><nav class="wd-rail" aria-label="Wardrobe sections"></nav><div class="wd-body"></div></div>`;
     const body = wdOverlay.querySelector('.wd-body');
+    const rail = wdOverlay.querySelector('.wd-rail');
 
-    const section = (name) => {
+    // Side rail: one anchor per top-level section, active state follows scroll.
+    const navTargets = [];
+    const addNav = (name, icon, el) => {
+      const b = document.createElement('button');
+      b.type = 'button';
+      b.className = 'wd-nav';
+      b.title = name;
+      b.innerHTML = `<i>${icon}</i><span>${name}</span>`;
+      b.addEventListener('click', () => body.scrollTo({ top: el.offsetTop - 6, behavior: 'smooth' }));
+      rail.appendChild(b);
+      navTargets.push([el, b]);
+    };
+    const syncNav = () => {
+      let active = navTargets.length ? navTargets[0][1] : null;
+      for (const [el, b] of navTargets) if (el.offsetTop <= body.scrollTop + 90) active = b;
+      for (const [, b] of navTargets) b.classList.toggle('on', b === active);
+    };
+    body.addEventListener('scroll', syncNav, { passive: true });
+
+    const section = (name, sub) => {
       const t = document.createElement('div');
-      t.className = 'wd-section';
+      t.className = sub ? 'wd-section wd-sub' : 'wd-section';
       t.textContent = name;
       body.appendChild(t);
       const grid = document.createElement('div');
       grid.className = 'wd-grid';
       body.appendChild(grid);
-      return grid;
+      return { title: t, grid };
     };
 
-    for (const [sec, name] of [[undefined, 'Clothing'], ['body', 'Body'], ['hair', 'Hair']]) {
-      const grid = section(name);
+    for (const [sec, name, icon] of [[undefined, 'Clothing', '👗'], ['body', 'Body', '🐾'], ['hair', 'Hair', '💇']]) {
+      const { title, grid } = section(name);
+      addNav(name, icon, title);
       for (const it of ITEMS.filter(x => x.section === sec)) {
-        const tile = makeTile(it.label, itemThumb(it), (isClick) => setItem(it.key, isClick ? !state[it.key] : true));
+        const colorKeys = ITEM_COLOR_GROUPS[it.key] || [];
+        const tile = makeTile(it.label, itemThumb(it),
+          (isClick) => setItem(it.key, isClick ? !state[it.key] : true), colorKeys);
         tile.dataset.item = it.key;
         grid.appendChild(tile);
       }
     }
+
+    // All variant slots grouped under one "Styles" anchor.
+    let firstVariant = true;
     for (const v of VARIANTS) {
-      const grid = section(v.label);
+      const { title, grid } = section(v.label, !firstVariant);
+      if (firstVariant) { addNav('Styles', '✨', title); firstVariant = false; }
       v.options.forEach((opt, i) => {
         const tile = makeTile(opt.name, variantThumb(v, opt), () => setVariant(v.key, i));
         tile.dataset.variant = v.key;
@@ -673,6 +1072,41 @@ window.Outfit = (function () {
       });
     }
 
+    // Color studio: tints that have no wardrobe tile to live on (skin, face,
+    // eyes...). Item/ear/hair tints are on the tiles themselves.
+    const tileGroups = new Set(Object.values(ITEM_COLOR_GROUPS).flat());
+    const studioGroups = COLOR_GROUPS.filter(g =>
+      !tileGroups.has(g.key) &&
+      (!Live2D.findDrawables || Live2D.findDrawables(g.includes, g.excludes).length));
+    if (studioGroups.length) {
+      const t = document.createElement('div');
+      t.className = 'wd-section';
+      t.textContent = 'Color studio';
+      body.appendChild(t);
+      addNav('Colors', '🎨', t);
+      const chips = document.createElement('div');
+      chips.className = 'wd-chips';
+      for (const g of studioGroups) {
+        const chip = document.createElement('div');
+        chip.className = 'wd-chip';
+        chip.appendChild(Object.assign(document.createElement('span'), { textContent: g.label }));
+        chip.appendChild(makeSwatch([g.key], g.label));
+        chips.appendChild(chip);
+      }
+      body.appendChild(chips);
+    }
+
+    // Game-mod items (loaded from .zip, stored client-side in IndexedDB).
+    if (window.Mods) {
+      const anchor = document.createElement('div');
+      body.appendChild(anchor);
+      Mods.buildWardrobeSection(body);
+      const modTitle = anchor.nextElementSibling;
+      anchor.remove();
+      if (modTitle) addNav('Mods', '🧩', modTitle);
+    }
+    syncNav();
+
     wdTooltip = document.createElement('div');
     wdTooltip.className = 'wd-tooltip';
     wdGhost = document.createElement('img');
@@ -680,17 +1114,23 @@ window.Outfit = (function () {
     document.body.append(wdOverlay, wdTooltip, wdGhost);
 
     wdOverlay.querySelector('.wd-close').addEventListener('click', closeWardrobe);
+    wdOverlay.querySelector('.wd-reset').addEventListener('click', () => {
+      if (window.confirm('Restore Jun\'s default outfit and colors?')) reset();
+    });
 
-    // Model-side: hover highlights the exact drawable under the pointer; a
-    // drag removes the matching item as soon as the pointer actually moves.
+    // Model-side: hover highlights every drawable of the item under the
+    // pointer (the whole garment, not just the hit mesh); a drag removes the
+    // matching item as soon as the pointer actually moves.
     let removeDrag = null; // { key, x, y, removed }
-    let hoveredDrawable = null;
-    const setHoveredDrawable = (id) => {
-      if (hoveredDrawable === id) return;
-      if (hoveredDrawable) Live2D.setDrawableHighlight(hoveredDrawable, null);
-      hoveredDrawable = id;
-      if (hoveredDrawable) Live2D.setDrawableHighlight(hoveredDrawable, [0.45, 0.22, 0.65]);
-      document.body.classList.toggle('wd-over-worn-item', !!hoveredDrawable);
+    let hoveredKey = null, hoveredIds = [];
+    const setHoveredItem = (key, worn) => {
+      if (hoveredKey === key) return;
+      for (const id of hoveredIds) Live2D.setDrawableHighlight(id, null);
+      hoveredKey = key;
+      hoveredIds = [];
+      if (key && worn) for (const [id, k] of worn) if (k === key) hoveredIds.push(id);
+      for (const id of hoveredIds) Live2D.setDrawableHighlight(id, [0.45, 0.22, 0.65]);
+      document.body.classList.toggle('wd-over-worn-item', !!key);
     };
     window.addEventListener('pointermove', (e) => {
       if (!document.body.classList.contains('wardrobe-open')) return;
@@ -699,17 +1139,17 @@ window.Outfit = (function () {
         if (!removeDrag.removed && Math.hypot(e.clientX - removeDrag.x, e.clientY - removeDrag.y) > 6) {
           removeDrag.removed = true;
           setItem(removeDrag.key, false);
-          setHoveredDrawable(null);
+          setHoveredItem(null);
         }
         return;
       }
-      let key = null, hit = null;
+      let key = null, worn = null;
       if (!(e.target && e.target.closest && e.target.closest('.wardrobe-overlay'))) {
-        const worn = wornDrawableMap();
-        hit = Live2D.drawableAt(e.clientX, e.clientY, new Set(worn.keys()));
+        worn = wornDrawableMap();
+        const hit = Live2D.drawableAt(e.clientX, e.clientY, new Set(worn.keys()));
         key = hit ? worn.get(hit) : null;
       }
-      setHoveredDrawable(hit);
+      setHoveredItem(key, worn);
       wdTooltip.style.display = key ? 'block' : 'none';
       if (key) {
         const it = ITEMS.find(x => x.key === key);
@@ -730,16 +1170,20 @@ window.Outfit = (function () {
       try { e.target.setPointerCapture(e.pointerId); } catch (err) { }
       removeDrag = { key, x: e.clientX, y: e.clientY, removed: false };
       wdTooltip.style.display = 'none';
-      setHoveredDrawable(hit);
+      setHoveredItem(key, worn);
       const tile = wdOverlay.querySelector(`.wd-tile[data-item="${key}"] img`);
       wdShowGhost(tile ? tile.src : '', e.clientX, e.clientY);
     });
     window.addEventListener('pointerup', (e) => {
       if (!removeDrag) return;
+      // Dropping the piece back on Jun cancels the removal (change of mind);
+      // releasing away from her confirms it. A press without a real move is
+      // just a pick - it never removed anything in the first place.
+      if (removeDrag.removed && Live2D.isOverModel(e.clientX, e.clientY)) {
+        setItem(removeDrag.key, true);
+      }
       removeDrag = null;
       wdShowGhost(null);
-      // A press without a real move is just a pick; moving it is the remove.
-      // This avoids accidentally stripping a layer while inspecting it.
     });
     window.addEventListener('pointercancel', () => {
       removeDrag = null;
@@ -756,13 +1200,20 @@ window.Outfit = (function () {
     if (!wdOverlay) return;
     for (const it of ITEMS) {
       const tile = wdOverlay.querySelector(`.wd-tile[data-item="${it.key}"]`);
-      if (tile) tile.classList.toggle('on', !!state[it.key]);
+      if (tile) {
+        tile.classList.toggle('on', !!state[it.key]);
+        tile.setAttribute('aria-pressed', String(!!state[it.key]));
+      }
     }
     for (const v of VARIANTS) {
       wdOverlay.querySelectorAll(`.wd-tile[data-variant="${v.key}"]`).forEach(tile => {
-        tile.classList.toggle('on', Number(tile.dataset.opt) === (variantState[v.key] || 0));
+        const selected = Number(tile.dataset.opt) === (variantState[v.key] || 0);
+        tile.classList.toggle('on', selected);
+        tile.setAttribute('aria-pressed', String(selected));
       });
     }
+    // Repaint tint swatches (covers reset() and syncFromAction paths).
+    refreshColorButtons();
   }
 
   function openWardrobe() {
@@ -804,6 +1255,7 @@ window.Outfit = (function () {
       .filter(v => (variantState[v.key] || 0) > 0)
       .map(v => `${v.label.toLowerCase()}: ${v.options[variantState[v.key]].name.toLowerCase()}`);
     if (styles.length) s += ` Styles - ${styles.join('; ')}.`;
+    if (window.Mods) s += Mods.describe();
     return s;
   }
 
@@ -851,5 +1303,6 @@ window.Outfit = (function () {
     if (dirty) { save(); syncUI(); }
   }
 
-  return { load, buildUI, applyAll, describe, snapshot, reset, syncFromAction, setVariant, openWardrobe };
+  return { load, buildUI, applyAll, describe, snapshot, reset, syncFromAction, setVariant, openWardrobe,
+    makeItemColorButton, refreshColors: applyColors };
 })();
