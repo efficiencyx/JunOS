@@ -191,6 +191,15 @@ function Install-MachineTools([string[]]$missing, [switch]$Optional) {
 function Install-Php {
     $phpDir = Join-Path (Get-Location) 'runtime\php'
     $phpExe = Join-Path $phpDir 'php.exe'
+
+    # The windows.php.net builds link against the VC++ runtime, which fresh
+    # Windows installs often lack (php.exe then dies with a missing
+    # VCRUNTIME140.dll dialog). Tiny, standard, machine-wide MS component.
+    if (-not (Test-Path (Join-Path $env:SystemRoot 'System32\vcruntime140.dll'))) {
+        Write-Host '==> Installing the Microsoft Visual C++ runtime (needed by PHP)'
+        winget install -e --id Microsoft.VCRedist.2015+.x64 --accept-source-agreements --accept-package-agreements
+    }
+
     if (Test-Path $phpExe) { return }
 
     Write-Host '==> Downloading portable PHP into runtime\php'
@@ -236,6 +245,9 @@ function Install-Php {
     $ini | Set-Content (Join-Path $phpDir 'php.ini')
 
     & $phpExe -v | Select-Object -First 1 | Write-Host
+    if ($LASTEXITCODE -ne 0) {
+        Write-Warning 'php.exe did not run. If you saw a VCRUNTIME140.dll error, install the Microsoft Visual C++ 2015-2022 Redistributable (x64) and re-run.'
+    }
 }
 
 # ── TTS venv into runtime\tts-venv (only when voice is on) ──────────────────
