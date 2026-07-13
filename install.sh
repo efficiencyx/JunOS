@@ -360,6 +360,43 @@ cd "$DIR"
 
 configure
 
+step "asset policy"
+warn_ "Jun's Live2D model & textures belong to the creator of"
+warn_ "My Dystopian Robot Girlfriend. tools/recover_assets.py rebuilds"
+warn_ "them from YOUR game copy, for personal use only - do NOT"
+warn_ "republish them (public fork, release, mirror). See NOTICE in LICENSE."
+
+# Opt-in extraction of the Live2D assets from the user's own game install.
+# Never runs unless explicitly requested: answer y here, or JUN_EXTRACT=1
+# when non-interactive. Without it the webapp uses placeholder assets.
+extract=0
+case "$(printf '%s' "${JUN_EXTRACT:-}" | tr '[:upper:]' '[:lower:]')" in
+    1|on|yes|true) extract=1 ;;
+    0|off|no|false) extract=0 ;;
+    *)
+        if [ -r /dev/tty ] && [ "${JUN_YES:-}" != "1" ]; then
+            printf '     %s$%s extract them now from your game install? %s[y/N]%s %s→%s ' \
+                "$OK" "$R" "$DIM" "$R" "$ACCENT" "$R" > /dev/tty
+            read -r e < /dev/tty || e=""
+            case "$e" in y|Y|yes|YES) extract=1 ;; esac
+        fi
+        ;;
+esac
+if [ "$extract" = 1 ]; then
+    if command -v python3 >/dev/null 2>&1; then
+        run "install UnityPy + Pillow" python3 -m pip install --user --quiet UnityPy Pillow
+        if python3 tools/recover_assets.py; then
+            ok "assets extracted to webapp/assets (local use only)"
+        else
+            warn_ "extraction failed - run 'python3 tools/recover_assets.py --game DIR' later."
+        fi
+    else
+        warn_ "python3 not found - install it and run 'python3 tools/recover_assets.py' later."
+    fi
+else
+    note "skipped - run 'python3 tools/recover_assets.py' anytime to extract."
+fi
+
 [ "$DOCKER_JUST_INSTALLED" = 1 ] && wait_for_docker || true
 
 if docker_run docker info >/dev/null 2>&1; then
