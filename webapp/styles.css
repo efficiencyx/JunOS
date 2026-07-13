@@ -294,8 +294,13 @@ input[type="checkbox"] {
   display: inline-flex;
   align-items: center;
   gap: 8px;
+  min-height: 32px;
   min-width: 0;
   overflow: hidden;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  cursor: pointer;
 }
 .sidebar-brand-mark {
   font-family: ui-serif, Georgia, serif;
@@ -334,8 +339,17 @@ input[type="checkbox"] {
 /* Collapsed state - only icons visible, sidebar 56px wide.
    Uses ONLY animatable properties (gap, padding, opacity) - never justify-content,
    which is discrete and snaps mid-transition. */
-.app-main.sidebar-collapsed .sidebar-toolbar { padding: 4px 2px 0; justify-content: center; }
-.app-main.sidebar-collapsed .sidebar-brand { display: none; }
+.app-main.sidebar-collapsed .sidebar-toolbar { position: relative; padding: 4px 2px 0; justify-content: flex-start; }
+.app-main.sidebar-collapsed .sidebar-toggle { display: none; }
+.app-main.sidebar-collapsed .sidebar-brand {
+  position: absolute;
+  left: 50%;
+  width: 32px;
+  gap: 0;
+  justify-content: center;
+  transform: translate(-50%, 2px);
+}
+.app-main.sidebar-collapsed .sidebar-brand-name { display: none; }
 .app-main.sidebar-collapsed .sidebar-item span,
 .app-main.sidebar-collapsed .sidebar-label,
 .app-main.sidebar-collapsed .sidebar-brand-name,
@@ -487,6 +501,7 @@ input[type="checkbox"] {
   flex-shrink: 0;
   text-transform: uppercase;
 }
+.user-avatar img { width: 100%; height: 100%; border-radius: 50%; object-fit: cover; }
 .user-info {
   display: flex;
   flex-direction: column;

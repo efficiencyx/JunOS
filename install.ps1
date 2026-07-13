@@ -310,6 +310,43 @@ Install-Php
 if ($voice -eq 'on') { Install-Tts }
 
 Write-Host ""
+Write-Host "Asset policy:" -ForegroundColor Yellow
+Write-Host "  Jun's Live2D model & textures belong to the creator of My Dystopian" -ForegroundColor Yellow
+Write-Host "  Robot Girlfriend. tools/recover_assets.py rebuilds them from YOUR game" -ForegroundColor Yellow
+Write-Host "  copy, for personal use only - do NOT republish them (public fork," -ForegroundColor Yellow
+Write-Host "  release, mirror). See the NOTICE in LICENSE." -ForegroundColor Yellow
+
+# Opt-in extraction from the user's own game install. Never runs unless
+# explicitly requested: answer y here, or set JUN_EXTRACT=1 non-interactively.
+# Without it the webapp uses placeholder assets.
+$extract = $false
+switch -Regex ($env:JUN_EXTRACT) {
+    '^(1|on|yes|true)$'  { $extract = $true }
+    '^(0|off|no|false)$' { $extract = $false }
+    default {
+        if ($interactive) {
+            $e = Read-Host "Extract them now from your game install? [y/N]"
+            $extract = $e -match '^(y|yes)$'
+        }
+    }
+}
+if ($extract) {
+    $python = (Get-Command python -ErrorAction SilentlyContinue), (Get-Command python3 -ErrorAction SilentlyContinue) |
+        Where-Object { $_ } | Select-Object -First 1
+    if ($python) {
+        & $python.Source -m pip install --user --quiet UnityPy Pillow
+        & $python.Source tools/recover_assets.py
+        if ($LASTEXITCODE -ne 0) {
+            Write-Warning 'Extraction failed - run "python tools/recover_assets.py --game DIR" later.'
+        }
+    } else {
+        Write-Warning 'Python not found - install it and run "python tools/recover_assets.py" later.'
+    }
+} else {
+    Write-Host '  Skipped - run "python tools/recover_assets.py" anytime to extract.'
+}
+
+Write-Host ""
 Write-Host "Install summary:"
 Write-Host "  In this folder ($(Get-Location)): webapp, PHP, TTS venv, models, chat data."
 Write-Host "  Machine-wide (Settings > Apps):   git, Ollama$(if ($voice -eq 'on') { ', possibly Python' })."
