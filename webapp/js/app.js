@@ -804,17 +804,18 @@
   // Sidebar collapse toggle (persists across reloads)
   const appMain = document.querySelector('.app-main');
   const collapseBtn = document.getElementById('collapseSidebarBtn');
+  const expandBtn = document.getElementById('expandSidebarBtn');
   if (appMain && localStorage.getItem('sidebar.collapsed') === '1') {
     appMain.classList.add('sidebar-collapsed');
   }
-  if (collapseBtn) {
-    collapseBtn.addEventListener('click', () => {
+  [collapseBtn, expandBtn].filter(Boolean).forEach(btn => {
+    btn.addEventListener('click', () => {
       if (!appMain) return;
       const next = !appMain.classList.contains('sidebar-collapsed');
       appMain.classList.toggle('sidebar-collapsed', next);
       localStorage.setItem('sidebar.collapsed', next ? '1' : '0');
     });
-  }
+  });
 
   // Example prompt chips
   document.querySelectorAll('.chip[data-prompt]').forEach(chip => {
@@ -979,9 +980,7 @@
 
     // Populate sidebar user chip from session.
     const emailEl = document.getElementById('userEmail');
-    const avatarEl = document.getElementById('userAvatar');
     if (me.user && emailEl) emailEl.textContent = me.user.email || '';
-    if (me.user && avatarEl) avatarEl.textContent = (me.user.email || '?').charAt(0);
 
     // Pull server-side preferences into localStorage before any module reads
     // tracked keys (Outfit, TTS), so a second browser picks up A's settings.
