@@ -378,6 +378,10 @@
           }
         },
         onStats: (s) => { if (window.DevHud) DevHud.setGenStats(s); },
+        onToolStatus: (s) => {
+          if (s && s.state === 'running') ui.setStatus('streaming', '🔧 ' + s.name + '…');
+          else ui.setStatus('streaming', 'streaming');
+        },
         onThinking: (t) => { appendRaw(t); pushThinking(t); },
         onToken: (tok) => { settleThinking(); if (window.DevHud) DevHud.tickToken(); appendRaw(tok); stream.push(tok); },
         onDone: async () => {
