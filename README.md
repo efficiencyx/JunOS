@@ -123,7 +123,9 @@ On Windows, `start.ps1` runs bare metal: it starts (or reuses) Ollama natively -
 > python3 tools/recover_assets.py --game /path/to/your/game/install
 > ```
 >
-> This writes `webapp/assets/` locally. Those files are **for your own use** - please don't republish them (commit them to a public fork, ship them in a release, mirror them). `webapp/assets/` is in `.gitignore` so it won't get pushed by accident. See the NOTICE in [`LICENSE`](LICENSE).
+> This writes `webapp/assets/` locally, including a `variants/game_items.json`
+> catalog of every packed item layer and color index plus the native hair-strand
+> overlays. Those files are **for your own use** - please don't republish them (commit them to a public fork, ship them in a release, mirror them). `webapp/assets/` is in `.gitignore` so it won't get pushed by accident. See the NOTICE in [`LICENSE`](LICENSE).
 
 > **Windows:** if PowerShell slaps down the script, run it once as `powershell -ExecutionPolicy Bypass -File start.ps1` (the `irm | iex` installer already handles this for you).
 

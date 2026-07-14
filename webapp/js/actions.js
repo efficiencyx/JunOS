@@ -79,6 +79,13 @@ window.Actions = (function () {
           kwargs[posKeys[pos++]] = p.replace(/^["']|["']$/g, '');
         }
       }
+      // The model fuses item and state about half the time ("skirt_off",
+      // "dress_on") which matches no _resolve key and silently no-ops. Split
+      // it back apart; real pose items end in _up/_aside, never _on/_off.
+      if (name === 'outfit' && kwargs.item) {
+        const fused = /^(.+)_(on|off)$/.exec(kwargs.item);
+        if (fused) { kwargs.item = fused[1]; kwargs.state = fused[2]; }
+      }
       const defs = DEFAULTS[name];
       if (defs) {
         for (const [k, v] of Object.entries(defs)) {
