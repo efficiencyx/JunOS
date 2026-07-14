@@ -9,7 +9,12 @@ $libPath = __DIR__ . '/../webapp/api/_lib.php';
 if (!is_readable($libPath)) $libPath = __DIR__ . '/../api/_lib.php';
 require_once $libPath;
 
-$OLLAMA_URL = rtrim(getenv('OLLAMA_URL') ?: 'http://localhost:11434', '/');
+if (!embeddings_enabled()) {
+    echo "Embeddings are off (EMBEDDINGS=off / non-Ollama provider); nothing to backfill.\n";
+    exit(0);
+}
+
+$OLLAMA_URL = embeddings_base_url();
 
 // One curl handle reused for every line.
 $ch = curl_init($OLLAMA_URL . '/api/embeddings');

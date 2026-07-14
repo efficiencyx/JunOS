@@ -8,10 +8,16 @@
 # On a fresh machine it checks for git + Docker, offers to install them with
 # your package manager, then starts the daemon and continues automatically.
 #
-# Interactive in a terminal: it asks which model to pull (auto-detecting a
-# sensible default from your VRAM) and whether to enable voice. Piped or with
-# JUN_YES=1 it stays one-command, defaulting to the 12B model + voice on.
-# Override either non-interactively: JUN_MODEL=12b|e4b|e2b|<full-ref> VOICE=on|off.
+# Interactive in a terminal: it asks which AI provider to use (Ollama local -
+# the default, OpenRouter cloud, or a llama.cpp llama-server), which model to
+# pull (auto-detecting a sensible default from your VRAM) and whether to enable
+# voice. Piped or with JUN_YES=1 it stays one-command, defaulting to Ollama +
+# recommended model + voice on. Non-interactive overrides:
+#   JUN_PROVIDER=ollama|openrouter|llamacpp
+#   JUN_MODEL=12b|e4b|e2b|<full-ref>        VOICE=on|off
+#   OPENROUTER_API_KEY=...  OPENROUTER_MODEL=<id>   (openrouter)
+#   LLAMACPP_URL=http://host:8080           (llamacpp: skip the managed container)
+#   JUN_EMBEDDINGS=on|off   (openrouter/llamacpp: local Ollama RAG embeddings)
 #
 # Overrides: JUN_REPO, JUN_DIR, JUN_REF. Set JUN_YES=1 to skip prompts.
 # Prefer to read before you run? That's the right instinct - open the file
@@ -170,14 +176,12 @@ set_env() {
     fi
 }
 
-# Ask which model + whether voice, then persist both into .env. Non-interactive
-# (piped, JUN_YES=1, or per-field env override) keeps the one-command flow.
-configure() {
-    local vram rec alias voice
+# Interactive Jun-model menu (VRAM-aware recommendation). Sets $MODEL_REF.
+# Non-interactive: JUN_MODEL / JUN_YES / piped input take the recommendation.
+ask_model_ref() {
+    local vram rec alias ans
     vram="$(detect_vram_mb)"
     rec="$(recommend_model "$vram")"
-
-    step "configure"
 
     if [ -n "${JUN_MODEL:-}" ] || [ "${JUN_YES:-}" = "1" ] || [ ! -r /dev/tty ]; then
         alias="${JUN_MODEL:-$rec}"
@@ -199,6 +203,150 @@ configure() {
         esac
     fi
 
+    MODEL_REF="$(resolve_model "$alias")"
+}
+
+# "enable local embeddings via Ollama? [y/N]" for non-Ollama providers. RAG /
+# cross-chat memory need a local Ollama with nomic-embed-text; when declined
+# those features switch off silently. Sets $EMBED (on|off).
+# Non-interactive knob: JUN_EMBEDDINGS=on|off (default off).
+ask_embeddings() {
+    local v
+    if [ -n "${JUN_EMBEDDINGS:-}" ]; then
+        case "$(printf '%s' "$JUN_EMBEDDINGS" | tr '[:upper:]' '[:lower:]')" in
+            on|1|true|yes|y) EMBED=on ;; *) EMBED=off ;;
+        esac
+    elif [ "${JUN_YES:-}" = "1" ] || [ ! -r /dev/tty ]; then
+        EMBED=off
+    else
+        printf '     %s$%s enable local embeddings via Ollama %s(RAG memory)%s %s[y/N]%s %s→%s ' \
+            "$OK" "$R" "$DIM" "$R" "$DIM" "$R" "$ACCENT" "$R" > /dev/tty
+        read -r v < /dev/tty || v=""
+        case "$v" in y|Y|yes|YES) EMBED=on ;; *) EMBED=off ;; esac
+    fi
+}
+
+# Ask which provider + model + whether voice, then persist into .env.
+# Non-interactive (piped, JUN_YES=1, or per-field env override) keeps the
+# one-command flow. Knobs: JUN_PROVIDER, JUN_MODEL, OPENROUTER_API_KEY,
+# OPENROUTER_MODEL, LLAMACPP_URL, JUN_EMBEDDINGS, VOICE.
+configure() {
+    local provider voice ans profiles
+
+    step "configure"
+
+    # ── provider ─────────────────────────────────────────────────────────────
+    if [ -n "${JUN_PROVIDER:-}" ]; then
+        provider="$(printf '%s' "$JUN_PROVIDER" | tr '[:upper:]' '[:lower:]')"
+    elif [ "${JUN_YES:-}" = "1" ] || [ ! -r /dev/tty ]; then
+        provider=ollama
+    else
+        {
+            printf '\n     %sselect an AI provider%s\n' "$B" "$R"
+            printf '       %s1%s  Ollama      %s-%s local, fully managed %s(default)%s\n' "$ACCENT" "$R" "$DIM" "$R" "$DIM" "$R"
+            printf '       %s2%s  OpenRouter  %s-%s cloud API - needs an API key; chats leave this machine\n' "$ACCENT" "$R" "$DIM" "$R"
+            printf '       %s3%s  llama.cpp   %s-%s local llama-server\n' "$ACCENT" "$R" "$DIM" "$R"
+            printf '     %s$%s choice %s[enter = Ollama]%s %s→%s ' \
+                "$OK" "$R" "$DIM" "$R" "$ACCENT" "$R"
+        } > /dev/tty
+        read -r ans < /dev/tty || ans=""
+        case "$ans" in
+            2) provider=openrouter ;; 3) provider=llamacpp ;;
+            ""|1) provider=ollama ;;
+            *) printf '     %s✗%s unrecognized choice, using Ollama\n' "$DANGER" "$R" > /dev/tty; provider=ollama ;;
+        esac
+    fi
+    case "$provider" in
+        ollama|openrouter|llamacpp) ;;
+        *) printf '     %s✗%s unknown provider "%s", using Ollama\n' "$DANGER" "$R" "$provider" > /dev/tty 2>/dev/null || true
+           provider=ollama ;;
+    esac
+
+    # ── per-provider config ──────────────────────────────────────────────────
+    case "$provider" in
+    ollama)
+        ask_model_ref
+        set_env OLLAMA_MODELS_TO_PULL "${MODEL_REF},nomic-embed-text"
+        set_env EMBEDDINGS on
+        profiles=ollama
+        ok "model $MODEL_REF"
+        ;;
+
+    openrouter)
+        local key orm
+        key="${OPENROUTER_API_KEY:-}"
+        if [ -z "$key" ] && [ "${JUN_YES:-}" != "1" ] && [ -r /dev/tty ]; then
+            # Silent read: the key must never be echoed (or land in scrollback).
+            printf '     %s$%s OpenRouter API key %s(hidden; from openrouter.ai/keys)%s %s→%s ' \
+                "$OK" "$R" "$DIM" "$R" "$ACCENT" "$R" > /dev/tty
+            read -rs key < /dev/tty || key=""
+            printf '\n' > /dev/tty
+        fi
+        [ -z "$key" ] && warn_ "no API key set - add OPENROUTER_API_KEY to .env before chatting"
+
+        orm="${OPENROUTER_MODEL:-}"
+        if [ -z "$orm" ] && [ "${JUN_YES:-}" != "1" ] && [ -r /dev/tty ]; then
+            printf '     %s$%s model id %s[enter = openrouter/auto]%s %s→%s ' \
+                "$OK" "$R" "$DIM" "$R" "$ACCENT" "$R" > /dev/tty
+            read -r orm < /dev/tty || orm=""
+        fi
+        orm="${orm:-openrouter/auto}"
+
+        ask_embeddings
+        set_env OPENROUTER_API_KEY "$key"
+        set_env OPENROUTER_MODEL "$orm"
+        set_env EMBEDDINGS "$EMBED"
+        profiles=""
+        if [ "$EMBED" = on ]; then
+            set_env OLLAMA_MODELS_TO_PULL "nomic-embed-text"
+            profiles=ollama
+        fi
+        ok "model $orm"
+        ok "embeddings $EMBED"
+        ;;
+
+    llamacpp)
+        local url
+        url="${LLAMACPP_URL:-}"
+        if [ -z "$url" ] && [ "${JUN_YES:-}" != "1" ] && [ -r /dev/tty ]; then
+            printf '     %s$%s llama-server URL %s[enter = managed setup]%s %s→%s ' \
+                "$OK" "$R" "$DIM" "$R" "$ACCENT" "$R" > /dev/tty
+            read -r url < /dev/tty || url=""
+        fi
+        if [ -n "$url" ]; then
+            case "$url" in
+                http://*|https://*) ;;
+                *) printf '     %s✗%s not an http(s) URL, using managed setup\n' "$DANGER" "$R" > /dev/tty 2>/dev/null || true
+                   url="" ;;
+            esac
+        fi
+        if [ -n "$url" ]; then
+            set_env LLAMACPP_URL "$url"
+            profiles=""
+            ok "llama-server $url"
+        else
+            ask_model_ref
+            # llama-server -hf syntax has no hf.co/ prefix.
+            set_env LLAMACPP_MODEL_HF "${MODEL_REF#hf.co/}"
+            set_env LLAMACPP_URL "http://llamacpp:8080"
+            profiles=llamacpp
+            ok "model ${MODEL_REF#hf.co/}"
+        fi
+        ask_embeddings
+        set_env EMBEDDINGS "$EMBED"
+        if [ "$EMBED" = on ]; then
+            set_env OLLAMA_MODELS_TO_PULL "nomic-embed-text"
+            profiles="${profiles:+$profiles,}ollama"
+        fi
+        ok "embeddings $EMBED"
+        ;;
+    esac
+
+    set_env AI_PROVIDER "$provider"
+    set_env COMPOSE_PROFILES "$profiles"
+    ok "provider $provider"
+
+    # ── voice ────────────────────────────────────────────────────────────────
     if [ -n "${VOICE:-}" ]; then
         case "$(printf '%s' "$VOICE" | tr '[:upper:]' '[:lower:]')" in
             off|0|false|no) voice=off ;; *) voice=on ;;
@@ -211,11 +359,7 @@ configure() {
         read -r v < /dev/tty || v=""
         case "$v" in n|N|no|NO) voice=off ;; *) voice=on ;; esac
     fi
-
-    local ref; ref="$(resolve_model "$alias")"
-    set_env OLLAMA_MODELS_TO_PULL "${ref},nomic-embed-text"
     set_env VOICE "$voice"
-    ok "model $ref"
     ok "voice $voice"
 }
 

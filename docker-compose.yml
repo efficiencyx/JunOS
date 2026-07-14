@@ -52,16 +52,20 @@ services:
     expose:
       - "9000"
     environment:
+      AI_PROVIDER: "${AI_PROVIDER:-ollama}"
       OLLAMA_URL: "${OLLAMA_URL:-http://ollama:11434}"
+      OPENROUTER_API_KEY: "${OPENROUTER_API_KEY:-}"
+      OPENROUTER_MODEL: "${OPENROUTER_MODEL:-}"
+      LLAMACPP_URL: "${LLAMACPP_URL:-http://llamacpp:8080}"
+      EMBEDDINGS: "${EMBEDDINGS:-}"
       KOKORO_URL: "${KOKORO_URL:-http://kokoro:8001}"
     volumes:
       - omega_state:/var/lib/omega
       - ./tools:/var/www/omega/tools:ro
-    depends_on:
-      ollama:
-        condition: service_healthy
-    # Note: php does NOT depend on kokoro. The TTS sidecar is an optional
-    # `voice` profile; php/the frontend degrade gracefully when it's absent.
+    # Note: php does NOT depend on the model server (ollama/llamacpp - both are
+    # profile-gated, and compose rejects dependencies on profile-disabled
+    # services) or on kokoro. The frontend boot-polls models.php until the
+    # backend answers, so startup ordering is soft.
     healthcheck:
       test: ["CMD", "cgi-fcgi", "-bind", "-connect", "127.0.0.1:9000"]
       interval: 10s
@@ -72,13 +76,17 @@ services:
       - "no-new-privileges:true"
     networks: [omega]
 
-  # ── ollama (LLM backend - internal only) ────────────────────────────────────
+  # ── ollama (LLM backend - internal only, `ollama` profile) ──────────────────
+  # Runs when AI_PROVIDER=ollama (the default) or when a non-Ollama provider
+  # keeps local embeddings on. start.sh derives COMPOSE_PROFILES from .env;
+  # for manual `docker compose up` set COMPOSE_PROFILES=ollama in .env/shell.
   ollama:
     build:
       context: .
       dockerfile: docker/ollama.Dockerfile
       network: host
     container_name: omega-ollama
+    profiles: [ollama]
     restart: unless-stopped
     environment:
       # Comma-separated list of models pulled on first boot.
@@ -111,6 +119,38 @@ services:
     networks: [omega]
     # GPU acceleration is added by docker-compose.nvidia.yml / .amd.yml.
     # On its own this service runs on CPU.
+
+  # ── llamacpp (LLM backend - internal only, `llamacpp` profile) ──────────────
+  # Alternative to ollama: a llama.cpp llama-server speaking the OpenAI API.
+  # Runs when AI_PROVIDER=llamacpp with the managed setup (install.sh sets
+  # COMPOSE_PROFILES=llamacpp); a custom LLAMACPP_URL skips this container.
+  # Configured via LLAMA_ARG_* env (same as CLI flags) so the GPU overlays can
+  # extend it without clobbering an args list.
+  llamacpp:
+    image: ghcr.io/ggml-org/llama.cpp:server
+    container_name: omega-llamacpp
+    profiles: [llamacpp]
+    restart: unless-stopped
+    environment:
+      # HF repo:quant, downloaded on first boot into llamacpp_cache (idempotent).
+      LLAMA_ARG_HF_REPO: "${LLAMACPP_MODEL_HF:-efficiencyx/Jun-LoRA-v3-E2B-GGUF:Q4_K_M}"
+      LLAMA_ARG_CTX_SIZE: "16384"
+      LLAMA_ARG_JINJA: "1"           # chat-template tool calling
+      LLAMA_ARG_HOST: "0.0.0.0"
+      LLAMA_ARG_PORT: "8080"
+    volumes:
+      - llamacpp_cache:/root/.cache/llama.cpp
+    healthcheck:
+      # Generous retries: the first boot downloads the GGUF before /health
+      # goes green (the server image ships curl for its -hf downloads).
+      test: ["CMD", "curl", "-fsS", "http://127.0.0.1:8080/health"]
+      interval: 10s
+      timeout: 3s
+      retries: 90
+      start_period: 60s
+    security_opt:
+      - "no-new-privileges:true"
+    networks: [omega]
 
   # ── kokoro (TTS sidecar - internal only, optional `voice` profile) ──────────
   # Only started when the `voice` profile is active (start.sh adds it unless
@@ -159,6 +199,7 @@ services:
 # ── Volumes ──────────────────────────────────────────────────────────────────
 volumes:
   ollama_data:
+  llamacpp_cache:
   kokoro_cache:
   omega_state:
   letsencrypt:
