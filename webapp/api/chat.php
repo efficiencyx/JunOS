@@ -119,6 +119,19 @@ function tool_catalog(): array {
         [
             'type' => 'function',
             'function' => [
+                'name' => 'list_recent_chats',
+                'description' => 'Recap Anon and Jun\'s most recent past conversations, each with a short snippet, WITHOUT needing a search query. Use when Anon asks what you two have been talking about lately, wants to catch up, or asks "what did we do recently" with no specific topic.',
+                'parameters' => [
+                    'type' => 'object',
+                    'properties' => [
+                        'limit' => ['type' => 'integer', 'description' => 'How many recent conversations to recap, from 1 to 10.'],
+                    ],
+                ],
+            ],
+        ],
+        [
+            'type' => 'function',
+            'function' => [
                 'name' => 'memory_write',
                 'description' => 'Append a durable note to Anon\'s private memory file. Use when Anon explicitly asks you to remember something, or when he shares a stable preference/fact that will help future conversations.',
                 'parameters' => [
@@ -154,11 +167,12 @@ function tool_context_block(): string {
 You may ask the system to run tools before answering. Use tools only when they materially improve the reply, and summarize tool results naturally.
 When a tool would help, you MUST reply in TWO parts: (1) FIRST a short spoken line to Anon in your own voice (under 8 words) - and this text MUST appear in your message content; (2) THEN make the tool call. Never emit a tool call with empty message content - always speak first. After the tool result comes back, give your real answer.
 CRITICAL: the spoken line must match WHAT that specific tool does - the register is different for remembering vs. looking something up:
-- search_recent_chats: you are REMEMBERING your own shared past, not looking anything up. Sound like you're casting your mind back: "hmm, lemme think back...", "did we...?", "wait, I remember something...". NEVER say "let me check" / "let me look that up" here - that's for the web, not your memory.
+- search_recent_chats / list_recent_chats: you are REMEMBERING your own shared past, not looking anything up. Sound like you're casting your mind back: "hmm, lemme think back...", "did we...?", "wait, I remember something...". NEVER say "let me check" / "let me look that up" here - that's for the web, not your memory.
 - memory_write: you are making a mental note. Sound like you're committing it to memory: "aw, noting that down...", "okay, I'll remember that...".
 - web_fetch: you are looking up outside/current info. Here "let me check...", "one sec, looking that up..." is right.
 Available tools:
-- search_recent_chats(query, limit): searches Jun and Anon's saved past conversations - this is Jun REMEMBERING, phrase the lead line as recall.
+- search_recent_chats(query, limit): searches Jun and Anon's saved past conversations for a specific topic - this is Jun REMEMBERING, phrase the lead line as recall.
+- list_recent_chats(limit): recaps the most recent conversations with Anon (no query needed) - use for "what have we been talking about lately" / "catch me up". Also Jun REMEMBERING.
 - memory_write(memory, category): appends a concise durable note to Anon's private memory file when he asks you to remember something or shares a stable preference/fact.
 - web_fetch(url): fetches a public web page or API URL for live/current real-world information. If Anon asks for latest data but does not provide a URL, ask him for a URL or say you need one.
 
@@ -174,6 +188,7 @@ TXT;
 function tool_lead_phrase(string $name): string {
     $sets = [
         'search_recent_chats' => ['Lemme think...', 'Uhhh...', 'I remember...', 'Did we...', 'Hold on, let me remember...'],
+        'list_recent_chats'   => ['Lemme think back...', 'What have we been up to...', 'Hold on, let me remember...', 'Ooh, lately we...'],
         'memory_write'        => ['Got it, noting that down...', 'Mm, I\'ll remember that...', 'Writing that down...'],
         'web_fetch'           => ['Let me check...', 'One sec, looking that up...', 'Let me look that up...'],
     ];
@@ -331,6 +346,43 @@ function run_tool_call(string $name, array $args, array $user, int $convId): str
                 return ['date' => date('Y-m-d H:i', (int)$r['created_at']), 'conversation_id' => (int)$r['conversation_id'], 'title' => (string)($r['title'] ?? ''), 'role' => (string)$r['role'], 'content' => $content];
             }, $st->fetchAll());
             return json_encode(['results' => $rows], JSON_UNESCAPED_UNICODE);
+        }
+        if ($name === 'list_recent_chats') {
+            $limit = max(1, min(10, (int)($args['limit'] ?? 5)));
+            $st = db()->prepare(
+                'SELECT id, title, updated_at FROM conversations
+                  WHERE user_id = ? AND id != ? AND title IS NOT NULL
+                  ORDER BY updated_at DESC LIMIT ?'
+            );
+            $st->bindValue(1, (int)$user['id'], PDO::PARAM_INT);
+            $st->bindValue(2, $convId, PDO::PARAM_INT);
+            $st->bindValue(3, $limit, PDO::PARAM_INT);
+            $st->execute();
+            $convs = $st->fetchAll();
+            // A few of the latest turns per conversation, oldest-first, as a lightweight
+            // recap. Action tags are stripped so the model doesn't parrot old syntax.
+            $snip = db()->prepare(
+                'SELECT role, content FROM messages WHERE conversation_id = ? ORDER BY id DESC LIMIT 6'
+            );
+            $out = [];
+            foreach ($convs as $c) {
+                $snip->execute([(int)$c['id']]);
+                $lines = [];
+                foreach (array_reverse($snip->fetchAll()) as $r) {
+                    $txt = preg_replace('/\[\s*A(?:CTIONS?)?\s*:[^\]]*\]/i', '', (string)$r['content']);
+                    $txt = trim(preg_replace('/\s+/', ' ', $txt));
+                    if ($txt === '') continue;
+                    if (mb_strlen($txt) > 160) $txt = mb_substr($txt, 0, 157) . '…';
+                    $lines[] = $r['role'] . ': ' . $txt;
+                }
+                $out[] = [
+                    'conversation_id' => (int)$c['id'],
+                    'title' => (string)($c['title'] ?? ''),
+                    'date' => date('Y-m-d H:i', (int)$c['updated_at']),
+                    'recap' => $lines,
+                ];
+            }
+            return json_encode(['recent_chats' => $out], JSON_UNESCAPED_UNICODE);
         }
         if ($name === 'memory_write') {
             $memory = (string)($args['memory'] ?? '');
