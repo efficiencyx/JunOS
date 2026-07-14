@@ -12,13 +12,19 @@ rate_limit('stats', 60, 60);
 
 $out = ['models' => [], 'vram_bytes' => 0, 'ram_model_bytes' => 0, 'host' => null];
 
-$ollamaUrl = rtrim(env_str('OLLAMA_URL', 'http://localhost:11434'), '/');
-$ch = curl_init($ollamaUrl . '/api/ps');
-curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
-curl_setopt($ch, CURLOPT_CONNECTTIMEOUT, 3);
-curl_setopt($ch, CURLOPT_TIMEOUT, 5);
-$res = curl_exec($ch);
-curl_close($ch);
+// /api/ps is Ollama-specific; with a non-Ollama chat provider and no local
+// embeddings Ollama there's nothing to ask (and no point paying the connect
+// timeout on every HUD poll) - report host memory only.
+$res = false;
+if (ai_provider() === 'ollama' || embeddings_enabled()) {
+    $ollamaUrl = rtrim(env_str('OLLAMA_URL', 'http://localhost:11434'), '/');
+    $ch = curl_init($ollamaUrl . '/api/ps');
+    curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
+    curl_setopt($ch, CURLOPT_CONNECTTIMEOUT, 3);
+    curl_setopt($ch, CURLOPT_TIMEOUT, 5);
+    $res = curl_exec($ch);
+    curl_close($ch);
+}
 
 if ($res !== false) {
     $data = json_decode($res, true);
