@@ -152,7 +152,7 @@ function tool_context_block(): string {
     return <<<TXT
 ## Tools you can call when useful
 You may ask the system to run tools before answering. Use tools only when they materially improve the reply, and summarize tool results naturally.
-When you decide to call a tool, FIRST say one short, natural line in your own voice that fits what you're doing - recalling something ("hmm, lemme think...", "did we...?"), looking something up ("one sec, checking..."), or noting a memory ("got it, writing that down...") - THEN call the tool. After the tool result comes back, give your real answer.
+When a tool would help, you MUST reply in TWO parts: (1) FIRST a short spoken line to Anon in your own voice - a natural filler that fits the action (recalling: "hmm, lemme think...", "did we...?"; looking up: "one sec, checking..."; noting: "got it, writing that down...") - under 8 words, and this text MUST appear in your message content; (2) THEN make the tool call. Never emit a tool call with empty message content - always speak first. After the tool result comes back, give your real answer.
 Available tools:
 - search_recent_chats(query, limit): searches saved recent conversations for Anon's prior messages and Jun's replies.
 - memory_write(memory, category): appends a concise durable note to Anon's private memory file when he asks you to remember something or shares a stable preference/fact.
