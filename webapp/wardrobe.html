@@ -13,17 +13,17 @@
    thin thread of gold. No webfonts (CSP is self-only) - the display face
    leans on the platform's serif instead. */
 :root {
-  --panel-w: 424px;
-  --bg-2: #14121a;
-  --bg-3: #1f1b29;
-  --bg-4: #262033;
-  --border: #322b45;
-  --border-2: #4a4066;
-  --fg: #efeaf7;
-  --muted: #9a90b5;
-  --accent: #d4a5ff;
-  --accent-soft: rgba(212,165,255,0.16);
-  --gold: #d9b878;
+  --panel-w: 440px;
+  --bg-2: #16141e;
+  --bg-3: #1c1a26;
+  --bg-4: #232030;
+  --border: rgba(255,255,255,0.06);
+  --border-2: rgba(255,255,255,0.14);
+  --fg: #e8e4f0;
+  --muted: rgba(255,255,255,0.45);
+  --accent: #c4a0f0;
+  --accent-soft: rgba(196,160,240,0.1);
+  --gold: rgba(255,255,255,0.3);
   --serif: "Iowan Old Style", "Palatino Linotype", Palatino, Georgia, serif;
 }
 * { box-sizing: border-box; }
@@ -55,7 +55,7 @@ button:focus-visible, .wd-tile:focus-visible, .wd-swatch:focus-within {
   bottom: -60px;
   width: 520px; height: 200px;
   border-radius: 50%;
-  background: radial-gradient(ellipse at center, rgba(212,165,255,0.14), transparent 70%);
+  background: radial-gradient(ellipse at center, rgba(196,160,240,0.14), transparent 70%);
   pointer-events: none;
 }
 .page-title {
@@ -84,7 +84,7 @@ button:focus-visible, .wd-tile:focus-visible, .wd-swatch:focus-within {
   width: var(--panel-w);
   display: none;
   flex-direction: column;
-  background: linear-gradient(180deg, var(--bg-2), #100d17);
+  background: linear-gradient(180deg, var(--bg-2) 0%, #110f18 100%);
   border-left: 1px solid var(--border);
   box-shadow: -24px 0 60px rgba(0,0,0,0.5);
   z-index: 60;
@@ -94,87 +94,89 @@ body.wardrobe-open .wardrobe-overlay { display: flex; animation: wd-slide-in 0.3
 
 .wd-head {
   display: flex; align-items: center; gap: 10px;
-  padding: 18px 16px 14px 20px;
+  padding: 20px 16px 16px 22px;
   border-bottom: 1px solid var(--border);
-  background: linear-gradient(180deg, rgba(212,165,255,0.05), transparent);
 }
 .wd-titles { flex: 1; min-width: 0; }
 .wd-title {
   display: block;
-  font-family: var(--serif);
-  font-size: 21px; font-style: italic; letter-spacing: 0.03em;
-  color: var(--accent);
+  font-size: 18px; font-weight: 600; letter-spacing: -0.01em;
+  color: var(--fg);
 }
-.wd-hint { display: block; margin-top: 3px; font-size: 11px; color: var(--muted); }
-.wd-actions { display: flex; align-items: center; gap: 4px; }
+.wd-hint { display: block; margin-top: 2px; font-size: 11px; color: rgba(255,255,255,0.35); letter-spacing: 0.02em; }
+.wd-actions { display: flex; align-items: center; gap: 6px; }
 .wd-reset {
-  border: 1px solid var(--border-2); color: var(--muted);
+  border: 1px solid rgba(255,255,255,0.08); color: rgba(255,255,255,0.4);
   font: inherit; font-size: 11px; white-space: nowrap;
+  padding: 5px 10px; border-radius: 6px;
+  transition: border-color 0.15s, color 0.15s;
 }
-.wd-reset:hover { border-color: var(--accent); color: var(--fg); }
-.wd-close { font-size: 22px; line-height: 1; align-self: flex-start; }
+.wd-reset:hover { border-color: rgba(196,160,240,0.4); color: var(--accent); background: none; }
+.wd-close { font-size: 18px; line-height: 1; width: 28px; height: 28px; padding: 0; color: rgba(255,255,255,0.35); }
+.wd-close:hover { color: var(--fg); background: rgba(255,255,255,0.05); }
 
-/* Rail + scrollable body side by side. */
-.wd-main { flex: 1; display: flex; min-height: 0; }
+/* Category tab bar above the scrollable body (1a "Glass Shelf" layout).
+   Same buttons outfit.js builds for the old side rail: they scroll-anchor
+   to their section and the active state follows the scroll position. */
+.wd-main { flex: 1; display: flex; flex-direction: column; min-height: 0; }
 .wd-rail {
-  width: 64px; flex: none;
-  display: flex; flex-direction: column; gap: 4px;
-  padding: 12px 8px;
-  border-right: 1px solid var(--border);
-  background: rgba(0,0,0,0.18);
+  flex: none;
+  display: flex; gap: 2px;
+  padding: 10px 22px 0;
+  border-bottom: 1px solid rgba(255,255,255,0.04);
+  overflow-x: auto; scrollbar-width: none;
 }
 .wd-nav {
   position: relative;
-  display: flex; flex-direction: column; align-items: center; gap: 2px;
-  padding: 8px 2px;
-  border: 0; border-radius: 10px;
-  background: none; color: var(--muted);
-  cursor: pointer; font: inherit;
-  transition: background 0.15s, color 0.15s;
+  display: flex; align-items: center; gap: 5px;
+  padding: 8px 14px;
+  border: 0; border-bottom: 2px solid transparent; margin-bottom: -1px;
+  border-radius: 0;
+  background: none; color: rgba(255,255,255,0.4);
+  cursor: pointer; font: inherit; font-size: 12px; font-weight: 500;
+  white-space: nowrap;
+  transition: color 0.15s, border-color 0.15s;
 }
-.wd-nav i { font-style: normal; font-size: 16px; filter: grayscale(1) opacity(0.7); transition: filter 0.15s; }
-.wd-nav span { font-size: 9px; letter-spacing: 0.08em; text-transform: uppercase; }
-.wd-nav:hover { color: var(--fg); background: var(--bg-3); }
-.wd-nav.on { color: var(--accent); background: var(--accent-soft); }
-.wd-nav.on i { filter: none; }
-.wd-nav.on::before {
-  content: ""; position: absolute; left: -8px; top: 20%; bottom: 20%;
-  width: 2px; border-radius: 2px; background: var(--accent);
-}
+.wd-nav i { display: none; }
+.wd-nav:hover { color: var(--fg); }
+.wd-nav.on { color: var(--accent); border-bottom-color: var(--accent); }
 
 /* position:relative so section offsetTop is measured against this scroll
    container (the rail's scroll-to and active-state math depend on it). */
-.wd-body { position: relative; flex: 1; overflow-y: auto; padding: 4px 16px 28px; scrollbar-width: thin; scrollbar-color: var(--border-2) transparent; }
+.wd-body { position: relative; flex: 1; overflow-y: auto; padding: 16px 22px 28px; scrollbar-width: thin; scrollbar-color: rgba(255,255,255,0.08) transparent; }
 .wd-body::-webkit-scrollbar { width: 6px; }
-.wd-body::-webkit-scrollbar-thumb { background: var(--border-2); border-radius: 3px; }
+.wd-body::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.08); border-radius: 3px; }
 .wd-section {
-  display: flex; align-items: center; gap: 10px;
   margin: 20px 0 10px;
-  font-size: 11px; font-weight: 600;
-  text-transform: uppercase; letter-spacing: 0.14em;
-  color: var(--gold);
+  font-size: 10px; font-weight: 600;
+  text-transform: uppercase; letter-spacing: 0.1em;
+  color: rgba(255,255,255,0.3);
 }
-.wd-section::after { content: ""; flex: 1; height: 1px; background: linear-gradient(90deg, var(--border-2), transparent); }
-.wd-section.wd-sub { margin-top: 14px; color: var(--muted); letter-spacing: 0.1em; }
-.wd-section.wd-sub::after { background: linear-gradient(90deg, var(--border), transparent); }
+.wd-section:first-child { margin-top: 0; }
+.wd-section.wd-sub { margin-top: 14px; color: rgba(255,255,255,0.22); }
 
+/* Shelf rows: horizontal scroll, tiles keep their natural width. */
 .wd-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(94px, 1fr));
-  gap: 10px;
+  display: flex; gap: 10px;
+  overflow-x: auto;
+  padding: 4px 2px 6px;
+  scrollbar-width: none;
+  -webkit-overflow-scrolling: touch;
 }
+.wd-grid::-webkit-scrollbar { display: none; }
 .wd-tile {
   position: relative;
-  display: flex; flex-direction: column; align-items: center; gap: 5px;
-  padding: 12px 4px 9px;
+  flex: none; width: 88px;
+  display: flex; flex-direction: column; align-items: center; gap: 6px;
+  padding: 10px 6px;
   border: 1px solid var(--border);
-  border-radius: 12px;
-  background: linear-gradient(180deg, var(--bg-4), var(--bg-3));
+  border-radius: 10px;
+  background: rgba(255,255,255,0.02);
   cursor: grab;
   user-select: none; -webkit-user-select: none;
   touch-action: none;
   text-align: center;
-  transition: border-color 0.15s, transform 0.15s, box-shadow 0.15s;
+  transition: border-color 0.15s, background 0.15s, transform 0.15s, box-shadow 0.15s;
 }
 .wd-tile:hover {
   border-color: var(--border-2);
@@ -183,23 +185,25 @@ body.wardrobe-open .wardrobe-overlay { display: flex; animation: wd-slide-in 0.3
 }
 .wd-tile:active { cursor: grabbing; }
 .wd-tile.on {
-  border-color: var(--accent);
-  background: linear-gradient(180deg, #2d2440, var(--bg-3));
-  box-shadow: 0 0 0 1px var(--accent) inset, 0 0 18px var(--accent-soft);
+  border-color: rgba(196,160,240,0.25);
+  background: var(--accent-soft);
 }
 .wd-tile.on::after {
-  content: "✓"; position: absolute; top: -7px; left: -7px;
-  width: 18px; height: 18px; border-radius: 50%;
+  content: "✓"; position: absolute; top: -4px; left: -4px;
+  width: 16px; height: 16px; border-radius: 50%;
   display: flex; align-items: center; justify-content: center;
-  font-size: 11px; font-weight: 700;
+  font-size: 9px; font-weight: 700;
   background: var(--accent); color: #1a1224;
   box-shadow: 0 2px 6px rgba(0,0,0,0.4);
 }
 .wd-tile:focus-visible { transform: translateY(-2px); }
-.wd-tile img, .wd-noimg { width: 58px; height: 58px; object-fit: contain; pointer-events: none; }
+.wd-tile img, .wd-noimg {
+  width: 52px; height: 52px; object-fit: contain; pointer-events: none;
+  border-radius: 8px; background: rgba(255,255,255,0.04); padding: 2px;
+}
 .wd-noimg { display: flex; align-items: center; justify-content: center; color: var(--muted); font-size: 20px; }
-.wd-tile span { font-size: 11px; color: var(--muted); }
-.wd-tile.on span { color: var(--fg); }
+.wd-tile span { font-size: 10.5px; color: var(--muted); }
+.wd-tile.on span { color: var(--fg); font-weight: 500; }
 body.wd-over-worn-item { cursor: grab; }
 
 /* Tint swatch bundled in a tile's top-right corner. Hidden until the tile is
@@ -227,20 +231,6 @@ body.wd-over-worn-item { cursor: grab; }
     radial-gradient(circle at center, var(--bg-3) 0 35%, transparent 38%),
     conic-gradient(#f66, #fc6, #7d6, #6cf, #a6f, #f66) !important;
 }
-
-/* Color studio: tints with no tile to live on (skin, face, eyes...). */
-.wd-chips { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
-.wd-chip {
-  display: flex; align-items: center; justify-content: space-between; gap: 8px;
-  padding: 7px 10px;
-  border: 1px solid var(--border); border-radius: 10px;
-  background: var(--bg-3);
-  font-size: 12px; color: var(--muted);
-  transition: border-color 0.15s, color 0.15s;
-}
-.wd-chip:hover { border-color: var(--border-2); color: var(--fg); }
-/* Color-studio swatches sit inline instead of in a tile corner. */
-.wd-chip .wd-swatch { position: relative; top: auto; right: auto; flex: none; opacity: 1; transform: none; }
 
 .wd-tooltip {
   position: fixed; display: none; z-index: 62;
@@ -334,7 +324,7 @@ body.wd-over-worn-item { cursor: grab; }
 @media (max-width: 700px) {
   #stage { inset: 0 0 46vh 0; }
   .wardrobe-overlay { top: auto; left: 0; width: 100%; height: 46vh; border-left: 0; border-top: 1px solid var(--border); }
-  .wd-rail { width: 56px; padding: 10px 6px; }
+  .wd-rail { padding: 8px 14px 0; }
   .spotlight, .page-title { display: none; }
   /* No hover on touch: keep every tint swatch visible. */
   .wd-swatch { opacity: 1; transform: none; }
@@ -354,7 +344,7 @@ body.wd-over-worn-item { cursor: grab; }
 <script src="js/prefs.js?v=2"></script>
 <script src="js/live2d.js?v=17"></script>
 <script src="js/mods.js?v=9"></script>
-<script src="js/outfit.js?v=21"></script>
+<script src="js/outfit.js?v=23"></script>
 <script src="js/wardrobe.js?v=1"></script>
 </body>
 </html>

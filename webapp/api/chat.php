@@ -147,14 +147,14 @@ function tool_catalog(): array {
         [
             'type' => 'function',
             'function' => [
-                'name' => 'web_fetch',
-                'description' => 'Fetch a public HTTP or HTTPS URL for current real-world data. Use only when Anon asks for current/latest/live information or gives a URL to inspect.',
+                'name' => 'web_search',
+                'description' => 'Search the web for current real-world information. Use when Anon asks about current/latest/live info, news, facts you are unsure of, or anything outside your knowledge.',
                 'parameters' => [
                     'type' => 'object',
                     'properties' => [
-                        'url' => ['type' => 'string', 'description' => 'Public http(s) URL to fetch.'],
+                        'query' => ['type' => 'string', 'description' => 'Search query, like you would type into Google.'],
                     ],
-                    'required' => ['url'],
+                    'required' => ['query'],
                 ],
             ],
         ],
@@ -169,32 +169,17 @@ When a tool would help, you MUST reply in TWO parts: (1) FIRST a short spoken li
 CRITICAL: the spoken line must match WHAT that specific tool does - the register is different for remembering vs. looking something up:
 - search_recent_chats / list_recent_chats: you are REMEMBERING your own shared past, not looking anything up. Sound like you're casting your mind back: "hmm, lemme think back...", "did we...?", "wait, I remember something...". NEVER say "let me check" / "let me look that up" here - that's for the web, not your memory.
 - memory_write: you are making a mental note. Sound like you're committing it to memory: "aw, noting that down...", "okay, I'll remember that...".
-- web_fetch: you are looking up outside/current info. Here "let me check...", "one sec, looking that up..." is right.
+- web_search: you are looking up outside/current info. Here "let me check...", "one sec, looking that up..." is right.
 Available tools:
 - search_recent_chats(query, limit): searches Jun and Anon's saved past conversations for a specific topic - this is Jun REMEMBERING, phrase the lead line as recall.
 - list_recent_chats(limit): recaps the most recent conversations with Anon (no query needed) - use for "what have we been talking about lately" / "catch me up". Also Jun REMEMBERING.
 - memory_write(memory, category): appends a concise durable note to Anon's private memory file when he asks you to remember something or shares a stable preference/fact.
-- web_fetch(url): fetches a public web page or API URL for live/current real-world information. If Anon asks for latest data but does not provide a URL, ask him for a URL or say you need one.
+- web_search(query): searches the web (like googling) for live/current real-world information and returns the top results with titles, URLs and snippets. Summarize the results naturally and mention where the info came from.
 
 Interesting future tools the app could add: weather lookup, calculator/unit conversion, calendar/reminder creation, local file/library search, image generation, text-to-speech voice controls, smart-home/webhook actions, code runner sandbox, and location/place lookup.
 TXT;
 }
 
-
-// Short, in-character lead lines Jun says while a tool runs, keyed by tool. Used
-// only as a fallback when the model didn't emit its own preamble - so the "pause"
-// still reads naturally and matches what she's actually doing (recalling vs. looking
-// something up vs. noting a memory).
-function tool_lead_phrase(string $name): string {
-    $sets = [
-        'search_recent_chats' => ['Lemme think...', 'Uhhh...', 'I remember...', 'Did we...', 'Hold on, let me remember...'],
-        'list_recent_chats'   => ['Lemme think back...', 'What have we been up to...', 'Hold on, let me remember...', 'Ooh, lately we...'],
-        'memory_write'        => ['Got it, noting that down...', 'Mm, I\'ll remember that...', 'Writing that down...'],
-        'web_fetch'           => ['Let me check...', 'One sec, looking that up...', 'Let me look that up...'],
-    ];
-    $choices = $sets[$name] ?? ['One sec...', 'Hold on...', 'Let me check...'];
-    return $choices[array_rand($choices)];
-}
 
 function should_offer_tools(string $msg): bool {
     $m = mb_strtolower(trim($msg));
@@ -275,7 +260,31 @@ function make_absolute_url(string $base, string $location): string {
     return $b['scheme'] . '://' . $b['host'] . $dir . $location;
 }
 
-function web_fetch_public(string $url): array {
+function web_search_public(string $query): array {
+    if ($query === '') return ['error' => 'query_required'];
+    if (mb_strlen($query) > 400) $query = mb_substr($query, 0, 400);
+    $page = web_fetch_public('https://html.duckduckgo.com/html/?q=' . rawurlencode($query), true);
+    if (!empty($page['error'])) return $page;
+    $html = (string)($page['raw_html'] ?? '');
+    $results = [];
+    if (preg_match_all('#<a[^>]+class="result__a"[^>]+href="([^"]+)"[^>]*>(.*?)</a>#si', $html, $links, PREG_SET_ORDER)) {
+        preg_match_all('#<a[^>]+class="result__snippet"[^>]*>(.*?)</a>#si', $html, $snips);
+        foreach ($links as $i => $m) {
+            $href = html_entity_decode($m[1], ENT_QUOTES | ENT_HTML5);
+            // DDG wraps result URLs as /l/?uddg=<encoded>; unwrap to the real target.
+            if (preg_match('#[?&]uddg=([^&]+)#', $href, $u)) $href = urldecode($u[1]);
+            $title = trim(html_entity_decode(strip_tags($m[2]), ENT_QUOTES | ENT_HTML5));
+            $snippet = trim(html_entity_decode(strip_tags($snips[1][$i] ?? ''), ENT_QUOTES | ENT_HTML5));
+            if ($title === '' || !preg_match('#^https?://#i', $href)) continue;
+            $results[] = ['title' => $title, 'url' => $href, 'snippet' => mb_substr($snippet, 0, 300)];
+            if (count($results) >= 6) break;
+        }
+    }
+    if (!$results) return ['error' => 'no_results', 'query' => $query];
+    return ['query' => $query, 'results' => $results];
+}
+
+function web_fetch_public(string $url, bool $raw = false): array {
     $maxBytes = 512 * 1024;
     $current = $url;
     for ($hop = 0; $hop <= 3; $hop++) {
@@ -316,6 +325,7 @@ function web_fetch_public(string $url): array {
             $current = make_absolute_url($current, $location);
             continue;
         }
+        if ($raw) return ['status' => $code, 'content_type' => $ctype, 'url' => $current, 'raw_html' => $body];
         $text = trim(preg_replace('/\s+/', ' ', strip_tags($body)));
         return ['status' => $code, 'content_type' => $ctype, 'url' => $current, 'bytes_read' => strlen($body), 'text' => mb_substr($text, 0, 6000)];
     }
@@ -389,25 +399,15 @@ function run_tool_call(string $name, array $args, array $user, int $convId): str
             $category = (string)($args['category'] ?? 'general');
             return json_encode(memory_append((int)$user['id'], $memory, $category), JSON_UNESCAPED_UNICODE);
         }
-        if ($name === 'web_fetch') {
-            $url = trim((string)($args['url'] ?? ''));
-            return json_encode(web_fetch_public($url), JSON_UNESCAPED_UNICODE);
+        if ($name === 'web_search') {
+            $query = trim((string)($args['query'] ?? ''));
+            return json_encode(web_search_public($query), JSON_UNESCAPED_UNICODE);
         }
         return json_encode(['error' => 'unknown_tool']);
     } catch (Throwable $e) {
         log_event(['msg' => 'tool_call_error', 'tool' => $name, 'err' => $e->getMessage()]);
         return json_encode(['error' => 'tool_failed']);
     }
-}
-
-function ollama_chat_once(string $url, array $payload): array {
-    $ch = curl_init($url . '/api/chat');
-    curl_setopt_array($ch, [CURLOPT_POST => true, CURLOPT_HTTPHEADER => ['Content-Type: application/json'], CURLOPT_POSTFIELDS => json_encode($payload, JSON_UNESCAPED_UNICODE), CURLOPT_RETURNTRANSFER => true, CURLOPT_TIMEOUT => 45, CURLOPT_CONNECTTIMEOUT => 10]);
-    $resp = curl_exec($ch);
-    if ($resp === false) { $err = curl_error($ch); curl_close($ch); return ['error' => $err]; }
-    curl_close($ch);
-    $obj = json_decode($resp, true);
-    return is_array($obj) ? $obj : ['error' => 'bad_json'];
 }
 
 $lastUserMsg = '';
@@ -417,8 +417,7 @@ for ($i = count($body['messages']) - 1; $i >= 0; $i--) {
         break;
     }
 }
-// Always offer tools and let the model decide whether to call one. This costs one
-// extra non-streamed Ollama call per turn (the preflight below), but the previous
+// Always offer tools and let the model decide whether to call one. The previous
 // keyword gate silently blocked most natural tool-worthy asks ("search our past
 // chats...", "who's the president?"), so tools appeared broken. Correctness wins.
 $toolsOffered = true;
@@ -429,7 +428,6 @@ $contextParts = [];
 // "tonight" etc. The browser's clock matches the user's timezone; fall back
 // to the server clock when it didn't send one.
 $nowStr = $clientTime !== '' ? $clientTime : date('l, F j, Y \a\t g:i A T');
-if ($toolsOffered) $contextParts[] = tool_context_block();
 $memoryBlock = memory_recent_context((int)$user['id']);
 if ($memoryBlock !== '') $contextParts[] = $memoryBlock;
 
@@ -769,11 +767,10 @@ $ollamaPayload = [
     'stream' => true,
     'options' => [
         'reasoning_effort' => $reasoning,
-        'temperature' => 1,
+        'temperature' => 0.7,
         'top_p' => 0.95,
         'top_k' => 80,
         'min_p' => 0.01,
-        'repeat_penalty' => 1.15,
         'presence_penalty' => 0,
         'num_ctx' => 16384,
         // num_predict caps TOTAL generated tokens, and a reasoning model's hidden
@@ -794,151 +791,144 @@ $ollamaPayload = [
 // forwards as `thinking` events.
 if (!$think) $ollamaPayload['think'] = false;
 
-// Give the model a bounded chance to call tools before the final streamed reply.
-// We only run this preflight for explicit recall/current-data/memory asks,
-// avoiding a second Ollama request on ordinary companion-chat small talk. Tool
-// role messages stay inside this preflight only; the final streamed call gets a
-// plain context block so strict chat templates don't need to render tool roles.
-// Streamed to the client during the preflight (the "Let me check." line the model
-// says before it calls a tool) and prepended to the stored reply so history matches
-// what Anon saw. Empty when the model answers without any tool.
-$preamble = '';
+// Tools ride on the streamed call itself - no preflight. The tool instructions
+// and `tools` go to the same call, so there's no contradiction for the model to
+// reconcile; when it emits tool_calls we run them, append the tool-role results,
+// and re-stream for the tool-informed continuation.
 if ($toolsOffered) {
-    $toolMessages = $messages;
-    $toolResultBlocks = [];
-    for ($toolRound = 0; $toolRound < 2; $toolRound++) {
-        $toolPayload = $ollamaPayload;
-        $toolPayload['messages'] = $toolMessages;
-        $toolPayload['stream'] = false;
-        $toolPayload['tools'] = tool_catalog();
-        unset($toolPayload['think']);
-        $toolResp = ollama_chat_once($OLLAMA_URL, $toolPayload);
-        if (isset($toolResp['error'])) {
-            log_event(['msg' => 'tool_preflight_error', 'err' => (string)$toolResp['error']]);
-            break;
-        }
-        $calls = $toolResp['message']['tool_calls'] ?? [];
-        if (!is_array($calls) || !$calls) break;
-
-        // The model's pre-tool line - show it now, once, before we run anything, so
-        // Anon sees intent before the pause. If the model didn't emit one, fall back
-        // to a phrase matched to the tool it's calling (recall vs. lookup vs. note).
-        $lead = trim((string)($toolResp['message']['content'] ?? ''));
-        if ($lead === '') {
-            $firstName = (string)($calls[0]['function']['name'] ?? '');
-            $lead = tool_lead_phrase($firstName);
-        }
-        if ($preamble === '') {
-            sse_send(['token' => $lead . "\n\n"]);
-            $preamble = $lead . "\n\n";
-        }
-
-        $toolMessages[] = [
-            'role' => 'assistant',
-            'content' => (string)($toolResp['message']['content'] ?? ''),
-            'tool_calls' => $calls,
-        ];
-        foreach (array_slice($calls, 0, 4) as $call) {
-            $fn = $call['function'] ?? [];
-            $name = (string)($fn['name'] ?? '');
-            $args = $fn['arguments'] ?? [];
-            if (is_string($args)) {
-                $decoded = json_decode($args, true);
-                $args = is_array($decoded) ? $decoded : [];
-            }
-            if (!is_array($args)) $args = [];
-            // Let the UI show a "running <tool>" indicator during the (possibly slow)
-            // call, then clear it.
-            sse_send(['tool_status' => ['name' => $name, 'state' => 'running']]);
-            $result = run_tool_call($name, $args, $user, $convId);
-            sse_send(['tool_status' => ['name' => $name, 'state' => 'done']]);
-            // Carry tool_call_id + name so the model's chat template can match this
-            // result back to the call it answers (otherwise it renders as "unknown").
-            $toolMessages[] = [
-                'role' => 'tool',
-                'content' => $result,
-                'tool_call_id' => (string)($call['id'] ?? ''),
-                'name' => $name,
-            ];
-            $toolResultBlocks[] = '- ' . $name . ': ' . mb_substr($result, 0, 6500);
-        }
+    $lastMsgIdx = count($messages) - 1;
+    if ($lastMsgIdx >= 0 && $messages[$lastMsgIdx]['role'] === 'user') {
+        $messages[$lastMsgIdx]['content'] .= "\n\n" . tool_context_block();
+    } else {
+        $messages[] = ['role' => 'user', 'content' => tool_context_block()];
     }
-    if ($toolResultBlocks) {
-        $toolContext = "\n\n## Tool results for THIS reply\nUse these tool outputs as fresh context. Do not expose raw JSON unless Anon asks.\n" . implode("\n", $toolResultBlocks);
-        $lastMsgIdx = count($messages) - 1;
-        if ($lastMsgIdx >= 0 && $messages[$lastMsgIdx]['role'] === 'user') {
-            $messages[$lastMsgIdx]['content'] .= $toolContext;
-        } else {
-            $messages[] = ['role' => 'user', 'content' => $toolContext];
-        }
-        $ollamaPayload['messages'] = $messages;
-    }
+    $ollamaPayload['messages'] = $messages;
+    $ollamaPayload['tools'] = tool_catalog();
 }
 
-$ch = curl_init($OLLAMA_URL . '/api/chat');
-curl_setopt($ch, CURLOPT_POST, true);
-curl_setopt($ch, CURLOPT_HTTPHEADER, ['Content-Type: application/json']);
-curl_setopt($ch, CURLOPT_POSTFIELDS, json_encode($ollamaPayload, JSON_UNESCAPED_UNICODE));
-curl_setopt($ch, CURLOPT_RETURNTRANSFER, false);
-curl_setopt($ch, CURLOPT_TIMEOUT, 0);
-curl_setopt($ch, CURLOPT_CONNECTTIMEOUT, 10);
-
-$buf = '';
 $sawError = false;
 $assistantBuffer = '';
 $stats = null;
 $doneReason = '';
 
-// Ollama streams NDJSON; re-frame each complete line as an SSE token event.
-curl_setopt($ch, CURLOPT_WRITEFUNCTION, function ($ch, $chunk) use (&$buf, &$sawError, &$assistantBuffer, &$stats, &$doneReason) {
-    $buf .= $chunk;
-    while (($nl = strpos($buf, "\n")) !== false) {
-        $line = trim(substr($buf, 0, $nl));
-        $buf = substr($buf, $nl + 1);
-        if ($line === '') continue;
-        $obj = json_decode($line, true);
-        if (!is_array($obj)) continue;
+// Stream, and if the model called tools, run them and stream a follow-up round.
+// 3 rounds max: initial reply, one tool-informed continuation, one retry if the
+// continuation itself calls again.
+for ($round = 0; $round < 3; $round++) {
+    $buf = '';
+    $roundContent = '';
+    $toolCalls = [];
 
-        if (isset($obj['error'])) {
-            sse_send(['error' => (string)$obj['error']]);
-            $sawError = true;
-            continue;
-        }
-        // The terminal line (done:true) carries timing/token counters. Forward them so
-        // the dev HUD can show tokens/s without us computing anything client-side.
-        if (!empty($obj['done'])) {
-            $doneReason = (string)($obj['done_reason'] ?? '');
-        }
-        if (!empty($obj['done']) && isset($obj['eval_count'])) {
-            $stats = [
-                'eval_count'           => (int)($obj['eval_count'] ?? 0),
-                'eval_duration'        => (int)($obj['eval_duration'] ?? 0),
-                'prompt_eval_count'    => (int)($obj['prompt_eval_count'] ?? 0),
-                'prompt_eval_duration' => (int)($obj['prompt_eval_duration'] ?? 0),
-                'total_duration'       => (int)($obj['total_duration'] ?? 0),
-                'load_duration'        => (int)($obj['load_duration'] ?? 0),
-            ];
-        }
-        // Reasoning tokens arrive on a separate field when think=true. Stream them as
-        // their own event - never into $assistantBuffer, so they stay out of stored
-        // history, embeddings, RAG, and action parsing.
-        $th = (string)($obj['message']['thinking'] ?? '');
-        if ($th !== '') sse_send(['thinking' => $th]);
+    $ch = curl_init($OLLAMA_URL . '/api/chat');
+    curl_setopt($ch, CURLOPT_POST, true);
+    curl_setopt($ch, CURLOPT_HTTPHEADER, ['Content-Type: application/json']);
+    curl_setopt($ch, CURLOPT_POSTFIELDS, json_encode($ollamaPayload, JSON_UNESCAPED_UNICODE));
+    curl_setopt($ch, CURLOPT_RETURNTRANSFER, false);
+    curl_setopt($ch, CURLOPT_TIMEOUT, 0);
+    curl_setopt($ch, CURLOPT_CONNECTTIMEOUT, 10);
 
-        $tok = (string)($obj['message']['content'] ?? '');
-        if ($tok !== '') {
-            sse_send(['token' => $tok]);
-            $assistantBuffer .= $tok;
+    // Ollama streams NDJSON; re-frame each complete line as an SSE token event.
+    curl_setopt($ch, CURLOPT_WRITEFUNCTION, function ($ch, $chunk) use (&$buf, &$sawError, &$roundContent, &$toolCalls, &$stats, &$doneReason) {
+        $buf .= $chunk;
+        while (($nl = strpos($buf, "\n")) !== false) {
+            $line = trim(substr($buf, 0, $nl));
+            $buf = substr($buf, $nl + 1);
+            if ($line === '') continue;
+            $obj = json_decode($line, true);
+            if (!is_array($obj)) continue;
+
+            if (isset($obj['error'])) {
+                sse_send(['error' => (string)$obj['error']]);
+                $sawError = true;
+                continue;
+            }
+            // The terminal line (done:true) carries timing/token counters. Forward them so
+            // the dev HUD can show tokens/s without us computing anything client-side.
+            if (!empty($obj['done'])) {
+                $doneReason = (string)($obj['done_reason'] ?? '');
+            }
+            if (!empty($obj['done']) && isset($obj['eval_count'])) {
+                $stats = [
+                    'eval_count'           => (int)($obj['eval_count'] ?? 0),
+                    'eval_duration'        => (int)($obj['eval_duration'] ?? 0),
+                    'prompt_eval_count'    => (int)($obj['prompt_eval_count'] ?? 0),
+                    'prompt_eval_duration' => (int)($obj['prompt_eval_duration'] ?? 0),
+                    'total_duration'       => (int)($obj['total_duration'] ?? 0),
+                    'load_duration'        => (int)($obj['load_duration'] ?? 0),
+                ];
+            }
+            // Reasoning tokens arrive on a separate field when think=true. Stream them as
+            // their own event - never into the stored reply, so they stay out of stored
+            // history, embeddings, RAG, and action parsing.
+            $th = (string)($obj['message']['thinking'] ?? '');
+            if ($th !== '') sse_send(['thinking' => $th]);
+
+            $calls = $obj['message']['tool_calls'] ?? null;
+            if (is_array($calls) && $calls) {
+                $toolCalls = array_merge($toolCalls, $calls);
+            }
+
+            $tok = (string)($obj['message']['content'] ?? '');
+            if ($tok !== '') {
+                sse_send(['token' => $tok]);
+                $roundContent .= $tok;
+            }
         }
+        return strlen($chunk);
+    });
+
+    if (curl_exec($ch) === false) {
+        log_event(['msg' => 'ollama_curl_error', 'err' => curl_error($ch)]);
+        sse_send(['error' => 'upstream_unavailable']);
+        $sawError = true;
     }
-    return strlen($chunk);
-});
+    curl_close($ch);
 
-if (curl_exec($ch) === false) {
-    log_event(['msg' => 'ollama_curl_error', 'err' => curl_error($ch)]);
-    sse_send(['error' => 'upstream_unavailable']);
+    $assistantBuffer .= $roundContent;
+    if ($sawError || !$toolCalls) break;
+
+    // If the model spoke before calling ("Let me check."), keep a visible break
+    // between that lead line and the continuation.
+    if ($roundContent !== '') {
+        sse_send(['token' => "\n\n"]);
+        $assistantBuffer .= "\n\n";
+    }
+
+    $messages[] = [
+        'role' => 'assistant',
+        'content' => $roundContent,
+        'tool_calls' => $toolCalls,
+    ];
+    foreach (array_slice($toolCalls, 0, 4) as $call) {
+        $fn = $call['function'] ?? [];
+        $name = (string)($fn['name'] ?? '');
+        $args = $fn['arguments'] ?? [];
+        if (is_string($args)) {
+            $decoded = json_decode($args, true);
+            $args = is_array($decoded) ? $decoded : [];
+        }
+        if (!is_array($args)) $args = [];
+        // Let the UI show a "running <tool>" indicator during the (possibly slow)
+        // call, then clear it.
+        sse_send(['tool_status' => ['name' => $name, 'state' => 'running', 'args' => $args]]);
+        $t0 = microtime(true);
+        $result = run_tool_call($name, $args, $user, $convId);
+        sse_send(['tool_status' => [
+            'name' => $name, 'state' => 'done',
+            'duration_ms' => (int)round((microtime(true) - $t0) * 1000),
+            'result' => mb_substr($result, 0, 2000),
+        ]]);
+        // Carry tool_call_id + name so the model's chat template can match this
+        // result back to the call it answers (otherwise it renders as "unknown").
+        $messages[] = [
+            'role' => 'tool',
+            'content' => $result,
+            'tool_call_id' => (string)($call['id'] ?? ''),
+            'name' => $name,
+        ];
+    }
+    $ollamaPayload['messages'] = $messages;
 }
-curl_close($ch);
 
 if ($stats !== null) {
     $stats['num_ctx'] = (int)($ollamaPayload['options']['num_ctx'] ?? 0);
@@ -949,16 +939,12 @@ if ($stats !== null) {
 // A reply with no answer text - never let it surface as silence. The usual cause
 // is a reasoning model that spent its whole generation budget on the thinking
 // channel (done_reason=length); flag that distinctly so the UI can hint at it.
-if (!$sawError && $assistantBuffer === '' && $preamble === '') {
+if (!$sawError && $assistantBuffer === '') {
     log_event(['msg' => 'empty_reply', 'model' => $model, 'done_reason' => $doneReason, 'think' => $think]);
     sse_send(['error' => $doneReason === 'length' ? 'reply_truncated_in_thinking' : 'empty_reply']);
 }
 
-if (!$sawError && ($assistantBuffer !== '' || $preamble !== '')) {
-    // Fold the pre-tool line ("Let me check.") back in so the stored message matches
-    // what Anon saw streamed - preamble first, then the tool-informed answer.
-    $assistantBuffer = $preamble . $assistantBuffer;
-
+if (!$sawError && $assistantBuffer !== '') {
     // Pull Jun's hidden relationship bookkeeping tag, apply the deltas, then strip
     // it from what we persist - unlike animation tags this is internal state, not
     // dialogue, and we don't want it in stored history, embeddings, or future RAG.

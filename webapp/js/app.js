@@ -14,6 +14,9 @@
   const missingParamsEl = document.getElementById('missingParams');
   const rawStreamEl = document.getElementById('rawStream');
   const clearRawBtn = document.getElementById('clearRawBtn');
+  const toolLogEl = document.getElementById('toolLog');
+  const toolLogCount = document.getElementById('toolLogCount');
+  const clearToolLogBtn = document.getElementById('clearToolLogBtn');
   const debugSystemPromptEl = document.getElementById('debugSystemPrompt');
   const moodInputs = {
     affection: document.getElementById('moodAffection'),
@@ -153,6 +156,27 @@
     row.innerHTML = `<span class="ts">${ts}</span> <span class="${level}">${escapeHtml(text)}</span>`;
     actionLogEl.appendChild(row);
     actionLogEl.scrollTop = actionLogEl.scrollHeight;
+  }
+
+  let toolCallCount = 0;
+  function logToolStatus(s) {
+    if (!toolLogEl || !s || !s.name) return;
+    if (toolCallCount === 0) toolLogEl.textContent = '';
+    const row = document.createElement('div');
+    row.className = 'row';
+    const ts = new Date().toLocaleTimeString();
+    if (s.state === 'running') {
+      const args = s.args && Object.keys(s.args).length ? JSON.stringify(s.args) : '';
+      row.innerHTML = `<span class="ts">${ts}</span> <span class="info">🔧 ${escapeHtml(s.name)}(${escapeHtml(args)})</span>`;
+    } else {
+      toolCallCount++;
+      toolLogCount.textContent = toolCallCount;
+      const ms = typeof s.duration_ms === 'number' ? ` ${s.duration_ms}ms` : '';
+      const result = (s.result || '').trim() || '(empty result)';
+      row.innerHTML = `<span class="ts">${ts}</span> <span class="ok">✓ ${escapeHtml(s.name)}${ms}</span> <span>→ ${escapeHtml(result)}</span>`;
+    }
+    toolLogEl.appendChild(row);
+    toolLogEl.scrollTop = toolLogEl.scrollHeight;
   }
 
   function logMissing(param) {
@@ -381,6 +405,7 @@
         onToolStatus: (s) => {
           if (s && s.state === 'running') ui.setStatus('streaming', '🔧 ' + s.name + '…');
           else ui.setStatus('streaming', 'streaming');
+          logToolStatus(s);
         },
         onThinking: (t) => { appendRaw(t); pushThinking(t); },
         onToken: (tok) => { settleThinking(); if (window.DevHud) DevHud.tickToken(); appendRaw(tok); stream.push(tok); },
@@ -581,6 +606,11 @@
     rawStreamEl.scrollTop = rawStreamEl.scrollHeight;
   }
   clearRawBtn.addEventListener('click', () => { rawStreamEl.textContent = ''; });
+  clearToolLogBtn.addEventListener('click', () => {
+    toolLogEl.textContent = 'No tool calls yet.';
+    toolCallCount = 0;
+    toolLogCount.textContent = '0';
+  });
 
   const newChatBtn = document.getElementById('newChatBtn');
   if (newChatBtn) {

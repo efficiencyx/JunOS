@@ -12,6 +12,8 @@ Rebuilds everything the webapp needs straight from the game install
                                 layer textures listed in each item's
                                 PackedTexturesContainer, plus the four
                                 standalone logo textures
+  variants/game_items.json      every packed item layer and ColorIndex
+  variants/hair/**              separately colorable native hair strands
   variants/limbs/**             per-drawable crops of the packed variant
                                 textures (Experimental limbs + High-Tech
                                 skin), with mapping.json for outfit.js
@@ -23,8 +25,10 @@ Requires: UnityPy, Pillow  (pip install UnityPy Pillow)
 """
 
 import argparse
+import hashlib
 import json
 import os
+import re
 import struct
 import sys
 
@@ -89,6 +93,16 @@ LIMB_CONTAINERS = {
 }
 LIMB_DIRS = {"experimental": "experimental", "hightech_skin": "hightech"}
 
+# These are layer-1 additions to existing hair drawables. Their ColorIndex is
+# 1 in the game data (the base hair is slot 0), which is why a hairstyle can
+# expose a separate strand color even though both layers end up on one Cubism
+# drawable.
+HAIR_STRAND_CONTAINERS = {
+    "clothier": "clothierHairStrand_interaction",
+    "eye_covering_bang": "eyecoveringbangStrand_interaction",
+    "hime": "himeHairStrand_interaction",
+}
+
 
 def aligned_str(raw, off):
     n = struct.unpack_from("<I", raw, off)[0]
@@ -118,15 +132,25 @@ def parse_container(raw):
     sections = []
     for _ in range(ntex):
         _src, off = aligned_str(raw, off)
-        off += 4  # layer index
+        layer = struct.unpack_from("<i", raw, off)[0]
+        off += 4
         cnt = struct.unpack_from("<I", raw, off)[0]
         off += 4
         entries = {}
         for _ in range(cnt):
             en, off = aligned_str(raw, off)
-            x, y, w, h = struct.unpack_from("<4i", raw, off)
-            off += 16 + 12  # rect + 3 unknown ints
-            entries[en] = (x, y, w, h)
+            x, y, w, h, color_index, unknown, flag = struct.unpack_from(
+                "<7i", raw, off)
+            off += 28
+            entries[en] = {
+                "rect": (x, y, w, h),
+                # PackedDrawable.ColorIndex. -1 means the layer is not tinted.
+                "color_index": color_index,
+                # Preserve the two still-unidentified serialized fields in the
+                # catalog so no game metadata is silently discarded.
+                "unknown": unknown,
+                "flag": flag,
+            }
         nmodels = struct.unpack_from("<I", raw, off)[0]
         off += 4
         for _ in range(nmodels):
@@ -135,8 +159,16 @@ def parse_container(raw):
         path, off = aligned_str(raw, off)
         _hash, off = aligned_str(raw, off)
         off += 20  # byte size + 2 zeros + 2 ones
-        sections.append({"entries": entries, "path": path})
+        sections.append({"source": _src, "layer": layer,
+                         "entries": entries, "path": path})
     return name, sections
+
+
+def safe_component(value):
+    """Stable, filesystem-safe key for a Unity object name."""
+    clean = re.sub(r"[^a-z0-9]+", "_", value.lower()).strip("_") or "item"
+    digest = hashlib.sha1(value.encode()).hexdigest()[:8]
+    return f"{clean[:72]}_{digest}"
 
 
 class Recovery:
@@ -310,7 +342,8 @@ class Recovery:
                 for sec in self.containers[cname]:
                     img = self.tex_by_path(sec["path"]).convert("RGBA")
                     _, H = img.size
-                    for en, (x, y, w, h) in sec["entries"].items():
+                    for en, entry in sec["entries"].items():
+                        x, y, w, h = entry["rect"]
                         # rects are stored from the bottom-left
                         crop = img.crop((x, H - y - h, x + w, H - y))
                         self.save(crop, f"variants/limbs/{d}/{en}.png")
@@ -319,6 +352,71 @@ class Recovery:
         with open(path, "w") as f:
             f.write(json.dumps(mapping, indent=1) + "\n")
         print("  wrote variants/limbs/mapping.json")
+
+    def recover_hair_strands(self):
+        """Recover the game's separately colorable hair-strand layers."""
+        mapping = {}
+        for key, cname in HAIR_STRAND_CONTAINERS.items():
+            mapping[key] = []
+            for sec_index, sec in enumerate(self.containers[cname]):
+                img = self.tex_by_path(sec["path"]).convert("RGBA")
+                _, height = img.size
+                for drawable, entry in sec["entries"].items():
+                    x, y, w, h = entry["rect"]
+                    crop = img.crop((x, height - y - h, x + w, height - y))
+                    rel = f"variants/hair/{key}/{drawable}.png"
+                    self.save(crop, rel)
+                    mapping[key].append({
+                        "drawable": drawable,
+                        "texture": f"assets/{rel}",
+                        "layer": sec["layer"],
+                        "color_index": entry["color_index"],
+                        "section": sec_index,
+                    })
+        path = os.path.join(self.out, "variants", "hair", "mapping.json")
+        with open(path, "w") as f:
+            f.write(json.dumps(mapping, indent=1) + "\n")
+        print("  wrote variants/hair/mapping.json")
+
+    def recover_item_catalog(self):
+        """Write every packed game item layer and its ColorIndex metadata.
+
+        The catalog covers every scene, not only the interaction model used by
+        the webapp. Texture resource paths remain in the output so future
+        wardrobe work can select and crop any native item without repeating
+        the binary reverse engineering performed here.
+        """
+        catalog = []
+        for name, sections in sorted(self.containers.items()):
+            color_indices = sorted({
+                entry["color_index"]
+                for sec in sections
+                for entry in sec["entries"].values()
+                if entry["color_index"] >= 0
+            })
+            catalog.append({
+                "name": name,
+                "key": safe_component(name),
+                "color_indices": color_indices,
+                "color_slot_count": max(color_indices, default=-1) + 1,
+                "sections": [{
+                    "source": sec["source"],
+                    "resource": sec["path"],
+                    "layer": sec["layer"],
+                    "drawables": [{
+                        "name": drawable,
+                        "rect": list(entry["rect"]),
+                        "color_index": entry["color_index"],
+                        "unknown": entry["unknown"],
+                        "flag": entry["flag"],
+                    } for drawable, entry in sec["entries"].items()],
+                } for sec in sections],
+            })
+        path = os.path.join(self.out, "variants", "game_items.json")
+        os.makedirs(os.path.dirname(path), exist_ok=True)
+        with open(path, "w") as f:
+            f.write(json.dumps({"version": 1, "items": catalog}, indent=1) + "\n")
+        print(f"  wrote variants/game_items.json ({len(catalog)} containers)")
 
 
 def main():
@@ -332,6 +430,8 @@ def main():
     print("atlases...");  r.recover_atlases()
     print("variants..."); r.recover_variants()
     print("limbs...");    r.recover_limbs()
+    print("hair...");     r.recover_hair_strands()
+    print("items...");    r.recover_item_catalog()
     print("done:", args.out)
     print()
     print("NOTE: these are the game's art assets, rebuilt for your own local")

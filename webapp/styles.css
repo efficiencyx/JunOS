@@ -355,8 +355,31 @@ input[type="checkbox"] {
 .app-main.sidebar-collapsed .sidebar-brand-name,
 .app-main.sidebar-collapsed .user-info { opacity: 0; pointer-events: none; }
 .app-main.sidebar-collapsed .conv-list { display: none; }
-.app-main.sidebar-collapsed .sidebar-item { gap: 0; padding: 9px 11px; }
-.app-main.sidebar-collapsed .user-chip   { gap: 0; padding: 7px 5px; }
+/* Icons sit in fixed 40px squares centered in the 56px rail */
+.app-main.sidebar-collapsed .sidebar-item span { width: 0; }
+.app-main.sidebar-collapsed .sidebar-item {
+  width: 40px;
+  height: 40px;
+  gap: 0;
+  padding: 0;
+  justify-content: center;
+  align-self: center;
+}
+.app-main.sidebar-collapsed .sidebar-item svg { width: 18px; height: 18px; }
+.app-main.sidebar-collapsed .sidebar-top { gap: 6px; }
+.app-main.sidebar-collapsed .user-chip {
+  width: 40px;
+  gap: 0;
+  padding: 5px 0;
+  justify-content: center;
+  align-self: center;
+}
+.app-main.sidebar-collapsed .user-info { display: none; }
+.app-main.sidebar-collapsed .sidebar-footer {
+  display: flex;
+  justify-content: center;
+  border-top-color: transparent;
+}
 .app-main.sidebar-collapsed .sidebar-section.sidebar-scroll { overflow: hidden; }
 
 .sidebar-section {
@@ -1086,6 +1109,7 @@ input[type="checkbox"].toggle:checked::after { left: 20px; }
 .action-log::-webkit-scrollbar { width: 4px; }
 .action-log::-webkit-scrollbar-thumb { background: var(--border-2); }
 .action-log .ok   { color: var(--ok); }
+.action-log .info { color: var(--accent); }
 .action-log .warn { color: var(--warn); }
 .action-log .err  { color: var(--danger); }
 .action-log .ts   { color: var(--dim); }
