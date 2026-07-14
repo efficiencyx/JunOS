@@ -71,11 +71,14 @@ window.Outfit = (function () {
     { key: 'hair_h0', label: 'Default Hair', section: 'hair', defaultOn: true,
       visibilityPatterns: ['h0_'], visOn: 1, visOff: 0 },
     { key: 'hair_h1', label: 'Side Swept Hair', section: 'hair', defaultOn: false,
-      visibilityPatterns: ['h1_'], visOn: 1, visOff: 0 },
+      visibilityPatterns: ['h1_'], visOn: 1, visOff: 0,
+      textures: { H1_Front_Bang: { url: 'assets/variants/hair/clothier/H1_Front_Bang.png', overlay: true } } },
     { key: 'hair_h2', label: 'Front bang', section: 'hair', defaultOn: false,
-      visibilityPatterns: ['h2_'], visOn: 1, visOff: 0 },
+      visibilityPatterns: ['h2_'], visOn: 1, visOff: 0,
+      textures: { H2_Front_Bang: { url: 'assets/variants/hair/eye_covering_bang/H2_Front_Bang.png', overlay: true } } },
     { key: 'hair_h3', label: 'Hime Cut Hair', section: 'hair', defaultOn: false,
-      visibilityPatterns: ['h3_'], visOn: 1, visOff: 0 },
+      visibilityPatterns: ['h3_'], visOn: 1, visOff: 0,
+      textures: { H3_Front: { url: 'assets/variants/hair/hime/H3_Front.png', overlay: true } } },
     { key: 'hair_h4', label: 'Ponytail', section: 'hair', defaultOn: false,
       visibilityPatterns: ['h4_'], visOn: 1, visOff: 0 },
   ];
@@ -102,6 +105,13 @@ window.Outfit = (function () {
     { key: 'hair', label: 'Hair',
       includes: ['h0_','h1_','h2_','h3_','h4_','hair'],
       excludes: ['hairband','hairpin','hairtie','hairclip','hairbow','hairhologram'] },
+
+    // The native hair items add a separately colorable layer (ColorIndex 1)
+    // to these exact front drawables. Keep them after the broad main-hair
+    // group so a strand choice overrides the main tint only on its own mesh.
+    { key: 'hair_h1_strand', label: 'Strand', includes: ['h1_front_bang'], excludes: [] },
+    { key: 'hair_h2_strand', label: 'Strand', includes: ['h2_front_bang'], excludes: [] },
+    { key: 'hair_h3_strand', label: 'Strand', includes: ['h3_front'], excludes: [] },
 
     { key: 'hair_hologram', label: 'Hair hologram', includes: ['hairhologram'], excludes: [] },
 
@@ -149,7 +159,11 @@ window.Outfit = (function () {
     pointy_ears: ['ear'],
     tail: ['tail'],
     hair_hologram: ['hair_hologram'],
-    hair_h0: ['hair'], hair_h1: ['hair'], hair_h2: ['hair'], hair_h3: ['hair'], hair_h4: ['hair'],
+    hair_h0: ['hair'],
+    hair_h1: ['hair', 'hair_h1_strand'],
+    hair_h2: ['hair', 'hair_h2_strand'],
+    hair_h3: ['hair', 'hair_h3_strand'],
+    hair_h4: ['hair'],
   };
 
   // Limb variants ripped from the game's PackedTexturesContainer assets:
@@ -346,6 +360,7 @@ window.Outfit = (function () {
   // Just the param/opacity flips for the boolean items. Cheap: no texture
   // recompositing, no tint repaint. This is all an equip/unequip needs.
   function applyItems() {
+    const textureMap = {};
     for (const it of ITEMS) {
       if (it.param) Live2D.setTarget(it.param, state[it.key] ? 1 : 0);
       // For items whose param doesn't drive drawable opacity, override directly.
@@ -358,7 +373,13 @@ window.Outfit = (function () {
         Live2D.opacityByPattern(it.visibilityPatterns, it.visibilityExcludes,
           state[it.key] ? visOn : visOff);
       }
+      // Native items may add packed art on top of a baked drawable. Hair
+      // strands are layer-1 overlays in the game and disappear with the item.
+      for (const [drawable, texture] of Object.entries(it.textures || {})) {
+        textureMap[drawable] = state[it.key] ? texture : null;
+      }
     }
+    if (Live2D.setDrawableTextures && Object.keys(textureMap).length) Live2D.setDrawableTextures(textureMap);
   }
 
   function applyAll() {
@@ -1059,41 +1080,27 @@ window.Outfit = (function () {
       }
     }
 
+    // Tints with no wardrobe tile of their own (skin, blush, lips, eyes...)
+    // ride on the High-Tech Skin tiles as one multi-channel picker instead of
+    // a separate "Color studio" section. Item/ear/hair tints stay on their tiles.
+    const tileGroups = new Set(Object.values(ITEM_COLOR_GROUPS).flat());
+    const studioKeys = COLOR_GROUPS.filter(g =>
+      !tileGroups.has(g.key) &&
+      (!Live2D.findDrawables || Live2D.findDrawables(g.includes, g.excludes).length))
+      .map(g => g.key);
+
     // All variant slots grouped under one "Styles" anchor.
     let firstVariant = true;
     for (const v of VARIANTS) {
       const { title, grid } = section(v.label, !firstVariant);
       if (firstVariant) { addNav('Styles', '✨', title); firstVariant = false; }
       v.options.forEach((opt, i) => {
-        const tile = makeTile(opt.name, variantThumb(v, opt), () => setVariant(v.key, i));
+        const tile = makeTile(opt.name, variantThumb(v, opt), () => setVariant(v.key, i),
+          v.key === 'hightech_skin' ? studioKeys : []);
         tile.dataset.variant = v.key;
         tile.dataset.opt = String(i);
         grid.appendChild(tile);
       });
-    }
-
-    // Color studio: tints that have no wardrobe tile to live on (skin, face,
-    // eyes...). Item/ear/hair tints are on the tiles themselves.
-    const tileGroups = new Set(Object.values(ITEM_COLOR_GROUPS).flat());
-    const studioGroups = COLOR_GROUPS.filter(g =>
-      !tileGroups.has(g.key) &&
-      (!Live2D.findDrawables || Live2D.findDrawables(g.includes, g.excludes).length));
-    if (studioGroups.length) {
-      const t = document.createElement('div');
-      t.className = 'wd-section';
-      t.textContent = 'Color studio';
-      body.appendChild(t);
-      addNav('Colors', '🎨', t);
-      const chips = document.createElement('div');
-      chips.className = 'wd-chips';
-      for (const g of studioGroups) {
-        const chip = document.createElement('div');
-        chip.className = 'wd-chip';
-        chip.appendChild(Object.assign(document.createElement('span'), { textContent: g.label }));
-        chip.appendChild(makeSwatch([g.key], g.label));
-        chips.appendChild(chip);
-      }
-      body.appendChild(chips);
     }
 
     // Game-mod items (loaded from .zip, stored client-side in IndexedDB).
