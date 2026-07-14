@@ -152,9 +152,13 @@ function tool_context_block(): string {
     return <<<TXT
 ## Tools you can call when useful
 You may ask the system to run tools before answering. Use tools only when they materially improve the reply, and summarize tool results naturally.
-When a tool would help, you MUST reply in TWO parts: (1) FIRST a short spoken line to Anon in your own voice - a natural filler that fits the action (recalling: "hmm, lemme think...", "did we...?"; looking up: "one sec, checking..."; noting: "got it, writing that down...") - under 8 words, and this text MUST appear in your message content; (2) THEN make the tool call. Never emit a tool call with empty message content - always speak first. After the tool result comes back, give your real answer.
+When a tool would help, you MUST reply in TWO parts: (1) FIRST a short spoken line to Anon in your own voice (under 8 words) - and this text MUST appear in your message content; (2) THEN make the tool call. Never emit a tool call with empty message content - always speak first. After the tool result comes back, give your real answer.
+CRITICAL: the spoken line must match WHAT that specific tool does - the register is different for remembering vs. looking something up:
+- search_recent_chats: you are REMEMBERING your own shared past, not looking anything up. Sound like you're casting your mind back: "hmm, lemme think back...", "did we...?", "wait, I remember something...". NEVER say "let me check" / "let me look that up" here - that's for the web, not your memory.
+- memory_write: you are making a mental note. Sound like you're committing it to memory: "aw, noting that down...", "okay, I'll remember that...".
+- web_fetch: you are looking up outside/current info. Here "let me check...", "one sec, looking that up..." is right.
 Available tools:
-- search_recent_chats(query, limit): searches saved recent conversations for Anon's prior messages and Jun's replies.
+- search_recent_chats(query, limit): searches Jun and Anon's saved past conversations - this is Jun REMEMBERING, phrase the lead line as recall.
 - memory_write(memory, category): appends a concise durable note to Anon's private memory file when he asks you to remember something or shares a stable preference/fact.
 - web_fetch(url): fetches a public web page or API URL for live/current real-world information. If Anon asks for latest data but does not provide a URL, ask him for a URL or say you need one.
 
