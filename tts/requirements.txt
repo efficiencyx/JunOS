@@ -1,5 +1,8 @@
 kokoro>=0.9.4
 pocket-tts>=2.1
+# STT. Runs on CTranslate2 (not torch) and decodes audio via PyAV, whose wheel
+# bundles ffmpeg - so no ffmpeg package is needed in the image.
+faster-whisper>=1.0
 torch>=2.5
 fastapi>=0.110
 uvicorn[standard]>=0.27

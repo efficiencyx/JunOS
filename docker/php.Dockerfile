@@ -11,8 +11,10 @@ RUN apk add --no-cache curl fcgi sqlite-libs \
  && rm -rf /tmp/pear
 
 # PHP tuning: security + performance
+# post_max_size covers the STT WAV upload (/api/stt.php). It's global, but nginx
+# caps every other location at 16k/256k, so those never reach this limit.
 RUN { \
-      echo 'post_max_size=512K'; \
+      echo 'post_max_size=4M'; \
       echo 'upload_max_filesize=1M'; \
       echo 'memory_limit=128M'; \
       echo 'expose_php=Off'; \
