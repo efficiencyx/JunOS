@@ -160,6 +160,22 @@ Jun's brain is available in 12B, E4B, and E2B fine-tunes on Hugging Face. The in
 
 Use `JUN_MODEL=12b`, `JUN_MODEL=e4b`, or `JUN_MODEL=e2b` to select a family at its Q4_K_M quant, or pass a complete Ollama reference to choose an exact quant. The frontend lists whatever Ollama actually has and picks a sensible default.
 
+## Choosing an AI provider
+
+Jun defaults to **Ollama** (local, fully managed), but both installers ask which backend you want:
+
+| Provider | What it is | Non-interactive install |
+|---|---|---|
+| **Ollama** (default) | Local inference, models pulled and pre-warmed for you | `JUN_YES=1 ./install.sh` |
+| **OpenRouter** | Cloud API - any model on [openrouter.ai](https://openrouter.ai); needs an API key, **your chats leave the machine** | `JUN_PROVIDER=openrouter OPENROUTER_API_KEY=sk-... OPENROUTER_MODEL=openrouter/auto ./install.sh` |
+| **llama.cpp** | A local [`llama-server`](https://github.com/ggml-org/llama.cpp) - managed for you (Docker service / winget install), or point at one you already run | `JUN_PROVIDER=llamacpp ./install.sh` (managed) · add `LLAMACPP_URL=http://host:8080` for your own server |
+
+The same knobs work with `install.ps1` on Windows (`$env:JUN_PROVIDER='openrouter'; ...`).
+
+**Embeddings note:** the cross-chat memory / RAG features embed messages with Ollama's `nomic-embed-text`. With OpenRouter or llama.cpp the installer asks whether to keep a local Ollama around just for that (`JUN_EMBEDDINGS=on|off`, default off). Declined, those features switch off silently - chat, tools and everything else still work.
+
+**Running compose by hand?** The model-server containers are profile-gated: `./start.sh` derives `COMPOSE_PROFILES` from your `.env`, but a bare `docker compose up -d` needs `COMPOSE_PROFILES=ollama` (or `llamacpp`) set in `.env` or the shell.
+
 ## Knobs to turn
 
 Everything's environment variables (see `.env.example`):
@@ -169,8 +185,14 @@ Everything's environment variables (see `.env.example`):
 | `DOMAIN` | Public hostname for nginx `server_name` and certbot | `localhost` |
 | `EMAIL` | Contact email for Let's Encrypt | `admin@localhost` |
 | `TLS_MODE` | `on` = HTTPS + certbot profile; `off` = plain HTTP | `off` |
+| `AI_PROVIDER` | Chat backend: `ollama` \| `openrouter` \| `llamacpp` | `ollama` |
 | `OLLAMA_URL` | Where PHP finds Ollama | `http://ollama:11434` |
 | `OLLAMA_MODELS_TO_PULL` | Models pulled on first boot | `hf.co/efficiencyx/Jun-LoRA-v3-E2B-GGUF:Q4_K_M,nomic-embed-text` |
+| `OPENROUTER_API_KEY` / `OPENROUTER_MODEL` | OpenRouter credentials + default model | - / `openrouter/auto` |
+| `LLAMACPP_URL` | Where PHP finds llama-server (custom URL skips the managed one) | `http://llamacpp:8080` |
+| `LLAMACPP_MODEL_HF` | HF `repo:quant` the managed llama-server loads (`-hf` syntax) | `efficiencyx/Jun-LoRA-v3-E2B-GGUF:Q4_K_M` |
+| `EMBEDDINGS` | `on`/`off` - local Ollama RAG embeddings | `on` for ollama, else `off` |
+| `COMPOSE_PROFILES` | Which model-server containers run (`ollama`, `llamacpp`) | `ollama` |
 | `KOKORO_URL` | Where the PHP TTS proxy finds the voice sidecar | `http://kokoro:8001` |
 | `CORS_ORIGIN` | `Access-Control-Allow-Origin` for the voice sidecar | `http://nginx` |
 

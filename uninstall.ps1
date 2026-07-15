@@ -3,7 +3,7 @@
 # Uninstaller for the bare-metal Windows install. Everything Jun created
 # lives either in this folder or as a normal winget app, so removal is:
 #   1. stop the running processes (start.ps1 stop)
-#   2. optionally uninstall Ollama (machine-wide, installed via winget)
+#   2. optionally uninstall Ollama / llama.cpp (machine-wide, installed via winget)
 #   3. delete this folder (webapp, PHP, TTS venv, model weights, chat data)
 #
 # git (and Python, if voice setup installed it) are left alone - they're
@@ -34,7 +34,16 @@ if (Test-Path $start) {
     & $start stop
 }
 
-# 2. Ollama is the one machine-wide piece Jun really installed for itself.
+# 2. The model servers are the machine-wide pieces Jun really installed for
+#    itself (which one depends on the provider chosen at install time).
+if (Get-Command llama-server -ErrorAction SilentlyContinue) {
+    if (Confirm-Step 'Uninstall llama.cpp too (machine-wide app)?') {
+        Get-Process 'llama-server*' -ErrorAction SilentlyContinue | Stop-Process -Force -ErrorAction SilentlyContinue
+        winget uninstall -e --id ggml.llamacpp
+        # Models Jun downloaded live in runtime\llama-cache (deleted below).
+    }
+}
+
 if (Get-Command ollama -ErrorAction SilentlyContinue) {
     if (Confirm-Step 'Uninstall Ollama too (machine-wide app)?') {
         Get-Process 'ollama*' -ErrorAction SilentlyContinue | Stop-Process -Force -ErrorAction SilentlyContinue
