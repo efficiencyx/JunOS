@@ -10,3 +10,16 @@ services:
             - driver: nvidia
               count: all
               capabilities: [gpu]
+
+  # Inert unless the llamacpp profile is active.
+  llamacpp:
+    image: ghcr.io/ggml-org/llama.cpp:server-cuda
+    environment:
+      LLAMA_ARG_N_GPU_LAYERS: "999"
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: all
+              capabilities: [gpu]

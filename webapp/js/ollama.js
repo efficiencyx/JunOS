@@ -1,4 +1,6 @@
-// Thin client for /api/chat.php (SSE) and /api/models.php.
+// Thin client for /api/chat.php (SSE) and /api/models.php. The backend proxies
+// whichever AI provider is configured (Ollama, OpenRouter, llama.cpp); the
+// window.Ollama name is kept for compatibility with the rest of the frontend.
 
 window.Ollama = (function () {
   async function listModels() {

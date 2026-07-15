@@ -12,7 +12,12 @@
 #
 # Config comes from .env (copied from .env.example by install.ps1):
 #   JUN_PORT               web UI port           (default 8080)
-#   OLLAMA_MODELS_TO_PULL  models pulled on boot
+#   AI_PROVIDER            ollama|openrouter|llamacpp (default ollama)
+#   OLLAMA_MODELS_TO_PULL  models pulled on boot (ollama / local embeddings)
+#   OPENROUTER_API_KEY/OPENROUTER_MODEL   openrouter settings
+#   LLAMACPP_MODEL_HF/LLAMACPP_PORT       managed llama-server (default port 8081)
+#   LLAMACPP_URL           existing llama-server to use instead of launching one
+#   EMBEDDINGS             on|off  local Ollama RAG embeddings
 #   VOICE                  on|off  TTS sidecar
 #   TTS_DEVICE             cpu|cuda|auto
 
@@ -40,7 +45,7 @@ if (Test-Path .env) {
             $k = $Matches[1]; $v = $Matches[2].Trim()
             # Docker-internal hostnames from .env.example don't resolve on bare
             # metal; ignore them and use our localhost defaults instead.
-            if ($v -match '://(ollama|kokoro|nginx|php)\b') { continue }
+            if ($v -match '://(ollama|kokoro|nginx|php|llamacpp)\b') { continue }
             if (-not (Get-Item "env:$k" -ErrorAction SilentlyContinue)) {
                 Set-Item "env:$k" $v
             }
@@ -51,6 +56,13 @@ if (Test-Path .env) {
 $Port      = if ($env:JUN_PORT) { $env:JUN_PORT } else { '8080' }
 $OllamaUrl = if ($env:OLLAMA_URL) { $env:OLLAMA_URL } else { 'http://127.0.0.1:11434' }
 $SiteUrl   = "http://127.0.0.1:$Port"
+
+$Provider  = if ($env:AI_PROVIDER) { $env:AI_PROVIDER.ToLower() } else { 'ollama' }
+if ($Provider -notin 'ollama', 'openrouter', 'llamacpp') { $Provider = 'ollama' }
+# Embeddings default on only for the ollama provider; they always run on Ollama.
+$EmbedOn = if ($env:EMBEDDINGS) { $env:EMBEDDINGS.ToLower() -eq 'on' } else { $Provider -eq 'ollama' }
+$LlamaPort = if ($env:LLAMACPP_PORT) { $env:LLAMACPP_PORT } else { '8081' }
+$LlamacppUrl = if ($env:LLAMACPP_URL) { $env:LLAMACPP_URL } else { "http://127.0.0.1:$LlamaPort" }
 
 function Read-Pids {
     if (Test-Path $PidFile) {
@@ -76,7 +88,7 @@ function Test-Http([string]$url, [int]$timeoutSec = 2) {
 # ── stop / status ────────────────────────────────────────────────────────────
 if ($Action -eq 'stop') {
     $pids = Read-Pids
-    foreach ($name in 'php', 'tts', 'ollama') {
+    foreach ($name in 'php', 'tts', 'ollama', 'llamacpp') {
         $p = Get-TrackedProcess $pids $name
         if ($p) {
             Write-Host "==> Stopping $name (pid $($p.Id))"
@@ -90,7 +102,7 @@ if ($Action -eq 'stop') {
 
 if ($Action -eq 'status') {
     $pids = Read-Pids
-    foreach ($name in 'php', 'tts', 'ollama') {
+    foreach ($name in 'php', 'tts', 'ollama', 'llamacpp') {
         $p = Get-TrackedProcess $pids $name
         $state = if ($p) { "running (pid $($p.Id))" } else { 'not running' }
         Write-Host ("  {0,-7} {1}" -f $name, $state)
@@ -114,9 +126,12 @@ function Start-Tracked([string]$name, [string]$exe, [string[]]$exeArgs) {
 }
 
 # ── ollama ───────────────────────────────────────────────────────────────────
-# If an Ollama server is already up (the desktop app autostarts one), use it.
-# Otherwise launch `ollama serve` ourselves, with the model store inside the
-# install folder so weights disappear with it on uninstall.
+# Needed when it's the chat provider, or for local embeddings alongside a
+# non-Ollama provider. If an Ollama server is already up (the desktop app
+# autostarts one), use it. Otherwise launch `ollama serve` ourselves, with the
+# model store inside the install folder so weights disappear with it on
+# uninstall.
+if ($Provider -eq 'ollama' -or $EmbedOn) {
 if (-not (Get-Command ollama -ErrorAction SilentlyContinue)) {
     throw 'ollama is not installed. Run install.ps1 first (it installs Ollama via winget).'
 }
@@ -170,12 +185,43 @@ if ($env:OLLAMA_MODELS_TO_PULL) {
 # Pre-warm: an empty-prompt generate makes ollama load the chat model now, so
 # the first real message doesn't pay the cold-load cost. Fire and forget - the
 # short timeout aborts our wait, not the server-side load.
-if ($chatModel) {
+if ($chatModel -and $Provider -eq 'ollama') {
     Write-Host "==> Pre-warming $chatModel (loads in the background)"
     try {
         Invoke-RestMethod -Method Post -Uri "$OllamaUrl/api/generate" -ContentType 'application/json' `
             -Body (@{ model = $chatModel; prompt = ''; stream = $false } | ConvertTo-Json) -TimeoutSec 5 | Out-Null
     } catch {}
+}
+}
+
+# ── llama.cpp (managed llama-server) ─────────────────────────────────────────
+# Only when AI_PROVIDER=llamacpp and LLAMACPP_URL targets this machine; a
+# remote/custom URL means the user runs their own server. Weights cache under
+# runtime\llama-cache so they disappear with the folder on uninstall.
+if ($Provider -eq 'llamacpp' -and $LlamacppUrl -match '://(127\.0\.0\.1|localhost)\b') {
+    if (Test-Http "$LlamacppUrl/health") {
+        Write-Host "==> Using already-running llama-server at $LlamacppUrl"
+        $p = Get-TrackedProcess $oldPids 'llamacpp'
+        if ($p) { $newPids['llamacpp'] = $p.Id }
+    } else {
+        if (-not (Get-Command llama-server -ErrorAction SilentlyContinue)) {
+            throw 'llama-server is not installed. Run install.ps1 first (it installs llama.cpp via winget).'
+        }
+        $hfRef = if ($env:LLAMACPP_MODEL_HF) { $env:LLAMACPP_MODEL_HF } else { 'efficiencyx/Jun-LoRA-v3-E2B-GGUF:Q4_K_M' }
+        Write-Host "==> Starting llama-server ($hfRef; first run downloads the model)"
+        $env:LLAMA_CACHE = Join-Path $Runtime 'llama-cache'
+        $llamaProc = Start-Tracked 'llamacpp' 'llama-server' @(
+            '-hf', $hfRef, '--host', '127.0.0.1', '--port', $LlamaPort, '-c', '16384', '--jinja')
+
+        # Generous deadline: the first boot downloads the GGUF before /health
+        # goes green. A dead process fails fast instead of waiting it out.
+        $deadline = (Get-Date).AddMinutes(15)
+        while (-not (Test-Http "$LlamacppUrl/health")) {
+            if ($llamaProc.HasExited) { throw "llama-server exited (code $($llamaProc.ExitCode)) - see runtime\logs\llamacpp.err.log" }
+            if ((Get-Date) -gt $deadline) { throw "llama-server did not come up on $LlamacppUrl (see runtime\logs\llamacpp.err.log)" }
+            Start-Sleep -Seconds 2
+        }
+    }
 }
 
 # ── TTS sidecar (optional) ───────────────────────────────────────────────────
@@ -221,7 +267,11 @@ if ($LASTEXITCODE -ne 0) {
 }
 
 Write-Host "==> Starting web server on $SiteUrl"
+$env:AI_PROVIDER            = $Provider
 $env:OLLAMA_URL             = $OllamaUrl
+$env:LLAMACPP_URL           = $LlamacppUrl
+$env:EMBEDDINGS             = if ($EmbedOn) { 'on' } else { 'off' }
+# OPENROUTER_API_KEY / OPENROUTER_MODEL are already process env via the .env loader.
 $env:KOKORO_URL             = 'http://127.0.0.1:8001'
 $env:OMEGA_STATE_DIR        = $StateDir
 # PHP honors this on Unix only; on Windows the built-in server stays

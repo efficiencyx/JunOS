@@ -32,11 +32,12 @@ $dir  = if ($env:JUN_DIR)  { $env:JUN_DIR }  else { 'Jun' }
 $ref  = if ($env:JUN_REF)  { $env:JUN_REF }  else { 'main' }
 
 # winget package ids for the machine-wide tools we depend on.
-$wingetIds = @{ git = 'Git.Git'; ollama = 'Ollama.Ollama'; python = 'Python.Python.3.11' }
+$wingetIds = @{ git = 'Git.Git'; ollama = 'Ollama.Ollama'; python = 'Python.Python.3.11'; llamacpp = 'ggml.llamacpp' }
 $manualUrls = @{
-    git    = 'https://git-scm.com/download/win'
-    ollama = 'https://ollama.com/download/windows'
-    python = 'https://www.python.org/downloads/windows/'
+    git      = 'https://git-scm.com/download/win'
+    ollama   = 'https://ollama.com/download/windows'
+    python   = 'https://www.python.org/downloads/windows/'
+    llamacpp = 'https://github.com/ggml-org/llama.cpp/releases'
 }
 
 # Short aliases the menu and $env:JUN_MODEL accept; anything else is verbatim.
@@ -82,9 +83,8 @@ function Set-EnvKey([string]$key, [string]$val) {
 
 $interactive = [Environment]::UserInteractive -and ($env:JUN_YES -ne '1')
 
-# Ask which model + whether voice, then persist both into .env. Non-interactive
-# (JUN_YES, per-field env override, or no console) keeps the one-command flow.
-function Configure-Jun {
+# Interactive Jun-model menu (VRAM-aware recommendation). Returns the full ref.
+function Ask-ModelRef {
     $vram = Get-VramMb
     $rec  = if ($null -ne $vram) { Recommend-Alias $vram } else { $models['e2b'] }
 
@@ -109,7 +109,115 @@ function Configure-Jun {
             $alias = $rec
         }
     }
+    return Resolve-Model $alias
+}
 
+# "enable local embeddings via Ollama? [y/N]" for non-Ollama providers. RAG /
+# cross-chat memory need a local Ollama with nomic-embed-text; when declined
+# those features switch off silently. Knob: JUN_EMBEDDINGS=on|off (default off).
+function Ask-Embeddings {
+    if ($env:JUN_EMBEDDINGS) {
+        return $(if ($env:JUN_EMBEDDINGS.ToLower() -match '^(on|1|true|yes|y)$') { 'on' } else { 'off' })
+    }
+    if ($interactive) {
+        $v = Read-Host "Enable local embeddings via Ollama (RAG memory)? [y/N]"
+        return $(if ($v -match '^(y|yes)$') { 'on' } else { 'off' })
+    }
+    return 'off'
+}
+
+# Ask which AI provider + model + whether voice, then persist into .env.
+# Non-interactive (JUN_YES, per-field env override, or no console) keeps the
+# one-command flow. Knobs: JUN_PROVIDER, JUN_MODEL, OPENROUTER_API_KEY,
+# OPENROUTER_MODEL, LLAMACPP_URL, JUN_EMBEDDINGS, VOICE.
+# Returns @{ provider; voice; embeddings; needsOllama; needsLlamacpp }.
+function Configure-Jun {
+    # ── provider ──
+    $provider = if ($env:JUN_PROVIDER) { $env:JUN_PROVIDER.ToLower() } else { '' }
+    if (-not $provider) {
+        if ($interactive) {
+            Write-Host ""
+            Write-Host "Which AI provider should Jun use?"
+            Write-Host "  1) Ollama      - local, fully managed (default)"
+            Write-Host "  2) OpenRouter  - cloud API - needs an API key; chats leave this machine"
+            Write-Host "  3) llama.cpp   - local llama-server"
+            $ans = Read-Host "Choice [Enter = Ollama]"
+            $provider = switch ($ans) {
+                '2' { 'openrouter' }
+                '3' { 'llamacpp' }
+                default { 'ollama' }
+            }
+        } else {
+            $provider = 'ollama'
+        }
+    }
+    if ($provider -notin 'ollama', 'openrouter', 'llamacpp') {
+        Write-Host "Unknown provider '$provider', using Ollama."
+        $provider = 'ollama'
+    }
+
+    $embeddings = 'on'
+    $needsOllama = $true
+    $needsLlamacpp = $false
+
+    switch ($provider) {
+        'ollama' {
+            $modelRef = Ask-ModelRef
+            Set-EnvKey 'OLLAMA_MODELS_TO_PULL' "$modelRef,nomic-embed-text"
+            Write-Host "==> Config: model=$modelRef"
+        }
+        'openrouter' {
+            $key = $env:OPENROUTER_API_KEY
+            if (-not $key -and $interactive) {
+                # Masked input, PS 5.1-compatible; the key is never echoed and
+                # never printed in the config summary.
+                $sec = Read-Host 'OpenRouter API key (hidden; from openrouter.ai/keys)' -AsSecureString
+                $key = [Runtime.InteropServices.Marshal]::PtrToStringAuto(
+                    [Runtime.InteropServices.Marshal]::SecureStringToBSTR($sec))
+            }
+            if (-not $key) { Write-Warning 'No API key set - add OPENROUTER_API_KEY to .env before chatting.' }
+
+            $orm = $env:OPENROUTER_MODEL
+            if (-not $orm -and $interactive) { $orm = Read-Host 'Model id [Enter = openrouter/auto]' }
+            if (-not $orm) { $orm = 'openrouter/auto' }
+
+            $embeddings = Ask-Embeddings
+            Set-EnvKey 'OPENROUTER_API_KEY' "$key"
+            Set-EnvKey 'OPENROUTER_MODEL' $orm
+            $needsOllama = ($embeddings -eq 'on')
+            if ($needsOllama) { Set-EnvKey 'OLLAMA_MODELS_TO_PULL' 'nomic-embed-text' }
+            Write-Host "==> Config: model=$orm, embeddings=$embeddings"
+        }
+        'llamacpp' {
+            $url = $env:LLAMACPP_URL
+            if (-not $url -and $interactive) { $url = Read-Host 'llama-server URL [Enter = managed setup]' }
+            if ($url -and $url -notmatch '^https?://') {
+                Write-Host 'Not an http(s) URL, using managed setup.'
+                $url = ''
+            }
+            if ($url) {
+                Set-EnvKey 'LLAMACPP_URL' $url
+                Write-Host "==> Config: llama-server=$url"
+            } else {
+                $modelRef = Ask-ModelRef
+                # llama-server -hf syntax has no hf.co/ prefix.
+                $hfRef = $modelRef -replace '^hf\.co/', ''
+                Set-EnvKey 'LLAMACPP_MODEL_HF' $hfRef
+                Set-EnvKey 'LLAMACPP_URL' 'http://127.0.0.1:8081'
+                Set-EnvKey 'LLAMACPP_PORT' '8081'
+                $needsLlamacpp = $true
+                Write-Host "==> Config: model=$hfRef"
+            }
+            $embeddings = Ask-Embeddings
+            $needsOllama = ($embeddings -eq 'on')
+            if ($needsOllama) { Set-EnvKey 'OLLAMA_MODELS_TO_PULL' 'nomic-embed-text' }
+            Write-Host "==> Config: embeddings=$embeddings"
+        }
+    }
+    Set-EnvKey 'AI_PROVIDER' $provider
+    Set-EnvKey 'EMBEDDINGS' $embeddings
+
+    # ── voice ──
     $voice = $env:VOICE
     if ($voice) {
         $voice = if ($voice.ToLower() -match '^(off|0|false|no)$') { 'off' } else { 'on' }
@@ -119,12 +227,11 @@ function Configure-Jun {
     } else {
         $voice = 'on'
     }
-
-    $modelRef = Resolve-Model $alias
-    Set-EnvKey 'OLLAMA_MODELS_TO_PULL' "$modelRef,nomic-embed-text"
     Set-EnvKey 'VOICE' $voice
-    Write-Host "==> Config: model=$modelRef, voice=$voice"
-    return $voice
+    Write-Host "==> Config: provider=$provider, voice=$voice"
+
+    return @{ provider = $provider; voice = $voice; embeddings = $embeddings
+              needsOllama = $needsOllama; needsLlamacpp = $needsLlamacpp }
 }
 
 function Refresh-Path {
@@ -285,13 +392,13 @@ function Install-Tts {
 }
 
 # ── main ─────────────────────────────────────────────────────────────────────
-$missing = @()
-foreach ($c in 'git', 'ollama') {
-    if (-not (Get-Command $c -ErrorAction SilentlyContinue)) { $missing += $c }
+# git first (needed to clone); the model-server tools depend on the provider
+# the user picks in Configure-Jun, so they're installed after.
+if (-not (Get-Command git -ErrorAction SilentlyContinue)) {
+    Install-MachineTools @('git')
 }
-Install-MachineTools $missing
-if (-not (Get-Command git -ErrorAction SilentlyContinue) -or -not (Get-Command ollama -ErrorAction SilentlyContinue)) {
-    Write-Error 'git/ollama still not on PATH. Open a NEW terminal (so PATH refreshes) and run the one-liner again; setup will resume.'
+if (-not (Get-Command git -ErrorAction SilentlyContinue)) {
+    Write-Error 'git still not on PATH. Open a NEW terminal (so PATH refreshes) and run the one-liner again; setup will resume.'
 }
 
 if (Test-Path (Join-Path $dir '.git')) {
@@ -305,7 +412,20 @@ if (Test-Path (Join-Path $dir '.git')) {
 Set-Location -LiteralPath $dir
 if (-not (Test-Path .env)) { Copy-Item .env.example .env }
 
-$voice = Configure-Jun
+$cfg = Configure-Jun
+$voice = $cfg.voice
+
+$missing = @()
+if ($cfg.needsOllama -and -not (Get-Command ollama -ErrorAction SilentlyContinue)) { $missing += 'ollama' }
+if ($cfg.needsLlamacpp -and -not (Get-Command llama-server -ErrorAction SilentlyContinue)) { $missing += 'llamacpp' }
+Install-MachineTools $missing
+if ($cfg.needsOllama -and -not (Get-Command ollama -ErrorAction SilentlyContinue)) {
+    Write-Error 'ollama still not on PATH. Open a NEW terminal (so PATH refreshes) and run the one-liner again; setup will resume.'
+}
+if ($cfg.needsLlamacpp -and -not (Get-Command llama-server -ErrorAction SilentlyContinue)) {
+    Write-Error 'llama-server still not on PATH. Open a NEW terminal (so PATH refreshes) and run the one-liner again; setup will resume.'
+}
+
 Install-Php
 if ($voice -eq 'on') { Install-Tts }
 
@@ -349,7 +469,7 @@ if ($extract) {
 Write-Host ""
 Write-Host "Install summary:"
 Write-Host "  In this folder ($(Get-Location)): webapp, PHP, TTS venv, models, chat data."
-Write-Host "  Machine-wide (Settings > Apps):   git, Ollama$(if ($voice -eq 'on') { ', possibly Python' })."
+Write-Host "  Machine-wide (Settings > Apps):   git$(if ($cfg.needsOllama) { ', Ollama' })$(if ($cfg.needsLlamacpp) { ', llama.cpp' })$(if ($voice -eq 'on') { ', possibly Python' })."
 Write-Host "  To remove everything later:       ./uninstall.ps1"
 
 Write-Host "==> Starting"

@@ -1,5 +1,8 @@
 <?php
-// SSE proxy: browser -> here -> Ollama /api/chat (NDJSON) -> SSE back to browser.
+// SSE proxy: browser -> here -> AI provider -> SSE back to browser. The
+// upstream is either Ollama's native /api/chat (NDJSON) or an OpenAI-compatible
+// /chat/completions SSE endpoint (OpenRouter, llama.cpp) - see providers.php.
+// The SSE contract to the browser is identical either way.
 
 require_once __DIR__ . '/_lib.php';
 require_once __DIR__ . '/lore.php';
@@ -10,7 +13,9 @@ require_once __DIR__ . '/lore.php';
 while (ob_get_level() > 0) { ob_end_flush(); }
 ob_implicit_flush(true);
 
-$OLLAMA_URL = rtrim(env_str('OLLAMA_URL', 'http://localhost:11434'), '/');
+$PROVIDER = ai_provider();
+$PROVIDER_IS_OPENAI = provider_is_openai($PROVIDER);
+$API_BASE = chat_api_base();
 
 header('Content-Type: text/event-stream');
 header('Cache-Control: no-cache, no-transform');
@@ -49,7 +54,7 @@ foreach ($body['messages'] as $m) {
     if (!is_string($content) || strlen($content) > 16 * 1024) sse_fail('invalid_request');
 }
 
-$model = 'hf.co/efficiencyx/Jun-Lora-v2-GGUF:Q4_K_M';
+$model = default_chat_model();
 if (isset($body['model']) && is_string($body['model']) && $body['model'] !== '') {
     if (!preg_match('/^[a-z0-9._:\\/\-]{1,64}$/i', $body['model'])) sse_fail('invalid_request');
     $model = $body['model'];
@@ -420,7 +425,8 @@ for ($i = count($body['messages']) - 1; $i >= 0; $i--) {
 // Always offer tools and let the model decide whether to call one. The previous
 // keyword gate silently blocked most natural tool-worthy asks ("search our past
 // chats...", "who's the president?"), so tools appeared broken. Correctness wins.
-$toolsOffered = true;
+// (Except when the provider can't do tools - e.g. llama.cpp with LLAMACPP_TOOLS=off.)
+$toolsOffered = provider_tools_enabled();
 
 $contextParts = [];
 
@@ -748,7 +754,7 @@ if (!$idle) {
         } catch (Throwable $e) {
             log_event(['msg' => 'embed_insert_user_error', 'err' => $e->getMessage()]);
         }
-    } else {
+    } elseif (embeddings_enabled()) {
         log_event(['msg' => 'embed_skipped_user', 'message_id' => $userMsgId]);
     }
 
@@ -761,36 +767,6 @@ if (!$idle) {
     }
 }
 
-$ollamaPayload = [
-    'model' => $model,
-    'messages' => $messages,
-    'stream' => true,
-    'options' => [
-        'reasoning_effort' => $reasoning,
-        'temperature' => 0.7,
-        'top_p' => 0.95,
-        'top_k' => 80,
-        'min_p' => 0.01,
-        'presence_penalty' => 0,
-        'num_ctx' => 16384,
-        // num_predict caps TOTAL generated tokens, and a reasoning model's hidden
-        // chain-of-thought counts against it. A verbose reasoner (gpt-oss at medium/
-        // high effort) can burn the whole budget on the thinking channel and stop
-        // with done_reason=length BEFORE emitting any answer - the user then sees a
-        // thought process and an empty reply. So when thinking we lift the cap (-1)
-        // and let num_ctx bound generation; non-thinking turns stay snappy.
-        'num_predict' => $think ? -1 : 128,
-    ],
-];
-
-// Ollama enables thinking by default for capable models and rejects think:true on
-// models whose manifest doesn't declare the capability (HTTP 400 "does not support
-// thinking") - even though those models still reason by default. So we only ever
-// send `think` to DISABLE it; when the user wants thinking we omit the key and let
-// the model's default reasoning flow into message.thinking, which the stream loop
-// forwards as `thinking` events.
-if (!$think) $ollamaPayload['think'] = false;
-
 // Tools ride on the streamed call itself - no preflight. The tool instructions
 // and `tools` go to the same call, so there's no contradiction for the model to
 // reconcile; when it emits tool_calls we run them, append the tool-role results,
@@ -802,9 +778,63 @@ if ($toolsOffered) {
     } else {
         $messages[] = ['role' => 'user', 'content' => tool_context_block()];
     }
-    $ollamaPayload['messages'] = $messages;
-    $ollamaPayload['tools'] = tool_catalog();
 }
+
+if (!$PROVIDER_IS_OPENAI) {
+    $upstreamPayload = [
+        'model' => $model,
+        'messages' => $messages,
+        'stream' => true,
+        'options' => [
+            'reasoning_effort' => $reasoning,
+            'temperature' => 0.7,
+            'top_p' => 0.95,
+            'top_k' => 80,
+            'min_p' => 0.01,
+            'presence_penalty' => 0,
+            'num_ctx' => 16384,
+            // num_predict caps TOTAL generated tokens, and a reasoning model's hidden
+            // chain-of-thought counts against it. A verbose reasoner (gpt-oss at medium/
+            // high effort) can burn the whole budget on the thinking channel and stop
+            // with done_reason=length BEFORE emitting any answer - the user then sees a
+            // thought process and an empty reply. So when thinking we lift the cap (-1)
+            // and let num_ctx bound generation; non-thinking turns stay snappy.
+            'num_predict' => $think ? -1 : 128,
+        ],
+    ];
+
+    // Ollama enables thinking by default for capable models and rejects think:true on
+    // models whose manifest doesn't declare the capability (HTTP 400 "does not support
+    // thinking") - even though those models still reason by default. So we only ever
+    // send `think` to DISABLE it; when the user wants thinking we omit the key and let
+    // the model's default reasoning flow into message.thinking, which the stream loop
+    // forwards as `thinking` events.
+    if (!$think) $upstreamPayload['think'] = false;
+} else {
+    // OpenAI-compatible payload (OpenRouter, llama.cpp). Sampling mirrors the
+    // Ollama options; llama.cpp honors top_k/min_p natively and OpenRouter
+    // accepts them as extensions (other providers just ignore them). There is
+    // no per-request num_ctx here - llama.cpp's context is fixed server-side
+    // (-c 16384 in the managed setup), OpenRouter's is the model's own.
+    $upstreamPayload = [
+        'model' => $model,
+        'messages' => $messages,
+        'stream' => true,
+        'temperature' => 0.7,
+        'top_p' => 0.95,
+        'top_k' => 80,
+        'min_p' => 0.01,
+        'stream_options' => ['include_usage' => true],
+    ];
+    // max_tokens is the num_predict equivalent: cap non-thinking turns, let
+    // thinking turns run (reasoning tokens count against the cap too).
+    if (!$think) $upstreamPayload['max_tokens'] = 128;
+    if ($PROVIDER === 'openrouter' && $think) {
+        $upstreamPayload['reasoning'] = ['effort' => $reasoning];
+    }
+}
+
+if ($toolsOffered) $upstreamPayload['tools'] = tool_catalog();
 
 $sawError = false;
 $assistantBuffer = '';
@@ -814,75 +844,203 @@ $doneReason = '';
 // Stream, and if the model called tools, run them and stream a follow-up round.
 // 3 rounds max: initial reply, one tool-informed continuation, one retry if the
 // continuation itself calls again.
+$chatUrl = $PROVIDER_IS_OPENAI ? $API_BASE . '/chat/completions' : $API_BASE . '/api/chat';
+
 for ($round = 0; $round < 3; $round++) {
-    $buf = '';
     $roundContent = '';
     $toolCalls = [];
+    $retriedWithoutTools = false;
 
-    $ch = curl_init($OLLAMA_URL . '/api/chat');
-    curl_setopt($ch, CURLOPT_POST, true);
-    curl_setopt($ch, CURLOPT_HTTPHEADER, ['Content-Type: application/json']);
-    curl_setopt($ch, CURLOPT_POSTFIELDS, json_encode($ollamaPayload, JSON_UNESCAPED_UNICODE));
-    curl_setopt($ch, CURLOPT_RETURNTRANSFER, false);
-    curl_setopt($ch, CURLOPT_TIMEOUT, 0);
-    curl_setopt($ch, CURLOPT_CONNECTTIMEOUT, 10);
+    do {
+        $retryRound = false;
+        $buf = '';
+        $toolAcc = [];       // OpenAI streams tool calls as fragments keyed by index.
+        $httpStatus = 0;
+        $errBody = '';
+        $t0 = microtime(true);
 
-    // Ollama streams NDJSON; re-frame each complete line as an SSE token event.
-    curl_setopt($ch, CURLOPT_WRITEFUNCTION, function ($ch, $chunk) use (&$buf, &$sawError, &$roundContent, &$toolCalls, &$stats, &$doneReason) {
-        $buf .= $chunk;
-        while (($nl = strpos($buf, "\n")) !== false) {
-            $line = trim(substr($buf, 0, $nl));
-            $buf = substr($buf, $nl + 1);
-            if ($line === '') continue;
-            $obj = json_decode($line, true);
-            if (!is_array($obj)) continue;
+        $ch = curl_init($chatUrl);
+        curl_setopt($ch, CURLOPT_POST, true);
+        curl_setopt($ch, CURLOPT_HTTPHEADER, chat_request_headers());
+        curl_setopt($ch, CURLOPT_POSTFIELDS, json_encode($upstreamPayload, JSON_UNESCAPED_UNICODE));
+        curl_setopt($ch, CURLOPT_RETURNTRANSFER, false);
+        curl_setopt($ch, CURLOPT_TIMEOUT, 0);
+        curl_setopt($ch, CURLOPT_CONNECTTIMEOUT, 10);
 
-            if (isset($obj['error'])) {
-                sse_send(['error' => (string)$obj['error']]);
+        if (!$PROVIDER_IS_OPENAI) {
+            // Ollama streams NDJSON; re-frame each complete line as an SSE token event.
+            curl_setopt($ch, CURLOPT_WRITEFUNCTION, function ($ch, $chunk) use (&$buf, &$sawError, &$roundContent, &$toolCalls, &$stats, &$doneReason) {
+                $buf .= $chunk;
+                while (($nl = strpos($buf, "\n")) !== false) {
+                    $line = trim(substr($buf, 0, $nl));
+                    $buf = substr($buf, $nl + 1);
+                    if ($line === '') continue;
+                    $obj = json_decode($line, true);
+                    if (!is_array($obj)) continue;
+
+                    if (isset($obj['error'])) {
+                        sse_send(['error' => (string)$obj['error']]);
+                        $sawError = true;
+                        continue;
+                    }
+                    // The terminal line (done:true) carries timing/token counters. Forward them so
+                    // the dev HUD can show tokens/s without us computing anything client-side.
+                    if (!empty($obj['done'])) {
+                        $doneReason = (string)($obj['done_reason'] ?? '');
+                    }
+                    if (!empty($obj['done']) && isset($obj['eval_count'])) {
+                        $stats = [
+                            'eval_count'           => (int)($obj['eval_count'] ?? 0),
+                            'eval_duration'        => (int)($obj['eval_duration'] ?? 0),
+                            'prompt_eval_count'    => (int)($obj['prompt_eval_count'] ?? 0),
+                            'prompt_eval_duration' => (int)($obj['prompt_eval_duration'] ?? 0),
+                            'total_duration'       => (int)($obj['total_duration'] ?? 0),
+                            'load_duration'        => (int)($obj['load_duration'] ?? 0),
+                        ];
+                    }
+                    // Reasoning tokens arrive on a separate field when think=true. Stream them as
+                    // their own event - never into the stored reply, so they stay out of stored
+                    // history, embeddings, RAG, and action parsing.
+                    $th = (string)($obj['message']['thinking'] ?? '');
+                    if ($th !== '') sse_send(['thinking' => $th]);
+
+                    $calls = $obj['message']['tool_calls'] ?? null;
+                    if (is_array($calls) && $calls) {
+                        $toolCalls = array_merge($toolCalls, $calls);
+                    }
+
+                    $tok = (string)($obj['message']['content'] ?? '');
+                    if ($tok !== '') {
+                        sse_send(['token' => $tok]);
+                        $roundContent .= $tok;
+                    }
+                }
+                return strlen($chunk);
+            });
+        } else {
+            // OpenAI-compatible SSE (OpenRouter, llama.cpp): `data: {json}` lines,
+            // keep-alive comment lines (": OPENROUTER PROCESSING"), CRLF endings,
+            // a final `data: [DONE]`. On HTTP errors the body is a plain JSON error
+            // document instead of a stream - buffer it and report after the round.
+            curl_setopt($ch, CURLOPT_WRITEFUNCTION, function ($ch, $chunk) use (&$buf, &$sawError, &$roundContent, &$toolAcc, &$stats, &$doneReason, &$httpStatus, &$errBody) {
+                if ($httpStatus === 0) $httpStatus = (int)curl_getinfo($ch, CURLINFO_RESPONSE_CODE);
+                if ($httpStatus >= 400) {
+                    $errBody .= $chunk;
+                    return strlen($chunk);
+                }
+                $buf .= $chunk;
+                while (($nl = strpos($buf, "\n")) !== false) {
+                    $line = rtrim(substr($buf, 0, $nl), "\r");
+                    $buf = substr($buf, $nl + 1);
+                    if ($line === '' || $line[0] === ':') continue;
+                    if (strncmp($line, 'data:', 5) !== 0) continue;
+                    $data = trim(substr($line, 5));
+                    if ($data === '[DONE]') continue;
+                    $obj = json_decode($data, true);
+                    if (!is_array($obj)) continue;
+
+                    if (isset($obj['error'])) {
+                        $msg = is_array($obj['error'])
+                            ? (string)($obj['error']['message'] ?? 'upstream_error')
+                            : (string)$obj['error'];
+                        sse_send(['error' => $msg]);
+                        $sawError = true;
+                        continue;
+                    }
+                    // The final chunk (often with empty `choices`) carries usage counters.
+                    // Durations don't exist in the OpenAI shape; the round's wall time is
+                    // filled in below so the dev HUD's tokens/s stays meaningful.
+                    if (isset($obj['usage']) && is_array($obj['usage'])) {
+                        $stats = [
+                            'eval_count'           => (int)($obj['usage']['completion_tokens'] ?? 0),
+                            'eval_duration'        => 0,
+                            'prompt_eval_count'    => (int)($obj['usage']['prompt_tokens'] ?? 0),
+                            'prompt_eval_duration' => 0,
+                            'total_duration'       => 0,
+                            'load_duration'        => 0,
+                        ];
+                    }
+                    $choice = $obj['choices'][0] ?? null;
+                    if (!is_array($choice)) continue;
+                    if (!empty($choice['finish_reason'])) {
+                        // 'length' maps 1:1 onto Ollama's done_reason, keeping the
+                        // truncated-in-thinking hint below working.
+                        $doneReason = (string)$choice['finish_reason'];
+                    }
+                    $delta = is_array($choice['delta'] ?? null) ? $choice['delta'] : [];
+
+                    // Reasoning arrives as delta.reasoning (OpenRouter) or
+                    // delta.reasoning_content (llama.cpp).
+                    $th = (string)($delta['reasoning'] ?? $delta['reasoning_content'] ?? '');
+                    if ($th !== '') sse_send(['thinking' => $th]);
+
+                    // Tool calls stream as fragments: the first carries id + name,
+                    // the rest append pieces of the arguments JSON string.
+                    if (is_array($delta['tool_calls'] ?? null)) {
+                        foreach ($delta['tool_calls'] as $frag) {
+                            if (!is_array($frag)) continue;
+                            $idx = (int)($frag['index'] ?? 0);
+                            if (!isset($toolAcc[$idx])) $toolAcc[$idx] = ['id' => '', 'name' => '', 'arguments' => ''];
+                            if (!empty($frag['id'])) $toolAcc[$idx]['id'] = (string)$frag['id'];
+                            if (isset($frag['function']['name'])) $toolAcc[$idx]['name'] .= (string)$frag['function']['name'];
+                            if (isset($frag['function']['arguments'])) $toolAcc[$idx]['arguments'] .= (string)$frag['function']['arguments'];
+                        }
+                    }
+
+                    $tok = (string)($delta['content'] ?? '');
+                    if ($tok !== '') {
+                        sse_send(['token' => $tok]);
+                        $roundContent .= $tok;
+                    }
+                }
+                return strlen($chunk);
+            });
+        }
+
+        if (curl_exec($ch) === false) {
+            log_event(['msg' => 'upstream_curl_error', 'provider' => $PROVIDER, 'err' => curl_error($ch)]);
+            sse_send(['error' => 'upstream_unavailable']);
+            $sawError = true;
+        }
+        curl_close($ch);
+        $roundNs = (int)round((microtime(true) - $t0) * 1e9);
+
+        if ($PROVIDER_IS_OPENAI) {
+            if ($httpStatus >= 400 && !$sawError) {
+                // Log the body (truncated), never the request headers - the API key
+                // must not end up in logs.
+                log_event(['msg' => 'upstream_http_error', 'provider' => $PROVIDER,
+                           'status' => $httpStatus, 'body' => mb_substr($errBody, 0, 500)]);
+                if ($round === 0 && !$retriedWithoutTools && isset($upstreamPayload['tools'])) {
+                    // Most likely a llama.cpp chat template without tool support
+                    // rejecting `tools` - try the turn once more without them.
+                    unset($upstreamPayload['tools']);
+                    $toolsOffered = false;
+                    $retriedWithoutTools = true;
+                    $retryRound = true;
+                    continue;
+                }
+                $errObj = json_decode($errBody, true);
+                $msg = is_array($errObj) && isset($errObj['error'])
+                    ? (is_array($errObj['error']) ? (string)($errObj['error']['message'] ?? 'upstream_error') : (string)$errObj['error'])
+                    : 'upstream_error';
+                sse_send(['error' => $msg]);
                 $sawError = true;
-                continue;
             }
-            // The terminal line (done:true) carries timing/token counters. Forward them so
-            // the dev HUD can show tokens/s without us computing anything client-side.
-            if (!empty($obj['done'])) {
-                $doneReason = (string)($obj['done_reason'] ?? '');
+            if ($stats !== null && ($stats['eval_duration'] ?? 0) === 0) {
+                $stats['eval_duration'] = $roundNs;
+                $stats['total_duration'] = $roundNs;
             }
-            if (!empty($obj['done']) && isset($obj['eval_count'])) {
-                $stats = [
-                    'eval_count'           => (int)($obj['eval_count'] ?? 0),
-                    'eval_duration'        => (int)($obj['eval_duration'] ?? 0),
-                    'prompt_eval_count'    => (int)($obj['prompt_eval_count'] ?? 0),
-                    'prompt_eval_duration' => (int)($obj['prompt_eval_duration'] ?? 0),
-                    'total_duration'       => (int)($obj['total_duration'] ?? 0),
-                    'load_duration'        => (int)($obj['load_duration'] ?? 0),
+            foreach ($toolAcc as $i => $t) {
+                if ($t['name'] === '') continue;
+                $toolCalls[] = [
+                    'id' => $t['id'] !== '' ? $t['id'] : ('call_' . $round . '_' . $i),
+                    'type' => 'function',
+                    'function' => ['name' => $t['name'], 'arguments' => $t['arguments']],
                 ];
             }
-            // Reasoning tokens arrive on a separate field when think=true. Stream them as
-            // their own event - never into the stored reply, so they stay out of stored
-            // history, embeddings, RAG, and action parsing.
-            $th = (string)($obj['message']['thinking'] ?? '');
-            if ($th !== '') sse_send(['thinking' => $th]);
-
-            $calls = $obj['message']['tool_calls'] ?? null;
-            if (is_array($calls) && $calls) {
-                $toolCalls = array_merge($toolCalls, $calls);
-            }
-
-            $tok = (string)($obj['message']['content'] ?? '');
-            if ($tok !== '') {
-                sse_send(['token' => $tok]);
-                $roundContent .= $tok;
-            }
         }
-        return strlen($chunk);
-    });
-
-    if (curl_exec($ch) === false) {
-        log_event(['msg' => 'ollama_curl_error', 'err' => curl_error($ch)]);
-        sse_send(['error' => 'upstream_unavailable']);
-        $sawError = true;
-    }
-    curl_close($ch);
+    } while ($retryRound);
 
     $assistantBuffer .= $roundContent;
     if ($sawError || !$toolCalls) break;
@@ -920,18 +1078,24 @@ for ($round = 0; $round < 3; $round++) {
         ]]);
         // Carry tool_call_id + name so the model's chat template can match this
         // result back to the call it answers (otherwise it renders as "unknown").
-        $messages[] = [
+        // (OpenAI-style providers only take tool_call_id; some reject extra keys.)
+        $toolMsg = [
             'role' => 'tool',
             'content' => $result,
             'tool_call_id' => (string)($call['id'] ?? ''),
-            'name' => $name,
         ];
+        if (!$PROVIDER_IS_OPENAI) $toolMsg['name'] = $name;
+        $messages[] = $toolMsg;
     }
-    $ollamaPayload['messages'] = $messages;
+    $upstreamPayload['messages'] = $messages;
 }
 
 if ($stats !== null) {
-    $stats['num_ctx'] = (int)($ollamaPayload['options']['num_ctx'] ?? 0);
+    // num_ctx: server-enforced for ollama (payload) and managed llama.cpp
+    // (-c 16384); unknowable for OpenRouter (0 = "n/a" for the HUD).
+    $stats['num_ctx'] = $PROVIDER_IS_OPENAI
+        ? ($PROVIDER === 'llamacpp' ? 16384 : 0)
+        : (int)($upstreamPayload['options']['num_ctx'] ?? 0);
     $stats['model'] = $model;
     sse_send(['stats' => $stats]);
 }
@@ -972,7 +1136,7 @@ if (!$sawError && $assistantBuffer !== '') {
         } catch (Throwable $e) {
             log_event(['msg' => 'embed_insert_assistant_error', 'err' => $e->getMessage()]);
         }
-    } else {
+    } elseif (embeddings_enabled()) {
         log_event(['msg' => 'embed_skipped_assistant', 'message_id' => $asstMsgId]);
     }
 }

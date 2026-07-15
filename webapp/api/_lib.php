@@ -1,6 +1,8 @@
 <?php
 // Shared helpers pulled in by every endpoint (require_once __DIR__ . '/_lib.php').
 
+require_once __DIR__ . '/providers.php';
+
 function request_id(): string {
     static $id = null;
     if ($id === null) $id = bin2hex(random_bytes(6));
@@ -117,9 +119,18 @@ function rate_limit(string $bucket, int $maxPerWindow, int $windowSec): void {
 
 const EMBED_MODEL = 'nomic-embed-text';
 
-// Returns the embedding vector for $text, or null if Ollama is unreachable or
-// gives us something we can't parse. Every caller has to cope with null.
+// Returns the embedding vector for $text, or null if embeddings are disabled
+// (EMBEDDINGS=off / non-Ollama provider), Ollama is unreachable, or it gives us
+// something we can't parse. Every caller has to cope with null.
 function embed_text(string $text, string $task = ''): ?array {
+    if (!embeddings_enabled()) return null;
+
+    // A dead embeddings backend would otherwise cost the full connect timeout
+    // on EVERY call - and chat.php embeds twice per turn. Fail once, then
+    // short-circuit for the rest of this request.
+    static $unreachable = false;
+    if ($unreachable) return null;
+
     $text = trim($text);
     if ($text === '') return null;
 
@@ -129,7 +140,7 @@ function embed_text(string $text, string $task = ''): ?array {
     // with existing message_embeddings rows leave it empty.
     $prompt = $task !== '' ? $task . ': ' . $text : $text;
 
-    $baseUrl = rtrim(env_str('OLLAMA_URL', 'http://localhost:11434'), '/');
+    $baseUrl = embeddings_base_url();
 
     // Resolve the host ourselves first - curl's DNS occasionally stalls inside
     // the docker network and we'd rather not wait out the timeout.
@@ -154,6 +165,7 @@ function embed_text(string $text, string $task = ''): ?array {
     $resp = curl_exec($ch);
     if ($resp === false) {
         log_event(['msg' => 'embed_curl_error', 'err' => curl_error($ch)]);
+        if (curl_errno($ch) === CURLE_COULDNT_CONNECT) $unreachable = true;
         curl_close($ch);
         return null;
     }

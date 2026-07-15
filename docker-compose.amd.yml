@@ -22,6 +22,20 @@ services:
     environment:
       - HSA_OVERRIDE_GFX_VERSION
 
+  # llama.cpp on AMD via Vulkan - the broadest consumer-card path (the project
+  # publishes no official ROCm server image). Inert unless the llamacpp
+  # profile is active.
+  llamacpp:
+    image: ghcr.io/ggml-org/llama.cpp:server-vulkan
+    devices:
+      - /dev/kfd
+      - /dev/dri
+    group_add:
+      - "${VIDEO_GID:-video}"
+      - "${RENDER_GID:-render}"
+    environment:
+      LLAMA_ARG_N_GPU_LAYERS: "999"
+
   # TTS sidecar on the GPU: rebuild against a ROCm torch wheel and hand it the
   # GPU device nodes. The ROCm torch build exposes its HIP backend as torch.cuda,
   # so TTS_DEVICE=auto/cuda both target the GPU; set TTS_DEVICE=cpu to opt out.

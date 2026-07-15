@@ -29,6 +29,39 @@ detect_gpu() {
 }
 
 
+# ── Compose profiles from the configured AI provider ─────────────────────────
+# The model-server containers are profile-gated: `ollama` runs the Ollama
+# service, `llamacpp` the llama.cpp one. Merge (never replace) what's already
+# in the shell (e.g. COMPOSE_PROFILES=prod ./start.sh) and in .env, then inject
+# what AI_PROVIDER implies - so a pre-provider-era .env still boots ollama.
+env_get() { sed -n "s/^$1=//p" .env 2>/dev/null | tail -n1 || true; }
+add_profile() {
+  case ",${profiles}," in *,"$1",*) ;; *) profiles="${profiles:+$profiles,}$1" ;; esac
+}
+
+profiles="${COMPOSE_PROFILES:-}"
+file_profiles="$(env_get COMPOSE_PROFILES)"
+for p in ${file_profiles//,/ }; do add_profile "$p"; done
+
+provider="$(env_get AI_PROVIDER)"; provider="${provider:-ollama}"
+llamacpp_url="$(env_get LLAMACPP_URL)"
+embeddings="$(env_get EMBEDDINGS)"
+case "$provider" in
+  llamacpp)
+    # Managed llama-server container unless the user pointed at their own.
+    case "${llamacpp_url:-http://llamacpp:8080}" in
+      http://llamacpp:8080) add_profile llamacpp ;;
+    esac
+    ;;
+  openrouter) : ;;
+  *) add_profile ollama ;;
+esac
+# Non-Ollama chat with local embeddings still needs the Ollama container.
+[ "$provider" != ollama ] && [ "$embeddings" = on ] && add_profile ollama
+
+export COMPOSE_PROFILES="$profiles"
+echo "AI provider: $provider${profiles:+ (compose profiles: $profiles)}"
+
 gpu="$(detect_gpu)"
 files=(-f docker-compose.yml)
 
