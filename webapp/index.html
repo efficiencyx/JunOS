@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Jun OS</title>
 <link rel="icon" type="image/png" href="jun_os.png">
-<link rel="stylesheet" href="styles.css?v=27">
+<link rel="stylesheet" href="styles.css?v=29">
 <script src="js/boot-gate.js?v=1"></script>
 </head>
 <body>
@@ -256,6 +256,28 @@
           </div>
           <div class="set-row-control"><input type="number" id="ttsSpeed" min="0.5" max="2.0" step="0.05" value="1.0" aria-label="TTS speed"></div>
         </div>
+
+        <div class="set-row">
+          <div class="set-row-text">
+            <div class="set-row-title">Microphone <span id="voiceState" class="voice-pill" data-state="idle">off</span></div>
+            <div class="set-row-desc">Talk to her instead of typing. Headphones recommended — on speakers she can hear herself.</div>
+          </div>
+          <div class="set-row-control"><input type="checkbox" id="voiceChk" class="toggle" aria-label="Enable microphone"></div>
+        </div>
+        <div class="set-row">
+          <div class="set-row-text">
+            <div class="set-row-title">Interrupt her</div>
+            <div class="set-row-desc">Talking over her cuts her off. Turn off if she keeps interrupting herself.</div>
+          </div>
+          <div class="set-row-control"><input type="checkbox" id="voiceBargeChk" class="toggle" checked aria-label="Allow interrupting"></div>
+        </div>
+        <div class="set-row">
+          <div class="set-row-text">
+            <div class="set-row-title">End-of-turn pause</div>
+            <div class="set-row-desc">Silence before she answers, in ms. Lower feels snappier but clips you mid-thought.</div>
+          </div>
+          <div class="set-row-control"><input type="number" id="voiceSilence" min="300" max="2000" step="50" value="700" aria-label="End-of-turn silence in milliseconds"></div>
+        </div>
       </section>
 
       <section class="settings-panel" data-panel="appearance" hidden>
@@ -433,8 +455,8 @@
 
       <div class="composer-area">
         <div class="composer">
-          <button class="composer-icon" id="composerAttach" type="button" title="Attach" aria-label="Attach">
-            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+          <button class="composer-icon" id="voiceModeBtn" type="button" title="Voice mode" aria-label="Voice mode">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/><line x1="12" y1="19" x2="12" y2="23"/><line x1="8" y1="23" x2="16" y2="23"/></svg>
           </button>
           <textarea id="chatInput" rows="1"
             placeholder="Write to Jun…"
@@ -471,6 +493,20 @@
   </main>
 </div>
 
+<!-- Voice mode overlay: minimal chrome over the zoomed Live2D stage -->
+<div id="voiceOverlay" class="voice-overlay" hidden>
+  <button id="voiceOverlayClose" class="voice-overlay-btn voice-overlay-close" type="button" aria-label="Exit voice mode" title="Exit voice mode">
+    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+  </button>
+  <div class="voice-overlay-controls">
+    <button id="voiceOverlayMute" class="voice-overlay-btn voice-overlay-mute" type="button" aria-label="Mute microphone" title="Mute microphone">
+      <svg class="ico-mic" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/><line x1="12" y1="19" x2="12" y2="23"/><line x1="8" y1="23" x2="16" y2="23"/></svg>
+      <svg class="ico-mic-off" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="display:none"><line x1="1" y1="1" x2="23" y2="23"/><path d="M9 9v3a3 3 0 0 0 5.12 2.12M15 9.34V4a3 3 0 0 0-5.94-.6"/><path d="M17 16.95A7 7 0 0 1 5 12v-2m14 0v2a7 7 0 0 1-.11 1.23"/><line x1="12" y1="19" x2="12" y2="23"/><line x1="8" y1="23" x2="16" y2="23"/></svg>
+    </button>
+    <div class="voice-overlay-status" id="voiceOverlayStatus">…</div>
+  </div>
+</div>
+
 <!-- CDN scripts - load order preserved from original -->
 <script src="https://cdn.jsdelivr.net/npm/marked@12.0.2/marked.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/dompurify@3.0.11/dist/purify.min.js"></script>
@@ -478,19 +514,24 @@
 <script src="https://cdn.jsdelivr.net/npm/pixi.js@6.5.10/dist/browser/pixi.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/pixi-live2d-display@0.4.0/dist/cubism4.min.js"></script>
 <script src="js/auth.js?v=6"></script>
-<script src="js/prefs.js?v=2"></script>
+<script src="js/prefs.js?v=3"></script>
 <script src="js/names.js?v=1"></script>
-<script src="js/live2d.js?v=17"></script>
+<script src="js/live2d.js?v=18"></script>
 <script src="js/actions.js?v=7"></script>
 <script src="js/mods.js?v=9"></script>
 <script src="js/outfit.js?v=23"></script>
 <script src="js/ollama.js?v=8"></script>
-<script src="js/tts.js?v=7"></script>
+<script src="js/tts.js?v=8"></script>
+<!-- After tts.js: voice.js reads TTS.isSpeaking/outputRms/duck for barge-in.
+     js/mic-worklet.js is NOT listed here - it's loaded by addModule() onto the
+     audio thread, not as a page script. -->
+<script src="js/voice.js?v=1"></script>
+<script src="js/voicemode.js?v=1"></script>
 <!-- ui.js must load before app.js -->
 <script src="js/ui.js?v=6"></script>
 <script src="js/history.js?v=6"></script>
 <script src="js/devhud.js?v=2"></script>
 <script src="js/boot-fx.js?v=3"></script>
-<script src="js/app.js?v=17"></script>
+<script src="js/app.js?v=19"></script>
 </body>
 </html>

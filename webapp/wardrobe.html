@@ -147,11 +147,22 @@ body.wardrobe-open .wardrobe-overlay { display: flex; animation: wd-slide-in 0.3
 .wd-body::-webkit-scrollbar { width: 6px; }
 .wd-body::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.08); border-radius: 3px; }
 .wd-section {
+  display: flex; align-items: center; gap: 8px;
   margin: 20px 0 10px;
   font-size: 10px; font-weight: 600;
   text-transform: uppercase; letter-spacing: 0.1em;
   color: rgba(255,255,255,0.3);
 }
+
+/* Chevron shown when a shelf overflows: toggles wrap-to-3-rows mode. */
+.wd-expand {
+  border: 0; background: none; padding: 0 6px;
+  color: rgba(255,255,255,0.35); font: inherit; font-size: 12px; line-height: 1;
+  cursor: pointer;
+  transition: transform 0.15s, color 0.15s;
+}
+.wd-expand:hover { color: var(--fg); }
+.wd-expand.on { transform: rotate(180deg); }
 .wd-section:first-child { margin-top: 0; }
 .wd-section.wd-sub { margin-top: 14px; color: rgba(255,255,255,0.22); }
 
@@ -164,6 +175,12 @@ body.wardrobe-open .wardrobe-overlay { display: flex; animation: wd-slide-in 0.3
   -webkit-overflow-scrolling: touch;
 }
 .wd-grid::-webkit-scrollbar { display: none; }
+/* Expanded shelf: wrap tiles into rows, capped at ~3 tile rows then scroll. */
+.wd-grid.expanded {
+  flex-wrap: wrap;
+  overflow-x: hidden; overflow-y: auto;
+  max-height: 330px;
+}
 .wd-tile {
   position: relative;
   flex: none; width: 88px;
@@ -224,6 +241,90 @@ body.wd-over-worn-item { cursor: grab; }
 .wd-tile:hover .wd-swatch, .wd-swatch.set { opacity: 1; transform: scale(1); }
 .wd-swatch:hover { transform: scale(1.2); box-shadow: 0 3px 9px rgba(0,0,0,0.55); }
 .wd-swatch.set { border-color: rgba(255,255,255,0.55); }
+
+/* Options arrow: opens the tile's popup (equip / colors / styles). Always
+   visible; lit while a non-default style option is active. */
+.wd-optorb {
+  position: absolute; bottom: 4px; right: 6px;
+  display: flex; align-items: center; justify-content: center;
+  width: 20px; height: 20px; padding: 0; border-radius: 50%;
+  border: 1px solid var(--border-2);
+  background: var(--bg-3);
+  color: rgba(255,255,255,0.6);
+  font-size: 12px; line-height: 1;
+  cursor: pointer;
+  transition: transform 0.15s, box-shadow 0.15s, color 0.15s;
+  box-shadow: 0 2px 6px rgba(0,0,0,0.45);
+}
+.wd-optorb:hover { transform: scale(1.15); box-shadow: 0 3px 9px rgba(0,0,0,0.55); color: var(--fg); }
+.wd-optorb.set { border-color: rgba(196,160,240,0.6); color: var(--accent); }
+
+/* Anchored popup listing a slot's options as mini tiles. */
+.wd-optpop {
+  position: fixed; z-index: 70;
+  padding: 10px;
+  border: 1px solid var(--border-2);
+  border-radius: 12px;
+  background: var(--bg-3);
+  box-shadow: 0 12px 32px rgba(0,0,0,0.55);
+  max-width: 356px;
+}
+.wd-optpop[hidden] { display: none; }
+.wd-optpop-title {
+  margin-bottom: 8px;
+  font-size: 10px; font-weight: 600;
+  text-transform: uppercase; letter-spacing: 0.1em;
+  color: rgba(255,255,255,0.35);
+}
+/* Action row: equip toggle + color picker access. */
+.wd-optpop-row { display: flex; align-items: center; gap: 8px; margin-bottom: 10px; }
+.wd-optpop-row[hidden] { display: none; }
+.wd-opt-equip {
+  padding: 6px 14px;
+  border: 1px solid var(--border-2); border-radius: 8px;
+  background: var(--accent-soft); color: var(--fg);
+  font: inherit; font-size: 11px; font-weight: 500;
+  cursor: pointer;
+  transition: border-color 0.15s, background 0.15s;
+}
+.wd-opt-equip:hover { border-color: rgba(196,160,240,0.5); }
+.wd-opt-equip.worn { background: rgba(255,255,255,0.04); }
+/* Color picker embedded inline at the bottom of the popup (the same shared
+   .omega-color-picker element, reparented; it floats again for the tile
+   swatches and settings panel). */
+.wd-optpop-color[hidden] { display: none; }
+.omega-color-picker.ocp-embedded {
+  position: static; z-index: auto;
+  width: auto; max-width: 284px;
+  padding: 10px 0 0; margin-top: 10px;
+  background: none; border: 0; border-top: 1px solid var(--border);
+  border-radius: 0; box-shadow: none;
+}
+.ocp-embedded .ocp-head .ocp-close { display: none; }
+
+.wd-optpop-grid {
+  display: flex; flex-wrap: wrap; gap: 8px;
+  max-height: 300px; overflow-y: auto;
+  scrollbar-width: thin; scrollbar-color: rgba(255,255,255,0.08) transparent;
+}
+.wd-opt {
+  width: 74px;
+  display: flex; flex-direction: column; align-items: center; gap: 5px;
+  padding: 8px 4px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: rgba(255,255,255,0.02);
+  cursor: pointer; font: inherit; text-align: center;
+  transition: border-color 0.15s, background 0.15s;
+}
+.wd-opt:hover { border-color: var(--border-2); }
+.wd-opt.on { border-color: rgba(196,160,240,0.45); background: var(--accent-soft); }
+.wd-opt img, .wd-opt .wd-noimg {
+  width: 44px; height: 44px; object-fit: contain; pointer-events: none;
+  border-radius: 8px; background: rgba(255,255,255,0.04); padding: 2px;
+}
+.wd-opt span { font-size: 10px; color: var(--muted); }
+.wd-opt.on span { color: var(--fg); }
 .color-preview-segment { display: block; flex: 1 1 0; height: 100%; min-width: 0; pointer-events: none; }
 .color-preview-segment + .color-preview-segment { border-left: 1px solid rgba(255,255,255,0.65); }
 .color-preview-segment.unset {

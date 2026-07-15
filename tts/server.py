@@ -1,13 +1,21 @@
 """
-Local TTS sidecar for Jun OS. A small FastAPI server on :8001 that fronts two
-swappable engines, picked per-request by the `engine` field:
+Local audio sidecar for Jun OS. A small FastAPI server on :8001 serving both
+directions of the voice loop.
+
+Out (/tts) - two swappable engines, picked per-request by the `engine` field:
 
   - kokoro    - Kokoro-82M (default). Needs espeak-ng on the system.
   - pockettts - kyutai-labs pocket-tts (100M, CPU, English + 5 langs).
 
+In (/stt) - faster-whisper transcribes a WAV posted as a raw body.
+
 The webapp's js/tts.js posts a sentence at a time to /tts and plays the returned
-WAV through an AudioContext. /voices exposes both engines' voice lists so the UI
-can offer an engine + voice picker. Run: python server.py
+WAV through an AudioContext; js/voice.js posts captured utterances to /stt.
+/voices exposes both engines' voice lists so the UI can offer an engine + voice
+picker. Run: python server.py
+
+(The service is still named "kokoro" in docker-compose and KOKORO_URL - it
+predates both the pocket-tts engine and STT. Renaming it is churn, not a fix.)
 """
 
 import io
@@ -50,9 +58,23 @@ POCKET_VOICES = [
 
 DEFAULT_ENGINE = "kokoro"
 
+# Cap on the /stt request body. 16kHz mono PCM16 is ~32KB/s, so 4MB is ~2min of
+# audio - far past js/voice.js's 30s max-utterance guard. Kept in step with
+# nginx's `client_max_body_size 4m` and PHP's post_max_size on /api/stt.php.
+STT_MAX_BYTES = 4 * 1024 * 1024
+
+# STT language. Must match STT_MODEL: the ".en" whisper builds are English-only,
+# so a non-"en" value here needs a multilingual model too (base / small / etc,
+# no ".en" suffix). Empty string = auto-detect per utterance, which costs an
+# extra decode pass and is unreliable on utterances under ~2s - prefer naming the
+# language when you know it. See docker/kokoro.Dockerfile for the pairing.
+STT_LANG = (os.environ.get("STT_LANG", "en").strip().lower() or None)
+
 _pipeline = None       # Kokoro KPipeline
 _pocket_model = None   # pocket-tts TTSModel
 _pocket_states = {}    # voice name -> precomputed voice state (load is non-trivial)
+_whisper = None        # faster-whisper WhisperModel
+_stt_ok = None         # faster-whisper importable? resolved once, reported by /health
 _device = None         # resolved once: "cpu" or "cuda"
 
 
@@ -113,6 +135,65 @@ def get_pocket_model():
     return _pocket_model
 
 
+def _stt_available():
+    global _stt_ok
+    if _stt_ok is None:
+        try:
+            import faster_whisper  # noqa: F401
+            _stt_ok = True
+        except Exception:
+            log.warning("faster-whisper not installed; /stt disabled")
+            _stt_ok = False
+    return _stt_ok
+
+
+def get_whisper():
+    # Lazy like the TTS engines: the model downloads into HF_HOME on first call,
+    # and keeping it out of prewarm() means it can't push first boot past the
+    # healthcheck. First transcription pays ~1-2s of load; every later one is warm.
+    #
+    # cpu_threads is pinned deliberately. CTranslate2 and torch each default to
+    # spawning one intra-op thread per core, so an unpinned whisper transcribing
+    # while Kokoro synthesizes oversubscribes every core on the box. OMP_NUM_THREADS
+    # (set in kokoro.Dockerfile) bounds torch; this bounds CTranslate2.
+    global _whisper
+    if _whisper is None:
+        from faster_whisper import WhisperModel
+        model = os.environ.get("STT_MODEL", "base.en")
+        compute = os.environ.get("STT_COMPUTE", "int8")
+        threads = int(os.environ.get("OMP_NUM_THREADS", "4"))
+        # STT_DEVICE, NOT TTS_DEVICE - and defaulting to cpu rather than auto.
+        # Whisper runs on CTranslate2, a different runtime from torch, so the
+        # device that's right for Kokoro isn't automatically right here:
+        #   - CUDA CTranslate2 needs cuBLAS + cuDNN. The CUDA torch wheel the
+        #     nvidia overlay installs doesn't reliably provide cuDNN, so
+        #     inheriting TTS_DEVICE=cuda would fail at load with a missing-.so
+        #     error on a stack that was working a moment ago.
+        #   - CTranslate2 has no ROCm backend at all, so on the AMD overlay
+        #     (where torch reports "cuda" via HIP) it can only run on CPU.
+        # base.en on CPU is ~350-700ms for a short utterance, which is not the
+        # bottleneck - Kokoro is. Opt in with STT_DEVICE=cuda if you have the
+        # CUDA libs and want the ~250ms.
+        device = os.environ.get("STT_DEVICE", "cpu").strip().lower()
+        if device not in ("cpu", "cuda"):
+            device = "cpu"
+        if device == "cpu" and compute not in ("int8", "float32"):
+            log.info("STT: compute_type=%s unsupported on CPU, using int8", compute)
+            compute = "int8"
+        if model.endswith(".en") and STT_LANG not in (None, "en"):
+            # Silent-garbage guard: an English-only model asked for another
+            # language doesn't error, it just transcribes nonsense.
+            log.warning("STT: model %s is English-only but STT_LANG=%s; "
+                        "use a multilingual model (e.g. %s) or set STT_LANG=en",
+                        model, STT_LANG, model[:-3])
+        log.info("loading faster-whisper (%s, %s, lang=%s) on %s...",
+                 model, compute, STT_LANG or "auto", device)
+        _whisper = WhisperModel(model, device=device, compute_type=compute,
+                                cpu_threads=threads, num_workers=1)
+        log.info("faster-whisper ready.")
+    return _whisper
+
+
 def pocket_state(voice):
     state = _pocket_states.get(voice)
     if state is None:
@@ -134,7 +215,8 @@ app.add_middleware(
 async def on_unhandled(request: Request, exc: Exception) -> JSONResponse:
     # Anything that slips through becomes a generic 500 - no tracebacks to clients.
     log.exception("unhandled exception on %s %s", request.method, request.url.path)
-    return JSONResponse({"error": "synthesis_failed"}, status_code=500)
+    err = "transcription_failed" if request.url.path == "/stt" else "synthesis_failed"
+    return JSONResponse({"error": err}, status_code=500)
 
 
 class TTSReq(BaseModel):
@@ -160,7 +242,10 @@ def prewarm():
 
 @app.get("/health")
 def health():
-    return {"ok": True}
+    # `stt` lets the webapp hide the mic button when this build has no whisper,
+    # rather than failing on the first utterance. Reports whether the dep is
+    # importable, not whether the model is loaded (it loads lazily).
+    return {"ok": True, "stt": _stt_available()}
 
 
 @app.get("/voices")
@@ -232,6 +317,42 @@ def tts(req: TTSReq):
         media_type="audio/wav",
         headers={"Cache-Control": "no-store"},
     )
+
+
+@app.post("/stt")
+async def stt(request: Request):
+    # Body is a raw WAV (16kHz mono PCM16 from js/voice.js), not multipart - it's
+    # one file with no metadata, so a raw body skips python-multipart entirely.
+    #
+    # faster-whisper decodes via PyAV, whose wheel bundles ffmpeg's libraries, so
+    # no ffmpeg binary is needed in the image and any container PyAV can open
+    # works here - not just the WAV the client actually sends.
+    if not _stt_available():
+        return JSONResponse({"error": "stt_unavailable"}, status_code=503)
+
+    body = await request.body()
+    if len(body) > STT_MAX_BYTES:
+        return JSONResponse({"error": "audio_too_large"}, status_code=413)
+    if not body:
+        return JSONResponse({"text": ""})
+
+    # beam_size=1 (greedy) is ~30% faster than the default beam search and the
+    # accuracy cost is negligible on short conversational utterances.
+    # condition_on_previous_text=False: each utterance is independent here, and
+    # leaving it on is what makes whisper spiral into repetition loops.
+    # vad_filter drops leading/trailing silence the client's 300ms pre-roll and
+    # 700ms end-of-turn hangover necessarily include.
+    segments, _info = get_whisper().transcribe(
+        io.BytesIO(body),
+        language=STT_LANG,
+        beam_size=1,
+        condition_on_previous_text=False,
+        vad_filter=True,
+    )
+    # transcribe() returns a lazy generator; the work happens on iteration.
+    text = " ".join(seg.text.strip() for seg in segments).strip()
+    log.info("stt: %d bytes -> %r", len(body), text)
+    return JSONResponse({"text": text})
 
 
 if __name__ == "__main__":

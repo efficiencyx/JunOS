@@ -4,8 +4,12 @@
 //
 // Reserved keys:
 //   omega.outfit.v1, omega.outfit.colors.v1, omega.names.player, omega.names.bot,
-//   tts.enabled, tts.engine, tts.voice, tts.speed, model, reasoning_level, think
+//   tts.enabled, tts.engine, tts.voice, tts.speed, model, reasoning_level, think,
+//   voice.bargein, voice.silence_ms
 // Future: theme.
+//
+// Note there's no `voice.enabled`: a live microphone is a per-session decision,
+// not something a synced pref should switch on in another browser.
 
 window.Prefs = (function () {
   const TRACKED = [
@@ -17,6 +21,8 @@ window.Prefs = (function () {
     'tts.engine',
     'tts.voice',
     'tts.speed',
+    'voice.bargein',
+    'voice.silence_ms',
     'model',
     'reasoning_level',
     'think',

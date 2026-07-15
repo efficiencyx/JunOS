@@ -37,6 +37,10 @@
   const ttsEngineSelect = document.getElementById('ttsEngineSelect');
   const ttsVoiceSelect = document.getElementById('ttsVoiceSelect');
   const ttsSpeedInput = document.getElementById('ttsSpeed');
+  const voiceChk = document.getElementById('voiceChk');
+  const voiceState = document.getElementById('voiceState');
+  const voiceBargeChk = document.getElementById('voiceBargeChk');
+  const voiceSilenceInput = document.getElementById('voiceSilence');
   const messagesEmpty = document.getElementById('messagesEmpty');
   const openSettingsBtn = document.getElementById('openSettingsBtn');
   const closeSettingsBtn = document.getElementById('closeSettingsBtn');
@@ -64,6 +68,12 @@
   // Set while an *idle nudge* is streaming: lets a real user send abort it cleanly
   // (rather than being swallowed) so Anon's message wins instead of doubling up.
   let cancelActiveIdleNudge = null;
+  // Set while any stream is in flight: aborts it and settles the UI, keeping the
+  // partial reply. Defined in runChat(); null when nothing is streaming.
+  let stopActiveStream = null;
+  // Voice mode gates the per-token render; this re-renders the hidden bubble
+  // (set per-stream in runChat, used when exiting voice mode mid-reply).
+  let renderVoiceDraft = null;
 
   function cancelIdleNudge() {
     if (idleTimer) { clearTimeout(idleTimer); idleTimer = null; }
@@ -85,6 +95,12 @@
       // Anon has a half-written message sitting in the box - he's composing, not
       // idle. Don't talk over him; check again later.
       if (chatInput.value.trim() !== '') { scheduleIdleNudge(delayMs); return; }
+      // The spoken equivalent: he's mid-sentence, or a transcript is already on
+      // its way. He isn't idle - he's talking to her right now.
+      if (window.Voice && Voice.isEnabled()) {
+        const vs = Voice.getState();
+        if (vs === 'speech' || vs === 'maybe' || vs === 'thinking') { scheduleIdleNudge(delayMs); return; }
+      }
       idleNudgeStreak++;
       runChat({ idle: true });
     }, delayMs);
@@ -304,6 +320,48 @@
     runChat({ idle: false });
   }
 
+  // Hands-free gives no physical feedback - no button held down, nothing to
+  // watch - so the pill is the only way to tell "it didn't hear me" from "it
+  // heard me and Jun is thinking". Without it the whole mode feels broken.
+  const VOICE_STATE_LABELS = {
+    idle: 'off',
+    calibrating: 'listening to the room…',
+    listening: 'listening',
+    maybe: 'listening',      // too brief (~96ms) to be worth flickering the label
+    speech: 'hearing you',
+    thinking: 'transcribing…',
+  };
+
+  // The sidecar can be built without faster-whisper, in which case /stt 503s.
+  // Ask once at boot rather than letting the first utterance fail.
+  async function sttAvailable() {
+    try {
+      const r = await fetch('/api/stt.php?action=health', { credentials: 'same-origin' });
+      if (!r.ok) return false;
+      const d = await r.json();
+      return !!d.stt;
+    } catch (e) {
+      return false;
+    }
+  }
+
+  // A finished spoken turn. Goes through sendMessage() rather than calling
+  // runChat() directly - that function owns the idle-nudge cancellation and the
+  // history push, and a parallel send path would drift out of sync with it.
+  //
+  // By the time a transcript lands, any stream we interrupted is already gone:
+  // Voice's barge-in fired ~250ms into your speech and aborted it, while this is
+  // at least silence-timeout + STT later. The abortFn guard below is for the case
+  // where barge-in never ran (barge-in disabled).
+  function sendFromVoice(text) {
+    // Clears abortFn synchronously, so sendMessage()'s in-flight guard won't
+    // swallow the turn. Normally a no-op: barge-in already stopped the stream
+    // ~250ms into your speech, well before this transcript existed.
+    if (stopActiveStream) stopActiveStream();
+    chatInput.value = text;
+    sendMessage();
+  }
+
   // Core streaming loop. `idle` requests are unprompted (no user turn): the backend
   // injects a stage-direction so Jun speaks first, and we don't add a user bubble.
   function runChat({ idle }) {
@@ -355,11 +413,21 @@
     let shown = '';
     const names = makeNameFilter(sub => {
       shown += sub;
-      body.innerHTML = renderMarkdown(shown);
-      body.appendChild(typing);
-      messagesEl.scrollTop = messagesEl.scrollHeight;
+      // Voice mode: the chat is hidden and the reply is spoken, so skip the
+      // per-token markdown re-render. `shown` still accumulates; the bubble is
+      // caught up in finalize() or when voice mode exits mid-stream.
+      if (!(window.VoiceMode && VoiceMode.isActive())) {
+        body.innerHTML = renderMarkdown(shown);
+        body.appendChild(typing);
+        messagesEl.scrollTop = messagesEl.scrollHeight;
+      }
       if (window.TTS) TTS.feed(sub);
     });
+    renderVoiceDraft = () => {
+      body.innerHTML = renderMarkdown(shown);
+      if (abortFn) body.appendChild(typing);
+      messagesEl.scrollTop = messagesEl.scrollHeight;
+    };
     const stream = makeStreamBuffer(clean => {
       visible += clean;
       names.push(clean);
@@ -367,10 +435,31 @@
 
     sendBtn.disabled = true;
     sendBtn.textContent = 'Stop';
-    const onClickStop = () => {
+
+    // Cut this stream short but keep what's already on screen. Used by the Stop
+    // button and by voice barge-in.
+    //
+    // It has to call finalize() itself: ollama.js treats AbortError as "not an
+    // error" and swallows it (ollama.js:60), so aborting fires neither onDone nor
+    // onError, and nothing else would ever clear abortFn - leaving runChat's
+    // `if (abortFn) return` guard permanently closed.
+    stopActiveStream = () => {
       if (abortFn) abortFn();
       if (window.TTS) TTS.stop();
+      typing.remove();
+      // Keep the partial line in history: Anon heard her say it, so she has to
+      // remember saying it. Same rule as onDone - drop the bubble if it's empty.
+      if (visible.trim()) messages.push({ role: 'assistant', content: visible });
+      else draft.remove();
+      finalize();
+      ui.setStatus('idle', 'idle');
+      updateEmptyState();
+      scheduleAutoReset();
+      // Same as onDone/onError: she stopped talking, so the idle clock starts.
+      // On the barge-in path sendMessage() resets it a moment later anyway.
+      armIdleAfterReply();
     };
+    const onClickStop = () => stopActiveStream();
     sendBtn.addEventListener('click', onClickStop, { once: true });
 
     // Idle nudges are interruptible: if Anon sends while this is streaming, drop the
@@ -445,7 +534,11 @@
 
     function finalize() {
       abortFn = null;
+      // Catch up the gated render so the bubble is complete when chat reappears.
+      if (window.VoiceMode && VoiceMode.isActive()) body.innerHTML = renderMarkdown(shown);
+      renderVoiceDraft = null;
       cancelActiveIdleNudge = null;
+      stopActiveStream = null;
       sendBtn.disabled = false;
       sendBtn.textContent = 'Send';
       sendBtn.removeEventListener('click', onClickStop);
@@ -1152,6 +1245,92 @@
           localStorage.setItem('tts.speed', String(s));
           if (window.Prefs) Prefs.pushToServer();
         });
+      }
+    }
+
+    // Voice bootstrap: hands-free mic input. Needs TTS for the reply half, so it
+    // only makes sense once TTS is wired above.
+    if (window.Voice && voiceChk) {
+      Voice.setLogger(logAction);
+      Voice.setOnTranscript(sendFromVoice);
+      Voice.setOnBargeIn(() => { if (stopActiveStream) stopActiveStream(); });
+      const voiceOverlayStatus = document.getElementById('voiceOverlayStatus');
+      Voice.setOnState((s) => {
+        if (voiceState) {
+          voiceState.textContent = VOICE_STATE_LABELS[s] || s;
+          voiceState.dataset.state = s;
+        }
+        // Same states, mirrored into the voice-mode overlay pill.
+        if (voiceOverlayStatus) {
+          voiceOverlayStatus.textContent = VOICE_STATE_LABELS[s] || s;
+          voiceOverlayStatus.dataset.state = s;
+        }
+      });
+
+      if (window.VoiceMode) {
+        VoiceMode.init({
+          sttAvailable,
+          onExitMidStream: () => { if (renderVoiceDraft) renderVoiceDraft(); },
+        });
+      }
+
+      const sup = Voice.support();
+      const sttOk = await sttAvailable();
+      if (!sup.ok || !sttOk) {
+        // Hands-free with no visible reason for being greyed out is worse than
+        // no button, so say which of the three things is actually missing.
+        voiceChk.disabled = true;
+        const why = !sup.ok
+          ? (sup.reason === 'insecure_context'
+              ? 'needs HTTPS (or localhost) - see TLS_MODE in .env'
+              : sup.reason === 'no_getusermedia'
+                ? 'no microphone API in this browser'
+                : 'no AudioWorklet in this browser')
+          : 'sidecar has no speech-to-text (rebuild the kokoro image)';
+        if (voiceState) voiceState.textContent = 'unavailable';
+        const voiceModeBtn = document.getElementById('voiceModeBtn');
+        if (voiceModeBtn) { voiceModeBtn.disabled = true; voiceModeBtn.title = `Voice mode unavailable: ${why}`; }
+        logAction('warn', `Voice mode unavailable: ${why}`);
+      } else {
+        const savedBarge = localStorage.getItem('voice.bargein') !== '0';
+        const savedSilence = parseInt(localStorage.getItem('voice.silence_ms') || '700', 10);
+        Voice.setBargeIn(savedBarge);
+        Voice.setSilenceMs(savedSilence);
+        if (voiceBargeChk) voiceBargeChk.checked = savedBarge;
+        if (voiceSilenceInput) voiceSilenceInput.value = String(savedSilence);
+
+        // Deliberately NOT restored from prefs on load: a hot mic has to be an
+        // explicit per-session choice, not something a synced pref turns on
+        // behind your back in a new tab.
+        voiceChk.checked = false;
+        voiceChk.addEventListener('change', async () => {
+          if (voiceChk.checked) {
+            try {
+              await Voice.enable();
+            } catch (e) {
+              voiceChk.checked = false;
+              ui.toast('⚠ Mic blocked - check the browser permission', 'error');
+            }
+          } else {
+            Voice.disable();
+          }
+        });
+
+        if (voiceBargeChk) {
+          voiceBargeChk.addEventListener('change', () => {
+            Voice.setBargeIn(voiceBargeChk.checked);
+            localStorage.setItem('voice.bargein', voiceBargeChk.checked ? '1' : '0');
+            if (window.Prefs) Prefs.pushToServer();
+          });
+        }
+        if (voiceSilenceInput) {
+          voiceSilenceInput.addEventListener('change', () => {
+            const ms = parseInt(voiceSilenceInput.value, 10) || 700;
+            Voice.setSilenceMs(ms);
+            localStorage.setItem('voice.silence_ms', String(ms));
+            if (window.Prefs) Prefs.pushToServer();
+          });
+        }
       }
     }
 

@@ -12,10 +12,12 @@ window.Outfit = (function () {
   // drawable IDs to tint when the user picks a color, and `colorExcludes`
   // trims false positives from that match.
   const ITEMS = [
+    // 'logo' is excluded from the clothing tints: the Moddable*Logo decals sit
+    // on top of the garment and must keep their own colors when it is tinted.
     { key: 'shirt', label: 'Shirt', param: 'ParamShirtEnabled', defaultOn: true, excludes: ['dress','dress1'],
-      colorPatterns: ['shirt'] },
+      colorPatterns: ['shirt'], colorExcludes: ['logo'] },
     { key: 'hoodie', label: 'Hoodie', param: 'ParamHoodieEnabled', defaultOn: false, excludes: ['dress','dress1'],
-      colorPatterns: ['hoodie'] },
+      colorPatterns: ['hoodie'], colorExcludes: ['logo'] },
     { key: 'dress', label: 'Dress', param: 'ParamDress2Enabled', defaultOn: false, excludes: ['shirt','hoodie','skirt','pants','dress1'],
       colorPatterns: ['dress'] },
     // Dress1 (Dress1_*) is a second, alternative dress that has NO enable param
@@ -34,7 +36,7 @@ window.Outfit = (function () {
     { key: 'bra', label: 'Bra', param: 'ParamBraEnabled', defaultOn: true,
       colorPatterns: ['bra'], colorExcludes: ['skin'] },
     { key: 'panties', label: 'Panties', param: 'ParamPantiesEnabled', defaultOn: true,
-      colorPatterns: ['panties'] },
+      colorPatterns: ['panties'], colorExcludes: ['logo'] },
     // ParamShoeLOn/ROn are NOT wired to the shoe drawable opacity in this moc3,
     // and the current rig keeps Shoe_L/R and StockingL/R at opacity 0 by
     // default (verified: forcing opacity 1 makes them appear). So like Dress1
@@ -166,6 +168,27 @@ window.Outfit = (function () {
     hair_h4: ['hair'],
   };
 
+  // Variant slot owned by a clothing tile: rendered as an options orb on that
+  // tile instead of a separate "Styles" section. Slots with no owning item
+  // (arms/legs/high-tech skin) become their own tiles in the Body section.
+  const ITEM_VARIANTS = {
+    shirt: 'shirt_logo',
+    hoodie: 'hoodie_logo',
+    panties: 'panties_logo',
+    skirt: 'skirt_style',
+    stockings: 'sock_style',
+    shoe_l: 'shoe_style',
+    shoe_r: 'shoe_style',
+  };
+  const BODY_VARIANTS = ['arm_style', 'leg_style', 'hightech_skin'];
+
+  // Reverse of ITEM_VARIANTS: variant key -> owning item keys. A slot's
+  // force-shown decals (logos) must hide with the garment they sit on.
+  const VARIANT_OWNER = {};
+  for (const [itemKey, variantKey] of Object.entries(ITEM_VARIANTS)) {
+    (VARIANT_OWNER[variantKey] = VARIANT_OWNER[variantKey] || []).push(itemKey);
+  }
+
   // Limb variants ripped from the game's PackedTexturesContainer assets:
   // per-drawable crops of the packed variant textures, saved one PNG per
   // drawable so the standard compositor can place them via each drawable's
@@ -276,8 +299,12 @@ window.Outfit = (function () {
       drawables: ['ModdableShirtLogo'],
       options: [
         { name: 'None', textures: {} },
-        { name: 'Gamer', textures: { ModdableShirtLogo: { url: 'assets/variants/logoGamerTshirt.png', overlay: true } }, show: ['ModdableShirtLogo'] },
-        { name: 'Priest Bot', textures: { ModdableShirtLogo: { url: 'assets/variants/logoPriestbot.png', overlay: true } }, show: ['ModdableShirtLogo'] },
+        // fullClear: the Moddable*Logo atlas regions hold baked placeholder art
+        // (pattern + red border) that must be erased across the whole UV rect -
+        // the border sits outside the mesh polygon, so a mesh-clipped erase
+        // leaves it to bleed back in through bilinear edge sampling.
+        { name: 'Gamer', textures: { ModdableShirtLogo: { url: 'assets/variants/logoGamerTshirt.png', fullClear: true } }, show: ['ModdableShirtLogo'] },
+        { name: 'Priest Bot', textures: { ModdableShirtLogo: { url: 'assets/variants/logoPriestbot.png', fullClear: true } }, show: ['ModdableShirtLogo'] },
       ],
     },
     {
@@ -285,7 +312,7 @@ window.Outfit = (function () {
       drawables: ['ModdableHoodieLogo'],
       options: [
         { name: 'None', textures: {} },
-        { name: 'Shady Corner', textures: { ModdableHoodieLogo: { url: 'assets/variants/logoShcHoodie.png', overlay: true } }, show: ['ModdableHoodieLogo'] },
+        { name: 'Shady Corner', textures: { ModdableHoodieLogo: { url: 'assets/variants/logoShcHoodie.png', fullClear: true } }, show: ['ModdableHoodieLogo'] },
       ],
     },
     {
@@ -293,7 +320,7 @@ window.Outfit = (function () {
       drawables: ['ModdablePantiesLogo'],
       options: [
         { name: 'None', textures: {} },
-        { name: 'Shady Corner', textures: { ModdablePantiesLogo: { url: 'assets/variants/logoShcPanties.png', overlay: true } }, show: ['ModdablePantiesLogo'] },
+        { name: 'Shady Corner', textures: { ModdablePantiesLogo: { url: 'assets/variants/logoShcPanties.png', fullClear: true } }, show: ['ModdablePantiesLogo'] },
       ],
     },
   ];
@@ -408,19 +435,27 @@ window.Outfit = (function () {
       const map = {};
       for (const d of v.drawables) map[d] = (opt.textures && opt.textures[d]) || null;
       Live2D.setDrawableTextures(map);
-      // Some variants take control of rig-hidden decals or base meshes.
-      if (Live2D.setDrawableOpacity) {
-        const show = new Set(opt.show || []);
-        const hide = new Set(opt.hide || []);
-        const controlled = new Set();
-        for (const o of v.options) {
-          for (const d of o.show || []) controlled.add(d);
-          for (const d of o.hide || []) controlled.add(d);
-        }
-        for (const d of controlled) {
-          Live2D.setDrawableOpacity(d, show.has(d) ? 1 : hide.has(d) ? 0 : null);
-        }
-      }
+      applyVariantVisibility(v);
+    }
+  }
+
+  // Some variants take control of rig-hidden decals or base meshes. A decal
+  // is only force-shown while its owning garment (if any) is worn - removing
+  // the shirt must take the shirt logo with it.
+  function applyVariantVisibility(v) {
+    if (!Live2D.setDrawableOpacity) return;
+    const opt = v.options[variantState[v.key] || 0];
+    const owners = VARIANT_OWNER[v.key];
+    const worn = !owners || owners.some(k => state[k]);
+    const show = new Set(opt.show || []);
+    const hide = new Set(opt.hide || []);
+    const controlled = new Set();
+    for (const o of v.options) {
+      for (const d of o.show || []) controlled.add(d);
+      for (const d of o.hide || []) controlled.add(d);
+    }
+    for (const d of controlled) {
+      Live2D.setDrawableOpacity(d, worn && show.has(d) ? 1 : hide.has(d) ? 0 : null);
     }
   }
 
@@ -480,6 +515,14 @@ window.Outfit = (function () {
     // variant compositor + tint repaint (they redraw and re-upload whole
     // atlases, which caused a visible stutter on every un/equip).
     applyItems();
+    // But re-gate force-shown decals (logos) on this item and anything the
+    // equip just excluded - a removed shirt takes its logo along.
+    const affected = new Set([key, ...(state[key] && it.excludes || [])]);
+    for (const k of affected) {
+      const vk = ITEM_VARIANTS[k];
+      const v = vk && VARIANTS.find(x => x.key === vk);
+      if (v) applyVariantVisibility(v);
+    }
     syncUI();
   }
 
@@ -546,8 +589,15 @@ window.Outfit = (function () {
   let colorPickerEl = null, colorPickerAnchor = null, pickerState = null;
   const COLOR_PRESETS = ['#f6d6c8', '#ef8fa9', '#c76ee8', '#7754d8', '#4b7bd8', '#41a9a2', '#76ae57', '#e2b34c', '#d76b42', '#34273f'];
 
-  function closeColorPicker(focusAnchor) {
+  // An embedded picker (inside the tile options popup) lives and dies with
+  // that popup: only a forced close (popup closing/reopening) may hide it.
+  function pickerEmbedded() {
+    return !!(colorPickerEl && colorPickerEl.classList.contains('ocp-embedded'));
+  }
+
+  function closeColorPicker(focusAnchor, force) {
     if (!colorPickerEl || colorPickerEl.hidden) return;
+    if (pickerEmbedded() && !force) return;
     colorPickerEl.hidden = true;
     if (focusAnchor && colorPickerAnchor) colorPickerAnchor.focus();
     colorPickerAnchor = null;
@@ -718,9 +768,17 @@ window.Outfit = (function () {
     window.addEventListener('scroll', () => closeColorPicker(false), true);
   }
 
-  function showColorPicker(anchor, label, state) {
+  function showColorPicker(anchor, label, state, embedContainer) {
     buildColorPicker();
-    colorPickerAnchor = anchor;
+    if (embedContainer) {
+      colorPickerEl.classList.add('ocp-embedded');
+      if (colorPickerEl.parentElement !== embedContainer) embedContainer.appendChild(colorPickerEl);
+      colorPickerAnchor = null;
+    } else {
+      colorPickerEl.classList.remove('ocp-embedded');
+      if (colorPickerEl.parentElement !== document.body) document.body.appendChild(colorPickerEl);
+      colorPickerAnchor = anchor;
+    }
     pickerState = { ...state, index: 0, hsv: hexToHsv('#ffffff') };
     if (!pickerState.labels.length) return;
     colorPickerEl.querySelector('.ocp-title').textContent = label;
@@ -740,7 +798,7 @@ window.Outfit = (function () {
     });
     colorPickerEl.hidden = false;
     selectPickerChannel(0);
-    positionColorPicker();
+    if (!embedContainer) positionColorPicker();
   }
 
   function openColorPicker(anchor, keys, label) {
@@ -933,7 +991,7 @@ window.Outfit = (function () {
   // Visual dress-up view over the same ITEMS/VARIANTS state: drag a tile onto
   // Jun to equip it, drag a worn piece to remove it. The live canvas model is
   // the preview - every change goes through setItem/setVariant.
-  let wdOverlay = null, wdTooltip = null, wdGhost = null;
+  let wdOverlay = null, wdTooltip = null, wdGhost = null, wdUpdateExpand = null;
 
   const itemPatterns = (it) => it.colorPatterns || it.visibilityPatterns || [];
 
@@ -986,14 +1044,153 @@ window.Outfit = (function () {
     return makeColorButton(groupKeys, label, 'wd-swatch');
   }
 
-  function makeTile(label, thumbSrc, onEquip, colorKeys) {
+  // Anchored per-tile popup: equip toggle, color picker access, and the tile's
+  // style/logo options. One shared element, same open/close conventions as the
+  // color picker.
+  let optPopEl = null, optPopAnchor = null, optPopKey = null, optPopItemKey = null;
+
+  function closeOptionsPopup(focusAnchor) {
+    if (!optPopEl || optPopEl.hidden) return;
+    closeColorPicker(false, true);
+    optPopEl.hidden = true;
+    if (focusAnchor && optPopAnchor) optPopAnchor.focus();
+    optPopAnchor = null;
+    optPopKey = null;
+    optPopItemKey = null;
+  }
+
+  function positionOptionsPopup() {
+    const anchor = optPopAnchor.getBoundingClientRect();
+    const width = optPopEl.offsetWidth, height = optPopEl.offsetHeight;
+    let left = anchor.right - width, top = anchor.bottom + 8;
+    if (top + height > innerHeight - 8) top = anchor.top - height - 8;
+    optPopEl.style.left = `${Math.max(8, Math.min(left, innerWidth - width - 8))}px`;
+    optPopEl.style.top = `${Math.max(8, Math.min(top, innerHeight - height - 8))}px`;
+  }
+
+  function buildOptionsPopup() {
+    if (optPopEl) return;
+    optPopEl = document.createElement('div');
+    optPopEl.className = 'wd-optpop';
+    optPopEl.hidden = true;
+    optPopEl.innerHTML = '<div class="wd-optpop-title"></div><div class="wd-optpop-row"></div><div class="wd-optpop-grid"></div><div class="wd-optpop-color"></div>';
+    document.body.appendChild(optPopEl);
+    document.addEventListener('pointerdown', (e) => {
+      if (optPopEl.hidden || optPopEl.contains(e.target)) return;
+      if (optPopAnchor && optPopAnchor.contains(e.target)) return;
+      // The color picker opened from inside the popup floats outside it.
+      if (colorPickerEl && !colorPickerEl.hidden && colorPickerEl.contains(e.target)) return;
+      closeOptionsPopup(false);
+    });
+    document.addEventListener('keydown', (e) => {
+      // The embedded picker doesn't intercept Escape - the popup owns it.
+      if (e.key === 'Escape' && !optPopEl.hidden && (!colorPickerEl || colorPickerEl.hidden || pickerEmbedded())) {
+        e.stopPropagation();
+        closeOptionsPopup(true);
+      }
+    }, true);
+    window.addEventListener('resize', () => closeOptionsPopup(false));
+    // Close when the page/shelves scroll away from the anchor, but not when
+    // the popup's own option grid scrolls.
+    window.addEventListener('scroll', (e) => {
+      if (!(e.target instanceof Node) || !optPopEl.contains(e.target)) closeOptionsPopup(false);
+    }, true);
+  }
+
+  // cfg: { title, itemKey?, colorKeys?, variant? }. Every tile opens this:
+  // clothing tiles get equip + colors + styles; body variant tiles get options.
+  function openTilePopup(anchor, cfg) {
+    buildOptionsPopup();
+    if (optPopAnchor === anchor && !optPopEl.hidden) { closeOptionsPopup(false); return; }
+    closeColorPicker(false, true);
+    optPopAnchor = anchor;
+    optPopKey = cfg.variant ? cfg.variant.key : null;
+    optPopItemKey = cfg.itemKey || null;
+    optPopEl.querySelector('.wd-optpop-title').textContent = cfg.title;
+
+    const row = optPopEl.querySelector('.wd-optpop-row');
+    row.innerHTML = '';
+    if (cfg.itemKey) {
+      const eq = document.createElement('button');
+      eq.type = 'button';
+      eq.className = 'wd-opt-equip';
+      eq.addEventListener('click', () => setItem(cfg.itemKey, !state[cfg.itemKey]));
+      row.appendChild(eq);
+    }
+    row.hidden = !row.childNodes.length;
+
+    // The color picker sits inline in the popup rather than behind a button.
+    const colorWrap = optPopEl.querySelector('.wd-optpop-color');
+    const validKeys = (cfg.colorKeys || []).filter(key => key in colors);
+    colorWrap.hidden = !validKeys.length;
+    if (validKeys.length) {
+      showColorPicker(null, cfg.title, {
+        keys: validKeys,
+        labels: validKeys.map(key => (colorGroup(key) || {}).label || key),
+      }, colorWrap);
+    }
+
+    const grid = optPopEl.querySelector('.wd-optpop-grid');
+    grid.innerHTML = '';
+    grid.hidden = !cfg.variant;
+    if (cfg.variant) {
+      const v = cfg.variant;
+      v.options.forEach((opt, i) => {
+        const b = document.createElement('button');
+        b.type = 'button';
+        b.className = 'wd-opt';
+        b.dataset.opt = String(i);
+        const thumb = variantThumb(v, opt);
+        b.innerHTML = `${thumb ? `<img draggable="false" src="${thumb}">` : '<div class="wd-noimg">?</div>'}<span>${opt.name}</span>`;
+        b.addEventListener('click', () => setVariant(v.key, i));
+        grid.appendChild(b);
+      });
+    }
+    optPopEl.hidden = false;
+    syncOptionsPopup();
+    positionOptionsPopup();
+  }
+
+  function syncOptionsPopup() {
+    if (!optPopEl || optPopEl.hidden) return;
+    if (optPopKey) {
+      const current = variantState[optPopKey] || 0;
+      optPopEl.querySelectorAll('.wd-opt').forEach(b => {
+        b.classList.toggle('on', Number(b.dataset.opt) === current);
+      });
+    }
+    const eq = optPopEl.querySelector('.wd-opt-equip');
+    if (eq && optPopItemKey) {
+      const worn = !!state[optPopItemKey];
+      eq.textContent = worn ? 'Remove' : 'Wear';
+      eq.classList.toggle('worn', worn);
+    }
+  }
+
+  function makeOptOrb(cfg) {
+    const orb = document.createElement('button');
+    orb.type = 'button';
+    orb.className = 'wd-optorb';
+    if (cfg.variant) orb.dataset.optOrb = cfg.variant.key;
+    orb.textContent = '▾';
+    orb.title = `${cfg.title} options`;
+    orb.setAttribute('aria-label', `${cfg.title} options`);
+    orb.addEventListener('pointerdown', (e) => e.stopPropagation());
+    orb.addEventListener('click', (e) => { e.stopPropagation(); openTilePopup(orb, cfg); });
+    return orb;
+  }
+
+  // Clicking a tile opens its options popup (equip toggle, colors, styles);
+  // only dragging onto Jun equips directly.
+  function makeTile(label, thumbSrc, onEquip, colorKeys, popupCfg) {
     const tile = document.createElement('div');
     tile.className = 'wd-tile';
     tile.tabIndex = 0;
     tile.setAttribute('role', 'button');
-    tile.setAttribute('aria-label', `Toggle ${label}`);
+    tile.setAttribute('aria-label', `${label} options`);
     tile.innerHTML = `${thumbSrc ? `<img draggable="false" src="${thumbSrc}">` : '<div class="wd-noimg">?</div>'}<span>${label}</span>`;
     if (colorKeys && colorKeys.length) tile.appendChild(makeSwatch(colorKeys, label));
+    tile.appendChild(makeOptOrb(popupCfg));
     // Custom pointer drag (not HTML5 DnD): works on touch and gives us the ghost.
     tile.addEventListener('pointerdown', (e) => {
       if (e.button !== 0) return;
@@ -1012,8 +1209,8 @@ window.Outfit = (function () {
         tile.removeEventListener('pointermove', move);
         tile.removeEventListener('pointerup', up);
         wdShowGhost(null);
-        // Drop on Jun equips; a plain click (no real drag) toggles too.
-        if (!dragging || Live2D.isOverModel(ev.clientX, ev.clientY)) onEquip(!dragging);
+        if (!dragging) openTilePopup(tile, popupCfg);            // click = options
+        else if (Live2D.isOverModel(ev.clientX, ev.clientY)) onEquip(); // drop on Jun = wear
       };
       tile.addEventListener('pointermove', move);
       tile.addEventListener('pointerup', up);
@@ -1021,7 +1218,7 @@ window.Outfit = (function () {
     tile.addEventListener('keydown', (e) => {
       if (e.key !== 'Enter' && e.key !== ' ') return;
       e.preventDefault();
-      onEquip(true);
+      openTilePopup(tile, popupCfg);
     });
     return tile;
   }
@@ -1031,7 +1228,7 @@ window.Outfit = (function () {
     wdOverlay.className = 'wardrobe-overlay';
     wdOverlay.innerHTML = `<div class="wd-head">
         <div class="wd-titles"><span class="wd-title">Wardrobe</span>
-        <span class="wd-hint">Click to toggle · drag onto Jun to wear</span></div>
+        <span class="wd-hint">Click for options · drag onto Jun to wear</span></div>
         <div class="wd-actions"><button class="ghost wd-reset" type="button" title="Restore the default outfit">Reset</button>
         <button class="ghost wd-close" type="button" aria-label="Close wardrobe" title="Close">×</button></div></div>
       <div class="wd-main"><nav class="wd-rail" aria-label="Wardrobe sections"></nav><div class="wd-body"></div></div>`;
@@ -1057,31 +1254,47 @@ window.Outfit = (function () {
     };
     body.addEventListener('scroll', syncNav, { passive: true });
 
+    // Shelf grids default to one horizontally-scrollable row; a chevron in the
+    // section header (shown only when the shelf overflows) wraps the tiles into
+    // up to 3 rows instead.
+    const expandableGrids = [];
     const section = (name, sub) => {
       const t = document.createElement('div');
       t.className = sub ? 'wd-section wd-sub' : 'wd-section';
-      t.textContent = name;
+      const label = document.createElement('span');
+      label.textContent = name;
+      t.appendChild(label);
       body.appendChild(t);
       const grid = document.createElement('div');
       grid.className = 'wd-grid';
       body.appendChild(grid);
+      const expand = document.createElement('button');
+      expand.type = 'button';
+      expand.className = 'wd-expand';
+      expand.title = 'Show all';
+      expand.hidden = true;
+      expand.setAttribute('aria-expanded', 'false');
+      expand.textContent = '⌄';
+      expand.addEventListener('click', () => {
+        const on = grid.classList.toggle('expanded');
+        expand.classList.toggle('on', on);
+        expand.setAttribute('aria-expanded', String(on));
+        expand.title = on ? 'Collapse' : 'Show all';
+      });
+      t.appendChild(expand);
+      expandableGrids.push([grid, expand]);
       return { title: t, grid };
     };
-
-    for (const [sec, name, icon] of [[undefined, 'Clothing', '👗'], ['body', 'Body', '🐾'], ['hair', 'Hair', '💇']]) {
-      const { title, grid } = section(name);
-      addNav(name, icon, title);
-      for (const it of ITEMS.filter(x => x.section === sec)) {
-        const colorKeys = ITEM_COLOR_GROUPS[it.key] || [];
-        const tile = makeTile(it.label, itemThumb(it),
-          (isClick) => setItem(it.key, isClick ? !state[it.key] : true), colorKeys);
-        tile.dataset.item = it.key;
-        grid.appendChild(tile);
+    const updateExpandButtons = () => {
+      for (const [grid, expand] of expandableGrids) {
+        expand.hidden = !(grid.classList.contains('expanded') || grid.scrollWidth > grid.clientWidth + 1);
       }
-    }
+    };
+    window.addEventListener('resize', updateExpandButtons);
+    wdUpdateExpand = updateExpandButtons;
 
     // Tints with no wardrobe tile of their own (skin, blush, lips, eyes...)
-    // ride on the High-Tech Skin tiles as one multi-channel picker instead of
+    // ride on the High-Tech Skin tile as one multi-channel picker instead of
     // a separate "Color studio" section. Item/ear/hair tints stay on their tiles.
     const tileGroups = new Set(Object.values(ITEM_COLOR_GROUPS).flat());
     const studioKeys = COLOR_GROUPS.filter(g =>
@@ -1089,18 +1302,51 @@ window.Outfit = (function () {
       (!Live2D.findDrawables || Live2D.findDrawables(g.includes, g.excludes).length))
       .map(g => g.key);
 
-    // All variant slots grouped under one "Styles" anchor.
-    let firstVariant = true;
-    for (const v of VARIANTS) {
-      const { title, grid } = section(v.label, !firstVariant);
-      if (firstVariant) { addNav('Styles', '✨', title); firstVariant = false; }
-      v.options.forEach((opt, i) => {
-        const tile = makeTile(opt.name, variantThumb(v, opt), () => setVariant(v.key, i),
-          v.key === 'hightech_skin' ? studioKeys : []);
-        tile.dataset.variant = v.key;
-        tile.dataset.opt = String(i);
-        grid.appendChild(tile);
+    // A tile per item-less variant slot (arms/legs/high-tech skin): the thumb
+    // tracks the current option and clicking opens the options popup.
+    const makeVariantTile = (v, colorKeys) => {
+      const tile = document.createElement('div');
+      tile.className = 'wd-tile';
+      tile.tabIndex = 0;
+      tile.setAttribute('role', 'button');
+      tile.setAttribute('aria-label', `Choose ${v.label.toLowerCase()}`);
+      const thumb = variantThumb(v, v.options[variantState[v.key] || 0]);
+      tile.innerHTML = `${thumb ? `<img draggable="false" src="${thumb}">` : '<div class="wd-noimg">?</div>'}<span>${v.label}</span>`;
+      tile.dataset.variantTile = v.key;
+      if (colorKeys && colorKeys.length) tile.appendChild(makeSwatch(colorKeys, v.label));
+      const popupCfg = { title: v.label, colorKeys, variant: v };
+      tile.appendChild(makeOptOrb(popupCfg));
+      tile.addEventListener('click', () => openTilePopup(tile, popupCfg));
+      tile.addEventListener('keydown', (e) => {
+        if (e.key !== 'Enter' && e.key !== ' ') return;
+        e.preventDefault();
+        openTilePopup(tile, popupCfg);
       });
+      return tile;
+    };
+
+    for (const [sec, name, icon] of [[undefined, 'Clothing', '👗'], ['body', 'Body', '🐾'], ['hair', 'Hair', '💇']]) {
+      const { title, grid } = section(name);
+      addNav(name, icon, title);
+      for (const it of ITEMS.filter(x => x.section === sec)) {
+        const colorKeys = ITEM_COLOR_GROUPS[it.key] || [];
+        const popupCfg = {
+          title: it.label,
+          itemKey: it.key,
+          colorKeys,
+          variant: VARIANTS.find(v => v.key === ITEM_VARIANTS[it.key]) || null,
+        };
+        const tile = makeTile(it.label, itemThumb(it),
+          () => setItem(it.key, true), colorKeys, popupCfg);
+        tile.dataset.item = it.key;
+        grid.appendChild(tile);
+      }
+      if (sec === 'body') {
+        for (const key of BODY_VARIANTS) {
+          const v = VARIANTS.find(x => x.key === key);
+          if (v) grid.appendChild(makeVariantTile(v, key === 'hightech_skin' ? studioKeys : []));
+        }
+      }
     }
 
     // Game-mod items (loaded from .zip, stored client-side in IndexedDB).
@@ -1213,12 +1459,21 @@ window.Outfit = (function () {
       }
     }
     for (const v of VARIANTS) {
-      wdOverlay.querySelectorAll(`.wd-tile[data-variant="${v.key}"]`).forEach(tile => {
-        const selected = Number(tile.dataset.opt) === (variantState[v.key] || 0);
-        tile.classList.toggle('on', selected);
-        tile.setAttribute('aria-pressed', String(selected));
+      const idx = variantState[v.key] || 0;
+      // Options orbs light up while a non-default style/logo is active.
+      wdOverlay.querySelectorAll(`.wd-optorb[data-opt-orb="${v.key}"]`).forEach(orb => {
+        orb.classList.toggle('set', idx > 0);
       });
+      // Item-less variant tiles (arms/legs/skin) preview the current option.
+      const tile = wdOverlay.querySelector(`.wd-tile[data-variant-tile="${v.key}"]`);
+      if (tile) {
+        tile.classList.toggle('on', idx > 0);
+        const img = tile.querySelector('img');
+        const thumb = variantThumb(v, v.options[idx]);
+        if (img && thumb) img.src = thumb;
+      }
     }
+    syncOptionsPopup();
     // Repaint tint swatches (covers reset() and syncFromAction paths).
     refreshColorButtons();
   }
@@ -1226,12 +1481,15 @@ window.Outfit = (function () {
   function openWardrobe() {
     if (!wdOverlay) buildWardrobe();
     document.body.classList.add('wardrobe-open');
+    // Overflow is only measurable once the overlay has layout.
+    if (wdUpdateExpand) requestAnimationFrame(wdUpdateExpand);
   }
 
   function closeWardrobe() {
     // On the dedicated wardrobe page, closing means going back to the app.
     if (location.pathname.endsWith('wardrobe.html')) { location.href = 'index.html'; return; }
     document.body.classList.remove('wardrobe-open');
+    closeOptionsPopup(false);
     wdTooltip.style.display = 'none';
     wdShowGhost(null);
     document.body.classList.remove('wd-over-worn-item');

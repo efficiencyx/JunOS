@@ -152,9 +152,11 @@ services:
       - "no-new-privileges:true"
     networks: [omega]
 
-  # ── kokoro (TTS sidecar - internal only, optional `voice` profile) ──────────
-  # Only started when the `voice` profile is active (start.sh adds it unless
-  # VOICE=off). With it off the stack runs text-only and skips this build.
+  # ── kokoro (audio sidecar - internal only, optional `voice` profile) ────────
+  # TTS (kokoro/pockettts) + STT (faster-whisper). Named for the first engine it
+  # ever ran; KOKORO_URL is wired through .env.example and api/*.php, so the name
+  # stays. Only started when the `voice` profile is active (start.sh adds it
+  # unless VOICE=off). With it off the stack runs text-only and skips this build.
   kokoro:
     build:
       context: .
@@ -168,6 +170,12 @@ services:
       # nvidia/amd overlays supply a GPU torch wheel so it can pick the GPU.
       # Force it either way with TTS_DEVICE in your environment / .env.
       TTS_DEVICE: "${TTS_DEVICE:-auto}"
+      # STT (voice mode mic input). These two must agree - the ".en" whisper
+      # models are English-only. See .env.example for the language table.
+      STT_MODEL: "${STT_MODEL:-base.en}"
+      STT_LANG: "${STT_LANG-en}"
+      # cpu | cuda. Separate from TTS_DEVICE by design - see kokoro.Dockerfile.
+      STT_DEVICE: "${STT_DEVICE:-cpu}"
     volumes:
       - kokoro_cache:/root/.cache
     healthcheck:

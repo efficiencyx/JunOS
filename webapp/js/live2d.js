@@ -181,11 +181,18 @@ window.Live2D = (function () {
     // inheriting the chat page's saved position.
     if (ignoreSavedPos) { userOffsetX = 0; userOffsetY = 0; userZoom = 1; hasUserPos = true; }
     fitModel();
-    window.addEventListener('resize', fitModel);
+    window.addEventListener('resize', () => {
+      if (cameraPreset === 'face' && !cameraTween) {
+        const t = computeFaceCamera();
+        userZoom = t.zoom; userOffsetX = t.offsetX; userOffsetY = t.offsetY;
+      }
+      fitModel();
+    });
 
     // Zoom (shift+wheel) / vertical pan (wheel) while the pointer is over her.
     // The canvas is click-through, so we listen on the window and hit-test.
     window.addEventListener('wheel', (e) => {
+      if (cameraPreset === 'face') return;
       if (!isOverModel(e.clientX, e.clientY)) return;
       e.preventDefault();
       if (e.shiftKey) {
@@ -206,6 +213,7 @@ window.Live2D = (function () {
     let dragging = false, dragPX = 0, dragPY = 0, dragOX = 0, dragOY = 0;
     window.addEventListener('pointerdown', (e) => {
       if (e.button !== 0) return;
+      if (cameraPreset === 'face') return;
       // Wardrobe mode: presses on the model start an item-removal drag instead of a pan.
       if (document.body.classList.contains('wardrobe-open')) return;
       if (isInteractiveTarget(e.target)) return;
@@ -435,6 +443,81 @@ window.Live2D = (function () {
     model.y = my;
   }
 
+  // --- Camera presets (voice mode face zoom) ---
+  let cameraPreset = 'default';
+  let savedCamera = null;   // snapshot of user camera while 'face' is active
+  let cameraTween = null;   // active ticker fn
+
+  // Face framing constants: face center sits ~12% from the model's top; frame
+  // it slightly above the stage midline with the head ~1/3 of stage height.
+  const FACE_CENTER_FRAC = 0.12;
+  const FACE_SCREEN_Y = 0.42;
+  const FACE_HEAD_FRAC = 0.30;
+
+  function computeFaceCamera() {
+    const dpr = window.devicePixelRatio || 1;
+    const stageW = app.view.width / dpr;
+    const stageH = app.view.height / dpr;
+    const margin = 0.92;
+    const sBase = Math.min(
+      (stageW * margin) / model.internalModel.width,
+      (stageH * margin) / model.internalModel.height
+    );
+    // Head ≈ top 22% of the model; make it FACE_HEAD_FRAC of stage height.
+    const zoom = Math.min(5, (stageH * FACE_HEAD_FRAC) / (sBase * model.internalModel.height * 0.22));
+    const modelH = model.internalModel.height * sBase * zoom;
+    const baseY = stageH / 2 - modelH / 2;
+    return {
+      zoom,
+      offsetX: 0,
+      offsetY: (stageH * FACE_SCREEN_Y - FACE_CENTER_FRAC * modelH) - baseY,
+    };
+  }
+
+  function cancelCameraTween() {
+    if (cameraTween) { app.ticker.remove(cameraTween); cameraTween = null; }
+  }
+
+  function tweenCameraTo(target, ms, onDone) {
+    cancelCameraTween();
+    const from = { zoom: userZoom, offsetX: userOffsetX, offsetY: userOffsetY };
+    const t0 = performance.now();
+    cameraTween = () => {
+      const t = Math.min(1, (performance.now() - t0) / ms);
+      const e = 1 - Math.pow(1 - t, 3); // ease-out cubic
+      userZoom = from.zoom + (target.zoom - from.zoom) * e;
+      userOffsetX = from.offsetX + (target.offsetX - from.offsetX) * e;
+      userOffsetY = from.offsetY + (target.offsetY - from.offsetY) * e;
+      fitModel();
+      if (t >= 1) { cancelCameraTween(); if (onDone) onDone(); }
+    };
+    app.ticker.add(cameraTween);
+  }
+
+  function setCameraPreset(preset) {
+    if (!model || !app || preset === cameraPreset) return;
+    if (preset === 'face') {
+      savedCamera = { zoom: userZoom, offsetX: userOffsetX, offsetY: userOffsetY, hasUserPos };
+      cameraPreset = 'face';
+      hasUserPos = true; // suppress the default rest offset in fitModel
+      tweenCameraTo(computeFaceCamera(), 450);
+    } else {
+      cameraPreset = 'default';
+      const back = savedCamera || { zoom: 1, offsetX: 0, offsetY: 0, hasUserPos: false };
+      savedCamera = null;
+      if (!back.hasUserPos) {
+        // Tween to the rest pose explicitly; only hand control back to
+        // fitModel's default-offset branch once the tween lands.
+        const dpr = window.devicePixelRatio || 1;
+        const restX = (app.view.width / dpr) * 0.26;
+        tweenCameraTo({ zoom: back.zoom, offsetX: restX, offsetY: 0 }, 450,
+          () => { hasUserPos = false; fitModel(); });
+      } else {
+        tweenCameraTo(back, 450);
+      }
+    }
+  }
+
   function clamp(id, v) {
     const lo = paramMin.get(id), hi = paramMax.get(id);
     if (lo === undefined) return v;
@@ -462,6 +545,8 @@ window.Live2D = (function () {
   function savePos() {
     // Wardrobe-page zoom/pan is transient - never clobber the chat page's position.
     if (document.body.classList.contains('wardrobe-open')) return;
+    // Voice-mode face camera is transient too.
+    if (cameraPreset === 'face') return;
     try {
       localStorage.setItem('l2d.pos', JSON.stringify({ x: userOffsetX, y: userOffsetY, z: userZoom }));
     } catch (e) { }
@@ -969,6 +1054,17 @@ window.Live2D = (function () {
     // overlapping atlas rect (the limb Attach* rects overlap heavily), which
     // shows up as transparent holes on the model.
     for (const a of active) {
+      if (a.entry.fullClear) {
+        // Erase the whole UV rect, NOT clipped to the mesh, and pad it by a
+        // few texels: the baked Moddable*Logo placeholder (red grid + "LOGO")
+        // extends past the drawable's UV rect, and texels just outside the
+        // rect bleed into the render through bilinear edge sampling (the red
+        // box outline). Only safe for rects surrounded by placeholder art -
+        // shared-texel regions must keep the clipped paths below.
+        const p = 8;
+        ctx.clearRect(a.x - p, a.yTop - p, a.w + 2 * p, a.h + 2 * p);
+        continue;
+      }
       if (a.entry.overlay) continue;   // decorations paint on top of the base
       ctx.save();
       ctx.clip(meshPath(a.id, W, H));
@@ -1005,24 +1101,35 @@ window.Live2D = (function () {
   async function setDrawableTexture(drawableId, url, overlay) {
     const r = _uvRect.get(drawableId);
     if (!r) return;
-    if (url) _texOverride.set(drawableId, { img: await _loadImg(url), overlay: !!overlay });
+    if (url) _texOverride.set(drawableId, { url, img: await _loadImg(url), overlay: !!overlay, alphaClip: false, fullClear: false });
     else _texOverride.delete(drawableId);
     recompositeTexture(r.tex);
   }
 
-  // Batch form: map of { drawableId: { url, overlay, alphaClip } | url | null }.
+  // Batch form: map of { drawableId: { url, overlay, alphaClip, fullClear } | url | null }.
   // Recomposites each affected atlas once. Used by the outfit variant pickers.
   async function setDrawableTextures(map) {
     const texes = new Set();
     await Promise.all(Object.entries(map).map(async ([id, val]) => {
       const r = _uvRect.get(id);
       if (!r) return;
-      // val can be a string (url), an object { url, overlay, alphaClip }, or null.
+      // val can be a string (url), an object { url, overlay, alphaClip, fullClear }, or null.
       const url = val && typeof val === 'object' ? val.url : val;
       const overlay = val && typeof val === 'object' ? !!val.overlay : false;
       const alphaClip = val && typeof val === 'object' ? !!val.alphaClip : false;
-      if (url) _texOverride.set(id, { img: await _loadImg(url), overlay, alphaClip });
-      else _texOverride.delete(id);
+      const fullClear = val && typeof val === 'object' ? !!val.fullClear : false;
+      // Skip no-op updates: callers re-send unchanged maps on every outfit
+      // toggle, and a redundant recomposite redraws + re-uploads a whole 4k
+      // atlas (a visible main-thread stall).
+      const prev = _texOverride.get(id);
+      if (url) {
+        if (prev && prev.url === url && prev.overlay === overlay &&
+            prev.alphaClip === alphaClip && prev.fullClear === fullClear) return;
+        _texOverride.set(id, { url, img: await _loadImg(url), overlay, alphaClip, fullClear });
+      } else {
+        if (!prev) return;
+        _texOverride.delete(id);
+      }
       texes.add(r.tex);
     }));
     for (const t of texes) recompositeTexture(t);
@@ -1131,6 +1238,7 @@ window.Live2D = (function () {
     knows,
     setOnMissingParam,
     fitModel,
+    setCameraPreset,
     debugParam,
     tintByPattern,
     screenByPattern,

@@ -250,6 +250,46 @@ input[type="checkbox"] {
 .status-tts       { background: #1a2a1e; color: var(--ok); }
 .status-error     { background: #3a1f23; color: var(--danger); }
 
+/* Mic state, next to the hands-free toggle. Borrows .status-pill's shape but
+   sits inline in a settings row, so it's smaller and not uppercased - the labels
+   are sentences ("listening to the room…"), not status codes.
+   Hands-free gives no other feedback that it heard you; this is it. */
+.voice-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  margin-left: 8px;
+  padding: 2px 8px;
+  border-radius: var(--radius-pill);
+  font-size: 11px;
+  font-weight: 500;
+  vertical-align: middle;
+  background: var(--bg-3);
+  color: var(--muted);
+  transition: background .2s, color .2s;
+}
+.voice-pill::before {
+  content: '';
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: currentColor;
+  flex-shrink: 0;
+}
+.voice-pill[data-state="listening"],
+.voice-pill[data-state="maybe"]       { background: #1a2a40; color: var(--accent); }
+.voice-pill[data-state="speech"]      { background: #1a2a1e; color: var(--ok); }
+.voice-pill[data-state="thinking"]    { background: #2e2717; color: var(--warn); }
+/* Pulse only while calibrating and hearing you - the two states where something
+   is actively happening that the user is waiting on. */
+.voice-pill[data-state="calibrating"] { background: #2e2717; color: var(--warn); }
+.voice-pill[data-state="calibrating"]::before,
+.voice-pill[data-state="speech"]::before { animation: voice-pulse 1s ease-in-out infinite; }
+@keyframes voice-pulse { 50% { opacity: .25; } }
+@media (prefers-reduced-motion: reduce) {
+  .voice-pill::before { animation: none !important; }
+}
+
 /* ================================================================
    Main layout - sidebar + chat + stage
    ================================================================ */
@@ -805,6 +845,7 @@ input[type="checkbox"] {
   color: var(--fg);
 }
 .composer-icon:hover { background: var(--bg-hover); color: var(--fg); border-color: var(--bg-hover); filter: none; }
+.composer-icon:disabled { color: var(--dim); border-color: var(--border); cursor: not-allowed; background: transparent; }
 
 .composer-send {
   background: var(--accent);
@@ -2103,3 +2144,81 @@ html[data-pre-auth] #app { visibility: hidden; }
   white-space: nowrap;
 }
 .devhud-sep { height: 1px; background: var(--border); margin: 5px 0; }
+
+/* ================================================================
+   Voice mode (ChatGPT-style): chat chrome hidden, face-zoomed stage,
+   minimal overlay controls. Chrome is hidden with visibility (not display)
+   so layout/geometry stays stable.
+   ================================================================ */
+body.voice-mode .chat-panel,
+body.voice-mode .conv-sidebar,
+body.voice-mode .app-header { visibility: hidden; }
+
+.voice-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 50; /* above the stage (40), below drawers/toasts */
+  pointer-events: none;
+  opacity: 0;
+  transition: opacity .25s ease;
+}
+body.voice-mode .voice-overlay { opacity: 1; }
+
+.voice-overlay-btn {
+  pointer-events: auto;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 48px;
+  height: 48px;
+  border-radius: 50%;
+  border: 1px solid var(--border);
+  background: var(--bg-2);
+  color: var(--fg);
+  cursor: pointer;
+  transition: background .15s, color .15s, transform .15s;
+}
+.voice-overlay-btn:hover { background: var(--bg-3); transform: scale(1.06); }
+
+.voice-overlay-close {
+  position: absolute;
+  top: calc(16px + env(safe-area-inset-top, 0px));
+  right: calc(16px + env(safe-area-inset-right, 0px));
+}
+
+.voice-overlay-controls {
+  position: absolute;
+  left: 50%;
+  transform: translateX(-50%);
+  bottom: calc(28px + env(safe-area-inset-bottom, 0px));
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+/* Reuses .voice-pill state colors via the same data-state attribute. */
+.voice-overlay-status {
+  pointer-events: none;
+  padding: 8px 16px;
+  border-radius: var(--radius-pill);
+  font-size: 13px;
+  font-weight: 500;
+  background: var(--bg-2);
+  border: 1px solid var(--border);
+  color: var(--muted);
+  transition: background .2s, color .2s;
+}
+.voice-overlay-status[data-state="listening"],
+.voice-overlay-status[data-state="maybe"]       { color: var(--accent); }
+.voice-overlay-status[data-state="speech"]      { color: var(--ok); }
+.voice-overlay-status[data-state="thinking"],
+.voice-overlay-status[data-state="calibrating"] { color: var(--warn); }
+.voice-overlay-status[data-state="calibrating"],
+.voice-overlay-status[data-state="speech"]      { animation: voice-pulse 1.4s ease-in-out infinite; }
+@media (prefers-reduced-motion: reduce) {
+  .voice-overlay-status { animation: none !important; }
+}
+
+/* Muted: dim the status, mark the mute button */
+.voice-overlay.muted .voice-overlay-status { opacity: .5; }
+.voice-overlay.muted .voice-overlay-mute { background: #3a1f23; color: var(--danger); }

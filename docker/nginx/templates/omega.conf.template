@@ -20,7 +20,7 @@ server {
     add_header X-Content-Type-Options     "nosniff"                         always;
     add_header X-Frame-Options            "DENY"                            always;
     add_header Referrer-Policy            "strict-origin-when-cross-origin" always;
-    add_header Permissions-Policy         "microphone=(), camera=(), geolocation=()" always;
+    add_header Permissions-Policy         "microphone=(self), camera=(), geolocation=()" always;
     add_header Content-Security-Policy    "default-src 'self'; script-src 'self' 'unsafe-eval' https://cdn.jsdelivr.net https://cubism.live2d.com; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; media-src 'self' blob:; connect-src 'self' data:; worker-src 'self' blob:; frame-ancestors 'none'; base-uri 'self'" always;
 
     # ── Health probe ─────────────────────────────────────────────────────────
@@ -53,6 +53,17 @@ server {
 
         include fastcgi_params;
         fastcgi_param SCRIPT_FILENAME /var/www/omega/api/tts.php;
+        fastcgi_pass  php:9000;
+    }
+
+    # ── STT proxy - body is a WAV upload, so it needs a much larger cap ───────
+    location = /api/stt.php {
+        limit_req zone=api burst=5 nodelay;
+        client_max_body_size 4m;
+        fastcgi_read_timeout 60s;
+
+        include fastcgi_params;
+        fastcgi_param SCRIPT_FILENAME /var/www/omega/api/stt.php;
         fastcgi_pass  php:9000;
     }
 
