@@ -1198,7 +1198,9 @@
         try {
           const m = await Ollama.listModels();
           if (m && m.models && m.models.length) return m;
-          setBoot('Pulling models', 'No models installed yet - `ollama pull <model>`', 'err');
+          setBoot('Pulling models', m && m.provider && m.provider !== 'ollama'
+            ? 'No models reported by the provider yet - still booting?'
+            : 'No models installed yet - `ollama pull <model>`', 'err');
         } catch (e) {
           const phase = phases[Math.min(attempt - 1, phases.length - 1)];
           setBoot(phase, 'Jun is still sleeping - retrying…', 'err');
@@ -1223,9 +1225,11 @@
       'llama3.1:8b', 'llama3.1:latest',
     ];
     const isChat = (n) => !/embed/i.test(n);
-    // A previously chosen model wins, as long as it's still installed.
+    // A previously chosen model wins, as long as it's still available; then the
+    // provider's configured default (e.g. OPENROUTER_MODEL), then the Jun refs.
     const saved = localStorage.getItem('model');
     const picked = (saved && m.models.includes(saved) ? saved : null)
+      || (m.default_model && m.models.includes(m.default_model) ? m.default_model : null)
       || prefer.find(p => m.models.includes(p))
       || m.models.find(isChat)
       || m.models[0];
