@@ -16,6 +16,27 @@ services:
     image: ghcr.io/ggml-org/llama.cpp:server-cuda
     environment:
       LLAMA_ARG_N_GPU_LAYERS: "999"
+  # Audio sidecar on the GPU: rebuild against a CUDA torch wheel and reserve the
+  # card, mirroring what the AMD overlay already does with ROCm. Without this the
+  # base image's CPU-only wheel means TTS_DEVICE=auto/cuda silently resolve to
+  # cpu, no matter what you set.
+  #
+  # This is the single biggest latency win for voice mode. Kokoro's real-time
+  # factor goes from ~0.3-0.6 on CPU to ~0.03-0.05 here, which is most of the
+  # delay between you finishing a sentence and Jun starting one (~1.8s -> ~0.1s
+  # for a first chunk).
+  #
+  # Costs: ~3GB more image (CUDA wheel), and Kokoro now shares VRAM with the LLM.
+  # At 82M params that's only ~350MB, but `count: all` means ollama's allocator
+  # can't see the reservation - on an 8GB card at 16k context you're already
+  # tight, so watch for OOM and set TTS_DEVICE=cpu to back this out without
+  # rebuilding. This only moves Kokoro: whisper reads STT_DEVICE (default cpu)
+  # because CTranslate2 is a different runtime and needs cuDNN this wheel doesn't
+  # ship - set STT_DEVICE=cuda only if you know you have those libs.
+  kokoro:
+    build:
+      args:
+        TORCH_INDEX: https://download.pytorch.org/whl/cu121
     deploy:
       resources:
         reservations:

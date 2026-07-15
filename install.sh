@@ -368,7 +368,9 @@ pkg_manager() {
         command -v brew >/dev/null 2>&1 && echo brew || echo none
         return
     fi
-    for pm in apt-get dnf yum pacman zypper; do
+    # rpm-ostree hosts (including Bazzite) are immutable: layer packages into
+    # the next deployment instead of trying to use a mutable package manager.
+    for pm in rpm-ostree apt-get dnf yum pacman zypper; do
         if command -v "$pm" >/dev/null 2>&1; then echo "$pm"; return; fi
     done
     echo none
@@ -395,11 +397,39 @@ install_git() {
 }
 
 install_docker() {
-    if [ "$OS" = "Darwin" ]; then
-        brew install --cask docker
-    else
-        curl -fsSL https://get.docker.com | $SUDO sh   # official cross-distro script
-    fi
+    case "$PM" in
+        brew)
+            if [ "$OS" = "Darwin" ]; then
+                brew install --cask docker
+            else
+                brew install docker docker-compose docker-engine rootlesskit slirp4netns
+            fi
+            ;;
+        *)    curl -fsSL https://get.docker.com | $SUDO sh ;; # official cross-distro script
+    esac
+}
+
+# rpm-ostree applies package changes to a new deployment, so install every
+# missing dependency in one transaction and let the caller stop for a reboot.
+install_ostree_deps() {
+    local c packages=()
+    for c in "$@"; do
+        case "$c" in
+            git)    packages+=(git) ;;
+            docker) packages+=(moby-engine) ;;
+        esac
+    done
+    $SUDO rpm-ostree install "${packages[@]}"
+}
+
+# Homebrew's Linux Docker engine is rootless. Its Compose plugin lives outside
+# Docker's default plugin directory, so expose it after Homebrew installs it.
+configure_brew_docker() {
+    local plugin
+    dockerd-rootless-setuptool.sh install
+    plugin="$(brew --prefix docker-compose)/lib/docker/cli-plugins/docker-compose"
+    mkdir -p "$HOME/.docker/cli-plugins"
+    ln -sf "$plugin" "$HOME/.docker/cli-plugins/docker-compose"
 }
 
 # Bring the daemon up and grant the current user docker access without a logout.
@@ -407,6 +437,10 @@ prepare_docker() {
     if [ "$OS" = "Darwin" ]; then
         ok "launching Docker Desktop"
         open -a Docker 2>/dev/null || true
+        return
+    fi
+    if [ "$PM" = "brew" ]; then
+        ok "using rootless Docker"
         return
     fi
     ok "starting the Docker daemon"
@@ -459,10 +493,27 @@ confirm_deps() {
     if [ "${JUN_YES:-}" = "1" ]; then
         proceed=1
     elif [ -r /dev/tty ]; then
-        printf '     %s$%s install %s with %s%s%s? %s[y/N]%s %s→%s ' \
-            "$OK" "$R" "${missing[*]}" "$B" "$PM" "$R" "$DIM" "$R" "$ACCENT" "$R" > /dev/tty
+        if [ "$PM" = "rpm-ostree" ]; then
+            printf '     %s$%s layer %s with %s%s%s? %s[Y/n]%s %s→%s ' \
+                "$OK" "$R" "${missing[*]}" "$B" "$PM" "$R" "$DIM" "$R" "$ACCENT" "$R" > /dev/tty
+        else
+            printf '     %s$%s install %s with %s%s%s? %s[y/N]%s %s→%s ' \
+                "$OK" "$R" "${missing[*]}" "$B" "$PM" "$R" "$DIM" "$R" "$ACCENT" "$R" > /dev/tty
+        fi
         read -r answer < /dev/tty || answer=""
-        case "$answer" in y | Y | yes | YES) proceed=1 ;; esac
+        case "$answer" in
+            y | Y | yes | YES | "")
+                [ "$PM" = "rpm-ostree" ] && proceed=1
+                [ "$PM" != "rpm-ostree" ] && { case "$answer" in y | Y | yes | YES) proceed=1 ;; esac; }
+                ;;
+            *)
+                if [ "$PM" = "rpm-ostree" ] && command -v brew >/dev/null 2>&1; then
+                    PM=brew
+                    proceed=1
+                    note "rpm-ostree declined - using Homebrew instead"
+                fi
+                ;;
+        esac
     else
         fail_ "re-run in an interactive terminal (or set JUN_YES=1) to install them."
         exit 1
@@ -476,7 +527,16 @@ confirm_deps() {
 
     # Authenticate sudo up front: installs run output-hidden, and a password
     # prompt buried behind the spinner would just hang.
-    [ -n "$SUDO" ] && { note "sudo authentication"; $SUDO -v; }
+    [ -n "$SUDO" ] && [ "$PM" != brew ] && { note "sudo authentication"; $SUDO -v; }
+
+    # Bazzite and other rpm-ostree systems cannot use newly layered packages
+    # until after booting into the deployment created by rpm-ostree.
+    if [ "$PM" = "rpm-ostree" ]; then
+        note "immutable system detected - layering ${missing[*]} for the next boot"
+        run "layer ${missing[*]}" install_ostree_deps "${missing[@]}"
+        ok "packages layered - reboot, then re-run this installer"
+        exit 0
+    fi
 
     for c in "${missing[@]}"; do
         case "$c" in
@@ -485,7 +545,13 @@ confirm_deps() {
         esac
     done
 
-    [ "$DOCKER_JUST_INSTALLED" = 1 ] && prepare_docker
+    if [ "$DOCKER_JUST_INSTALLED" = 1 ]; then
+        if [ "$PM" = "brew" ] && [ "$OS" != "Darwin" ]; then
+            run "configure rootless Docker" configure_brew_docker
+            export DOCKER_HOST="${DOCKER_HOST:-unix://${XDG_RUNTIME_DIR:-/run/user/$(id -u)}/docker.sock}"
+        fi
+        prepare_docker
+    fi
 }
 
 banner
