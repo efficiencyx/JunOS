@@ -194,7 +194,7 @@ Everything's environment variables (see `.env.example`; the full reference lives
 | `LLAMACPP_MODEL_HF` | HF `repo:quant` the managed llama-server loads (`-hf` syntax) | `efficiencyx/Jun-LoRA-v3-E2B-GGUF:Q4_K_M` |
 | `EMBEDDINGS` | `on`/`off` - local Ollama RAG embeddings | `on` for ollama, else `off` |
 | `COMPOSE_PROFILES` | Which model-server containers run (`ollama`, `llamacpp`) | `ollama` |
-| `KOKORO_URL` | Where the PHP TTS proxy finds the voice sidecar | `http://kokoro:8001` |
+| `TTS_URL` | Where the PHP TTS/STT proxies find the voice sidecar (legacy name `KOKORO_URL` still works) | `http://tts:8001` |
 | `CORS_ORIGIN` | `Access-Control-Allow-Origin` for the voice sidecar | `http://nginx` |
 
 ## Under the hood
@@ -202,7 +202,7 @@ Everything's environment variables (see `.env.example`; the full reference lives
 ```
 Browser ──HTTP/SSE──▶ nginx ──FastCGI──▶ php-fpm ──HTTP──▶ ollama :11434
                         │                    │
-                        │                    └──────────────▶ kokoro :8001 (TTS)
+                        │                    └──────────────▶ tts :8001 (TTS + STT)
                         │
                         └── serves /var/www/omega/ (static assets, JS, Live2D model)
 ```
@@ -290,7 +290,7 @@ The rate limiter tripped. Raise *both* layers: `limit_req_zone` in the nginx tem
 <details>
 <summary><b>No voice</b></summary>
 
-Check `docker compose logs kokoro`. The first run downloads ~300 MB of weights. From inside the stack, `docker compose exec nginx wget -qO- http://kokoro:8001/health` should return `{"ok":true}`. The Kokoro port is intentionally not exposed to the host.
+Check `docker compose logs tts`. The first run downloads ~300 MB of weights. From inside the stack, `docker compose exec nginx wget -qO- http://tts:8001/health` should return `{"ok":true}`. The sidecar's port is intentionally not exposed to the host.
 </details>
 
 <details>
@@ -304,7 +304,7 @@ Watch `docker compose logs ollama`. The entrypoint pre-warms the first non-embed
 ```
 .
 ├── docker/                    Dockerfiles, nginx templates, entrypoints
-├── tts/                       Kokoro voice sidecar (FastAPI, server.py)
+├── tts/                       Audio sidecar: TTS (Kokoro / pocket-tts) + STT (FastAPI, server.py)
 ├── tools/                     Lore-corpus builder + dataset, chat-index compaction, asset recovery
 ├── docs/                      architecture.md + screenshots/
 ├── webapp/                    Everything served by nginx / php-fpm

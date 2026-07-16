@@ -1280,7 +1280,7 @@
               : sup.reason === 'no_getusermedia'
                 ? 'no microphone API in this browser'
                 : 'no AudioWorklet in this browser')
-          : 'sidecar has no speech-to-text (rebuild the kokoro image)';
+          : 'sidecar has no speech-to-text (rebuild the tts image)';
         if (voiceState) voiceState.textContent = 'unavailable';
         const voiceModeBtn = document.getElementById('voiceModeBtn');
         if (voiceModeBtn) { voiceModeBtn.disabled = true; voiceModeBtn.title = `Voice mode unavailable: ${why}`; }

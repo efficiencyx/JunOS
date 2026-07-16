@@ -14,8 +14,8 @@ WAV through an AudioContext; js/voice.js posts captured utterances to /stt.
 /voices exposes both engines' voice lists so the UI can offer an engine + voice
 picker. Run: python server.py
 
-(The service is still named "kokoro" in docker-compose and KOKORO_URL - it
-predates both the pocket-tts engine and STT. Renaming it is churn, not a fix.)
+(PHP reaches this sidecar via TTS_URL - the compose service is `tts`. The
+legacy KOKORO_URL name from older .env files is still honored as a fallback.)
 """
 
 import io
@@ -67,7 +67,7 @@ STT_MAX_BYTES = 4 * 1024 * 1024
 # so a non-"en" value here needs a multilingual model too (base / small / etc,
 # no ".en" suffix). Empty string = auto-detect per utterance, which costs an
 # extra decode pass and is unreliable on utterances under ~2s - prefer naming the
-# language when you know it. See docker/kokoro.Dockerfile for the pairing.
+# language when you know it. See docker/tts.Dockerfile for the pairing.
 STT_LANG = (os.environ.get("STT_LANG", "en").strip().lower() or None)
 
 _pipeline = None       # Kokoro KPipeline
@@ -155,7 +155,7 @@ def get_whisper():
     # cpu_threads is pinned deliberately. CTranslate2 and torch each default to
     # spawning one intra-op thread per core, so an unpinned whisper transcribing
     # while Kokoro synthesizes oversubscribes every core on the box. OMP_NUM_THREADS
-    # (set in kokoro.Dockerfile) bounds torch; this bounds CTranslate2.
+    # (set in tts.Dockerfile) bounds torch; this bounds CTranslate2.
     global _whisper
     if _whisper is None:
         from faster_whisper import WhisperModel

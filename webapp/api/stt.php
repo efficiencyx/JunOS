@@ -1,7 +1,7 @@
 <?php
 // Proxy for the audio sidecar's STT endpoint. Two routes:
-//   GET  ?action=health → GET  {KOKORO_URL}/health  ({"ok":..,"stt":bool})
-//   POST ?action=stt    → POST {KOKORO_URL}/stt  (raw WAV body in, {"text":...} out)
+//   GET  ?action=health → GET  {TTS_URL}/health  ({"ok":..,"stt":bool})
+//   POST ?action=stt    → POST {TTS_URL}/stt  (raw WAV body in, {"text":...} out)
 //
 // Mirrors tts.php, the other half of the voice loop, on the same sidecar. The
 // body is a raw 16kHz mono WAV from js/voice.js rather than multipart - it's a
@@ -11,7 +11,8 @@ require_once __DIR__ . '/_lib.php';
 
 require_user();
 
-$kokoroUrl = rtrim(env_str('KOKORO_URL', 'http://localhost:8001'), '/');
+// KOKORO_URL is the pre-rename name of TTS_URL, honored for existing .env files.
+$ttsUrl = rtrim(env_str('TTS_URL', env_str('KOKORO_URL', 'http://localhost:8001')), '/');
 $action = $_GET['action'] ?? '';
 
 if ($action === 'health') {
@@ -19,7 +20,7 @@ if ($action === 'health') {
     // mic toggle up front instead of failing on the first utterance.
     header('Content-Type: application/json');
 
-    $ch = curl_init($kokoroUrl . '/health');
+    $ch = curl_init($ttsUrl . '/health');
     curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
     curl_setopt($ch, CURLOPT_CONNECTTIMEOUT, 5);
     curl_setopt($ch, CURLOPT_TIMEOUT, 10);
@@ -53,7 +54,7 @@ if ($action === 'stt') {
     $rawBody = read_body(4 * 1024 * 1024);
     if ($rawBody === '') fail(400, 'invalid_request');
 
-    $ch = curl_init($kokoroUrl . '/stt');
+    $ch = curl_init($ttsUrl . '/stt');
     curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
     curl_setopt($ch, CURLOPT_POST, true);
     curl_setopt($ch, CURLOPT_POSTFIELDS, $rawBody);
@@ -74,12 +75,12 @@ if ($action === 'stt') {
     if ($res === false) {
         // Same error key tts.php uses, so the client handles one shape for both.
         http_response_code(502);
-        echo json_encode(['error' => 'kokoro_unreachable']);
+        echo json_encode(['error' => 'tts_unreachable']);
         exit;
     }
 
     if ($code >= 500) {
-        log_event(['msg' => 'kokoro_stt_error', 'upstream_code' => $code]);
+        log_event(['msg' => 'stt_upstream_error', 'upstream_code' => $code]);
         fail(502, 'stt_failed');
     }
 
