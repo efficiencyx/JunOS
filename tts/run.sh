@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Start the Kokoro TTS sidecar. First run creates a venv and installs deps.
+# Start the audio (TTS/STT) sidecar. First run creates a venv and installs deps.
 # Requires espeak-ng on the host (sudo pacman -S espeak-ng on Arch).
 
 set -euo pipefail
