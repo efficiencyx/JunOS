@@ -32,7 +32,7 @@ Jun OS is a fan-made tribute to **Jun**, the robot girlfriend from the game *!Ω
 Here's what makes her feel alive:
 
 - **She reacts as she talks.** Jun doesn't just type words at you - she tilts her head, glances away, smiles, or pouts *while she's saying them*. The expressions land with the words, not a beat late.
-- **She has a voice.** Flip on the optional speech and she reads her replies out loud, with her mouth moving in time to what she's saying. (It's a little uncanny. We're into it.)
+- **She has a voice - and ears.** Flip on the optional speech and she reads her replies out loud, with her mouth moving in time to what she's saying. Turn on voice mode and you can just *talk* to her, mic to mouth, no typing. (It's a little uncanny. We're into it.)
 - **She remembers, and she knows her world.** She can bring up things from earlier chats, and she stays true to the game's lore and characters.
 - **It's all private.** Nothing you say to her ever leaves your computer - no accounts in the cloud, no servers, no company reading along. Given the source material, that's kind of the whole point.
 
@@ -54,11 +54,15 @@ If you just want to meet her, the [Quickstart](#get-her-running) below gets you 
 
 - **She reacts mid-sentence.** `[A:...]` action tags are parsed *while the reply is still streaming*, so the gesture lands with the word - not two seconds after. This is the magic trick the whole thing is built around.
 - **She talks, and her mouth means it.** TTS audio amplitude (RMS) drives `ParamMouthOpen` directly, skipping the smoothing pass so the lips stay glued to the sound.
+- **You can talk back.** Voice mode captures your mic, runs it through local Whisper (faster-whisper on the audio sidecar), and sends the transcript as your message - a full hands-free conversation loop.
+- **She has feelings about you.** Affection, trust, and tension shift with every exchange via a hidden bookkeeping tag she writes (and the server strips) - how she treats you follows from where you actually stand.
 - **She knows her lore.** Curated *Factorial Omega* canon (`tools/lore_dataset.jsonl`) is keyword-matched and injected per-message, so Jun stays accurate on the world details a fine-tune would otherwise smudge.
 - **She remembers you.** Past messages get embedded and recalled by similarity, so she can bring up things you said in earlier chats. Spooky-cute, not spooky-creepy.
 - **She has a little toolbox.** Mid-chat she can decide to search your past conversations, jot down a durable note about you (view and delete them in settings), or run a quick web search (that one does leave the machine, obviously).
 - **Accounts & history.** Sign up, log in, keep your conversations. Server-side sessions, per-user history, and an adult-content gate at signup.
-- **Dress her up.** Toggle clothing parts and recolor tint groups live, right from the settings drawer.
+- **Dress her up.** A dedicated wardrobe page: toggle clothing parts, recolor tint groups, and watch her react to what you put her in (she has opinions). Quick toggles live in the settings drawer too.
+- **Bring your mods.** Drop game-mod zips straight into the browser - they load client-side (IndexedDB), and the server only ever sees item names.
+- **Call each other whatever you like.** Player and companion names are customizable, and she uses them naturally mid-sentence.
 - **100% local.** Ollama for the thinking, Kokoro for the voice, SQLite for the memory. Air-gap it if you want.
 - **Use your GPU (or don't).** NVIDIA, AMD, or plain CPU - the launcher figures out which and configures itself.
 - **Grown-up infra under the cute exterior.** Optional TLS via certbot, two-layer rate limiting, the works.
@@ -206,14 +210,14 @@ Browser ──HTTP/SSE──▶ nginx ──FastCGI──▶ php-fpm ──HTTP�
                         └── serves /var/www/omega/ (static assets, JS, Live2D model)
 ```
 
-**The stack:** PHP 8.2 (the Ollama SSE proxy + RAG) · Python FastAPI + Kokoro-82M (the voice) · plain HTML/JS/CSS up front with PIXI.js + pixi-live2d-display + the Cubism 4 SDK from CDN · SQLite · nginx + php-fpm. No build step, no bundler, no node_modules black hole.
+**The stack:** PHP 8.2 (the Ollama SSE proxy + RAG) · Python FastAPI + Kokoro-82M + faster-whisper (the voice and the ears) · plain HTML/JS/CSS up front with PIXI.js + pixi-live2d-display + the Cubism 4 SDK from CDN · SQLite · nginx + php-fpm. No build step, no bundler, no node_modules black hole.
 
 Want the gory details - token streaming, the ACTION stream buffer, the Live2D tick loop, the TTS pipeline? It's all in [`docs/architecture.md`](docs/architecture.md).
 
 ### What happens when you hit send
 
 1. The browser `POST`s your conversation to `/api/chat.php`.
-2. PHP assembles the prompt: the static `system_prompt.txt` prefix and your history stay byte-identical between turns (so Ollama's prompt cache keeps hitting), and a trailing live-context block carries the current time, the closest canon lore facts (keyword-matched), and any recalled bits from past chats (cosine-ranked).
+2. PHP assembles the prompt: the static `system_prompt.txt` prefix and your history stay byte-identical between turns (so Ollama's prompt cache keeps hitting), and a trailing live-context block carries the current time, the closest canon lore facts (keyword-matched), recalled bits from past chats (cosine-ranked), what she's wearing, and the current relationship gauges.
 3. Ollama streams NDJSON back; PHP re-frames it as `data: {"token":"..."}` SSE events and flushes each one immediately.
 4. `js/app.js` watches the stream for `[A:` markers (the legacy `[ACTION:` form still parses too), hides any half-typed marker so it never renders, and fires each action the instant its closing `]` shows up.
 5. `js/actions.js` resolves that action against `action_map.json`; `js/live2d.js` lerps the model's parameters toward the new pose every frame.
@@ -307,8 +311,8 @@ Watch `docker compose logs ollama`. The entrypoint pre-warms the first non-embed
 ├── tools/                     Lore-corpus builder + dataset, chat-index compaction, asset recovery
 ├── docs/                      architecture.md + screenshots/
 ├── webapp/                    Everything served by nginx / php-fpm
-│   ├── api/                   chat.php, auth.php, conversations.php, prefs.php, tts.php, models.php, _lib.php
-│   ├── js/                    app.js, live2d.js, actions.js, chat-api.js, tts.js, outfit.js, ui.js, …
+│   ├── api/                   chat.php, auth.php, conversations.php, memory.php, relationship.php, stt.php, tts.php, …
+│   ├── js/                    app.js, live2d.js, actions.js, voice.js, wardrobe.js, mods.js, tts.js, ui.js, …
 │   ├── assets/                Live2D model files (*.moc3, *.physics3.json, *.png)
 │   ├── action_map.json        Semantic action → Live2D parameter map
 │   ├── system_prompt.txt      Jun's persona + ACTION syntax (read server-side)
@@ -328,6 +332,7 @@ Watch `docker compose logs ollama`. The entrypoint pre-warms the first non-embed
 - [pixi-live2d-display](https://github.com/guansss/pixi-live2d-display) - Live2D integration for PIXI
 - [Live2D Cubism SDK](https://www.live2d.com/en/sdk/about/) - the character model runtime
 - [Kokoro-82M](https://huggingface.co/hexgrad/Kokoro-82M) - the lightweight TTS that gives her a voice
+- [faster-whisper](https://github.com/SYSTRAN/faster-whisper) - the local STT that lets her hear you
 - [Ollama](https://ollama.com/) - local LLM inference
 - And of course [**Factorial Omega**](), for giving us Jun in the first place. 💛
 
