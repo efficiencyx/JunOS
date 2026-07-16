@@ -1,6 +1,3 @@
-// Thin client for /api/chat.php (SSE) and /api/models.php. The backend proxies
-// whichever AI provider is configured (Ollama, OpenRouter, llama.cpp); the
-// window.Ollama name is kept for compatibility with the rest of the frontend.
 
 window.Ollama = (function () {
   async function listModels() {
@@ -9,8 +6,6 @@ window.Ollama = (function () {
     return r.json();
   }
 
-  // chat({messages, model, conversation_id}, {onToken, onDone, onError})
-  // Returns a function to abort.
   function chat({ messages, model, reasoning, think, outfit_context, conversation_id, idle, client_time }, { onToken, onThinking, onDone, onError, onDebug, onStats, onToolStatus }) {
     const ctrl = new AbortController();
 
@@ -33,7 +28,6 @@ window.Ollama = (function () {
           const { value, done } = await reader.read();
           if (done) break;
           buf += dec.decode(value, { stream: true });
-          // SSE events are separated by a blank line.
           let idx;
           while ((idx = buf.indexOf('\n\n')) >= 0) {
             const event = buf.slice(0, idx);

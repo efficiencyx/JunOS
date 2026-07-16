@@ -1,7 +1,4 @@
 <?php
-// Per-user preferences blob. GET returns the stored JSON ({} if none), PUT
-// replaces it. The body is opaque (capped at 16 KB) so the frontend can stash
-// whatever keys it wants without a schema migration.
 require_once __DIR__ . '/_lib.php';
 
 header('Content-Type: application/json');
@@ -25,7 +22,6 @@ if ($method === 'PUT') {
     $parsed = json_decode(read_body(16 * 1024), true);
     if (!is_array($parsed)) fail(400, 'invalid_request');
 
-    // round-trip through json_encode to drop any non-UTF-8 junk
     $canonical = json_encode($parsed, JSON_UNESCAPED_UNICODE);
     $db->prepare(
         'INSERT INTO preferences (user_id, data) VALUES (?, ?)

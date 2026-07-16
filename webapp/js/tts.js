@@ -1,12 +1,3 @@
-// TTS client (kokoro / pockettts engines): sentence queue → fetch /tts → ordered AudioContext playback
-// + AnalyserNode-driven ParamMouthOpen lipsync.
-//
-// Pipeline (per chat reply):
-//   feed(textChunk) accumulates and emits sentences at . ! ? \n boundaries
-//   each sentence becomes a Job with an id (monotonic) - kicked off in parallel
-//   jobs play in submission order regardless of which finishes first
-//   stop() aborts in-flight fetches, halts current source, releases the mouth
-
 window.TTS = (function () {
   const TTS_URL = '/api/tts.php';
 
@@ -21,10 +12,6 @@ window.TTS = (function () {
   let analyserBuf = null;
   let masterGain = null;
 
-  // Job queue. Each job: { id, text, abort, blobPromise, status }
-  // status: 'queued' | 'pending' | 'ready' | 'playing' | 'done' | 'cancelled' | 'error'
-  //   queued  - accepted, not yet fetched (waiting on the in-flight cap)
-  //   pending - fetch/synthesis in flight
   let jobs = [];
   let nextId = 1;
   let playingJobId = 0;     // id currently playing, 0 if none
@@ -56,7 +43,6 @@ window.TTS = (function () {
     analyser.fftSize = 1024;
     analyser.smoothingTimeConstant = 0.4;
     analyserBuf = new Float32Array(analyser.fftSize);
-    // Graph: source -> analyser -> masterGain -> destination
     analyser.connect(masterGain);
     masterGain.connect(audioCtx.destination);
     return audioCtx;
@@ -84,25 +70,8 @@ window.TTS = (function () {
     }
   }
 
-  // Progressive chunking: tight for the reply's first chunk, sentences after.
-  //
-  // Nothing is audible until a chunk is both generated AND synthesized, and
-  // Kokoro's synth time scales with output length - so a full opening sentence
-  // ("Oh, I've been waiting all day for you to say that.") costs ~1.8s on CPU
-  // before the first sample plays. Cutting chunk 0 at the first clause pays that
-  // down proportionally.
-  //
-  // Only chunk 0. Kokoro synthesizes each chunk independently with no
-  // cross-chunk context, so every fragment gets phrase-final intonation - falling
-  // pitch, final lengthening. Cut at every comma and Jun reads the whole reply
-  // like a shopping list. Chunk 0 is the only one with nothing covering it;
-  // later chunks synthesize under the previous chunk's playback, so they can
-  // afford to wait for a real sentence boundary and sound better for it.
-  //
-  // Trailing punctuation stays in the text: the comma cues Kokoro toward a
-  // non-final contour, which is exactly what a mid-sentence cut wants.
-  //
-  // app.js strips [ACTION:...] blocks before feed(), so input here is plain text.
+  // Split only the first chunk early: it lowers first-audio latency without
+  // making every sentence sound phrase-final.
   const HARD_BREAK_RE = /[.!?\n]/;
   const SOFT_BREAK_RE = /[,;:—–]/g;
   const MIN_FIRST_WORDS = 3;   // "Oh," alone reads as a whole falling utterance
@@ -117,15 +86,10 @@ window.TTS = (function () {
     return { chunk: buf.slice(0, i + 1), rest: buf.slice(i + 1) };
   }
 
-  // Returns { chunk, rest } or null if buf has no complete chunk yet.
   function nextChunk(buf, first) {
     const hard = buf.search(HARD_BREAK_RE);
     if (!first) return hard < 0 ? null : cutAt(buf, hard);
 
-    // A hard break is always fair game, even at one word - "Oh!" is a complete
-    // utterance and synthesizes with natural prosody.
-    // For soft breaks, scan for the first one with enough words ahead of it, so
-    // "Oh, my god, I missed you" cuts at "god," rather than at "Oh,".
     let soft = -1;
     SOFT_BREAK_RE.lastIndex = 0;
     let m;
@@ -136,9 +100,6 @@ window.TTS = (function () {
     const cands = [hard, soft].filter(i => i >= 0);
     if (cands.length) return cutAt(buf, Math.min.apply(null, cands));
 
-    // No usable break. Force a cut once enough *complete* words have arrived -
-    // the trailing \s+ is what proves a word ended, so we never split
-    // "unbeliev|able" mid-token and hand Kokoro a nonsense phoneme run.
     const re = /\S+\s+/g;
     let count = 0, end = 0;
     while ((m = re.exec(buf))) {
@@ -148,16 +109,9 @@ window.TTS = (function () {
     return null;
   }
 
-  // Kokoro's G2P chokes on emojis (errors or produces phoneme garbage that
-  // desyncs the queue), and any action-tag fragment ([A:...] or legacy
-  // [ACTION:...]) that survived the stream-buffer would get read out loud.
-  // Strip both, plus markdown noise.
+  // Strip input that Kokoro cannot pronounce safely.
   const ACTION_RE = /\[\s*A(?:CTIONS?)?\s*:[^\]]*\]?/gi;
   const MARKDOWN_NOISE_RE = /[*_~`#>]+/g;
-  // \p{Extended_Pictographic} covers all emojis; ️ is the variation
-  // selector that turns a few base glyphs into emoji form; ‍ is the
-  // zero-width joiner used in compound emoji (👨‍👩‍👧). Stripping these
-  // collapses an emoji sequence to nothing instead of leaving fragments.
   const EMOJI_RE = /[\p{Extended_Pictographic}️‍]/gu;
 
   function cleanForSpeech(s) {
@@ -165,7 +119,6 @@ window.TTS = (function () {
     s = s.replace(EMOJI_RE, '');
     s = s.replace(MARKDOWN_NOISE_RE, '');
     s = s.replace(/\s+/g, ' ').trim();
-    // If only punctuation remains, don't bother synthesizing.
     if (!/[\p{L}\p{N}]/u.test(s)) return '';
     return s;
   }
@@ -178,9 +131,6 @@ window.TTS = (function () {
       if (!r) break;
       sentenceBuf = r.rest;
       const clean = cleanForSpeech(r.chunk);
-      // Only count a chunk that actually produced speech - a fragment that
-      // cleans down to nothing (bare punctuation, a lone emoji) must not spend
-      // the reply's one aggressive first cut.
       if (clean) { enqueue(clean); chunkIndex++; }
     }
   }
@@ -193,8 +143,6 @@ window.TTS = (function () {
       const clean = cleanForSpeech(tail);
       if (clean) { enqueue(clean); chunkIndex++; }
     }
-    // End of reply. The next feed() starts a new one and gets a fresh fast first
-    // chunk. (stop() resets too, for the interrupted case.)
     resetReply();
   }
 
@@ -203,24 +151,12 @@ window.TTS = (function () {
     firstChunkSynthed = false;
   }
 
-  // Cap on concurrent synthesis requests. This is what makes the aggressive
-  // first-chunk split above actually pay off, and the two must not be separated.
-  //
-  // /tts is a sync `def` on single-process uvicorn, so FastAPI runs requests in
-  // its threadpool - concurrent ones genuinely execute at once and contend for
-  // cores. Firing every chunk immediately (as this used to) means chunk 0 fights
-  // chunks 1..N for CPU, and cutting chunks smaller makes that *worse*, not
-  // better: more chunks, same cores, first word later.
-  //
-  // So: chunk 0 synthesizes alone and gets the whole box, then the window opens
-  // for throughput so later chunks stay ahead of playback. Interacts with
-  // OMP_NUM_THREADS in docker/tts.Dockerfile (each synth pins to 4 threads,
-  // so 3 concurrent ≈ 12 cores) - drop this to 1 on a 4-core machine.
+  // Keep the first chunk uncontended, then allow later synthesis in parallel.
   const MAX_IN_FLIGHT = 3;
   let inFlight = 0;
   let firstChunkSynthed = false;   // has any chunk of this reply finished?
 
-  function enqueue(text) {
+  function enqueue(text, hooks) {
     ensureCtx();
     // Chrome's autoplay policy leaves the context suspended until a gesture.
     if (audioCtx.state === 'suspended') audioCtx.resume().catch(() => {});
@@ -231,13 +167,13 @@ window.TTS = (function () {
       abort: new AbortController(),
       status: 'queued',
       audioBuffer: null,
+      hooks: hooks || null,
     };
     jobs.push(job);
     speaking = true;
     kick();
   }
 
-  // Start as many queued jobs as the cap allows, oldest first.
   function kick() {
     const cap = firstChunkSynthed ? MAX_IN_FLIGHT : 1;
     for (const job of jobs) {
@@ -269,6 +205,7 @@ window.TTS = (function () {
       } catch (e) {
         if (e.name === 'AbortError') { job.status = 'cancelled'; return; }
         job.status = 'error';
+        if (job.hooks && job.hooks.onError) job.hooks.onError(e);
         onLog('warn', `TTS error: ${e.message}`);
       } finally {
         inFlight = Math.max(0, inFlight - 1);
@@ -283,11 +220,8 @@ window.TTS = (function () {
     })();
   }
 
-  // Drive playback strictly in submission order. Skip jobs that errored;
-  // wait (idle) for the head job to become 'ready' if it's still pending.
   function pump() {
     if (playingJobId) return;
-    // Drop any leading already-resolved (done/cancelled/error) jobs.
     while (jobs.length && (jobs[0].status === 'done' || jobs[0].status === 'cancelled' || jobs[0].status === 'error')) {
       jobs.shift();
     }
@@ -312,19 +246,26 @@ window.TTS = (function () {
     src.onended = () => {
       if (currentSource === src) currentSource = null;
       job.status = 'done';
-      // Remove from head if still there.
       const idx = jobs.indexOf(job);
       if (idx >= 0) jobs.splice(idx, 1);
       playingJobId = 0;
       if (!jobs.length || !jobs.some(j => j.status === 'playing' || j.status === 'ready' || j.status === 'pending')) {
         stopLipsyncLoop();
       }
+      if (job.hooks && job.hooks.onDone) job.hooks.onDone();
       pump();
     };
+    if (job.hooks && job.hooks.onStart) job.hooks.onStart();
     src.start();
   }
 
-  // ── Output level history, for voice.js's barge-in threshold ────────────────
+  function speak(text, hooks) {
+    if (!enabled || !cleanForSpeech(text)) return false;
+    stop();
+    enqueue(cleanForSpeech(text), hooks);
+    return true;
+  }
+
   // The mic hears whatever Jun is saying. Browser AEC removes most of it, but
   // the residual scales with how loud she currently is - so voice.js raises its
   // speech threshold in proportion to this rather than by a fixed amount.
@@ -385,7 +326,6 @@ window.TTS = (function () {
     masterGain.gain.setTargetAtTime(g, t, 0.02);  // ~20ms, no click
   }
 
-  // Lipsync: RMS of the analyser drives ParamMouthOpen.
   function startLipsyncLoop() {
     if (rafId) return;
     const tick = () => {
@@ -393,12 +333,9 @@ window.TTS = (function () {
       if (!analyser) return;
       const rms = computeRms();
       pushRms(rms);
-      // Map RMS (~0..0.4 typical for speech) to mouth open (0..1) with a
-      // mild expansion curve so soft consonants still register.
       const norm = Math.min(1, rms * 3.5);
       const shaped = Math.pow(norm, 0.7);
       if (window.Live2D && Live2D.setMouthOverride) Live2D.setMouthOverride(shaped);
-      // Keep ticking while audio is playing OR another job is queued.
       if (currentSource || jobs.length) rafId = requestAnimationFrame(tick);
       else stopLipsyncLoop();
     };
@@ -413,12 +350,9 @@ window.TTS = (function () {
   function stop() {
     sentenceBuf = '';
     speaking = false;
-    // Clear any duck a barge-in left behind, so the next reply isn't quiet.
     duck(1);
     for (const j of jobs) {
       if (j.status === 'queued' || j.status === 'pending' || j.status === 'ready') {
-        // 'queued' has no fetch to abort yet; marking it cancelled is enough to
-        // keep kick() from ever starting it.
         try { j.abort.abort(); } catch (e) {}
         j.status = 'cancelled';
       }
@@ -441,7 +375,7 @@ window.TTS = (function () {
     setEngine, setVoice, setSpeed,
     setLogger,
     listVoices,
-    feed, flush, stop,
+    feed, flush, stop, speak,
     isSpeaking, setOnAllDone,
     outputRms, duck,
   };

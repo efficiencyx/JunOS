@@ -1,8 +1,4 @@
-/* ================================================================
-   Design tokens
-   ================================================================ */
 :root {
-  /* Dark palette: near-black main canvas, warm-grey elevated surfaces */
   --bg:         #131314;
   --bg-elev:    #1e1f20;
   --bg-2:       #131314;
@@ -20,9 +16,7 @@
   --warn:       #ffc870;
   --border:     #2d2f31;
   --border-2:   #444746;
-  /* Signature Gemini blue → purple → coral gradient (saturated, for small marks) */
   --grad:       linear-gradient(74deg, #4285f4 0%, #9b72cb 48%, #d96570 100%);
-  /* Soft pastel variant for the large greeting headline */
   --grad-soft:  linear-gradient(74deg, #c2d6ff 0%, #ddccf3 50%, #f6cdd6 100%);
   --radius:     16px;
   --radius-sm:  10px;
@@ -39,9 +33,6 @@
   --drawer-w:   340px;
 }
 
-/* ================================================================
-   Reset / base
-   ================================================================ */
 *, *::before, *::after { box-sizing: border-box; }
 
 html, body {
@@ -58,25 +49,16 @@ html, body {
 
 body.drawer-open { overflow: hidden; }
 
-/* ================================================================
-   Scrollbars
-   ================================================================ */
 ::-webkit-scrollbar { width: 6px; height: 6px; }
 ::-webkit-scrollbar-track { background: transparent; }
 ::-webkit-scrollbar-thumb { background: var(--border-2); border-radius: 3px; }
 ::-webkit-scrollbar-thumb:hover { background: var(--muted); }
 
-/* ================================================================
-   Focus-visible a11y rings
-   ================================================================ */
 :focus-visible {
   outline: 2px solid var(--accent);
   outline-offset: 2px;
 }
 
-/* ================================================================
-   Buttons
-   ================================================================ */
 button {
   background: var(--accent);
   color: #0e1014;
@@ -119,9 +101,6 @@ button.icon-btn {
 }
 button.icon-btn:hover { color: var(--fg); background: var(--bg-3); }
 
-/* ================================================================
-   Form controls
-   ================================================================ */
 select {
   width: 100%;
   background: var(--bg-3);
@@ -181,9 +160,7 @@ input[type="checkbox"] {
 }
 .field-row select { width: auto; flex: 1; }
 
-/* ================================================================
-   App shell - header
-   ================================================================ */
+/* App shell header */
 #app {
   position: relative;
   display: flex;
@@ -222,9 +199,6 @@ input[type="checkbox"] {
   margin-left: auto;
 }
 
-/* ================================================================
-   Status pill
-   ================================================================ */
 .status-pill {
   display: inline-flex;
   align-items: center;
@@ -280,8 +254,6 @@ input[type="checkbox"] {
 .voice-pill[data-state="maybe"]       { background: #1a2a40; color: var(--accent); }
 .voice-pill[data-state="speech"]      { background: #1a2a1e; color: var(--ok); }
 .voice-pill[data-state="thinking"]    { background: #2e2717; color: var(--warn); }
-/* Pulse only while calibrating and hearing you - the two states where something
-   is actively happening that the user is waiting on. */
 .voice-pill[data-state="calibrating"] { background: #2e2717; color: var(--warn); }
 .voice-pill[data-state="calibrating"]::before,
 .voice-pill[data-state="speech"]::before { animation: voice-pulse 1s ease-in-out infinite; }
@@ -290,13 +262,9 @@ input[type="checkbox"] {
   .voice-pill::before { animation: none !important; }
 }
 
-/* ================================================================
-   Main layout - sidebar + chat + stage
-   ================================================================ */
 .app-main {
   flex: 1;
   display: grid;
-  /* sidebar | chat (absorbs leftover) | stage (locked) */
   grid-template-columns: 260px minmax(0, 1fr);
   overflow: hidden;
   min-height: 0;
@@ -306,9 +274,6 @@ input[type="checkbox"] {
   grid-template-columns: 56px minmax(0, 1fr);
 }
 
-/* ================================================================
-   Conversation sidebar (always-visible left rail, ChatGPT-style)
-   ================================================================ */
 .conv-sidebar {
   grid-column: 1;
   display: flex;
@@ -329,7 +294,6 @@ input[type="checkbox"] {
   transition: padding 220ms cubic-bezier(.4,0,.2,1);
 }
 
-/* Gemini-style brand: gradient Ω mark + wordmark */
 .sidebar-brand {
   display: inline-flex;
   align-items: center;
@@ -395,7 +359,6 @@ input[type="checkbox"] {
 .app-main.sidebar-collapsed .sidebar-brand-name,
 .app-main.sidebar-collapsed .user-info { opacity: 0; pointer-events: none; }
 .app-main.sidebar-collapsed .conv-list { display: none; }
-/* Icons sit in fixed 40px squares centered in the 56px rail */
 .app-main.sidebar-collapsed .sidebar-item span { width: 0; }
 .app-main.sidebar-collapsed .sidebar-item {
   width: 40px;
@@ -462,7 +425,6 @@ input[type="checkbox"] {
 .sidebar-item svg { color: var(--muted); flex-shrink: 0; }
 .sidebar-item:hover svg { color: var(--fg); }
 
-/* Gemini "New chat" is a plain nav row, not a filled button */
 .sidebar-item.primary svg { color: var(--muted); }
 .sidebar-item.primary:hover svg { color: var(--fg); }
 
@@ -529,7 +491,6 @@ input[type="checkbox"] {
 .conv-delete:hover { background: rgba(255,138,138,.14); color: var(--danger); }
 .conv-delete:focus-visible { opacity: 1; }
 
-/* Sidebar footer - user chip */
 .sidebar-footer {
   border-top: 1px solid var(--border);
   padding-top: var(--space-2);
@@ -586,9 +547,6 @@ input[type="checkbox"] {
   color: var(--muted);
 }
 
-/* ================================================================
-   Chat panel (center)
-   ================================================================ */
 .chat-panel {
   grid-column: 2;
   display: flex;
@@ -602,7 +560,6 @@ input[type="checkbox"] {
   min-width: 0;
 }
 
-/* ---- Empty state (centered above composer) ---- */
 .messages-empty {
   display: flex;
   flex-direction: column;
@@ -638,10 +595,8 @@ input[type="checkbox"] {
   text-align: center;
 }
 
-/* When messages exist, the empty state is gone; we hide an empty messages list */
 .messages:empty { display: none; }
 
-/* ---- Chips ---- */
 .prompt-chips {
   display: flex;
   flex-wrap: wrap;
@@ -666,7 +621,6 @@ input[type="checkbox"] {
 .chip:hover { background: var(--bg-4); border-color: var(--bg-4); color: var(--fg); filter: none; }
 .chip svg { color: var(--accent); flex-shrink: 0; }
 
-/* ---- Message list ---- */
 .messages {
   flex: 1;
   overflow-y: auto;
@@ -783,7 +737,6 @@ input[type="checkbox"] {
 }
 @keyframes pulse { 0%,100%{opacity:.3;} 50%{opacity:1;} }
 
-/* ---- Composer area (composer pill + chips) ---- */
 .composer-area {
   flex-shrink: 0;
   padding: var(--space-3) var(--space-5) var(--space-4);
@@ -854,9 +807,7 @@ input[type="checkbox"] {
 .composer-send:hover { filter: brightness(1.1); background: var(--accent); }
 .composer-send:disabled { background: var(--bg-4); color: var(--dim); cursor: not-allowed; filter: none; }
 
-/* ================================================================
-   Live2D stage (right)
-   ================================================================ */
+/* Live2D stage */
 /* Full-screen, click-through layer. The character floats over the whole page
    and is repositioned by dragging (hit-tested in live2d.js). Sits above the
    chat content but below the header chrome, drawer, and overlays. */
@@ -870,7 +821,6 @@ input[type="checkbox"] {
 }
 #stage canvas { display: block; width: 100%; height: 100%; }
 
-/* While dragging her, suppress text selection and show a grabbing cursor. */
 body.l2d-dragging { cursor: grabbing; user-select: none; }
 
 /* Skeleton shimmer while model loads (disabled: stage is now a full-screen
@@ -931,14 +881,7 @@ body.l2d-dragging { cursor: grabbing; user-select: none; }
 .stage-status.error  { color: var(--danger); border-color: #5c2a30; }
 .stage-status.hidden { display: none; }
 
-/* ================================================================
-   Settings drawer
-   ================================================================ */
-/* ================================================================
-   Settings - centered modal with a category nav.
-   ui.toggleDrawer() toggles .open on #settingsDrawer + #drawerBackdrop,
-   so the side-drawer markup became a dialog without touching that JS.
-   ================================================================ */
+/* Settings dialog retains the drawer's .open toggle contract. */
 .settings-drawer {
   position: fixed;
   top: 50%; left: 50%;
@@ -977,7 +920,6 @@ body.l2d-dragging { cursor: grabbing; user-select: none; }
 }
 .drawer-backdrop.open { opacity: 1; pointer-events: auto; }
 
-/* Left: category nav */
 .settings-nav {
   width: 222px;
   flex-shrink: 0;
@@ -1020,7 +962,6 @@ body.l2d-dragging { cursor: grabbing; user-select: none; }
 .settings-navitem:hover { background: var(--bg-hover); color: var(--fg); }
 .settings-navitem.active { background: var(--bg-elev); color: var(--fg); box-shadow: inset 0 0 0 1px var(--border); }
 
-/* Right: panels */
 .settings-main { flex: 1; min-width: 0; display: flex; flex-direction: column; }
 .settings-main-head {
   flex-shrink: 0;
@@ -1036,7 +977,6 @@ body.l2d-dragging { cursor: grabbing; user-select: none; }
 .settings-panel { display: flex; flex-direction: column; }
 .settings-panel[hidden] { display: none; }
 
-/* Rows: label + description on the left, control on the right */
 .set-row {
   display: flex;
   align-items: center;
@@ -1075,7 +1015,6 @@ body.l2d-dragging { cursor: grabbing; user-select: none; }
   font-size: 13px;
 }
 
-/* Full-width blocks: outfit + developer logs */
 .set-block { padding: 16px 0; border-bottom: 1px solid var(--border); }
 .set-block:last-child { border-bottom: none; }
 .set-block-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 10px; }
@@ -1084,14 +1023,12 @@ body.l2d-dragging { cursor: grabbing; user-select: none; }
 .set-block > .secondary { margin-top: 12px; }
 .set-block .count { color: var(--muted); font-weight: 500; font-size: 12px; }
 
-/* Mood switcher (developer panel) */
 .mood-controls { display: flex; flex-direction: column; gap: 12px; }
 .mood-row { display: grid; grid-template-columns: 72px 1fr 34px; align-items: center; gap: 12px; cursor: pointer; }
 .mood-row .mood-label { font-size: 13px; color: var(--muted); }
 .mood-row input[type="range"] { width: 100%; accent-color: var(--accent); cursor: pointer; }
 .mood-row .mood-val { font-variant-numeric: tabular-nums; text-align: right; font-size: 13px; color: var(--accent-2); }
 
-/* Memory panel */
 .memory-list { display: flex; flex-direction: column; gap: 8px; max-height: 320px; overflow-y: auto; margin: 12px 0; }
 .memory-item {
   display: grid; grid-template-columns: 1fr auto; gap: 2px 8px;
@@ -1105,7 +1042,6 @@ body.l2d-dragging { cursor: grabbing; user-select: none; }
 .memory-del { grid-column: 2; grid-row: 1 / span 2; align-self: center; }
 .memory-add { display: grid; grid-template-columns: 1fr 110px auto; gap: 8px; margin-top: 4px; }
 
-/* Toggle switch (for checkboxes given .toggle) */
 input[type="checkbox"].toggle {
   appearance: none; -webkit-appearance: none;
   width: 40px; height: 23px;
@@ -1131,9 +1067,6 @@ input[type="checkbox"].toggle:checked::after { left: 20px; }
 
 .secondary.danger { color: var(--danger); border-color: var(--danger); }
 
-/* ================================================================
-   Action log / raw stream
-   ================================================================ */
 .action-log {
   font-family: 'JetBrains Mono', ui-monospace, monospace;
   font-size: 11px;
@@ -1158,9 +1091,6 @@ input[type="checkbox"].toggle:checked::after { left: 20px; }
 .section-hint { font-size: 11px; color: var(--dim); margin-bottom: 8px; line-height: 1.5; }
 .action-log .row  { margin: 2px 0; }
 
-/* ================================================================
-   Outfit grid
-   ================================================================ */
 .outfit-grid {
   display: grid;
   grid-template-columns: 1fr 1fr;
@@ -1238,7 +1168,6 @@ input[type="checkbox"].toggle:checked::after { left: 20px; }
 .outfit-color-count.zero { color: var(--danger); }
 
 
-/* Custom color picker shared by settings and the standalone wardrobe. */
 .color-preview-segment {
   display: block; flex: 1 1 0; height: 100%; min-width: 0;
   pointer-events: none;
@@ -1326,9 +1255,6 @@ input[type="checkbox"].toggle:checked::after { left: 20px; }
 .ocp-close:focus-visible, .ocp-presets button:focus-visible, .ocp-clear:focus-visible,
 .outfit-color-trigger:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
 
-/* ================================================================
-   Toasts
-   ================================================================ */
 #toasts {
   position: fixed;
   top: calc(var(--header-h) + var(--space-3));
@@ -1381,9 +1307,6 @@ input[type="checkbox"].toggle:checked::after { left: 20px; }
 }
 .toast-close:hover { opacity: 1; background: transparent; filter: none; }
 
-/* ================================================================
-   Mobile - stack vertically at ≤ 900px
-   ================================================================ */
 @media (max-width: 900px) {
   html, body { overflow: auto; }
 
@@ -1431,9 +1354,6 @@ input[type="checkbox"].toggle:checked::after { left: 20px; }
   .toast  { max-width: none; }
 }
 
-/* ================================================================
-   Section header (kept for backward compat with any inline usage)
-   ================================================================ */
 .section-header {
   display: flex;
   align-items: center;
@@ -1447,15 +1367,6 @@ input[type="checkbox"].toggle:checked::after { left: 20px; }
 }
 .section-header .count { color: var(--muted); font-weight: 500; }
 
-/* ============================================================
-   Boot overlay - shown until Ollama responds with models.
-   ============================================================ */
-/* ============================================================
-   Boot overlay - soft "Jun OS" chrome wrapping a live terminal.
-   Live status hooks (driven by app.js + boot-fx.js):
-   #bootStatus .boot-status-label, #bootHint[data-tone], and data-ready
-   toggling the fade-out.
-   ============================================================ */
 .boot-overlay {
   position: fixed;
   inset: 0;
@@ -1474,7 +1385,6 @@ input[type="checkbox"].toggle:checked::after { left: 20px; }
   visibility: hidden;
 }
 
-/* Soft brand-gradient halo, breathing behind the mark. */
 .boot-glow {
   position: absolute;
   width: 460px; height: 460px;
@@ -1502,7 +1412,6 @@ input[type="checkbox"].toggle:checked::after { left: 20px; }
   animation: bootCardIn 560ms cubic-bezier(.2,.7,.2,1) both;
 }
 
-/* Ω mark in the brand gradient - same treatment as the sidebar logo. */
 .boot-sigil-wrap { display: grid; place-items: center; }
 .boot-sigil {
   font-family: ui-serif, Georgia, serif;
@@ -1537,7 +1446,6 @@ input[type="checkbox"].toggle:checked::after { left: 20px; }
   letter-spacing: .02em;
 }
 
-/* Terminal window - title bar + body with the typed boot log + live status. */
 .boot-term {
   --term-bg:     #0b0b0c;
   --term-bar:    #232427;
@@ -1573,7 +1481,6 @@ input[type="checkbox"].toggle:checked::after { left: 20px; }
   line-height: 1.55;
   animation: bootCrtFlicker 7s steps(1) infinite;
 }
-/* CRT scanlines over the screen only (not the window chrome). */
 .boot-term-body::after {
   content: "";
   position: absolute; inset: 0; z-index: 2;
@@ -1582,7 +1489,6 @@ input[type="checkbox"].toggle:checked::after { left: 20px; }
   opacity: .5;
   mix-blend-mode: multiply;
 }
-/* Slow refresh band sweeping down the screen. */
 .boot-term-body::before {
   content: "";
   position: absolute; left: 0; right: 0; top: -50%; height: 50%; z-index: 1;
@@ -1602,7 +1508,6 @@ input[type="checkbox"].toggle:checked::after { left: 20px; }
   99% { opacity: 1; }
 }
 
-/* Subsystem boot log - lines type in sequence, OK badge pops when done. */
 .boot-log {
   list-style: none; margin: 0; padding: 0;
   display: flex; flex-direction: column; gap: 6px;
@@ -1613,7 +1518,6 @@ input[type="checkbox"].toggle:checked::after { left: 20px; }
   opacity: 1;
   transition: opacity .2s ease;
 }
-/* While typing (JS adds .typing), hide upcoming lines until their turn. */
 .boot-term.typing .boot-log li        { opacity: 0; }
 .boot-term.typing .boot-log li.live   { opacity: 1; }
 .boot-prompt { color: var(--term-prompt); font-weight: 600; user-select: none; }
@@ -1631,14 +1535,12 @@ input[type="checkbox"].toggle:checked::after { left: 20px; }
 .boot-term.typing .boot-ok          { opacity: 0; }
 .boot-term.typing .boot-log li.done .boot-ok { opacity: 1; }
 
-/* The live status + hint stay hidden until the whole log has run. */
 .boot-live, .boot-hint { transition: opacity .25s ease; }
 .boot-term.typing .boot-live,
 .boot-term.typing .boot-hint { opacity: 0; }
 .boot-term.typing.log-done .boot-live,
 .boot-term.typing.log-done .boot-hint { opacity: 1; }
 
-/* Live status line - boot-fx types into .boot-status-label; caret blinks. */
 .boot-live {
   display: flex; align-items: center; gap: 8px;
   margin-top: 2px;
@@ -1664,7 +1566,6 @@ input[type="checkbox"].toggle:checked::after { left: 20px; }
 .boot-hint[data-tone="err"] { color: var(--warn); }
 .boot-hint[data-tone="ok"]  { color: var(--ok); }
 
-/* Indeterminate progress in the brand gradient. */
 .boot-progress {
   position: relative;
   width: 100%; height: 3px;
@@ -1685,7 +1586,6 @@ input[type="checkbox"].toggle:checked::after { left: 20px; }
   100% { transform: translateX(330%); }
 }
 
-/* Boot succeeded: dive into the terminal while the rest of the chrome fades. */
 .boot-console.finishing .boot-sigil-wrap,
 .boot-console.finishing .boot-brand,
 .boot-console.finishing .boot-progress {
@@ -1719,14 +1619,10 @@ input[type="checkbox"].toggle:checked::after { left: 20px; }
   .boot-caret { opacity: 1; }
 }
 
-/* ============================================================
-   Age gate - full-screen consent modal, z above boot overlay
-   ============================================================ */
 html[data-age-gated] #bootOverlay,
 html[data-age-gated] #authScreen,
 html[data-age-gated] #app { visibility: hidden; }
 
-/* App shell stays hidden until the session check resolves. */
 html[data-pre-auth] #app { visibility: hidden; }
 
 #ageGate {
@@ -1792,7 +1688,6 @@ html[data-pre-auth] #app { visibility: hidden; }
   color: var(--fg);
 }
 
-/* ── Auth screen ─────────────────────────────────────────────────────────── */
 
 #authScreen {
   position: fixed;
@@ -1852,7 +1747,6 @@ html[data-pre-auth] #app { visibility: hidden; }
 .term-winctl { display: none; margin-left: auto; gap: 16px; z-index: 1; }
 .term-winctl i { font-style: normal; font-size: 12px; line-height: 1; color: var(--term-dim); }
 
-/* Body */
 .auth-term-body {
   background: var(--term-bg);
   padding: 22px 22px 24px;
@@ -1879,7 +1773,6 @@ html[data-pre-auth] #app { visibility: hidden; }
   animation: bootBlink 1.05s steps(1) infinite;
 }
 
-/* Tabs as shell sub-commands */
 .auth-tabs {
   display: flex; gap: 20px;
   border-bottom: 1px solid rgba(255,255,255,.08);
@@ -1897,7 +1790,6 @@ html[data-pre-auth] #app { visibility: hidden; }
   background: var(--term-accent);
 }
 
-/* Forms */
 .auth-form { display: flex; flex-direction: column; gap: 14px; }
 .auth-form[hidden] { display: none; }
 .auth-field { display: flex; flex-direction: column; gap: 6px; }
@@ -1951,12 +1843,7 @@ html[data-pre-auth] #app { visibility: hidden; }
 .auth-submit:hover:not(:disabled) { background: var(--term-accent); color: var(--term-bg); }
 .auth-submit:disabled { opacity: .55; cursor: default; }
 
-/* ============================================================
-   OS themes - shared by the auth + boot terminals (data-os set by app.js).
-   :is() lets one rule paint both terminals.
-   ============================================================ */
 
-/* ---- macOS - Terminal.app (dark) ---- */
 :is(.auth-term, .boot-term)[data-os="mac"] {
   --term-bg: #1e1e1e;
   --term-bar: #343434;
@@ -1967,7 +1854,6 @@ html[data-pre-auth] #app { visibility: hidden; }
 .auth-term[data-os="mac"] .auth-ps::before,
 .boot-term[data-os="mac"] .boot-prompt::before { content: "%"; }
 
-/* ---- Windows - PowerShell (classic blue) ---- */
 :is(.auth-term, .boot-term)[data-os="windows"] {
   --term-bg: #012456;
   --term-bar: #2b2b2b;
@@ -1984,7 +1870,6 @@ html[data-pre-auth] #app { visibility: hidden; }
 .auth-term[data-os="windows"] .auth-ps::before,
 .boot-term[data-os="windows"] .boot-prompt::before { content: ">"; }
 
-/* ---- Linux - Ubuntu GNOME Terminal (aubergine) ---- */
 :is(.auth-term, .boot-term)[data-os="linux"] {
   --term-bg: #300a24;
   --term-bar: #2c2c2c;
@@ -2011,9 +1896,6 @@ html[data-pre-auth] #app { visibility: hidden; }
   .auth-caret { animation: none !important; opacity: 1; }
 }
 
-/* ================================================================
-   Confirm dialog
-   ================================================================ */
 .confirm-backdrop {
   position: fixed;
   inset: 0;
@@ -2082,7 +1964,6 @@ html[data-pre-auth] #app { visibility: hidden; }
 }
 .confirm-ok.danger:hover { background: var(--danger); color: #2a0d0d; }
 
-/* Developer metrics HUD - floating overlay, toggled from the Developer panel. */
 .devhud {
   position: fixed;
   top: calc(var(--header-h) + 10px);
@@ -2145,11 +2026,7 @@ html[data-pre-auth] #app { visibility: hidden; }
 }
 .devhud-sep { height: 1px; background: var(--border); margin: 5px 0; }
 
-/* ================================================================
-   Voice mode (ChatGPT-style): chat chrome hidden, face-zoomed stage,
-   minimal overlay controls. Chrome is hidden with visibility (not display)
-   so layout/geometry stays stable.
-   ================================================================ */
+/* Voice mode keeps hidden chat chrome in the layout for a stable stage. */
 body.voice-mode .chat-panel,
 body.voice-mode .conv-sidebar,
 body.voice-mode .app-header { visibility: hidden; }
@@ -2196,7 +2073,6 @@ body.voice-mode .voice-overlay { opacity: 1; }
   gap: 12px;
 }
 
-/* Reuses .voice-pill state colors via the same data-state attribute. */
 .voice-overlay-status {
   pointer-events: none;
   padding: 8px 16px;
@@ -2219,6 +2095,5 @@ body.voice-mode .voice-overlay { opacity: 1; }
   .voice-overlay-status { animation: none !important; }
 }
 
-/* Muted: dim the status, mark the mute button */
 .voice-overlay.muted .voice-overlay-status { opacity: .5; }
 .voice-overlay.muted .voice-overlay-mute { background: #3a1f23; color: var(--danger); }

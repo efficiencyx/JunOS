@@ -97,9 +97,9 @@ curl -fsSL https://raw.githubusercontent.com/efficiencyx/JunOS/main/install.sh |
 powershell -NoProfile -ExecutionPolicy Bypass -Command "irm https://raw.githubusercontent.com/efficiencyx/JunOS/main/install.ps1 | iex"
 ```
 
-On **Linux / macOS** this checks for **git + Docker** (and offers to install them via your package manager), clones the repo, writes a `.env`, sniffs out your GPU, and brings the whole stack up. Then open <http://localhost> and say hi.
+On **Linux / macOS** this checks for **git + Docker Compose** (and offers to install what is missing via your package manager), clones the repo, writes a `.env`, sniffs out your GPU, and brings the whole stack up. If you choose to extract Jun's model from your own game copy, it also installs Python if needed and keeps the extractor's packages in a local virtual environment. Then open <http://localhost> and say hi.
 
-On **Windows** there's no Docker involved. The installer checks for **git + Ollama** (offering to winget them - those two are the *only* machine-wide installs, each with a normal uninstaller in Settings > Apps), then keeps everything else inside the `JunOS` folder: a portable PHP, the voice engine's Python venv, downloaded model weights, and your chat history all live under `JunOS\runtime\`. No stray folders. Open <http://127.0.0.1:8080> and say hi; `./start.ps1 stop` shuts her down, and `./uninstall.ps1` removes the lot (asking before it touches anything machine-wide).
+On **Windows** there's no Docker involved. The installer checks for **git + Ollama** (and Python only if voice or asset recovery needs it, offering to install them with winget), then keeps everything else inside the `JunOS` folder: a portable PHP, local Python environments for voice and asset recovery when selected, downloaded model weights, and your chat history all live under `JunOS\runtime\`. Open <http://127.0.0.1:8080> and say hi; `./start.ps1 stop` shuts her down, and `./uninstall.ps1` removes the lot (asking before it touches anything machine-wide).
 
 > Piping a script into your shell runs remote code. Totally normal for installers, but if that makes you twitch, read [`install.sh`](install.sh) / [`install.ps1`](install.ps1) and just do the manual steps below - they're the same thing, by hand.
 
@@ -119,10 +119,9 @@ On Windows, `start.ps1` runs bare metal: it starts (or reuses) Ollama natively -
 
 > **Her body isn't in this repo.** The Live2D model and textures belong to *My Dystopian Robot Girlfriend* and aren't redistributed here. Rebuild them from your own copy of the game before first launch:
 >
-> ```sh
-> pip install UnityPy Pillow
-> python3 tools/recover_assets.py --game /path/to/your/game/install
-> ```
+> Answer **yes** when the installer asks to extract them. It installs Python if necessary, creates a local `runtime/asset-recovery-venv`, installs UnityPy and Pillow there, and runs the recovery script. No global `pip install` needed.
+>
+> If you skipped that prompt, re-run the installer with `JUN_EXTRACT=1` (Linux/macOS) or `$env:JUN_EXTRACT=1; .\install.ps1` (Windows). When automatic detection misses the game, the interactive installer lets you paste its folder or drag the game executable into the terminal. For scripted installs, set `JUN_GAME_DIR` to the game folder.
 >
 > This writes `webapp/assets/` locally, including a `variants/game_items.json`
 > catalog of every packed item layer and color index plus the native hair-strand
