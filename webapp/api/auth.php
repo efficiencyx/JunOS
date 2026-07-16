@@ -8,7 +8,7 @@ switch ($_GET['action'] ?? '') {
 case 'me':
     $user = current_user();
     if (!$user) fail(401, 'unauthorized');
-    echo json_encode(['user' => ['id' => $user['id'], 'email' => $user['email'], 'role' => $user['role']]]);
+    echo json_encode(['user' => ['id' => $user['id'], 'email' => $user['email']]]);
     break;
 
 case 'signup':
@@ -37,7 +37,7 @@ case 'signup':
     $userId = (int)$db->lastInsertId();
 
     start_session($userId);
-    echo json_encode(['user' => ['id' => $userId, 'email' => $email, 'role' => 'user']]);
+    echo json_encode(['user' => ['id' => $userId, 'email' => $email]]);
     break;
 
 case 'login':
@@ -65,7 +65,7 @@ case 'login':
        ->execute([$user['id'], time() - 30 * 86400]);
 
     start_session((int)$user['id']);
-    echo json_encode(['user' => ['id' => $user['id'], 'email' => $user['email'], 'role' => $user['role']]]);
+    echo json_encode(['user' => ['id' => $user['id'], 'email' => $user['email']]]);
     break;
 
 case 'logout':
