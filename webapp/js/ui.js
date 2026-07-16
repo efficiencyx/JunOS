@@ -1,5 +1,3 @@
-// Chrome helpers: toasts, status pill, settings drawer, confirm dialog.
-// Loaded as a plain script before app.js so window.ui is global.
 
 window.ui = (function () {
   var toastTimer = {};
@@ -24,7 +22,6 @@ window.ui = (function () {
 
     container.appendChild(el);
 
-    // Force reflow so the slide-in transition fires
     el.getBoundingClientRect();
     el.classList.add('toast-visible');
 
@@ -68,7 +65,6 @@ window.ui = (function () {
     }
   }
 
-  // Promise-based confirm dialog. Resolves true on confirm, false otherwise.
   function confirm(opts) {
     opts = opts || {};
     return new Promise(function (resolve) {

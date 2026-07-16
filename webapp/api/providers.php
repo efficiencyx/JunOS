@@ -1,33 +1,15 @@
 <?php
-// AI provider selection layer. Chat can run on Ollama (default, native NDJSON
-// API), OpenRouter, or a llama.cpp llama-server (both OpenAI-compatible).
-// Everything is driven by env vars; with none of them set the app behaves
-// exactly as the original Ollama-only build.
-//
-//   AI_PROVIDER          ollama | openrouter | llamacpp   (default ollama)
-//   OPENROUTER_API_KEY   Bearer key for openrouter
-//   OPENROUTER_MODEL     default chat model id (default openrouter/auto)
-//   OPENROUTER_BASE_URL  override for testing (default https://openrouter.ai/api/v1)
-//   LLAMACPP_URL         base URL of llama-server (default http://127.0.0.1:8081)
-//   LLAMACPP_MODEL_HF    HF repo:quant the managed server loads (llama-server -hf syntax)
-//   LLAMACPP_TOOLS       off -> never offer tools to llama.cpp (templates without tool support)
-//   EMBEDDINGS           on | off; default on only for ollama. Embeddings always
-//                        run on Ollama's nomic-embed-text regardless of chat provider.
-//   EMBEDDINGS_URL       where that Ollama lives (default OLLAMA_URL)
 
 function ai_provider(): string {
     $p = strtolower(env_str('AI_PROVIDER', 'ollama'));
     return in_array($p, ['ollama', 'openrouter', 'llamacpp'], true) ? $p : 'ollama';
 }
 
-// OpenRouter and llama.cpp share the OpenAI-compatible request/stream path.
 function provider_is_openai(?string $p = null): bool {
     $p = $p ?? ai_provider();
     return $p === 'openrouter' || $p === 'llamacpp';
 }
 
-// Base URL the chat endpoint lives under. For OpenAI-style providers this
-// already includes the /v1 segment, so callers append just /chat/completions.
 function chat_api_base(): string {
     switch (ai_provider()) {
         case 'openrouter':
@@ -44,7 +26,6 @@ function chat_request_headers(): array {
     if (ai_provider() === 'openrouter') {
         $key = env_str('OPENROUTER_API_KEY');
         if ($key !== '') $h[] = 'Authorization: Bearer ' . $key;
-        // OpenRouter attribution headers (optional but recommended).
         $h[] = 'HTTP-Referer: https://github.com/efficiencyx/JunOS';
         $h[] = 'X-Title: Jun OS';
     }
@@ -56,7 +37,6 @@ function default_chat_model(): string {
         case 'openrouter':
             return env_str('OPENROUTER_MODEL', 'openrouter/auto');
         case 'llamacpp':
-            // llama-server serves whatever it loaded; the id is mostly cosmetic.
             return env_str('LLAMACPP_MODEL_HF', 'efficiencyx/Jun-LoRA-v3-E2B-GGUF:Q4_K_M');
         default:
             return 'hf.co/efficiencyx/Jun-Lora-v2-GGUF:Q4_K_M';

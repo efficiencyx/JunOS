@@ -1,7 +1,4 @@
 <?php
-// Proxy for the audio sidecar's TTS endpoints. Handles two routes:
-//   GET  ?action=voices  → GET  {TTS_URL}/voices
-//   POST ?action=tts     → POST {TTS_URL}/tts  (pass-through JSON body, returns audio)
 
 require_once __DIR__ . '/_lib.php';
 
@@ -14,7 +11,6 @@ $action = $_GET['action'] ?? '';
 if ($action === 'voices') {
     header('Content-Type: application/json');
 
-    // 60-second cache: APCu if available, else a tmp file.
     $cacheKey = 'omega_voices_v2';
     $cached = null;
 

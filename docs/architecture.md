@@ -233,6 +233,14 @@ The analyser uses FFT size 1024 and smoothing constant 0.4. The RMS-to-mouth map
 
 ---
 
+## Voice input and barge-in
+
+`webapp/js/voice.js` captures 16 kHz mono PCM through an `AudioWorklet`, calibrates a noise floor, and sends complete turns as WAV uploads to `/api/stt.php`. The voice sidecar transcribes those uploads with faster-whisper. Automatic gain control stays disabled because it would make the calibrated voice-activity threshold drift during silence.
+
+When barge-in is enabled, browser echo cancellation removes most of Jun's playback from the microphone, while the client also raises its speech threshold in proportion to the current TTS output and confirms a detected interruption before stopping playback. This protects against speaker echo. Audio routed away from the default output device, loud or distorted speakers, Bluetooth latency, and clock drift can still trigger false detections. Use headphones or turn off barge-in for a fully half-duplex conversation.
+
+---
+
 ## Security layers
 
 ### nginx layer

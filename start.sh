@@ -1,16 +1,4 @@
 #!/usr/bin/env bash
-#
-# One-command launcher. Detects the GPU vendor, layers on the matching compose
-# overlay, and brings the stack up. Works on NVIDIA, AMD (ROCm), or plain CPU.
-#
-#   ./start.sh                     # auto-detect
-#   GPU=cpu ./start.sh             # force a specific backend: nvidia | amd | cpu
-#   TTS_DEVICE=cpu ./start.sh      # keep the TTS sidecar on CPU even on a GPU box (default: auto)
-#   HSA_OVERRIDE_GFX_VERSION=11.0.0 ./start.sh        # AMD consumer-card override
-#   COMPOSE_PROFILES=prod TLS_MODE=on DOMAIN=example.com EMAIL=you@example.com ./start.sh
-#
-# Anything after `./start.sh` is forwarded to `docker compose ... up -d`.
-
 set -euo pipefail
 cd "$(dirname "$0")"
 
@@ -29,7 +17,6 @@ detect_gpu() {
 }
 
 
-# ── Compose profiles from the configured AI provider ─────────────────────────
 # The model-server containers are profile-gated: `ollama` runs the Ollama
 # service, `llamacpp` the llama.cpp one. Merge (never replace) what's already
 # in the shell (e.g. COMPOSE_PROFILES=prod ./start.sh) and in .env, then inject

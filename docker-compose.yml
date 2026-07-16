@@ -1,19 +1,7 @@
 name: omega
 
-# Recommended one-command start (auto-detects NVIDIA / AMD / CPU):
-#   ./start.sh
-#
-# This base file targets CPU and works everywhere. GPU acceleration is layered
-# on via overlays that ./start.sh selects for you:
-#   docker compose -f docker-compose.yml -f docker-compose.nvidia.yml up -d
-#   docker compose -f docker-compose.yml -f docker-compose.amd.yml    up -d
-#
-# Production with auto-TLS (public domain required):
-#   DOMAIN=example.com EMAIL=ops@example.com TLS_MODE=on COMPOSE_PROFILES=prod ./start.sh
-
 services:
 
-  # ── nginx (reverse proxy + static files) ───────────────────────────────────
   nginx:
     build:
       context: .
@@ -42,7 +30,6 @@ services:
       - "no-new-privileges:true"
     networks: [omega]
 
-  # ── php-fpm (API endpoints) ─────────────────────────────────────────────────
   php:
     build:
       context: .
@@ -60,18 +47,13 @@ services:
       EMBEDDINGS: "${EMBEDDINGS:-}"
       EMBEDDINGS_URL: "${EMBEDDINGS_URL:-}"
       LLAMACPP_TOOLS: "${LLAMACPP_TOOLS:-}"
-      # PHP prefers TTS_URL and falls back to the legacy KOKORO_URL name, so a
-      # custom KOKORO_URL in an existing .env keeps working; the default
-      # targets the internal `tts` service.
+# Keep the legacy KOKORO_URL fallback for existing .env files.
       TTS_URL: "${TTS_URL:-}"
       KOKORO_URL: "${KOKORO_URL:-http://tts:8001}"
     volumes:
       - omega_state:/var/lib/omega
       - ./tools:/var/www/omega/tools:ro
-    # Note: php does NOT depend on the model server (ollama/llamacpp - both are
-    # profile-gated, and compose rejects dependencies on profile-disabled
-    # services) or on tts. The frontend boot-polls models.php until the
-    # backend answers, so startup ordering is soft.
+# Model-server and TTS dependencies remain soft because their profiles vary.
     healthcheck:
       test: ["CMD", "cgi-fcgi", "-bind", "-connect", "127.0.0.1:9000"]
       interval: 10s
@@ -82,10 +64,6 @@ services:
       - "no-new-privileges:true"
     networks: [omega]
 
-  # ── ollama (LLM backend - internal only, `ollama` profile) ──────────────────
-  # Runs when AI_PROVIDER=ollama (the default) or when a non-Ollama provider
-  # keeps local embeddings on. start.sh derives COMPOSE_PROFILES from .env;
-  # for manual `docker compose up` set COMPOSE_PROFILES=ollama in .env/shell.
   ollama:
     build:
       context: .
@@ -95,21 +73,12 @@ services:
     profiles: [ollama]
     restart: unless-stopped
     environment:
-      # Comma-separated list of models pulled on first boot.
-      # Pulls are idempotent - restarts don't re-download cached weights.
       OLLAMA_MODELS_TO_PULL: "${OLLAMA_MODELS_TO_PULL:-hf.co/efficiencyx/Jun-LoRA-v3-E2B-GGUF:Q4_K_M,nomic-embed-text}"
-      # Memory caps. Without these, ollama defaults to 4 parallel slots and
-      # allocates a full num_ctx (16384) KV cache PER slot - so RAM climbs as you
-      # keep chatting and more slots warm up. Pin to one slot, allow exactly the
-      # two models we use (chat + nomic-embed-text), and let idle models unload.
+# Limit Ollama's parallel slots and loaded models to avoid multiplying KV-cache memory.
       OLLAMA_NUM_PARALLEL: "${OLLAMA_NUM_PARALLEL:-1}"
       OLLAMA_MAX_LOADED_MODELS: "${OLLAMA_MAX_LOADED_MODELS:-2}"
       OLLAMA_KEEP_ALIVE: "${OLLAMA_KEEP_ALIVE:-5m}"
-      # Quantize the KV cache to 8-bit: roughly halves KV memory at
-      # num_ctx=16384 (more room for layers on-GPU) with negligible quality
-      # loss. Ollama only honors OLLAMA_KV_CACHE_TYPE when flash attention is
-      # on; on backends without flash-attention support it logs a warning and
-      # falls back to f16. Set OLLAMA_KV_CACHE_TYPE=f16 to opt out.
+# q8_0 lowers KV-cache memory; it requires flash attention and otherwise falls back to f16.
       OLLAMA_FLASH_ATTENTION: "${OLLAMA_FLASH_ATTENTION:-1}"
       OLLAMA_KV_CACHE_TYPE: "${OLLAMA_KV_CACHE_TYPE:-q8_0}"
     volumes:
@@ -123,22 +92,13 @@ services:
     security_opt:
       - "no-new-privileges:true"
     networks: [omega]
-    # GPU acceleration is added by docker-compose.nvidia.yml / .amd.yml.
-    # On its own this service runs on CPU.
 
-  # ── llamacpp (LLM backend - internal only, `llamacpp` profile) ──────────────
-  # Alternative to ollama: a llama.cpp llama-server speaking the OpenAI API.
-  # Runs when AI_PROVIDER=llamacpp with the managed setup (install.sh sets
-  # COMPOSE_PROFILES=llamacpp); a custom LLAMACPP_URL skips this container.
-  # Configured via LLAMA_ARG_* env (same as CLI flags) so the GPU overlays can
-  # extend it without clobbering an args list.
   llamacpp:
     image: ghcr.io/ggml-org/llama.cpp:server
     container_name: omega-llamacpp
     profiles: [llamacpp]
     restart: unless-stopped
     environment:
-      # HF repo:quant, downloaded on first boot into llamacpp_cache (idempotent).
       LLAMA_ARG_HF_REPO: "${LLAMACPP_MODEL_HF:-efficiencyx/Jun-LoRA-v3-E2B-GGUF:Q4_K_M}"
       LLAMA_ARG_CTX_SIZE: "16384"
       LLAMA_ARG_JINJA: "1"           # chat-template tool calling
@@ -147,8 +107,6 @@ services:
     volumes:
       - llamacpp_cache:/root/.cache/llama.cpp
     healthcheck:
-      # Generous retries: the first boot downloads the GGUF before /health
-      # goes green (the server image ships curl for its -hf downloads).
       test: ["CMD", "curl", "-fsS", "http://127.0.0.1:8080/health"]
       interval: 10s
       timeout: 3s
@@ -158,10 +116,6 @@ services:
       - "no-new-privileges:true"
     networks: [omega]
 
-  # ── tts (audio sidecar - internal only) ─────────────────────────────────────
-  # TTS (kokoro/pockettts engines) + STT (faster-whisper). Always started under
-  # Docker; the VOICE=on/off knob only gates the bare-metal Windows launcher
-  # (start.ps1). php and the frontend degrade gracefully when it's unhealthy.
   tts:
     build:
       context: .
@@ -171,15 +125,9 @@ services:
     restart: unless-stopped
     environment:
       CORS_ORIGIN: "${CORS_ORIGIN:-http://nginx}"
-      # cpu | cuda | auto. On this CPU base image "auto" resolves to cpu; the
-      # nvidia/amd overlays supply a GPU torch wheel so it can pick the GPU.
-      # Force it either way with TTS_DEVICE in your environment / .env.
       TTS_DEVICE: "${TTS_DEVICE:-auto}"
-      # STT (voice mode mic input). These two must agree - the ".en" whisper
-      # models are English-only. See .env.example for the language table.
       STT_MODEL: "${STT_MODEL:-base.en}"
       STT_LANG: "${STT_LANG-en}"
-      # cpu | cuda. Separate from TTS_DEVICE by design - see tts.Dockerfile.
       STT_DEVICE: "${STT_DEVICE:-cpu}"
     volumes:
       - tts_cache:/root/.cache
@@ -193,7 +141,6 @@ services:
       - "no-new-privileges:true"
     networks: [omega]
 
-  # ── certbot (auto-TLS renewal - prod profile only) ──────────────────────────
   certbot:
     build:
       context: .
@@ -209,7 +156,6 @@ services:
       - certbot_webroot:/var/www/certbot
     networks: [omega]
 
-# ── Volumes ──────────────────────────────────────────────────────────────────
 volumes:
   ollama_data:
   llamacpp_cache:
@@ -221,7 +167,6 @@ volumes:
   letsencrypt:
   certbot_webroot:
 
-# ── Network ──────────────────────────────────────────────────────────────────
 networks:
   omega:
     name: omega

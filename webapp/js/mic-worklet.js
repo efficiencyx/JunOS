@@ -1,15 +1,4 @@
-// Mic capture + level metering for voice mode. Runs on the audio thread.
-//
-// Why a worklet rather than the AnalyserNode + rAF pattern js/tts.js uses for
-// lipsync (tts.js:228):
-//   - rAF is throttled to ~0 in a hidden tab, so a rAF-driven VAD silently stops
-//     hearing you the moment you switch tabs. Hands-free has to keep working.
-//   - An analyser can only be *sampled*; you can't reconstruct the audio from it.
-//     We need the actual PCM to send to whisper, gaplessly.
-//
-// This half only measures and buffers. The speech/silence decisions live in
-// js/voice.js on the main thread - only the work that must be sample-accurate is
-// here. Emits {type:'rms'} continuously, and {type:'pcm'} once per utterance.
+// The worklet keeps VAD metering and PCM capture active in background tabs.
 
 class MicProcessor extends AudioWorkletProcessor {
   constructor(opts) {
@@ -51,7 +40,6 @@ class MicProcessor extends AudioWorkletProcessor {
   start() {
     if (this.recording) return;
     this.len = 0;
-    // Replay the ring oldest-first, recovering the onset we'd otherwise clip.
     const n = this.ringFilled;
     const startAt = (this.ringPos - n + this.ring.length) % this.ring.length;
     for (let i = 0; i < n; i++) {
@@ -64,8 +52,6 @@ class MicProcessor extends AudioWorkletProcessor {
     if (!this.recording) return;
     this.recording = false;
     if (discard || !this.len) { this.port.postMessage({ type: 'pcm', pcm: null }); return; }
-    // Copy out (buf is reused) and transfer, so the samples move to the main
-    // thread instead of being cloned.
     const out = this.buf.slice(0, this.len);
     this.port.postMessage({ type: 'pcm', pcm: out }, [out.buffer]);
     this.len = 0;
@@ -73,7 +59,6 @@ class MicProcessor extends AudioWorkletProcessor {
 
   process(inputs) {
     const ch = inputs[0] && inputs[0][0];
-    // No input channel = track muted or still connecting. Stay alive.
     if (!ch) return true;
 
     let sum = 0;
@@ -93,10 +78,6 @@ class MicProcessor extends AudioWorkletProcessor {
       }
     }
 
-    // Keep the ring current even while recording. Skipping it would leave the
-    // ring frozen at whatever preceded the *previous* utterance, and a turn that
-    // starts soon after one ends (a discarded cough, say) would get that stale
-    // audio prepended as its pre-roll. One 128-sample copy per 8ms is nothing.
     for (let i = 0; i < ch.length; i++) {
       this.ring[this.ringPos] = ch[i];
       this.ringPos = (this.ringPos + 1) % this.ring.length;
@@ -105,9 +86,6 @@ class MicProcessor extends AudioWorkletProcessor {
       this.ringFilled = Math.min(this.ring.length, this.ringFilled + ch.length);
     }
 
-    // ~32ms cadence. Every quantum would be 125 msg/s at no benefit: the state
-    // machine's shortest timer is the ~96ms debounce, so 32ms still gives it
-    // three samples to work with.
     if ((++this.tick & 3) === 0) this.port.postMessage({ type: 'rms', rms: this.ema });
     return true;
   }

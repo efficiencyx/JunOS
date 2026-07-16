@@ -1,25 +1,9 @@
-// Hands-free voice input: mic → VAD → whisper → app.js sendMessage().
-//
-// The counterpart to tts.js. That module owns the *playback* AudioContext (its
-// analyser drives Jun's mouth); this one owns a separate 16kHz capture context.
-// They must stay separate - feeding the mic into tts.js's analyser would make
-// Jun lipsync your voice.
-//
-// Flow per turn:
-//   mic-worklet.js reports RMS every ~32ms and buffers PCM (with 300ms pre-roll)
-//   the state machine below decides speech-start / end-of-turn from that RMS
-//   on end-of-turn: worklet hands back the utterance → WAV → /api/stt.php
-//   transcript → onTranscript() → app.js drops it in the input and sends
-//
-// Barge-in: while Jun is speaking we raise the threshold in proportion to her
-// own output level (TTS.outputRms), because the mic hears her too and browser
-// AEC only removes most of it. See NOTES ON ECHO at the bottom.
+// Keep capture separate from TTS playback so microphone audio cannot drive lipsync.
 
 window.Voice = (function () {
   const STT_URL = '/api/stt.php';
   const SAMPLE_RATE = 16000;   // what whisper wants; browser resamples for us
 
-  // ── Tuning ─────────────────────────────────────────────────────────────────
   const PRE_ROLL_MS = 300;
   const MAX_UTTERANCE_MS = 30000;
   const EMA_ALPHA = 0.2;
@@ -38,7 +22,6 @@ window.Voice = (function () {
   const MIN_SPEECH_MS = 250;   // shorter than this is a cough/click, not a turn
   const CONFIRM_MS = 250;      // duck at speech-start, cut for real after this
 
-  // ── State ──────────────────────────────────────────────────────────────────
   let enabled = false;
   let bargeIn = true;
   let silenceMs = SILENCE_MS;
@@ -81,7 +64,6 @@ window.Voice = (function () {
     onState(s);
   }
 
-  // ── Capability probe ───────────────────────────────────────────────────────
   // getUserMedia only exists in a secure context. http://localhost qualifies, so
   // a dev box is fine - but the stack defaults to TLS_MODE=off on :80, so over a
   // LAN IP `navigator.mediaDevices` is simply *undefined* rather than throwing.
@@ -95,7 +77,6 @@ window.Voice = (function () {
     return { ok: true };
   }
 
-  // ── Mic setup ──────────────────────────────────────────────────────────────
   async function ensureMic() {
     if (node) return;
 
@@ -159,7 +140,6 @@ window.Voice = (function () {
     if (micCtx) { micCtx.close().catch(() => {}); micCtx = null; }
   }
 
-  // ── Calibration ────────────────────────────────────────────────────────────
   function startCalibration() {
     // Never calibrate over Jun's voice: we'd measure her as the room's noise
     // floor and end up deaf for the rest of the session.
@@ -183,7 +163,6 @@ window.Voice = (function () {
     setState('listening');
   }
 
-  // ── VAD state machine ──────────────────────────────────────────────────────
   function onRms(rms) {
     if (!enabled) return;
     const now = performance.now();
@@ -248,7 +227,6 @@ window.Voice = (function () {
 
       case 'speech':
         if (rms > closeThresh) lastLoudAt = now;
-        // Real speech, not a click - now actually cut her off.
         if (!confirmed && now - speechStartedAt >= CONFIRM_MS) {
           confirmed = true;
           if (window.TTS && TTS.isSpeaking()) TTS.stop();
@@ -266,7 +244,6 @@ window.Voice = (function () {
     const spoken = (now - speechStartedAt) - silenceMs;
     setState('thinking');
     if (spoken < MIN_SPEECH_MS) {
-      // Too short to be a turn. Discard, and undo a duck if we caused one.
       node.port.postMessage({ type: 'stop', discard: true });
       if (!confirmed && window.TTS) TTS.duck(1);
       setState('listening');
@@ -275,7 +252,6 @@ window.Voice = (function () {
     node.port.postMessage({ type: 'stop', discard: false });  // → onPcm
   }
 
-  // ── Upload ─────────────────────────────────────────────────────────────────
   async function onPcm(pcm) {
     if (!pcm || !pcm.length) { resume(); return; }
     try {
@@ -343,24 +319,3 @@ window.Voice = (function () {
     setOnTranscript, setOnState, setOnBargeIn, setLogger,
   };
 })();
-
-// ── NOTES ON ECHO ────────────────────────────────────────────────────────────
-// getUserMedia({echoCancellation:true}) engages the browser's AEC, whose
-// reference signal is the mix rendered to the *output device* - which includes
-// tts.js's WebAudio output. So Jun's voice does get cancelled from the mic. That
-// is how every browser voice assistant works, and it's why barge-in is possible
-// at all here.
-//
-// AEC still fails on, in rough order of likelihood:
-//   - Output routed somewhere other than the OS default sink. AEC references the
-//     default render device; on PipeWire/PulseAudio this misroute is common.
-//   - Loud speakers. AEC models a *linear* echo path; drive cheap laptop speakers
-//     past ~75% and the clipping distortion survives cancellation.
-//   - Bluetooth. 100-200ms path delay exceeds the filter length in some configs.
-//   - Clock drift between mic and speaker on different devices.
-//
-// Hence the belt-and-braces above: the echo-proportional threshold and the
-// duck-then-confirm sequence both work even with AEC off entirely. If it's still
-// self-triggering, the ladder is: raise ECHO_COEFF toward 3.0 → setBargeIn(false)
-// (half-duplex, mic ignored while she talks) → wear headphones, which is the only
-// answer that is actually 100% reliable.

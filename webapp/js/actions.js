@@ -1,13 +1,8 @@
-// Action parser + resolver.
-// Parses action tags from the LLM stream and dispatches to Live2D.
-// Two syntaxes are accepted:
-//   compact (current prompt): [A:name|value|value]   - positional values
-//   legacy  (old prompt + stored history + fine-tune): [ACTION:name|key=value|...]
+// Supports compact and legacy action-tag syntax.
 
 window.Actions = (function () {
   let actionMap = null;
   let onLog = null; // (level, text), level is 'ok' | 'warn' | 'err'
-  // Kwarg keys that can select a sub-node in the action map, in priority order.
   const NAV_KEYS = ['target','dir','type','shape','emotion','side','state','speed','style','item','enable','gesture','duration'];
 
   async function load(url) {
@@ -18,12 +13,8 @@ window.Actions = (function () {
   function setLogger(cb) { onLog = cb; }
   function log(level, msg) { if (onLog) onLog(level, msg); }
 
-  // Matches [A:name], [A:name|v|v], [ACTION:name|k=v|...]. Plural [ACTIONS:...] also accepted.
   const ACTION_RE = /\[\s*A(?:CTIONS?)?\s*:\s*([a-zA-Z_][\w]*)\s*((?:\|[^\]|]*)*)\s*\]/gi;
 
-  // Positional value order for the compact syntax. [A:tilt_head|left|0.4] maps
-  // left→dir, 0.4→amount. key=value parts are still honored and never consume
-  // a positional slot, so mixed and legacy tags parse identically.
   const POS_KEYS = {
     look_at:     ['target'],
     look:        ['dir'],
@@ -46,7 +37,6 @@ window.Actions = (function () {
     mood:        ['level'],
   };
 
-  // Kwargs the model may omit entirely; the tag still resolves.
   const DEFAULTS = {
     look_at:   { target: 'user' },
     tilt_head: { amount: '0.3' },
@@ -110,7 +100,6 @@ window.Actions = (function () {
     return false;
   }
 
-  // Resolve "path.subpath" used by _compose (e.g. "brow.happy", "mouth.smile").
   function lookupPath(path) {
     const tokens = path.split('.');
     let cur = actionMap;
@@ -122,7 +111,6 @@ window.Actions = (function () {
   }
 
   function resolveResolve(resolveDict, kwargs) {
-    // Resolve-key candidates, NAV_KEYS first (in priority order) then the rest.
     const valuesInOrder = [];
     for (const navKey of NAV_KEYS) {
       if (kwargs[navKey] !== undefined) valuesInOrder.push(kwargs[navKey]);
@@ -134,7 +122,6 @@ window.Actions = (function () {
     if (valuesInOrder.length) {
       const joined = valuesInOrder.join('.');
       if (joined in resolveDict) return resolveDict[joined];
-      // single-value resolves, e.g. "on" / "off"
       for (const v of valuesInOrder) {
         if (v in resolveDict) return resolveDict[v];
       }
@@ -144,7 +131,6 @@ window.Actions = (function () {
       }
     }
 
-    // Last resort: any key whose tokens are all present among the kwarg values.
     const valSet = new Set(valuesInOrder);
     for (const key of Object.keys(resolveDict)) {
       const toks = key.split('.');
@@ -153,8 +139,6 @@ window.Actions = (function () {
     return null;
   }
 
-  // Containers searched when a bare action name isn't a top-level key
-  // (LLM tends to emit [ACTION:smile] instead of [ACTION:mouth|shape=smile]).
   const FALLBACK_CONTAINERS = ['mouth', 'emote', 'brow', 'look', 'lean', 'tail_wiggle', 'breath'];
 
   function resolveAction(name, kwargs) {
@@ -176,7 +160,6 @@ window.Actions = (function () {
         return null;
       }
     }
-    // Drill into known navigation kwargs as long as a child key matches a kwarg value.
     let safety = 5;
     while (safety-- > 0 && node && typeof node === 'object' && !isEffectNode(node)) {
       let advanced = false;
@@ -214,14 +197,12 @@ window.Actions = (function () {
     return f;
   }
 
-  // Apply a resolved effect node to Live2D.
   function applyNode(node, kwargs, depth) {
     if (depth > 4) return;
     if (!node || typeof node !== 'object') return;
 
     const scale = scaleFactor(node, kwargs);
 
-    // _compose runs the referenced actions first.
     if (Array.isArray(node._compose)) {
       for (const path of node._compose) {
         const sub = lookupPath(path);

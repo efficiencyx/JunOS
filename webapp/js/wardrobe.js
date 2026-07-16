@@ -1,5 +1,3 @@
-// Boot for wardrobe.html: standalone model instance + the Outfit wardrobe UI.
-// Lives in a file (not inline) because the nginx CSP only allows 'self' scripts.
 (async () => {
   const status = document.getElementById('stageStatus');
   try {
