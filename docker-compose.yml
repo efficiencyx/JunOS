@@ -152,11 +152,10 @@ services:
       - "no-new-privileges:true"
     networks: [omega]
 
-  # ── kokoro (audio sidecar - internal only, optional `voice` profile) ────────
-  # TTS (kokoro/pockettts) + STT (faster-whisper). Named for the first engine it
-  # ever ran; KOKORO_URL is wired through .env.example and api/*.php, so the name
-  # stays. Only started when the `voice` profile is active (start.sh adds it
-  # unless VOICE=off). With it off the stack runs text-only and skips this build.
+  # ── kokoro (audio sidecar - internal only) ──────────────────────────────────
+  # TTS (kokoro/pockettts) + STT (faster-whisper). Always started under Docker;
+  # the VOICE=on/off knob only gates the bare-metal Windows launcher (start.ps1).
+  # php and the frontend degrade gracefully to text-only when it's unhealthy.
   kokoro:
     build:
       context: .

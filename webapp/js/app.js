@@ -1144,12 +1144,6 @@
       // Validate action_map params against model.
       validateActionMap(live2dInfo.paramIds);
 
-      // Dump drawables so we can tune outfit color patterns to actual names.
-      if (Live2D.listDrawables) {
-        const ids = Live2D.listDrawables();
-        console.log(`[Outfit] ${ids.length} drawables in model:`, ids);
-      }
-
       // Outfit panel: load saved state, build checkboxes, push to model.
       Outfit.load();
       Outfit.buildUI(
