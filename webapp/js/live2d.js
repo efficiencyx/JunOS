@@ -1,5 +1,5 @@
 // Live2D engine: loads interaction_model.moc3, drives params via lerp + loops + sequences.
-// Pattern (getRaw / kill internal updaters / write to coreModel.parameters.values) follows viewer/index.html.
+// Pattern: getRaw / kill internal updaters / write to coreModel.parameters.values directly.
 
 window.Live2D = (function () {
   const { Live2DModel, Cubism4ModelSettings } = PIXI.live2d;
@@ -240,15 +240,6 @@ window.Live2D = (function () {
     window.addEventListener('pointercancel', endDrag);
 
     app.ticker.add(tick);
-
-    // Debug clothing toggle params: print min/max/default.
-    const clothingParams = ['ParamShirtEnabled', 'ParamBraEnabled', 'ParamPantiesEnabled', 'ParamSkirtEnabled', 'ParamHoodieEnabled', 'ParamPantsEnabled', 'ParamDress2Enabled', 'ParamShoeLOn', 'ParamShoeROn'];
-    const info = {};
-    for (const p of clothingParams) {
-      if (paramIndex.has(p)) info[p] = { min: paramMin.get(p), max: paramMax.get(p), def: paramDefault.get(p) };
-      else info[p] = 'MISSING from model';
-    }
-    console.log('[Live2D] clothing params:', info);
 
     // Render-time hooks: forced opacity + per-drawable color uniforms.
     let forcedOrderBelow = [];               // [belowId, aboveId] pairs, re-applied each frame

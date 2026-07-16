@@ -35,7 +35,9 @@ unsloth_compiled_cache/
 # raw Live2D source assets — kept locally, not in the repo
 live2d_raw/
 
-# lore RAG index — generated from tools/lore_dataset.jsonl by build_lore_index.php
+# lore corpus — generated from tools/lore_dataset.jsonl by build_lore_index.php
+# (.bin/.json are leftovers from the retired embedding index; still ignored so
+# stale local copies never get committed)
 webapp/lore_corpus.txt
 webapp/lore_index.bin
 webapp/lore_meta.json

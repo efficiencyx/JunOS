@@ -1144,12 +1144,6 @@
       // Validate action_map params against model.
       validateActionMap(live2dInfo.paramIds);
 
-      // Dump drawables so we can tune outfit color patterns to actual names.
-      if (Live2D.listDrawables) {
-        const ids = Live2D.listDrawables();
-        console.log(`[Outfit] ${ids.length} drawables in model:`, ids);
-      }
-
       // Outfit panel: load saved state, build checkboxes, push to model.
       Outfit.load();
       Outfit.buildUI(
@@ -1286,7 +1280,7 @@
               : sup.reason === 'no_getusermedia'
                 ? 'no microphone API in this browser'
                 : 'no AudioWorklet in this browser')
-          : 'sidecar has no speech-to-text (rebuild the kokoro image)';
+          : 'sidecar has no speech-to-text (rebuild the tts image)';
         if (voiceState) voiceState.textContent = 'unavailable';
         const voiceModeBtn = document.getElementById('voiceModeBtn');
         if (voiceModeBtn) { voiceModeBtn.disabled = true; voiceModeBtn.title = `Voice mode unavailable: ${why}`; }

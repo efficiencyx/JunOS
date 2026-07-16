@@ -45,7 +45,7 @@ if (Test-Path .env) {
             $k = $Matches[1]; $v = $Matches[2].Trim()
             # Docker-internal hostnames from .env.example don't resolve on bare
             # metal; ignore them and use our localhost defaults instead.
-            if ($v -match '://(ollama|kokoro|nginx|php|llamacpp)\b') { continue }
+            if ($v -match '://(ollama|tts|kokoro|nginx|php|llamacpp)\b') { continue }
             if (-not (Get-Item "env:$k" -ErrorAction SilentlyContinue)) {
                 Set-Item "env:$k" $v
             }
@@ -272,7 +272,7 @@ $env:OLLAMA_URL             = $OllamaUrl
 $env:LLAMACPP_URL           = $LlamacppUrl
 $env:EMBEDDINGS             = if ($EmbedOn) { 'on' } else { 'off' }
 # OPENROUTER_API_KEY / OPENROUTER_MODEL are already process env via the .env loader.
-$env:KOKORO_URL             = 'http://127.0.0.1:8001'
+$env:TTS_URL                = 'http://127.0.0.1:8001'
 $env:OMEGA_STATE_DIR        = $StateDir
 # PHP honors this on Unix only; on Windows the built-in server stays
 # single-worker, so requests made while a chat reply is streaming (e.g. TTS)

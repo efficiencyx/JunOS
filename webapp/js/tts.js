@@ -1,4 +1,4 @@
-// Kokoro TTS client: sentence queue → fetch /tts → ordered AudioContext playback
+// TTS client (kokoro / pockettts engines): sentence queue → fetch /tts → ordered AudioContext playback
 // + AnalyserNode-driven ParamMouthOpen lipsync.
 //
 // Pipeline (per chat reply):
@@ -214,7 +214,7 @@ window.TTS = (function () {
   //
   // So: chunk 0 synthesizes alone and gets the whole box, then the window opens
   // for throughput so later chunks stay ahead of playback. Interacts with
-  // OMP_NUM_THREADS in docker/kokoro.Dockerfile (each synth pins to 4 threads,
+  // OMP_NUM_THREADS in docker/tts.Dockerfile (each synth pins to 4 threads,
   // so 3 concurrent ≈ 12 cores) - drop this to 1 on a 4-core machine.
   const MAX_IN_FLIGHT = 3;
   let inFlight = 0;

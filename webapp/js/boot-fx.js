@@ -1,7 +1,6 @@
 // Typewriter effects for the boot overlay terminal.
 // app.js calls BootFX.start() when the overlay is shown and BootFX.typeStatus()
-// whenever the live status text changes. Kept separate so the standalone
-// boot-preview.html can drive the exact same animation.
+// whenever the live status text changes.
 
 (function () {
   const reduceMotion = window.matchMedia
