@@ -17,14 +17,14 @@ This document is the long-form reference for the system. For a quick orientation
   └──────────┘            │  │  static │                 │  HTTP            │
                           │  │  files  │                 ├──────────────── ▶│ ollama :11434
                           │  └─────────┘                 │                  │
-                          │                              └──────────────── ▶│ kokoro :8001
+                          │                              └──────────────── ▶│ tts :8001
                           └─────────────────────────────────────────────────┘
 
-  Volumes: ollama_data, kokoro_cache, omega_state, letsencrypt, certbot_webroot
+  Volumes: ollama_data, llamacpp_cache, tts_cache, omega_state, letsencrypt, certbot_webroot
   Optional (profile=prod): certbot sidecar for Let's Encrypt issuance + renewal
 ```
 
-nginx serves static files from `/var/www/omega/` and FastCGI-proxies `*.php` requests to the php-fpm container. Ollama and the voice sidecar are internal-only; their ports are not published to the host. The voice sidecar on `:8001` fronts two swappable engines, Kokoro-82M (default) and kyutai pocket-tts, selected per request; the compose `voice` profile (env `VOICE=on`) decides whether it runs at all.
+nginx serves static files from `/var/www/omega/` and FastCGI-proxies `*.php` requests to the php-fpm container. Ollama and the voice sidecar are internal-only; their ports are not published to the host. The voice sidecar on `:8001` fronts two swappable engines, Kokoro-82M (default) and kyutai pocket-tts, selected per request. Under Docker the `tts` service always runs — there is no compose `voice` profile; the `VOICE=on/off` env var only gates the bare-metal Windows launcher (`start.ps1`), which skips spawning the sidecar process when it's off. php and the frontend degrade gracefully to text-only whenever the sidecar is absent or unhealthy.
 
 ---
 
@@ -72,6 +72,23 @@ The three critical headers that ensure tokens arrive incrementally rather than b
 - **`X-Accel-Buffering: no`**: hint consumed by nginx and some CDN layers
 
 Without all three, tokens may arrive in one batch at end-of-message even though the server is streaming them correctly.
+
+---
+
+## AI providers
+
+`chat.php` serves one SSE contract to the browser regardless of backend, but speaks two different upstream dialects depending on `AI_PROVIDER` (selected via `webapp/api/providers.php`):
+
+- **`ollama`** (default): Ollama's native `/api/chat`, NDJSON stream, one JSON object per line.
+- **`openrouter`** / **`llamacpp`**: an OpenAI-compatible `/chat/completions` endpoint, `data: {...}` SSE lines. `providers.php`'s `provider_is_openai()` flags this path; `chat.php` runs a different `CURLOPT_WRITEFUNCTION` parser for each shape (NDJSON line-by-line decode vs. SSE `data:` frame decode) but funnels both into the same `token`/`thinking`/`tool_status` events sent to the browser.
+
+`webapp/api/models.php` lists models from whichever provider is active: Ollama's `/api/tags`, or an OpenAI-style `/models` call for OpenRouter/llama.cpp. OpenRouter's catalog (~1-2 MB) is disk-cached for 1 hour (`state_dir()/openrouter_models.json`) and served stale on upstream errors rather than failing the boot-time poll.
+
+Embeddings for RAG/recall always go to Ollama's `nomic-embed-text`, independent of the chat provider — `embeddings_base_url()` defaults to `OLLAMA_URL` but can be pointed elsewhere via `EMBEDDINGS_URL`; `EMBEDDINGS` (on/off) gates the feature and defaults to on only when `AI_PROVIDER=ollama`.
+
+Reasoning effort (`low`/`medium`/`high`/`auto` → `route_reasoning()`) is forwarded upstream only for OpenRouter, as a `reasoning.effort` field on the request; Ollama gets `think`/`reasoning_effort` options instead, and llama.cpp gets neither (its context is fixed server-side).
+
+llama.cpp tool support is gated by `LLAMACPP_TOOLS` (`provider_tools_enabled()` in `providers.php`) since not every chat template handles tool calling. Independent of that flag, `chat.php` has a runtime fallback: if the first streamed round comes back as an HTTP 4xx from an OpenAI-style provider, it strips `tools` from the payload and retries the same round once before giving up — this is what recovers automatically from a llama-server template that rejects the `tools` field.
 
 ---
 
@@ -257,9 +274,9 @@ Endpoint-specific caps:
 - `tts.php`: body ≤ 8 KB, text ≤ 2000 chars, rate limit 60/min
 - `models.php`: rate limit 30/min, `Cache-Control: public, max-age=10`
 
-### Kokoro/Ollama isolation
+### Sidecar/Ollama isolation
 
-Neither service publishes a port to the host. The Kokoro sidecar additionally enforces `CORS_ORIGIN` via FastAPI `CORSMiddleware`; the browser never talks to Kokoro directly; all requests go through `webapp/api/tts.php`.
+Neither service publishes a port to the host. The audio sidecar additionally enforces `CORS_ORIGIN` via FastAPI `CORSMiddleware`; the browser never talks to the sidecar directly; all requests go through `webapp/api/tts.php` / `stt.php`.
 
 ---
 
@@ -333,6 +350,18 @@ On every `/api/chat.php` request:
 4. The resulting excerpts are formatted as a "Recalled prior context" block and appended to the live-context message, for factual recall only; the model is told not to repeat or paraphrase Jun's prior lines.
 
 The retrieval is wrapped in a `try/catch`; if Ollama can't embed or the query is empty, the block is omitted and the chat continues normally. Embeddings missed at write time (e.g. Ollama was briefly down) are backfilled by `tools/compact_chat_index.php`.
+
+---
+
+## Tool calling and durable memory
+
+`chat.php` offers the model up to four tools via `tool_catalog()`, always offered together (no keyword pre-filter — an earlier version silently blocked most natural asks): `search_recent_chats`, `list_recent_chats`, `memory_write`, and `web_search`. The model is instructed (`tool_context_block()`) to speak a short in-character lead line before any tool call, so a call is never emitted with empty visible content.
+
+Tool calls run in a bounded loop of up to 3 rounds (initial reply, one tool-informed continuation, one retry round) — `run_tool_call()` executes each of up to 4 calls per round and the result is appended as a `tool`-role message before re-streaming. `search_recent_chats`/`list_recent_chats` query the user's own `messages`/`conversations` tables (excluding the current conversation); `memory_write` calls the shared `memory_append()` helper (below).
+
+`web_search` goes through `web_search_public()` → DuckDuckGo's HTML results page, parsed with regex for result links/snippets. Both it and any redirect hops it follows (`web_fetch_public()`, up to 3 redirects, 512 KB cap) are guarded by `resolve_public_http_url()`: an SSRF guard that resolves the target host's DNS A/AAAA records and rejects the request if any resolved IP is private/reserved (`FILTER_FLAG_NO_PRIV_RANGE | FILTER_FLAG_NO_RES_RANGE`), rejects userinfo-in-URL and non-standard ports, and restricts to `http`/`https`.
+
+Durable memories are per-user JSONL files, one line per fact, written by `memory_append()` in `webapp/api/_lib.php` under `memory_file_path()`. They live at `MEMORY_DIR` (default `<state dir>/memory`, i.e. `/var/lib/omega/memory`), inside the persisted `omega_state` Docker volume so they survive container recreation. Each request re-reads the file (`memory_recent_context()` in `chat.php`, last 20 entries) and injects it as a `## Durable memory notes` block in the live context. `webapp/api/memory.php` exposes `GET` (list), `POST` (append), and `DELETE` (remove one entry by index+timestamp, or wipe with `{"all":true}`) for the settings-drawer memory panel in the frontend.
 
 ---
 

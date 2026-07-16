@@ -230,7 +230,10 @@ function current_user(): ?array {
 }
 
 function memory_file_path(int $userId): string {
-    $dir = rtrim(env_str('MEMORY_DIR', '/var/lib/jun/memory'), '/');
+    // Defaults under state_dir() so memories land in the persisted omega_state
+    // volume. Builds before 2026-07 wrote to /var/lib/jun/memory (unmounted in
+    // Docker, so lost on container recreation); set MEMORY_DIR to override.
+    $dir = rtrim(env_str('MEMORY_DIR', state_dir() . '/memory'), '/');
     if (!is_dir($dir)) @mkdir($dir, 0700, true);
     if (!is_dir($dir) || !is_writable($dir)) {
         throw new RuntimeException('memory_dir_unwritable');

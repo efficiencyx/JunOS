@@ -1,13 +1,14 @@
 <?php
-// Proxy for Kokoro TTS sidecar. Handles two routes:
-//   GET  ?action=voices  → GET  {KOKORO_URL}/voices
-//   POST ?action=tts     → POST {KOKORO_URL}/tts  (pass-through JSON body, returns audio)
+// Proxy for the audio sidecar's TTS endpoints. Handles two routes:
+//   GET  ?action=voices  → GET  {TTS_URL}/voices
+//   POST ?action=tts     → POST {TTS_URL}/tts  (pass-through JSON body, returns audio)
 
 require_once __DIR__ . '/_lib.php';
 
 require_user();
 
-$kokoroUrl = rtrim(env_str('KOKORO_URL', 'http://localhost:8001'), '/');
+// KOKORO_URL is the pre-rename name of TTS_URL, honored for existing .env files.
+$ttsUrl = rtrim(env_str('TTS_URL', env_str('KOKORO_URL', 'http://localhost:8001')), '/');
 $action = $_GET['action'] ?? '';
 
 if ($action === 'voices') {
@@ -34,7 +35,7 @@ if ($action === 'voices') {
         exit;
     }
 
-    $ch = curl_init($kokoroUrl . '/voices');
+    $ch = curl_init($ttsUrl . '/voices');
     curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
     curl_setopt($ch, CURLOPT_CONNECTTIMEOUT, 5);
     curl_setopt($ch, CURLOPT_TIMEOUT, 10);
@@ -44,13 +45,13 @@ if ($action === 'voices') {
 
     if ($res === false) {
         http_response_code(502);
-        echo json_encode(['error' => 'kokoro_unreachable']);
+        echo json_encode(['error' => 'tts_unreachable']);
         exit;
     }
 
     if ($code >= 500) {
         http_response_code(502);
-        log_event(['msg' => 'kokoro_voices_error', 'upstream_code' => $code]);
+        log_event(['msg' => 'tts_voices_error', 'upstream_code' => $code]);
         echo json_encode(['error' => 'tts_failed']);
         exit;
     }
@@ -99,7 +100,7 @@ if ($action === 'tts') {
         if ($speed === false || $speed < 0.5 || $speed > 2.0) fail(400, 'invalid_request');
     }
 
-    $ch = curl_init($kokoroUrl . '/tts');
+    $ch = curl_init($ttsUrl . '/tts');
     curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
     curl_setopt($ch, CURLOPT_POST, true);
     curl_setopt($ch, CURLOPT_POSTFIELDS, $rawBody);
@@ -114,12 +115,12 @@ if ($action === 'tts') {
     if ($res === false) {
         http_response_code(502);
         header('Content-Type: application/json');
-        echo json_encode(['error' => 'kokoro_unreachable']);
+        echo json_encode(['error' => 'tts_unreachable']);
         exit;
     }
 
     if ($code >= 500) {
-        log_event(['msg' => 'kokoro_tts_error', 'upstream_code' => $code]);
+        log_event(['msg' => 'tts_upstream_error', 'upstream_code' => $code]);
         fail(502, 'tts_failed');
     }
 

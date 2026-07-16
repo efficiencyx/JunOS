@@ -58,13 +58,19 @@ services:
       OPENROUTER_MODEL: "${OPENROUTER_MODEL:-}"
       LLAMACPP_URL: "${LLAMACPP_URL:-http://llamacpp:8080}"
       EMBEDDINGS: "${EMBEDDINGS:-}"
-      KOKORO_URL: "${KOKORO_URL:-http://kokoro:8001}"
+      EMBEDDINGS_URL: "${EMBEDDINGS_URL:-}"
+      LLAMACPP_TOOLS: "${LLAMACPP_TOOLS:-}"
+      # PHP prefers TTS_URL and falls back to the legacy KOKORO_URL name, so a
+      # custom KOKORO_URL in an existing .env keeps working; the default
+      # targets the internal `tts` service.
+      TTS_URL: "${TTS_URL:-}"
+      KOKORO_URL: "${KOKORO_URL:-http://tts:8001}"
     volumes:
       - omega_state:/var/lib/omega
       - ./tools:/var/www/omega/tools:ro
     # Note: php does NOT depend on the model server (ollama/llamacpp - both are
     # profile-gated, and compose rejects dependencies on profile-disabled
-    # services) or on kokoro. The frontend boot-polls models.php until the
+    # services) or on tts. The frontend boot-polls models.php until the
     # backend answers, so startup ordering is soft.
     healthcheck:
       test: ["CMD", "cgi-fcgi", "-bind", "-connect", "127.0.0.1:9000"]
@@ -152,17 +158,16 @@ services:
       - "no-new-privileges:true"
     networks: [omega]
 
-  # ── kokoro (audio sidecar - internal only, optional `voice` profile) ────────
-  # TTS (kokoro/pockettts) + STT (faster-whisper). Named for the first engine it
-  # ever ran; KOKORO_URL is wired through .env.example and api/*.php, so the name
-  # stays. Only started when the `voice` profile is active (start.sh adds it
-  # unless VOICE=off). With it off the stack runs text-only and skips this build.
-  kokoro:
+  # ── tts (audio sidecar - internal only) ─────────────────────────────────────
+  # TTS (kokoro/pockettts engines) + STT (faster-whisper). Always started under
+  # Docker; the VOICE=on/off knob only gates the bare-metal Windows launcher
+  # (start.ps1). php and the frontend degrade gracefully when it's unhealthy.
+  tts:
     build:
       context: .
-      dockerfile: docker/kokoro.Dockerfile
+      dockerfile: docker/tts.Dockerfile
       network: host
-    container_name: omega-kokoro
+    container_name: omega-tts
     restart: unless-stopped
     environment:
       CORS_ORIGIN: "${CORS_ORIGIN:-http://nginx}"
@@ -174,10 +179,10 @@ services:
       # models are English-only. See .env.example for the language table.
       STT_MODEL: "${STT_MODEL:-base.en}"
       STT_LANG: "${STT_LANG-en}"
-      # cpu | cuda. Separate from TTS_DEVICE by design - see kokoro.Dockerfile.
+      # cpu | cuda. Separate from TTS_DEVICE by design - see tts.Dockerfile.
       STT_DEVICE: "${STT_DEVICE:-cpu}"
     volumes:
-      - kokoro_cache:/root/.cache
+      - tts_cache:/root/.cache
     healthcheck:
       test: ["CMD", "curl", "-fsS", "http://127.0.0.1:8001/health"]
       interval: 10s
@@ -208,7 +213,10 @@ services:
 volumes:
   ollama_data:
   llamacpp_cache:
-  kokoro_cache:
+  tts_cache:
+    # Pinned to the pre-rename volume name so existing installs keep their
+    # already-downloaded model weights (~300MB+) instead of re-fetching.
+    name: omega_kokoro_cache
   omega_state:
   letsencrypt:
   certbot_webroot:

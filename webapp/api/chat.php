@@ -186,15 +186,6 @@ TXT;
 }
 
 
-function should_offer_tools(string $msg): bool {
-    $m = mb_strtolower(trim($msg));
-    if (preg_match('/https?:\/\//i', $msg)) return true;
-    if (preg_match('/\b(remember this|remember that|please remember|can you remember|memorize|save this|make a note|note this|my favorite|i prefer|i like|i dislike)\b/u', $m)) return true;
-    if (preg_match('/\b(search|recall|look up|fetch|open|read|check)\b/u', $m) && preg_match('/\b(chat history|previous chats?|earlier|last time|website|url|web|internet|latest|current|news|today)\b/u', $m)) return true;
-    if (preg_match('/\b(what did|what was|what were|did i|did we|do you remember)\b/u', $m) && preg_match('/\b(before|previously|earlier|last time|last chat|past chats?)\b/u', $m)) return true;
-    return false;
-}
-
 // memory_file_path / memory_append live in _lib.php (shared with memory.php).
 
 function memory_recent_context(int $userId, int $limit = 20): string {
@@ -422,10 +413,9 @@ for ($i = count($body['messages']) - 1; $i >= 0; $i--) {
         break;
     }
 }
-// Always offer tools and let the model decide whether to call one. The previous
-// keyword gate silently blocked most natural tool-worthy asks ("search our past
-// chats...", "who's the president?"), so tools appeared broken. Correctness wins.
-// (Except when the provider can't do tools - e.g. llama.cpp with LLAMACPP_TOOLS=off.)
+// Always offer tools and let the model decide whether to call one; a keyword
+// pre-filter silently blocked most natural tool-worthy asks, so tools appeared
+// broken. (Except when the provider can't do tools - e.g. LLAMACPP_TOOLS=off.)
 $toolsOffered = provider_tools_enabled();
 
 $contextParts = [];
