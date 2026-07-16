@@ -39,7 +39,7 @@ services:
   # TTS sidecar on the GPU: rebuild against a ROCm torch wheel and hand it the
   # GPU device nodes. The ROCm torch build exposes its HIP backend as torch.cuda,
   # so TTS_DEVICE=auto/cuda both target the GPU; set TTS_DEVICE=cpu to opt out.
-  kokoro:
+  tts:
     build:
       args:
         TORCH_INDEX: https://download.pytorch.org/whl/rocm6.2

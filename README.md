@@ -52,10 +52,11 @@ If you just want to meet her, the [Quickstart](#get-her-running) below gets you 
 
 ## What it does
 
-- **She reacts mid-sentence.** `[ACTION:...]` tags are parsed *while the reply is still streaming*, so the gesture lands with the word - not two seconds after. This is the magic trick the whole thing is built around.
+- **She reacts mid-sentence.** `[A:...]` action tags are parsed *while the reply is still streaming*, so the gesture lands with the word - not two seconds after. This is the magic trick the whole thing is built around.
 - **She talks, and her mouth means it.** TTS audio amplitude (RMS) drives `ParamMouthOpen` directly, skipping the smoothing pass so the lips stay glued to the sound.
-- **She knows her lore.** Curated *Factorial Omega* canon (`tools/lore_dataset.jsonl`) is embedded and retrieved per-message, so Jun stays accurate on the world details a fine-tune would otherwise smudge.
+- **She knows her lore.** Curated *Factorial Omega* canon (`tools/lore_dataset.jsonl`) is keyword-matched and injected per-message, so Jun stays accurate on the world details a fine-tune would otherwise smudge.
 - **She remembers you.** Past messages get embedded and recalled by similarity, so she can bring up things you said in earlier chats. Spooky-cute, not spooky-creepy.
+- **She has a little toolbox.** Mid-chat she can decide to search your past conversations, jot down a durable note about you (view and delete them in settings), or run a quick web search (that one does leave the machine, obviously).
 - **Accounts & history.** Sign up, log in, keep your conversations. Server-side sessions, per-user history, and an adult-content gate at signup.
 - **Dress her up.** Toggle clothing parts and recolor tint groups live, right from the settings drawer.
 - **100% local.** Ollama for the thinking, Kokoro for the voice, SQLite for the memory. Air-gap it if you want.
@@ -78,7 +79,7 @@ Don't have a GPU (or just want to kick the tyres before committing)? Run the who
 3. **Runtime → Run all**, then wait for the ✅ on each step - the slow bit is the first run downloading the model (a few GB, ~3–6 min).
 4. Scroll to **Step 3** and click the public link it prints. Say hi. 🎉
 
-Two knobs in the notebook cells: **Model** (`auto` picks the 14B since Colab can handle it, or force 7B for snappier replies) and **Voice** (text-to-speech on/off - adds ~2 min on first run). The link is a free **Cloudflare tunnel** (no signup); if it 404s for a moment, give it ~30 s and reload, or just re-run Step 3 for a fresh one.
+Two knobs in the notebook cells: **Model** (`auto` picks the 12B fine-tune since Colab can handle it, or force E2B for snappier replies) and **Voice** (text-to-speech on/off - adds ~2 min on first run). The link comes from **Colab's built-in proxy**; if it 404s for a moment, give it ~30 s and reload, or just re-run Step 3 for a fresh one.
 
 > ⚠️ **It's a disposable demo.** Colab wipes the session when it ends, so accounts, chat history, and downloaded weights don't survive between runs. For something persistent, run her [locally](#get-her-running).
 
@@ -178,7 +179,7 @@ The same knobs work with `install.ps1` on Windows (`$env:JUN_PROVIDER='openroute
 
 ## Knobs to turn
 
-Everything's environment variables (see `.env.example`):
+Everything's environment variables (see `.env.example`; the full reference lives in [`docs/configuration.md`](docs/configuration.md)):
 
 | Variable | What it does | Default |
 |---|---|---|
@@ -193,7 +194,7 @@ Everything's environment variables (see `.env.example`):
 | `LLAMACPP_MODEL_HF` | HF `repo:quant` the managed llama-server loads (`-hf` syntax) | `efficiencyx/Jun-LoRA-v3-E2B-GGUF:Q4_K_M` |
 | `EMBEDDINGS` | `on`/`off` - local Ollama RAG embeddings | `on` for ollama, else `off` |
 | `COMPOSE_PROFILES` | Which model-server containers run (`ollama`, `llamacpp`) | `ollama` |
-| `KOKORO_URL` | Where the PHP TTS proxy finds the voice sidecar | `http://kokoro:8001` |
+| `TTS_URL` | Where the PHP TTS/STT proxies find the voice sidecar (legacy name `KOKORO_URL` still works) | `http://tts:8001` |
 | `CORS_ORIGIN` | `Access-Control-Allow-Origin` for the voice sidecar | `http://nginx` |
 
 ## Under the hood
@@ -201,7 +202,7 @@ Everything's environment variables (see `.env.example`):
 ```
 Browser ──HTTP/SSE──▶ nginx ──FastCGI──▶ php-fpm ──HTTP──▶ ollama :11434
                         │                    │
-                        │                    └──────────────▶ kokoro :8001 (TTS)
+                        │                    └──────────────▶ tts :8001 (TTS + STT)
                         │
                         └── serves /var/www/omega/ (static assets, JS, Live2D model)
 ```
@@ -213,9 +214,9 @@ Want the gory details - token streaming, the ACTION stream buffer, the Live2D ti
 ### What happens when you hit send
 
 1. The browser `POST`s your conversation to `/api/chat.php`.
-2. PHP assembles the system prompt fresh: `system_prompt.txt` (read every request), the current time, the closest canon lore facts, and any recalled bits from past chats (all cosine-ranked).
+2. PHP assembles the prompt: the static `system_prompt.txt` prefix and your history stay byte-identical between turns (so Ollama's prompt cache keeps hitting), and a trailing live-context block carries the current time, the closest canon lore facts (keyword-matched), and any recalled bits from past chats (cosine-ranked).
 3. Ollama streams NDJSON back; PHP re-frames it as `data: {"token":"..."}` SSE events and flushes each one immediately.
-4. `js/app.js` watches the stream for `[ACTION:` markers, hides any half-typed marker so it never renders, and fires each action the instant its closing `]` shows up.
+4. `js/app.js` watches the stream for `[A:` markers (the legacy `[ACTION:` form still parses too), hides any half-typed marker so it never renders, and fires each action the instant its closing `]` shows up.
 5. `js/actions.js` resolves that action against `action_map.json`; `js/live2d.js` lerps the model's parameters toward the new pose every frame.
 6. If the voice is on, `js/tts.js` splits the clean text into sentences, fetches audio per sentence from `/api/tts.php`, plays them in order, and drives `ParamMouthOpen` from the analyser's RMS.
 
@@ -223,14 +224,13 @@ Want the gory details - token streaming, the ACTION stream buffer, the Live2D ti
 
 ### Rebuild the lore index
 
-The index comes from `tools/lore_dataset.jsonl` (curated *Factorial Omega* Q&A, one JSON object per line). Regenerate it whenever you edit that dataset:
+The corpus comes from `tools/lore_dataset.jsonl` (curated *Factorial Omega* Q&A, one JSON object per line). Regenerate it whenever you edit that dataset:
 
 ```sh
-docker compose exec -e OLLAMA_URL=http://ollama:11434 php \
-  php tools/build_lore_index.php
+docker compose exec php php tools/build_lore_index.php
 ```
 
-This flattens each Q&A into a question→answer pair, embeds the questions with `nomic-embed-text`, and writes `webapp/lore_index.bin` (packed float32), `webapp/lore_corpus.txt` (the answers), and `webapp/lore_meta.json`. Add `--dry-run` to count pairs without touching Ollama. A missing index is fine - retrieval just gets skipped and chat carries on.
+This flattens each Q&A into question→answer pairs and writes `webapp/lore_corpus.txt` (the answers, one per line) - that's the whole index. Retrieval is a keyword/IDF match done at request time (see [`docs/architecture.md`](docs/architecture.md)), so no embeddings and no Ollama needed. Add `--dry-run` to just count pairs. A missing corpus is fine - retrieval just gets skipped and chat carries on.
 
 ### Picking your GPU
 
@@ -290,7 +290,7 @@ The rate limiter tripped. Raise *both* layers: `limit_req_zone` in the nginx tem
 <details>
 <summary><b>No voice</b></summary>
 
-Check `docker compose logs kokoro`. The first run downloads ~300 MB of weights. From inside the stack, `docker compose exec nginx wget -qO- http://kokoro:8001/health` should return `{"ok":true}`. The Kokoro port is intentionally not exposed to the host.
+Check `docker compose logs tts`. The first run downloads ~300 MB of weights. From inside the stack, `docker compose exec nginx wget -qO- http://tts:8001/health` should return `{"ok":true}`. The sidecar's port is intentionally not exposed to the host.
 </details>
 
 <details>
@@ -304,8 +304,8 @@ Watch `docker compose logs ollama`. The entrypoint pre-warms the first non-embed
 ```
 .
 ├── docker/                    Dockerfiles, nginx templates, entrypoints
-├── tts/                       Kokoro voice sidecar (FastAPI, server.py)
-├── tools/                     Lore-index builder + dataset, chat-index compaction, admin scripts
+├── tts/                       Audio sidecar: TTS (Kokoro / pocket-tts) + STT (FastAPI, server.py)
+├── tools/                     Lore-corpus builder + dataset, chat-index compaction, asset recovery
 ├── docs/                      architecture.md + screenshots/
 ├── webapp/                    Everything served by nginx / php-fpm
 │   ├── api/                   chat.php, auth.php, conversations.php, prefs.php, tts.php, models.php, _lib.php
