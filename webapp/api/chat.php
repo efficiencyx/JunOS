@@ -10,8 +10,6 @@ while (ob_get_level() > 0) { ob_end_flush(); }
 ob_implicit_flush(true);
 
 $PROVIDER = ai_provider();
-$PROVIDER_IS_OPENAI = provider_is_openai($PROVIDER);
-$API_BASE = chat_api_base();
 
 header('Content-Type: text/event-stream');
 header('Cache-Control: no-cache, no-transform');
@@ -681,42 +679,7 @@ if ($toolsOffered) {
     }
 }
 
-if (!$PROVIDER_IS_OPENAI) {
-    $upstreamPayload = [
-        'model' => $model,
-        'messages' => $messages,
-        'stream' => true,
-        'options' => [
-            'reasoning_effort' => $reasoning,
-            'temperature' => 0.7,
-            'top_p' => 0.95,
-            'top_k' => 80,
-            'min_p' => 0.01,
-            'presence_penalty' => 0,
-            'num_ctx' => 16384,
-            // Reasoning tokens count against num_predict, so let thinking turns use num_ctx.
-            'num_predict' => $think ? -1 : 128,
-        ],
-    ];
-
-    // Ollama rejects think:true for some capable models; omit it to enable thinking.
-    if (!$think) $upstreamPayload['think'] = false;
-} else {
-    $upstreamPayload = [
-        'model' => $model,
-        'messages' => $messages,
-        'stream' => true,
-        'temperature' => 0.7,
-        'top_p' => 0.95,
-        'top_k' => 80,
-        'min_p' => 0.01,
-        'stream_options' => ['include_usage' => true],
-    ];
-    if (!$think) $upstreamPayload['max_tokens'] = 128;
-    if ($PROVIDER === 'openrouter' && $think) {
-        $upstreamPayload['reasoning'] = ['effort' => $reasoning];
-    }
-}
+$upstreamPayload = provider_chat_payload($PROVIDER, $model, $messages, $reasoning, $think);
 
 if ($toolsOffered) $upstreamPayload['tools'] = tool_catalog();
 
@@ -725,8 +688,6 @@ $assistantBuffer = '';
 $stats = null;
 $doneReason = '';
 
-$chatUrl = $PROVIDER_IS_OPENAI ? $API_BASE . '/chat/completions' : $API_BASE . '/api/chat';
-
 for ($round = 0; $round < 3; $round++) {
     $roundContent = '';
     $toolCalls = [];
@@ -734,148 +695,24 @@ for ($round = 0; $round < 3; $round++) {
 
     do {
         $retryRound = false;
-        $buf = '';
-        $toolAcc = [];       // OpenAI streams tool calls as fragments keyed by index.
-        $httpStatus = 0;
-        $errBody = '';
-        $t0 = microtime(true);
+        $result = provider_stream_round($PROVIDER, $upstreamPayload, 'sse_send', $round);
+        $roundContent = $result['content'];
+        $toolCalls = $result['tool_calls'];
+        if ($result['stats'] !== null) $stats = $result['stats'];
+        if ($result['done_reason'] !== '') $doneReason = $result['done_reason'];
+        if ($result['stream_error']) $sawError = true;
 
-        $ch = curl_init($chatUrl);
-        curl_setopt($ch, CURLOPT_POST, true);
-        curl_setopt($ch, CURLOPT_HTTPHEADER, chat_request_headers());
-        curl_setopt($ch, CURLOPT_POSTFIELDS, json_encode($upstreamPayload, JSON_UNESCAPED_UNICODE));
-        curl_setopt($ch, CURLOPT_RETURNTRANSFER, false);
-        curl_setopt($ch, CURLOPT_TIMEOUT, 0);
-        curl_setopt($ch, CURLOPT_CONNECTTIMEOUT, 10);
-
-        if (!$PROVIDER_IS_OPENAI) {
-            curl_setopt($ch, CURLOPT_WRITEFUNCTION, function ($ch, $chunk) use (&$buf, &$sawError, &$roundContent, &$toolCalls, &$stats, &$doneReason) {
-                $buf .= $chunk;
-                while (($nl = strpos($buf, "\n")) !== false) {
-                    $line = trim(substr($buf, 0, $nl));
-                    $buf = substr($buf, $nl + 1);
-                    if ($line === '') continue;
-                    $obj = json_decode($line, true);
-                    if (!is_array($obj)) continue;
-
-                    if (isset($obj['error'])) {
-                        sse_send(['error' => (string)$obj['error']]);
-                        $sawError = true;
-                        continue;
-                    }
-                    if (!empty($obj['done'])) {
-                        $doneReason = (string)($obj['done_reason'] ?? '');
-                    }
-                    if (!empty($obj['done']) && isset($obj['eval_count'])) {
-                        $stats = [
-                            'eval_count'           => (int)($obj['eval_count'] ?? 0),
-                            'eval_duration'        => (int)($obj['eval_duration'] ?? 0),
-                            'prompt_eval_count'    => (int)($obj['prompt_eval_count'] ?? 0),
-                            'prompt_eval_duration' => (int)($obj['prompt_eval_duration'] ?? 0),
-                            'total_duration'       => (int)($obj['total_duration'] ?? 0),
-                            'load_duration'        => (int)($obj['load_duration'] ?? 0),
-                        ];
-                    }
-                    // Keep reasoning out of persisted history and embeddings.
-                    $th = (string)($obj['message']['thinking'] ?? '');
-                    if ($th !== '') sse_send(['thinking' => $th]);
-
-                    $calls = $obj['message']['tool_calls'] ?? null;
-                    if (is_array($calls) && $calls) {
-                        $toolCalls = array_merge($toolCalls, $calls);
-                    }
-
-                    $tok = (string)($obj['message']['content'] ?? '');
-                    if ($tok !== '') {
-                        sse_send(['token' => $tok]);
-                        $roundContent .= $tok;
-                    }
-                }
-                return strlen($chunk);
-            });
-        } else {
-            // OpenAI-style SSE may contain keep-alives, CRLF, or a JSON error body.
-            curl_setopt($ch, CURLOPT_WRITEFUNCTION, function ($ch, $chunk) use (&$buf, &$sawError, &$roundContent, &$toolAcc, &$stats, &$doneReason, &$httpStatus, &$errBody) {
-                if ($httpStatus === 0) $httpStatus = (int)curl_getinfo($ch, CURLINFO_RESPONSE_CODE);
-                if ($httpStatus >= 400) {
-                    $errBody .= $chunk;
-                    return strlen($chunk);
-                }
-                $buf .= $chunk;
-                while (($nl = strpos($buf, "\n")) !== false) {
-                    $line = rtrim(substr($buf, 0, $nl), "\r");
-                    $buf = substr($buf, $nl + 1);
-                    if ($line === '' || $line[0] === ':') continue;
-                    if (strncmp($line, 'data:', 5) !== 0) continue;
-                    $data = trim(substr($line, 5));
-                    if ($data === '[DONE]') continue;
-                    $obj = json_decode($data, true);
-                    if (!is_array($obj)) continue;
-
-                    if (isset($obj['error'])) {
-                        $msg = is_array($obj['error'])
-                            ? (string)($obj['error']['message'] ?? 'upstream_error')
-                            : (string)$obj['error'];
-                        sse_send(['error' => $msg]);
-                        $sawError = true;
-                        continue;
-                    }
-                    if (isset($obj['usage']) && is_array($obj['usage'])) {
-                        $stats = [
-                            'eval_count'           => (int)($obj['usage']['completion_tokens'] ?? 0),
-                            'eval_duration'        => 0,
-                            'prompt_eval_count'    => (int)($obj['usage']['prompt_tokens'] ?? 0),
-                            'prompt_eval_duration' => 0,
-                            'total_duration'       => 0,
-                            'load_duration'        => 0,
-                        ];
-                    }
-                    $choice = $obj['choices'][0] ?? null;
-                    if (!is_array($choice)) continue;
-                    if (!empty($choice['finish_reason'])) {
-                        $doneReason = (string)$choice['finish_reason'];
-                    }
-                    $delta = is_array($choice['delta'] ?? null) ? $choice['delta'] : [];
-
-                    // OpenRouter and llama.cpp use different reasoning fields.
-                    $th = (string)($delta['reasoning'] ?? $delta['reasoning_content'] ?? '');
-                    if ($th !== '') sse_send(['thinking' => $th]);
-
-                    // Tool-call IDs and JSON arguments arrive in separate fragments.
-                    if (is_array($delta['tool_calls'] ?? null)) {
-                        foreach ($delta['tool_calls'] as $frag) {
-                            if (!is_array($frag)) continue;
-                            $idx = (int)($frag['index'] ?? 0);
-                            if (!isset($toolAcc[$idx])) $toolAcc[$idx] = ['id' => '', 'name' => '', 'arguments' => ''];
-                            if (!empty($frag['id'])) $toolAcc[$idx]['id'] = (string)$frag['id'];
-                            if (isset($frag['function']['name'])) $toolAcc[$idx]['name'] .= (string)$frag['function']['name'];
-                            if (isset($frag['function']['arguments'])) $toolAcc[$idx]['arguments'] .= (string)$frag['function']['arguments'];
-                        }
-                    }
-
-                    $tok = (string)($delta['content'] ?? '');
-                    if ($tok !== '') {
-                        sse_send(['token' => $tok]);
-                        $roundContent .= $tok;
-                    }
-                }
-                return strlen($chunk);
-            });
-        }
-
-        if (curl_exec($ch) === false) {
-            log_event(['msg' => 'upstream_curl_error', 'provider' => $PROVIDER, 'err' => curl_error($ch)]);
+        if ($result['curl_error'] !== '') {
+            log_event(['msg' => 'upstream_curl_error', 'provider' => $PROVIDER, 'err' => $result['curl_error']]);
             sse_send(['error' => 'upstream_unavailable']);
             $sawError = true;
         }
-        curl_close($ch);
-        $roundNs = (int)round((microtime(true) - $t0) * 1e9);
 
-        if ($PROVIDER_IS_OPENAI) {
-            if ($httpStatus >= 400 && !$sawError) {
+        if (provider_uses_openai_protocol($PROVIDER)) {
+            if ($result['http_status'] >= 400 && !$sawError) {
                 // Never log request headers: they contain the API key.
                 log_event(['msg' => 'upstream_http_error', 'provider' => $PROVIDER,
-                           'status' => $httpStatus, 'body' => mb_substr($errBody, 0, 500)]);
+                           'status' => $result['http_status'], 'body' => mb_substr($result['error_body'], 0, 500)]);
                 if ($round === 0 && !$retriedWithoutTools && isset($upstreamPayload['tools'])) {
                     // Retry once for llama.cpp templates that reject tools.
                     unset($upstreamPayload['tools']);
@@ -884,7 +721,7 @@ for ($round = 0; $round < 3; $round++) {
                     $retryRound = true;
                     continue;
                 }
-                $errObj = json_decode($errBody, true);
+                $errObj = json_decode($result['error_body'], true);
                 $msg = is_array($errObj) && isset($errObj['error'])
                     ? (is_array($errObj['error']) ? (string)($errObj['error']['message'] ?? 'upstream_error') : (string)$errObj['error'])
                     : 'upstream_error';
@@ -892,16 +729,8 @@ for ($round = 0; $round < 3; $round++) {
                 $sawError = true;
             }
             if ($stats !== null && ($stats['eval_duration'] ?? 0) === 0) {
-                $stats['eval_duration'] = $roundNs;
-                $stats['total_duration'] = $roundNs;
-            }
-            foreach ($toolAcc as $i => $t) {
-                if ($t['name'] === '') continue;
-                $toolCalls[] = [
-                    'id' => $t['id'] !== '' ? $t['id'] : ('call_' . $round . '_' . $i),
-                    'type' => 'function',
-                    'function' => ['name' => $t['name'], 'arguments' => $t['arguments']],
-                ];
+                $stats['eval_duration'] = $result['duration_ns'];
+                $stats['total_duration'] = $result['duration_ns'];
             }
         }
     } while ($retryRound);
@@ -930,28 +759,24 @@ for ($round = 0; $round < 3; $round++) {
         if (!is_array($args)) $args = [];
         sse_send(['tool_status' => ['name' => $name, 'state' => 'running', 'args' => $args]]);
         $t0 = microtime(true);
-        $result = run_tool_call($name, $args, $user, $convId);
+        $toolResult = run_tool_call($name, $args, $user, $convId);
         sse_send(['tool_status' => [
             'name' => $name, 'state' => 'done',
             'duration_ms' => (int)round((microtime(true) - $t0) * 1000),
-            'result' => mb_substr($result, 0, 2000),
+            'result' => mb_substr($toolResult, 0, 2000),
         ]]);
-        // OpenAI-style providers reject tool-result fields other than tool_call_id.
-        $toolMsg = [
-            'role' => 'tool',
-            'content' => $result,
-            'tool_call_id' => (string)($call['id'] ?? ''),
-        ];
-        if (!$PROVIDER_IS_OPENAI) $toolMsg['name'] = $name;
-        $messages[] = $toolMsg;
+        $messages[] = provider_tool_message(
+            $PROVIDER,
+            $name,
+            (string)($call['id'] ?? ''),
+            $toolResult
+        );
     }
     $upstreamPayload['messages'] = $messages;
 }
 
 if ($stats !== null) {
-    $stats['num_ctx'] = $PROVIDER_IS_OPENAI
-        ? ($PROVIDER === 'llamacpp' ? 16384 : 0)
-        : (int)($upstreamPayload['options']['num_ctx'] ?? 0);
+    $stats['num_ctx'] = provider_context_size($PROVIDER, $upstreamPayload);
     $stats['model'] = $model;
     sse_send(['stats' => $stats]);
 }

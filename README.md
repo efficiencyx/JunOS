@@ -308,7 +308,7 @@ Watch `docker compose logs ollama`. The entrypoint pre-warms the first non-embed
 ├── docs/                      architecture.md + screenshots/
 ├── webapp/                    Everything served by nginx / php-fpm
 │   ├── api/                   chat.php, auth.php, conversations.php, prefs.php, tts.php, models.php, _lib.php
-│   ├── js/                    app.js, live2d.js, actions.js, ollama.js, tts.js, outfit.js, ui.js, …
+│   ├── js/                    app.js, live2d.js, actions.js, chat-api.js, tts.js, outfit.js, ui.js, …
 │   ├── assets/                Live2D model files (*.moc3, *.physics3.json, *.png)
 │   ├── action_map.json        Semantic action → Live2D parameter map
 │   ├── system_prompt.txt      Jun's persona + ACTION syntax (read server-side)

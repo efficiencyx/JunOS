@@ -1,5 +1,5 @@
 
-window.Ollama = (function () {
+window.ChatAPI = (function () {
   async function listModels() {
     const r = await fetch('api/models.php');
     if (!r.ok) throw new Error(`models http ${r.status}`);

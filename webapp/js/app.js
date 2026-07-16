@@ -396,7 +396,7 @@
     ui.setStatus('streaming', 'streaming');
     if (window.DevHud) DevHud.beginGen();
     appendRaw('--- ' + new Date().toLocaleTimeString() + (idle ? ' (idle nudge)' : '') + ' ---\n');
-    abortFn = Ollama.chat(
+    abortFn = ChatAPI.chat(
       { messages: [...messages], model: modelSelect.value,
         reasoning: reasoningSelect.value, think: thinkChk.checked,
         outfit_context: Outfit.describe(), conversation_id: currentConversationId,
@@ -1222,7 +1222,7 @@
       else setTimeout(hide, 350);
     };
 
-    async function waitForOllama() {
+    async function waitForProvider() {
       let attempt = 0;
       const phases = [
         'Waking the model',
@@ -1233,7 +1233,7 @@
       for (;;) {
         attempt++;
         try {
-          const m = await Ollama.listModels();
+          const m = await ChatAPI.listModels();
           if (m && m.models && m.models.length) return m;
           setBoot('Pulling models', m && m.provider && m.provider !== 'ollama'
             ? 'No models reported by the provider yet - still booting?'
@@ -1246,7 +1246,7 @@
       }
     }
 
-    const m = await waitForOllama();
+    const m = await waitForProvider();
     modelSelect.innerHTML = m.models.map(n =>
       `<option value="${escapeHtml(n)}">${escapeHtml(n)}</option>`).join('');
     const prefer = [
