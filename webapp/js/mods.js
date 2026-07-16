@@ -1,29 +1,10 @@
-// Client-side loader for game mods (the .zip format described in the official
-// "My Dystopian Robot Girlfriend" modding guide). Everything stays in the
-// browser: the zip is parsed here, stored in IndexedDB, and its textures are
-// composited onto the Live2D atlas via Live2D.setDrawableTextures. No mod file
-// ever reaches the server - only worn item *names* leak into the system prompt
-// through Outfit.describe().
-//
-// A mod zip contains:
-//   mod.json                - name / guid / description
-//   script.lua              - item prefabs (we only regex out names + color
-//                             slots; the Lua is NEVER executed)
-//   <item folder>/*.png     - full-scene textures
-//   <item folder>/*.json    - "packed texture containers": for each scene, a
-//                             list of drawables with their pixel RectInt on the
-//                             PNG, a Layer and a ColorIndex.
-// This webapp renders the *interaction* scene model, so we only consume the
-// containers whose filename mentions "interaction".
+// Mod archives are parsed and composited in-browser; Lua is never executed.
 
 window.Mods = (function () {
   const STATE_KEY = 'omega.mods.state.v1';   // { [guid]: { items: {i: bool}, colors: [hex|null] } }
   const DB_NAME = 'omega-mods', DB_STORE = 'zips';
 
-  // ---- Minimal zip reader ---------------------------------------------------
-  // Reads the end-of-central-directory record, walks the central directory and
-  // inflates entries with DecompressionStream. Handles methods 0 (stored) and
-  // 8 (deflate) - which is all the game's exporter and normal zippers produce.
+  // Supports stored and deflated ZIP entries.
   async function unzip(buf) {
     const dv = new DataView(buf), u8 = new Uint8Array(buf);
     let eocd = -1;
@@ -62,7 +43,6 @@ window.Mods = (function () {
     return out;
   }
 
-  // ---- IndexedDB persistence ------------------------------------------------
   function idb() {
     return new Promise((res, rej) => {
       const rq = indexedDB.open(DB_NAME, 1);
@@ -96,7 +76,6 @@ window.Mods = (function () {
     });
   }
 
-  // ---- Mod parsing ------------------------------------------------------------
   const luaStr = `'((?:\\\\'|[^'])*)'|"((?:\\\\"|[^"])*)"`;
   const unesc = (s) => (s || '').replace(/\\(['"\\n])/g, (m, c) => c === 'n' ? '\n' : c);
 
@@ -112,8 +91,7 @@ window.Mods = (function () {
     for (const m of src.matchAll(new RegExp(`(\\w+)\\s*\\.\\s*Name\\s*=\\s*(?:${luaStr})`, 'g'))) {
       pf(m[1]).name = unesc(m[2] !== undefined ? m[2] : m[3]);
     }
-    // ColorSlots value is a single-level {...}; slot order = ColorIndex order.
-    for (const m of src.matchAll(/(\w+)\s*\.\s*ColorSlots\s*=\s*\{([^}]*)\}/g)) {
+  for (const m of src.matchAll(/(\w+)\s*\.\s*ColorSlots\s*=\s*\{([^}]*)\}/g)) {
       const slots = [];
       for (const s of m[2].matchAll(new RegExp(`ColorSlot\\.CreateInstance\\(\\s*(?:${luaStr})`, 'g'))) {
         slots.push(unesc(s[1] !== undefined ? s[1] : s[2]));
@@ -201,7 +179,6 @@ window.Mods = (function () {
     };
   }
 
-  // ---- Texture composition ----------------------------------------------------
   const _blobUrls = new Map();   // guid + '/' + path -> object URL
   function fileUrl(mod, path) {
     const key = mod.guid + '/' + path;
@@ -244,8 +221,6 @@ window.Mods = (function () {
     ctx.globalCompositeOperation = 'source-over';
   }
 
-  // Collect every packed drawable of an item that exists in the loaded model.
-  // Returns [{ id, tex(path), r{x,y,w,h}, layer, colorIndex }].
   function itemDrawables(mod, item) {
     const valid = new Set(Live2D.findDrawables ? Live2D.findDrawables([''], []) : []);
     const out = [];
@@ -336,7 +311,6 @@ window.Mods = (function () {
     return { url: c.toDataURL(), overlay: !hasBase };
   }
 
-  // ---- State ------------------------------------------------------------------
   let mods = [];                 // parsed mods
   let state = {};                // guid -> { items: {index: bool}, colors: [hex|null] }
   let readyPromise = null;
@@ -365,8 +339,6 @@ window.Mods = (function () {
     return readyPromise;
   }
 
-  // Recomposite every equipped mod item onto the model. Clears overrides for
-  // drawables no longer covered by any equipped item.
   async function applyAll() {
     if (!window.Live2D || !Live2D.setDrawableTextures) return;
     await ensureLoaded();
@@ -463,13 +435,11 @@ window.Mods = (function () {
     return worn.length ? ` You are also wearing these special items: ${worn.join(', ')}.` : '';
   }
 
-  // ---- Wardrobe UI --------------------------------------------------------------
   let uiBody = null;
 
   async function itemThumbUrl(mod, item) {
     const entries = itemDrawables(mod, item).map(e => ({ ...e, url: fileUrl(mod, e.tex) }));
     if (!entries.length) return null;
-    // Thumbnail = the item's largest crop, untinted.
     entries.sort((a, b) => b.r.w * b.r.h - a.r.w * a.r.h);
     const baked = await bakeDrawable([entries[0]], () => null);
     return baked.url;
@@ -530,8 +500,6 @@ window.Mods = (function () {
         itemThumbUrl(mod, item).then(url => {
           if (url) tile.firstChild.outerHTML = `<img draggable="false" src="${url}">`;
         });
-        // Keep every game ColorSlot in one custom picker. The split swatch
-        // previews all channels without invoking the browser-native picker.
         if (item.slots.length && window.Outfit && Outfit.makeItemColorButton) {
           const values = ((modState(mod.guid).colors || {})[i] || []);
           tile.appendChild(Outfit.makeItemColorButton(
@@ -541,7 +509,6 @@ window.Mods = (function () {
         }
         tile.addEventListener('click', () => {
           setEquipped(mod.guid, i, !isEquipped(mod, i));
-          // Slot exclusivity may have unequipped siblings - resync all tiles.
           grid.querySelectorAll('.wd-tile').forEach((t, j) => t.classList.toggle('on', isEquipped(mod, j)));
         });
         grid.appendChild(tile);

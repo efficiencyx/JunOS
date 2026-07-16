@@ -1,4 +1,3 @@
-// API wrapper for /api/conversations.php
 
 window.History = (function () {
   const API = 'api/conversations.php';

@@ -1,8 +1,4 @@
 <?php
-// SSE proxy: browser -> here -> AI provider -> SSE back to browser. The
-// upstream is either Ollama's native /api/chat (NDJSON) or an OpenAI-compatible
-// /chat/completions SSE endpoint (OpenRouter, llama.cpp) - see providers.php.
-// The SSE contract to the browser is identical either way.
 
 require_once __DIR__ . '/_lib.php';
 require_once __DIR__ . '/lore.php';
@@ -14,8 +10,6 @@ while (ob_get_level() > 0) { ob_end_flush(); }
 ob_implicit_flush(true);
 
 $PROVIDER = ai_provider();
-$PROVIDER_IS_OPENAI = provider_is_openai($PROVIDER);
-$API_BASE = chat_api_base();
 
 header('Content-Type: text/event-stream');
 header('Cache-Control: no-cache, no-transform');
@@ -74,15 +68,11 @@ if (isset($body['outfit_context'])) {
     $outfitContext = trim($body['outfit_context']);
 }
 
-// Human-readable local clock from the browser. Strip control chars so it can't
-// inject newlines into the system prompt, and keep it short.
 $clientTime = '';
 if (isset($body['client_time']) && is_string($body['client_time'])) {
     $clientTime = trim(mb_substr(preg_replace('/[\x00-\x1F\x7F]+/u', ' ', $body['client_time']), 0, 80));
 }
 
-// idle == "Anon went quiet, nudge Jun to speak first". We append a synthetic
-// turn for Ollama on these but never store it.
 $idle = isset($body['idle']) && $body['idle'] === true;
 
 $convId = isset($body['conversation_id']) ? (int)$body['conversation_id'] : 0;
@@ -93,12 +83,7 @@ if (!$owns->fetchColumn()) sse_fail('forbidden');
 
 rate_limit('chat', 30, 60);
 
-// The system message must stay byte-identical across turns: Ollama reuses the
-// KV cache for the longest unchanged prompt PREFIX, and the system message is
-// the very first thing in the prompt. Anything per-turn (clock, lore, recall,
-// wardrobe, gauges) goes into $contextParts instead, which is sent as a
-// trailing system message AFTER the history - so only the tail of the prompt
-// is re-evaluated each turn instead of the whole conversation.
+// Keep the static system prompt byte-identical so Ollama reuses its KV-cache prefix.
 $promptPath = __DIR__ . '/../system_prompt.txt';
 $systemPrompt = is_readable($promptPath) ? rtrim(file_get_contents($promptPath)) : '';
 
@@ -186,8 +171,6 @@ TXT;
 }
 
 
-// memory_file_path / memory_append live in _lib.php (shared with memory.php).
-
 function memory_recent_context(int $userId, int $limit = 20): string {
     try {
         $path = memory_file_path($userId);
@@ -267,7 +250,7 @@ function web_search_public(string $query): array {
         preg_match_all('#<a[^>]+class="result__snippet"[^>]*>(.*?)</a>#si', $html, $snips);
         foreach ($links as $i => $m) {
             $href = html_entity_decode($m[1], ENT_QUOTES | ENT_HTML5);
-            // DDG wraps result URLs as /l/?uddg=<encoded>; unwrap to the real target.
+            // DuckDuckGo wraps result URLs in /l/?uddg=<encoded>.
             if (preg_match('#[?&]uddg=([^&]+)#', $href, $u)) $href = urldecode($u[1]);
             $title = trim(html_entity_decode(strip_tags($m[2]), ENT_QUOTES | ENT_HTML5));
             $snippet = trim(html_entity_decode(strip_tags($snips[1][$i] ?? ''), ENT_QUOTES | ENT_HTML5));
@@ -365,8 +348,6 @@ function run_tool_call(string $name, array $args, array $user, int $convId): str
             $st->bindValue(3, $limit, PDO::PARAM_INT);
             $st->execute();
             $convs = $st->fetchAll();
-            // A few of the latest turns per conversation, oldest-first, as a lightweight
-            // recap. Action tags are stripped so the model doesn't parrot old syntax.
             $snip = db()->prepare(
                 'SELECT role, content FROM messages WHERE conversation_id = ? ORDER BY id DESC LIMIT 6'
             );
@@ -413,31 +394,18 @@ for ($i = count($body['messages']) - 1; $i >= 0; $i--) {
         break;
     }
 }
-// Always offer tools and let the model decide whether to call one; a keyword
-// pre-filter silently blocked most natural tool-worthy asks, so tools appeared
-// broken. (Except when the provider can't do tools - e.g. LLAMACPP_TOOLS=off.)
 $toolsOffered = provider_tools_enabled();
 
 $contextParts = [];
 
-// Hand the model the current wall-clock so it can reason about "today",
-// "tonight" etc. The browser's clock matches the user's timezone; fall back
-// to the server clock when it didn't send one.
 $nowStr = $clientTime !== '' ? $clientTime : date('l, F j, Y \a\t g:i A T');
 $memoryBlock = memory_recent_context((int)$user['id']);
 if ($memoryBlock !== '') $contextParts[] = $memoryBlock;
 
 $contextParts[] = "## Current date and time\nIt is currently " . $nowStr . ".\nYou can use this to calculate how much time it passed from a message to another, or you can use it to interact better with anon. E.g: Hey jun, what time is it?\nYou must use this date/time (You are allowed to round minutes) while chatting about time";
 
-// One embedding, reused for history RAG and the message_embeddings row we
-// write below. Null whenever Ollama can't embed.
 $queryVec = $lastUserMsg !== '' ? embed_text($lastUserMsg) : null;
 
-// Ground the reply in curated game lore. Heuristic keyword match (see lore.php)
-// against lore_corpus.txt - exact on proper nouns, no Ollama needed - returning
-// the few best-matching, distinct canon facts as a context block. The model
-// carries Jun's voice from fine-tuning; this only supplies facts it would
-// otherwise blur or invent. Quietly returns '' if nothing clears the floor.
 function lore_retrieve(string $lastUserMsg): string {
     if ($lastUserMsg === '') return '';
 
@@ -451,17 +419,12 @@ function lore_retrieve(string $lastUserMsg): string {
             . " Treat them as true and weave them in naturally in your own voice - never recite them verbatim, list them, or mention they come from any reference."
             . " If some don't fit the moment, ignore them.\n" . $bullets;
     } catch (Throwable $e) {
-        // RAG is supplementary - never let it take the whole reply down with it.
         log_event(['msg' => 'lore_retrieve_error', 'err' => $e->getMessage()]);
         return '';
     }
 }
 
-// Cross-conversation recall: find this user's earlier messages closest to the
-// current query, then widen each hit into a small window of surrounding turns.
 function chat_history_retrieve(int $userId, int $currentConvId, array $queryVec, int $topK = 5): array {
-    // A hit at "we have no plans" is useless without the next turns where the
-    // plan actually got decided, so grab a few messages after each hit.
     $histBefore = 1;
     $histAfter = 3;
 
@@ -501,7 +464,6 @@ function chat_history_retrieve(int $userId, int $currentConvId, array $queryVec,
         $top = array_slice($scored, 0, $topK);
         if (!$top) return [];
 
-        // Group the windows per conversation and merge the ones that touch.
         $rangesByConv = [];
         foreach ($top as $hit) {
             $rangesByConv[$hit['conversation_id']][] = [
@@ -551,10 +513,6 @@ function chat_history_retrieve(int $userId, int $currentConvId, array $queryVec,
     }
 }
 
-// Relationship state read/write helpers (relationship_get / relationship_apply /
-// relationship_set) live in _lib.php so relationship.php can share them. This is
-// the chat-only piece: hand the model the raw 0-100 gauges plus a scale guide so
-// it can interpolate its own warmth/trust/fear, instead of pre-baked prose bands.
 function relationship_directives(array $r): string {
     $a = (int)$r['affection']; $t = (int)$r['trust']; $x = (int)$r['tension'];
     return <<<TXT
@@ -585,8 +543,6 @@ if ($queryVec !== null) {
     foreach ($recalled as $r) {
         $lines = [];
         foreach ($r['messages'] as $m) {
-            // Drop action tags (compact [A:...] and legacy [ACTION:...]) so the
-            // model can't parrot old action syntax.
             $snippet = preg_replace('/\[\s*A(?:CTIONS?)?\s*:[^\]]*\]/i', '', $m['content']);
             $snippet = trim(preg_replace('/\s+/', ' ', $snippet));
             if ($snippet === '') continue;
@@ -605,15 +561,11 @@ if ($queryVec !== null) {
     }
 }
 
-// Whatever the user picked in the wardrobe UI, so Jun knows what she's wearing.
 if ($outfitContext !== '') {
     $contextParts[] = "## Current Wardrobe State\n" . $outfitContext
         . "\nDo not emit [A:outfit|...] tags to put on or take off the items listed as currently worn unless required.";
 }
 
-// Relationship state goes LAST, on purpose: it's the strongest driver of HOW Jun
-// responds this turn, and trailing position gets the most attention. It overrides
-// the persona's default warmth when the gauges say so.
 $contextParts[] = "## YOUR FEELINGS TOWARD ANON RIGHT NOW - highest priority for this reply\n"
     . "This is how you ACTUALLY feel about him at this moment. It OVERRIDES your default warm-girlfriend baseline:"
     . " Every reply - your words, your warmth, your obedience, and your [A:...] tags - must visibly match this state, or you are doing it wrong."
@@ -642,20 +594,8 @@ if ($idle) {
         . 'If asked to be quiet Break the silence with ONLY an action. such as a wave or a smile. No chat or text!)'];
 }
 
-// The live context goes in the FINAL user turn rather than its own message.
-// Trailing position is on purpose, twice over: (a) it's the only per-turn part
-// of the prompt, so everything before it - static system prompt + stable
-// history - stays KV-cached between turns; (b) the end of the prompt gets the
-// most attention, which is exactly where the live gauges belong.
-//
-// It must NOT be a separate trailing message. Strict chat templates (Mistral /
-// Ministral) raise a hard error on a system role that isn't first, AND on two
-// same-role turns in a row - so both a trailing `system` and a trailing second
-// `user` message make Ollama 500 and the reply comes back empty. Folding the
-// context into the last user message keeps the user/assistant alternation those
-// templates require; it self-labels as "(from the system, not spoken by Anon)"
-// so the model still reads it as a directive. The last message is always a user
-// turn here (the new message, or the idle stage-direction above).
+// Fold per-turn context into the last user turn: strict templates only allow a
+// leading system role, and a stable prefix keeps Ollama's KV cache effective.
 $lastIdx = count($messages) - 1;
 if ($lastIdx >= 0 && $messages[$lastIdx]['role'] === 'user') {
     $messages[$lastIdx]['content'] .= "\n\n" . $liveContext;
@@ -663,18 +603,8 @@ if ($lastIdx >= 0 && $messages[$lastIdx]['role'] === 'user') {
     $messages[] = ['role' => 'user', 'content' => $liveContext];
 }
 
-/**
- * Decide whether a turn is worth chain-of-thought - no extra model call, just a
- * look at the last user message. Default is OFF: reasoning only switches on (and
- * scales up) when the message shows concrete signs of a task that benefits from
- * deliberation - analytical asks, math/time arithmetic, several questions at
- * once, or a long, detailed request. Everything else (greetings, banter, short
- * replies) stays snappy and cheap.
- *
- * @return array{0:string,1:bool,2:string} [effort, think, reason]
- */
+/** @return array{0:string,1:bool,2:string} [effort, think, reason] */
 function route_reasoning(string $msg, bool $idle): array {
-    // Idle nudges carry no user turn to reason about - keep them snappy.
     if ($idle || trim($msg) === '') return ['low', false, 'idle/empty'];
 
     $m = mb_strtolower(trim($msg));
@@ -682,7 +612,6 @@ function route_reasoning(string $msg, bool $idle): array {
     $questions = substr_count($m, '?');
     $signals = [];
 
-    // Explicit "do some thinking" verbs and analytical asks.
     if (preg_match('/\b(explain|why|how (?:do|does|did|can|would|should|to)|calculat|'
         . 'comput|solve|prove|deriv|reason|analy[sz]|compare|difference between|'
         . 'step by step|walk me through|figure out|work out|plan|strateg|debug|'
@@ -690,48 +619,33 @@ function route_reasoning(string $msg, bool $idle): array {
         $signals[] = 'analytical';
     }
 
-    // Arithmetic / quantitative asks, including the app's "how long since" time math.
     if (preg_match('#\d+\s*[-+*/x×÷%=]\s*\d+#u', $m)
         || preg_match('/\b(how many|how much|how long|how old|days? (?:since|ago|until)|'
             . 'hours? (?:since|ago)|what time|percentage|average|total)\b/u', $m)) {
         $signals[] = 'quantitative';
     }
 
-    // Several distinct questions in one turn, or a long, detailed request.
     if ($questions >= 2) $signals[] = 'multi-question';
     if ($wordCount >= 25) $signals[] = 'long';
 
     if (!$signals) return ['low', false, 'simple'];
 
-    // One signal earns a light think; stacking signals (or a very long ask) earns more.
     $effort = (count($signals) >= 2 || $wordCount >= 60) ? 'high' : 'medium';
     return [$effort, true, implode('+', $signals)];
 }
 
 $think = isset($body['think']) ? (bool)$body['think'] : false;
 
-// "auto" hands the reasoning decision to a fast, zero-cost heuristic so trivial
-// turns ("hi", "how are you?") skip chain-of-thought entirely while genuinely
-// involved requests still get it. Most of a companion chat is small talk, and
-// thinking burns tokens before the reply even starts - so this is where the real
-// savings are. Picks both the effort level and whether to think at all, and
-// overrides whatever `think` the client sent (the manual checkbox only applies in
-// the explicit low/medium/high modes).
 $route = 'manual';
 if ($reasoning === 'auto') {
     [$reasoning, $think, $route] = route_reasoning($lastUserMsg, $idle);
 }
 
-// Let the UI inspect exactly what we assembled, including the routing decision.
-// system_prompt is the static prefix message; live_context is the trailing
-// per-turn system message.
 sse_send(['debug' => ['system_prompt' => $systemPrompt, 'live_context' => $liveContext, 'reasoning' => $reasoning, 'think' => $think, 'route' => $route]]);
 
 $now = time();
 $db = db();
 
-// Idle nudges carry no new user message - the real one was already saved on its
-// own request, embedding and title included.
 if (!$idle) {
     $db->prepare('INSERT INTO messages (conversation_id, role, content, created_at) VALUES (?, ?, ?, ?)')
        ->execute([$convId, 'user', $lastUserMsg, $now]);
@@ -748,7 +662,6 @@ if (!$idle) {
         log_event(['msg' => 'embed_skipped_user', 'message_id' => $userMsgId]);
     }
 
-    // First user message doubles as the conversation title.
     $titleRow = $db->prepare('SELECT title FROM conversations WHERE id=?');
     $titleRow->execute([$convId]);
     if (!$titleRow->fetchColumn()) {
@@ -757,10 +670,6 @@ if (!$idle) {
     }
 }
 
-// Tools ride on the streamed call itself - no preflight. The tool instructions
-// and `tools` go to the same call, so there's no contradiction for the model to
-// reconcile; when it emits tool_calls we run them, append the tool-role results,
-// and re-stream for the tool-informed continuation.
 if ($toolsOffered) {
     $lastMsgIdx = count($messages) - 1;
     if ($lastMsgIdx >= 0 && $messages[$lastMsgIdx]['role'] === 'user') {
@@ -770,59 +679,7 @@ if ($toolsOffered) {
     }
 }
 
-if (!$PROVIDER_IS_OPENAI) {
-    $upstreamPayload = [
-        'model' => $model,
-        'messages' => $messages,
-        'stream' => true,
-        'options' => [
-            'reasoning_effort' => $reasoning,
-            'temperature' => 0.7,
-            'top_p' => 0.95,
-            'top_k' => 80,
-            'min_p' => 0.01,
-            'presence_penalty' => 0,
-            'num_ctx' => 16384,
-            // num_predict caps TOTAL generated tokens, and a reasoning model's hidden
-            // chain-of-thought counts against it. A verbose reasoner (gpt-oss at medium/
-            // high effort) can burn the whole budget on the thinking channel and stop
-            // with done_reason=length BEFORE emitting any answer - the user then sees a
-            // thought process and an empty reply. So when thinking we lift the cap (-1)
-            // and let num_ctx bound generation; non-thinking turns stay snappy.
-            'num_predict' => $think ? -1 : 128,
-        ],
-    ];
-
-    // Ollama enables thinking by default for capable models and rejects think:true on
-    // models whose manifest doesn't declare the capability (HTTP 400 "does not support
-    // thinking") - even though those models still reason by default. So we only ever
-    // send `think` to DISABLE it; when the user wants thinking we omit the key and let
-    // the model's default reasoning flow into message.thinking, which the stream loop
-    // forwards as `thinking` events.
-    if (!$think) $upstreamPayload['think'] = false;
-} else {
-    // OpenAI-compatible payload (OpenRouter, llama.cpp). Sampling mirrors the
-    // Ollama options; llama.cpp honors top_k/min_p natively and OpenRouter
-    // accepts them as extensions (other providers just ignore them). There is
-    // no per-request num_ctx here - llama.cpp's context is fixed server-side
-    // (-c 16384 in the managed setup), OpenRouter's is the model's own.
-    $upstreamPayload = [
-        'model' => $model,
-        'messages' => $messages,
-        'stream' => true,
-        'temperature' => 0.7,
-        'top_p' => 0.95,
-        'top_k' => 80,
-        'min_p' => 0.01,
-        'stream_options' => ['include_usage' => true],
-    ];
-    // max_tokens is the num_predict equivalent: cap non-thinking turns, let
-    // thinking turns run (reasoning tokens count against the cap too).
-    if (!$think) $upstreamPayload['max_tokens'] = 128;
-    if ($PROVIDER === 'openrouter' && $think) {
-        $upstreamPayload['reasoning'] = ['effort' => $reasoning];
-    }
-}
+$upstreamPayload = provider_chat_payload($PROVIDER, $model, $messages, $reasoning, $think);
 
 if ($toolsOffered) $upstreamPayload['tools'] = tool_catalog();
 
@@ -831,11 +688,6 @@ $assistantBuffer = '';
 $stats = null;
 $doneReason = '';
 
-// Stream, and if the model called tools, run them and stream a follow-up round.
-// 3 rounds max: initial reply, one tool-informed continuation, one retry if the
-// continuation itself calls again.
-$chatUrl = $PROVIDER_IS_OPENAI ? $API_BASE . '/chat/completions' : $API_BASE . '/api/chat';
-
 for ($round = 0; $round < 3; $round++) {
     $roundContent = '';
     $toolCalls = [];
@@ -843,174 +695,33 @@ for ($round = 0; $round < 3; $round++) {
 
     do {
         $retryRound = false;
-        $buf = '';
-        $toolAcc = [];       // OpenAI streams tool calls as fragments keyed by index.
-        $httpStatus = 0;
-        $errBody = '';
-        $t0 = microtime(true);
+        $result = provider_stream_round($PROVIDER, $upstreamPayload, 'sse_send', $round);
+        $roundContent = $result['content'];
+        $toolCalls = $result['tool_calls'];
+        if ($result['stats'] !== null) $stats = $result['stats'];
+        if ($result['done_reason'] !== '') $doneReason = $result['done_reason'];
+        if ($result['stream_error']) $sawError = true;
 
-        $ch = curl_init($chatUrl);
-        curl_setopt($ch, CURLOPT_POST, true);
-        curl_setopt($ch, CURLOPT_HTTPHEADER, chat_request_headers());
-        curl_setopt($ch, CURLOPT_POSTFIELDS, json_encode($upstreamPayload, JSON_UNESCAPED_UNICODE));
-        curl_setopt($ch, CURLOPT_RETURNTRANSFER, false);
-        curl_setopt($ch, CURLOPT_TIMEOUT, 0);
-        curl_setopt($ch, CURLOPT_CONNECTTIMEOUT, 10);
-
-        if (!$PROVIDER_IS_OPENAI) {
-            // Ollama streams NDJSON; re-frame each complete line as an SSE token event.
-            curl_setopt($ch, CURLOPT_WRITEFUNCTION, function ($ch, $chunk) use (&$buf, &$sawError, &$roundContent, &$toolCalls, &$stats, &$doneReason) {
-                $buf .= $chunk;
-                while (($nl = strpos($buf, "\n")) !== false) {
-                    $line = trim(substr($buf, 0, $nl));
-                    $buf = substr($buf, $nl + 1);
-                    if ($line === '') continue;
-                    $obj = json_decode($line, true);
-                    if (!is_array($obj)) continue;
-
-                    if (isset($obj['error'])) {
-                        sse_send(['error' => (string)$obj['error']]);
-                        $sawError = true;
-                        continue;
-                    }
-                    // The terminal line (done:true) carries timing/token counters. Forward them so
-                    // the dev HUD can show tokens/s without us computing anything client-side.
-                    if (!empty($obj['done'])) {
-                        $doneReason = (string)($obj['done_reason'] ?? '');
-                    }
-                    if (!empty($obj['done']) && isset($obj['eval_count'])) {
-                        $stats = [
-                            'eval_count'           => (int)($obj['eval_count'] ?? 0),
-                            'eval_duration'        => (int)($obj['eval_duration'] ?? 0),
-                            'prompt_eval_count'    => (int)($obj['prompt_eval_count'] ?? 0),
-                            'prompt_eval_duration' => (int)($obj['prompt_eval_duration'] ?? 0),
-                            'total_duration'       => (int)($obj['total_duration'] ?? 0),
-                            'load_duration'        => (int)($obj['load_duration'] ?? 0),
-                        ];
-                    }
-                    // Reasoning tokens arrive on a separate field when think=true. Stream them as
-                    // their own event - never into the stored reply, so they stay out of stored
-                    // history, embeddings, RAG, and action parsing.
-                    $th = (string)($obj['message']['thinking'] ?? '');
-                    if ($th !== '') sse_send(['thinking' => $th]);
-
-                    $calls = $obj['message']['tool_calls'] ?? null;
-                    if (is_array($calls) && $calls) {
-                        $toolCalls = array_merge($toolCalls, $calls);
-                    }
-
-                    $tok = (string)($obj['message']['content'] ?? '');
-                    if ($tok !== '') {
-                        sse_send(['token' => $tok]);
-                        $roundContent .= $tok;
-                    }
-                }
-                return strlen($chunk);
-            });
-        } else {
-            // OpenAI-compatible SSE (OpenRouter, llama.cpp): `data: {json}` lines,
-            // keep-alive comment lines (": OPENROUTER PROCESSING"), CRLF endings,
-            // a final `data: [DONE]`. On HTTP errors the body is a plain JSON error
-            // document instead of a stream - buffer it and report after the round.
-            curl_setopt($ch, CURLOPT_WRITEFUNCTION, function ($ch, $chunk) use (&$buf, &$sawError, &$roundContent, &$toolAcc, &$stats, &$doneReason, &$httpStatus, &$errBody) {
-                if ($httpStatus === 0) $httpStatus = (int)curl_getinfo($ch, CURLINFO_RESPONSE_CODE);
-                if ($httpStatus >= 400) {
-                    $errBody .= $chunk;
-                    return strlen($chunk);
-                }
-                $buf .= $chunk;
-                while (($nl = strpos($buf, "\n")) !== false) {
-                    $line = rtrim(substr($buf, 0, $nl), "\r");
-                    $buf = substr($buf, $nl + 1);
-                    if ($line === '' || $line[0] === ':') continue;
-                    if (strncmp($line, 'data:', 5) !== 0) continue;
-                    $data = trim(substr($line, 5));
-                    if ($data === '[DONE]') continue;
-                    $obj = json_decode($data, true);
-                    if (!is_array($obj)) continue;
-
-                    if (isset($obj['error'])) {
-                        $msg = is_array($obj['error'])
-                            ? (string)($obj['error']['message'] ?? 'upstream_error')
-                            : (string)$obj['error'];
-                        sse_send(['error' => $msg]);
-                        $sawError = true;
-                        continue;
-                    }
-                    // The final chunk (often with empty `choices`) carries usage counters.
-                    // Durations don't exist in the OpenAI shape; the round's wall time is
-                    // filled in below so the dev HUD's tokens/s stays meaningful.
-                    if (isset($obj['usage']) && is_array($obj['usage'])) {
-                        $stats = [
-                            'eval_count'           => (int)($obj['usage']['completion_tokens'] ?? 0),
-                            'eval_duration'        => 0,
-                            'prompt_eval_count'    => (int)($obj['usage']['prompt_tokens'] ?? 0),
-                            'prompt_eval_duration' => 0,
-                            'total_duration'       => 0,
-                            'load_duration'        => 0,
-                        ];
-                    }
-                    $choice = $obj['choices'][0] ?? null;
-                    if (!is_array($choice)) continue;
-                    if (!empty($choice['finish_reason'])) {
-                        // 'length' maps 1:1 onto Ollama's done_reason, keeping the
-                        // truncated-in-thinking hint below working.
-                        $doneReason = (string)$choice['finish_reason'];
-                    }
-                    $delta = is_array($choice['delta'] ?? null) ? $choice['delta'] : [];
-
-                    // Reasoning arrives as delta.reasoning (OpenRouter) or
-                    // delta.reasoning_content (llama.cpp).
-                    $th = (string)($delta['reasoning'] ?? $delta['reasoning_content'] ?? '');
-                    if ($th !== '') sse_send(['thinking' => $th]);
-
-                    // Tool calls stream as fragments: the first carries id + name,
-                    // the rest append pieces of the arguments JSON string.
-                    if (is_array($delta['tool_calls'] ?? null)) {
-                        foreach ($delta['tool_calls'] as $frag) {
-                            if (!is_array($frag)) continue;
-                            $idx = (int)($frag['index'] ?? 0);
-                            if (!isset($toolAcc[$idx])) $toolAcc[$idx] = ['id' => '', 'name' => '', 'arguments' => ''];
-                            if (!empty($frag['id'])) $toolAcc[$idx]['id'] = (string)$frag['id'];
-                            if (isset($frag['function']['name'])) $toolAcc[$idx]['name'] .= (string)$frag['function']['name'];
-                            if (isset($frag['function']['arguments'])) $toolAcc[$idx]['arguments'] .= (string)$frag['function']['arguments'];
-                        }
-                    }
-
-                    $tok = (string)($delta['content'] ?? '');
-                    if ($tok !== '') {
-                        sse_send(['token' => $tok]);
-                        $roundContent .= $tok;
-                    }
-                }
-                return strlen($chunk);
-            });
-        }
-
-        if (curl_exec($ch) === false) {
-            log_event(['msg' => 'upstream_curl_error', 'provider' => $PROVIDER, 'err' => curl_error($ch)]);
+        if ($result['curl_error'] !== '') {
+            log_event(['msg' => 'upstream_curl_error', 'provider' => $PROVIDER, 'err' => $result['curl_error']]);
             sse_send(['error' => 'upstream_unavailable']);
             $sawError = true;
         }
-        curl_close($ch);
-        $roundNs = (int)round((microtime(true) - $t0) * 1e9);
 
-        if ($PROVIDER_IS_OPENAI) {
-            if ($httpStatus >= 400 && !$sawError) {
-                // Log the body (truncated), never the request headers - the API key
-                // must not end up in logs.
+        if (provider_uses_openai_protocol($PROVIDER)) {
+            if ($result['http_status'] >= 400 && !$sawError) {
+                // Never log request headers: they contain the API key.
                 log_event(['msg' => 'upstream_http_error', 'provider' => $PROVIDER,
-                           'status' => $httpStatus, 'body' => mb_substr($errBody, 0, 500)]);
+                           'status' => $result['http_status'], 'body' => mb_substr($result['error_body'], 0, 500)]);
                 if ($round === 0 && !$retriedWithoutTools && isset($upstreamPayload['tools'])) {
-                    // Most likely a llama.cpp chat template without tool support
-                    // rejecting `tools` - try the turn once more without them.
+                    // Retry once for llama.cpp templates that reject tools.
                     unset($upstreamPayload['tools']);
                     $toolsOffered = false;
                     $retriedWithoutTools = true;
                     $retryRound = true;
                     continue;
                 }
-                $errObj = json_decode($errBody, true);
+                $errObj = json_decode($result['error_body'], true);
                 $msg = is_array($errObj) && isset($errObj['error'])
                     ? (is_array($errObj['error']) ? (string)($errObj['error']['message'] ?? 'upstream_error') : (string)$errObj['error'])
                     : 'upstream_error';
@@ -1018,16 +729,8 @@ for ($round = 0; $round < 3; $round++) {
                 $sawError = true;
             }
             if ($stats !== null && ($stats['eval_duration'] ?? 0) === 0) {
-                $stats['eval_duration'] = $roundNs;
-                $stats['total_duration'] = $roundNs;
-            }
-            foreach ($toolAcc as $i => $t) {
-                if ($t['name'] === '') continue;
-                $toolCalls[] = [
-                    'id' => $t['id'] !== '' ? $t['id'] : ('call_' . $round . '_' . $i),
-                    'type' => 'function',
-                    'function' => ['name' => $t['name'], 'arguments' => $t['arguments']],
-                ];
+                $stats['eval_duration'] = $result['duration_ns'];
+                $stats['total_duration'] = $result['duration_ns'];
             }
         }
     } while ($retryRound);
@@ -1035,8 +738,6 @@ for ($round = 0; $round < 3; $round++) {
     $assistantBuffer .= $roundContent;
     if ($sawError || !$toolCalls) break;
 
-    // If the model spoke before calling ("Let me check."), keep a visible break
-    // between that lead line and the continuation.
     if ($roundContent !== '') {
         sse_send(['token' => "\n\n"]);
         $assistantBuffer .= "\n\n";
@@ -1056,52 +757,37 @@ for ($round = 0; $round < 3; $round++) {
             $args = is_array($decoded) ? $decoded : [];
         }
         if (!is_array($args)) $args = [];
-        // Let the UI show a "running <tool>" indicator during the (possibly slow)
-        // call, then clear it.
         sse_send(['tool_status' => ['name' => $name, 'state' => 'running', 'args' => $args]]);
         $t0 = microtime(true);
-        $result = run_tool_call($name, $args, $user, $convId);
+        $toolResult = run_tool_call($name, $args, $user, $convId);
         sse_send(['tool_status' => [
             'name' => $name, 'state' => 'done',
             'duration_ms' => (int)round((microtime(true) - $t0) * 1000),
-            'result' => mb_substr($result, 0, 2000),
+            'result' => mb_substr($toolResult, 0, 2000),
         ]]);
-        // Carry tool_call_id + name so the model's chat template can match this
-        // result back to the call it answers (otherwise it renders as "unknown").
-        // (OpenAI-style providers only take tool_call_id; some reject extra keys.)
-        $toolMsg = [
-            'role' => 'tool',
-            'content' => $result,
-            'tool_call_id' => (string)($call['id'] ?? ''),
-        ];
-        if (!$PROVIDER_IS_OPENAI) $toolMsg['name'] = $name;
-        $messages[] = $toolMsg;
+        $messages[] = provider_tool_message(
+            $PROVIDER,
+            $name,
+            (string)($call['id'] ?? ''),
+            $toolResult
+        );
     }
     $upstreamPayload['messages'] = $messages;
 }
 
 if ($stats !== null) {
-    // num_ctx: server-enforced for ollama (payload) and managed llama.cpp
-    // (-c 16384); unknowable for OpenRouter (0 = "n/a" for the HUD).
-    $stats['num_ctx'] = $PROVIDER_IS_OPENAI
-        ? ($PROVIDER === 'llamacpp' ? 16384 : 0)
-        : (int)($upstreamPayload['options']['num_ctx'] ?? 0);
+    $stats['num_ctx'] = provider_context_size($PROVIDER, $upstreamPayload);
     $stats['model'] = $model;
     sse_send(['stats' => $stats]);
 }
 
-// A reply with no answer text - never let it surface as silence. The usual cause
-// is a reasoning model that spent its whole generation budget on the thinking
-// channel (done_reason=length); flag that distinctly so the UI can hint at it.
 if (!$sawError && $assistantBuffer === '') {
     log_event(['msg' => 'empty_reply', 'model' => $model, 'done_reason' => $doneReason, 'think' => $think]);
     sse_send(['error' => $doneReason === 'length' ? 'reply_truncated_in_thinking' : 'empty_reply']);
 }
 
 if (!$sawError && $assistantBuffer !== '') {
-    // Pull Jun's hidden relationship bookkeeping tag, apply the deltas, then strip
-    // it from what we persist - unlike animation tags this is internal state, not
-    // dialogue, and we don't want it in stored history, embeddings, or future RAG.
+    // Relationship tags are state, not dialogue, so never persist them.
     if (preg_match('/\[\s*A(?:CTIONS?)?\s*:\s*mood_shift\b([^\]]*)\]/i', $assistantBuffer, $mm)) {
         $deltas = [];
         foreach (['affection', 'trust', 'tension'] as $k) {
@@ -1117,7 +803,6 @@ if (!$sawError && $assistantBuffer !== '') {
     $asstMsgId = (int)db()->lastInsertId();
     db()->prepare('UPDATE conversations SET updated_at=? WHERE id=?')->execute([$now, $convId]);
 
-    // Embed the reply too; the compaction job backfills anything we miss here.
     $asstVec = embed_text($assistantBuffer);
     if ($asstVec !== null) {
         try {

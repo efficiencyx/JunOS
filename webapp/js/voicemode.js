@@ -1,11 +1,3 @@
-// Voice Mode: ChatGPT-style hands-free UI. The mic button on the composer
-// toggles it; while active the chat chrome is hidden, the camera zooms to
-// Jun's face, replies are spoken (TTS forced on) and not typed - app.js gates
-// its per-token render on VoiceMode.isActive().
-//
-// It deliberately owns no audio: mic/VAD/STT stay in voice.js, speech in
-// tts.js, and the transcript→reply pipeline is the same one the settings
-// hands-free toggle uses. This module is only the mode switch + overlay.
 window.VoiceMode = (function () {
   let active = false;
   let muted = false;
@@ -52,11 +44,8 @@ window.VoiceMode = (function () {
     active = false;
     document.body.classList.remove('voice-mode');
     const ov = overlay();
-    // Keep the element in the DOM until the fade ends, then hide it.
     if (ov) setTimeout(() => { if (!active) ov.hidden = true; }, 300);
-    // Reveal whatever accumulated while rendering was gated (mid-stream exit).
     if (hooks.onExitMidStream) hooks.onExitMidStream();
-    // Mic and TTS go back to what the settings say.
     const voiceChk = document.getElementById('voiceChk');
     if (!(voiceChk && voiceChk.checked)) Voice.disable();
     else if (muted) Voice.enable().catch(() => {});

@@ -1,5 +1,4 @@
 <?php
-// Shared helpers pulled in by every endpoint (require_once __DIR__ . '/_lib.php').
 
 require_once __DIR__ . '/providers.php';
 
@@ -119,9 +118,6 @@ function rate_limit(string $bucket, int $maxPerWindow, int $windowSec): void {
 
 const EMBED_MODEL = 'nomic-embed-text';
 
-// Returns the embedding vector for $text, or null if embeddings are disabled
-// (EMBEDDINGS=off / non-Ollama provider), Ollama is unreachable, or it gives us
-// something we can't parse. Every caller has to cope with null.
 function embed_text(string $text, string $task = ''): ?array {
     if (!embeddings_enabled()) return null;
 
@@ -261,7 +257,6 @@ function memory_append(int $userId, string $memory, string $category): array {
     return ['ok' => true, 'entry' => $entry];
 }
 
-// All valid entries with their line index (the id used for deletes).
 function memory_list(int $userId): array {
     $path = memory_file_path($userId);
     if (!is_readable($path)) return [];
@@ -329,8 +324,6 @@ function relationship_get(int $userId): array {
     return RELATIONSHIP_DEFAULTS; // mild-positive start: she's already his girlfriend
 }
 
-// Persist absolute scores (each clamped to 0-100). Used by the dev switcher and
-// as the write path for relationship_apply's deltas.
 function relationship_set(int $userId, array $values): void {
     $clamp = fn($n) => max(0, min(100, (int)$n));
     try {

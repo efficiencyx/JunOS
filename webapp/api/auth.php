@@ -60,7 +60,6 @@ case 'login':
         fail(401, 'invalid_credentials');
     }
 
-    // drop this user's stale sessions while we're here
     $db->prepare('DELETE FROM sessions WHERE user_id = ? AND created_at < ?')
        ->execute([$user['id'], time() - 30 * 86400]);
 

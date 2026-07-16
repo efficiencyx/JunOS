@@ -1,6 +1,3 @@
-// Bootstrap + chat loop. Streams tokens, parses [ACTION:...] inline,
-// dispatches to Live2D as soon as a complete action block is seen.
-
 (function () {
   const messagesEl = document.getElementById('messages');
   const chatInput = document.getElementById('chatInput');
@@ -54,25 +51,14 @@
 
   const AUTO_RESET_MS = 3000;
 
-  // Idle nudge: if Anon goes quiet, prompt Jun to speak first. The reply timer is
-  // armed only once the model finishes streaming (in onDone/onError), so a long
-  // reply can't trip it early. 60s after a reply lands, or 45s after the app is
-  // ready / a conversation is opened. Capped so Jun doesn't keep talking to an
-  // empty room forever - resets when Anon interacts.
   const IDLE_AFTER_REPLY_MS = 60000;
   const IDLE_AFTER_JOIN_MS  = 45000;
   const TYPING_POLL_MS = 5000;
   const MAX_IDLE_NUDGES = 3;
   let idleTimer = null;
   let idleNudgeStreak = 0;
-  // Set while an *idle nudge* is streaming: lets a real user send abort it cleanly
-  // (rather than being swallowed) so Anon's message wins instead of doubling up.
   let cancelActiveIdleNudge = null;
-  // Set while any stream is in flight: aborts it and settles the UI, keeping the
-  // partial reply. Defined in runChat(); null when nothing is streaming.
   let stopActiveStream = null;
-  // Voice mode gates the per-token render; this re-renders the hidden bubble
-  // (set per-stream in runChat, used when exiting voice mode mid-reply).
   let renderVoiceDraft = null;
 
   function cancelIdleNudge() {
@@ -92,11 +78,7 @@
       idleTimer = null;
       if (abortFn) return;                 // a stream is running; it re-arms on done
       if (document.hidden) { scheduleIdleNudge(delayMs); return; } // tab hidden, recheck later
-      // Anon has a half-written message sitting in the box - he's composing, not
-      // idle. Don't talk over him; check again later.
       if (chatInput.value.trim() !== '') { scheduleIdleNudge(delayMs); return; }
-      // The spoken equivalent: he's mid-sentence, or a transcript is already on
-      // its way. He isn't idle - he's talking to her right now.
       if (window.Voice && Voice.isEnabled()) {
         const vs = Voice.getState();
         if (vs === 'speech' || vs === 'maybe' || vs === 'thinking') { scheduleIdleNudge(delayMs); return; }
@@ -106,11 +88,7 @@
     }, delayMs);
   }
 
-  // Start the post-reply idle clock from when Jun *stops talking*, not when the text
-  // finished streaming: with TTS on (and especially with thinking, where replies run
-  // long) she keeps speaking for many seconds after the stream ends, which would
-  // otherwise eat most of the idle window. When she's still speaking, defer to the
-  // TTS drain callback below; otherwise arm immediately as before.
+  // Start the idle timer after TTS drains, not after text streaming ends.
   function armIdleAfterReply() {
     if (window.TTS && TTS.isSpeaking && TTS.isSpeaking()) return;
     scheduleIdleNudge(IDLE_AFTER_REPLY_MS);
@@ -213,13 +191,7 @@
     stageStatus.textContent = text;
   }
 
-  // Inline action-tag extraction from the streaming text. Accumulate text, dispatch
-  // complete actions (closed by ']'), and hold back any tail that could be the start of
-  // a marker so it isn't emitted as visible text until we know whether it's an action.
-  // Whitespace-tolerant and case-insensitive. Accepts the compact [A: marker plus the
-  // legacy [ACTION: / [ACTIONS: forms still present in stored history and the fine-tune.
   const MARK_RE = /\[\s*A(?:CTIONS?)?\s*:/i;
-  // Trailing partial that could still grow into MARK_RE. Anchored at end-of-string.
   const PARTIAL_RE = /\[\s*(?:A(?:C(?:T(?:I(?:O(?:N(?:S)?)?)?)?)?)?\s*)?$/i;
 
   function findMark(s, from = 0) {
@@ -240,7 +212,6 @@
         while (true) {
           const start = findMark(buf);
           if (start < 0) {
-            // No marker yet. Emit what we have, except a possible partial marker tail.
             const hold = pendingMarkerSuffix(buf);
             if (buf.length > hold) {
               onCleanText(buf.slice(0, buf.length - hold));
@@ -248,19 +219,16 @@
             }
             break;
           }
-          // Emit text before the marker.
           if (start > 0) {
             onCleanText(buf.slice(0, start));
             buf = buf.slice(start);
           }
-          // buf starts with MARK. Look for closing ']'.
           const end = buf.indexOf(']');
           if (end < 0) break; // wait for more
           const blob = buf.slice(0, end + 1);
           buf = buf.slice(end + 1);
           const acts = Actions.parseActions(blob);
           if (acts.length === 0) {
-            // Malformed but well-bracketed: log so we can see it, don't show in chat.
             logAction('warn', 'block non parsabile: ' + blob);
           } else {
             for (const a of acts) Actions.applyAction(a);
@@ -269,7 +237,6 @@
       },
       flush() {
         if (buf.length) {
-          // Drop a dangling unclosed action tag, emit everything else.
           const start = findMark(buf);
           if (start >= 0) onCleanText(buf.slice(0, start));
           else onCleanText(buf);
@@ -279,10 +246,6 @@
     };
   }
 
-  // Second stage after makeStreamBuffer: resolve {f_playerName}/{f_botName} to the
-  // user's chosen names. Buffers a trailing partial placeholder across chunks so a
-  // split token (e.g. "{f_play" + "erName}") substitutes cleanly and never flashes
-  // its raw form in the chat or gets read aloud by TTS.
   function makeNameFilter(emit) {
     let buf = '';
     return {
@@ -307,8 +270,6 @@
   function sendMessage() {
     const text = chatInput.value.trim();
     if (!text) return;
-    // If a stream is in flight, only an *idle nudge* may be interrupted - abort it
-    // so Anon's real message wins. A genuine reply in progress is left alone.
     if (abortFn) {
       if (!cancelActiveIdleNudge) return;
       cancelActiveIdleNudge();
@@ -320,9 +281,6 @@
     runChat({ idle: false });
   }
 
-  // Hands-free gives no physical feedback - no button held down, nothing to
-  // watch - so the pill is the only way to tell "it didn't hear me" from "it
-  // heard me and Jun is thinking". Without it the whole mode feels broken.
   const VOICE_STATE_LABELS = {
     idle: 'off',
     calibrating: 'listening to the room…',
@@ -332,8 +290,6 @@
     thinking: 'transcribing…',
   };
 
-  // The sidecar can be built without faster-whisper, in which case /stt 503s.
-  // Ask once at boot rather than letting the first utterance fail.
   async function sttAvailable() {
     try {
       const r = await fetch('/api/stt.php?action=health', { credentials: 'same-origin' });
@@ -345,33 +301,18 @@
     }
   }
 
-  // A finished spoken turn. Goes through sendMessage() rather than calling
-  // runChat() directly - that function owns the idle-nudge cancellation and the
-  // history push, and a parallel send path would drift out of sync with it.
-  //
-  // By the time a transcript lands, any stream we interrupted is already gone:
-  // Voice's barge-in fired ~250ms into your speech and aborted it, while this is
-  // at least silence-timeout + STT later. The abortFn guard below is for the case
-  // where barge-in never ran (barge-in disabled).
   function sendFromVoice(text) {
-    // Clears abortFn synchronously, so sendMessage()'s in-flight guard won't
-    // swallow the turn. Normally a no-op: barge-in already stopped the stream
-    // ~250ms into your speech, well before this transcript existed.
     if (stopActiveStream) stopActiveStream();
     chatInput.value = text;
     sendMessage();
   }
 
-  // Core streaming loop. `idle` requests are unprompted (no user turn): the backend
-  // injects a stage-direction so Jun speaks first, and we don't add a user bubble.
   function runChat({ idle }) {
     if (abortFn) return;
     cancelIdleNudge();
     cancelAutoReset();
 
     const draft = appendMsg('assistant', '');
-    // Reply text renders into its own body element so the thinking panel above it
-    // survives the per-token innerHTML rewrite.
     const body = document.createElement('div');
     body.className = 'msg-body';
     draft.appendChild(body);
@@ -379,7 +320,6 @@
     typing.className = 'typing';
     body.appendChild(typing);
 
-    // Lazily created the first time a thinking token arrives (only when Think is on).
     let thinkEl = null, thinkBody = null, thinking = '';
     function pushThinking(t) {
       if (!thinkEl) {
@@ -405,17 +345,10 @@
       thinkEl.querySelector('summary').textContent = 'Thought process';
     }
 
-    // `visible` is the raw, action-stripped text WITH {f_*} name placeholders left
-    // intact - that's what we store in history so the model keeps seeing the
-    // placeholders it was trained on. `shown` is the name-resolved text that the
-    // user actually reads and hears; the name filter substitutes between them.
     let visible = '';
     let shown = '';
     const names = makeNameFilter(sub => {
       shown += sub;
-      // Voice mode: the chat is hidden and the reply is spoken, so skip the
-      // per-token markdown re-render. `shown` still accumulates; the bubble is
-      // caught up in finalize() or when voice mode exits mid-stream.
       if (!(window.VoiceMode && VoiceMode.isActive())) {
         body.innerHTML = renderMarkdown(shown);
         body.appendChild(typing);
@@ -436,34 +369,21 @@
     sendBtn.disabled = true;
     sendBtn.textContent = 'Stop';
 
-    // Cut this stream short but keep what's already on screen. Used by the Stop
-    // button and by voice barge-in.
-    //
-    // It has to call finalize() itself: ollama.js treats AbortError as "not an
-    // error" and swallows it (ollama.js:60), so aborting fires neither onDone nor
-    // onError, and nothing else would ever clear abortFn - leaving runChat's
-    // `if (abortFn) return` guard permanently closed.
     stopActiveStream = () => {
       if (abortFn) abortFn();
       if (window.TTS) TTS.stop();
       typing.remove();
-      // Keep the partial line in history: Anon heard her say it, so she has to
-      // remember saying it. Same rule as onDone - drop the bubble if it's empty.
       if (visible.trim()) messages.push({ role: 'assistant', content: visible });
       else draft.remove();
       finalize();
       ui.setStatus('idle', 'idle');
       updateEmptyState();
       scheduleAutoReset();
-      // Same as onDone/onError: she stopped talking, so the idle clock starts.
-      // On the barge-in path sendMessage() resets it a moment later anyway.
       armIdleAfterReply();
     };
     const onClickStop = () => stopActiveStream();
     sendBtn.addEventListener('click', onClickStop, { once: true });
 
-    // Idle nudges are interruptible: if Anon sends while this is streaming, drop the
-    // half-rendered nudge bubble and clean up so his message takes over.
     cancelActiveIdleNudge = idle ? () => {
       if (abortFn) abortFn();
       if (window.TTS) TTS.stop();
@@ -476,7 +396,7 @@
     ui.setStatus('streaming', 'streaming');
     if (window.DevHud) DevHud.beginGen();
     appendRaw('--- ' + new Date().toLocaleTimeString() + (idle ? ' (idle nudge)' : '') + ' ---\n');
-    abortFn = Ollama.chat(
+    abortFn = ChatAPI.chat(
       { messages: [...messages], model: modelSelect.value,
         reasoning: reasoningSelect.value, think: thinkChk.checked,
         outfit_context: Outfit.describe(), conversation_id: currentConversationId,
@@ -511,7 +431,6 @@
           updateEmptyState();
           scheduleAutoReset();
           armIdleAfterReply();
-          // Jun may have nudged her mood this turn; refresh the dev panel if open.
           if (moodInputs.affection && moodInputs.affection.offsetParent !== null) loadMood();
           if (window.History) await refreshSidebar();
         },
@@ -534,7 +453,6 @@
 
     function finalize() {
       abortFn = null;
-      // Catch up the gated render so the bubble is complete when chat reappears.
       if (window.VoiceMode && VoiceMode.isActive()) body.innerHTML = renderMarkdown(shown);
       renderVoiceDraft = null;
       cancelActiveIdleNudge = null;
@@ -632,7 +550,6 @@
           const sb = makeStreamBuffer(clean => { visible += clean; });
           sb.push(row.content);
           sb.flush();
-          // Render with names resolved; keep the raw placeholders in history.
           el.innerHTML = renderMarkdown(window.Names ? Names.apply(visible) : visible);
           messages.push({ role: 'assistant', content: visible });
         }
@@ -642,15 +559,12 @@
     }
   }
 
-  // In "auto" mode the server decides whether to think, so the manual Think
-  // toggle does nothing - grey it out to make that obvious.
   function syncThinkToggle() {
     thinkChk.disabled = reasoningSelect.value === 'auto';
   }
   reasoningSelect.addEventListener('change', syncThinkToggle);
   syncThinkToggle();
 
-  // Persist model settings so they survive reloads / follow the account.
   function persistPref(key, value) {
     localStorage.setItem(key, value);
     if (window.Prefs) Prefs.pushToServer();
@@ -666,14 +580,11 @@
       sendMessage();
     }
   });
-  // Typing counts as activity: reset the streak and push the idle nudge back.
   chatInput.addEventListener('input', () => {
     if (abortFn) return;
     idleNudgeStreak = 0;
     scheduleIdleNudge(IDLE_AFTER_REPLY_MS);
   });
-  // Poll every 5s: while a draft is sitting in the box, Anon is mid-composition,
-  // so keep pushing the nudge back rather than interrupting them.
   setInterval(() => {
     if (abortFn || !currentConversationId) return;
     if (chatInput.value.trim() === '') return;
@@ -681,8 +592,6 @@
     scheduleIdleNudge(IDLE_AFTER_REPLY_MS);
   }, TYPING_POLL_MS);
 
-  // Human-readable local time from the user's browser (its clock + timezone),
-  // sent to the backend so the model's "current time" matches the user, not the server.
   function localTimeString() {
     try {
       return new Date().toLocaleString(undefined, {
@@ -727,13 +636,9 @@
   });
 
   reloadPromptBtn.addEventListener('click', () => {
-    // Server reads prompt fresh each request, so this is mostly a hint.
     logAction('ok', 'system prompt will be reloaded on next send');
   });
 
-  // Persona name fields: prefill from the current names, persist + sync on change,
-  // and re-render the open conversation so existing bubbles pick up the new name.
-  // Called once during bootstrap, after Names.load().
   function wireNameSettings() {
     const playerInput = document.getElementById('playerNameInput');
     const botInput = document.getElementById('botNameInput');
@@ -743,18 +648,15 @@
     function commit() {
       if (playerInput) Names.setPlayer(playerInput.value);
       if (botInput) Names.setBot(botInput.value);
-      // Reflect normalization (blank reverts to the default cast).
       if (playerInput) playerInput.value = Names.getPlayer();
       if (botInput) botInput.value = Names.getBot();
       if (window.Prefs) Prefs.pushToServer();
-      // Repaint already-rendered bubbles with the new names; skip mid-stream.
       if (!abortFn && currentConversationId != null) loadConversation(currentConversationId);
     }
     if (playerInput) playerInput.addEventListener('change', commit);
     if (botInput) botInput.addEventListener('change', commit);
   }
 
-  // Settings drawer
   if (openSettingsBtn) openSettingsBtn.addEventListener('click', () => ui.toggleDrawer(true));
   if (closeSettingsBtn) closeSettingsBtn.addEventListener('click', () => ui.toggleDrawer(false));
   if (drawerBackdrop) drawerBackdrop.addEventListener('click', () => ui.toggleDrawer(false));
@@ -762,7 +664,6 @@
   const userChipBtn = document.getElementById('userChipBtn');
   if (userChipBtn) userChipBtn.addEventListener('click', () => ui.toggleDrawer(true));
 
-  // Settings modal: switch category panels via the left nav.
   const settingsNavItems = document.querySelectorAll('.settings-navitem');
   const settingsPanels = document.querySelectorAll('.settings-panel');
   const settingsPanelTitle = document.getElementById('settingsPanelTitle');
@@ -782,7 +683,6 @@
     });
   });
 
-  // Memory panel: list / add / delete the durable notes memory_write saves.
   const memoryList = document.getElementById('memoryList');
   const memoryCount = document.getElementById('memoryCount');
   async function loadMemories() {
@@ -876,8 +776,6 @@
     loadMemories();
   });
 
-  // Mood switcher (developer panel): show the live relationship scores and let a
-  // dev override them. GET on open / after each reply, PUT (debounced) on drag.
   function renderMood(state) {
     for (const k of ['affection', 'trust', 'tension']) {
       if (state && typeof state[k] === 'number') {
@@ -921,14 +819,12 @@
   }
   if (moodRefreshBtn) moodRefreshBtn.addEventListener('click', loadMood);
 
-  // Escape closes the settings modal.
   document.addEventListener('keydown', (e) => {
     if (e.key !== 'Escape') return;
     const d = document.getElementById('settingsDrawer');
     if (d && d.classList.contains('open')) ui.toggleDrawer(false);
   });
 
-  // Sidebar collapse toggle (persists across reloads)
   const appMain = document.querySelector('.app-main');
   const collapseBtn = document.getElementById('collapseSidebarBtn');
   const expandBtn = document.getElementById('expandSidebarBtn');
@@ -944,7 +840,6 @@
     });
   });
 
-  // Example prompt chips
   document.querySelectorAll('.chip[data-prompt]').forEach(chip => {
     chip.addEventListener('click', () => {
       chatInput.value = chip.dataset.prompt;
@@ -954,7 +849,6 @@
 
   ui.setStatus('idle', 'idle');
 
-  // Auth gate
   const authScreen = document.getElementById('authScreen');
   const authTabLogin = document.getElementById('authTabLogin');
   const authTabSignup = document.getElementById('authTabSignup');
@@ -962,8 +856,6 @@
   const authFormSignup = document.getElementById('authFormSignup');
   const signOutBtn = document.getElementById('signOutBtn');
 
-  // Flavor the auth terminal after the user's OS: macOS Terminal, Windows
-  // PowerShell, or a Linux (Ubuntu) shell. Purely cosmetic - data-os drives CSS.
   function detectOS() {
     const p = (navigator.userAgentData && navigator.userAgentData.platform)
       || navigator.platform || navigator.userAgent || '';
@@ -997,7 +889,6 @@
 
   function showAuthScreen() {
     if (authScreen) authScreen.hidden = false;
-    // Dismiss the boot overlay so it doesn't sit on top of the auth UI.
     const bo = document.getElementById('bootOverlay');
     if (bo) {
       bo.setAttribute('data-ready', '1');
@@ -1092,31 +983,23 @@
   }
 
   (async function bootstrap() {
-    // Check session before anything else - redirect to auth screen if not logged in.
     const me = await Auth.me().catch(() => null);
     if (!me) {
       showAuthScreen();
       return;
     }
 
-    // Session confirmed: show the boot overlay. The app shell stays hidden
-    // (data-pre-auth) underneath it until dismissBoot reveals it, so the app
-    // never flickers through the overlay's fade-in. Unlogged visitors never
-    // reach this, so they never see provider loading.
+    // Keep the shell hidden until the authenticated boot overlay fades out.
     showBoot();
 
-    // Populate sidebar user chip from session.
     const emailEl = document.getElementById('userEmail');
     if (me.user && emailEl) emailEl.textContent = me.user.email || '';
 
-    // Pull server-side preferences into localStorage before any module reads
-    // tracked keys (Outfit, TTS), so a second browser picks up A's settings.
+    // Hydrate synced preferences before modules read their local keys.
     if (window.Prefs) await Prefs.pullFromServer();
     if (window.Names) Names.load();
     wireNameSettings();
 
-    // Restore saved model settings (model itself is restored by the picker once
-    // Ollama's installed list is known, below).
     const savedReasoning = localStorage.getItem('reasoning_level');
     if (savedReasoning && [...reasoningSelect.options].some(o => o.value === savedReasoning)) {
       reasoningSelect.value = savedReasoning;
@@ -1136,15 +1019,12 @@
         setStageStatus(null);
         if (stageSkeleton) stageSkeleton.classList.add('hidden');
       }, 1500);
-      // Default calm idle: breathing, blinking, subtle limb sway.
       Live2D.startIdle();
 
       await Actions.load('action_map.json');
 
-      // Validate action_map params against model.
       validateActionMap(live2dInfo.paramIds);
 
-      // Outfit panel: load saved state, build checkboxes, push to model.
       Outfit.load();
       Outfit.buildUI(
         document.getElementById('outfitControls'),
@@ -1161,10 +1041,8 @@
       ui.setStatus('error', 'error');
     }
 
-    // TTS bootstrap: load voice list from sidecar, restore prefs, wire UI.
     if (window.TTS) {
       TTS.setLogger(logAction);
-      // Once Jun finishes speaking a reply, start the idle clock from there.
       if (TTS.setOnAllDone) TTS.setOnAllDone(() => scheduleIdleNudge(IDLE_AFTER_REPLY_MS));
       const savedEnabled = localStorage.getItem('tts.enabled') === '1';
       const savedVoice = localStorage.getItem('tts.voice') || '';
@@ -1174,8 +1052,6 @@
       if (ttsSpeedInput) ttsSpeedInput.value = String(savedSpeed);
 
       let engines = {};
-      // Fill the voice dropdown for one engine and pick a voice for it.
-      // `preferred` wins if it's one of the engine's voices, else the engine default.
       function populateVoices(engineKey, preferred) {
         const info = engines[engineKey] || { voices: [], default: '' };
         const voices = info.voices || [];
@@ -1209,7 +1085,6 @@
           const engineKey = ttsEngineSelect.value;
           TTS.setEngine(engineKey);
           localStorage.setItem('tts.engine', engineKey);
-          // Switching engine resets to that engine's default voice.
           const def = populateVoices(engineKey, '');
           localStorage.setItem('tts.voice', def);
           if (window.Prefs) Prefs.pushToServer();
@@ -1242,8 +1117,6 @@
       }
     }
 
-    // Voice bootstrap: hands-free mic input. Needs TTS for the reply half, so it
-    // only makes sense once TTS is wired above.
     if (window.Voice && voiceChk) {
       Voice.setLogger(logAction);
       Voice.setOnTranscript(sendFromVoice);
@@ -1254,7 +1127,6 @@
           voiceState.textContent = VOICE_STATE_LABELS[s] || s;
           voiceState.dataset.state = s;
         }
-        // Same states, mirrored into the voice-mode overlay pill.
         if (voiceOverlayStatus) {
           voiceOverlayStatus.textContent = VOICE_STATE_LABELS[s] || s;
           voiceOverlayStatus.dataset.state = s;
@@ -1271,8 +1143,6 @@
       const sup = Voice.support();
       const sttOk = await sttAvailable();
       if (!sup.ok || !sttOk) {
-        // Hands-free with no visible reason for being greyed out is worse than
-        // no button, so say which of the three things is actually missing.
         voiceChk.disabled = true;
         const why = !sup.ok
           ? (sup.reason === 'insecure_context'
@@ -1293,9 +1163,7 @@
         if (voiceBargeChk) voiceBargeChk.checked = savedBarge;
         if (voiceSilenceInput) voiceSilenceInput.value = String(savedSilence);
 
-        // Deliberately NOT restored from prefs on load: a hot mic has to be an
-        // explicit per-session choice, not something a synced pref turns on
-        // behind your back in a new tab.
+        // A hot mic is an explicit per-session choice, never a synced preference.
         voiceChk.checked = false;
         voiceChk.addEventListener('change', async () => {
           if (voiceChk.checked) {
@@ -1328,7 +1196,6 @@
       }
     }
 
-    // Boot overlay: poll Ollama until reachable, then fade out.
     const bootOverlay = document.getElementById('bootOverlay');
     const bootStatusLabel = document.querySelector('#bootStatus .boot-status-label');
     const bootHint = document.getElementById('bootHint');
@@ -1345,20 +1212,17 @@
     };
     const dismissBoot = () => {
       if (!bootOverlay) return;
-      // Reveal the app shell underneath the still-opaque overlay, so the
-      // zoom/fade-out hands straight off to the app (no flicker before it).
       document.documentElement.removeAttribute('data-pre-auth');
       setBoot('Ready', 'Connected', 'ok');
       const hide = () => {
         bootOverlay.setAttribute('data-ready', '1');
         bootOverlay.setAttribute('aria-hidden', 'true');
       };
-      // Once the log + "Ready" have shown, zoom into the terminal, then dismiss.
       if (window.BootFX && BootFX.finish) BootFX.finish(hide);
       else setTimeout(hide, 350);
     };
 
-    async function waitForOllama() {
+    async function waitForProvider() {
       let attempt = 0;
       const phases = [
         'Waking the model',
@@ -1369,7 +1233,7 @@
       for (;;) {
         attempt++;
         try {
-          const m = await Ollama.listModels();
+          const m = await ChatAPI.listModels();
           if (m && m.models && m.models.length) return m;
           setBoot('Pulling models', m && m.provider && m.provider !== 'ollama'
             ? 'No models reported by the provider yet - still booting?'
@@ -1382,7 +1246,7 @@
       }
     }
 
-    const m = await waitForOllama();
+    const m = await waitForProvider();
     modelSelect.innerHTML = m.models.map(n =>
       `<option value="${escapeHtml(n)}">${escapeHtml(n)}</option>`).join('');
     const prefer = [
@@ -1398,8 +1262,6 @@
       'llama3.1:8b', 'llama3.1:latest',
     ];
     const isChat = (n) => !/embed/i.test(n);
-    // A previously chosen model wins, as long as it's still available; then the
-    // provider's configured default (e.g. OPENROUTER_MODEL), then the Jun refs.
     const saved = localStorage.getItem('model');
     const picked = (saved && m.models.includes(saved) ? saved : null)
       || (m.default_model && m.models.includes(m.default_model) ? m.default_model : null)

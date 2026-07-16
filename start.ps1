@@ -1,26 +1,4 @@
 #!/usr/bin/env pwsh
-#
-# Bare-metal launcher for Windows (Linux/macOS keep the Docker path via
-# start.sh). No containers: Ollama runs natively, the webapp is served by
-# PHP's built-in server, and the optional TTS sidecar runs from a Python
-# venv. Everything this script creates lives under .\runtime so
-# uninstall.ps1 can remove it cleanly.
-#
-#   ./start.ps1              # start everything (default)
-#   ./start.ps1 stop         # stop the processes started here
-#   ./start.ps1 status       # show what's running
-#
-# Config comes from .env (copied from .env.example by install.ps1):
-#   JUN_PORT               web UI port           (default 8080)
-#   AI_PROVIDER            ollama|openrouter|llamacpp (default ollama)
-#   OLLAMA_MODELS_TO_PULL  models pulled on boot (ollama / local embeddings)
-#   OPENROUTER_API_KEY/OPENROUTER_MODEL   openrouter settings
-#   LLAMACPP_MODEL_HF/LLAMACPP_PORT       managed llama-server (default port 8081)
-#   LLAMACPP_URL           existing llama-server to use instead of launching one
-#   EMBEDDINGS             on|off  local Ollama RAG embeddings
-#   VOICE                  on|off  TTS sidecar
-#   TTS_DEVICE             cpu|cuda|auto
-
 [CmdletBinding()]
 param(
     [ValidateSet('start', 'stop', 'status')]
@@ -31,12 +9,48 @@ param(
 $ErrorActionPreference = 'Stop'
 Set-Location -LiteralPath $PSScriptRoot
 
+# Ensure Unicode glyphs render correctly on all console hosts.
+try {
+    [Console]::OutputEncoding = [Text.Encoding]::UTF8
+    $OutputEncoding = [Text.Encoding]::UTF8
+} catch {}
+
+# ── ANSI / VT escape setup ───────────────────────────────────────────────────
+$VTSupported = $false
+if ($Host.UI.SupportsVirtualTerminal -or $env:WT_SESSION -or
+    $env:TERM_PROGRAM -eq 'vscode' -or $PSVersionTable.PSVersion.Major -ge 7) {
+    $VTSupported = $true
+}
+
+if ($VTSupported) {
+    $e      = [char]27
+    $R      = "$e[0m"
+    $B      = "$e[1m"
+    $D      = "$e[2m"
+    $ACCENT = "$e[38;2;96;205;255m"    # #60CDFF  Fluent light blue
+    $BLUE   = "$e[38;2;0;120;212m"     # #0078D4  Windows system blue
+    $OK     = "$e[38;2;108;203;95m"    # #6CCB5F  Fluent green
+    $DANGER = "$e[38;2;255;76;76m"     # #FF4C4C  Fluent red
+    $WARN   = "$e[38;2;252;225;0m"     # #FCE100  Fluent amber
+    $DIM    = "$e[38;2;158;158;158m"   # #9E9E9E  Neutral gray
+    $MUTED  = "$e[38;2;204;204;204m"   # #CCCCCC  Light gray
+} else {
+    $R = ''; $B = ''; $D = ''; $ACCENT = ''; $BLUE = ''; $OK = ''
+    $DANGER = ''; $WARN = ''; $DIM = ''; $MUTED = ''
+}
+
+function Step([string]$msg)    { Write-Host "  ${ACCENT}▸${R} ${B}${msg}${R}" }
+function Ok([string]$msg)      { Write-Host "    ${OK}✓${R} ${MUTED}${msg}${R}" }
+function Note([string]$msg)    { Write-Host "    ${DIM}ℹ ${msg}${R}" }
+function Warn_([string]$msg)   { Write-Host "    ${WARN}⚠${R} ${WARN}${msg}${R}" }
+function Fail_([string]$msg)   { Write-Host "    ${DANGER}✗${R} ${DANGER}${msg}${R}" }
+# ── end UI helpers ────────────────────────────────────────────────────────────
+
 $Runtime  = Join-Path $PSScriptRoot 'runtime'
 $LogDir   = Join-Path $Runtime 'logs'
 $PidFile  = Join-Path $Runtime 'pids.json'
 $StateDir = Join-Path $Runtime 'state'
 
-# ── .env ─────────────────────────────────────────────────────────────────────
 # Load KEY=VALUE pairs as process env vars unless already set (so the shell
 # can still override per-run).
 if (Test-Path .env) {
@@ -59,7 +73,6 @@ $SiteUrl   = "http://127.0.0.1:$Port"
 
 $Provider  = if ($env:AI_PROVIDER) { $env:AI_PROVIDER.ToLower() } else { 'ollama' }
 if ($Provider -notin 'ollama', 'openrouter', 'llamacpp') { $Provider = 'ollama' }
-# Embeddings default on only for the ollama provider; they always run on Ollama.
 $EmbedOn = if ($env:EMBEDDINGS) { $env:EMBEDDINGS.ToLower() -eq 'on' } else { $Provider -eq 'ollama' }
 $LlamaPort = if ($env:LLAMACPP_PORT) { $env:LLAMACPP_PORT } else { '8081' }
 $LlamacppUrl = if ($env:LLAMACPP_URL) { $env:LLAMACPP_URL } else { "http://127.0.0.1:$LlamaPort" }
@@ -85,33 +98,41 @@ function Test-Http([string]$url, [int]$timeoutSec = 2) {
     } catch { return $false }
 }
 
-# ── stop / status ────────────────────────────────────────────────────────────
 if ($Action -eq 'stop') {
+    Step 'stopping services'
     $pids = Read-Pids
     foreach ($name in 'php', 'tts', 'ollama', 'llamacpp') {
         $p = Get-TrackedProcess $pids $name
         if ($p) {
-            Write-Host "==> Stopping $name (pid $($p.Id))"
+            Ok "stopped $name (pid $($p.Id))"
             Stop-Process -Id $p.Id -Force -ErrorAction SilentlyContinue
         }
     }
     Remove-Item $PidFile -ErrorAction SilentlyContinue
-    Write-Host 'Stopped.'
+    Write-Host ''
+    Ok 'all services stopped'
     exit 0
 }
 
 if ($Action -eq 'status') {
+    Step 'service status'
     $pids = Read-Pids
     foreach ($name in 'php', 'tts', 'ollama', 'llamacpp') {
         $p = Get-TrackedProcess $pids $name
-        $state = if ($p) { "running (pid $($p.Id))" } else { 'not running' }
-        Write-Host ("  {0,-7} {1}" -f $name, $state)
+        if ($p) {
+            Ok ("{0,-10} running (pid {1})" -f $name, $p.Id)
+        } else {
+            Note ("{0,-10} not running" -f $name)
+        }
     }
-    Write-Host ("  web UI  {0}" -f $(if (Test-Http $SiteUrl) { $SiteUrl } else { 'not responding' }))
+    if (Test-Http $SiteUrl) {
+        Ok "web UI     $SiteUrl"
+    } else {
+        Warn_ 'web UI     not responding'
+    }
     exit 0
 }
 
-# ── start ────────────────────────────────────────────────────────────────────
 New-Item -ItemType Directory -Force -Path $Runtime, $LogDir, $StateDir, (Join-Path $StateDir 'rl') | Out-Null
 $newPids = @{}
 $oldPids = Read-Pids
@@ -125,7 +146,6 @@ function Start-Tracked([string]$name, [string]$exe, [string[]]$exeArgs) {
     return $p
 }
 
-# ── ollama ───────────────────────────────────────────────────────────────────
 # Needed when it's the chat provider, or for local embeddings alongside a
 # non-Ollama provider. If an Ollama server is already up (the desktop app
 # autostarts one), use it. Otherwise launch `ollama serve` ourselves, with the
@@ -138,7 +158,7 @@ if (-not (Get-Command ollama -ErrorAction SilentlyContinue)) {
 
 $ownOllama = $false
 if (-not (Test-Http "$OllamaUrl/api/tags")) {
-    Write-Host '==> Starting ollama serve'
+    Step 'start ollama serve'
     $env:OLLAMA_HOST   = '127.0.0.1:11434'
     $env:OLLAMA_MODELS = Join-Path $Runtime 'ollama-models'
     # Memory caps, same rationale as the Docker setup: one slot, two models,
@@ -156,28 +176,28 @@ if (-not (Test-Http "$OllamaUrl/api/tags")) {
         if ((Get-Date) -gt $deadline) { throw "ollama did not come up on $OllamaUrl (see runtime\logs\ollama.err.log)" }
         Start-Sleep -Seconds 1
     }
+    Ok 'ollama serve ready'
 } else {
-    Write-Host "==> Using already-running Ollama at $OllamaUrl (its models live in its own store, usually ~\.ollama)"
+    Ok "using already-running Ollama at $OllamaUrl"
     $p = Get-TrackedProcess $oldPids 'ollama'
     if ($p) { $newPids['ollama'] = $p.Id }
 }
 
-# Pull models (idempotent - cached weights aren't re-downloaded).
 $chatModel = ''
 if ($env:OLLAMA_MODELS_TO_PULL) {
     foreach ($raw in $env:OLLAMA_MODELS_TO_PULL -split ',') {
         $m = $raw.Trim()
         if (-not $m) { continue }
-        Write-Host "==> Pulling $m"
+        Step "pull $m"
         & ollama pull $m
         if ($LASTEXITCODE -ne 0 -and $m -match '^hf\.co/') {
             # Older Ollama builds reject the hf.co alias ("realm host
             # huggingface.co does not match original host hf.co").
             $m = $m -replace '^hf\.co/', 'huggingface.co/'
-            Write-Host "==> Retrying as $m"
+            Note "retrying as $m"
             & ollama pull $m
         }
-        if ($LASTEXITCODE -ne 0) { Write-Warning "pull failed: $m (continuing)" }
+        if ($LASTEXITCODE -ne 0) { Warn_ "pull failed: $m (continuing)" }
         if (-not $chatModel -and $m -ne 'nomic-embed-text') { $chatModel = $m }
     }
 }
@@ -186,7 +206,8 @@ if ($env:OLLAMA_MODELS_TO_PULL) {
 # the first real message doesn't pay the cold-load cost. Fire and forget - the
 # short timeout aborts our wait, not the server-side load.
 if ($chatModel -and $Provider -eq 'ollama') {
-    Write-Host "==> Pre-warming $chatModel (loads in the background)"
+    Step "pre-warm $chatModel"
+    Note 'loading model in the background'
     try {
         Invoke-RestMethod -Method Post -Uri "$OllamaUrl/api/generate" -ContentType 'application/json' `
             -Body (@{ model = $chatModel; prompt = ''; stream = $false } | ConvertTo-Json) -TimeoutSec 5 | Out-Null
@@ -194,13 +215,12 @@ if ($chatModel -and $Provider -eq 'ollama') {
 }
 }
 
-# ── llama.cpp (managed llama-server) ─────────────────────────────────────────
 # Only when AI_PROVIDER=llamacpp and LLAMACPP_URL targets this machine; a
 # remote/custom URL means the user runs their own server. Weights cache under
 # runtime\llama-cache so they disappear with the folder on uninstall.
 if ($Provider -eq 'llamacpp' -and $LlamacppUrl -match '://(127\.0\.0\.1|localhost)\b') {
     if (Test-Http "$LlamacppUrl/health") {
-        Write-Host "==> Using already-running llama-server at $LlamacppUrl"
+        Ok "using already-running llama-server at $LlamacppUrl"
         $p = Get-TrackedProcess $oldPids 'llamacpp'
         if ($p) { $newPids['llamacpp'] = $p.Id }
     } else {
@@ -208,7 +228,8 @@ if ($Provider -eq 'llamacpp' -and $LlamacppUrl -match '://(127\.0\.0\.1|localhos
             throw 'llama-server is not installed. Run install.ps1 first (it installs llama.cpp via winget).'
         }
         $hfRef = if ($env:LLAMACPP_MODEL_HF) { $env:LLAMACPP_MODEL_HF } else { 'efficiencyx/Jun-LoRA-v3-E2B-GGUF:Q4_K_M' }
-        Write-Host "==> Starting llama-server ($hfRef; first run downloads the model)"
+        Step "start llama-server ($hfRef)"
+        Note 'first run downloads the model'
         $env:LLAMA_CACHE = Join-Path $Runtime 'llama-cache'
         $llamaProc = Start-Tracked 'llamacpp' 'llama-server' @(
             '-hf', $hfRef, '--host', '127.0.0.1', '--port', $LlamaPort, '-c', '16384', '--jinja')
@@ -221,19 +242,20 @@ if ($Provider -eq 'llamacpp' -and $LlamacppUrl -match '://(127\.0\.0\.1|localhos
             if ((Get-Date) -gt $deadline) { throw "llama-server did not come up on $LlamacppUrl (see runtime\logs\llamacpp.err.log)" }
             Start-Sleep -Seconds 2
         }
+        Ok 'llama-server ready'
     }
 }
 
-# ── TTS sidecar (optional) ───────────────────────────────────────────────────
 $ttsPython = Join-Path $Runtime 'tts-venv\Scripts\python.exe'
 $voiceOff = $env:VOICE -and $env:VOICE.ToLower() -match '^(off|0|false|no)$'
 if (-not $voiceOff -and (Test-Path $ttsPython)) {
     $p = Get-TrackedProcess $oldPids 'tts'
     if ($p) {
         $newPids['tts'] = $p.Id
-        Write-Host '==> TTS already running'
+        Ok 'TTS already running'
     } else {
-        Write-Host '==> Starting TTS sidecar (first run downloads voice models)'
+        Step 'start TTS sidecar'
+        Note 'first run downloads voice models'
         $env:TTS_HOST    = '127.0.0.1'
         $env:TTS_PORT    = '8001'
         $env:CORS_ORIGIN = $SiteUrl
@@ -241,10 +263,9 @@ if (-not $voiceOff -and (Test-Path $ttsPython)) {
         Start-Tracked 'tts' $ttsPython @((Join-Path $PSScriptRoot 'tts\server.py')) | Out-Null
     }
 } elseif (-not $voiceOff) {
-    Write-Host '==> Voice is on but the TTS venv is missing - re-run install.ps1 to set it up. Continuing text-only.'
+    Warn_ 'voice is on but the TTS venv is missing — re-run install.ps1 to set it up. Continuing text-only.'
 }
 
-# ── web server (PHP built-in) ────────────────────────────────────────────────
 $phpExe = Join-Path $Runtime 'php\php.exe'
 if (-not (Test-Path $phpExe)) {
     $cmd = Get-Command php -ErrorAction SilentlyContinue
@@ -266,12 +287,11 @@ if ($LASTEXITCODE -ne 0) {
     throw "php.exe failed its self-check (exit code $LASTEXITCODE). Try re-running install.ps1."
 }
 
-Write-Host "==> Starting web server on $SiteUrl"
+Step "start web server on $SiteUrl"
 $env:AI_PROVIDER            = $Provider
 $env:OLLAMA_URL             = $OllamaUrl
 $env:LLAMACPP_URL           = $LlamacppUrl
 $env:EMBEDDINGS             = if ($EmbedOn) { 'on' } else { 'off' }
-# OPENROUTER_API_KEY / OPENROUTER_MODEL are already process env via the .env loader.
 $env:TTS_URL                = 'http://127.0.0.1:8001'
 $env:OMEGA_STATE_DIR        = $StateDir
 # PHP honors this on Unix only; on Windows the built-in server stays
@@ -287,8 +307,8 @@ while (-not (Test-Http $SiteUrl)) {
     if ($phpProc.HasExited -or (Get-Date) -gt $deadline) {
         $err = Join-Path $LogDir 'php.err.log'
         if (Test-Path $err) {
-            Write-Host '--- last lines of runtime\logs\php.err.log ---'
-            Get-Content $err -Tail 10 | Write-Host
+            Write-Host "    ${DIM}--- last lines of runtime\logs\php.err.log ---${R}"
+            Get-Content $err -Tail 10 | ForEach-Object { Write-Host "    ${DIM}$_${R}" }
         }
         $why = if ($phpProc.HasExited) { "php exited (code $($phpProc.ExitCode))" } else { 'timed out' }
         throw "web server did not come up on ${SiteUrl}: $why"
@@ -297,7 +317,7 @@ while (-not (Test-Http $SiteUrl)) {
 }
 
 Write-Host ''
-Write-Host "Jun is up: $SiteUrl"
-Write-Host "Stop with: ./start.ps1 stop   |   Logs: runtime\logs\"
+Write-Host "  ${OK}▸${R} ${B}${OK}ready${R} ${DIM}-${R} open ${B}${ACCENT}${SiteUrl}${R}"
+Note 'stop with: ./start.ps1 stop   |   logs: runtime\logs\'
 if (-not $NoBrowser) { Start-Process $SiteUrl }
 exit 0

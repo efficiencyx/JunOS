@@ -1,28 +1,4 @@
 #!/usr/bin/env bash
-#
-# Bootstrap installer. Clones Jun OS (if not already present), prepares .env,
-# and launches it via start.sh - which autodetects your GPU.
-#
-#   curl -fsSL https://raw.githubusercontent.com/efficiencyx/Jun/main/install.sh | bash
-#
-# On a fresh machine it checks for git + Docker, offers to install them with
-# your package manager, then starts the daemon and continues automatically.
-#
-# Interactive in a terminal: it asks which AI provider to use (Ollama local -
-# the default, OpenRouter cloud, or a llama.cpp llama-server), which model to
-# pull (auto-detecting a sensible default from your VRAM) and whether to enable
-# voice. Piped or with JUN_YES=1 it stays one-command, defaulting to Ollama +
-# recommended model + voice on. Non-interactive overrides:
-#   JUN_PROVIDER=ollama|openrouter|llamacpp
-#   JUN_MODEL=12b|e4b|e2b|<full-ref>        VOICE=on|off
-#   OPENROUTER_API_KEY=...  OPENROUTER_MODEL=<id>   (openrouter)
-#   LLAMACPP_URL=http://host:8080           (llamacpp: skip the managed container)
-#   JUN_EMBEDDINGS=on|off   (openrouter/llamacpp: local Ollama RAG embeddings)
-#
-# Overrides: JUN_REPO, JUN_DIR, JUN_REF. Set JUN_YES=1 to skip prompts.
-# Prefer to read before you run? That's the right instinct - open the file
-# first, then clone the repo and run ./start.sh yourself.
-
 set -euo pipefail
 
 REPO="${JUN_REPO:-https://github.com/efficiencyx/Jun.git}"
@@ -40,35 +16,27 @@ else
     SUDO=""
 fi
 
-# ── UI ───────────────────────────────────────────────────────────────────────
-# Mirrors the webapp's terminal-styled auth/boot screen (styles.css palette):
-# Ω/JUN OS header in a window frame, green `$` field markers, `→` actions,
-# `✓ OK` step badges, `✗` errors. Truecolor when stdout is a TTY; plain text
-# when piped/redirected or NO_COLOR is set.
 if [ -t 1 ] && [ -z "${NO_COLOR:-}" ] && [ "${TERM:-}" != "dumb" ]; then
     R=$'\033[0m'; B=$'\033[1m'; D=$'\033[2m'
-    ACCENT=$'\033[38;2;124;158;255m'    # --accent  #7c9eff
-    PURPLE=$'\033[38;2;155;114;203m'    # --grad mid #9b72cb
-    OK=$'\033[38;2;123;216;143m'        # --ok      #7bd88f
-    DANGER=$'\033[38;2;255;138;138m'    # --danger  #ff8a8a
-    WARN=$'\033[38;2;255;200;112m'      # --warn    #ffc870
-    DIM=$'\033[38;2;142;146;149m'       # --dim     #8e9295
-    MUTED=$'\033[38;2;196;199;197m'     # --muted   #c4c7c5
+    ACCENT=$'\033[38;2;124;158;255m'    #7c9eff
+    PURPLE=$'\033[38;2;155;114;203m'    #9b72cb
+    OK=$'\033[38;2;123;216;143m'        #7bd88f
+    DANGER=$'\033[38;2;255;138;138m'    #ff8a8a
+    WARN=$'\033[38;2;255;200;112m'      #ffc870
+    DIM=$'\033[38;2;142;146;149m'       #8e9295
+    MUTED=$'\033[38;2;196;199;197m'     #c4c7c5
 else
     R=; B=; D=; ACCENT=; PURPLE=; OK=; DANGER=; WARN=; DIM=; MUTED=
 fi
 
 UI_W=52   # interior width of the window frame
 
-# A horizontal rule of box chars, padded to UI_W.
 _rule() { local n=$UI_W out=; while [ "$n" -gt 0 ]; do out="$out$1"; n=$((n-1)); done; printf '%s' "$out"; }
 
 banner() {
     local os_name="Linux"; [ "$OS" = "Darwin" ] && os_name="macOS"
     printf '\n'
     printf '  %s┌%s┐%s\n' "$DIM" "$(_rule ─)" "$R"
-    # The title row's visible glyphs (dots + "jun@omega: ~/install") span 29
-    # columns; pad the rest so the right border lines up with the rules.
     printf '  %s│%s %s●%s %s●%s %s●%s   %sjun@omega%s:%s ~/install%s%*s%s│%s\n' \
         "$DIM" "$R" "$DANGER" "$R" "$WARN" "$R" "$OK" "$R" \
         "$ACCENT" "$R" "$MUTED" "$R" $((UI_W-29)) "" "$DIM" "$R"
@@ -78,14 +46,12 @@ banner() {
     printf '   %sshell detected:%s %s%s%s %s-%s installer\n\n' "$DIM" "$R" "$B$ACCENT" "$os_name" "$R" "$DIM" "$R"
 }
 
-# Section header - the green `$` shell prompt from the auth screen.
 step()  { printf '   %s$%s %s%s%s\n' "$OK" "$R" "$B" "$1" "$R"; }
 ok()    { printf '     %s✓%s %s%s%s\n' "$OK" "$R" "$MUTED" "$1" "$R"; }
 note()  { printf '     %s%s%s\n' "$DIM" "$1" "$R"; }
 warn_() { printf '   %s!%s %s%s%s\n' "$WARN" "$R" "$WARN" "$1" "$R" >&2; }
 fail_()  { printf '   %s✗%s %s%s%s\n' "$DANGER" "$R" "$DANGER" "$1" "$R" >&2; }
 
-# Animate a working line next to $pid until it exits, then clear the line.
 _spin() {
     local pid="$1" msg="$2" frames='|/-\' i=0
     while kill -0 "$pid" 2>/dev/null; do
@@ -120,9 +86,6 @@ run() {
     fi
 }
 
-# ── Model catalog ────────────────────────────────────────────────────────────
-# Short aliases the menu and JUN_MODEL accept; anything else is taken verbatim
-# as an explicit Ollama ref.
 MODEL_12B="hf.co/efficiencyx/Jun-Lora-v2-GGUF:Q4_K_M"
 MODEL_E4B="hf.co/efficiencyx/Jun-LoRA-V3-E4B-GGUF:Q4_K_M"
 MODEL_E2B="hf.co/efficiencyx/Jun-LoRA-v3-E2B-GGUF:Q4_K_M"
@@ -136,21 +99,17 @@ resolve_model() {  # alias|full-ref -> full-ref
     esac
 }
 
-# Best-effort total VRAM in MB (empty when no GPU / no tool to ask).
 detect_vram_mb() {
     if command -v nvidia-smi >/dev/null 2>&1; then
         nvidia-smi --query-gpu=memory.total --format=csv,noheader,nounits 2>/dev/null \
             | head -n1 | tr -dc '0-9'
     elif command -v rocm-smi >/dev/null 2>&1; then
-        # rocm-smi reports VRAM total in bytes; collapse to MB.
         rocm-smi --showmeminfo vram 2>/dev/null \
             | grep -i 'total' | grep -oE '[0-9]+' | head -n1 \
             | awk '{ if ($1 > 0) print int($1 / 1048576) }'
     fi
 }
 
-# Map detected VRAM to the conservative quant at each recommended tier.
-# Unknown/none -> CPU-friendly E2B Q4_K_M.
 recommend_model() {
     local mb="$1"
     [ -z "$mb" ] && { echo "$MODEL_E2B"; return; }
@@ -163,7 +122,6 @@ recommend_model() {
     fi
 }
 
-# Set or replace KEY=VALUE in ./.env (run from inside the repo).
 set_env() {
     local key="$1" val="$2" tmp
     if grep -qE "^${key}=" .env 2>/dev/null; then
@@ -176,8 +134,6 @@ set_env() {
     fi
 }
 
-# Interactive Jun-model menu (VRAM-aware recommendation). Sets $MODEL_REF.
-# Non-interactive: JUN_MODEL / JUN_YES / piped input take the recommendation.
 ask_model_ref() {
     local vram rec alias ans
     vram="$(detect_vram_mb)"
@@ -226,16 +182,11 @@ ask_embeddings() {
     fi
 }
 
-# Ask which provider + model + whether voice, then persist into .env.
-# Non-interactive (piped, JUN_YES=1, or per-field env override) keeps the
-# one-command flow. Knobs: JUN_PROVIDER, JUN_MODEL, OPENROUTER_API_KEY,
-# OPENROUTER_MODEL, LLAMACPP_URL, JUN_EMBEDDINGS, VOICE.
 configure() {
     local provider voice ans profiles
 
     step "configure"
 
-    # ── provider ─────────────────────────────────────────────────────────────
     if [ -n "${JUN_PROVIDER:-}" ]; then
         provider="$(printf '%s' "$JUN_PROVIDER" | tr '[:upper:]' '[:lower:]')"
     elif [ "${JUN_YES:-}" = "1" ] || [ ! -r /dev/tty ]; then
@@ -262,7 +213,6 @@ configure() {
            provider=ollama ;;
     esac
 
-    # ── per-provider config ──────────────────────────────────────────────────
     case "$provider" in
     ollama)
         ask_model_ref
@@ -346,7 +296,6 @@ configure() {
     set_env COMPOSE_PROFILES "$profiles"
     ok "provider $provider"
 
-    # ── voice ────────────────────────────────────────────────────────────────
     if [ -n "${VOICE:-}" ]; then
         case "$(printf '%s' "$VOICE" | tr '[:upper:]' '[:lower:]')" in
             off|0|false|no) voice=off ;; *) voice=on ;;
@@ -379,6 +328,8 @@ pkg_manager() {
 manual_url() {
     case "$1" in
         git) echo "https://git-scm.com/downloads" ;;
+        python) echo "https://www.python.org/downloads/" ;;
+        compose) echo "https://docs.docker.com/compose/install/" ;;
         docker)
             if [ "$OS" = "Darwin" ]; then echo "https://www.docker.com/products/docker-desktop/"
             else echo "https://docs.docker.com/engine/install/"; fi ;;
@@ -409,6 +360,33 @@ install_docker() {
     esac
 }
 
+install_compose() {
+    case "$PM" in
+        apt-get) $SUDO apt-get update && $SUDO apt-get install -y docker-compose-plugin ;;
+        dnf|yum) $SUDO "$PM" install -y docker-compose-plugin ;;
+        pacman)  $SUDO pacman -Sy --noconfirm docker-compose ;;
+        zypper)  $SUDO zypper install -y docker-compose ;;
+        brew)
+            if [ "$OS" = "Darwin" ]; then
+                brew install --cask docker
+            else
+                brew install docker-compose
+            fi
+            ;;
+    esac
+}
+
+install_python() {
+    case "$PM" in
+        apt-get) $SUDO apt-get update && $SUDO apt-get install -y python3 python3-venv ;;
+        dnf)     $SUDO dnf install -y python3 ;;
+        yum)     $SUDO yum install -y python3 ;;
+        pacman)  $SUDO pacman -Sy --noconfirm python ;;
+        zypper)  $SUDO zypper install -y python3 ;;
+        brew)    brew install python ;;
+    esac
+}
+
 # rpm-ostree applies package changes to a new deployment, so install every
 # missing dependency in one transaction and let the caller stop for a reboot.
 install_ostree_deps() {
@@ -417,9 +395,137 @@ install_ostree_deps() {
         case "$c" in
             git)    packages+=(git) ;;
             docker) packages+=(moby-engine) ;;
+            compose) packages+=(docker-compose) ;;
+            python) packages+=(python3) ;;
         esac
     done
     $SUDO rpm-ostree install "${packages[@]}"
+}
+
+python_command() {
+    local candidate
+    for candidate in python3 python; do
+        if command -v "$candidate" >/dev/null 2>&1 \
+            && "$candidate" -c 'import ensurepip, sys, venv; assert sys.version_info >= (3, 9)' >/dev/null 2>&1; then
+            command -v "$candidate"
+            return 0
+        fi
+    done
+    return 1
+}
+
+ensure_recovery_python() {
+    python_command >/dev/null && return 0
+
+    PM="$(pkg_manager)"
+    if [ "$PM" = none ]; then
+        warn_ "Python 3.9+ is needed for asset recovery - install it from $(manual_url python), then re-run."
+        return 1
+    fi
+    if [ "$PM" != brew ] && [ "$SUDO" = "" ] && [ "$(id -u)" -ne 0 ]; then
+        warn_ "installing Python needs root, and sudo isn't available."
+        return 1
+    fi
+
+    local proceed=0 answer=""
+    if [ "${JUN_YES:-}" = "1" ]; then
+        proceed=1
+    elif [ -r /dev/tty ]; then
+        printf '     %s$%s install Python 3 for asset recovery with %s%s%s? %s[y/N]%s %sâ†’%s ' \
+            "$OK" "$R" "$B" "$PM" "$R" "$DIM" "$R" "$ACCENT" "$R" > /dev/tty
+        read -r answer < /dev/tty || answer=""
+        case "$answer" in y|Y|yes|YES) proceed=1 ;; esac
+    fi
+    if [ "$proceed" != 1 ]; then
+        warn_ "Python installation declined - asset recovery was skipped."
+        return 1
+    fi
+
+    if [ "$PM" != brew ] && [ -n "$SUDO" ]; then
+        note "sudo authentication"
+        $SUDO -v
+    fi
+    if [ "$PM" = "rpm-ostree" ]; then
+        note "immutable system detected - layering Python for the next boot"
+        run "layer Python" install_ostree_deps python
+        warn_ "Python was layered - reboot, then re-run this installer with JUN_EXTRACT=1."
+        return 1
+    fi
+
+    run "install Python" install_python
+    if ! python_command >/dev/null; then
+        warn_ "Python 3.9+ is still unavailable - re-run after installation finishes."
+        return 1
+    fi
+}
+
+install_asset_recovery() {
+    local python venv recovery_python args=(tools/recover_assets.py)
+    ensure_recovery_python || return 1
+    python="$(python_command)"
+    venv="runtime/asset-recovery-venv"
+    recovery_python="$venv/bin/python"
+
+    if [ ! -x "$recovery_python" ]; then
+        note "setting up the local asset-recovery environment"
+        "$python" -m venv "$venv" || {
+            warn_ "could not create the asset-recovery virtual environment."
+            return 1
+        }
+    fi
+    run "install UnityPy + Pillow" "$recovery_python" -m pip install --disable-pip-version-check --quiet UnityPy Pillow
+    [ -n "${JUN_GAME_DIR:-}" ] && args+=(--game "$JUN_GAME_DIR")
+    if "$recovery_python" "${args[@]}"; then
+        ok "assets extracted to webapp/assets (local use only)"
+        return 0
+    fi
+
+    # A supplied path is deliberate, and non-interactive installs must never
+    # wait for input. Only offer the friendly fallback after auto-discovery.
+    if [ -n "${JUN_GAME_DIR:-}" ] || [ "${JUN_YES:-}" = "1" ] || [ ! -r /dev/tty ]; then
+        warn_ "extraction failed - set JUN_GAME_DIR to the game folder, then re-run with JUN_EXTRACT=1."
+        return 1
+    fi
+
+    warn_ "couldn't find the game in its usual locations."
+    local selection game_dir data_dir
+    while :; do
+        printf '     %s$%s paste the game folder or drag the game executable here %s[Enter = skip]%s %s→%s ' \
+            "$OK" "$R" "$DIM" "$R" "$ACCENT" "$R" > /dev/tty
+        read -r selection < /dev/tty || selection=""
+        selection="${selection%$'\r'}"
+        # Drag-and-drop paths may be wrapped in shell quotes.
+        selection="${selection#\"}"
+        selection="${selection%\"}"
+        selection="${selection#\'}"
+        selection="${selection%\'}"
+        if [ -z "$selection" ]; then
+            note "asset extraction skipped."
+            return 1
+        fi
+
+        if [ -d "$selection" ]; then
+            game_dir="$selection"
+        elif [ -f "$selection" ]; then
+            game_dir="$(dirname "$selection")"
+        else
+            warn_ "path not found: $selection"
+            continue
+        fi
+        data_dir="$game_dir/My Dystopian Robot Girlfriend_Data"
+        if [ ! -d "$data_dir" ]; then
+            warn_ "that location does not contain My Dystopian Robot Girlfriend_Data"
+            continue
+        fi
+
+        if "$recovery_python" tools/recover_assets.py --game "$game_dir"; then
+            ok "assets extracted to webapp/assets (local use only)"
+            return 0
+        fi
+        warn_ "extraction failed from that location. Try another path or press Enter to skip."
+    done
+
+    return 1
 }
 
 # Homebrew's Linux Docker engine is rootless. Its Compose plugin lives outside
@@ -432,7 +538,6 @@ configure_brew_docker() {
     ln -sf "$plugin" "$HOME/.docker/cli-plugins/docker-compose"
 }
 
-# Bring the daemon up and grant the current user docker access without a logout.
 prepare_docker() {
     if [ "$OS" = "Darwin" ]; then
         ok "launching Docker Desktop"
@@ -456,7 +561,6 @@ prepare_docker() {
     fi
 }
 
-# Run a command, joining the docker group if we just added the user to it.
 docker_run() {
     if [ "$NEED_SG" = 1 ]; then sg docker -c "$*"; else "$@"; fi
 }
@@ -476,8 +580,9 @@ confirm_deps() {
     local missing=()
     command -v git >/dev/null 2>&1 || missing+=(git)
     command -v docker >/dev/null 2>&1 || missing+=(docker)
+    docker compose version >/dev/null 2>&1 || missing+=(compose)
     step "check dependencies"
-    [ ${#missing[@]} -eq 0 ] && { ok "git, docker present"; return; }
+    [ ${#missing[@]} -eq 0 ] && { ok "git, Docker + Compose present"; return; }
 
     warn_ "missing: ${missing[*]}"
 
@@ -542,8 +647,14 @@ confirm_deps() {
         case "$c" in
             git)    run "install git" install_git ;;
             docker) run "install docker" install_docker; DOCKER_JUST_INSTALLED=1 ;;
+            compose) run "install Docker Compose" install_compose ;;
         esac
     done
+
+    if ! docker compose version >/dev/null 2>&1; then
+        fail_ "Docker Compose is still unavailable - install it from $(manual_url compose), then re-run."
+        exit 1
+    fi
 
     if [ "$DOCKER_JUST_INSTALLED" = 1 ]; then
         if [ "$PM" = "brew" ] && [ "$OS" != "Darwin" ]; then
@@ -593,18 +704,9 @@ case "$(printf '%s' "${JUN_EXTRACT:-}" | tr '[:upper:]' '[:lower:]')" in
         ;;
 esac
 if [ "$extract" = 1 ]; then
-    if command -v python3 >/dev/null 2>&1; then
-        run "install UnityPy + Pillow" python3 -m pip install --user --quiet UnityPy Pillow
-        if python3 tools/recover_assets.py; then
-            ok "assets extracted to webapp/assets (local use only)"
-        else
-            warn_ "extraction failed - run 'python3 tools/recover_assets.py --game DIR' later."
-        fi
-    else
-        warn_ "python3 not found - install it and run 'python3 tools/recover_assets.py' later."
-    fi
+    install_asset_recovery || true
 else
-    note "skipped - run 'python3 tools/recover_assets.py' anytime to extract."
+    note "skipped - re-run this installer with JUN_EXTRACT=1 anytime to extract."
 fi
 
 [ "$DOCKER_JUST_INSTALLED" = 1 ] && wait_for_docker || true

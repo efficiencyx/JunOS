@@ -1,6 +1,3 @@
-// Typewriter effects for the boot overlay terminal.
-// app.js calls BootFX.start() when the overlay is shown and BootFX.typeStatus()
-// whenever the live status text changes.
 
 (function () {
   const reduceMotion = window.matchMedia
@@ -8,8 +5,6 @@
 
   const wait = (ms) => new Promise((r) => setTimeout(r, ms));
 
-  // Type `text` into `el` one character at a time. `signal.cancelled` lets a
-  // newer call abort an in-flight one (the live status updates repeatedly).
   function type(el, text, speed, signal) {
     text = text || '';
     if (reduceMotion) { el.textContent = text; return Promise.resolve(); }
@@ -26,8 +21,6 @@
     });
   }
 
-  // The live status line only appears once every boot-log command has run.
-  // Status updates that arrive before then are held; the latest one wins.
   let logStarted = false;
   let logDone = false;
   let pendingStatus = null;
@@ -49,8 +42,6 @@
     while (afterLog.length) afterLog.shift()();
   }
 
-  // Boot succeeded: let the green "Ready" settle, zoom into the terminal, then
-  // hand back to the caller (which dismisses the overlay). Waits for the log.
   function finish(done) {
     whenLogDone(() => {
       const term = document.querySelector('.boot-term');

@@ -19,13 +19,11 @@
   </div>
 </div>
 
-<!-- Auth screen: shown when no valid session exists. Styled as an OS-flavored
-     terminal - app.js sets data-os (mac / windows / linux) + the title/os name. -->
 <div id="authScreen" hidden>
   <div class="auth-term" id="authTerm" data-os="linux">
     <div class="auth-term-bar">
       <span class="term-lights" aria-hidden="true"><i></i><i></i><i></i></span>
-      <span class="term-title" id="authTermTitle">jun@omega: ~/access</span>
+      <span class="term-title" id="authTermTitle">jun@junos: ~/access</span>
       <span class="term-winctl" aria-hidden="true"><i class="wc-min">─</i><i class="wc-max">▢</i><i class="wc-close">✕</i></span>
     </div>
 
@@ -36,7 +34,7 @@
       </div>
 
       <div class="auth-motd">
-        <div class="auth-motd-line">Welcome to Jun OS · omega build</div>
+        <div class="auth-motd-line">Welcome to Jun OS · JunOS build</div>
         <div class="auth-motd-line auth-dim">shell detected: <b class="auth-os-name">linux</b> - authenticate to continue<span class="auth-caret" aria-hidden="true"></span></div>
       </div>
 
@@ -78,10 +76,6 @@
   </div>
 </div>
 
-<!-- Boot overlay: shown to logged-in users until Ollama is reachable.
-     Soft Jun-OS chrome (Ω mark + halo) wrapping a live terminal. The status is
-     driven by app.js via #bootStatus .boot-status-label and #bootHint; boot-fx.js
-     types the log lines and the status. boot-log rows are decorative. -->
 <div id="bootOverlay" class="boot-overlay" data-ready="1" aria-hidden="true" role="status" aria-live="polite">
   <div class="boot-glow" aria-hidden="true"></div>
 
@@ -92,18 +86,18 @@
 
     <div class="boot-brand">
       <span class="boot-brand-name">Jun OS</span>
-      <span class="boot-brand-tag">omega · cold start</span>
+      <span class="boot-brand-tag">JunOS · cold start</span>
     </div>
 
     <div class="boot-term" data-os="mac">
       <div class="boot-term-bar" aria-hidden="true">
         <span class="term-lights"><i></i><i></i><i></i></span>
-        <span class="term-title">jun@omega: ~/boot</span>
+        <span class="term-title">jun@junos: ~/boot</span>
         <span class="term-winctl"><i class="wc-min">─</i><i class="wc-max">▢</i><i class="wc-close">✕</i></span>
       </div>
       <div class="boot-term-body">
         <ul class="boot-log" aria-hidden="true">
-          <li style="--i:0"><span class="boot-prompt"></span><span class="boot-cmd" data-text="init omega_state">init omega_state</span><span class="boot-ok">OK</span></li>
+          <li style="--i:0"><span class="boot-prompt"></span><span class="boot-cmd" data-text="init junos_state">init junos_state</span><span class="boot-ok">OK</span></li>
           <li style="--i:1"><span class="boot-prompt"></span><span class="boot-cmd" data-text="link neural-core · ollama">link neural-core · ollama</span><span class="boot-ok">OK</span></li>
           <li style="--i:2"><span class="boot-prompt"></span><span class="boot-cmd" data-text="load live2d-rig · cubism5">load live2d-rig · cubism5</span><span class="boot-ok">OK</span></li>
           <li style="--i:3"><span class="boot-prompt"></span><span class="boot-cmd" data-text="boot voice-synth · kokoro">boot voice-synth · kokoro</span><span class="boot-ok">OK</span></li>
@@ -123,16 +117,12 @@
   </div>
 </div>
 
-<!-- Fixed toast container -->
 <div id="toasts" aria-live="polite" aria-atomic="false"></div>
 
-<!-- Drawer backdrop -->
 <div id="drawerBackdrop" class="drawer-backdrop" aria-hidden="true"></div>
 
-<!-- Off-canvas settings drawer -->
 <aside id="settingsDrawer" class="settings-drawer" aria-label="Settings" role="dialog" aria-modal="true">
 
-  <!-- Left: category nav -->
   <nav class="settings-nav" aria-label="Settings categories">
     <button class="settings-close" id="closeSettingsBtn" title="Close settings" aria-label="Close">
       <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" aria-hidden="true"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
@@ -165,7 +155,6 @@
     </div>
   </nav>
 
-  <!-- Right: panels -->
   <div class="settings-main">
     <header class="settings-main-head">
       <h2 class="settings-main-title" id="settingsPanelTitle">General</h2>
@@ -190,9 +179,9 @@
         <div class="set-row">
           <div class="set-row-text">
             <div class="set-row-title">Model</div>
-            <div class="set-row-desc">Which installed Ollama model answers.</div>
+            <div class="set-row-desc">Which model answers.</div>
           </div>
-          <div class="set-row-control"><select id="modelSelect" aria-label="Ollama model"></select></div>
+          <div class="set-row-control"><select id="modelSelect" aria-label="Chat model"></select></div>
         </div>
         <div class="set-row">
           <div class="set-row-text">
@@ -388,9 +377,6 @@
   </div>
 </aside>
 
-<!-- ============================================================ -->
-<!-- App shell -->
-<!-- ============================================================ -->
 <div id="app">
 
   <header class="app-header">
@@ -405,7 +391,6 @@
 
   <main class="app-main">
 
-    <!-- Sidebar: conversation history & nav -->
     <nav id="conversationSidebar" class="conv-sidebar" aria-label="Conversations">
       <div class="sidebar-toolbar">
         <button class="sidebar-brand" id="expandSidebarBtn" title="Toggle sidebar" aria-label="Toggle sidebar" type="button">
@@ -442,10 +427,8 @@
       </div>
     </nav>
 
-    <!-- Center: chat panel -->
     <section class="chat-panel" aria-label="Chat">
 
-      <!-- Empty state (hidden when messages exist) -->
       <div class="messages-empty" id="messagesEmpty" aria-hidden="false">
         <p class="empty-title">Hello, I am Jun.</p>
         <p class="empty-sub">How can I help you today?</p>
@@ -482,9 +465,7 @@
       </div>
     </section>
 
-    <!-- Right: Live2D stage -->
     <section id="stage" aria-label="Live2D stage">
-      <!-- Skeleton shimmer overlay while model loads -->
       <div class="stage-skeleton" id="stageSkeleton" aria-hidden="true"></div>
 
       <div id="stageStatus" class="stage-status">loading…</div>
@@ -493,7 +474,6 @@
   </main>
 </div>
 
-<!-- Voice mode overlay: minimal chrome over the zoomed Live2D stage -->
 <div id="voiceOverlay" class="voice-overlay" hidden>
   <button id="voiceOverlayClose" class="voice-overlay-btn voice-overlay-close" type="button" aria-label="Exit voice mode" title="Exit voice mode">
     <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
@@ -507,7 +487,6 @@
   </div>
 </div>
 
-<!-- CDN scripts - load order preserved from original -->
 <script src="https://cdn.jsdelivr.net/npm/marked@12.0.2/marked.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/dompurify@3.0.11/dist/purify.min.js"></script>
 <script src="https://cubism.live2d.com/sdk-web/cubismcore/live2dcubismcore.min.js"></script>
@@ -519,19 +498,16 @@
 <script src="js/live2d.js?v=19"></script>
 <script src="js/actions.js?v=7"></script>
 <script src="js/mods.js?v=9"></script>
-<script src="js/outfit.js?v=23"></script>
-<script src="js/ollama.js?v=8"></script>
-<script src="js/tts.js?v=9"></script>
-<!-- After tts.js: voice.js reads TTS.isSpeaking/outputRms/duck for barge-in.
-     js/mic-worklet.js is NOT listed here - it's loaded by addModule() onto the
-     audio thread, not as a page script. -->
+<script src="js/outfit.js?v=24"></script>
+<script src="js/chat-api.js?v=1"></script>
+<script src="js/tts.js?v=10"></script>
+<script src="js/wardrobe-reactions.js?v=1"></script>
 <script src="js/voice.js?v=1"></script>
 <script src="js/voicemode.js?v=1"></script>
-<!-- ui.js must load before app.js -->
 <script src="js/ui.js?v=6"></script>
 <script src="js/history.js?v=6"></script>
 <script src="js/devhud.js?v=2"></script>
 <script src="js/boot-fx.js?v=4"></script>
-<script src="js/app.js?v=20"></script>
+<script src="js/app.js?v=21"></script>
 </body>
 </html>

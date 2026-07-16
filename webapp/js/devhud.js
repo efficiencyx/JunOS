@@ -1,7 +1,3 @@
-// Floating developer HUD: live tokens/s + token counts from the chat stream, plus
-// VRAM / model RAM / host RAM and the loaded model, polled from api/stats.php while
-// open. Toggled from the Developer settings panel or Ctrl+Shift+D. Device-local -
-// the visibility flag lives in localStorage and isn't synced across browsers.
 
 window.DevHud = (function () {
   const STORAGE_KEY = 'omega.devhud.v1';
@@ -13,8 +9,6 @@ window.DevHud = (function () {
   let pollTimer = null;
   let visible = false;
 
-  // Live per-generation counters (authoritative numbers arrive from the backend at
-  // the end; until then we approximate tok/s from token events ourselves).
   let gen = { t0: 0, tFirst: 0, tokens: 0, final: null };
 
   function fmtBytes(n) {
@@ -57,13 +51,11 @@ window.DevHud = (function () {
 
     restoreGeom();
     enableDrag(root.querySelector('.devhud-head'));
-    // The CSS resize grip changes size directly; mirror the new size into storage.
     if (window.ResizeObserver) {
       new ResizeObserver(() => { if (visible && root.offsetWidth) saveGeom(); }).observe(root);
     }
   }
 
-  // --- geometry (position + size) persistence ---
 
   function clamp(v, lo, hi) { return Math.max(lo, Math.min(v, hi)); }
 
@@ -81,7 +73,6 @@ window.DevHud = (function () {
     let g = null;
     try { g = JSON.parse(localStorage.getItem(GEOM_KEY) || 'null'); } catch (e) {}
     if (!g) return;
-    // Switch from the CSS right-anchor to explicit left/top, kept on-screen.
     root.style.right = 'auto';
     root.style.left = clamp(g.left, 0, window.innerWidth - 60) + 'px';
     root.style.top = clamp(g.top, 0, window.innerHeight - 30) + 'px';
@@ -151,7 +142,6 @@ window.DevHud = (function () {
     } catch (e) { /* upstream down - leave stale values */ }
   }
 
-  // --- chat stream hooks (called from app.js) ---
 
   function beginGen() {
     gen = { t0: performance.now(), tFirst: 0, tokens: 0, final: null };
@@ -168,7 +158,6 @@ window.DevHud = (function () {
     put('gentok', String(gen.tokens));
   }
 
-  // Authoritative end-of-stream numbers from Ollama (via chat.php).
   function setGenStats(s) {
     if (!s) return;
     gen.final = s;

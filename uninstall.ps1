@@ -6,7 +6,7 @@
 #   2. optionally uninstall Ollama / llama.cpp (machine-wide, installed via winget)
 #   3. delete this folder (webapp, PHP, TTS venv, model weights, chat data)
 #
-# git (and Python, if voice setup installed it) are left alone - they're
+# git (and Python, if voice or asset recovery installed it) are left alone - they're
 # general-purpose tools you may use elsewhere. Remove them yourself from
 # Settings > Apps if you want.
 #
@@ -65,4 +65,4 @@ if (Get-Command ollama -ErrorAction SilentlyContinue) {
 Set-Location $env:USERPROFILE
 Remove-Item -LiteralPath $root -Recurse -Force
 Write-Host "Removed $root. Jun is uninstalled."
-Write-Host 'Left in place: git (and Python, if installed) - remove via Settings > Apps if unwanted.'
+Write-Host 'Left in place: git and any Python installed for voice or asset recovery - remove via Settings > Apps if unwanted.'

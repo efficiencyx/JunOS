@@ -1,15 +1,4 @@
-// Per-account preference sync. localStorage stays the source of truth at read
-// time (so the UI is instant and works offline); we mirror tracked keys to the
-// server on change so a second browser sees the same outfit / colors / TTS.
-//
-// Reserved keys:
-//   omega.outfit.v1, omega.outfit.colors.v1, omega.names.player, omega.names.bot,
-//   tts.enabled, tts.engine, tts.voice, tts.speed, model, reasoning_level, think,
-//   voice.bargein, voice.silence_ms
-// Future: theme.
-//
-// Note there's no `voice.enabled`: a live microphone is a per-session decision,
-// not something a synced pref should switch on in another browser.
+// Microphone activation is intentionally not synced across sessions.
 
 window.Prefs = (function () {
   const TRACKED = [
@@ -48,7 +37,6 @@ window.Prefs = (function () {
         }
       }
     } catch (e) {
-      // Network/offline: keep whatever's in localStorage and move on.
     }
   }
 
@@ -66,14 +54,11 @@ window.Prefs = (function () {
         body: JSON.stringify(data),
       });
     } catch (e) {
-      // Drop silently; the next change (or the `online` listener below) retries.
     }
   }
 
-  // Coalesce bursts of saves (e.g. dragging the color picker) into one PUT.
   const pushToServer = debounce(pushNow, 500);
 
-  // Flush pending writes if the user closes / navigates away.
   window.addEventListener('pagehide', () => { pushNow(); });
   window.addEventListener('online', () => { pushNow(); });
 

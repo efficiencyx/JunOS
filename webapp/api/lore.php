@@ -1,16 +1,4 @@
 <?php
-// Heuristic (keyword) lore retrieval. Replaces the old embedding search, which
-// silently broke once the index and the live query path went through two
-// different nomic-embed-text pulls (bare-metal vs the docker ollama): common
-// words still matched, but proper nouns like "Annalie" embedded inconsistently
-// and never landed, so name lookups returned nothing.
-//
-// Plain term overlap sidesteps all of that - it's exact on names, deterministic,
-// and needs no Ollama, no .bin index, no rebuild. We weight matches by IDF (rare
-// lore terms count, ubiquitous ones don't) and boost proper nouns mined from the
-// corpus's own capitalization, which gives the precision the cosine floor never
-// had: chit-chat scores ~0, a single distinctive lore term clears the floor. A
-// Levenshtein fallback on names absorbs typos ("Annallie" -> Annalie).
 
 const LORE_PROPER_BOOST   = 2.0;  // a term that's a proper noun in the corpus
 const LORE_FLOOR          = 3.0;  // min score to inject
@@ -42,10 +30,6 @@ const LORE_STOP = [
     'around','here',
 ];
 
-// Split into lowercase stems with byte offsets: ASCII alnum runs, length >= 2,
-// minus stopwords, trailing plural "s" stripped so "shops"/"shop" agree.
-// Returns [[stem, originalWord, byteOffset], ...] - the original (for casing)
-// and offset (for sentence position) are used when mining proper nouns.
 function lore_tokens(string $s): array {
     static $stop = null;
     if ($stop === null) $stop = array_flip(LORE_STOP);
@@ -61,9 +45,6 @@ function lore_tokens(string $s): array {
     return $out;
 }
 
-// Build (and cache) the keyword index from lore_corpus.txt: per-doc term counts,
-// IDF per term, the proper-noun set, and the fuzzy-match vocabulary (distinctive
-// names). Returns null if the corpus is missing.
 function lore_index(): ?array {
     static $idx = false; // false = not built yet; array|null afterwards
     if ($idx !== false) return $idx;
@@ -118,8 +99,6 @@ function lore_index(): ?array {
     return $idx = $built;
 }
 
-// Nearest distinctive name within a length-scaled edit distance, or null. Only
-// kicks in for query words with no exact corpus hit.
 function lore_fuzzy(string $tok, array $vocab): ?string {
     $len = strlen($tok);
     if ($len < 4) return null;                  // too short to correct safely
@@ -133,8 +112,6 @@ function lore_fuzzy(string $tok, array $vocab): ?string {
     return $best;
 }
 
-// Resolve each query token to a corpus term: exact hit, else nearest name typo.
-// Returns [['token'=>orig, 'term'=>stem|null, 'fuzzy'=>bool], ...].
 function lore_resolve(array $idx, string $query): array {
     $res = [];
     foreach (lore_tokens($query) as [$stem, $orig]) {
@@ -157,11 +134,6 @@ function lore_jaccard(array $a, array $b): float {
     return $union > 0 ? $inter / $union : 0.0;
 }
 
-// Rank corpus answers against $query by summed IDF of overlapping terms (proper
-// nouns boosted, typo-corrected terms discounted, a mild term-frequency bump).
-// Returns up to $topK ['score','answer'] rows, highest first. With $dedup set,
-// answers too similar to an already-picked one are skipped, so you get $topK
-// *distinct* facts rather than $topK rephrasings of the same one.
 function lore_search(string $query, int $topK = 1, bool $dedup = false): array {
     $idx = lore_index();
     if ($idx === null) return [];

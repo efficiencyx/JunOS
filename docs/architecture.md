@@ -77,10 +77,12 @@ Without all three, tokens may arrive in one batch at end-of-message even though 
 
 ## AI providers
 
-`chat.php` serves one SSE contract to the browser regardless of backend, but speaks two different upstream dialects depending on `AI_PROVIDER` (selected via `webapp/api/providers.php`):
+`chat.php` serves one SSE contract to the browser regardless of backend. `webapp/api/providers.php` owns the upstream request and streaming dialect selected by `AI_PROVIDER`:
 
 - **`ollama`** (default): Ollama's native `/api/chat`, NDJSON stream, one JSON object per line.
-- **`openrouter`** / **`llamacpp`**: an OpenAI-compatible `/chat/completions` endpoint, `data: {...}` SSE lines. `providers.php`'s `provider_is_openai()` flags this path; `chat.php` runs a different `CURLOPT_WRITEFUNCTION` parser for each shape (NDJSON line-by-line decode vs. SSE `data:` frame decode) but funnels both into the same `token`/`thinking`/`tool_status` events sent to the browser.
+- **`openrouter`** / **`llamacpp`**: an OpenAI-compatible `/chat/completions` endpoint with `data: {...}` SSE lines.
+
+`provider_stream_round()` parses either upstream shape and returns normalized content, tool calls, usage, completion state, and errors. It emits normalized `token` and `thinking` events through the callback supplied by `chat.php`, so conversation orchestration does not depend on either wire format.
 
 `webapp/api/models.php` lists models from whichever provider is active: Ollama's `/api/tags`, or an OpenAI-style `/models` call for OpenRouter/llama.cpp. OpenRouter's catalog (~1-2 MB) is disk-cached for 1 hour (`state_dir()/openrouter_models.json`) and served stale on upstream errors rather than failing the boot-time poll.
 
@@ -230,6 +232,14 @@ AudioBufferSourceNode ──▶ AnalyserNode ──▶ AudioContext.destination
 The analyser uses FFT size 1024 and smoothing constant 0.4. The RMS-to-mouth mapping compresses the dynamic range so that both quiet and loud speech produce visible mouth movement, while the power curve (0.7) keeps the mouth from snapping fully open on every syllable.
 
 `TTS.stop()` aborts in-flight fetches via `AbortController`, halts the active `AudioBufferSourceNode`, and calls `Live2D.setMouthOverride(null)` to release the mouth override.
+
+---
+
+## Voice input and barge-in
+
+`webapp/js/voice.js` captures 16 kHz mono PCM through an `AudioWorklet`, calibrates a noise floor, and sends complete turns as WAV uploads to `/api/stt.php`. The voice sidecar transcribes those uploads with faster-whisper. Automatic gain control stays disabled because it would make the calibrated voice-activity threshold drift during silence.
+
+When barge-in is enabled, browser echo cancellation removes most of Jun's playback from the microphone, while the client also raises its speech threshold in proportion to the current TTS output and confirms a detected interruption before stopping playback. This protects against speaker echo. Audio routed away from the default output device, loud or distorted speakers, Bluetooth latency, and clock drift can still trigger false detections. Use headphones or turn off barge-in for a fully half-duplex conversation.
 
 ---
 

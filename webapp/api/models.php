@@ -1,7 +1,4 @@
 <?php
-// Lists the chat models the configured provider offers, plus which provider is
-// active and its default model - the frontend uses this to fill the model
-// dropdown and pick a sensible initial selection.
 require_once __DIR__ . '/_lib.php';
 
 header('Content-Type: application/json');

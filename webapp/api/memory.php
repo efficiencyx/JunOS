@@ -1,9 +1,4 @@
 <?php
-// Durable memory notes (the file memory_write appends to from chat).
-// GET returns all entries; POST {memory, category?} adds one;
-// DELETE {id, created_at} removes one entry, DELETE {all:true} wipes the file.
-// `id` is the entry's line index as returned by GET; created_at is re-checked
-// so a stale list can't delete the wrong line.
 require_once __DIR__ . '/_lib.php';
 
 header('Content-Type: application/json');

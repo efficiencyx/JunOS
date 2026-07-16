@@ -213,8 +213,6 @@ class Recovery:
                 self.containers[name] = secs
         print(f"  {len(self.containers)} packed-texture containers")
 
-    # -- helpers ---------------------------------------------------------
-
     def save(self, img, rel):
         path = os.path.join(self.out, rel)
         os.makedirs(os.path.dirname(path), exist_ok=True)
@@ -235,8 +233,6 @@ class Recovery:
         # A few container paths point at the prefab instead of the texture;
         # fall back to the equally-named Texture2D.
         return self.tex_by_name(p.rsplit("/", 1)[-1])
-
-    # -- steps -----------------------------------------------------------
 
     def recover_moc3(self):
         for o in self.res.objects:

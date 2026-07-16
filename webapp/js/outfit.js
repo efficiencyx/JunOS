@@ -1,29 +1,16 @@
-// Manual outfit/clothing customization. Bypasses the LLM: toggles drive
-// Live2D params directly and the current state is injected into the system
-// prompt server-side so the model knows what Jun is wearing.
-
 window.Outfit = (function () {
   const STORAGE_KEY = 'omega.outfit.v1';
   const COLOR_KEY = 'omega.outfit.colors.v1';
   const VARIANT_KEY = 'omega.outfit.variants.v1';
 
-  // Each item is a param-backed boolean. `excludes` lists other keys to force
-  // off when this one turns on. `colorPatterns` are substrings matched against
-  // drawable IDs to tint when the user picks a color, and `colorExcludes`
-  // trims false positives from that match.
   const ITEMS = [
-    // 'logo' is excluded from the clothing tints: the Moddable*Logo decals sit
-    // on top of the garment and must keep their own colors when it is tinted.
     { key: 'shirt', label: 'Shirt', param: 'ParamShirtEnabled', defaultOn: true, excludes: ['dress','dress1'],
       colorPatterns: ['shirt'], colorExcludes: ['logo'] },
     { key: 'hoodie', label: 'Hoodie', param: 'ParamHoodieEnabled', defaultOn: false, excludes: ['dress','dress1'],
       colorPatterns: ['hoodie'], colorExcludes: ['logo'] },
     { key: 'dress', label: 'Dress', param: 'ParamDress2Enabled', defaultOn: false, excludes: ['shirt','hoodie','skirt','pants','dress1'],
       colorPatterns: ['dress'] },
-    // Dress1 (Dress1_*) is a second, alternative dress that has NO enable param
-    // in the rig - its drawables carry full geometry but are hidden by opacity 0
-    // (which also clears their IsVisible flag). So it's a force-SHOW item:
-    // visOn=1 forces opacity+visible on, visOff=null lets the rig hide it again.
+    // Dress1 has no rig parameter, so visibility overrides control it.
     { key: 'dress1', label: 'Dress (alt)', defaultOn: false,
       excludes: ['shirt','hoodie','skirt','pants','dress'],
       colorPatterns: ['dress1'], visibilityPatterns: ['dress1'], visOn: 1, visOff: null },
@@ -31,32 +18,20 @@ window.Outfit = (function () {
       colorPatterns: ['skirt'] },
     { key: 'pants', label: 'Pants', param: 'ParamPantsEnabled', defaultOn: false, excludes: ['skirt','dress','dress1'],
       colorPatterns: ['pants'] },
-    // The 'bra' substring also hits SkinBraChest* (the skin under the bra, not
-    // the bra itself), so exclude 'skin' to keep that area skin-toned.
     { key: 'bra', label: 'Bra', param: 'ParamBraEnabled', defaultOn: true,
       colorPatterns: ['bra'], colorExcludes: ['skin'] },
     { key: 'panties', label: 'Panties', param: 'ParamPantiesEnabled', defaultOn: true,
       colorPatterns: ['panties'], colorExcludes: ['logo'] },
-    // ParamShoeLOn/ROn are NOT wired to the shoe drawable opacity in this moc3,
-    // and the current rig keeps Shoe_L/R and StockingL/R at opacity 0 by
-    // default (verified: forcing opacity 1 makes them appear). So like Dress1
-    // they are force-SHOW items: visOn=1 overrides the rig, visOff=0 hides.
+    // The shoe parameters do not control drawable opacity in this moc3.
     { key: 'shoe_l', label: 'Left shoe', param: 'ParamShoeLOn', defaultOn: true,
       colorPatterns: ['shoe_l'], visibilityPatterns: ['shoe_l'], visOn: 1, visOff: 0 },
     { key: 'shoe_r', label: 'Right shoe', param: 'ParamShoeROn', defaultOn: true,
       colorPatterns: ['shoe_r'], visibilityPatterns: ['shoe_r'], visOn: 1, visOff: 0 },
-    // Stockings (StockingL/StockingR) have no enable parameter at all, so they
-    // are visibility-only: driven purely by the opacity override.
     { key: 'stockings', label: 'Stockings', defaultOn: true,
       colorPatterns: ['stocking'], visibilityPatterns: ['stocking'], visOn: 1, visOff: 0 },
 
-    // --- Body parts (section: 'body'). None of these have enable params in
-    // the moc3 (only clothing does), so they are all visibility-only items.
-    // Colors are already handled by the ear/tail/hair COLOR_GROUPS below.
     { key: 'cat_ears', label: 'Cat ears', section: 'body', defaultOn: true,
       visibilityPatterns: ['catear'], excludes: ['pointy_ears'] },
-    // The current rig shows PointyEar* by default, so the toggle must be
-    // authoritative both ways: visOn=1 force-shows, visOff=0 force-hides.
     { key: 'pointy_ears', label: 'Pointy ears', section: 'body', defaultOn: false,
       visibilityPatterns: ['pointyear'], visOn: 1, visOff: 0,
       excludes: ['cat_ears'] },
@@ -65,11 +40,7 @@ window.Outfit = (function () {
     { key: 'hair_hologram', label: 'Hair hologram', section: 'body', defaultOn: true,
       visibilityPatterns: ['hairhologram'] },
 
-    // --- Hair (section: 'hair'). Numbered layer groups (H0_..H4_) are
-    // alternative style pieces: the rig only shows H3 (a complete basic
-    // style - Back/Back_Top/Front/Side) and keeps the rest at opacity 0, so
-    // every toggle is authoritative both ways (visOn 1 forces show even when
-    // the rig hides it, visOff 0 force-hides). Groups combine freely.
+    // The rig exposes only H3; other hair styles need explicit visibility.
     { key: 'hair_h0', label: 'Default Hair', section: 'hair', defaultOn: true,
       visibilityPatterns: ['h0_'], visOn: 1, visOff: 0 },
     { key: 'hair_h1', label: 'Side Swept Hair', section: 'hair', defaultOn: false,
@@ -85,45 +56,28 @@ window.Outfit = (function () {
       visibilityPatterns: ['h4_'], visOn: 1, visOff: 0 },
   ];
 
-  // Patterns tuned to this model's actual drawable IDs (see console dump).
-  // Skin parts are prefixed Skin*, pose-time skin layers Attach*; MCHand* and
-  // MCForearm* are the partner character's hands. Hair uses H0_..H4_ prefixes
-  // plus *Hair*. Cat ears split Front/Mid/Back, eyes into Iris/Pupil/EyeBall/highlight.
-  // Order matters here: applyColors paints groups in sequence, so a narrow group
-  // listed after a broad one overrides it.
   const COLOR_GROUPS = [
     { key: 'skin', label: 'Skin',
       includes: ['skin','attach','mchand','mcforearm','nipple','moddableface','moddableback'],
       excludes: [] },
 
-    // Blush is split out of skin so it can carry its own reddish tint. It uses
-    // an additive (screen) blend instead of multiply - a red multiply just
-    // darkens the cheeks into a shadow, while screen adds color for a real flush.
     { key: 'blush', label: 'Blush', includes: ['blush'], excludes: [],
       tintMode: 'screen', defaultColor: '#ff3a3a' },
 
-    // Catches all H<digit>_ styles plus anything containing "hair". The
-    // HairHologram drawable is split into its own group below, so exclude it.
     { key: 'hair', label: 'Hair',
       includes: ['h0_','h1_','h2_','h3_','h4_','hair'],
       excludes: ['hairband','hairpin','hairtie','hairclip','hairbow','hairhologram'] },
 
-    // The native hair items add a separately colorable layer (ColorIndex 1)
-    // to these exact front drawables. Keep them after the broad main-hair
-    // group so a strand choice overrides the main tint only on its own mesh.
+    // This narrow group must follow main hair to override its tint.
     { key: 'hair_h1_strand', label: 'Strand', includes: ['h1_front_bang'], excludes: [] },
     { key: 'hair_h2_strand', label: 'Strand', includes: ['h2_front_bang'], excludes: [] },
     { key: 'hair_h3_strand', label: 'Strand', includes: ['h3_front'], excludes: [] },
 
     { key: 'hair_hologram', label: 'Hair hologram', includes: ['hairhologram'], excludes: [] },
 
-    // The game exposes CatEarMain and CatEarSecondary color slots. In this
-    // model the secondary slot is the inner/fluff layer, kept disjoint from
-    // the front/back main layers so clearing either slot restores its default.
     { key: 'ear', label: 'Ear', includes: ['catearback','catearfront','pointyear'], excludes: [] },
     { key: 'ear_mid', label: 'Fluff', includes: ['catearmid'], excludes: [] },
 
-    // Body tail is TailMain*; H4_Tail belongs to the hair group instead.
     { key: 'tail', label: 'Tail', includes: ['tailmain'], excludes: [] },
 
     { key: 'eyebrows', label: 'Eyebrows', includes: ['brow'], excludes: [] },
@@ -147,14 +101,9 @@ window.Outfit = (function () {
   const state = {};
   for (const it of ITEMS) state[it.key] = it.defaultOn;
 
-  // colors[groupKey] is '#rrggbb' or null when there's no override. A group may
-  // declare a `defaultColor` that seeds the tint until the user changes/clears it.
   const colors = {};
   for (const g of COLOR_GROUPS) colors[g.key] = g.defaultColor || null;
 
-  // A wardrobe item can own several game color slots. Keep those slots on the
-  // same tile and open them in one picker instead of scattering independent
-  // controls around the color studio.
   const ITEM_COLOR_GROUPS = {
     ...Object.fromEntries(ITEMS.filter(it => it.colorPatterns).map(it => [it.key, [it.key]])),
     cat_ears: ['ear', 'ear_mid'],
@@ -168,9 +117,6 @@ window.Outfit = (function () {
     hair_h4: ['hair'],
   };
 
-  // Variant slot owned by a clothing tile: rendered as an options orb on that
-  // tile instead of a separate "Styles" section. Slots with no owning item
-  // (arms/legs/high-tech skin) become their own tiles in the Body section.
   const ITEM_VARIANTS = {
     shirt: 'shirt_logo',
     hoodie: 'hoodie_logo',
@@ -182,24 +128,14 @@ window.Outfit = (function () {
   };
   const BODY_VARIANTS = ['arm_style', 'leg_style', 'hightech_skin'];
 
-  // Reverse of ITEM_VARIANTS: variant key -> owning item keys. A slot's
-  // force-shown decals (logos) must hide with the garment they sit on.
   const VARIANT_OWNER = {};
   for (const [itemKey, variantKey] of Object.entries(ITEM_VARIANTS)) {
     (VARIANT_OWNER[variantKey] = VARIANT_OWNER[variantKey] || []).push(itemKey);
   }
 
-  // Limb variants ripped from the game's PackedTexturesContainer assets:
-  // per-drawable crops of the packed variant textures, saved one PNG per
-  // drawable so the standard compositor can place them via each drawable's
-  // own UV rect. The game creates its High-Tech limbs by cloning the matching
-  // Experimental limb and calling MakeHypercamo(); that changes its Hypercamo
-  // material/color state, not its drawable texture list. The separate
-  // HighTechHypercamoSkin item owns the SkinArm*/SkinThigh*/SkinPelvis art.
+  // Limb variants use packed-game crops placed through their drawable UVs.
   const LIMB_DIR = 'assets/variants/limbs';
-  // alphaClip: limb crops' bounding rects overlap each other and base-skin
-  // texels in the atlas, so the compositor must only erase under opaque pixels
-  // (a full-rect clear punches transparent holes in neighboring drawables).
+  // Overlapping atlas regions require alphaClip.
   const limbTex = (v, ids) => Object.fromEntries(
     ids.map(d => [d, { url: `${LIMB_DIR}/${v}/${d}.png`, alphaClip: true }]));
   const ARM_EXP_IDS = ['AttachArmL', 'AttachArmLHandCuddle', 'AttachArmLHandDown1',
@@ -210,24 +146,13 @@ window.Outfit = (function () {
     'AttachArmRHandUp2', 'AttachArmRHandUp3', 'AttachArmRLowerArmDown', 'AttachArmRLowerArmUp'];
   const LEG_EXP_IDS = ['AttachLegLFeet', 'AttachLegLKnee', 'AttachLegLLower', 'AttachLegLThigh',
     'AttachLegRFeet', 'AttachLegRKnee', 'AttachLegRLower', 'AttachLegRThigh'];
-  // HighTechHypercamoSkin is a separate game item (ID 1200), not a limb
-  // replacement. These are its own packed drawables and optional decals.
   const HT_SKIN_IDS = ['SkinArmL', 'SkinArmR', 'SkinPelvis', 'SkinThighL', 'SkinThighR',
     'barcode', 'lines'];
-  // The rig draws the calf pieces over the thigh pieces; invisible on
-  // contiguous flesh but wrong for the segmented mech art, where the knee
-  // joint must tuck under the thigh. `order` = [below, above] draw-order pairs
-  // enforced while the option is equipped.
+  // Mech knees need calf/thigh draw-order overrides.
   const LEG_ORDER = [
     ['AttachLegLLower', 'AttachLegLThigh'], ['AttachLegRLower', 'AttachLegRThigh'],
   ];
 
-  // Alternative-clothing variants. Each slot swaps the atlas region of one or
-  // more drawables with an alternative texture (game-faithful compositing via
-  // Live2D.setDrawableTextures). Option 0 is the baked default (empty textures
-  // = clear overrides). `textures` maps a drawable id -> variant PNG url.
-  // `show` drawables are rig-hidden decals force-shown while the option is
-  // active. Mech limbs follow the Skin color (its 'attach' pattern tints them).
   const VARIANTS = [
     {
       key: 'arm_style', label: 'Arms',
@@ -235,9 +160,6 @@ window.Outfit = (function () {
       options: [
         { name: 'Arms (standard)', textures: {} },
         { name: 'Experimental Arms', textures: limbTex('experimental', ARM_EXP_IDS) },
-        // Game: ExperimentalArm.Clone().MakeHypercamo(). It retains the exact
-        // Experimental drawable set; Hypercamo's color material supplies the
-        // smooth shaded finish. Do not mix in HighTech Skin's SkinArm* art.
         { name: 'High-Tech Arms', textures: limbTex('experimental', ARM_EXP_IDS) },
       ],
     },
@@ -247,8 +169,6 @@ window.Outfit = (function () {
       options: [
         { name: 'Legs (standard)', textures: {} },
         { name: 'Experimental Legs', textures: limbTex('experimental', LEG_EXP_IDS), order: LEG_ORDER },
-        // Game: ExperimentalLeg.Clone().MakeHypercamo(). The Skin* panels,
-        // barcode, and glow lines belong to the separate HighTech Skin item.
         { name: 'High-Tech Legs', textures: limbTex('experimental', LEG_EXP_IDS), order: LEG_ORDER },
       ],
     },
@@ -257,9 +177,6 @@ window.Outfit = (function () {
       drawables: HT_SKIN_IDS,
       options: [
         { name: 'Standard skin', textures: {} },
-        // Separate game item: HightechHyperCamoSkin (ID 1200). It only swaps
-        // the Skin* surface art and exposes its barcode/glow decals; it never
-        // changes which arm or leg item is equipped.
         { name: 'High-Tech Skin', textures: limbTex('hightech', HT_SKIN_IDS), show: ['barcode', 'lines'] },
       ],
     },
@@ -299,10 +216,6 @@ window.Outfit = (function () {
       drawables: ['ModdableShirtLogo'],
       options: [
         { name: 'None', textures: {} },
-        // fullClear: the Moddable*Logo atlas regions hold baked placeholder art
-        // (pattern + red border) that must be erased across the whole UV rect -
-        // the border sits outside the mesh polygon, so a mesh-clipped erase
-        // leaves it to bleed back in through bilinear edge sampling.
         { name: 'Gamer', textures: { ModdableShirtLogo: { url: 'assets/variants/logoGamerTshirt.png', fullClear: true } }, show: ['ModdableShirtLogo'] },
         { name: 'Priest Bot', textures: { ModdableShirtLogo: { url: 'assets/variants/logoPriestbot.png', fullClear: true } }, show: ['ModdableShirtLogo'] },
       ],
@@ -374,34 +287,22 @@ window.Outfit = (function () {
     if (window.Prefs) Prefs.pushToServer();
   }
 
-  // Overlay meshes the game hides via part opacity in its own code (no Live2D
-  // parameter drives them, so the rig leaves them permanently visible). They
-  // render as untinted grey blobs over the face/body unless force-hidden here.
-  // Matched by substring against the model's drawable IDs, so this is a no-op
-  // on extractions that don't contain them.
+  // This rig lacks the game-side opacity control for these overlay meshes.
   const ALWAYS_HIDDEN = [
     'cumoutside', 'shadowboob', 'fondle',
     'nippiercing', 'navelpiercing', 'headband',
   ];
 
-  // Just the param/opacity flips for the boolean items. Cheap: no texture
-  // recompositing, no tint repaint. This is all an equip/unequip needs.
   function applyItems() {
     const textureMap = {};
     for (const it of ITEMS) {
       if (it.param) Live2D.setTarget(it.param, state[it.key] ? 1 : 0);
-      // For items whose param doesn't drive drawable opacity, override directly.
-      // visOn/visOff are the forced opacity for the on/off state (null = clear
-      // the override and let the rig decide). Defaults reproduce the shoe/stocking
-      // behaviour: on -> clear (rig shows), off -> force opacity 0 (hide).
       if (it.visibilityPatterns && Live2D.opacityByPattern) {
         const visOn  = it.visOn  !== undefined ? it.visOn  : null;
         const visOff = it.visOff !== undefined ? it.visOff : 0;
         Live2D.opacityByPattern(it.visibilityPatterns, it.visibilityExcludes,
           state[it.key] ? visOn : visOff);
       }
-      // Native items may add packed art on top of a baked drawable. Hair
-      // strands are layer-1 overlays in the game and disappear with the item.
       for (const [drawable, texture] of Object.entries(it.textures || {})) {
         textureMap[drawable] = state[it.key] ? texture : null;
       }
@@ -414,17 +315,12 @@ window.Outfit = (function () {
     applyItems();
     applyVariants();
     applyColors();
-    // Modded items go last so they win over variant overrides on shared drawables.
     if (window.Mods) Mods.applyAll();
   }
 
-  // Swap each slot's drawables to the selected variant texture (or clear to the
-  // baked default). Runs the compositor once per slot. Pass `onlyKey` to touch
-  // a single slot (recompositing an atlas is expensive - don't redo the other
-  // slots when only one changed).
+  // Recompose only the changed variant slot; atlas uploads are expensive.
   function applyVariants(onlyKey) {
     if (!Live2D.setDrawableTextures) return;
-    // Collect draw-order pairs from every active option in one go.
     if (Live2D.setDrawableOrderBelow) {
       Live2D.setDrawableOrderBelow(
         VARIANTS.flatMap(v => v.options[variantState[v.key] || 0].order || []));
@@ -439,9 +335,6 @@ window.Outfit = (function () {
     }
   }
 
-  // Some variants take control of rig-hidden decals or base meshes. A decal
-  // is only force-shown while its owning garment (if any) is worn - removing
-  // the shirt must take the shirt logo with it.
   function applyVariantVisibility(v) {
     if (!Live2D.setDrawableOpacity) return;
     const opt = v.options[variantState[v.key] || 0];
@@ -467,6 +360,9 @@ window.Outfit = (function () {
     applyVariants(key);
     applyColors();
     syncUI();
+    if (key.indexOf('hair_') === 0 && window.WardrobeReactions) {
+      WardrobeReactions.react({ key, label: v.label, on: true, state: snapshot() });
+    }
   }
 
   function hexToRgb01(hex) {
@@ -479,9 +375,7 @@ window.Outfit = (function () {
 
   function applyColors() {
     if (!Live2D.tintByPattern || !Live2D.findDrawables || !Live2D.setDrawableTint) return;
-    // Two-pass: clear every drawable any group could touch, then paint each
-    // active group in declared order. This way a narrow group whose color was
-    // cleared can't accidentally erase the broad group's color underneath.
+    // Clear before repainting so narrow tints cannot erase broad-group colors.
     const touched = new Set();
     for (const g of COLOR_GROUPS) {
       for (const id of Live2D.findDrawables(g.includes, g.excludes)) touched.add(id);
@@ -499,8 +393,6 @@ window.Outfit = (function () {
         Live2D.tintByPattern(g.includes, g.excludes, rgb);
       }
     }
-    // Mechanical limbs follow the skin color: the Skin group's 'attach'
-    // pattern already painted them above, so nothing to strip or re-paint.
   }
 
   function setItem(key, on) {
@@ -511,12 +403,8 @@ window.Outfit = (function () {
       for (const ex of it.excludes) state[ex] = false;
     }
     save();
-    // Only the boolean params/opacities change on an equip toggle; skip the
-    // variant compositor + tint repaint (they redraw and re-upload whole
-    // atlases, which caused a visible stutter on every un/equip).
+    // Skip atlas recomposition on parameter-only item toggles.
     applyItems();
-    // But re-gate force-shown decals (logos) on this item and anything the
-    // equip just excluded - a removed shirt takes its logo along.
     const affected = new Set([key, ...(state[key] && it.excludes || [])]);
     for (const k of affected) {
       const vk = ITEM_VARIANTS[k];
@@ -524,6 +412,9 @@ window.Outfit = (function () {
       if (v) applyVariantVisibility(v);
     }
     syncUI();
+    if (window.WardrobeReactions) {
+      WardrobeReactions.react({ key, label: it.label, on: state[key], state: snapshot() });
+    }
   }
 
   function setColor(key, hex) {
@@ -589,8 +480,6 @@ window.Outfit = (function () {
   let colorPickerEl = null, colorPickerAnchor = null, pickerState = null;
   const COLOR_PRESETS = ['#f6d6c8', '#ef8fa9', '#c76ee8', '#7754d8', '#4b7bd8', '#41a9a2', '#76ae57', '#e2b34c', '#d76b42', '#34273f'];
 
-  // An embedded picker (inside the tile options popup) lives and dies with
-  // that popup: only a forced close (popup closing/reopening) may hide it.
   function pickerEmbedded() {
     return !!(colorPickerEl && colorPickerEl.classList.contains('ocp-embedded'));
   }
@@ -928,7 +817,6 @@ window.Outfit = (function () {
       rootEl.appendChild(buildGrid(ITEMS.filter(it => it.section === section)));
     }
 
-    // Variant (alternative clothing) pickers.
     if (VARIANTS.length) {
       const varWrap = document.createElement('div');
       varWrap.className = 'outfit-variants';
@@ -953,8 +841,6 @@ window.Outfit = (function () {
     title.textContent = 'Colors';
     colorWrap.appendChild(title);
 
-    // The settings panel uses the same custom picker as the visual wardrobe.
-    // Cat-ear main/fluff slots are represented by one bundled row.
     for (const g of COLOR_GROUPS) {
       if (g.key === 'ear_mid') continue;
       const keys = g.key === 'ear' ? ITEM_COLOR_GROUPS.cat_ears : [g.key];
@@ -987,15 +873,10 @@ window.Outfit = (function () {
     if (resetBtn) resetBtn.addEventListener('click', reset);
   }
 
-  // ---- Wardrobe overlay -----------------------------------------------------
-  // Visual dress-up view over the same ITEMS/VARIANTS state: drag a tile onto
-  // Jun to equip it, drag a worn piece to remove it. The live canvas model is
-  // the preview - every change goes through setItem/setVariant.
   let wdOverlay = null, wdTooltip = null, wdGhost = null, wdUpdateExpand = null;
 
   const itemPatterns = (it) => it.colorPatterns || it.visibilityPatterns || [];
 
-  // drawableId -> item key, for every currently-worn toggleable item.
   function wornDrawableMap() {
     const map = new Map();
     for (const it of ITEMS) {
@@ -1007,8 +888,6 @@ window.Outfit = (function () {
 
   function itemThumb(it) {
     const ids = Live2D.findDrawables(itemPatterns(it), it.colorExcludes);
-    // Pick the drawable with the largest atlas area so e.g. a dress thumbnail
-    // shows the dress body, not a strap.
     let best = null, bestPx = 0;
     for (const id of ids) {
       const img = Live2D.drawableThumb(id, 72);
@@ -1038,15 +917,10 @@ window.Outfit = (function () {
     if (src) wdMoveGhost(x, y);
   }
 
-  // Small tint control pinned to a tile's top-right corner. Multi-slot items
-  // display a split preview and open every slot in the same custom picker.
   function makeSwatch(groupKeys, label) {
     return makeColorButton(groupKeys, label, 'wd-swatch');
   }
 
-  // Anchored per-tile popup: equip toggle, color picker access, and the tile's
-  // style/logo options. One shared element, same open/close conventions as the
-  // color picker.
   let optPopEl = null, optPopAnchor = null, optPopKey = null, optPopItemKey = null;
 
   function closeOptionsPopup(focusAnchor) {
@@ -1078,27 +952,21 @@ window.Outfit = (function () {
     document.addEventListener('pointerdown', (e) => {
       if (optPopEl.hidden || optPopEl.contains(e.target)) return;
       if (optPopAnchor && optPopAnchor.contains(e.target)) return;
-      // The color picker opened from inside the popup floats outside it.
       if (colorPickerEl && !colorPickerEl.hidden && colorPickerEl.contains(e.target)) return;
       closeOptionsPopup(false);
     });
     document.addEventListener('keydown', (e) => {
-      // The embedded picker doesn't intercept Escape - the popup owns it.
       if (e.key === 'Escape' && !optPopEl.hidden && (!colorPickerEl || colorPickerEl.hidden || pickerEmbedded())) {
         e.stopPropagation();
         closeOptionsPopup(true);
       }
     }, true);
     window.addEventListener('resize', () => closeOptionsPopup(false));
-    // Close when the page/shelves scroll away from the anchor, but not when
-    // the popup's own option grid scrolls.
     window.addEventListener('scroll', (e) => {
       if (!(e.target instanceof Node) || !optPopEl.contains(e.target)) closeOptionsPopup(false);
     }, true);
   }
 
-  // cfg: { title, itemKey?, colorKeys?, variant? }. Every tile opens this:
-  // clothing tiles get equip + colors + styles; body variant tiles get options.
   function openTilePopup(anchor, cfg) {
     buildOptionsPopup();
     if (optPopAnchor === anchor && !optPopEl.hidden) { closeOptionsPopup(false); return; }
@@ -1119,7 +987,6 @@ window.Outfit = (function () {
     }
     row.hidden = !row.childNodes.length;
 
-    // The color picker sits inline in the popup rather than behind a button.
     const colorWrap = optPopEl.querySelector('.wd-optpop-color');
     const validKeys = (cfg.colorKeys || []).filter(key => key in colors);
     colorWrap.hidden = !validKeys.length;
@@ -1180,8 +1047,6 @@ window.Outfit = (function () {
     return orb;
   }
 
-  // Clicking a tile opens its options popup (equip toggle, colors, styles);
-  // only dragging onto Jun equips directly.
   function makeTile(label, thumbSrc, onEquip, colorKeys, popupCfg) {
     const tile = document.createElement('div');
     tile.className = 'wd-tile';
@@ -1191,7 +1056,6 @@ window.Outfit = (function () {
     tile.innerHTML = `${thumbSrc ? `<img draggable="false" src="${thumbSrc}">` : '<div class="wd-noimg">?</div>'}<span>${label}</span>`;
     if (colorKeys && colorKeys.length) tile.appendChild(makeSwatch(colorKeys, label));
     tile.appendChild(makeOptOrb(popupCfg));
-    // Custom pointer drag (not HTML5 DnD): works on touch and gives us the ghost.
     tile.addEventListener('pointerdown', (e) => {
       if (e.button !== 0) return;
       e.preventDefault();
@@ -1235,7 +1099,6 @@ window.Outfit = (function () {
     const body = wdOverlay.querySelector('.wd-body');
     const rail = wdOverlay.querySelector('.wd-rail');
 
-    // Side rail: one anchor per top-level section, active state follows scroll.
     const navTargets = [];
     const addNav = (name, icon, el) => {
       const b = document.createElement('button');
@@ -1254,9 +1117,6 @@ window.Outfit = (function () {
     };
     body.addEventListener('scroll', syncNav, { passive: true });
 
-    // Shelf grids default to one horizontally-scrollable row; a chevron in the
-    // section header (shown only when the shelf overflows) wraps the tiles into
-    // up to 3 rows instead.
     const expandableGrids = [];
     const section = (name, sub) => {
       const t = document.createElement('div');
@@ -1293,17 +1153,12 @@ window.Outfit = (function () {
     window.addEventListener('resize', updateExpandButtons);
     wdUpdateExpand = updateExpandButtons;
 
-    // Tints with no wardrobe tile of their own (skin, blush, lips, eyes...)
-    // ride on the High-Tech Skin tile as one multi-channel picker instead of
-    // a separate "Color studio" section. Item/ear/hair tints stay on their tiles.
     const tileGroups = new Set(Object.values(ITEM_COLOR_GROUPS).flat());
     const studioKeys = COLOR_GROUPS.filter(g =>
       !tileGroups.has(g.key) &&
       (!Live2D.findDrawables || Live2D.findDrawables(g.includes, g.excludes).length))
       .map(g => g.key);
 
-    // A tile per item-less variant slot (arms/legs/high-tech skin): the thumb
-    // tracks the current option and clicking opens the options popup.
     const makeVariantTile = (v, colorKeys) => {
       const tile = document.createElement('div');
       tile.className = 'wd-tile';
@@ -1349,7 +1204,6 @@ window.Outfit = (function () {
       }
     }
 
-    // Game-mod items (loaded from .zip, stored client-side in IndexedDB).
     if (window.Mods) {
       const anchor = document.createElement('div');
       body.appendChild(anchor);
@@ -1371,9 +1225,6 @@ window.Outfit = (function () {
       if (window.confirm('Restore Jun\'s default outfit and colors?')) reset();
     });
 
-    // Model-side: hover highlights every drawable of the item under the
-    // pointer (the whole garment, not just the hit mesh); a drag removes the
-    // matching item as soon as the pointer actually moves.
     let removeDrag = null; // { key, x, y, removed }
     let hoveredKey = null, hoveredIds = [];
     const setHoveredItem = (key, worn) => {
@@ -1419,7 +1270,6 @@ window.Outfit = (function () {
       if (!hit) return;
       const key = worn.get(hit);
       e.preventDefault();
-      // Keep receiving pointer events even after the pointer leaves the stage.
       try { e.target.setPointerCapture(e.pointerId); } catch (err) { }
       removeDrag = { key, x: e.clientX, y: e.clientY, removed: false };
       wdTooltip.style.display = 'none';
@@ -1429,9 +1279,6 @@ window.Outfit = (function () {
     });
     window.addEventListener('pointerup', (e) => {
       if (!removeDrag) return;
-      // Dropping the piece back on Jun cancels the removal (change of mind);
-      // releasing away from her confirms it. A press without a real move is
-      // just a pick - it never removed anything in the first place.
       if (removeDrag.removed && Live2D.isOverModel(e.clientX, e.clientY)) {
         setItem(removeDrag.key, true);
       }
@@ -1460,11 +1307,9 @@ window.Outfit = (function () {
     }
     for (const v of VARIANTS) {
       const idx = variantState[v.key] || 0;
-      // Options orbs light up while a non-default style/logo is active.
       wdOverlay.querySelectorAll(`.wd-optorb[data-opt-orb="${v.key}"]`).forEach(orb => {
         orb.classList.toggle('set', idx > 0);
       });
-      // Item-less variant tiles (arms/legs/skin) preview the current option.
       const tile = wdOverlay.querySelector(`.wd-tile[data-variant-tile="${v.key}"]`);
       if (tile) {
         tile.classList.toggle('on', idx > 0);
@@ -1474,28 +1319,26 @@ window.Outfit = (function () {
       }
     }
     syncOptionsPopup();
-    // Repaint tint swatches (covers reset() and syncFromAction paths).
     refreshColorButtons();
   }
 
   function openWardrobe() {
     if (!wdOverlay) buildWardrobe();
     document.body.classList.add('wardrobe-open');
-    // Overflow is only measurable once the overlay has layout.
+    if (window.WardrobeReactions) WardrobeReactions.activate();
     if (wdUpdateExpand) requestAnimationFrame(wdUpdateExpand);
   }
 
   function closeWardrobe() {
-    // On the dedicated wardrobe page, closing means going back to the app.
     if (location.pathname.endsWith('wardrobe.html')) { location.href = 'index.html'; return; }
     document.body.classList.remove('wardrobe-open');
+    if (window.WardrobeReactions) WardrobeReactions.deactivate();
     closeOptionsPopup(false);
     wdTooltip.style.display = 'none';
     wdShowGhost(null);
     document.body.classList.remove('wd-over-worn-item');
   }
 
-  // Builds the wardrobe phrase injected into the system prompt.
   function describe() {
     const clothes = ITEMS.filter(it => !it.section);
     const worn = clothes.filter(it => state[it.key]);
@@ -1509,13 +1352,11 @@ window.Outfit = (function () {
     }
     const body = ITEMS.filter(it => it.section === 'body' && state[it.key]);
     if (body.length) s += ` Your body features: ${phrase(body)}.`;
-    // Only tell the LLM about the hair when it deviates from the default style.
     const hair = ITEMS.filter(it => it.section === 'hair');
     if (hair.some(it => state[it.key] !== it.defaultOn)) {
       const on = hair.filter(it => state[it.key]);
       s += on.length ? ` Your hair style: ${phrase(on)}.` : ' Your hair is completely hidden (bald).';
     }
-    // Note non-default clothing styles (e.g. a mini skirt vs pleated).
     const styles = VARIANTS
       .filter(v => (variantState[v.key] || 0) > 0)
       .map(v => `${v.label.toLowerCase()}: ${v.options[variantState[v.key]].name.toLowerCase()}`);
@@ -1530,9 +1371,6 @@ window.Outfit = (function () {
     return out;
   }
 
-  // Mirror state when the LLM emits an outfit/nude action, so the panel,
-  // localStorage, and the next system-prompt all stay in sync with reality.
-  // Item kwargs come from action_map.json's outfit._resolve table.
   function syncFromAction(name, kwargs) {
     const n = (name || '').toLowerCase();
     let dirty = false;
@@ -1558,10 +1396,8 @@ window.Outfit = (function () {
         case 'shoe_left': setKey('shoe_l', stateOn); break;
         case 'shoe_right': setKey('shoe_r', stateOn); break;
         case 'nude':
-          // Only strip clothing - body parts and hair are not wardrobe.
           if (stateOn) for (const it of ITEMS) { if (!it.section) setKey(it.key, false); }
           break;
-        // skirt_up / panties_aside are pose-y, not wardrobe state - ignore.
       }
     }
 

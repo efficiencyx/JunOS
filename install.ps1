@@ -1,37 +1,81 @@
-#!/usr/bin/env pwsh
-#
-# Bootstrap installer for Windows - bare metal, no Docker. Clones Jun OS (if
-# not already present), sets up everything it needs, and launches start.ps1.
-#
-#   irm https://raw.githubusercontent.com/efficiencyx/Jun/main/install.ps1 | iex
-#
-# What lands where (uninstallability is the design goal - see uninstall.ps1):
-#   - The Jun folder itself: webapp, a portable PHP under runtime\php, the
-#     TTS Python venv under runtime\tts-venv, model weights under
-#     runtime\ollama-models, chat state under runtime\state. Deleting the
-#     folder removes all of it.
-#   - Machine-wide (via winget, each with its own uninstaller in
-#     Settings > Apps): git, Ollama, and - only if voice is enabled and no
-#     Python 3 exists - Python. The installer warns before touching these.
-#
-# In a terminal it asks which model to pull (auto-detecting a default from
-# your VRAM) and whether to enable voice; piped or with $env:JUN_YES='1' it
-# stays one-command (recommended model + voice on). Override non-interactively:
-# $env:JUN_MODEL='12b|e4b|e2b|<full-ref>', $env:VOICE='on|off'.
-#
-# Overrides: $env:JUN_REPO, $env:JUN_DIR, $env:JUN_REF.
-# Set $env:JUN_YES='1' to skip prompts (assume yes).
-# Prefer to read before you run? Sensible - open the file first, then clone
-# the repo and run ./start.ps1 yourself.
-
+﻿#!/usr/bin/env pwsh
 $ErrorActionPreference = 'Stop'
 $ProgressPreference = 'SilentlyContinue'
+
+# Ensure Unicode glyphs render correctly on all console hosts.
+try {
+    [Console]::OutputEncoding = [Text.Encoding]::UTF8
+    $OutputEncoding = [Text.Encoding]::UTF8
+} catch {}
 
 $repo = if ($env:JUN_REPO) { $env:JUN_REPO } else { 'https://github.com/efficiencyx/Jun.git' }
 $dir  = if ($env:JUN_DIR)  { $env:JUN_DIR }  else { 'Jun' }
 $ref  = if ($env:JUN_REF)  { $env:JUN_REF }  else { 'main' }
 
-# winget package ids for the machine-wide tools we depend on.
+# ── ANSI / VT escape setup ───────────────────────────────────────────────────
+# Windows Terminal, VS Code, and modern conhost all handle VT sequences.
+# Detect support and fall back to unstyled text gracefully.
+$VTSupported = $false
+if ($Host.UI.SupportsVirtualTerminal -or $env:WT_SESSION -or
+    $env:TERM_PROGRAM -eq 'vscode' -or $PSVersionTable.PSVersion.Major -ge 7) {
+    $VTSupported = $true
+}
+
+if ($VTSupported) {
+    $e      = [char]27
+    $R      = "$e[0m"
+    $B      = "$e[1m"
+    $D      = "$e[2m"
+    $ACCENT = "$e[38;2;96;205;255m"    # #60CDFF  Fluent light blue
+    $BLUE   = "$e[38;2;0;120;212m"     # #0078D4  Windows system blue
+    $OK     = "$e[38;2;108;203;95m"    # #6CCB5F  Fluent green
+    $DANGER = "$e[38;2;255;76;76m"     # #FF4C4C  Fluent red
+    $WARN   = "$e[38;2;252;225;0m"     # #FCE100  Fluent amber
+    $DIM    = "$e[38;2;158;158;158m"   # #9E9E9E  Neutral gray
+    $MUTED  = "$e[38;2;204;204;204m"   # #CCCCCC  Light gray
+    $FRAME  = "$e[38;2;80;80;80m"      # #505050  Card border
+} else {
+    $R = ''; $B = ''; $D = ''; $ACCENT = ''; $BLUE = ''; $OK = ''
+    $DANGER = ''; $WARN = ''; $DIM = ''; $MUTED = ''; $FRAME = ''
+}
+
+$UI_W = 54   # interior width of the card frame
+
+function _Rule([string]$ch) { $ch * $UI_W }
+
+function Show-Banner {
+    $blank = ' ' * $UI_W
+    $bar   = _Rule '═'
+    Write-Host ''
+    Write-Host "  ${FRAME}╔${bar}╗${R}"
+    Write-Host "  ${FRAME}║${R}${blank}${FRAME}║${R}"
+    # "    Ω  JUN OS" = 13 visible chars
+    Write-Host "  ${FRAME}║${R}    ${B}${BLUE}Ω${R}  ${B}${ACCENT}JUN OS${R}$(' ' * ($UI_W - 13))${FRAME}║${R}"
+    Write-Host "  ${FRAME}║${R}${blank}${FRAME}║${R}"
+    # "    Welcome to Jun OS · omega build" = 35 visible chars
+    Write-Host "  ${FRAME}║${R}    ${MUTED}Welcome to Jun OS${R} ${DIM}·${R} ${DIM}omega build${R}$(' ' * ($UI_W - 35))${FRAME}║${R}"
+    # "    Windows installer" = 21 visible chars
+    Write-Host "  ${FRAME}║${R}    ${DIM}Windows installer${R}$(' ' * ($UI_W - 21))${FRAME}║${R}"
+    Write-Host "  ${FRAME}║${R}${blank}${FRAME}║${R}"
+    Write-Host "  ${FRAME}╚${bar}╝${R}"
+    Write-Host ''
+}
+
+function Step([string]$msg)    { Write-Host "  ${ACCENT}▸${R} ${B}${msg}${R}" }
+function Ok([string]$msg)      { Write-Host "    ${OK}✓${R} ${MUTED}${msg}${R}" }
+function Note([string]$msg)    { Write-Host "    ${DIM}ℹ ${msg}${R}" }
+function Warn_([string]$msg)   { Write-Host "    ${WARN}⚠${R} ${WARN}${msg}${R}" }
+function Fail_([string]$msg)   { Write-Host "    ${DANGER}✗${R} ${DANGER}${msg}${R}" }
+
+# Read a line of input after a styled prompt (avoids the ': ' suffix of Read-Host).
+function Read-Styled([string]$prompt) {
+    Write-Host -NoNewline $prompt
+    try { return [Console]::ReadLine() }
+    catch { return (Read-Host) }
+}
+
+# ── end UI helpers ────────────────────────────────────────────────────────────
+
 $wingetIds = @{ git = 'Git.Git'; ollama = 'Ollama.Ollama'; python = 'Python.Python.3.11'; llamacpp = 'ggml.llamacpp' }
 $manualUrls = @{
     git      = 'https://git-scm.com/download/win'
@@ -40,7 +84,6 @@ $manualUrls = @{
     llamacpp = 'https://github.com/ggml-org/llama.cpp/releases'
 }
 
-# Short aliases the menu and $env:JUN_MODEL accept; anything else is verbatim.
 $models = @{
     '12b' = 'hf.co/efficiencyx/Jun-Lora-v2-GGUF:Q4_K_M'
     'e4b' = 'hf.co/efficiencyx/Jun-LoRA-V3-E4B-GGUF:Q4_K_M'
@@ -56,7 +99,6 @@ function Resolve-Model([string]$a) {
     }
 }
 
-# Best-effort total VRAM in MB ($null when no NVIDIA GPU / no tool to ask).
 function Get-VramMb {
     if (Get-Command nvidia-smi -ErrorAction SilentlyContinue) {
         $out = & nvidia-smi --query-gpu=memory.total --format=csv,noheader,nounits 2>$null
@@ -83,7 +125,6 @@ function Set-EnvKey([string]$key, [string]$val) {
 
 $interactive = [Environment]::UserInteractive -and ($env:JUN_YES -ne '1')
 
-# Interactive Jun-model menu (VRAM-aware recommendation). Returns the full ref.
 function Ask-ModelRef {
     $vram = Get-VramMb
     $rec  = if ($null -ne $vram) { Recommend-Alias $vram } else { $models['e2b'] }
@@ -91,19 +132,19 @@ function Ask-ModelRef {
     $alias = $env:JUN_MODEL
     if (-not $alias) {
         if ($interactive) {
-            Write-Host ""
-            Write-Host "Which model should Jun run?"
-            Write-Host "  1) Jun 12B  - highest quality"
-            Write-Host "  2) Jun E4B  - balanced"
-            Write-Host "  3) Jun E2B  - lightest / CPU-friendly"
-            if ($null -ne $vram) { Write-Host "  (detected ${vram}MB VRAM)" }
-            $ans = Read-Host "Choice [Enter = recommended $rec]"
+            Write-Host ''
+            Write-Host "     ${B}select a model${R}"
+            Write-Host "       ${ACCENT}[1]${R}  Jun 12B  ${DIM}- highest quality${R}"
+            Write-Host "       ${ACCENT}[2]${R}  Jun E4B  ${DIM}- balanced${R}"
+            Write-Host "       ${ACCENT}[3]${R}  Jun E2B  ${DIM}- lightest / CPU-friendly${R}"
+            if ($null -ne $vram) { Write-Host "       ${DIM}detected ${vram}MB VRAM${R}" }
+            $ans = Read-Styled "     ${OK}▸${R} choice ${DIM}[Enter = recommended ${rec}]${R} ${ACCENT}›${R} "
             switch ($ans) {
                 '1' { $alias = '12b' }
                 '2' { $alias = 'e4b' }
                 '3' { $alias = 'e2b' }
                 ''  { $alias = $rec }
-                default { Write-Host "Unrecognized choice, using recommended model."; $alias = $rec }
+                default { Warn_ 'unrecognized choice, using recommended model'; $alias = $rec }
             }
         } else {
             $alias = $rec
@@ -120,28 +161,22 @@ function Ask-Embeddings {
         return $(if ($env:JUN_EMBEDDINGS.ToLower() -match '^(on|1|true|yes|y)$') { 'on' } else { 'off' })
     }
     if ($interactive) {
-        $v = Read-Host "Enable local embeddings via Ollama (RAG memory)? [y/N]"
+        $v = Read-Styled "     ${OK}▸${R} enable local embeddings via Ollama ${DIM}(RAG memory)${R} ${DIM}[y/N]${R} ${ACCENT}›${R} "
         return $(if ($v -match '^(y|yes)$') { 'on' } else { 'off' })
     }
     return 'off'
 }
 
-# Ask which AI provider + model + whether voice, then persist into .env.
-# Non-interactive (JUN_YES, per-field env override, or no console) keeps the
-# one-command flow. Knobs: JUN_PROVIDER, JUN_MODEL, OPENROUTER_API_KEY,
-# OPENROUTER_MODEL, LLAMACPP_URL, JUN_EMBEDDINGS, VOICE.
-# Returns @{ provider; voice; embeddings; needsOllama; needsLlamacpp }.
 function Configure-Jun {
-    # ── provider ──
     $provider = if ($env:JUN_PROVIDER) { $env:JUN_PROVIDER.ToLower() } else { '' }
     if (-not $provider) {
         if ($interactive) {
-            Write-Host ""
-            Write-Host "Which AI provider should Jun use?"
-            Write-Host "  1) Ollama      - local, fully managed (default)"
-            Write-Host "  2) OpenRouter  - cloud API - needs an API key; chats leave this machine"
-            Write-Host "  3) llama.cpp   - local llama-server"
-            $ans = Read-Host "Choice [Enter = Ollama]"
+            Write-Host ''
+            Write-Host "     ${B}select an AI provider${R}"
+            Write-Host "       ${ACCENT}[1]${R}  Ollama      ${DIM}- local, fully managed${R} ${DIM}(default)${R}"
+            Write-Host "       ${ACCENT}[2]${R}  OpenRouter  ${DIM}- cloud API - needs an API key; chats leave this machine${R}"
+            Write-Host "       ${ACCENT}[3]${R}  llama.cpp   ${DIM}- local llama-server${R}"
+            $ans = Read-Styled "     ${OK}▸${R} choice ${DIM}[Enter = Ollama]${R} ${ACCENT}›${R} "
             $provider = switch ($ans) {
                 '2' { 'openrouter' }
                 '3' { 'llamacpp' }
@@ -152,9 +187,11 @@ function Configure-Jun {
         }
     }
     if ($provider -notin 'ollama', 'openrouter', 'llamacpp') {
-        Write-Host "Unknown provider '$provider', using Ollama."
+        Warn_ "unknown provider '$provider', using Ollama"
         $provider = 'ollama'
     }
+
+    Step 'configure'
 
     $embeddings = 'on'
     $needsOllama = $true
@@ -164,21 +201,25 @@ function Configure-Jun {
         'ollama' {
             $modelRef = Ask-ModelRef
             Set-EnvKey 'OLLAMA_MODELS_TO_PULL' "$modelRef,nomic-embed-text"
-            Write-Host "==> Config: model=$modelRef"
+            Set-EnvKey 'EMBEDDINGS' 'on'
+            Ok "model $modelRef"
         }
         'openrouter' {
             $key = $env:OPENROUTER_API_KEY
             if (-not $key -and $interactive) {
                 # Masked input, PS 5.1-compatible; the key is never echoed and
                 # never printed in the config summary.
-                $sec = Read-Host 'OpenRouter API key (hidden; from openrouter.ai/keys)' -AsSecureString
+                Write-Host "     ${OK}▸${R} OpenRouter API key ${DIM}(hidden; from openrouter.ai/keys)${R}"
+                $sec = Read-Host '       key' -AsSecureString
                 $key = [Runtime.InteropServices.Marshal]::PtrToStringAuto(
                     [Runtime.InteropServices.Marshal]::SecureStringToBSTR($sec))
             }
-            if (-not $key) { Write-Warning 'No API key set - add OPENROUTER_API_KEY to .env before chatting.' }
+            if (-not $key) { Warn_ 'no API key set — add OPENROUTER_API_KEY to .env before chatting' }
 
             $orm = $env:OPENROUTER_MODEL
-            if (-not $orm -and $interactive) { $orm = Read-Host 'Model id [Enter = openrouter/auto]' }
+            if (-not $orm -and $interactive) {
+                $orm = Read-Styled "     ${OK}▸${R} model id ${DIM}[Enter = openrouter/auto]${R} ${ACCENT}›${R} "
+            }
             if (-not $orm) { $orm = 'openrouter/auto' }
 
             $embeddings = Ask-Embeddings
@@ -186,18 +227,21 @@ function Configure-Jun {
             Set-EnvKey 'OPENROUTER_MODEL' $orm
             $needsOllama = ($embeddings -eq 'on')
             if ($needsOllama) { Set-EnvKey 'OLLAMA_MODELS_TO_PULL' 'nomic-embed-text' }
-            Write-Host "==> Config: model=$orm, embeddings=$embeddings"
+            Ok "model $orm"
+            Ok "embeddings $embeddings"
         }
         'llamacpp' {
             $url = $env:LLAMACPP_URL
-            if (-not $url -and $interactive) { $url = Read-Host 'llama-server URL [Enter = managed setup]' }
+            if (-not $url -and $interactive) {
+                $url = Read-Styled "     ${OK}▸${R} llama-server URL ${DIM}[Enter = managed setup]${R} ${ACCENT}›${R} "
+            }
             if ($url -and $url -notmatch '^https?://') {
-                Write-Host 'Not an http(s) URL, using managed setup.'
+                Warn_ 'not an http(s) URL, using managed setup'
                 $url = ''
             }
             if ($url) {
                 Set-EnvKey 'LLAMACPP_URL' $url
-                Write-Host "==> Config: llama-server=$url"
+                Ok "llama-server $url"
             } else {
                 $modelRef = Ask-ModelRef
                 # llama-server -hf syntax has no hf.co/ prefix.
@@ -206,29 +250,29 @@ function Configure-Jun {
                 Set-EnvKey 'LLAMACPP_URL' 'http://127.0.0.1:8081'
                 Set-EnvKey 'LLAMACPP_PORT' '8081'
                 $needsLlamacpp = $true
-                Write-Host "==> Config: model=$hfRef"
+                Ok "model $hfRef"
             }
             $embeddings = Ask-Embeddings
             $needsOllama = ($embeddings -eq 'on')
             if ($needsOllama) { Set-EnvKey 'OLLAMA_MODELS_TO_PULL' 'nomic-embed-text' }
-            Write-Host "==> Config: embeddings=$embeddings"
+            Ok "embeddings $embeddings"
         }
     }
     Set-EnvKey 'AI_PROVIDER' $provider
     Set-EnvKey 'EMBEDDINGS' $embeddings
+    Ok "provider $provider"
 
-    # ── voice ──
     $voice = $env:VOICE
     if ($voice) {
         $voice = if ($voice.ToLower() -match '^(off|0|false|no)$') { 'off' } else { 'on' }
     } elseif ($interactive) {
-        $v = Read-Host "Enable voice (TTS)? [Y/n]"
+        $v = Read-Styled "     ${OK}▸${R} enable voice ${DIM}(TTS)${R} ${DIM}[Y/n]${R} ${ACCENT}›${R} "
         $voice = if ($v -match '^(n|no)$') { 'off' } else { 'on' }
     } else {
         $voice = 'on'
     }
     Set-EnvKey 'VOICE' $voice
-    Write-Host "==> Config: provider=$provider, voice=$voice"
+    Ok "voice $voice"
 
     return @{ provider = $provider; voice = $voice; embeddings = $embeddings
               needsOllama = $needsOllama; needsLlamacpp = $needsLlamacpp }
@@ -245,13 +289,13 @@ function Refresh-Path {
 # $true if winget is available afterwards.
 function Ensure-Winget {
     if (Get-Command winget -ErrorAction SilentlyContinue) { return $true }
-    Write-Host "==> winget not found, attempting to bootstrap it via the WinGet PowerShell module"
+    Note 'winget not found, attempting to bootstrap via WinGet PowerShell module'
     try {
         Install-PackageProvider -Name NuGet -Force | Out-Null
         Install-Module -Name Microsoft.WinGet.Client -Force -Repository PSGallery | Out-Null
         Repair-WinGetPackageManager -AllUsers
     } catch {
-        Write-Warning ("Couldn't bootstrap winget automatically: {0}" -f $_.Exception.Message)
+        Warn_ ("couldn't bootstrap winget automatically: {0}" -f $_.Exception.Message)
     }
     Refresh-Path
     return [bool](Get-Command winget -ErrorAction SilentlyContinue)
@@ -262,39 +306,54 @@ function Ensure-Winget {
 function Install-MachineTools([string[]]$missing, [switch]$Optional) {
     if ($missing.Count -eq 0) { return }
 
-    Write-Host ""
-    Write-Warning ("These tools aren't installed: {0}" -f ($missing -join ', '))
-    Write-Host "They are the only machine-wide installs Jun needs; everything else stays"
-    Write-Host "inside the Jun folder. Each gets a normal uninstaller under Settings > Apps."
+    Write-Host ''
+    Warn_ ("these tools aren't installed: {0}" -f ($missing -join ', '))
+    Note 'they are the only machine-wide installs Jun needs; everything else stays'
+    Note 'inside the Jun folder. Each gets a normal uninstaller under Settings > Apps.'
 
     if (-not (Ensure-Winget)) {
-        Write-Host "winget (App Installer) isn't available, so install them manually and re-run:"
-        foreach ($c in $missing) { Write-Host ("  {0,-7} {1}" -f $c, $manualUrls[$c]) }
+        Fail_ "winget (App Installer) isn't available - install them manually and re-run:"
+        foreach ($c in $missing) { Write-Host ("       ${ACCENT}{0,-7}${R} ${DIM}{1}${R}" -f $c, $manualUrls[$c]) }
         if ($Optional) { return } else { exit 1 }
     }
 
     $proceed = $env:JUN_YES -eq '1'
     if (-not $proceed) {
         if (-not [Environment]::UserInteractive) {
-            Write-Host "Re-run in an interactive terminal (or set `$env:JUN_YES='1') to install them."
+            Note "re-run in an interactive terminal (or set `$env:JUN_YES='1') to install them."
             if ($Optional) { return } else { exit 1 }
         }
-        $answer = Read-Host ("Install {0} now with winget? [y/N]" -f ($missing -join ' and '))
+        $answer = Read-Styled ("     ${OK}▸${R} install {0} now with winget? ${DIM}[y/N]${R} ${ACCENT}›${R} " -f ($missing -join ' and '))
         $proceed = $answer -match '^(y|yes)$'
     }
     if (-not $proceed) {
-        Write-Host "Okay, leaving it to you. Install the tools above and re-run this installer."
+        Note 'okay, leaving it to you — install the tools above and re-run this installer.'
         if ($Optional) { return } else { exit 1 }
     }
 
     foreach ($c in $missing) {
-        Write-Host ("==> Installing {0} via winget" -f $wingetIds[$c])
+        Step ("install {0}" -f $c)
         winget install -e --id $wingetIds[$c] --accept-source-agreements --accept-package-agreements
+        Ok ("{0} installed" -f $c)
     }
     Refresh-Path
 }
 
-# ── Portable PHP into runtime\php (no machine-wide install, no PATH edits) ──
+function Get-UsablePython {
+    $candidates = @(
+        Get-Command python -ErrorAction SilentlyContinue
+        Get-Command python3 -ErrorAction SilentlyContinue
+    ) | Where-Object { $_ }
+
+    foreach ($python in $candidates) {
+        # Do not accept the Windows Store launcher or an interpreter unable to
+        # create the repo-local virtual environments used by Jun.
+        & $python.Source -c 'import ensurepip, sys, venv; assert sys.version_info >= (3, 9)' 2>$null
+        if ($LASTEXITCODE -eq 0) { return $python }
+    }
+    return $null
+}
+
 function Install-Php {
     $phpDir = Join-Path (Get-Location) 'runtime\php'
     $phpExe = Join-Path $phpDir 'php.exe'
@@ -303,13 +362,16 @@ function Install-Php {
     # Windows installs often lack (php.exe then dies with a missing
     # VCRUNTIME140.dll dialog). Tiny, standard, machine-wide MS component.
     if (-not (Test-Path (Join-Path $env:SystemRoot 'System32\vcruntime140.dll'))) {
-        Write-Host '==> Installing the Microsoft Visual C++ runtime (needed by PHP)'
+        if (-not (Ensure-Winget)) {
+            throw 'The Microsoft Visual C++ 2015-2022 Redistributable (x64) is required for PHP, but winget could not be installed.'
+        }
+        Step 'install Visual C++ runtime (needed by PHP)'
         winget install -e --id Microsoft.VCRedist.2015+.x64 --accept-source-agreements --accept-package-agreements
     }
 
     if (Test-Path $phpExe) { return }
 
-    Write-Host '==> Downloading portable PHP into runtime\php'
+    Step 'download portable PHP'
     $releases = Invoke-RestMethod 'https://windows.php.net/downloads/releases/releases.json'
     $branch = ($releases.PSObject.Properties.Name | Sort-Object { [version]$_ } | Select-Object -Last 1)
     $build = $releases.$branch.PSObject.Properties |
@@ -323,11 +385,9 @@ function Install-Php {
     Expand-Archive -Path $zip -DestinationPath $phpDir -Force
     Remove-Item $zip -ErrorAction SilentlyContinue
 
-    # Minimal php.ini: the bundled extensions the API needs + the same
-    # security/size tuning the Docker image used.
     $cacert = Join-Path $phpDir 'cacert.pem'
     try { Invoke-WebRequest -Uri 'https://curl.se/ca/cacert.pem' -OutFile $cacert } catch {
-        Write-Warning 'Could not download cacert.pem; HTTPS from PHP (web fetch tool) may not work.'
+        Warn_ 'could not download cacert.pem; HTTPS from PHP (web fetch tool) may not work'
     }
     $ini = @(
         "extension_dir=`"$phpDir\ext`""
@@ -351,34 +411,30 @@ function Install-Php {
 
     cmd /c "`"$phpExe`" -v 2>&1" | Select-Object -First 1 | Write-Host
     if ($LASTEXITCODE -ne 0) {
-        Write-Warning 'php.exe did not run. If you saw a VCRUNTIME140.dll error, install the Microsoft Visual C++ 2015-2022 Redistributable (x64) and re-run.'
+        Warn_ 'php.exe did not run. If you saw a VCRUNTIME140.dll error, install the'
+        Warn_ 'Microsoft Visual C++ 2015-2022 Redistributable (x64) and re-run.'
+    } else {
+        Ok 'portable PHP ready'
     }
 }
 
-# ── TTS venv into runtime\tts-venv (only when voice is on) ──────────────────
 function Install-Tts {
     $venv = Join-Path (Get-Location) 'runtime\tts-venv'
     $py = Join-Path $venv 'Scripts\python.exe'
     if (Test-Path $py) { return }
 
-    $python = (Get-Command python -ErrorAction SilentlyContinue), (Get-Command python3 -ErrorAction SilentlyContinue) |
-        Where-Object { $_ } | Select-Object -First 1
-    # The Microsoft Store stub named python.exe exits non-zero; verify it runs.
-    if ($python) {
-        & $python.Source -c 'import sys; assert sys.version_info >= (3, 9)' 2>$null
-        if ($LASTEXITCODE -ne 0) { $python = $null }
-    }
+    $python = Get-UsablePython
     if (-not $python) {
         Install-MachineTools @('python') -Optional
-        $python = Get-Command python -ErrorAction SilentlyContinue
+        $python = Get-UsablePython
         if (-not $python) {
-            Write-Warning 'Python still not found - skipping voice. Re-run install.ps1 after installing it.'
+            Warn_ 'Python still not found — skipping voice. Re-run install.ps1 after installing it.'
             Set-EnvKey 'VOICE' 'off'
             return
         }
     }
 
-    Write-Host '==> Setting up the TTS voice engine in runtime\tts-venv (a few GB, one-time)'
+    Step 'set up TTS voice engine (a few GB, one-time)'
     & $python.Source -m venv $venv
     & $py -m pip install --upgrade pip
     # CPU torch wheel first so the resolver doesn't pull CUDA builds in as a
@@ -386,27 +442,112 @@ function Install-Tts {
     & $py -m pip install torch --index-url https://download.pytorch.org/whl/cpu
     & $py -m pip install -r (Join-Path (Get-Location) 'tts\requirements.txt')
     if ($LASTEXITCODE -ne 0) {
-        Write-Warning 'TTS setup failed - continuing text-only. Re-run install.ps1 to retry.'
+        Warn_ 'TTS setup failed — continuing text-only. Re-run install.ps1 to retry.'
         Set-EnvKey 'VOICE' 'off'
+    } else {
+        Ok 'TTS voice engine ready'
     }
 }
 
-# ── main ─────────────────────────────────────────────────────────────────────
-# git first (needed to clone); the model-server tools depend on the provider
-# the user picks in Configure-Jun, so they're installed after.
+# ══════════════════════════════════════════════════════════════════════════════
+function Install-AssetRecovery {
+    $python = Get-UsablePython
+    if (-not $python) {
+        # The user explicitly selected extraction, so Python is required here
+        # instead of being treated as an optional voice dependency.
+        Install-MachineTools @('python')
+        $python = Get-UsablePython
+        if (-not $python) {
+            throw 'Python 3.9 or newer is required for asset recovery. Re-run install.ps1 after installing it.'
+        }
+    }
+
+    $venv = Join-Path (Get-Location) 'runtime\asset-recovery-venv'
+    $recoveryPython = Join-Path $venv 'Scripts\python.exe'
+    if (-not (Test-Path $recoveryPython)) {
+        Step 'set up local asset-recovery environment'
+        & $python.Source -m venv $venv
+        if ($LASTEXITCODE -ne 0) { throw 'Could not create the asset-recovery virtual environment.' }
+    }
+
+    Step 'install UnityPy + Pillow'
+    & $recoveryPython -m pip install --disable-pip-version-check --quiet UnityPy Pillow
+    if ($LASTEXITCODE -ne 0) { throw 'Could not install UnityPy and Pillow for asset recovery.' }
+
+    $recoveryArgs = @('tools/recover_assets.py')
+    if ($env:JUN_GAME_DIR) { $recoveryArgs += @('--game', $env:JUN_GAME_DIR) }
+    & $recoveryPython @recoveryArgs
+    if ($LASTEXITCODE -eq 0) {
+        Ok 'assets extracted to webapp/assets (local use only)'
+        return
+    }
+
+    # A supplied path is deliberate, and non-interactive installs must never
+    # wait for input. Only offer the friendly fallback after auto-discovery.
+    if ($env:JUN_GAME_DIR -or -not $interactive) {
+        Warn_ 'Asset extraction failed. Set JUN_GAME_DIR to the game folder, then re-run with JUN_EXTRACT=1.'
+        return
+    }
+
+    Warn_ "Couldn't find the game in its usual locations."
+    while ($true) {
+        $selection = Read-Styled "     ${OK}▸${R} paste the game folder or drag My Dystopian Robot Girlfriend.exe here ${DIM}[Enter = skip]${R} ${ACCENT}›${R} "
+        if ([string]::IsNullOrWhiteSpace($selection)) {
+            Note 'asset extraction skipped.'
+            return
+        }
+
+        # Windows terminals wrap drag-and-drop paths in quotes. A file input
+        # means its containing folder; a folder input is used as-is.
+        $path = $selection.Trim().Trim('"').Trim("'")
+        try {
+            $item = Get-Item -LiteralPath $path -ErrorAction Stop
+        } catch {
+            Warn_ "path not found: $path"
+            continue
+        }
+        $gameDir = if ($item.PSIsContainer) { $item.FullName } else { $item.Directory.FullName }
+        $dataDir = Join-Path $gameDir 'My Dystopian Robot Girlfriend_Data'
+        if (-not (Test-Path -LiteralPath $dataDir -PathType Container)) {
+            Warn_ "that location does not contain My Dystopian Robot Girlfriend_Data"
+            continue
+        }
+
+        & $recoveryPython tools/recover_assets.py --game $gameDir
+        if ($LASTEXITCODE -eq 0) {
+            Ok 'assets extracted to webapp/assets (local use only)'
+            return
+        }
+        Warn_ 'Asset extraction failed from that location. Try another path or press Enter to skip.'
+    }
+}
+
+# Main flow
+# ══════════════════════════════════════════════════════════════════════════════
+
+Show-Banner
+
+Step 'check dependencies'
+
 if (-not (Get-Command git -ErrorAction SilentlyContinue)) {
+    Warn_ 'git not found'
     Install-MachineTools @('git')
 }
 if (-not (Get-Command git -ErrorAction SilentlyContinue)) {
-    Write-Error 'git still not on PATH. Open a NEW terminal (so PATH refreshes) and run the one-liner again; setup will resume.'
+    Fail_ 'git still not on PATH'
+    Note 'open a NEW terminal (so PATH refreshes) and run the one-liner again; setup will resume.'
+    exit 1
 }
+Ok 'git found'
 
 if (Test-Path (Join-Path $dir '.git')) {
-    Write-Host "==> $dir already cloned, pulling latest"
+    Step 'update repository'
     git -C $dir pull --ff-only
+    Ok "$dir up to date"
 } else {
-    Write-Host "==> Cloning $repo ($ref) into $dir"
+    Step 'clone repository'
     git clone --depth 1 --branch $ref $repo $dir
+    Ok "$repo ($ref)"
 }
 
 Set-Location -LiteralPath $dir
@@ -420,59 +561,58 @@ if ($cfg.needsOllama -and -not (Get-Command ollama -ErrorAction SilentlyContinue
 if ($cfg.needsLlamacpp -and -not (Get-Command llama-server -ErrorAction SilentlyContinue)) { $missing += 'llamacpp' }
 Install-MachineTools $missing
 if ($cfg.needsOllama -and -not (Get-Command ollama -ErrorAction SilentlyContinue)) {
-    Write-Error 'ollama still not on PATH. Open a NEW terminal (so PATH refreshes) and run the one-liner again; setup will resume.'
+    Fail_ 'ollama still not on PATH'
+    Note 'open a NEW terminal (so PATH refreshes) and run the one-liner again; setup will resume.'
+    exit 1
 }
 if ($cfg.needsLlamacpp -and -not (Get-Command llama-server -ErrorAction SilentlyContinue)) {
-    Write-Error 'llama-server still not on PATH. Open a NEW terminal (so PATH refreshes) and run the one-liner again; setup will resume.'
+    Fail_ 'llama-server still not on PATH'
+    Note 'open a NEW terminal (so PATH refreshes) and run the one-liner again; setup will resume.'
+    exit 1
 }
 
 Install-Php
 if ($voice -eq 'on') { Install-Tts }
 
-Write-Host ""
-Write-Host "Asset policy:" -ForegroundColor Yellow
-Write-Host "  Jun's Live2D model & textures belong to the creator of My Dystopian" -ForegroundColor Yellow
-Write-Host "  Robot Girlfriend. tools/recover_assets.py rebuilds them from YOUR game" -ForegroundColor Yellow
-Write-Host "  copy, for personal use only - do NOT republish them (public fork," -ForegroundColor Yellow
-Write-Host "  release, mirror). See the NOTICE in LICENSE." -ForegroundColor Yellow
+Step 'asset policy'
+Warn_ "Jun's Live2D model & textures belong to the creator of"
+Warn_ 'My Dystopian Robot Girlfriend. tools/recover_assets.py rebuilds'
+Warn_ 'them from YOUR game copy, for personal use only — do NOT'
+Warn_ 'republish them (public fork, release, mirror). See NOTICE in LICENSE.'
 
-# Opt-in extraction from the user's own game install. Never runs unless
-# explicitly requested: answer y here, or set JUN_EXTRACT=1 non-interactively.
-# Without it the webapp uses placeholder assets.
+# Opt-in extraction of the Live2D assets from the user's own game install.
+# Never runs unless explicitly requested: answer y here, or JUN_EXTRACT=1
+# when non-interactive. Without it the webapp uses placeholder assets.
 $extract = $false
 switch -Regex ($env:JUN_EXTRACT) {
     '^(1|on|yes|true)$'  { $extract = $true }
     '^(0|off|no|false)$' { $extract = $false }
     default {
         if ($interactive) {
-            $e = Read-Host "Extract them now from your game install? [y/N]"
+            $e = Read-Styled "     ${OK}▸${R} extract them now from your game install? ${DIM}[y/N]${R} ${ACCENT}›${R} "
             $extract = $e -match '^(y|yes)$'
         }
     }
 }
 if ($extract) {
-    $python = (Get-Command python -ErrorAction SilentlyContinue), (Get-Command python3 -ErrorAction SilentlyContinue) |
-        Where-Object { $_ } | Select-Object -First 1
-    if ($python) {
-        & $python.Source -m pip install --user --quiet UnityPy Pillow
-        & $python.Source tools/recover_assets.py
-        if ($LASTEXITCODE -ne 0) {
-            Write-Warning 'Extraction failed - run "python tools/recover_assets.py --game DIR" later.'
-        }
-    } else {
-        Write-Warning 'Python not found - install it and run "python tools/recover_assets.py" later.'
-    }
+    Install-AssetRecovery
 } else {
-    Write-Host '  Skipped - run "python tools/recover_assets.py" anytime to extract.'
+    Note 'skipped - re-run install.ps1 with JUN_EXTRACT=1 anytime to extract.'
 }
 
-Write-Host ""
-Write-Host "Install summary:"
-Write-Host "  In this folder ($(Get-Location)): webapp, PHP, TTS venv, models, chat data."
-Write-Host "  Machine-wide (Settings > Apps):   git$(if ($cfg.needsOllama) { ', Ollama' })$(if ($cfg.needsLlamacpp) { ', llama.cpp' })$(if ($voice -eq 'on') { ', possibly Python' })."
-Write-Host "  To remove everything later:       ./uninstall.ps1"
+Write-Host ''
+Step 'install summary'
+$loc = Get-Location
+Note "in this folder (${loc}): webapp, PHP, TTS venv, models, chat data"
+$machineWide = 'git'
+if ($cfg.needsOllama) { $machineWide += ', Ollama' }
+if ($cfg.needsLlamacpp) { $machineWide += ', llama.cpp' }
+if ($voice -eq 'on' -or $extract) { $machineWide += ', possibly Python' }
+Note "machine-wide (Settings > Apps): ${machineWide}"
+Note 'to remove everything later: ./uninstall.ps1'
 
-Write-Host "==> Starting"
+Write-Host ''
+Write-Host "  ${OK}▸${R} ${B}${OK}starting${R} ${DIM}-${R} launching start.ps1"
 # Re-launch via the same PowerShell with Bypass so the machine's execution
 # policy can't block start.ps1 (this script may have arrived through `iex`).
 $psExe = (Get-Process -Id $PID).MainModule.FileName
