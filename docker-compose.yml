@@ -17,6 +17,7 @@ services:
     volumes:
       - letsencrypt:/etc/letsencrypt:ro
       - certbot_webroot:/var/www/certbot:ro
+      - selfsigned:/etc/nginx/selfsigned
     depends_on:
       php:
         condition: service_healthy
@@ -166,6 +167,7 @@ volumes:
   omega_state:
   letsencrypt:
   certbot_webroot:
+  selfsigned:
 
 networks:
   omega:

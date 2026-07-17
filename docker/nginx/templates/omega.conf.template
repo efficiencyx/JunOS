@@ -1,4 +1,4 @@
-# omega.conf.template - HTTP only (TLS_MODE=off, default)
+# omega.conf.template - HTTP + self-signed HTTPS (TLS_MODE=off, default)
 # Expanded by nginx 1.27 envsubst at container boot.
 
 limit_req_zone  $binary_remote_addr zone=api:10m   rate=10r/s;
@@ -6,7 +6,12 @@ limit_conn_zone $binary_remote_addr zone=conns:10m;
 
 server {
     listen 80;
+    listen 443 ssl;
     server_name ${DOMAIN:-localhost};
+
+    ssl_certificate     /etc/nginx/selfsigned/fullchain.pem;
+    ssl_certificate_key /etc/nginx/selfsigned/privkey.pem;
+    ssl_protocols       TLSv1.2 TLSv1.3;
 
     server_tokens off;
 
