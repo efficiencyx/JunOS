@@ -1275,15 +1275,17 @@
     modelSelect.innerHTML = m.models.map(n =>
       `<option value="${escapeHtml(n)}">${escapeHtml(n)}</option>`).join('');
     const prefer = [
-      'hf.co/efficiencyx/Jun-Lora-v2-GGUF:Q8_0',
-      'hf.co/efficiencyx/Jun-Lora-v2-GGUF:Q6_K',
-      'hf.co/efficiencyx/Jun-Lora-v2-GGUF:Q4_K_M',
-      'hf.co/efficiencyx/Jun-LoRA-V3-E4B-GGUF:Q8_0',
-      'hf.co/efficiencyx/Jun-LoRA-V3-E4B-GGUF:Q6_K',
-      'hf.co/efficiencyx/Jun-LoRA-V3-E4B-GGUF:Q4_K_M',
-      'hf.co/efficiencyx/Jun-LoRA-v3-E2B-GGUF:Q8_0',
-      'hf.co/efficiencyx/Jun-LoRA-v3-E2B-GGUF:Q6_K',
-      'hf.co/efficiencyx/Jun-LoRA-v3-E2B-GGUF:Q4_K_M',
+      'hf.co/efficiencyx/Jun-LoRA-v4-12B-GGUF:Q8_0',
+      'hf.co/efficiencyx/Jun-LoRA-v4-12B-GGUF:Q6_K',
+      'hf.co/efficiencyx/Jun-LoRA-v4-12B-GGUF:Q5_K_M',
+      'hf.co/efficiencyx/Jun-LoRA-v4-12B-GGUF:Q4_K_M',
+      'hf.co/efficiencyx/Jun-LoRA-v4-12B-GGUF:Q3_K_M',
+      'hf.co/efficiencyx/Jun-LoRA-v4-E4B-GGUF:Q8_0',
+      'hf.co/efficiencyx/Jun-LoRA-v4-E4B-GGUF:Q6_K',
+      'hf.co/efficiencyx/Jun-LoRA-v4-E4B-GGUF:Q4_K_M',
+      'hf.co/efficiencyx/Jun-LoRA-v4-E2B-GGUF:Q8_0',
+      'hf.co/efficiencyx/Jun-LoRA-v4-E2B-GGUF:Q6_K',
+      'hf.co/efficiencyx/Jun-LoRA-v4-E2B-GGUF:Q4_K_M',
       'llama3.1:8b', 'llama3.1:latest',
     ];
     const isChat = (n) => !/embed/i.test(n);
