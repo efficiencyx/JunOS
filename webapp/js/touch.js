@@ -15,28 +15,29 @@ window.ModelTouch = (function () {
   const NOTIFY_CHANCE = 0.2;
   const COOLDOWN_MS = 10000;
 
+  const HIT_FACE = new Set(['HitAreaFaceStroke']);
+  const HIT_HEAD = new Set(['HitAreaHeadpat']);
+  const HIT_BOOB_L = new Set(['HitAreaBoobL']);
+  const HIT_BOOB_R = new Set(['HitAreaBoobR']);
+
   function buildRegions() {
-    const head = Live2D.findDrawables(
-      ['h0_', 'h1_', 'h2_', 'h3_', 'h4_', 'hair', 'catear', 'pointyear'],
-      ['hairhologram']
-    );
-    const face = Live2D.findDrawables(['moddableface'], []);
-    const hand = Live2D.findDrawables(['hand'], ['handholding']);
-    if (!head.length && !face.length && !hand.length) return null;
-    return { head: new Set(head), face: new Set(face), hand: new Set(hand) };
+    const hand = Live2D.findDrawables(['armlhand', 'armrhand'], []);
+    const skirt = Live2D.findDrawables(['skirt'], []);
+    return hand.length ? { hand: new Set(hand), skirt: new Set(skirt) } : null;
   }
 
   function classify(clientX, clientY) {
     if (!regions) regions = buildRegions();
     if (!regions) return null;
-    const id = Live2D.drawableAt(clientX, clientY);
-    if (!id) return null;
-    if (regions.hand.has(id)) {
-      const lo = id.toLowerCase();
-      return { kind: 'hand', side: (lo.includes('arml') || lo.includes('mchandl')) ? 'left' : 'right' };
+    const hand = Live2D.drawableAt(clientX, clientY, regions.hand, 12);
+    if (hand) {
+      return { kind: 'hand', side: hand.toLowerCase().includes('armlhand') ? 'left' : 'right' };
     }
-    if (regions.head.has(id)) return { kind: 'head' };
-    if (regions.face.has(id)) return { kind: 'face' };
+    if (Live2D.hitTest(clientX, clientY, HIT_FACE)) return { kind: 'face' };
+    if (Live2D.hitTest(clientX, clientY, HIT_HEAD)) return { kind: 'head' };
+    if (Live2D.hitTest(clientX, clientY, HIT_BOOB_L)) return { kind: 'boob', side: 'left' };
+    if (Live2D.hitTest(clientX, clientY, HIT_BOOB_R)) return { kind: 'boob', side: 'right' };
+    if (Live2D.drawableAt(clientX, clientY, regions.skirt, 8)) return { kind: 'skirt' };
     return null;
   }
 
@@ -49,6 +50,8 @@ window.ModelTouch = (function () {
   function eventText(kind, side) {
     if (kind === 'head') return "*pats Jun's head*";
     if (kind === 'face') return "*rubs Jun's cheek*";
+    if (kind === 'boob') return `*fondles Jun's ${side} breast*`;
+    if (kind === 'skirt') return "*lifts Jun's skirt*";
     return `*holds Jun's ${side} hand*`;
   }
 
@@ -62,16 +65,25 @@ window.ModelTouch = (function () {
       startedAt: performance.now(),
       heldMs: 0,
       lastTickAt: performance.now(),
-      lastPatReplay: performance.now(),
+      ox: 0,
+      oy: 0,
     };
     if (kind === 'head') {
       Actions.applyAction({ name: 'receive_headpat', kwargs: {} });
       Live2D.setTarget('ParamHeadpat', 1);
     } else if (kind === 'face') {
       Live2D.setTarget('ParamFaceRubEnable', 1);
+    } else if (kind === 'boob') {
+      active.sq = 0;
+      Live2D.setTarget(side === 'left' ? 'ParamEnableBoobFondleL' : 'ParamEnableBoobFondleR', 1);
+      // No param keys the MC hand meshes visible; force the drawable directly.
+      Live2D.setDrawableOpacity(side === 'left' ? 'MCRightHandFondle' : 'MCLeftHandFondle', 1);
+    } else if (kind === 'skirt') {
+      active.lift = Live2D.debugParam('ParamSkirtUp').current || 0;
     } else {
       Actions.applyAction({ name: 'handhold', kwargs: { side, enable: 'true' } });
     }
+    document.body.classList.add('l2d-touching');
     tickTimer = setInterval(tick, 250);
     if (onTouch) onTouch();
   }
@@ -80,15 +92,28 @@ window.ModelTouch = (function () {
     if (!active) return;
     const { kind, side } = active;
     if (kind === 'head') {
-      Live2D.setTarget('ParamHeadpat', 0);
-      Live2D.setTarget('ParamHeadpatY', 0);
+      Live2D.cancelPending('ParamHeadpat');
+      // ParamHeadpat rests at -1; at 0 the hand stays half-shown.
+      Live2D.setNow('ParamHeadpat', -1);
+      Live2D.setNow('ParamHeadpatX', 0);
+      Live2D.setNow('ParamHeadpatY', 0);
+      Live2D.setTarget('ParamHeadZ', 0);
     } else if (kind === 'face') {
       Live2D.setTarget('ParamFaceRubMoveX', 0);
       Live2D.setTarget('ParamFaceRubEnable', 0);
+    } else if (kind === 'boob') {
+      const s = side === 'left' ? 'L' : 'R';
+      Live2D.setTarget('ParamBoobSqueeze' + s, 0);
+      Live2D.setTarget('ParamPhysicsBoobX' + s, 0);
+      Live2D.setTarget('ParamEnableBoobFondle' + s, 0);
+      Live2D.setDrawableOpacity(side === 'left' ? 'MCRightHandFondle' : 'MCLeftHandFondle', null);
+    } else if (kind === 'skirt') {
+      Live2D.setTarget('ParamSkirtUp', active.lift > 0.6 ? 1 : 0);
     } else {
       Actions.applyAction({ name: 'handhold', kwargs: { side, enable: 'false' } });
     }
     active = null;
+    document.body.classList.remove('l2d-touching');
     clearInterval(tickTimer);
     tickTimer = null;
   }
@@ -101,13 +126,13 @@ window.ModelTouch = (function () {
     if (onTouch) onTouch();
 
     if (now - active.lastMoveAt > 400) {
-      if (active.kind === 'head') Live2D.setTarget('ParamHeadpatY', 0);
       if (active.kind === 'face') Live2D.setTarget('ParamFaceRubMoveX', 0);
-    }
-    if (active.kind === 'head' && now - active.lastPatReplay > 800) {
-      active.lastPatReplay = now;
-      Actions.applyAction({ name: 'receive_headpat', kwargs: {} });
-      Live2D.setTarget('ParamHeadpat', 1);
+      if (active.kind === 'boob' && active.sq > 0) {
+        active.sq = Math.max(0, active.sq - 0.15);
+        const s = active.side === 'left' ? 'L' : 'R';
+        Live2D.setTarget('ParamBoobSqueeze' + s, active.sq);
+        Live2D.setTarget('ParamPhysicsBoobX' + s, 0);
+      }
     }
 
     if (active.heldMs >= NOTIFY_INTERVAL_MS) {
@@ -124,11 +149,24 @@ window.ModelTouch = (function () {
     const now = performance.now();
     active.lastMoveAt = now;
     if (active.kind === 'head') {
-      const dy = e.clientY - active.lastY;
-      Live2D.setTarget('ParamHeadpatY', Math.max(-1, Math.min(1, -dy * 0.08)));
+      active.ox = Math.max(-1, Math.min(1, active.ox + (e.clientX - active.lastX) * 0.02));
+      active.oy = Math.max(-1, Math.min(1, active.oy + (active.lastY - e.clientY) * 0.02));
+      Live2D.setTarget('ParamHeadpatX', active.ox);
+      Live2D.setTarget('ParamHeadpatY', active.oy);
+      Live2D.setTarget('ParamHeadZ', active.ox * 0.5);
     } else if (active.kind === 'face') {
       const dx = e.clientX - active.lastX;
       Live2D.setTarget('ParamFaceRubMoveX', Math.max(-1, Math.min(1, dx * 0.08)));
+    } else if (active.kind === 'boob') {
+      const dx = e.clientX - active.lastX;
+      const dy = e.clientY - active.lastY;
+      active.sq = Math.min(1, active.sq + (Math.abs(dx) + Math.abs(dy)) * 0.015);
+      const s = active.side === 'left' ? 'L' : 'R';
+      Live2D.setTarget('ParamBoobSqueeze' + s, active.sq);
+      Live2D.setTarget('ParamPhysicsBoobX' + s, Math.max(-1, Math.min(1, dx * 0.08)));
+    } else if (active.kind === 'skirt') {
+      active.lift = Math.max(0, Math.min(1, active.lift + (active.lastY - e.clientY) * 0.01));
+      Live2D.setTarget('ParamSkirtUp', active.lift);
     }
     active.lastY = e.clientY;
     active.lastX = e.clientX;
@@ -148,6 +186,7 @@ window.ModelTouch = (function () {
     if (!Live2D.isOverModel(e.clientX, e.clientY)) return;
     const hit = classify(e.clientX, e.clientY);
     if (!hit) return;
+    e.preventDefault();
     e.stopImmediatePropagation();
     begin(hit.kind, hit.side, e);
   }

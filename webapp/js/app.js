@@ -1324,7 +1324,7 @@
         else if (typeof v === 'object') walk(v);
       }
     }
-    fetch('action_map.json').then(r => r.json()).then(am => {
+    fetch('action_map.json', { cache: 'no-cache' }).then(r => r.json()).then(am => {
       walk(am);
       const missing = [...referenced].filter(p => !known.has(p));
       if (missing.length) {
