@@ -29,6 +29,14 @@ window.Outfit = (function () {
       colorPatterns: ['shoe_r'], visibilityPatterns: ['shoe_r'], visOn: 1, visOff: 0 },
     { key: 'stockings', label: 'Stockings', defaultOn: true,
       colorPatterns: ['stocking'], visibilityPatterns: ['stocking'], visOn: 1, visOff: 0 },
+    { key: 'headband', label: 'Headband', defaultOn: false, excludes: ['wizard_hat'],
+      colorPatterns: ['headband'], visibilityPatterns: ['headband'], visOn: 1, visOff: 0 },
+    { key: 'wizard_hat', label: 'Witch hat', defaultOn: false, excludes: ['headband'],
+      colorPatterns: ['wizardhat'], visibilityPatterns: ['wizardhat'], visOn: 1, visOff: 0 },
+    { key: 'bow', label: 'Bow', defaultOn: false,
+      colorPatterns: ['cutebow'], visibilityPatterns: ['cutebow'], visOn: 1, visOff: 0 },
+    { key: 'choker', label: 'Bell choker', defaultOn: false,
+      colorPatterns: ['bellchoker'], visibilityPatterns: ['bellchoker'], visOn: 1, visOff: 0 },
 
     { key: 'cat_ears', label: 'Cat ears', section: 'body', defaultOn: true,
       visibilityPatterns: ['catear'], excludes: ['pointy_ears'] },
@@ -92,6 +100,11 @@ window.Outfit = (function () {
     { key: 'mouth_interior', label: 'Mouth interior',
       includes: ['innermouth','tounge','tongue','teeth','saliva'], excludes: [] },
 
+    // Baked into the ModdableFace texture by applyGlassesTexture, not
+    // drawable tints — hence no include patterns.
+    { key: 'glasses_frame', label: 'Glasses frame', includes: [], excludes: [] },
+    { key: 'glasses_lens', label: 'Glasses lens', includes: [], excludes: [] },
+
     ...ITEMS.filter(it => it.colorPatterns).map(it => ({
       key: it.key, label: it.label,
       includes: it.colorPatterns, excludes: it.colorExcludes || [],
@@ -118,19 +131,105 @@ window.Outfit = (function () {
   };
 
   const ITEM_VARIANTS = {
-    shirt: 'shirt_logo',
-    hoodie: 'hoodie_logo',
-    panties: 'panties_logo',
-    skirt: 'skirt_style',
-    stockings: 'sock_style',
-    shoe_l: 'shoe_style',
-    shoe_r: 'shoe_style',
+    shirt: ['shirt_logo', 'sleeve_logo'],
+    hoodie: ['hoodie_logo'],
+    panties: ['panties_logo'],
+    skirt: ['skirt_style'],
+    stockings: ['sock_style'],
+    shoe_l: ['shoe_style'],
+    shoe_r: ['shoe_style'],
   };
   const BODY_VARIANTS = ['arm_style', 'leg_style', 'hightech_skin'];
+  const CLOTHING_VARIANTS = ['glasses_style'];
 
   const VARIANT_OWNER = {};
-  for (const [itemKey, variantKey] of Object.entries(ITEM_VARIANTS)) {
-    (VARIANT_OWNER[variantKey] = VARIANT_OWNER[variantKey] || []).push(itemKey);
+  for (const [itemKey, variantKeys] of Object.entries(ITEM_VARIANTS)) {
+    for (const variantKey of variantKeys) {
+      (VARIANT_OWNER[variantKey] = VARIANT_OWNER[variantKey] || []).push(itemKey);
+    }
+  }
+
+  // Decal catalog from the game (variants/logos/, see DECALS in
+  // tools/recover_assets.py). The garment tags mirror the game's own item
+  // definitions (BedabotsShirt, MilfHunterHoodie, USBPanties, ...) recovered
+  // from its Il2Cpp metadata, so each picker only offers what the game sells
+  // for that clothing piece.
+  const LOGO_CATALOG = [
+    ['aguiLogo', 'A-GUI', 'sh'],
+    ['avocado', 'Avocado', 'p'],
+    ['baka', 'Baka', 's'],
+    ['banana', 'Banana', 'p'],
+    ['bedabots', 'Bedabots', 'sh'],
+    ['bloodyMoon', 'Bloody Moon', 'h'],
+    ['botLogo', 'Bot', 's'],
+    ['cazino', 'Cazino', 'sh'],
+    ['celestyn', 'Celestyn', 'h'],
+    ['cherry', 'Cherry', 'p'],
+    ['cia', 'CIA', 's'],
+    ['cosplayHouse', 'Cosplay House', 'h'],
+    ['ddLogo', 'Destination Delirium', 's'],
+    ['diabete', 'Diabete', 'sh'],
+    ['diabeteColaPow', 'Diabete Cola Pow', 'sh'],
+    ['diabeteDrSugar', 'Diabete Dr Sugar', 'sh'],
+    ['diabeteSweetPotato', 'Diabete Sweet Potato', 'sh'],
+    ['diabeteTransparent', 'Diabete (clean)', 'sh'],
+    ['dogeCoin', 'Dogecoin', 'sh'],
+    ['fishFearMe', 'Fish Fear Me', 'sp'],
+    ['flowerkidv', 'FlowerKidV', 'h'],
+    ['fungus', 'Fungus', 's'],
+    ['galaxy', 'Galaxy', 's'],
+    ['gamerTshirt', 'Gamer', 's'],
+    ['hikkeiru', 'Hikkeiru', 'p'],
+    ['hotPinkGames', 'Hot Pink Games', 's'],
+    ['inHeat', 'In Heat', 'shp'],
+    ['lightSonic', 'Light Sonic', 'h'],
+    ['luxe', 'Luxe', 'sh'],
+    ['madJoram', 'Mad Joram', 'h'],
+    ['milfHunter', 'MILF Hunter', 'h'],
+    ['mirthal', 'Mirthal', 's'],
+    ['monizmed', 'Monizmed', 'sh'],
+    ['mushroom', 'Mushroom', 'p'],
+    ['nitrori', 'Nitrori', 'h'],
+    ['nuteku', 'Nuteku', 'h'],
+    ['peach', 'Peach', 'p'],
+    ['polandball', 'Polandball', 'sh'],
+    ['priestbot', 'Priest Bot', 's'],
+    ['projektMelody', 'Projekt Melody', 's'],
+    ['projektMelody69', 'Projekt Melody 69', 'h'],
+    ['radioactive', 'Radioactive', 'p'],
+    ['rose', 'Rose', 'p'],
+    ['rottingSteel', 'Rotting Steel', 'h'],
+    ['shcHoodie', 'Shady Corner', 'h'],
+    ['shcPanties', 'Shady Corner', 'p'],
+    ['sheep', 'Sheep', 's'],
+    ['siluman', 'Siluman', 's'],
+    ['silumanAlice', 'Siluman Alice', 's'],
+    ['sj68', 'SJ68', 'h'],
+    ['skull', 'Skull', 'h'],
+    ['stilou', 'Stilou', 'sh'],
+    ['strawberry', 'Strawberry', 'p'],
+    ['sylphy', 'Sylphy', 's'],
+    ['temple', 'Temple', 's'],
+    ['tonisAlbum', 'Toni S', 'h'],
+    ['ufo', 'UFO', 's'],
+    ['usb', 'USB', 'p'],
+    ['weeb', 'Weeb', 'h'],
+    ['withStupid', 'With Stupid', 's'],
+    ['worldTamer', 'World Tamer', 'h'],
+    ['wyldSpace', 'WyldSpace', 'sp'],
+    ['xoulion', 'Xoulion', 'shp'],
+    ['yaranaika', 'Yaranaika', 'sp'],
+  ];
+  function logoOptions(garment, drawables) {
+    return [
+      { name: 'None', textures: {} },
+      ...LOGO_CATALOG.filter(([, , tags]) => tags.includes(garment)).map(([file, name]) => ({
+        name,
+        textures: Object.fromEntries(drawables.map(d =>
+          [d, { url: `assets/variants/logos/${file}.png`, fullClear: true }])),
+        show: drawables,
+      })),
+    ];
   }
 
   // Limb variants use packed-game crops placed through their drawable UVs.
@@ -212,29 +311,33 @@ window.Outfit = (function () {
       ],
     },
     {
-      key: 'shirt_logo', label: 'Shirt logo',
-      drawables: ['ModdableShirtLogo'],
+      key: 'glasses_style', label: 'Glasses',
+      drawables: ['ModdableFace'],
       options: [
         { name: 'None', textures: {} },
-        { name: 'Gamer', textures: { ModdableShirtLogo: { url: 'assets/variants/logoGamerTshirt.png', fullClear: true } }, show: ['ModdableShirtLogo'] },
-        { name: 'Priest Bot', textures: { ModdableShirtLogo: { url: 'assets/variants/logoPriestbot.png', fullClear: true } }, show: ['ModdableShirtLogo'] },
+        { name: 'Classic', textures: {}, show: ['ModdableFace'], thumb: 'assets/variants/glasses.png' },
+        { name: 'Hearts', textures: {}, show: ['ModdableFace'], thumb: 'assets/variants/heartGlasses.png' },
       ],
+    },
+    {
+      key: 'shirt_logo', label: 'Shirt logo',
+      drawables: ['ModdableShirtLogo'],
+      options: logoOptions('s', ['ModdableShirtLogo']),
+    },
+    {
+      key: 'sleeve_logo', label: 'Sleeve logos',
+      drawables: ['ModdableShirtLeftSleeveLogo', 'ModdableShirtRightSleeveLogo'],
+      options: logoOptions('s', ['ModdableShirtLeftSleeveLogo', 'ModdableShirtRightSleeveLogo']),
     },
     {
       key: 'hoodie_logo', label: 'Hoodie logo',
       drawables: ['ModdableHoodieLogo'],
-      options: [
-        { name: 'None', textures: {} },
-        { name: 'Shady Corner', textures: { ModdableHoodieLogo: { url: 'assets/variants/logoShcHoodie.png', fullClear: true } }, show: ['ModdableHoodieLogo'] },
-      ],
+      options: logoOptions('h', ['ModdableHoodieLogo']),
     },
     {
       key: 'panties_logo', label: 'Panties logo',
       drawables: ['ModdablePantiesLogo'],
-      options: [
-        { name: 'None', textures: {} },
-        { name: 'Shady Corner', textures: { ModdablePantiesLogo: { url: 'assets/variants/logoShcPanties.png', fullClear: true } }, show: ['ModdablePantiesLogo'] },
-      ],
+      options: logoOptions('p', ['ModdablePantiesLogo']),
     },
   ];
   const variantState = {};
@@ -290,7 +393,7 @@ window.Outfit = (function () {
   // This rig lacks the game-side opacity control for these overlay meshes.
   const ALWAYS_HIDDEN = [
     'cumoutside', 'shadowboob', 'fondle',
-    'nippiercing', 'navelpiercing', 'headband',
+    'nippiercing', 'navelpiercing',
   ];
 
   function applyItems() {
@@ -393,6 +496,57 @@ window.Outfit = (function () {
         Live2D.tintByPattern(g.includes, g.excludes, rgb);
       }
     }
+    // The face-mod slot follows skin color only while it holds face art;
+    // glasses live there too and must not be skin-tinted.
+    if ((variantState.glasses_style || 0) > 0) Live2D.setDrawableTint('ModdableFace', null);
+    applyGlassesTexture();
+  }
+
+  // Lens/frame colors cannot be drawable tints (the glasses composite into
+  // one drawable), so each part is multiplied client-side and the result
+  // baked into the ModdableFace texture.
+  const GLASSES_STYLES = [
+    null,
+    { base: 'glasses', layers: [['lens', 'glasses_lens'], ['highlight', null], ['frame', 'glasses_frame']] },
+    { base: 'heartGlasses', layers: [['lens', 'glasses_lens'], ['frame', 'glasses_frame'], ['heart', 'glasses_frame'], ['highlight', null]] },
+  ];
+  const glassesImgCache = {};
+  const glassesImg = (url) => glassesImgCache[url] || (glassesImgCache[url] = new Promise((resolve, reject) => {
+    const img = new Image();
+    img.onload = () => resolve(img);
+    img.onerror = reject;
+    img.src = url;
+  }));
+
+  function tintedLayer(img, hex) {
+    if (!hex) return img;
+    const c = document.createElement('canvas');
+    c.width = img.width; c.height = img.height;
+    const ctx = c.getContext('2d');
+    ctx.drawImage(img, 0, 0);
+    ctx.globalCompositeOperation = 'multiply';
+    ctx.fillStyle = hex;
+    ctx.fillRect(0, 0, c.width, c.height);
+    ctx.globalCompositeOperation = 'destination-in';
+    ctx.drawImage(img, 0, 0);
+    return c;
+  }
+
+  let glassesJob = 0;
+  async function applyGlassesTexture() {
+    const style = GLASSES_STYLES[variantState.glasses_style || 0];
+    if (!style || !Live2D.setDrawableTextures) return;
+    const job = ++glassesJob;
+    const imgs = await Promise.all(style.layers.map(([part]) =>
+      glassesImg(`assets/variants/glasses/${style.base}_${part}.png`)));
+    if (job !== glassesJob || GLASSES_STYLES[variantState.glasses_style || 0] !== style) return;
+    const c = document.createElement('canvas');
+    c.width = imgs[0].width; c.height = imgs[0].height;
+    const ctx = c.getContext('2d');
+    style.layers.forEach(([, colorKey], i) => {
+      ctx.drawImage(tintedLayer(imgs[i], colorKey && colors[colorKey]), 0, 0);
+    });
+    Live2D.setDrawableTextures({ ModdableFace: { url: c.toDataURL(), fullClear: true } });
   }
 
   function setItem(key, on) {
@@ -407,9 +561,10 @@ window.Outfit = (function () {
     applyItems();
     const affected = new Set([key, ...(state[key] && it.excludes || [])]);
     for (const k of affected) {
-      const vk = ITEM_VARIANTS[k];
-      const v = vk && VARIANTS.find(x => x.key === vk);
-      if (v) applyVariantVisibility(v);
+      for (const vk of ITEM_VARIANTS[k] || []) {
+        const v = VARIANTS.find(x => x.key === vk);
+        if (v) applyVariantVisibility(v);
+      }
     }
     syncUI();
     if (window.WardrobeReactions) {
@@ -883,7 +1038,33 @@ window.Outfit = (function () {
       if (!state[it.key]) continue;
       for (const id of Live2D.findDrawables(itemPatterns(it), it.colorExcludes)) map.set(id, it.key);
     }
+    if ((variantState.glasses_style || 0) > 0) map.set('ModdableFace', 'glasses_style');
     return map;
+  }
+
+  function wornLabel(key) {
+    const it = ITEMS.find(x => x.key === key);
+    if (it) return it.label;
+    const v = VARIANTS.find(x => x.key === key);
+    return v ? v.label : key;
+  }
+
+  let lastGlassesIdx = 1;
+  function wornRemove(key) {
+    if (key === 'glasses_style') {
+      lastGlassesIdx = variantState.glasses_style || 1;
+      setVariant(key, 0);
+    } else setItem(key, false);
+  }
+  function wornWear(key) {
+    if (key === 'glasses_style') setVariant(key, lastGlassesIdx || 1);
+    else setItem(key, true);
+  }
+
+  // Small accessories (bow, choker, glasses) are hard to grab with an exact
+  // mesh test; the tolerance falls back to padded bounding boxes.
+  function wornHitAt(x, y, worn) {
+    return Live2D.drawableAt(x, y, new Set(worn.keys()), 16);
   }
 
   function itemThumb(it) {
@@ -899,6 +1080,7 @@ window.Outfit = (function () {
   }
 
   function variantThumb(v, opt) {
+    if (opt.thumb) return opt.thumb;
     for (const val of Object.values(opt.textures || {})) {
       const url = typeof val === 'object' ? val.url : val;
       if (url) return url;
@@ -921,7 +1103,7 @@ window.Outfit = (function () {
     return makeColorButton(groupKeys, label, 'wd-swatch');
   }
 
-  let optPopEl = null, optPopAnchor = null, optPopKey = null, optPopItemKey = null;
+  let optPopEl = null, optPopAnchor = null, optPopItemKey = null;
 
   function closeOptionsPopup(focusAnchor) {
     if (!optPopEl || optPopEl.hidden) return;
@@ -929,7 +1111,6 @@ window.Outfit = (function () {
     optPopEl.hidden = true;
     if (focusAnchor && optPopAnchor) optPopAnchor.focus();
     optPopAnchor = null;
-    optPopKey = null;
     optPopItemKey = null;
   }
 
@@ -972,7 +1153,6 @@ window.Outfit = (function () {
     if (optPopAnchor === anchor && !optPopEl.hidden) { closeOptionsPopup(false); return; }
     closeColorPicker(false, true);
     optPopAnchor = anchor;
-    optPopKey = cfg.variant ? cfg.variant.key : null;
     optPopItemKey = cfg.itemKey || null;
     optPopEl.querySelector('.wd-optpop-title').textContent = cfg.title;
 
@@ -999,14 +1179,21 @@ window.Outfit = (function () {
 
     const grid = optPopEl.querySelector('.wd-optpop-grid');
     grid.innerHTML = '';
-    grid.hidden = !cfg.variant;
-    if (cfg.variant) {
-      const v = cfg.variant;
+    const variants = cfg.variants || [];
+    grid.hidden = !variants.length;
+    for (const v of variants) {
+      if (variants.length > 1) {
+        const title = document.createElement('div');
+        title.className = 'wd-optpop-subtitle';
+        title.textContent = v.label;
+        grid.appendChild(title);
+      }
       v.options.forEach((opt, i) => {
         const b = document.createElement('button');
         b.type = 'button';
         b.className = 'wd-opt';
         b.dataset.opt = String(i);
+        b.dataset.variantKey = v.key;
         const thumb = variantThumb(v, opt);
         b.innerHTML = `${thumb ? `<img draggable="false" src="${thumb}">` : '<div class="wd-noimg">?</div>'}<span>${opt.name}</span>`;
         b.addEventListener('click', () => setVariant(v.key, i));
@@ -1020,12 +1207,10 @@ window.Outfit = (function () {
 
   function syncOptionsPopup() {
     if (!optPopEl || optPopEl.hidden) return;
-    if (optPopKey) {
-      const current = variantState[optPopKey] || 0;
-      optPopEl.querySelectorAll('.wd-opt').forEach(b => {
-        b.classList.toggle('on', Number(b.dataset.opt) === current);
-      });
-    }
+    optPopEl.querySelectorAll('.wd-opt').forEach(b => {
+      const current = variantState[b.dataset.variantKey] || 0;
+      b.classList.toggle('on', Number(b.dataset.opt) === current);
+    });
     const eq = optPopEl.querySelector('.wd-opt-equip');
     if (eq && optPopItemKey) {
       const worn = !!state[optPopItemKey];
@@ -1038,7 +1223,7 @@ window.Outfit = (function () {
     const orb = document.createElement('button');
     orb.type = 'button';
     orb.className = 'wd-optorb';
-    if (cfg.variant) orb.dataset.optOrb = cfg.variant.key;
+    if (cfg.variants && cfg.variants.length) orb.dataset.optOrb = cfg.variants[0].key;
     orb.textContent = '▾';
     orb.title = `${cfg.title} options`;
     orb.setAttribute('aria-label', `${cfg.title} options`);
@@ -1169,7 +1354,7 @@ window.Outfit = (function () {
       tile.innerHTML = `${thumb ? `<img draggable="false" src="${thumb}">` : '<div class="wd-noimg">?</div>'}<span>${v.label}</span>`;
       tile.dataset.variantTile = v.key;
       if (colorKeys && colorKeys.length) tile.appendChild(makeSwatch(colorKeys, v.label));
-      const popupCfg = { title: v.label, colorKeys, variant: v };
+      const popupCfg = { title: v.label, colorKeys, variants: [v] };
       tile.appendChild(makeOptOrb(popupCfg));
       tile.addEventListener('click', () => openTilePopup(tile, popupCfg));
       tile.addEventListener('keydown', (e) => {
@@ -1189,12 +1374,19 @@ window.Outfit = (function () {
           title: it.label,
           itemKey: it.key,
           colorKeys,
-          variant: VARIANTS.find(v => v.key === ITEM_VARIANTS[it.key]) || null,
+          variants: (ITEM_VARIANTS[it.key] || [])
+            .map(k => VARIANTS.find(v => v.key === k)).filter(Boolean),
         };
         const tile = makeTile(it.label, itemThumb(it),
           () => setItem(it.key, true), colorKeys, popupCfg);
         tile.dataset.item = it.key;
         grid.appendChild(tile);
+      }
+      if (sec === undefined) {
+        for (const key of CLOTHING_VARIANTS) {
+          const v = VARIANTS.find(x => x.key === key);
+          if (v) grid.appendChild(makeVariantTile(v, key === 'glasses_style' ? ['glasses_frame', 'glasses_lens'] : []));
+        }
       }
       if (sec === 'body') {
         for (const key of BODY_VARIANTS) {
@@ -1242,7 +1434,7 @@ window.Outfit = (function () {
         wdMoveGhost(e.clientX, e.clientY);
         if (!removeDrag.removed && Math.hypot(e.clientX - removeDrag.x, e.clientY - removeDrag.y) > 6) {
           removeDrag.removed = true;
-          setItem(removeDrag.key, false);
+          wornRemove(removeDrag.key);
           setHoveredItem(null);
         }
         return;
@@ -1250,14 +1442,13 @@ window.Outfit = (function () {
       let key = null, worn = null;
       if (!(e.target && e.target.closest && e.target.closest('.wardrobe-overlay'))) {
         worn = wornDrawableMap();
-        const hit = Live2D.drawableAt(e.clientX, e.clientY, new Set(worn.keys()));
+        const hit = wornHitAt(e.clientX, e.clientY, worn);
         key = hit ? worn.get(hit) : null;
       }
       setHoveredItem(key, worn);
       wdTooltip.style.display = key ? 'block' : 'none';
       if (key) {
-        const it = ITEMS.find(x => x.key === key);
-        wdTooltip.textContent = `${it.label} - drag away to remove`;
+        wdTooltip.textContent = `${wornLabel(key)} - drag away to remove`;
         wdTooltip.style.left = (e.clientX + 14) + 'px';
         wdTooltip.style.top = (e.clientY + 14) + 'px';
       }
@@ -1266,7 +1457,7 @@ window.Outfit = (function () {
       if (!document.body.classList.contains('wardrobe-open') || e.button !== 0) return;
       if (e.target && e.target.closest && e.target.closest('.wardrobe-overlay, button, a, input, textarea, select, .composer, .conv-sidebar, .app-header')) return;
       const worn = wornDrawableMap();
-      const hit = Live2D.drawableAt(e.clientX, e.clientY, new Set(worn.keys()));
+      const hit = wornHitAt(e.clientX, e.clientY, worn);
       if (!hit) return;
       const key = worn.get(hit);
       e.preventDefault();
@@ -1274,13 +1465,13 @@ window.Outfit = (function () {
       removeDrag = { key, x: e.clientX, y: e.clientY, removed: false };
       wdTooltip.style.display = 'none';
       setHoveredItem(key, worn);
-      const tile = wdOverlay.querySelector(`.wd-tile[data-item="${key}"] img`);
+      const tile = wdOverlay.querySelector(`.wd-tile[data-item="${key}"] img, .wd-tile[data-variant-tile="${key}"] img`);
       wdShowGhost(tile ? tile.src : '', e.clientX, e.clientY);
     });
     window.addEventListener('pointerup', (e) => {
       if (!removeDrag) return;
       if (removeDrag.removed && Live2D.isOverModel(e.clientX, e.clientY)) {
-        setItem(removeDrag.key, true);
+        wornWear(removeDrag.key);
       }
       removeDrag = null;
       wdShowGhost(null);

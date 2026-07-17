@@ -99,6 +99,16 @@
       {"ParamArmRRot":  0,   "ParamArmRUp": 0, "ParamArmRGesture": 1, "_t": 300}
     ]
   },
+  "slap": {
+    "_compose": ["brow.angry"],
+    "ParamMouthForm": -0.8,
+    "_sequence": [
+      {"ParamArmLUp": 1, "ParamArmLGesture": 2, "_t": 280},
+      {"ParamArmLUp": 0, "ParamArmLGesture": 1, "ParamArmLCuddleUp": 1, "_t": 240},
+      {"ParamArmLCuddleUp": 0, "ParamArmLCuddleDown": 1, "ParamHeadZ": 8, "_t": 170},
+      {"ParamArmLCuddleDown": 0, "ParamHeadZ": 0, "_t": 140}
+    ]
+  },
   "arm_gesture": {
     "_resolve": {
       "left.raise":  { "ParamArmLUp": 1 },

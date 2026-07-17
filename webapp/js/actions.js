@@ -6,7 +6,7 @@ window.Actions = (function () {
   const NAV_KEYS = ['target','dir','type','shape','emotion','side','state','speed','style','item','enable','gesture','duration'];
 
   async function load(url) {
-    const res = await fetch(url);
+    const res = await fetch(url, { cache: 'no-cache' });
     actionMap = await res.json();
   }
 
@@ -14,6 +14,10 @@ window.Actions = (function () {
   function log(level, msg) { if (onLog) onLog(level, msg); }
 
   const ACTION_RE = /\[\s*A(?:CTIONS?)?\s*:\s*([a-zA-Z_][\w]*)\s*((?:\|[^\]|]*)*)\s*\]/gi;
+
+  // Physical touch on Jun is something only Anon can initiate; these actions
+  // are driven by touch.js, never by model-emitted tags.
+  const USER_ONLY = new Set(['receive_headpat', 'nuzzle', 'handhold']);
 
   const POS_KEYS = {
     look_at:     ['target'],
@@ -54,6 +58,10 @@ window.Actions = (function () {
     ACTION_RE.lastIndex = 0;
     while ((m = ACTION_RE.exec(text)) !== null) {
       const name = m[1];
+      if (USER_ONLY.has(name)) {
+        log('warn', `azione riservata all'utente ignorata: ${name}`);
+        continue;
+      }
       const kwargs = {};
       const tail = m[2] || '';
       const parts = tail.split('|').map(p => p.trim()).filter(p => p.length > 0);
@@ -142,6 +150,7 @@ window.Actions = (function () {
   const FALLBACK_CONTAINERS = ['mouth', 'emote', 'brow', 'look', 'lean', 'tail_wiggle', 'breath'];
 
   function resolveAction(name, kwargs) {
+    if (name === 'mood_shift') return null; // bookkeeping tag, gestito da chat.php
     if (!actionMap) {
       log('warn', `azione sconosciuta: ${name}`);
       return null;

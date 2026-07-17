@@ -281,6 +281,14 @@
     runChat({ idle: false });
   }
 
+  function sendTouchEvent(text) {
+    if (abortFn) return;
+    resetIdleNudge();
+    appendMsg('user', text);
+    messages.push({ role: 'user', content: text });
+    runChat({ idle: false, ephemeral: true });
+  }
+
   const VOICE_STATE_LABELS = {
     idle: 'off',
     calibrating: 'listening to the room…',
@@ -307,7 +315,7 @@
     sendMessage();
   }
 
-  function runChat({ idle }) {
+  function runChat({ idle, ephemeral }) {
     if (abortFn) return;
     cancelIdleNudge();
     cancelAutoReset();
@@ -400,7 +408,7 @@
       { messages: [...messages], model: modelSelect.value,
         reasoning: reasoningSelect.value, think: thinkChk.checked,
         outfit_context: Outfit.describe(), conversation_id: currentConversationId,
-        idle: !!idle, client_time: localTimeString() },
+        idle: !!idle, ephemeral: !!ephemeral, client_time: localTimeString() },
       {
         onDebug: (dbg) => {
           if (dbg && typeof dbg.system_prompt === 'string') {
@@ -431,7 +439,8 @@
           updateEmptyState();
           scheduleAutoReset();
           armIdleAfterReply();
-          if (moodInputs.affection && moodInputs.affection.offsetParent !== null) loadMood();
+          if (window.ModelTouch) ModelTouch.onReplyDone();
+          loadMood();
           if (window.History) await refreshSidebar();
         },
         onError: async (err) => {
@@ -446,6 +455,7 @@
           updateEmptyState();
           scheduleAutoReset();
           armIdleAfterReply();
+          if (window.ModelTouch) ModelTouch.onReplyDone();
           if (window.History) await refreshSidebar();
         },
       }
@@ -574,6 +584,15 @@
   thinkChk.addEventListener('change', () => persistPref('think', thinkChk.checked ? '1' : '0'));
 
   sendBtn.addEventListener('click', sendMessage);
+  if (window.ModelTouch) ModelTouch.init({
+    sendEvent: sendTouchEvent,
+    isBusy: () => !!abortFn,
+    onTouch: () => {
+      if (abortFn) return;
+      idleNudgeStreak = 0;
+      scheduleIdleNudge(IDLE_AFTER_REPLY_MS);
+    },
+  });
   chatInput.addEventListener('keydown', e => {
     if (e.key === 'Enter' && !e.shiftKey) {
       e.preventDefault();
@@ -783,9 +802,9 @@
         if (moodVals[k]) moodVals[k].textContent = state[k];
       }
     }
+    if (window.Live2D && Live2D.setMood) Live2D.setMood(state);
   }
   async function loadMood() {
-    if (!moodInputs.affection) return;
     try {
       const r = await fetch('/api/relationship.php', { credentials: 'same-origin' });
       if (r.ok) renderMood(await r.json());
@@ -814,6 +833,11 @@
     if (!moodInputs[k]) continue;
     moodInputs[k].addEventListener('input', () => {
       if (moodVals[k]) moodVals[k].textContent = moodInputs[k].value;
+      const live = {};
+      for (const j of ['affection', 'trust', 'tension']) {
+        if (moodInputs[j]) live[j] = parseInt(moodInputs[j].value, 10) || 0;
+      }
+      if (window.Live2D && Live2D.setMood) Live2D.setMood(live);
     });
     moodInputs[k].addEventListener('change', pushMood);
   }
@@ -1020,6 +1044,7 @@
         if (stageSkeleton) stageSkeleton.classList.add('hidden');
       }, 1500);
       Live2D.startIdle();
+      loadMood();
 
       await Actions.load('action_map.json');
 
@@ -1299,7 +1324,7 @@
         else if (typeof v === 'object') walk(v);
       }
     }
-    fetch('action_map.json').then(r => r.json()).then(am => {
+    fetch('action_map.json', { cache: 'no-cache' }).then(r => r.json()).then(am => {
       walk(am);
       const missing = [...referenced].filter(p => !known.has(p));
       if (missing.length) {

@@ -74,6 +74,7 @@ if (isset($body['client_time']) && is_string($body['client_time'])) {
 }
 
 $idle = isset($body['idle']) && $body['idle'] === true;
+$ephemeral = !empty($body['ephemeral']);
 
 $convId = isset($body['conversation_id']) ? (int)$body['conversation_id'] : 0;
 if (!$convId) sse_fail('invalid_request');
@@ -646,7 +647,7 @@ sse_send(['debug' => ['system_prompt' => $systemPrompt, 'live_context' => $liveC
 $now = time();
 $db = db();
 
-if (!$idle) {
+if (!$idle && !$ephemeral) {
     $db->prepare('INSERT INTO messages (conversation_id, role, content, created_at) VALUES (?, ?, ?, ?)')
        ->execute([$convId, 'user', $lastUserMsg, $now]);
     $userMsgId = (int)$db->lastInsertId();
@@ -796,6 +797,8 @@ if (!$sawError && $assistantBuffer !== '') {
         if ($deltas) relationship_apply((int)$user['id'], $rel, $deltas);
         $assistantBuffer = trim(preg_replace('/\[\s*A(?:CTIONS?)?\s*:\s*mood_shift\b[^\]]*\]/i', '', $assistantBuffer));
     }
+
+    if ($ephemeral) { sse_done(); exit; }
 
     $now = time();
     db()->prepare('INSERT INTO messages (conversation_id, role, content, created_at) VALUES (?, ?, ?, ?)')

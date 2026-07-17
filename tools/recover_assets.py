@@ -73,12 +73,94 @@ VARIANTS = {
     "miniskirt": "miniskirt_interaction",
 }
 
+# Glasses draw on the ModdableFace slot; their sections are stored out of
+# layer order, so they get composited layer-sorted.
+GLASSES = {
+    "glasses": "glasse_common",
+    "heartGlasses": "heartGlasses_common",
+}
+
 # Output PNG -> Texture2D name for the standalone logo decals.
 LOGOS = {
     "logoGamerTshirt": "GamerTshirt",
     "logoPriestbot": "priestbot_tshirt",
     "logoShcHoodie": "shcHoodie",
     "logoShcPanties": "shcPanties",
+}
+
+# variants/logos/<key>.png -> Texture2D name. The full decal catalog from the
+# game's Sprites/Logos/{OtherLogos,PartnerLogos} registry
+# (SpriteTextureDataGenerated); any of these can go on the Moddable*Logo
+# drawables. Kept in sync with LOGO_CATALOG in webapp/js/outfit.js.
+DECALS = {
+    "aguiLogo": "AGUI_Logo",
+    "avocado": "Avocado",
+    "baka": "Baka",
+    "banana": "Banana",
+    "bedabots": "Bedabots_Logo",
+    "bloodyMoon": "BloodyMoon",
+    "botLogo": "BotLogo1",
+    "bow": "Bow",
+    "cazino": "Cazino",
+    "celestyn": "CELESTYN",
+    "cherry": "Cherry",
+    "cia": "CIA",
+    "cosplayHouse": "CosplayHouse",
+    "ddLogo": "DDlogo1",
+    "diabete": "Diabete",
+    "diabeteColaPow": "DiabeteColaPow",
+    "diabeteDrSugar": "DiabeteDrSugarTrans",
+    "diabeteSweetPotato": "DiabeteSweetPotatoTrans",
+    "diabeteTransparent": "DiabeteTransparent",
+    "dogeCoin": "DogeCoin",
+    "fishFearMe": "fishFearMeLogo",
+    "flowerkidv": "Flowerkidv",
+    "fruitPlus": "Fruit+",
+    "fungus": "FungusLogo",
+    "galaxy": "galaxy",
+    "gamerTshirt": "GamerTshirt",
+    "hikkeiru": "HikkeiruLogo",
+    "hotPinkGames": "HotPinkGames_Logo",
+    "inHeat": "InHeatLogo",
+    "lightSonic": "LightSonic",
+    "luxe": "Luxe",
+    "madJoram": "MadLogo",
+    "milfHunter": "MILF",
+    "mirthal": "mirthal",
+    "monizmed": "Monizmed",
+    "mushroom": "Mushroom",
+    "nitrori": "NitroriLogo",
+    "nuteku": "NutekuLogo",
+    "peach": "Peach",
+    "polandball": "Polandball",
+    "priestbot": "priestbot_tshirt",
+    "projektMelody": "projekt_melody_nbtw_logo",
+    "projektMelody69": "projekt_melody_nbtw_69",
+    "radioactive": "radioactive",
+    "rehabTech": "RehabTech",
+    "rose": "Rose",
+    "rottingSteel": "RottingSteelLogo",
+    "shadyCornerText": "Shady_Corner_Logo",
+    "shcHoodie": "shcHoodie",
+    "shcPanties": "shcPanties",
+    "sheep": "Sheep",
+    "silumanAlice": "siluman_Alice",
+    "siluman": "siluman_logo",
+    "sj68": "SJ68WHITE",
+    "skull": "skull",
+    "stilou": "Stilou",
+    "strawberry": "Strawberry",
+    "sylphy": "sylphy_chibi",
+    "temple": "Temple",
+    "tonisAlbum": "tonis album",
+    "ufo": "ufo",
+    "usb": "USP",
+    "weeb": "WeebDesign",
+    "withStupid": "WithStupid",
+    "worldTamer": "world_tamer_logo",
+    "wyldSpace": "WyldSpace",
+    "xoulion": "XoulionLogo",
+    "yaranaika": "yaranaika",
 }
 
 # PackedTexturesContainer sources for the limb crops, in mapping.json order.
@@ -180,6 +262,7 @@ class Recovery:
         print("loading Unity files...")
         self.res = UnityPy.load(os.path.join(data, "resources.assets"))
         shared = UnityPy.load(os.path.join(data, "sharedassets0.assets"))
+        self.shared = shared
         ggm = UnityPy.load(os.path.join(data, "globalgamemanagers"))
         self.res_objs = {o.path_id: o for o in self.res.objects}
 
@@ -328,6 +411,32 @@ class Recovery:
             self.save(base, f"variants/{out}.png")
         for out, tname in LOGOS.items():
             self.save(self.tex_by_name(tname), f"variants/{out}.png")
+        for out, cname in GLASSES.items():
+            base = None
+            for sec in sorted(self.containers[cname], key=lambda s: s["layer"]):
+                img = self.tex_by_path(sec["path"]).convert("RGBA")
+                # Per-part layers so the webapp can tint lens/frame separately.
+                role = next(r for r in ("lens", "frame", "highlight", "heart")
+                            if r in sec["path"].lower())
+                self.save(img, f"variants/glasses/{out}_{role}.png")
+                base = img if base is None else Image.alpha_composite(base, img)
+            self.save(base, f"variants/{out}.png")
+
+    def decal_by_name(self, name):
+        # The registry stores decals as Sprites (the fruit ones are sub-rects
+        # of the Fruit+ atlas), so prefer those; a few names collide with
+        # unrelated small sprites, and the actual decal is always the biggest.
+        for tname in ("Sprite", "Texture2D"):
+            hits = [o.read() for env in (self.res, self.shared)
+                    for o in env.objects
+                    if o.type.name == tname and o.read().m_Name == name]
+            if hits:
+                return max(hits, key=lambda d: d.image.width * d.image.height).image
+        sys.exit(f"no Sprite or Texture2D named {name!r}")
+
+    def recover_logos(self):
+        for out, tname in DECALS.items():
+            self.save(self.decal_by_name(tname), f"variants/logos/{out}.png")
 
     def recover_limbs(self):
         mapping = {}
@@ -425,6 +534,7 @@ def main():
     print("model...");    r.recover_moc3()
     print("atlases...");  r.recover_atlases()
     print("variants..."); r.recover_variants()
+    print("logos...");    r.recover_logos()
     print("limbs...");    r.recover_limbs()
     print("hair...");     r.recover_hair_strands()
     print("items...");    r.recover_item_catalog()
