@@ -6,7 +6,7 @@ window.ChatAPI = (function () {
     return r.json();
   }
 
-  function chat({ messages, model, reasoning, think, outfit_context, conversation_id, idle, client_time }, { onToken, onThinking, onDone, onError, onDebug, onStats, onToolStatus }) {
+  function chat({ messages, model, reasoning, think, outfit_context, conversation_id, idle, ephemeral, client_time }, { onToken, onThinking, onDone, onError, onDebug, onStats, onToolStatus }) {
     const ctrl = new AbortController();
 
     (async () => {
@@ -14,7 +14,7 @@ window.ChatAPI = (function () {
         const res = await fetch('api/chat.php', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ messages, model, reasoning, think, outfit_context, conversation_id, idle, client_time }),
+          body: JSON.stringify({ messages, model, reasoning, think, outfit_context, conversation_id, idle, ephemeral, client_time }),
           signal: ctrl.signal,
         });
         if (!res.ok || !res.body) {

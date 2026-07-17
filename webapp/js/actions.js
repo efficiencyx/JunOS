@@ -15,6 +15,10 @@ window.Actions = (function () {
 
   const ACTION_RE = /\[\s*A(?:CTIONS?)?\s*:\s*([a-zA-Z_][\w]*)\s*((?:\|[^\]|]*)*)\s*\]/gi;
 
+  // Physical touch on Jun is something only Anon can initiate; these actions
+  // are driven by touch.js, never by model-emitted tags.
+  const USER_ONLY = new Set(['receive_headpat', 'nuzzle', 'handhold']);
+
   const POS_KEYS = {
     look_at:     ['target'],
     look:        ['dir'],
@@ -54,6 +58,10 @@ window.Actions = (function () {
     ACTION_RE.lastIndex = 0;
     while ((m = ACTION_RE.exec(text)) !== null) {
       const name = m[1];
+      if (USER_ONLY.has(name)) {
+        log('warn', `azione riservata all'utente ignorata: ${name}`);
+        continue;
+      }
       const kwargs = {};
       const tail = m[2] || '';
       const parts = tail.split('|').map(p => p.trim()).filter(p => p.length > 0);
