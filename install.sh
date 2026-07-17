@@ -86,9 +86,24 @@ run() {
     fi
 }
 
-MODEL_12B="hf.co/efficiencyx/Jun-Lora-v2-GGUF:Q4_K_M"
-MODEL_E4B="hf.co/efficiencyx/Jun-LoRA-V3-E4B-GGUF:Q4_K_M"
-MODEL_E2B="hf.co/efficiencyx/Jun-LoRA-v3-E2B-GGUF:Q4_K_M"
+# Like run(), but streams output live - for long steps (image builds, model
+# pulls) where a silent spinner reads as a hang.
+run_live() {
+    local msg="$1"; shift
+    printf '     %s→%s %s%s%s\n' "$ACCENT" "$R" "$DIM" "$msg" "$R"
+    local rc=0
+    "$@" 2>&1 | sed -u 's/^/       /' || rc=$?
+    if [ "$rc" -eq 0 ]; then
+        ok "$msg"
+    else
+        fail_ "$msg"
+        exit "$rc"
+    fi
+}
+
+MODEL_12B="hf.co/efficiencyx/Jun-LoRA-v4-12B-GGUF:Q4_K_M"
+MODEL_E4B="hf.co/efficiencyx/Jun-LoRA-v4-E4B-GGUF:Q4_K_M"
+MODEL_E2B="hf.co/efficiencyx/Jun-LoRA-v4-E2B-GGUF:Q4_K_M"
 
 resolve_model() {  # alias|full-ref -> full-ref
     case "$(printf '%s' "$1" | tr '[:upper:]' '[:lower:]')" in
@@ -113,11 +128,12 @@ detect_vram_mb() {
 recommend_model() {
     local mb="$1"
     [ -z "$mb" ] && { echo "$MODEL_E2B"; return; }
-    if   [ "$mb" -ge 15500 ]; then echo "hf.co/efficiencyx/Jun-Lora-v2-GGUF:Q6_K"
-    elif [ "$mb" -ge 11500 ]; then echo "hf.co/efficiencyx/Jun-LoRA-V3-E4B-GGUF:Q8_0"
-    elif [ "$mb" -ge 9500 ]; then echo "hf.co/efficiencyx/Jun-LoRA-V3-E4B-GGUF:Q6_K"
+    if   [ "$mb" -ge 23500 ]; then echo "hf.co/efficiencyx/Jun-LoRA-v4-12B-GGUF:Q8_0"
+    elif [ "$mb" -ge 15500 ]; then echo "hf.co/efficiencyx/Jun-LoRA-v4-12B-GGUF:Q6_K"
+    elif [ "$mb" -ge 11500 ]; then echo "$MODEL_12B"
+    elif [ "$mb" -ge 9500 ]; then echo "hf.co/efficiencyx/Jun-LoRA-v4-E4B-GGUF:Q8_0"
     elif [ "$mb" -ge 7500 ]; then echo "$MODEL_E4B"
-    elif [ "$mb" -ge 5500 ]; then echo "hf.co/efficiencyx/Jun-LoRA-v3-E2B-GGUF:Q6_K"
+    elif [ "$mb" -ge 5500 ]; then echo "hf.co/efficiencyx/Jun-LoRA-v4-E2B-GGUF:Q6_K"
     else                               echo "$MODEL_E2B"
     fi
 }
@@ -565,6 +581,26 @@ docker_run() {
     if [ "$NEED_SG" = 1 ]; then sg docker -c "$*"; else "$@"; fi
 }
 
+# Rootless Docker (Bazzite/Fedora Atomic, brew) can't bind :80 - RootlessKit
+# refuses privileged ports unless the host lowers ip_unprivileged_port_start.
+# The rootless netns inherits the value at creation, hence the daemon restart.
+allow_privileged_ports() {
+    docker_run docker info -f '{{.SecurityOptions}}' 2>/dev/null | grep -q rootless || return 0
+    local start
+    start="$(sysctl -n net.ipv4.ip_unprivileged_port_start 2>/dev/null || echo 1024)"
+    [ "$start" -le 80 ] && return 0
+    note "rootless Docker needs unprivileged ports to start at 80 (for the web UI)"
+    if printf 'net.ipv4.ip_unprivileged_port_start=80\n' \
+            | $SUDO tee /etc/sysctl.d/99-jun-unprivileged-ports.conf >/dev/null 2>&1 \
+        && $SUDO sysctl -q net.ipv4.ip_unprivileged_port_start=80; then
+        systemctl --user restart docker 2>/dev/null || true
+        ok "allowed rootless Docker to bind port 80"
+    else
+        warn_ "couldn't lower net.ipv4.ip_unprivileged_port_start - port 80 will fail."
+        note "fix manually: sudo sysctl net.ipv4.ip_unprivileged_port_start=80"
+    fi
+}
+
 wait_for_docker() {
     printf '     %s…%s waiting for Docker to be ready' "$DIM" "$R"
     local i=0
@@ -713,7 +749,16 @@ fi
 
 if docker_run docker info >/dev/null 2>&1; then
     step "boot stack"
-    run "build & start containers (first run pulls models, can take a while)" docker_run ./start.sh
+    allow_privileged_ports
+    run_live "build & start containers" docker_run ./start.sh
+    if docker_run docker ps --format '{{.Names}}' | grep -qx omega-ollama; then
+        note "model pull (first run can take a while):"
+        # `logs -f` never exits on its own; awk bails once the entrypoint
+        # reports the pull/pre-warm outcome and SIGPIPE reaps the follow.
+        docker_run docker logs -f omega-ollama 2>&1 \
+            | awk '{ print "       " $0; fflush() } /pre-warm (done|failed)|pull failed/ { exit }' || true
+        ok "models ready"
+    fi
     printf '\n   %s$%s %s%sready%s %s-%s open %shttp://localhost%s\n\n' \
         "$OK" "$R" "$B" "$OK" "$R" "$DIM" "$R" "$B$ACCENT" "$R"
 else

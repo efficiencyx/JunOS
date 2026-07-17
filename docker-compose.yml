@@ -73,7 +73,7 @@ services:
     profiles: [ollama]
     restart: unless-stopped
     environment:
-      OLLAMA_MODELS_TO_PULL: "${OLLAMA_MODELS_TO_PULL:-hf.co/efficiencyx/Jun-LoRA-v3-E2B-GGUF:Q4_K_M,nomic-embed-text}"
+      OLLAMA_MODELS_TO_PULL: "${OLLAMA_MODELS_TO_PULL:-hf.co/efficiencyx/Jun-LoRA-v4-E2B-GGUF:Q4_K_M,nomic-embed-text}"
 # Limit Ollama's parallel slots and loaded models to avoid multiplying KV-cache memory.
       OLLAMA_NUM_PARALLEL: "${OLLAMA_NUM_PARALLEL:-1}"
       OLLAMA_MAX_LOADED_MODELS: "${OLLAMA_MAX_LOADED_MODELS:-2}"
@@ -99,7 +99,7 @@ services:
     profiles: [llamacpp]
     restart: unless-stopped
     environment:
-      LLAMA_ARG_HF_REPO: "${LLAMACPP_MODEL_HF:-efficiencyx/Jun-LoRA-v3-E2B-GGUF:Q4_K_M}"
+      LLAMA_ARG_HF_REPO: "${LLAMACPP_MODEL_HF:-efficiencyx/Jun-LoRA-v4-E2B-GGUF:Q4_K_M}"
       LLAMA_ARG_CTX_SIZE: "16384"
       LLAMA_ARG_JINJA: "1"           # chat-template tool calling
       LLAMA_ARG_HOST: "0.0.0.0"

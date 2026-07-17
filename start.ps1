@@ -227,7 +227,7 @@ if ($Provider -eq 'llamacpp' -and $LlamacppUrl -match '://(127\.0\.0\.1|localhos
         if (-not (Get-Command llama-server -ErrorAction SilentlyContinue)) {
             throw 'llama-server is not installed. Run install.ps1 first (it installs llama.cpp via winget).'
         }
-        $hfRef = if ($env:LLAMACPP_MODEL_HF) { $env:LLAMACPP_MODEL_HF } else { 'efficiencyx/Jun-LoRA-v3-E2B-GGUF:Q4_K_M' }
+        $hfRef = if ($env:LLAMACPP_MODEL_HF) { $env:LLAMACPP_MODEL_HF } else { 'efficiencyx/Jun-LoRA-v4-E2B-GGUF:Q4_K_M' }
         Step "start llama-server ($hfRef)"
         Note 'first run downloads the model'
         $env:LLAMA_CACHE = Join-Path $Runtime 'llama-cache'

@@ -133,7 +133,7 @@ On Windows, `start.ps1` runs bare metal: it starts (or reuses) Ollama natively -
 
 > **Windows:** if PowerShell slaps down the script, run it once as `powershell -ExecutionPolicy Bypass -File start.ps1` (the `irm | iex` installer already handles this for you).
 
-On first boot Ollama pulls whatever's in `OLLAMA_MODELS_TO_PULL` - by default the CPU-friendly `hf.co/efficiencyx/Jun-LoRA-v3-E2B-GGUF:Q4_K_M` and `nomic-embed-text`. Watch it crawl in with `docker compose logs -f ollama` (on Windows the pull runs right in your terminal).
+On first boot Ollama pulls whatever's in `OLLAMA_MODELS_TO_PULL` - by default the CPU-friendly `hf.co/efficiencyx/Jun-LoRA-v4-E2B-GGUF:Q4_K_M` and `nomic-embed-text`. Watch it crawl in with `docker compose logs -f ollama` (on Windows the pull runs right in your terminal).
 
 She's ready the moment `docker compose ps` says everything's healthy - usually 30–90 seconds, faster if the weights are already cached in the `ollama_data` volume.
 
@@ -191,10 +191,10 @@ Everything's environment variables (see `.env.example`; the full reference lives
 | `TLS_MODE` | `on` = HTTPS + certbot profile; `off` = plain HTTP | `off` |
 | `AI_PROVIDER` | Chat backend: `ollama` \| `openrouter` \| `llamacpp` | `ollama` |
 | `OLLAMA_URL` | Where PHP finds Ollama | `http://ollama:11434` |
-| `OLLAMA_MODELS_TO_PULL` | Models pulled on first boot | `hf.co/efficiencyx/Jun-LoRA-v3-E2B-GGUF:Q4_K_M,nomic-embed-text` |
+| `OLLAMA_MODELS_TO_PULL` | Models pulled on first boot | `hf.co/efficiencyx/Jun-LoRA-v4-E2B-GGUF:Q4_K_M,nomic-embed-text` |
 | `OPENROUTER_API_KEY` / `OPENROUTER_MODEL` | OpenRouter credentials + default model | - / `openrouter/auto` |
 | `LLAMACPP_URL` | Where PHP finds llama-server (custom URL skips the managed one) | `http://llamacpp:8080` |
-| `LLAMACPP_MODEL_HF` | HF `repo:quant` the managed llama-server loads (`-hf` syntax) | `efficiencyx/Jun-LoRA-v3-E2B-GGUF:Q4_K_M` |
+| `LLAMACPP_MODEL_HF` | HF `repo:quant` the managed llama-server loads (`-hf` syntax) | `efficiencyx/Jun-LoRA-v4-E2B-GGUF:Q4_K_M` |
 | `EMBEDDINGS` | `on`/`off` - local Ollama RAG embeddings | `on` for ollama, else `off` |
 | `COMPOSE_PROFILES` | Which model-server containers run (`ollama`, `llamacpp`) | `ollama` |
 | `TTS_URL` | Where the PHP TTS/STT proxies find the voice sidecar (legacy name `KOKORO_URL` still works) | `http://tts:8001` |
