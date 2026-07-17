@@ -190,10 +190,12 @@ window.Mods = (function () {
   const _imgCache = new Map();
   function loadImg(url) {
     if (!_imgCache.has(url)) {
-      _imgCache.set(url, new Promise((res, rej) => {
+      const p = new Promise((res, rej) => {
         const im = new Image();
         im.onload = () => res(im); im.onerror = rej; im.src = url;
-      }));
+      });
+      p.catch(() => _imgCache.delete(url));
+      _imgCache.set(url, p);
     }
     return _imgCache.get(url);
   }
@@ -356,8 +358,13 @@ window.Mods = (function () {
     for (const id of appliedIds) map[id] = null;   // clear stale overrides
     for (const [id, entries] of byDrawable) {
       // ColorIndex points into the owning ITEM's ColorSlots list.
-      map[id] = await bakeDrawable(entries,
-        (e) => ((modState(e.mod.guid).colors || {})[e.itemIndex] || [])[e.colorIndex] || null);
+      try {
+        map[id] = await bakeDrawable(entries,
+          (e) => ((modState(e.mod.guid).colors || {})[e.itemIndex] || [])[e.colorIndex] || null);
+      } catch (e) {
+        console.warn('mod bake failed', id, e);
+        delete map[id];
+      }
     }
     appliedIds = new Set(byDrawable.keys());
     await Live2D.setDrawableTextures(map);
