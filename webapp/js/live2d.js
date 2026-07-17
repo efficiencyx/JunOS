@@ -522,6 +522,18 @@ window.Live2D = (function () {
     return true;
   }
 
+  function setNow(param, value) {
+    if (!setTarget(param, value)) return false;
+    currentValues.set(param, clamp(param, value));
+    return true;
+  }
+
+  function cancelPending(paramPrefix) {
+    for (let i = pendingSequences.length - 1; i >= 0; i--) {
+      if (pendingSequences[i].param.startsWith(paramPrefix)) pendingSequences.splice(i, 1);
+    }
+  }
+
   function startLoop(param, amplitude, period_ms, base) {
     if (!paramIndex.has(param)) { reportMissing(param); return false; }
     if (base === undefined) base = paramDefault.get(param) || 0;
@@ -640,13 +652,16 @@ window.Live2D = (function () {
     trySet('ParamEyeOpen', fear > 0.3 ? 1 : (warmth < -0.4 ? 0.7 : 1));
 
     if (fear > 0.4) {
-      tryLoop('ParamHeadZ', 1 + 1.5 * fear, 240);
-      tryLoop('ParamBodyX', 0.05 + 0.08 * fear, 200);
-      tryLoop('ParamBodyY', 0.25, 1600);
+      tryLoop('ParamHeadZ', 0.01 + 0.02 * fear, 220);
+      tryLoop('ParamHeadX', 0.01 + 0.02 * fear, 120);
+      tryLoop('ParamBodyX', 0.01 + 0.01 * fear, 200);
+      tryLoop('ParamBodyY', 0.05, 1600);
     } else {
       stopLoop('ParamHeadZ');
+      stopLoop('ParamHeadX');
       stopLoop('ParamBodyX');
       trySet('ParamHeadZ', paramDefault.get('ParamHeadZ') || 0);
+      trySet('ParamHeadX', paramDefault.get('ParamHeadX') || 0);
       trySet('ParamBodyX', paramDefault.get('ParamBodyX') || 0);
       tryLoop('ParamBodyY', warmth > 0.4 ? 0.2 : 0.15, warmth > 0.4 ? 3000 : 3800);
     }
@@ -684,7 +699,7 @@ window.Live2D = (function () {
   const FIDGETS = [
     { kind: 'loop', param: 'ParamTailWiggle', amp: 0.5, period: 900, duration: 2400 },
     { kind: 'loop', param: 'ParamEarsWiggle', amp: 0.4, period: 700, duration: 1400, moods: ['neutral', 'happy', 'nervous'] },
-    { kind: 'loop', param: 'ParamHeadX', amp: 1.2, period: 4200, duration: 4200 },
+    { kind: 'loop', param: 'ParamHeadX', amp: 1.2, period: 4200, duration: 4200, moods: ['neutral', 'happy', 'upset', 'nervous'] },
     { kind: 'loop', param: 'ParamHeadY', amp: 0.8, period: 3800, duration: 3800 },
     { kind: 'loop', param: 'ParamEyeballLX', amp: 0.3, period: 2600, duration: 2600, pair: 'ParamEyeballRX' },
     { kind: 'loop', param: 'ParamBodyX', amp: 0.2, period: 5000, duration: 5000, moods: ['neutral', 'happy', 'upset'] },
@@ -839,7 +854,10 @@ window.Live2D = (function () {
     for (const [id, target] of targetParams) {
       const cur = currentValues.get(id);
       if (cur === undefined) { currentValues.set(id, target); continue; }
-      const next = cur + (target - cur) * alpha;
+      let next = cur + (target - cur) * alpha;
+      // Snap when close: params that gate drawable visibility (ParamHeadpat)
+      // must actually reach 0, not decay asymptotically forever.
+      if (Math.abs(target - next) < 0.001) next = target;
       currentValues.set(id, next);
     }
 
@@ -1101,6 +1119,8 @@ window.Live2D = (function () {
     for (const a of active) {
       ctx.save();
       ctx.clip(meshPath(a.id, W, H));
+      // Tiny decals are pixel art (the fruit panty logos); keep them crisp.
+      if (a.entry.img.width < 64) ctx.imageSmoothingEnabled = false;
       ctx.drawImage(a.entry.img, a.x, a.yTop, a.w, a.h);
       ctx.restore();
     }
@@ -1160,16 +1180,48 @@ window.Live2D = (function () {
     return ids;
   }
 
-  function drawableAt(clientX, clientY, onlyIds) {
-    if (!model || !raw || !app) return null;
+  function toModelPoint(clientX, clientY) {
     const rect = app.view.getBoundingClientRect();
     const p = model.toModelPosition(new PIXI.Point(clientX - rect.left, clientY - rect.top));
     // Convert model-canvas pixels (y down) to Cubism coordinates (y up).
     const ci = raw.canvasinfo;
     p.x = (p.x - ci.CanvasOriginX) / ci.PixelsPerUnit;
     p.y = (ci.CanvasOriginY - p.y) / ci.PixelsPerUnit;
+    return p;
+  }
+
+  function pointInMesh(D, i, p) {
+    const vp = D.vertexPositions[i], ix = D.indices[i];
+    for (let k = 0; k < ix.length; k += 3) {
+      const a = ix[k] * 2, b = ix[k + 1] * 2, c = ix[k + 2] * 2;
+      const s1 = (vp[b] - vp[a]) * (p.y - vp[a + 1]) - (vp[b + 1] - vp[a + 1]) * (p.x - vp[a]);
+      const s2 = (vp[c] - vp[b]) * (p.y - vp[b + 1]) - (vp[c + 1] - vp[b + 1]) * (p.x - vp[b]);
+      const s3 = (vp[a] - vp[c]) * (p.y - vp[c + 1]) - (vp[a + 1] - vp[c + 1]) * (p.x - vp[c]);
+      if ((s1 >= 0 && s2 >= 0 && s3 >= 0) || (s1 <= 0 && s2 <= 0 && s3 <= 0)) return true;
+    }
+    return false;
+  }
+
+  // Point-in-mesh test against specific drawables regardless of visibility,
+  // for the model's invisible HitArea* meshes.
+  function hitTest(clientX, clientY, ids) {
+    if (!model || !raw || !app) return null;
+    const p = toModelPoint(clientX, clientY);
+    const D = raw.drawables;
+    for (let i = 0; i < D.count; i++) {
+      if (ids.has(D.ids[i]) && pointInMesh(D, i, p)) return D.ids[i];
+    }
+    return null;
+  }
+
+  function drawableAt(clientX, clientY, onlyIds, tolerancePx) {
+    if (!model || !raw || !app) return null;
+    const rect = app.view.getBoundingClientRect();
+    const p = toModelPoint(clientX, clientY);
+    const ci = raw.canvasinfo;
     const D = raw.drawables;
     const only = onlyIds ? (onlyIds instanceof Set ? onlyIds : new Set(onlyIds)) : null;
+    const candidates = [];
     let best = null, bestOrder = -Infinity;
     for (let i = 0; i < D.count; i++) {
       if (only && !only.has(D.ids[i])) continue;
@@ -1178,17 +1230,28 @@ window.Live2D = (function () {
       // Include layers forced visible by the renderer.
       const visible = (D.dynamicFlags[i] & 0x01) || (forcedOpacity != null && forcedOpacity > 0.0001);
       if (!visible || opacity < 0.01) continue;
+      candidates.push(i);
       if (D.renderOrders[i] <= bestOrder) continue;
-      const vp = D.vertexPositions[i], ix = D.indices[i];
-      for (let k = 0; k < ix.length; k += 3) {
-        const a = ix[k] * 2, b = ix[k + 1] * 2, c = ix[k + 2] * 2;
-        const s1 = (vp[b] - vp[a]) * (p.y - vp[a + 1]) - (vp[b + 1] - vp[a + 1]) * (p.x - vp[a]);
-        const s2 = (vp[c] - vp[b]) * (p.y - vp[b + 1]) - (vp[c + 1] - vp[b + 1]) * (p.x - vp[b]);
-        const s3 = (vp[a] - vp[c]) * (p.y - vp[c + 1]) - (vp[a + 1] - vp[c + 1]) * (p.x - vp[c]);
-        if ((s1 >= 0 && s2 >= 0 && s3 >= 0) || (s1 <= 0 && s2 <= 0 && s3 <= 0)) {
-          best = D.ids[i]; bestOrder = D.renderOrders[i]; break;
-        }
+      if (pointInMesh(D, i, p)) { best = D.ids[i]; bestOrder = D.renderOrders[i]; }
+    }
+    if (best || !tolerancePx) return best;
+    // Nothing under the cursor exactly: fall back to padded bounding boxes,
+    // smallest box wins so thin accessories are not shadowed by garments.
+    const q = model.toModelPosition(new PIXI.Point(clientX - rect.left + tolerancePx, clientY - rect.top));
+    const tol = Math.abs((q.x - ci.CanvasOriginX) / ci.PixelsPerUnit - p.x);
+    let bestArea = Infinity;
+    for (const i of candidates) {
+      const vp = D.vertexPositions[i];
+      let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+      for (let k = 0; k < vp.length; k += 2) {
+        if (vp[k] < minX) minX = vp[k];
+        if (vp[k] > maxX) maxX = vp[k];
+        if (vp[k + 1] < minY) minY = vp[k + 1];
+        if (vp[k + 1] > maxY) maxY = vp[k + 1];
       }
+      if (p.x < minX - tol || p.x > maxX + tol || p.y < minY - tol || p.y > maxY + tol) continue;
+      const area = (maxX - minX) * (maxY - minY);
+      if (area < bestArea) { bestArea = area; best = D.ids[i]; }
     }
     return best;
   }
@@ -1220,6 +1283,8 @@ window.Live2D = (function () {
   return {
     init,
     setTarget,
+    setNow,
+    cancelPending,
     startLoop,
     stopLoop,
     stopAllLoops,
@@ -1250,6 +1315,7 @@ window.Live2D = (function () {
     setMouthOverride,
     isOverModel,
     drawableAt,
+    hitTest,
     drawableThumb,
   };
 })();

@@ -6,7 +6,7 @@ window.Actions = (function () {
   const NAV_KEYS = ['target','dir','type','shape','emotion','side','state','speed','style','item','enable','gesture','duration'];
 
   async function load(url) {
-    const res = await fetch(url);
+    const res = await fetch(url, { cache: 'no-cache' });
     actionMap = await res.json();
   }
 
@@ -150,6 +150,7 @@ window.Actions = (function () {
   const FALLBACK_CONTAINERS = ['mouth', 'emote', 'brow', 'look', 'lean', 'tail_wiggle', 'breath'];
 
   function resolveAction(name, kwargs) {
+    if (name === 'mood_shift') return null; // bookkeeping tag, gestito da chat.php
     if (!actionMap) {
       log('warn', `azione sconosciuta: ${name}`);
       return null;
