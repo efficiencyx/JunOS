@@ -516,7 +516,7 @@ window.Outfit = (function () {
     img.onload = () => resolve(img);
     img.onerror = reject;
     img.src = url;
-  }));
+  }).catch((e) => { delete glassesImgCache[url]; throw e; }));
 
   function tintedLayer(img, hex) {
     if (!hex) return img;
@@ -537,8 +537,17 @@ window.Outfit = (function () {
     const style = GLASSES_STYLES[variantState.glasses_style || 0];
     if (!style || !Live2D.setDrawableTextures) return;
     const job = ++glassesJob;
-    const imgs = await Promise.all(style.layers.map(([part]) =>
-      glassesImg(`assets/variants/glasses/${style.base}_${part}.png`)));
+    let imgs;
+    try {
+      imgs = await Promise.all(style.layers.map(([part]) =>
+        glassesImg(`assets/variants/glasses/${style.base}_${part}.png`)));
+    } catch (e) {
+      // A dropped load would leave the raw ModdableFace atlas art on screen;
+      // retry instead of giving up for the rest of the session.
+      console.warn('glasses layer load failed, retrying', e);
+      if (job === glassesJob) setTimeout(applyGlassesTexture, 1000);
+      return;
+    }
     if (job !== glassesJob || GLASSES_STYLES[variantState.glasses_style || 0] !== style) return;
     const c = document.createElement('canvas');
     c.width = imgs[0].width; c.height = imgs[0].height;
