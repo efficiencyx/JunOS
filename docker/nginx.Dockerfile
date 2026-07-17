@@ -1,7 +1,7 @@
 FROM nginx:1.27-alpine
 
-# curl for the healthcheck probe
-RUN apk add --no-cache curl
+# curl for the healthcheck probe, openssl for the self-signed localhost cert
+RUN apk add --no-cache curl openssl
 
 # Drop the stock welcome-page config so only our template-generated config loads
 RUN rm -f /etc/nginx/conf.d/default.conf
