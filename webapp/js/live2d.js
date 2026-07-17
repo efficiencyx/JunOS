@@ -118,7 +118,9 @@ window.Live2D = (function () {
     const textures = [t0, t1, t2];
     while (textures.length < 8) textures.push(TRANSPARENT);
 
-    // Normalize mixed-alpha atlas pixels to prevent bright or dark fringes.
+    // The extracted atlas mixes premultiplied and straight-alpha edge pixels.
+    // Upload it as PMA, then normalize each sampled pixel in the shader so
+    // neither representation can produce a bright or dark fringe.
     for (const url of textures) {
       PIXI.BaseTexture.from(url, {
         alphaMode: PIXI.ALPHA_MODES.PMA,
@@ -136,6 +138,11 @@ window.Live2D = (function () {
 
     onStatus('Building model...');
     model = await Live2DModel.from(settings, { autoInteract: false, autoUpdate: true });
+    for (const texture of model.textures) {
+      const baseTexture = texture.baseTexture;
+      baseTexture.alphaMode = PIXI.ALPHA_MODES.PMA;
+      baseTexture.update();
+    }
     app.stage.addChild(model);
 
     const im = model.internalModel;
@@ -997,6 +1004,8 @@ window.Live2D = (function () {
       im.onerror = rej;
       im.src = url;
     });
+    // Never memoize a failure: a flaky load at startup must stay retryable.
+    p.catch(() => _imgCache.delete(url));
     _imgCache.set(url, p);
     return p;
   }
@@ -1149,7 +1158,12 @@ window.Live2D = (function () {
       if (url) {
         if (prev && prev.url === url && prev.overlay === overlay &&
             prev.alphaClip === alphaClip && prev.fullClear === fullClear) return;
-        _texOverride.set(id, { url, img: await _loadImg(url), overlay, alphaClip, fullClear });
+        // One failed image must not abort the whole batch: the other
+        // overrides still have to land and recomposite.
+        let img;
+        try { img = await _loadImg(url); }
+        catch (e) { console.warn('texture load failed', id, url, e); return; }
+        _texOverride.set(id, { url, img, overlay, alphaClip, fullClear });
       } else {
         if (!prev) return;
         _texOverride.delete(id);

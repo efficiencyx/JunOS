@@ -90,10 +90,23 @@ def get_device():
         if choice in ("cpu", "cuda"):
             _device = choice
         else:
+            # torch.cuda.is_available() is not enough on ROCm: it returns True on
+            # cards whose gfx arch has no shipped kernels (most consumer RDNA
+            # without HSA_OVERRIDE_GFX_VERSION), and the first real kernel then
+            # dies with "HIP error: invalid device function". Run a tiny matmul
+            # so "auto" degrades to cpu instead of breaking every request.
             try:
                 import torch
-                _device = "cuda" if torch.cuda.is_available() else "cpu"
-            except Exception:
+                if torch.cuda.is_available():
+                    t = torch.ones(8, 8, device="cuda")
+                    (t @ t).sum().item()
+                    _device = "cuda"
+                else:
+                    _device = "cpu"
+            except Exception as e:
+                log.warning("GPU unusable (%s); falling back to CPU. On AMD consumer "
+                            "cards, try setting HSA_OVERRIDE_GFX_VERSION (e.g. 10.3.0 "
+                            "for RDNA2, 11.0.0 for RDNA3).", e)
                 _device = "cpu"
         log.info("TTS device: %s (TTS_DEVICE=%s)", _device, choice)
     return _device
