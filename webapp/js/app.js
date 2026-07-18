@@ -121,6 +121,7 @@
   function appendMsg(role, content) {
     const el = document.createElement('div');
     el.className = `msg ${role}`;
+    if (role === 'user') hideFaceBubble();
     if (role === 'assistant') {
       el.innerHTML = renderMarkdown(content);
     } else {
@@ -130,6 +131,49 @@
     messagesEl.scrollTop = messagesEl.scrollHeight;
     updateEmptyState();
     return el;
+  }
+
+  const faceBubble = (() => {
+    const el = document.createElement('div');
+    el.className = 'game-bubble face-bubble';
+    el.hidden = true;
+    document.getElementById('stage').appendChild(el);
+    return el;
+  })();
+  let faceBubbleRaf = 0;
+
+  function positionFaceBubble() {
+    faceBubbleRaf = requestAnimationFrame(positionFaceBubble);
+    const a = window.Live2D && Live2D.faceAnchor && Live2D.faceAnchor();
+    if (!a) return;
+    const w = faceBubble.offsetWidth, h = faceBubble.offsetHeight;
+    let left = a.x - a.headW - w;
+    if (left < 8) left = Math.min(a.x + a.headW, window.innerWidth - w - 8);
+    const top = Math.max(40, Math.min(a.y, window.innerHeight - h - 8));
+    faceBubble.style.left = left + 'px';
+    faceBubble.style.top = top + 'px';
+  }
+
+  function showFaceBubble(html) {
+    clearTimeout(faceBubbleHideTimer);
+    if (window.Names) faceBubble.dataset.name = Names.getBot();
+    faceBubble.innerHTML = html;
+    if (faceBubble.hidden) {
+      faceBubble.hidden = false;
+      positionFaceBubble();
+    }
+  }
+
+  function hideFaceBubble() {
+    if (faceBubble.hidden) return;
+    faceBubble.hidden = true;
+    cancelAnimationFrame(faceBubbleRaf);
+  }
+
+  let faceBubbleHideTimer = 0;
+  function scheduleFaceBubbleHide() {
+    clearTimeout(faceBubbleHideTimer);
+    faceBubbleHideTimer = setTimeout(hideFaceBubble, 10000);
   }
 
   function updateEmptyState() {
@@ -284,7 +328,6 @@
   function sendTouchEvent(text) {
     if (abortFn) return;
     resetIdleNudge();
-    appendMsg('user', text);
     messages.push({ role: 'user', content: text });
     runChat({ idle: false, ephemeral: true });
   }
@@ -321,6 +364,10 @@
     cancelAutoReset();
 
     const draft = appendMsg('assistant', '');
+    if (ephemeral) {
+      draft.remove();
+      updateEmptyState();
+    }
     const body = document.createElement('div');
     body.className = 'msg-body';
     draft.appendChild(body);
@@ -362,6 +409,7 @@
         body.appendChild(typing);
         messagesEl.scrollTop = messagesEl.scrollHeight;
       }
+      if (ephemeral) showFaceBubble(renderMarkdown(shown));
       if (window.TTS) TTS.feed(sub);
     });
     renderVoiceDraft = () => {
@@ -463,6 +511,7 @@
 
     function finalize() {
       abortFn = null;
+      if (ephemeral) scheduleFaceBubbleHide();
       if (window.VoiceMode && VoiceMode.isActive()) body.innerHTML = renderMarkdown(shown);
       renderVoiceDraft = null;
       cancelActiveIdleNudge = null;
@@ -538,6 +587,7 @@
   async function loadConversation(id) {
     currentConversationId = id;
     cancelAutoReset();
+    hideFaceBubble();
     resetIdleNudge(); // fresh context - let Jun nudge again
     if (window.TTS) TTS.stop();
     messages.length = 0;
@@ -686,13 +736,14 @@
   const settingsNavItems = document.querySelectorAll('.settings-navitem');
   const settingsPanels = document.querySelectorAll('.settings-panel');
   const settingsPanelTitle = document.getElementById('settingsPanelTitle');
-  settingsNavItems.forEach((item) => {
+  settingsNavItems.forEach((item, idx) => {
     item.addEventListener('click', () => {
       const key = item.dataset.panel;
       settingsNavItems.forEach((n) => {
         const on = n === item;
         n.classList.toggle('active', on);
         n.setAttribute('aria-selected', on ? 'true' : 'false');
+        n.tabIndex = on ? 0 : -1;
       });
       settingsPanels.forEach((p) => { p.hidden = p.dataset.panel !== key; });
       const label = item.querySelector('span');
@@ -700,7 +751,36 @@
       if (key === 'developer') loadMood(); // pull fresh scores when the panel opens
       if (key === 'memory') loadMemories();
     });
+    item.tabIndex = item.classList.contains('active') ? 0 : -1;
+    item.addEventListener('keydown', (e) => {
+      let target = -1;
+      if (e.key === 'ArrowDown') target = (idx + 1) % settingsNavItems.length;
+      else if (e.key === 'ArrowUp') target = (idx - 1 + settingsNavItems.length) % settingsNavItems.length;
+      else if (e.key === 'Home') target = 0;
+      else if (e.key === 'End') target = settingsNavItems.length - 1;
+      if (target < 0) return;
+      e.preventDefault();
+      settingsNavItems[target].focus();
+      settingsNavItems[target].click();
+    });
   });
+
+  function updateTtsSpeedLabel() {
+    const out = document.getElementById('ttsSpeedVal');
+    if (out && ttsSpeedInput) out.textContent = parseFloat(ttsSpeedInput.value).toFixed(2).replace(/0$/, '') + '×';
+  }
+  function updateVoiceSilenceLabel() {
+    const out = document.getElementById('voiceSilenceVal');
+    if (out && voiceSilenceInput) out.textContent = voiceSilenceInput.value + ' ms';
+  }
+
+  function syncVoiceDeps() {
+    const on = { tts: !!(ttsChk && ttsChk.checked), mic: !!(voiceChk && voiceChk.checked) };
+    document.querySelectorAll('#settingsDrawer .set-row[data-dep]').forEach((row) => {
+      row.classList.toggle('disabled', !on[row.dataset.dep]);
+    });
+  }
+  syncVoiceDeps();
 
   const memoryList = document.getElementById('memoryList');
   const memoryCount = document.getElementById('memoryCount');
@@ -1013,8 +1093,21 @@
       return;
     }
 
-    // Keep the shell hidden until the authenticated boot overlay fades out.
-    showBoot();
+    // Coming back from the wardrobe, the return cutscene replaces the boot
+    // terminal: skipping BootFX.start also makes BootFX.finish a no-op later.
+    const fromWardrobe = new URLSearchParams(location.search).get('from') === 'wardrobe';
+    if (fromWardrobe) {
+      history.replaceState(null, '', location.pathname);
+      TripLoader.mount({ reverse: true });
+      const bo = document.getElementById('bootOverlay');
+      if (bo) {
+        bo.setAttribute('data-ready', '1');
+        bo.setAttribute('aria-hidden', 'true');
+      }
+    } else {
+      // Keep the shell hidden until the authenticated boot overlay fades out.
+      showBoot();
+    }
 
     const emailEl = document.getElementById('userEmail');
     if (me.user && emailEl) emailEl.textContent = me.user.email || '';
@@ -1038,11 +1131,18 @@
     if (window.DevHud) DevHud.init();
 
     try {
-      const live2dInfo = await Live2D.init({ stageEl, onStatus: (m) => setStageStatus(m) });
+      const live2dInfo = await Live2D.init({ stageEl, onStatus: (m) => {
+        setStageStatus(m);
+        if (fromWardrobe) TripLoader.setStage(m);
+      } });
       setTimeout(() => {
         setStageStatus(null);
         if (stageSkeleton) stageSkeleton.classList.add('hidden');
       }, 1500);
+      if (fromWardrobe) {
+        TripLoader.setStage('Home again');
+        TripLoader.finish();
+      }
       Live2D.startIdle();
       loadMood();
 
@@ -1051,16 +1151,19 @@
       validateActionMap(live2dInfo.paramIds);
 
       Outfit.load();
-      Outfit.buildUI(
-        document.getElementById('outfitControls'),
-        document.getElementById('outfitResetBtn'),
-      );
       Outfit.applyAll();
       const wBtn = document.getElementById('wardrobeBtn');
-      if (wBtn) wBtn.addEventListener('click', () => { location.href = 'wardrobe.html'; });
+      if (wBtn) wBtn.addEventListener('click', async () => {
+        if (window.WardrobeReactions && !wBtn.disabled) {
+          wBtn.disabled = true;
+          try { await WardrobeReactions.playIntro(); } catch (e) {}
+        }
+        location.href = 'wardrobe.html';
+      });
     } catch (e) {
       console.error(e);
       if (stageSkeleton) stageSkeleton.classList.add('hidden');
+      if (fromWardrobe) TripLoader.fail('Live2D load error: ' + e.message);
       setStageStatus('Live2D load error: ' + e.message, true);
       ui.toast('Live2D load error: ' + e.message, 'error');
       ui.setStatus('error', 'error');
@@ -1075,6 +1178,7 @@
       const savedEngine = localStorage.getItem('tts.engine') || 'kokoro';
       TTS.setSpeed(savedSpeed);
       if (ttsSpeedInput) ttsSpeedInput.value = String(savedSpeed);
+      updateTtsSpeedLabel();
 
       let engines = {};
       function populateVoices(engineKey, preferred) {
@@ -1122,8 +1226,10 @@
         ttsChk.addEventListener('change', () => {
           TTS.setEnabled(ttsChk.checked);
           localStorage.setItem('tts.enabled', ttsChk.checked ? '1' : '0');
+          syncVoiceDeps();
           if (window.Prefs) Prefs.pushToServer();
         });
+        syncVoiceDeps();
       }
       if (ttsVoiceSelect) {
         ttsVoiceSelect.addEventListener('change', () => {
@@ -1133,6 +1239,7 @@
         });
       }
       if (ttsSpeedInput) {
+        ttsSpeedInput.addEventListener('input', updateTtsSpeedLabel);
         ttsSpeedInput.addEventListener('change', () => {
           const s = parseFloat(ttsSpeedInput.value) || 1.0;
           TTS.setSpeed(s);
@@ -1187,6 +1294,7 @@
         Voice.setSilenceMs(savedSilence);
         if (voiceBargeChk) voiceBargeChk.checked = savedBarge;
         if (voiceSilenceInput) voiceSilenceInput.value = String(savedSilence);
+        updateVoiceSilenceLabel();
 
         // A hot mic is an explicit per-session choice, never a synced preference.
         voiceChk.checked = false;
@@ -1194,12 +1302,15 @@
           if (voiceChk.checked) {
             try {
               await Voice.enable();
+              syncVoiceDeps();
             } catch (e) {
               voiceChk.checked = false;
+              syncVoiceDeps();
               ui.toast('⚠ Mic blocked - check the browser permission', 'error');
             }
           } else {
             Voice.disable();
+            syncVoiceDeps();
           }
         });
 
@@ -1211,6 +1322,7 @@
           });
         }
         if (voiceSilenceInput) {
+          voiceSilenceInput.addEventListener('input', updateVoiceSilenceLabel);
           voiceSilenceInput.addEventListener('change', () => {
             const ms = parseInt(voiceSilenceInput.value, 10) || 700;
             Voice.setSilenceMs(ms);

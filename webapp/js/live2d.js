@@ -477,6 +477,17 @@ window.Live2D = (function () {
     return Math.max(lo, Math.min(hi, v));
   }
 
+  function faceAnchor() {
+    if (!model || !app) return null;
+    const r = app.view.getBoundingClientRect();
+    const b = model.getBounds();
+    return {
+      x: r.left + b.x + b.width / 2,
+      y: r.top + b.y + b.height * 0.09,
+      headW: Math.max(b.width * 0.30, b.height * 0.12),
+    };
+  }
+
   function isOverModel(clientX, clientY) {
     if (!model || !app) return false;
     const r = app.view.getBoundingClientRect();
@@ -1328,6 +1339,7 @@ window.Live2D = (function () {
     setDrawableTextures,
     setMouthOverride,
     isOverModel,
+    faceAnchor,
     drawableAt,
     hitTest,
     drawableThumb,

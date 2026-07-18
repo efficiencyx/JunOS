@@ -152,7 +152,7 @@ window.Actions = (function () {
   function resolveAction(name, kwargs) {
     if (name === 'mood_shift') return null; // bookkeeping tag, gestito da chat.php
     if (!actionMap) {
-      log('warn', `azione sconosciuta: ${name}`);
+      if (name !== 'outfit') log('warn', `azione sconosciuta: ${name}`);
       return null;
     }
     let node = actionMap[name];
@@ -165,7 +165,7 @@ window.Actions = (function () {
         }
       }
       if (node === undefined) {
-        log('warn', `azione sconosciuta: ${name}`);
+        if (name !== 'outfit') log('warn', `azione sconosciuta: ${name}`);
         return null;
       }
     }
@@ -183,14 +183,14 @@ window.Actions = (function () {
       if (!isEffectNode(rest)) {
         const resolved = resolveResolve(_resolve, kwargs);
         if (!resolved) {
-          log('warn', `nessun match _resolve per ${name} ${JSON.stringify(kwargs)}`);
+          if (name !== 'outfit') log('warn', `nessun match _resolve per ${name} ${JSON.stringify(kwargs)}`);
           return null;
         }
         node = resolved;
       }
     }
     if (!node || typeof node !== 'object') {
-      log('warn', `azione non risolta: ${name} ${JSON.stringify(kwargs)}`);
+      if (name !== 'outfit') log('warn', `azione non risolta: ${name} ${JSON.stringify(kwargs)}`);
       return null;
     }
     return node;
@@ -270,7 +270,10 @@ window.Actions = (function () {
 
   function applyAction({ name, kwargs }) {
     const node = resolveAction(name, kwargs);
-    if (!node) return;
+    if (!node) {
+      if (name === 'outfit' && window.Outfit && Outfit.syncFromAction) Outfit.syncFromAction(name, kwargs);
+      return;
+    }
     applyNode(node, kwargs, 0);
     if (window.Outfit && Outfit.syncFromAction) Outfit.syncFromAction(name, kwargs);
     const k = Object.keys(kwargs).map(x => `${x}=${kwargs[x]}`).join('|');

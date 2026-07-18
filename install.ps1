@@ -347,9 +347,12 @@ function Get-UsablePython {
     ) | Where-Object { $_ }
 
     foreach ($python in $candidates) {
-        # Do not accept the Windows Store launcher or an interpreter unable to
-        # create the repo-local virtual environments used by Jun.
-        & $python.Source -c 'import ensurepip, sys, venv; assert sys.version_info >= (3, 9)' 2>$null
+        # Skip the Windows Store alias stub outright: probing it writes to
+        # stderr, which $ErrorActionPreference='Stop' turns into a terminating
+        # NativeCommandError on PowerShell 5.1. Run the probe through cmd so
+        # any other stderr output never reaches PowerShell either.
+        if ($python.Source -like '*\WindowsApps\*') { continue }
+        cmd /c "`"$($python.Source)`" -c `"import ensurepip, sys, venv; assert sys.version_info >= (3, 9)`" >nul 2>nul"
         if ($LASTEXITCODE -eq 0) { return $python }
     }
     return $null
@@ -410,8 +413,12 @@ function Install-Php {
     }
     $ini | Set-Content (Join-Path $phpDir 'php.ini')
 
-    cmd /c "`"$phpExe`" -v 2>&1" | Select-Object -First 1 | Write-Host
-    if ($LASTEXITCODE -ne 0) {
+    # Capture before piping: Select-Object -First stops the pipeline early,
+    # leaving $LASTEXITCODE stale from a previous command.
+    $phpVersionOut = cmd /c "`"$phpExe`" -v 2>&1"
+    $phpRan = ($LASTEXITCODE -eq 0)
+    $phpVersionOut | Select-Object -First 1 | Write-Host
+    if (-not $phpRan) {
         Warn_ 'php.exe did not run. If you saw a VCRUNTIME140.dll error, install the'
         Warn_ 'Microsoft Visual C++ 2015-2022 Redistributable (x64) and re-run.'
     } else {
