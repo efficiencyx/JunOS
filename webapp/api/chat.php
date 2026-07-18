@@ -589,7 +589,7 @@ foreach ($body['messages'] as $m) {
 if ($idle) {
     $messages[] = ['role' => 'user', 'content' =>
         '(OOC stage direction, not spoken by Anon: Anon has gone quiet and is just '
-        . 'sitting there watching you, saying nothing. The silence has stretched on. '
+        . 'saying nothing. The silence has stretched on. '
         . 'Unless he specifically asked you to be quiet say or do something on your own initiative, the way Jun '
         . 'naturally would when Anon goes still and stares at her. '
         . 'If asked to be quiet Break the silence with ONLY an action. such as a wave or a smile. No chat or text!)'];

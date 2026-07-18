@@ -1,4 +1,4 @@
-#!/usr/bin/env pwsh
+﻿#!/usr/bin/env pwsh
 #
 # Uninstaller for the bare-metal Windows install. Everything Jun created
 # lives either in this folder or as a normal winget app, so removal is:

@@ -259,6 +259,7 @@ class Recovery:
         if not os.path.isdir(data):
             sys.exit(f"game data dir not found: {data}")
         self.out = out
+        self.failures = []
         print("loading Unity files...")
         self.res = UnityPy.load(os.path.join(data, "resources.assets"))
         shared = UnityPy.load(os.path.join(data, "sharedassets0.assets"))
@@ -303,11 +304,11 @@ class Recovery:
         print("  wrote", rel)
 
     def tex_by_name(self, name):
-        hits = [o for o in self.res.objects
+        hits = [o.read() for o in self.res.objects
                 if o.type.name == "Texture2D" and o.read().m_Name == name]
-        if len(hits) != 1:
-            sys.exit(f"expected exactly one Texture2D named {name!r}, got {len(hits)}")
-        return hits[0].read().image
+        if not hits:
+            raise LookupError(f"no Texture2D named {name!r}")
+        return max(hits, key=lambda t: t.m_Width * t.m_Height).image
 
     def tex_by_path(self, p):
         pid = self.respath.get(p.lower())
@@ -316,6 +317,13 @@ class Recovery:
         # A few container paths point at the prefab instead of the texture;
         # fall back to the equally-named Texture2D.
         return self.tex_by_name(p.rsplit("/", 1)[-1])
+
+    def attempt(self, what, fn):
+        try:
+            fn()
+        except (LookupError, StopIteration) as e:
+            self.failures.append(what)
+            print(f"  SKIP {what}: {e}")
 
     def recover_moc3(self):
         for o in self.res.objects:
@@ -403,15 +411,14 @@ class Recovery:
             self.save(self.res_objs[pid].read().image, f"texture_{tn:02d}.png")
 
     def recover_variants(self):
-        for out, cname in VARIANTS.items():
+        def composite(out, cname):
             base = None
             for sec in self.containers[cname]:
                 img = self.tex_by_path(sec["path"]).convert("RGBA")
                 base = img if base is None else Image.alpha_composite(base, img)
             self.save(base, f"variants/{out}.png")
-        for out, tname in LOGOS.items():
-            self.save(self.tex_by_name(tname), f"variants/{out}.png")
-        for out, cname in GLASSES.items():
+
+        def glasses(out, cname):
             base = None
             for sec in sorted(self.containers[cname], key=lambda s: s["layer"]):
                 img = self.tex_by_path(sec["path"]).convert("RGBA")
@@ -421,6 +428,14 @@ class Recovery:
                 self.save(img, f"variants/glasses/{out}_{role}.png")
                 base = img if base is None else Image.alpha_composite(base, img)
             self.save(base, f"variants/{out}.png")
+
+        for out, cname in VARIANTS.items():
+            self.attempt(f"variants/{out}", lambda o=out, c=cname: composite(o, c))
+        for out, tname in LOGOS.items():
+            self.attempt(f"variants/{out}", lambda o=out, t=tname: self.save(
+                self.tex_by_name(t), f"variants/{o}.png"))
+        for out, cname in GLASSES.items():
+            self.attempt(f"variants/{out}", lambda o=out, c=cname: glasses(o, c))
 
     def decal_by_name(self, name):
         # The registry stores decals as Sprites (the fruit ones are sub-rects
@@ -432,11 +447,12 @@ class Recovery:
                     if o.type.name == tname and o.read().m_Name == name]
             if hits:
                 return max(hits, key=lambda d: d.image.width * d.image.height).image
-        sys.exit(f"no Sprite or Texture2D named {name!r}")
+        raise LookupError(f"no Sprite or Texture2D named {name!r}")
 
     def recover_logos(self):
         for out, tname in DECALS.items():
-            self.save(self.decal_by_name(tname), f"variants/logos/{out}.png")
+            self.attempt(f"logos/{out}", lambda o=out, t=tname: self.save(
+                self.decal_by_name(t), f"variants/logos/{o}.png"))
 
     def recover_limbs(self):
         mapping = {}
@@ -538,6 +554,10 @@ def main():
     print("limbs...");    r.recover_limbs()
     print("hair...");     r.recover_hair_strands()
     print("items...");    r.recover_item_catalog()
+    if r.failures:
+        print(f"\nWARNING: {len(r.failures)} item(s) not found in this game "
+              "version and skipped:")
+        print("  " + ", ".join(r.failures))
     print("done:", args.out)
     print()
     print("NOTE: these are the game's art assets, rebuilt for your own local")

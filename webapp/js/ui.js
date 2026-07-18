@@ -45,6 +45,8 @@ window.ui = (function () {
     pill.className = 'status-pill status-' + kind;
   }
 
+  var drawerOpener = null;
+
   function toggleDrawer(open) {
     var drawer = document.getElementById('settingsDrawer');
     var backdrop = document.getElementById('drawerBackdrop');
@@ -55,13 +57,18 @@ window.ui = (function () {
     }
 
     if (open) {
+      drawerOpener = document.activeElement;
       drawer.classList.add('open');
       if (backdrop) backdrop.classList.add('open');
       document.body.classList.add('drawer-open');
+      var tab = drawer.querySelector('.settings-navitem.active');
+      if (tab) tab.focus();
     } else {
       drawer.classList.remove('open');
       if (backdrop) backdrop.classList.remove('open');
       document.body.classList.remove('drawer-open');
+      if (drawerOpener && drawerOpener.focus && document.contains(drawerOpener)) drawerOpener.focus();
+      drawerOpener = null;
     }
   }
 

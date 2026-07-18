@@ -19,7 +19,7 @@ window.Outfit = (function () {
     { key: 'pants', label: 'Pants', param: 'ParamPantsEnabled', defaultOn: false, excludes: ['skirt','dress','dress1'],
       colorPatterns: ['pants'] },
     { key: 'bra', label: 'Bra', param: 'ParamBraEnabled', defaultOn: true,
-      colorPatterns: ['bra'], colorExcludes: ['skin'] },
+      colorPatterns: ['bra'], colorExcludes: ['skin','braid'] },
     { key: 'panties', label: 'Panties', param: 'ParamPantiesEnabled', defaultOn: true,
       colorPatterns: ['panties'], colorExcludes: ['logo'] },
     // The shoe parameters do not control drawable opacity in this moc3.
@@ -567,8 +567,8 @@ window.Outfit = (function () {
     }
     save();
     // Skip atlas recomposition on parameter-only item toggles.
-    applyItems();
     const affected = new Set([key, ...(state[key] && it.excludes || [])]);
+    applyItems();
     for (const k of affected) {
       for (const vk of ITEM_VARIANTS[k] || []) {
         const v = VARIANTS.find(x => x.key === vk);
@@ -951,92 +951,6 @@ window.Outfit = (function () {
     syncUI();
   }
 
-  function buildUI(rootEl, resetBtn) {
-    containerEl = rootEl;
-    rootEl.innerHTML = '';
-    rootEl.classList.remove('outfit-grid');
-
-    const buildGrid = (items) => {
-      const grid = document.createElement('div');
-      grid.className = 'outfit-grid';
-      for (const it of items) {
-        const row = document.createElement('label');
-        row.className = 'outfit-row';
-        row.innerHTML = `<input type="checkbox" data-key="${it.key}"><span>${it.label}</span>`;
-        const cb = row.querySelector('input');
-        cb.checked = state[it.key];
-        cb.addEventListener('change', () => setItem(it.key, cb.checked));
-        grid.appendChild(row);
-      }
-      return grid;
-    };
-
-    rootEl.appendChild(buildGrid(ITEMS.filter(it => !it.section)));
-
-    for (const [section, name] of [['body', 'Body'], ['hair', 'Hair']]) {
-      const title = document.createElement('div');
-      title.className = 'outfit-colors-title';
-      title.textContent = name;
-      rootEl.appendChild(title);
-      rootEl.appendChild(buildGrid(ITEMS.filter(it => it.section === section)));
-    }
-
-    if (VARIANTS.length) {
-      const varWrap = document.createElement('div');
-      varWrap.className = 'outfit-variants';
-      for (const v of VARIANTS) {
-        const row = document.createElement('div');
-        row.className = 'outfit-variant-row';
-        const opts = v.options.map((o, i) => `<option value="${i}">${o.name}</option>`).join('');
-        row.innerHTML = `<span class="outfit-variant-label">${v.label}</span>
-          <select data-variant-key="${v.key}">${opts}</select>`;
-        const sel = row.querySelector('select');
-        sel.value = String(variantState[v.key] || 0);
-        sel.addEventListener('change', () => setVariant(v.key, parseInt(sel.value, 10)));
-        varWrap.appendChild(row);
-      }
-      rootEl.appendChild(varWrap);
-    }
-
-    const colorWrap = document.createElement('div');
-    colorWrap.className = 'outfit-colors';
-    const title = document.createElement('div');
-    title.className = 'outfit-colors-title';
-    title.textContent = 'Colors';
-    colorWrap.appendChild(title);
-
-    for (const g of COLOR_GROUPS) {
-      if (g.key === 'ear_mid') continue;
-      const keys = g.key === 'ear' ? ITEM_COLOR_GROUPS.cat_ears : [g.key];
-      const groups = keys.map(colorGroup).filter(Boolean);
-      const matchedIds = new Set(groups.flatMap(group =>
-        Live2D.findDrawables ? Live2D.findDrawables(group.includes, group.excludes) : []));
-      const label = g.key === 'ear' ? 'Cat ears' : g.label;
-      const row = document.createElement('div');
-      row.className = 'outfit-color-row';
-      row.title = matchedIds.size ? [...matchedIds].join('\n') : '(no matching drawable)';
-      const labelEl = document.createElement('span');
-      labelEl.className = 'outfit-color-label';
-      labelEl.textContent = label;
-      const count = document.createElement('span');
-      count.className = `outfit-color-count ${matchedIds.size === 0 ? 'zero' : ''}`;
-      count.textContent = String(matchedIds.size);
-      const trigger = makeColorButton(keys, label, 'outfit-color-trigger');
-      const clear = document.createElement('button');
-      clear.type = 'button';
-      clear.className = 'ghost outfit-color-clear';
-      clear.dataset.colorClear = keys.join(',');
-      clear.title = 'Remove tint';
-      clear.textContent = '×';
-      clear.addEventListener('click', () => keys.forEach(key => setColor(key, null)));
-      row.append(labelEl, count, trigger, clear);
-      colorWrap.appendChild(row);
-    }
-    rootEl.appendChild(colorWrap);
-
-    if (resetBtn) resetBtn.addEventListener('click', reset);
-  }
-
   let wdOverlay = null, wdTooltip = null, wdGhost = null, wdUpdateExpand = null;
 
   const itemPatterns = (it) => it.colorPatterns || it.visibilityPatterns || [];
@@ -1285,7 +1199,7 @@ window.Outfit = (function () {
     wdOverlay = document.createElement('div');
     wdOverlay.className = 'wardrobe-overlay';
     wdOverlay.innerHTML = `<div class="wd-head">
-        <div class="wd-titles"><span class="wd-title">Wardrobe</span>
+        <div class="wd-titles"><span class="wd-title">Annalie's Shop</span>
         <span class="wd-hint">Click for options · drag onto Jun to wear</span></div>
         <div class="wd-actions"><button class="ghost wd-reset" type="button" title="Restore the default outfit">Reset</button>
         <button class="ghost wd-close" type="button" aria-label="Close wardrobe" title="Close">×</button></div></div>
@@ -1525,12 +1439,21 @@ window.Outfit = (function () {
   function openWardrobe() {
     if (!wdOverlay) buildWardrobe();
     document.body.classList.add('wardrobe-open');
-    if (window.WardrobeReactions) WardrobeReactions.activate();
     if (wdUpdateExpand) requestAnimationFrame(wdUpdateExpand);
+    if (window.WardrobeReactions) return WardrobeReactions.activate();
   }
 
+  let leavingWardrobePage = false;
   function closeWardrobe() {
-    if (location.pathname.endsWith('wardrobe.html')) { location.href = 'index.html'; return; }
+    if (location.pathname.endsWith('wardrobe.html')) {
+      if (leavingWardrobePage) return;
+      leavingWardrobePage = true;
+      const go = () => { location.href = 'index.html?from=wardrobe'; };
+      if (window.WardrobeReactions && WardrobeReactions.playOutro) {
+        WardrobeReactions.playOutro().catch(() => {}).then(go);
+      } else go();
+      return;
+    }
     document.body.classList.remove('wardrobe-open');
     if (window.WardrobeReactions) WardrobeReactions.deactivate();
     closeOptionsPopup(false);
@@ -1572,38 +1495,33 @@ window.Outfit = (function () {
   }
 
   function syncFromAction(name, kwargs) {
-    const n = (name || '').toLowerCase();
-    let dirty = false;
-    const setKey = (key, on) => {
-      const it = ITEMS.find(x => x.key === key);
-      if (!it || state[key] === !!on) return;
-      state[key] = !!on;
-      if (state[key] && it.excludes) {
-        for (const ex of it.excludes) state[ex] = false;
-      }
-      dirty = true;
+    if ((name || '').toLowerCase() !== 'outfit') return;
+    const item = (kwargs.item || '').toLowerCase();
+    const stateOn = (kwargs.state || 'on').toLowerCase() === 'on';
+    const aliases = {
+      shoes: ['shoe_l', 'shoe_r'],
+      shoe_left: ['shoe_l'],
+      shoe_right: ['shoe_r'],
+      hat: ['wizard_hat'],
+      witch_hat: ['wizard_hat'],
+      dress_alt: ['dress1'],
+      socks: ['stockings'],
+      catears: ['cat_ears'],
     };
+    const keys = aliases[item] || (ITEMS.some(it => it.key === item) ? [item] : []);
 
-    if (n === 'outfit') {
-      const item = (kwargs.item || '').toLowerCase();
-      const stateOn = (kwargs.state || 'on').toLowerCase() === 'on';
-      switch (item) {
-        case 'shirt': case 'hoodie': case 'skirt': case 'pants':
-        case 'dress': case 'bra': case 'panties':
-          setKey(item, stateOn); break;
-        case 'shoes':
-          setKey('shoe_l', stateOn); setKey('shoe_r', stateOn); break;
-        case 'shoe_left': setKey('shoe_l', stateOn); break;
-        case 'shoe_right': setKey('shoe_r', stateOn); break;
-        case 'nude':
-          if (stateOn) for (const it of ITEMS) { if (!it.section) setKey(it.key, false); }
-          break;
+    if (item === 'nude' && stateOn) {
+      for (const it of ITEMS) {
+        if (!it.section && state[it.key]) setItem(it.key, false);
       }
+      return;
     }
 
-    if (dirty) { save(); syncUI(); }
+    for (const key of keys) {
+      if (state[key] !== stateOn) setItem(key, stateOn);
+    }
   }
 
-  return { load, buildUI, applyAll, describe, snapshot, reset, syncFromAction, setVariant, openWardrobe,
+  return { load, applyAll, describe, snapshot, reset, syncFromAction, setVariant, openWardrobe,
     makeItemColorButton, refreshColors: applyColors };
 })();

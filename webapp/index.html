@@ -6,6 +6,7 @@
 <title>Jun OS</title>
 <link rel="icon" type="image/png" href="jun_os.png">
 <link rel="stylesheet" href="styles.css?v=30">
+<link rel="stylesheet" href="trip-loader.css?v=2">
 <script src="js/boot-gate.js?v=1"></script>
 </head>
 <body>
@@ -161,7 +162,7 @@
     </header>
     <div class="settings-main-body">
 
-      <section class="settings-panel active" data-panel="general">
+      <section class="settings-panel" data-panel="general">
         <div class="set-row">
           <div class="set-row-text">
             <div class="set-row-title">Your name</div>
@@ -221,7 +222,7 @@
           </div>
           <div class="set-row-control"><input type="checkbox" id="ttsChk" class="toggle" aria-label="Enable TTS"></div>
         </div>
-        <div class="set-row">
+        <div class="set-row" data-dep="tts">
           <div class="set-row-text">
             <div class="set-row-title">Engine</div>
             <div class="set-row-desc">Which speech synthesis engine to use.</div>
@@ -231,19 +232,22 @@
             <option value="pockettts">Pocket-TTS</option>
           </select></div>
         </div>
-        <div class="set-row">
+        <div class="set-row" data-dep="tts">
           <div class="set-row-text">
             <div class="set-row-title">Voice</div>
             <div class="set-row-desc">Which voice to use.</div>
           </div>
           <div class="set-row-control"><select id="ttsVoiceSelect" aria-label="TTS voice"></select></div>
         </div>
-        <div class="set-row">
+        <div class="set-row" data-dep="tts">
           <div class="set-row-text">
             <div class="set-row-title">Speed</div>
             <div class="set-row-desc">Playback rate, 0.5×–2.0×.</div>
           </div>
-          <div class="set-row-control"><input type="number" id="ttsSpeed" min="0.5" max="2.0" step="0.05" value="1.0" aria-label="TTS speed"></div>
+          <div class="set-row-control range-control">
+            <input type="range" id="ttsSpeed" min="0.5" max="2.0" step="0.05" value="1.0" aria-label="TTS speed">
+            <output id="ttsSpeedVal" for="ttsSpeed">1.0×</output>
+          </div>
         </div>
 
         <div class="set-row">
@@ -253,29 +257,32 @@
           </div>
           <div class="set-row-control"><input type="checkbox" id="voiceChk" class="toggle" aria-label="Enable microphone"></div>
         </div>
-        <div class="set-row">
+        <div class="set-row" data-dep="mic">
           <div class="set-row-text">
             <div class="set-row-title">Interrupt her</div>
             <div class="set-row-desc">Talking over her cuts her off. Turn off if she keeps interrupting herself.</div>
           </div>
           <div class="set-row-control"><input type="checkbox" id="voiceBargeChk" class="toggle" checked aria-label="Allow interrupting"></div>
         </div>
-        <div class="set-row">
+        <div class="set-row" data-dep="mic">
           <div class="set-row-text">
             <div class="set-row-title">End-of-turn pause</div>
-            <div class="set-row-desc">Silence before she answers, in ms. Lower feels snappier but clips you mid-thought.</div>
+            <div class="set-row-desc">Silence before she answers. Lower feels snappier but clips you mid-thought.</div>
           </div>
-          <div class="set-row-control"><input type="number" id="voiceSilence" min="300" max="2000" step="50" value="700" aria-label="End-of-turn silence in milliseconds"></div>
+          <div class="set-row-control range-control">
+            <input type="range" id="voiceSilence" min="300" max="2000" step="50" value="700" aria-label="End-of-turn silence in milliseconds">
+            <output id="voiceSilenceVal" for="voiceSilence">700 ms</output>
+          </div>
         </div>
       </section>
 
       <section class="settings-panel" data-panel="appearance" hidden>
-        <div class="set-block">
-          <div class="set-row-title">Outfit</div>
-          <div class="set-row-desc">Toggle clothing layers and pick colors for Jun.</div>
-          <div id="outfitControls" class="outfit-grid"></div>
-          <button class="secondary" id="wardrobeBtn" title="Open the visual wardrobe">Open wardrobe</button>
-          <button class="secondary" id="outfitResetBtn" title="Restore default outfit">Reset outfit</button>
+        <div class="set-row">
+          <div class="set-row-text">
+            <div class="set-row-title">Annalie's shop</div>
+            <div class="set-row-desc">Take Jun shopping — clothing layers, colors and decals.</div>
+          </div>
+          <div class="set-row-control"><button class="secondary" id="wardrobeBtn" title="Walk to Annalie's shop">Visit the shop</button></div>
         </div>
       </section>
 
@@ -498,17 +505,19 @@
 <script src="js/live2d.js?v=25"></script>
 <script src="js/actions.js?v=9"></script>
 <script src="js/mods.js?v=9"></script>
-<script src="js/outfit.js?v=24"></script>
+<script src="js/outfit.js?v=31"></script>
 <script src="js/touch.js?v=9"></script>
 <script src="js/chat-api.js?v=2"></script>
 <script src="js/tts.js?v=10"></script>
-<script src="js/wardrobe-reactions.js?v=1"></script>
+<script src="js/wardrobe-open-lines.js?v=2"></script>
+<script src="js/wardrobe-reactions.js?v=6"></script>
 <script src="js/voice.js?v=1"></script>
 <script src="js/voicemode.js?v=1"></script>
 <script src="js/ui.js?v=6"></script>
 <script src="js/history.js?v=6"></script>
 <script src="js/devhud.js?v=2"></script>
 <script src="js/boot-fx.js?v=4"></script>
-<script src="js/app.js?v=23"></script>
+<script src="js/trip-loader.js?v=2"></script>
+<script src="js/app.js?v=26"></script>
 </body>
 </html>

@@ -355,6 +355,8 @@ window.WardrobeReactions = (function () {
   const BASE_REACT_CHANCE = 0.35;
   let reactChance = BASE_REACT_CHANCE;
   let affection = 0;
+  let trust = 0;
+  let tension = 0;
   let active = false;
   let card = null;
   let textEl = null;
@@ -376,7 +378,7 @@ window.WardrobeReactions = (function () {
     const stage = document.getElementById('stage');
     if (!stage) return;
     const style = document.createElement('style');
-    style.textContent = `.wardrobe-reaction { position:absolute; z-index:4; left:calc(50% - min(25vw, 270px)); top:33%; width:min(330px, 38vw); color:#fff; pointer-events:none; opacity:0; transform:translateX(-14px); transition:opacity .32s ease, transform .32s cubic-bezier(.22,1,.36,1); font-family:Arial,Helvetica,sans-serif; } .wardrobe-reaction.show { opacity:1; transform:translateX(0); } .wardrobe-reaction-text span { opacity:0; animation:wr-letter .28s ease-out forwards; } @keyframes wr-letter { from { opacity:0; } to { opacity:1; } } .wardrobe-reaction-name { display:table; padding:5px 10px 6px; background:#bf126a; color:#fff; font-size:17px; font-weight:800; line-height:1; } .wardrobe-reaction-text { position:relative; margin-top:4px; padding:10px 14px 11px; background:#1a062c; font-size:17px; font-weight:700; line-height:1.2; box-shadow:0 2px 5px rgba(0,0,0,.3); } .wardrobe-reaction-text::after { content:''; position:absolute; top:0; right:-15px; width:0; height:0; border-top:15px solid #1a062c; border-right:15px solid transparent; } @media (max-width:700px) { .wardrobe-reaction { left:12px; top:16%; width:min(300px, calc(100% - 42px)); } .wardrobe-reaction-name { font-size:14px; } .wardrobe-reaction-text { font-size:15px; } }`;
+    style.textContent = `.wardrobe-reaction { position:absolute; z-index:4; left:calc(50% - min(25vw, 270px)); top:33%; width:min(330px, 38vw); color:#fff; pointer-events:none; opacity:0; transform:translateX(-14px); transition:opacity .32s ease, transform .32s cubic-bezier(.22,1,.36,1); font-family:Arial,Helvetica,sans-serif; filter:drop-shadow(-4px 5px 0 rgba(13,11,38,.9)); } .wardrobe-reaction.show { opacity:1; transform:translateX(0); } .wardrobe-reaction-text span { opacity:0; animation:wr-letter .28s ease-out forwards; } @keyframes wr-letter { from { opacity:0; } to { opacity:1; } } .wardrobe-reaction-name { display:table; padding:7px 16px 7px 11px; background:#15142e; border-left:5px solid #ec0054; color:#fff; font-size:15px; font-weight:800; line-height:1; clip-path:polygon(0 0, 100% 0, 100% calc(100% - 9px), calc(100% - 9px) 100%, 0 100%); } .wardrobe-reaction-text { position:relative; margin-top:4px; padding:11px 18px 13px; background:rgba(25,2,44,.92); font-size:17px; font-weight:700; line-height:1.25; clip-path:polygon(0 0, 100% 0, 100% calc(100% - 12px), calc(100% - 12px) 100%, 0 100%); } @media (max-width:700px) { .wardrobe-reaction { left:12px; top:16%; width:min(300px, calc(100% - 42px)); } .wardrobe-reaction-name { font-size:13px; } .wardrobe-reaction-text { font-size:15px; } }`;
     document.head.appendChild(style);
     card = document.createElement('div');
     card.className = 'wardrobe-reaction';
@@ -385,15 +387,38 @@ window.WardrobeReactions = (function () {
     stage.appendChild(card);
   }
 
-  async function activate() {
-    active = true;
-    buildCard();
+  async function fetchGauges() {
     try {
       const response = await fetch('/api/relationship.php', { credentials: 'same-origin' });
       if (!response.ok) return;
       const state = await response.json();
-      if (state && typeof state.affection === 'number') affection = state.affection;
+      if (state && typeof state.affection === 'number') {
+        affection = state.affection;
+        trust = Number(state.trust) || 0;
+        tension = Number(state.tension) || 0;
+      }
     } catch (e) {}
+  }
+
+  async function activate() {
+    active = true;
+    buildCard();
+    await fetchGauges();
+  }
+
+  async function playIntro() {
+    buildCard();
+    await Promise.race([fetchGauges(), new Promise(r => setTimeout(r, 700))]);
+    await Promise.race([playOpening(), new Promise(r => setTimeout(r, 12000))]);
+  }
+
+  async function playOutro() {
+    buildCard();
+    await Promise.race([fetchGauges(), new Promise(r => setTimeout(r, 700))]);
+    await Promise.race([
+      playOpening(window.WardrobeReturnLines, 'return'),
+      new Promise(r => setTimeout(r, 12000)),
+    ]);
   }
 
   function deactivate() {
@@ -486,6 +511,83 @@ window.WardrobeReactions = (function () {
     return 'shy';
   }
 
+  function tier(v) {
+    return v < 34 ? 0 : v < 67 ? 1 : 2;
+  }
+
+  function openMood(a, t, x) {
+    if (a === 0) return 'cold';
+    if (x === 2) return 'shy';
+    if (a === 2) return t === 2 && Math.random() < 0.4 ? 'tease' : 'warm';
+    return 'shy';
+  }
+
+  function openGesture(mood) {
+    if (!window.Live2D || !Live2D.scheduleSequence) return;
+    const seq = {
+      cold: [
+        { dt_ms: 0, params: { ParamAngleX: -16, ParamAngleZ: 6, ParamBodyAngleX: -5 } },
+        { dt_ms: 900, params: { ParamAngleX: -6, ParamAngleY: -4 } },
+        { dt_ms: 1200, params: { ParamAngleX: 0, ParamAngleY: 0, ParamAngleZ: 0, ParamBodyAngleX: 0 } },
+      ],
+      shy: [
+        { dt_ms: 0, params: { ParamAngleY: -10, ParamAngleZ: -7, ParamBodyAngleX: 3 } },
+        { dt_ms: 900, params: { ParamAngleY: -4, ParamAngleX: 6 } },
+        { dt_ms: 1200, params: { ParamAngleX: 0, ParamAngleY: 0, ParamAngleZ: 0, ParamBodyAngleX: 0 } },
+      ],
+      warm: [
+        { dt_ms: 0, params: { ParamAngleX: 8, ParamAngleY: 5, ParamAngleZ: -5, ParamBodyAngleX: 6 } },
+        { dt_ms: 900, params: { ParamAngleZ: 4 } },
+        { dt_ms: 1200, params: { ParamAngleX: 0, ParamAngleY: 0, ParamAngleZ: 0, ParamBodyAngleX: 0 } },
+      ],
+      tease: [
+        { dt_ms: 0, params: { ParamAngleX: 12, ParamAngleZ: 9, ParamBodyAngleX: 5 } },
+        { dt_ms: 900, params: { ParamAngleX: 4, ParamAngleZ: -4 } },
+        { dt_ms: 1200, params: { ParamAngleX: 0, ParamAngleZ: 0, ParamBodyAngleX: 0 } },
+      ],
+    }[mood];
+    if (seq) Live2D.scheduleSequence(seq);
+  }
+
+  function playOpening(pools, idPrefix) {
+    const key = `${tier(affection)}${tier(trust)}${tier(tension)}`;
+    const pool = (pools || window.WardrobeOpenLines || {})[key];
+    if (!pool || !pool.length) return Promise.resolve();
+    const id = `${idPrefix || 'open'}:${key}`;
+    let line;
+    for (let tries = 0; tries < 4; tries++) {
+      line = sample(pool);
+      if (line !== lastLine[id]) break;
+    }
+    lastLine[id] = line;
+    const mood = openMood(tier(affection), tier(trust), tier(tension));
+    const token = ++currentToken;
+    hide();
+    buildCard();
+    applyExpression(mood);
+    openGesture(mood);
+    if (card && textEl) {
+      setLetters(textEl, line);
+      card.classList.add('show');
+    }
+    return new Promise((resolve) => {
+      const finish = () => { hide(); resolve(); };
+      const after = (ms) => {
+        if (token === currentToken) hideTimer = setTimeout(finish, ms);
+        else resolve();
+      };
+      const linger = () => after(1800 + 40 * line.length);
+      if (configureTts()) {
+        TTS.speak(line, {
+          onDone() { after(450); },
+          onError: linger,
+        });
+      } else {
+        linger();
+      }
+    });
+  }
+
   function react({ key, label, on, state }) {
     if (!active || !document.body.classList.contains('wardrobe-open') || !configureTts()) return;
     if (Math.random() >= reactChance) {
@@ -525,5 +627,5 @@ window.WardrobeReactions = (function () {
     });
   }
 
-  return { activate, deactivate, react };
+  return { activate, deactivate, react, playIntro, playOutro };
 })();
