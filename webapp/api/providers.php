@@ -44,6 +44,25 @@ function default_chat_model(): string {
     }
 }
 
+function default_num_ctx(): int {
+    static $ctx = null;
+    if ($ctx !== null) return $ctx;
+    $override = (int)env_str('OMEGA_NUM_CTX', '0');
+    if ($override > 0) return $ctx = $override;
+    $gib = 0.0;
+    $meminfo = @file_get_contents('/proc/meminfo');
+    if ($meminfo && preg_match('/^MemTotal:\s+(\d+)\s*kB/m', $meminfo, $m)) {
+        $gib = (int)$m[1] / (1024 * 1024);
+    }
+    if ($gib <= 0) return $ctx = 16384;
+    // MemTotal reports slightly under the nominal size, so tiers sit just above it
+    if ($gib <= 12) return $ctx = 4096;
+    if ($gib <= 17) return $ctx = 6144;
+    if ($gib <= 25) return $ctx = 8192;
+    if ($gib <= 33) return $ctx = 12288;
+    return $ctx = 16384;
+}
+
 function provider_chat_payload(
     string $provider,
     string $model,
@@ -63,7 +82,7 @@ function provider_chat_payload(
                 'top_k' => 80,
                 'min_p' => 0.01,
                 'presence_penalty' => 0,
-                'num_ctx' => 16384,
+                'num_ctx' => default_num_ctx(),
                 'num_predict' => $think ? -1 : 128,
             ],
         ];
