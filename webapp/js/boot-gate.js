@@ -6,6 +6,16 @@
 // visitors never see the chat UI or the AI-provider boot overlay.
 document.documentElement.setAttribute('data-pre-auth', '1');
 
+// The pre-app screens are styled by the inlined critical CSS, so the full
+// sheets are applied here instead of blocking the parser on them. They are
+// already in flight from the <link rel="preload"> tags in the head.
+for (const href of ['styles.css?v=40', 'trip-loader.css?v=4']) {
+  const link = document.createElement('link');
+  link.rel = 'stylesheet';
+  link.href = href;
+  document.head.appendChild(link);
+}
+
 if (localStorage.getItem('omega.adultConsent.v1') !== '1') {
   // First visit: the 18+ gate must come before anything else, including login.
   document.documentElement.setAttribute('data-age-gated', '1');

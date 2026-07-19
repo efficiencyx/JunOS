@@ -4,11 +4,617 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, interactive-widget=resizes-content">
 <title>Jun OS</title>
-<link rel="icon" type="image/png" href="jun_os.png">
-<script src="js/viewport.js?v=1"></script>
-<link rel="stylesheet" href="styles.css?v=39">
-<link rel="stylesheet" href="trip-loader.css?v=3">
-<script src="js/boot-gate.js?v=1"></script>
+<link rel="icon" type="image/png" href="favicon.png?v=1">
+
+<style id="critical">
+/* Generated from boot.css by tools/build-critical-css.php - do not edit. */
+/* Critical CSS: everything the pre-app screens need (age gate, auth terminal,
+   boot overlay) plus the custom properties and resets the whole app builds on.
+   This file is never served - tools/build-critical-css.php inlines it into the
+   <style id="critical"> block of index.html, so styles.css can load async
+   without the first screen flashing unstyled. Edit here, then ./sync-webapp.sh. */
+
+:root {
+  --bg:         #131314;
+  --bg-elev:    #1e1f20;
+  --bg-2:       #131314;
+  --bg-3:       #1e1f20;
+  --bg-4:       #282a2c;
+  --bg-hover:   #2d2e31;
+  --fg:         #e3e3e3;
+  --muted:      #c4c7c5;
+  --dim:        #8e9295;
+  --accent:     #7c9eff;
+  --accent-2:   #a8c7fa;
+  --accent-soft:#7c9eff1f;
+  --ok:         #7bd88f;
+  --danger:     #ff8a8a;
+  --warn:       #ffc870;
+  --border:     #2d2f31;
+  --border-2:   #444746;
+  --grad:       linear-gradient(74deg, #4285f4 0%, #9b72cb 48%, #d96570 100%);
+  --grad-soft:  linear-gradient(74deg, #c2d6ff 0%, #ddccf3 50%, #f6cdd6 100%);
+  --radius:     16px;
+  --radius-sm:  10px;
+  --radius-pill:9999px;
+  --shadow:     0 4px 18px rgba(0,0,0,.4);
+  --shadow-lg:  0 8px 32px rgba(0,0,0,.55);
+  --space-1:    4px;
+  --space-2:    8px;
+  --space-3:    12px;
+  --space-4:    16px;
+  --space-5:    24px;
+  --space-6:    32px;
+  --header-h:   56px;
+  --drawer-w:   340px;
+}
+
+*, *::before, *::after { box-sizing: border-box; }
+* {
+  scrollbar-width: thin;
+  scrollbar-color: var(--border-2) transparent;
+}
+
+html, body {
+  margin: 0;
+  height: 100%;
+  background: var(--bg);
+  color: var(--fg);
+  font-family: 'Google Sans', 'Google Sans Text', 'Product Sans', 'Inter', -apple-system, system-ui, 'Segoe UI', sans-serif;
+  font-size: 14px;
+  line-height: 1.55;
+  -webkit-font-smoothing: antialiased;
+  overflow: hidden;
+}
+.boot-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 9999;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: radial-gradient(900px 620px at 50% 36%, #1b1c1e 0%, var(--bg) 58%, #0c0c0d 100%);
+  overflow: hidden;
+  opacity: 1;
+  transition: opacity 600ms ease, visibility 600ms;
+}
+.boot-overlay[data-ready="1"] {
+  opacity: 0;
+  pointer-events: none;
+  visibility: hidden;
+}
+
+.boot-glow {
+  position: absolute;
+  width: 460px; height: 460px;
+  border-radius: 50%;
+  background: var(--grad-soft);
+  filter: blur(120px);
+  opacity: .14;
+  pointer-events: none;
+  animation: bootGlow 6s ease-in-out infinite;
+}
+@keyframes bootGlow {
+  0%, 100% { opacity: .1;  transform: scale(.95); }
+  50%      { opacity: .18; transform: scale(1.05); }
+}
+
+.boot-console {
+  position: relative; z-index: 1;
+  width: min(380px, 86vw);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--space-4);
+}
+.boot-overlay:not([data-ready]) .boot-console {
+  animation: bootCardIn 560ms cubic-bezier(.2,.7,.2,1) both;
+}
+
+.boot-sigil-wrap { display: grid; place-items: center; }
+.boot-sigil {
+  font-family: ui-serif, Georgia, serif;
+  font-size: 64px;
+  font-weight: 600;
+  line-height: 1;
+  background: var(--grad);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+  animation: bootSigilPulse 3s ease-in-out infinite;
+}
+@keyframes bootSigilPulse {
+  0%, 100% { opacity: .92; transform: scale(1); }
+  50%      { opacity: 1;   transform: scale(1.035); }
+}
+
+.boot-brand {
+  text-align: center;
+  display: flex; flex-direction: column; gap: 4px;
+  margin-bottom: 2px;
+}
+.boot-brand-name {
+  font-size: 19px;
+  font-weight: 500;
+  color: var(--fg);
+  letter-spacing: -.01em;
+}
+.boot-brand-tag {
+  font-size: 12px;
+  color: var(--dim);
+  letter-spacing: .02em;
+}
+
+.boot-term {
+  --term-bg:     #0b0b0c;
+  --term-bar:    #232427;
+  --term-fg:     #e6e6e6;
+  --term-dim:    #8e9295;
+  --term-accent: #7c9eff;
+  --term-prompt: #cfd6dd;
+  --term-ring:   rgba(124,158,255,.22);
+  width: 100%;
+  text-align: left;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--term-bg);
+  box-shadow: var(--shadow);
+  overflow: hidden;
+  font-family: ui-monospace, 'SFMono-Regular', 'JetBrains Mono', 'Cascadia Code', Menlo, Consolas, monospace;
+}
+.boot-term-bar {
+  position: relative;
+  display: flex; align-items: center; gap: 8px;
+  height: 36px; padding: 0 12px;
+  background: var(--term-bar);
+  border-bottom: 1px solid rgba(0,0,0,.45);
+}
+/* Window chrome (.term-lights / .term-title / .term-winctl) + the per-OS
+   themes are shared with the auth terminal - defined in the auth block below. */
+.boot-term-body {
+  position: relative;
+  overflow: hidden;
+  padding: 13px 14px;
+  display: flex; flex-direction: column; gap: 6px;
+  font-size: 12.5px;
+  line-height: 1.55;
+  animation: bootCrtFlicker 7s steps(1) infinite;
+}
+.boot-term-body::after {
+  content: "";
+  position: absolute; inset: 0; z-index: 2;
+  pointer-events: none;
+  background: repeating-linear-gradient(0deg, transparent 0 2px, rgba(0,0,0,.16) 2px 3px);
+  opacity: .5;
+  mix-blend-mode: multiply;
+}
+.boot-term-body::before {
+  content: "";
+  position: absolute; left: 0; right: 0; top: -50%; height: 50%; z-index: 1;
+  pointer-events: none;
+  background: linear-gradient(180deg, transparent, rgba(124,158,255,.05), transparent);
+  animation: bootCrtSweep 4.5s linear infinite;
+}
+@keyframes bootCrtSweep {
+  0%   { transform: translateY(0); }
+  100% { transform: translateY(300%); }
+}
+@keyframes bootCrtFlicker {
+  0%, 95%, 100% { opacity: 1; }
+  96% { opacity: .9; }
+  97% { opacity: 1; }
+  98% { opacity: .94; }
+  99% { opacity: 1; }
+}
+
+.boot-log {
+  list-style: none; margin: 0; padding: 0;
+  display: flex; flex-direction: column; gap: 6px;
+}
+.boot-log li {
+  display: flex; align-items: center; gap: 8px;
+  color: var(--term-dim);
+  opacity: 1;
+  transition: opacity .2s ease;
+}
+.boot-term.typing .boot-log li        { opacity: 0; }
+.boot-term.typing .boot-log li.live   { opacity: 1; }
+.boot-prompt { color: var(--term-prompt); font-weight: 600; user-select: none; }
+.boot-prompt::before { content: "$"; }
+.boot-cmd { color: var(--term-fg); white-space: pre; }
+.boot-ok {
+  margin-left: auto;
+  font-size: 10px; font-weight: 700; letter-spacing: .1em;
+  color: var(--ok);
+  padding: 1px 6px; border-radius: 4px;
+  border: 1px solid rgba(123,216,143,.32);
+  background: rgba(123,216,143,.12);
+  transition: opacity .25s ease;
+}
+.boot-term.typing .boot-ok          { opacity: 0; }
+.boot-term.typing .boot-log li.done .boot-ok { opacity: 1; }
+
+.boot-live, .boot-hint { transition: opacity .25s ease; }
+.boot-term.typing .boot-live,
+.boot-term.typing .boot-hint { opacity: 0; }
+.boot-term.typing.log-done .boot-live,
+.boot-term.typing.log-done .boot-hint { opacity: 1; }
+
+.boot-live {
+  display: flex; align-items: center; gap: 8px;
+  margin-top: 2px;
+}
+.boot-status { color: var(--term-fg); font-weight: 500; }
+.boot-caret {
+  width: 7px; height: 14px; flex-shrink: 0;
+  margin-left: -4px;
+  background: var(--term-accent);
+  animation: bootBlink 1.05s steps(1) infinite;
+}
+@keyframes bootBlink {
+  0%, 49%   { opacity: 1; }
+  50%, 100% { opacity: 0; }
+}
+
+.boot-hint {
+  margin-top: 3px;
+  font-size: 11.5px;
+  color: var(--term-dim);
+}
+.boot-hint::before { content: "# "; opacity: .55; }
+.boot-hint[data-tone="err"] { color: var(--warn); }
+.boot-hint[data-tone="ok"]  { color: var(--ok); }
+
+.boot-progress {
+  position: relative;
+  width: 100%; height: 3px;
+  background: var(--bg-4);
+  border-radius: var(--radius-pill);
+  overflow: hidden;
+}
+.boot-progress > span {
+  position: absolute;
+  top: 0; bottom: 0; left: 0;
+  width: 40%;
+  border-radius: var(--radius-pill);
+  background: var(--grad);
+  animation: bootSlide 1.6s ease-in-out infinite;
+}
+@keyframes bootSlide {
+  0%   { transform: translateX(-110%); }
+  100% { transform: translateX(330%); }
+}
+
+.boot-console.finishing .boot-sigil-wrap,
+.boot-console.finishing .boot-brand,
+.boot-console.finishing .boot-progress {
+  transition: opacity .4s ease, transform .4s ease;
+  opacity: 0;
+  transform: translateY(-6px);
+}
+.boot-term.zoom {
+  position: relative; z-index: 2;
+  transform-origin: center center;
+  animation: bootZoom 720ms cubic-bezier(.55, 0, .3, 1) forwards;
+}
+@keyframes bootZoom {
+  0%   { transform: scale(1);    opacity: 1; }
+  28%  { transform: scale(.965); opacity: 1; }   /* slight pull-back */
+  100% { transform: scale(2.4);  opacity: 0; }
+}
+
+/* Shared with the age gate + auth panels below - keep defined. */
+@keyframes bootCardIn {
+  from { opacity: 0; transform: translateY(12px) scale(.98); }
+  to   { opacity: 1; transform: none; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .boot-glow, .boot-sigil, .boot-caret, .boot-progress > span,
+  .boot-term-body, .boot-term-body::before,
+  .boot-overlay:not([data-ready]) .boot-console {
+    animation: none !important;
+  }
+  .boot-caret { opacity: 1; }
+}
+
+html[data-age-gated] #bootOverlay,
+html[data-age-gated] #authScreen,
+html[data-age-gated] #app { visibility: hidden; }
+
+html[data-pre-auth] #app { visibility: hidden; }
+
+#ageGate {
+  position: fixed;
+  inset: 0;
+  z-index: 10000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background:
+    radial-gradient(1200px 800px at 50% 40%, #161b27 0%, var(--bg) 60%, #07080c 100%);
+}
+#ageGate[hidden] { display: none; }
+
+.age-gate-panel {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--space-4);
+  padding: 40px 48px 32px;
+  max-width: 420px;
+  text-align: center;
+  border-radius: 18px;
+  background: linear-gradient(180deg, rgba(28,32,44,.82), rgba(18,22,32,.82));
+  border: 1px solid rgba(255,255,255,.07);
+  box-shadow: 0 30px 80px rgba(0,0,0,.55), inset 0 1px 0 rgba(255,255,255,.06);
+  backdrop-filter: blur(14px) saturate(140%);
+  -webkit-backdrop-filter: blur(14px) saturate(140%);
+  animation: bootCardIn 500ms cubic-bezier(.2,.7,.2,1) both;
+}
+
+.age-gate-panel h1 {
+  margin: 0;
+  font-size: 22px;
+  font-weight: 700;
+  color: var(--fg);
+  letter-spacing: .01em;
+}
+
+.age-gate-panel p {
+  margin: 0;
+  color: var(--muted);
+  font-size: 13px;
+  line-height: 1.6;
+}
+
+.age-gate-panel #ageGateAccept {
+  width: 100%;
+  padding: var(--space-3) var(--space-5);
+  font-size: 14px;
+}
+
+.age-gate-panel #ageGateLeave {
+  width: 100%;
+  padding: var(--space-3) var(--space-5);
+  font-size: 14px;
+  background: transparent;
+  color: var(--muted);
+  border: 1px solid var(--border);
+}
+.age-gate-panel #ageGateLeave:hover {
+  background: var(--bg-3);
+  color: var(--fg);
+}
+
+
+#authScreen {
+  position: fixed;
+  inset: 0;
+  z-index: 9000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background:
+    radial-gradient(1200px 800px at 50% 40%, #161b27 0%, var(--bg) 60%, #07080c 100%);
+}
+#authScreen[hidden] { display: none; }
+
+/* Auth terminal - base theme (mac-like); per-OS overrides further down.
+   --term-* vars are swapped by .auth-term[data-os=…]. */
+.auth-term {
+  --term-bg:     #0c0c0d;
+  --term-bar:    #232427;
+  --term-fg:     #e6e6e6;
+  --term-dim:    #8e9295;
+  --term-accent: #7c9eff;
+  --term-prompt: #cfd6dd;
+  --term-ring:   rgba(124,158,255,.22);
+  width: 100%;
+  max-width: 440px;
+  margin: 16px;
+  border-radius: 12px;
+  overflow: hidden;
+  border: 1px solid rgba(255,255,255,.08);
+  box-shadow: 0 40px 100px rgba(0,0,0,.6), inset 0 1px 0 rgba(255,255,255,.05);
+  color: var(--term-fg);
+  font-family: ui-monospace, 'SFMono-Regular', 'JetBrains Mono', 'Cascadia Code', Menlo, Consolas, monospace;
+  animation: bootCardIn 500ms cubic-bezier(.2,.7,.2,1) both;
+}
+
+/* Title bar. Default: traffic lights left, centered title (macOS Terminal). */
+.auth-term-bar {
+  position: relative;
+  display: flex; align-items: center; gap: 8px;
+  height: 38px; padding: 0 12px;
+  background: var(--term-bar);
+  border-bottom: 1px solid rgba(0,0,0,.45);
+}
+.term-title {
+  position: absolute; left: 0; right: 0;
+  text-align: center;
+  font-size: 12px; color: var(--term-dim);
+  pointer-events: none;
+  padding: 0 70px;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.term-lights { display: inline-flex; gap: 8px; z-index: 1; }
+.term-lights i { width: 12px; height: 12px; border-radius: 50%; display: inline-block; }
+.term-lights i:nth-child(1) { background: #ff5f57; }
+.term-lights i:nth-child(2) { background: #febc2e; }
+.term-lights i:nth-child(3) { background: #28c840; }
+.term-winctl { display: none; margin-left: auto; gap: 16px; z-index: 1; }
+.term-winctl i { font-style: normal; font-size: 12px; line-height: 1; color: var(--term-dim); }
+
+.auth-term-body {
+  background: var(--term-bg);
+  padding: 22px 22px 24px;
+  display: flex; flex-direction: column; gap: 16px;
+  font-size: 12.5px; line-height: 1.5;
+}
+
+.auth-head { display: flex; align-items: center; gap: 12px; }
+.auth-logo {
+  font-family: ui-serif, Georgia, serif;
+  font-size: 40px; font-weight: 600; line-height: 1;
+  background: var(--grad);
+  -webkit-background-clip: text; background-clip: text; color: transparent;
+  filter: drop-shadow(0 1px 6px rgba(0,0,0,.5));
+}
+.auth-wordmark { font-size: 17px; font-weight: 600; letter-spacing: .14em; color: var(--term-fg); }
+
+.auth-motd { display: flex; flex-direction: column; gap: 3px; }
+.auth-dim { color: var(--term-dim); }
+.auth-os-name { color: var(--term-accent); font-weight: 700; font-style: normal; }
+.auth-caret {
+  display: inline-block; width: 7px; height: 13px; vertical-align: -2px;
+  margin-left: 5px; background: var(--term-accent);
+  animation: bootBlink 1.05s steps(1) infinite;
+}
+
+.auth-tabs {
+  display: flex; gap: 20px;
+  border-bottom: 1px solid rgba(255,255,255,.08);
+}
+.auth-tab {
+  background: none; border: none; cursor: pointer;
+  font-family: inherit; font-size: 13px; color: var(--term-dim);
+  padding: 4px 1px 7px; position: relative;
+  transition: color .15s;
+}
+.auth-tab::before { content: "> "; opacity: .45; }
+.auth-tab.active { color: var(--term-fg); }
+.auth-tab.active::after {
+  content: ""; position: absolute; left: 0; right: 0; bottom: -1px; height: 2px;
+  background: var(--term-accent);
+}
+
+.auth-form { display: flex; flex-direction: column; gap: 14px; }
+.auth-form[hidden] { display: none; }
+.auth-field { display: flex; flex-direction: column; gap: 6px; }
+.auth-flabel { font-size: 12px; color: var(--term-dim); }
+.auth-flabel small { opacity: .7; }
+.auth-ps::before { content: "$"; color: var(--term-prompt); font-weight: 700; margin-right: 3px; }
+.auth-field input {
+  width: 100%; box-sizing: border-box;
+  font-family: inherit; font-size: 14px;
+  color: var(--term-fg);
+  background: rgba(255,255,255,.045);
+  border: 1px solid rgba(255,255,255,.1);
+  border-radius: 6px;
+  padding: 9px 11px;
+  outline: none;
+  caret-color: var(--term-accent);
+  transition: border-color .15s, box-shadow .15s;
+}
+.auth-field input:focus {
+  border-color: var(--term-accent);
+  box-shadow: 0 0 0 3px var(--term-ring);
+}
+
+.auth-check {
+  display: flex; align-items: flex-start; gap: 10px;
+  font-size: 12.5px; color: var(--term-dim); cursor: pointer;
+}
+.auth-check input { margin-top: 2px; flex-shrink: 0; accent-color: var(--term-accent); }
+
+.auth-error {
+  font-size: 12.5px; color: #ff8a8a;
+  padding: 8px 10px;
+  background: rgba(255,90,90,.1);
+  border: 1px solid rgba(255,90,90,.3);
+  border-radius: 6px;
+}
+.auth-error::before { content: "✗ "; }
+.auth-error[hidden] { display: none; }
+
+.auth-submit {
+  width: 100%; margin-top: 2px;
+  font-family: inherit; font-size: 13.5px; font-weight: 700; letter-spacing: .02em;
+  padding: 10px 0; border-radius: 6px;
+  background: transparent;
+  color: var(--term-accent);
+  border: 1px solid var(--term-accent);
+  cursor: pointer;
+  transition: background .15s, color .15s;
+}
+.auth-submit::before { content: "➜ "; }
+.auth-submit:hover:not(:disabled) { background: var(--term-accent); color: var(--term-bg); }
+.auth-submit:disabled { opacity: .55; cursor: default; }
+
+
+:is(.auth-term, .boot-term)[data-os="mac"] {
+  --term-bg: #1e1e1e;
+  --term-bar: #343434;
+  --term-accent: #3ac06a;
+  --term-prompt: #d8d8d8;
+  --term-ring: rgba(58,192,106,.22);
+}
+.auth-term[data-os="mac"] .auth-ps::before,
+.boot-term[data-os="mac"] .boot-prompt::before { content: "%"; }
+
+:is(.auth-term, .boot-term)[data-os="windows"] {
+  --term-bg: #012456;
+  --term-bar: #2b2b2b;
+  --term-fg: #eeeeee;
+  --term-dim: #b7c4d8;
+  --term-accent: #ffd866;
+  --term-prompt: #ffe9a8;
+  --term-ring: rgba(255,216,102,.22);
+}
+:is(.auth-term, .boot-term)[data-os="windows"] .term-lights { display: none; }
+:is(.auth-term, .boot-term)[data-os="windows"] .term-winctl { display: inline-flex; }
+:is(.auth-term, .boot-term)[data-os="windows"] .term-title { position: static; text-align: left; padding: 0; margin-right: auto; }
+:is(.auth-term, .boot-term)[data-os="windows"] .term-winctl .wc-close:hover { color: #ff6b6b; }
+.auth-term[data-os="windows"] .auth-ps::before,
+.boot-term[data-os="windows"] .boot-prompt::before { content: ">"; }
+
+:is(.auth-term, .boot-term)[data-os="linux"] {
+  --term-bg: #300a24;
+  --term-bar: #2c2c2c;
+  --term-fg: #eeeeee;
+  --term-dim: #c0a8ba;
+  --term-accent: #e95420;
+  --term-prompt: #5fd35f;
+  --term-ring: rgba(233,84,32,.22);
+}
+:is(.auth-term, .boot-term)[data-os="linux"] .term-lights { display: none; }
+:is(.auth-term, .boot-term)[data-os="linux"] .term-winctl { display: inline-flex; gap: 8px; }
+:is(.auth-term, .boot-term)[data-os="linux"] .term-title { position: static; text-align: left; padding: 0; margin-right: auto; }
+:is(.auth-term, .boot-term)[data-os="linux"] .term-winctl i {
+  width: 20px; height: 20px; border-radius: 50%;
+  display: grid; place-items: center; font-size: 9px;
+  background: rgba(255,255,255,.12); color: #e6e6e6;
+}
+:is(.auth-term, .boot-term)[data-os="linux"] .term-winctl .wc-close { background: #e95420; color: #fff; }
+.auth-term[data-os="linux"] .auth-ps::before,
+.boot-term[data-os="linux"] .boot-prompt::before { content: "$"; }
+
+@media (prefers-reduced-motion: reduce) {
+  .auth-term { animation: none !important; }
+  .auth-caret { animation: none !important; opacity: 1; }
+}
+</style>
+
+<!-- Fetched during parse but applied by boot-gate.js: the CSP forbids the
+     usual media="print" onload= trick, and blocking on the full sheet would
+     cost a round trip the auth screen does not need. -->
+<link rel="preload" as="style" href="styles.css?v=40">
+<link rel="preload" as="style" href="trip-loader.css?v=4">
+<noscript><link rel="stylesheet" href="styles.css?v=40"></noscript>
+
+<script src="js/viewport.js?v=2"></script>
+<script src="js/boot-gate.js?v=2"></script>
+
+<script defer src="js/loader.js?v=1"></script>
+<script defer src="js/auth.js?v=7"></script>
+<script defer src="js/prefs.js?v=4"></script>
+<script defer src="js/names.js?v=2"></script>
+<script defer src="js/chat-api.js?v=3"></script>
+<script defer src="js/ui.js?v=7"></script>
+<script defer src="js/history.js?v=7"></script>
+<script defer src="js/boot-fx.js?v=5"></script>
+<script defer src="js/app.js?v=36"></script>
 </head>
 <body>
 
@@ -443,7 +1049,7 @@
 
       <div class="sidebar-footer">
         <button class="user-chip" id="userChipBtn" type="button" title="Open settings">
-          <span class="user-avatar" id="userAvatar"><img src="jun_os.png" alt=""></span>
+          <span class="user-avatar" id="userAvatar"><img src="jun_os_avatar.png?v=1" alt="" width="32" height="32"></span>
           <span class="user-info">
             <span class="user-name" id="userEmail">…</span>
           </span>
@@ -512,30 +1118,5 @@
   </div>
 </div>
 
-<script src="https://cdn.jsdelivr.net/npm/marked@12.0.2/marked.min.js"></script>
-<script src="https://cdn.jsdelivr.net/npm/dompurify@3.0.11/dist/purify.min.js"></script>
-<script src="https://cubism.live2d.com/sdk-web/cubismcore/live2dcubismcore.min.js"></script>
-<script src="https://cdn.jsdelivr.net/npm/pixi.js@6.5.10/dist/browser/pixi.min.js"></script>
-<script src="https://cdn.jsdelivr.net/npm/pixi-live2d-display@0.4.0/dist/cubism4.min.js"></script>
-<script src="js/auth.js?v=6"></script>
-<script src="js/prefs.js?v=3"></script>
-<script src="js/names.js?v=1"></script>
-<script src="js/live2d.js?v=27"></script>
-<script src="js/actions.js?v=9"></script>
-<script src="js/mods.js?v=9"></script>
-<script src="js/outfit.js?v=33"></script>
-<script src="js/touch.js?v=11"></script>
-<script src="js/chat-api.js?v=2"></script>
-<script src="js/tts.js?v=10"></script>
-<script src="js/wardrobe-open-lines.js?v=2"></script>
-<script src="js/wardrobe-reactions.js?v=13"></script>
-<script src="js/voice.js?v=1"></script>
-<script src="js/voicemode.js?v=2"></script>
-<script src="js/ui.js?v=6"></script>
-<script src="js/history.js?v=6"></script>
-<script src="js/devhud.js?v=2"></script>
-<script src="js/boot-fx.js?v=4"></script>
-<script src="js/trip-loader.js?v=2"></script>
-<script src="js/app.js?v=35"></script>
 </body>
 </html>
