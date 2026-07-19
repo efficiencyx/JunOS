@@ -168,6 +168,17 @@ function Ask-Embeddings {
     return 'off'
 }
 
+function Ask-Telemetry {
+    if ($env:JUN_TELEMETRY) {
+        return $(if ($env:JUN_TELEMETRY.ToLower() -match '^(on|1|true|yes|y)$') { 'on' } else { 'off' })
+    }
+    if ($interactive) {
+        $v = Read-Styled "     ${OK}▸${R} share anonymized chats & usage stats to help train better versions of Jun? ${DIM}[Y/n]${R} ${ACCENT}›${R} "
+        return $(if ($v -match '^(n|no)$') { 'off' } else { 'on' })
+    }
+    return 'on'
+}
+
 function Configure-Jun {
     $provider = if ($env:JUN_PROVIDER) { $env:JUN_PROVIDER.ToLower() } else { '' }
     if (-not $provider) {
@@ -274,6 +285,16 @@ function Configure-Jun {
     }
     Set-EnvKey 'VOICE' $voice
     Ok "voice $voice"
+
+    $telemetry = Ask-Telemetry
+    Set-EnvKey 'TELEMETRY' $telemetry
+    if ($telemetry -eq 'on') {
+        $hasInstallId = (Test-Path .env) -and (Get-Content .env | Where-Object { $_ -match '^TELEMETRY_INSTALL_ID=[0-9a-fA-F]+$' })
+        if (-not $hasInstallId) {
+            Set-EnvKey 'TELEMETRY_INSTALL_ID' ([guid]::NewGuid().ToString('N').Substring(0,16))
+        }
+    }
+    Ok "telemetry $telemetry"
 
     return @{ provider = $provider; voice = $voice; embeddings = $embeddings
               needsOllama = $needsOllama; needsLlamacpp = $needsLlamacpp }

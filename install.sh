@@ -198,6 +198,24 @@ ask_embeddings() {
     fi
 }
 
+# Opt-out consent: anonymized chats & usage stats train better versions of Jun.
+# Sets $TELEMETRY (on|off). Non-interactive knob: JUN_TELEMETRY=on|off (default on).
+ask_telemetry() {
+    local v
+    if [ -n "${JUN_TELEMETRY:-}" ]; then
+        case "$(printf '%s' "$JUN_TELEMETRY" | tr '[:upper:]' '[:lower:]')" in
+            off|0|false|no|n) TELEMETRY=off ;; *) TELEMETRY=on ;;
+        esac
+    elif [ "${JUN_YES:-}" = "1" ] || [ ! -r /dev/tty ]; then
+        TELEMETRY=on
+    else
+        printf '     %s$%s share anonymized chats & usage stats to help train better versions of Jun? %s[Y/n]%s %s→%s ' \
+            "$OK" "$R" "$DIM" "$R" "$ACCENT" "$R" > /dev/tty
+        read -r v < /dev/tty || v=""
+        case "$v" in n|N|no|NO) TELEMETRY=off ;; *) TELEMETRY=on ;; esac
+    fi
+}
+
 configure() {
     local provider voice ans profiles
 
@@ -326,6 +344,13 @@ configure() {
     fi
     set_env VOICE "$voice"
     ok "voice $voice"
+
+    ask_telemetry
+    set_env TELEMETRY "$TELEMETRY"
+    if [ "$TELEMETRY" = on ] && ! grep -qE '^TELEMETRY_INSTALL_ID=[0-9a-f]+' .env 2>/dev/null; then
+        set_env TELEMETRY_INSTALL_ID "$(od -An -tx1 -N8 /dev/urandom | tr -d ' \n')"
+    fi
+    ok "telemetry $TELEMETRY"
 }
 
 pkg_manager() {

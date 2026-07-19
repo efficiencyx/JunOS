@@ -72,7 +72,22 @@ exposed as `.env` knobs in `docker-compose.yml` — they're internal to the
 sidecar image (bare-metal `start.ps1` does override `TTS_HOST`/`TTS_PORT`
 directly as process env when launching the venv).
 
-## 5. Ollama tuning
+## 5. Telemetry
+
+| Variable | Default | Consumed by | What it does |
+|---|---|---|---|
+| `TELEMETRY` | `on` when chosen in an installer | `webapp/api/chat.php`, `rating.php` | Set to `off` to stop sending telemetry. Restart after changing it. |
+| `TELEMETRY_INSTALL_ID` | random 16-hex-character id from the installer | `webapp/api/_lib.php` | Anonymous per-installation identifier. It is kept when reinstalling. |
+| `TELEMETRY_ENDPOINT` | project metrics endpoint | `webapp/api/_lib.php` | URL of the maintainer-hosted telemetry ingest endpoint. |
+
+When enabled, telemetry sends chat turns (including user-typed text exactly as
+written and assistant replies, with `{f_playerName}` / `{f_botName}` placeholders
+left intact), model usage statistics, and thumb ratings. It is used to train
+better versions of Jun. The data is anonymized with the random installation id;
+the metrics server stores only a daily-salted IP hash, never a raw IP address.
+Opt out at any time by setting `TELEMETRY=off` in `.env` and restarting Jun.
+
+## 6. Ollama tuning
 
 | Variable | Default | Consumed by | What it does |
 |---|---|---|---|
@@ -82,21 +97,21 @@ directly as process env when launching the venv).
 | `OLLAMA_MAX_LOADED_MODELS` | `2` | `ollama` service | Cap on simultaneously loaded models (room for the chat model + `nomic-embed-text`). |
 | `OLLAMA_KEEP_ALIVE` | `5m` | `ollama` service | How long an idle model stays loaded before unloading. |
 
-## 6. State & persistence
+## 7. State & persistence
 
 | Variable | Default | Consumed by | What it does |
 |---|---|---|---|
 | `OMEGA_STATE_DIR` | `/var/lib/omega` | `webapp/api/_lib.php` (`state_dir()`) | Directory for the SQLite DB and rate-limit flat files. Under Docker this is fixed at the default (mounted as the `omega_state` named volume) — the var is not forwarded into the `php` container's environment, so this is effectively **bare-metal only** (`start.ps1` points it at `runtime\state`). |
 | `MEMORY_DIR` | `<state dir>/memory` (i.e. `/var/lib/omega/memory` under Docker) | `webapp/api/_lib.php` (`memory_file_path()`) | Directory holding per-user durable-memory JSONL files. Same Docker/bare-metal split as `OMEGA_STATE_DIR` above. **Migration note:** builds before 2026-07 defaulted to `/var/lib/jun/memory`, a path that was never mounted as a volume under Docker — memories written there were silently lost on every container recreation. The current default lives inside the persisted `omega_state` volume, so it survives rebuilds/restarts. |
 
-## 7. Bare-metal Windows only
+## 8. Bare-metal Windows only
 
 | Variable | Default | Consumed by | What it does |
 |---|---|---|---|
 | `JUN_PORT` | `8080` | `start.ps1` | Port PHP's built-in server serves the web UI on. |
 | `LLAMACPP_PORT` | `8081` | `start.ps1`, `install.ps1` | Port the bare-metal managed `llama-server` listens on. `8080` is avoided because it collides with `JUN_PORT`. |
 
-## 8. GPU overlays
+## 9. GPU overlays
 
 | Variable | Default | Consumed by | What it does |
 |---|---|---|---|

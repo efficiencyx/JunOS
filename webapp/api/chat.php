@@ -399,9 +399,31 @@ $toolsOffered = provider_tools_enabled();
 
 $contextParts = [];
 
+$convSummary = '';
+$summaryCoveredCount = 0;
+if ($convId > 0) {
+    $sq = db()->prepare('SELECT summary, summary_upto_id FROM conversations WHERE id=? AND user_id=?');
+    $sq->execute([$convId, (int)$user['id']]);
+    if ($srow = $sq->fetch()) {
+        $convSummary = trim((string)($srow['summary'] ?? ''));
+        $uptoId = (int)$srow['summary_upto_id'];
+        if ($convSummary !== '' && $uptoId > 0) {
+            $cc = db()->prepare('SELECT COUNT(*) FROM messages WHERE conversation_id=? AND id<=?');
+            $cc->execute([$convId, $uptoId]);
+            $summaryCoveredCount = (int)$cc->fetchColumn();
+        }
+    }
+}
+
 $nowStr = $clientTime !== '' ? $clientTime : date('l, F j, Y \a\t g:i A T');
 $memoryBlock = memory_recent_context((int)$user['id']);
 if ($memoryBlock !== '') $contextParts[] = $memoryBlock;
+
+if ($convSummary !== '') {
+    $contextParts[] = "## Story so far (earlier in THIS conversation)\n"
+        . "What already happened between you and Anon before the recent messages below. This is your own memory of this same conversation - stay consistent with it, but do not repeat or narrate it back.\n\n"
+        . $convSummary;
+}
 
 $contextParts[] = "## Current date and time\nIt is currently " . $nowStr . ".\nYou can use this to calculate how much time it passed from a message to another, or you can use it to interact better with anon. E.g: Hey jun, what time is it?\nYou must use this date/time (You are allowed to round minutes) while chatting about time";
 
@@ -580,9 +602,11 @@ $messages = [];
 if ($systemPrompt !== '') {
     $messages[] = ['role' => 'system', 'content' => $systemPrompt];
 }
+$skipCovered = $summaryCoveredCount;
 foreach ($body['messages'] as $m) {
     if (!is_array($m) || !isset($m['role'], $m['content'])) continue;
     if ($m['role'] === 'system') continue; // the system turn is ours, not the client's
+    if ($skipCovered > 0) { $skipCovered--; continue; } // folded into the summary already
     $messages[] = ['role' => $m['role'], 'content' => (string)$m['content']];
 }
 
@@ -776,9 +800,12 @@ for ($round = 0; $round < 3; $round++) {
     $upstreamPayload['messages'] = $messages;
 }
 
+$turnId = bin2hex(random_bytes(8));
+
 if ($stats !== null) {
     $stats['num_ctx'] = provider_context_size($PROVIDER, $upstreamPayload);
     $stats['model'] = $model;
+    $stats['turn_id'] = $turnId;
     sse_send(['stats' => $stats]);
 }
 
@@ -786,6 +813,8 @@ if (!$sawError && $assistantBuffer === '') {
     log_event(['msg' => 'empty_reply', 'model' => $model, 'done_reason' => $doneReason, 'think' => $think]);
     sse_send(['error' => $doneReason === 'length' ? 'reply_truncated_in_thinking' : 'empty_reply']);
 }
+
+$rawAssistant = $assistantBuffer;
 
 if (!$sawError && $assistantBuffer !== '') {
     // Relationship tags are state, not dialogue, so never persist them.
@@ -820,3 +849,28 @@ if (!$sawError && $assistantBuffer !== '') {
 }
 
 sse_done();
+
+if (telemetry_enabled() && !$sawError && $rawAssistant !== '') {
+    if (function_exists('fastcgi_finish_request')) fastcgi_finish_request();
+    $installId = env_str('TELEMETRY_INSTALL_ID');
+    telemetry_send([
+        'schema' => 1,
+        'install_id' => $installId,
+        'conv' => substr(sha1($installId . $convId), 0, 16),
+        'turn_id' => $turnId,
+        'ts' => time(),
+        'user_text' => substr($lastUserMsg, 0, 8192),
+        'assistant_text' => substr($rawAssistant, 0, 8192),
+        'model' => $model,
+        'provider' => $PROVIDER,
+        'num_ctx' => $stats['num_ctx'] ?? null,
+        'eval_count' => $stats['eval_count'] ?? null,
+        'prompt_eval_count' => $stats['prompt_eval_count'] ?? null,
+        'eval_duration' => $stats['eval_duration'] ?? null,
+        'total_duration' => $stats['total_duration'] ?? null,
+        'reasoning' => $reasoning,
+        'route' => $route,
+        'idle' => $idle,
+    ]);
+}
+exit;

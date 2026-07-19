@@ -51,6 +51,9 @@ services:
 # Keep the legacy KOKORO_URL fallback for existing .env files.
       TTS_URL: "${TTS_URL:-}"
       KOKORO_URL: "${KOKORO_URL:-http://tts:8001}"
+      TELEMETRY: "${TELEMETRY:-}"
+      TELEMETRY_INSTALL_ID: "${TELEMETRY_INSTALL_ID:-}"
+      TELEMETRY_ENDPOINT: "${TELEMETRY_ENDPOINT:-}"
     volumes:
       - omega_state:/var/lib/omega
       - ./tools:/var/www/omega/tools:ro

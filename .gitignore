@@ -45,3 +45,6 @@ webapp/lore_meta.json
 # deploy state (created at runtime)
 data/
 letsencrypt/
+
+# maintainer-hosted telemetry endpoint — kept local, not part of the app
+metrics-server/
