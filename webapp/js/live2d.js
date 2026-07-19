@@ -22,6 +22,20 @@ window.Live2D = (function () {
   let userOffsetY = 0;
   let hasUserPos = false;   // true once the user drags her or a saved position loads
 
+  const CAMERA_STORAGE_KEY = 'l2d.camera';
+  const CAMERA_STORAGE_VERSION = 2;
+  let cameraStates = { phone: null, desktop: null };
+  let legacyDesktopCamera = null;
+  let cameraMode = 'desktop';
+  let cameraPersistenceEnabled = true;
+  let stageElement = null;
+  let stageResizeObserver = null;
+  let stageResizeFrame = 0;
+  let visualRefitPending = false;
+  let removeViewportSubscription = null;
+  let lastUsableStage = null;
+  let lastFittedScreen = null;
+
   let lastTickMs = performance.now();
   let onMissingParam = null;        // callback(name)
   const reportedMissing = new Set();
@@ -94,12 +108,18 @@ window.Live2D = (function () {
     onStatus = onStatus || (() => { });
     onStatus('Initializing PIXI...');
 
+    stageElement = stageEl;
+    cameraMode = currentCameraMode();
+    cameraPersistenceEnabled = !ignoreSavedPos;
+    const initialSize = measureStage();
+
     app = new PIXI.Application({
-      resizeTo: stageEl,
+      width: initialSize.width,
+      height: initialSize.height,
       backgroundAlpha: 0,          // transparent canvas: model floats on the page background
       antialias: true,
       autoDensity: true,
-      resolution: window.devicePixelRatio || 1,
+      resolution: rendererResolution(cameraMode),
       preserveDrawingBuffer: true,
     });
     stageEl.appendChild(app.view);
@@ -169,19 +189,20 @@ window.Live2D = (function () {
 
     installVariantCompositor();
 
-    loadPos();
+    const importedLegacy = loadPos();
     if (ignoreSavedPos) { userOffsetX = 0; userOffsetY = 0; userZoom = 1; hasUserPos = true; }
     fitModel();
-    window.addEventListener('resize', () => {
-      if (cameraPreset === 'face' && !cameraTween) {
-        const t = computeFaceCamera();
-        userZoom = t.zoom; userOffsetX = t.offsetX; userOffsetY = t.offsetY;
-      }
-      fitModel();
-    });
+    if (importedLegacy) {
+      cameraStates.desktop = captureCameraState();
+      legacyDesktopCamera = null;
+      writeCameraStates();
+    }
+    watchStageSize();
 
     window.addEventListener('wheel', (e) => {
       if (cameraPreset === 'face') return;
+      if (document.body.classList.contains('sidebar-open')) return;
+      if (isInteractiveTarget(e.target)) return;
       if (!isOverModel(e.clientX, e.clientY)) return;
       e.preventDefault();
       if (e.shiftKey) {
@@ -198,30 +219,47 @@ window.Live2D = (function () {
       savePos();
     }, { passive: false });
 
-    let dragging = false, dragPX = 0, dragPY = 0, dragOX = 0, dragOY = 0;
+    let dragging = false, dragMoved = false, dragPointerId = -1;
+    let dragPX = 0, dragPY = 0, dragOX = 0, dragOY = 0;
     window.addEventListener('pointerdown', (e) => {
       if (e.button !== 0) return;
+      if (dragging) return;
       if (cameraPreset === 'face') return;
       if (document.body.classList.contains('wardrobe-open')) return;
+      if (document.body.classList.contains('sidebar-open')) return;
       if (isInteractiveTarget(e.target)) return;
       if (!isOverModel(e.clientX, e.clientY)) return;
+      if (e.pointerType === 'touch') e.preventDefault();
       dragging = true;
+      dragMoved = false;
+      dragPointerId = e.pointerId;
       dragPX = e.clientX; dragPY = e.clientY;
       dragOX = userOffsetX; dragOY = userOffsetY;
-      hasUserPos = true;
-      document.body.classList.add('l2d-dragging');
+      try { e.target.setPointerCapture(e.pointerId); } catch (err) { }
     });
     window.addEventListener('pointermove', (e) => {
-      if (!dragging) return;
-      userOffsetX = dragOX + (e.clientX - dragPX);
-      userOffsetY = dragOY + (e.clientY - dragPY);
+      if (!dragging || e.pointerId !== dragPointerId) return;
+      if (document.body.classList.contains('l2d-touch-pending') || document.body.classList.contains('l2d-touching')) return;
+      const dx = e.clientX - dragPX;
+      const dy = e.clientY - dragPY;
+      if (!dragMoved) {
+        if (Math.hypot(dx, dy) < 4) return;
+        dragMoved = true;
+        hasUserPos = true;
+        document.body.classList.add('l2d-dragging');
+      }
+      userOffsetX = dragOX + dx;
+      userOffsetY = dragOY + dy;
       fitModel();
     });
-    const endDrag = () => {
-      if (!dragging) return;
+    const endDrag = (e) => {
+      if (!dragging || e.pointerId !== dragPointerId) return;
+      const moved = dragMoved;
       dragging = false;
+      dragMoved = false;
+      dragPointerId = -1;
       document.body.classList.remove('l2d-dragging');
-      savePos();
+      if (moved) savePos();
     };
     window.addEventListener('pointerup', endDrag);
     window.addEventListener('pointercancel', endDrag);
@@ -378,28 +416,288 @@ window.Live2D = (function () {
     return { paramIds: Array.from(paramIndex.keys()) };
   }
 
+  function boundNumber(value, min, max) {
+    return Math.max(min, Math.min(max, value));
+  }
+
+  function currentCameraMode() {
+    try {
+      return window.MobileViewport && window.MobileViewport.isPhone() ? 'phone' : 'desktop';
+    } catch (e) {
+      return 'desktop';
+    }
+  }
+
+  function rendererResolution(mode) {
+    const resolution = window.devicePixelRatio || 1;
+    return mode === 'phone' ? Math.min(2, resolution) : resolution;
+  }
+
+  function measureStage() {
+    const rect = stageElement && stageElement.getBoundingClientRect();
+    const width = rect && rect.width ? rect.width : (stageElement && stageElement.clientWidth) || window.innerWidth;
+    const height = rect && rect.height ? rect.height : (stageElement && stageElement.clientHeight) || window.innerHeight;
+    return {
+      width: Math.max(1, Math.round(width || 1)),
+      height: Math.max(1, Math.round(height || 1)),
+    };
+  }
+
+  function stageScreen() {
+    const screen = app && (app.screen || (app.renderer && app.renderer.screen));
+    if (screen && screen.width > 0 && screen.height > 0) {
+      return { width: screen.width, height: screen.height };
+    }
+    return measureStage();
+  }
+
+  function textEntryFocused() {
+    const activeElement = document.activeElement;
+    return !!(activeElement && (
+      activeElement.matches('input, textarea, select') || activeElement.isContentEditable
+    ));
+  }
+
+  function usableStage(mode = cameraMode) {
+    const screen = stageScreen();
+    const full = { x: 0, y: 0, width: screen.width, height: screen.height };
+    if (mode !== 'phone' || !window.MobileViewport || !app || !app.view) return full;
+
+    let visual;
+    try { visual = window.MobileViewport.getVisualRect(); } catch (e) { return full; }
+    const canvas = app.view.getBoundingClientRect();
+    if (!visual || !canvas.width || !canvas.height) return full;
+
+    const visualRight = Number.isFinite(visual.right) ? visual.right : visual.left + visual.width;
+    const visualBottom = Number.isFinite(visual.bottom) ? visual.bottom : visual.top + visual.height;
+    const left = Math.max(canvas.left, visual.left);
+    const top = Math.max(canvas.top, visual.top);
+    const right = Math.min(canvas.right, visualRight);
+    const bottom = Math.min(canvas.bottom, visualBottom);
+    if (right - left < 1 || bottom - top < 1) return full;
+
+    const scaleX = screen.width / canvas.width;
+    const scaleY = screen.height / canvas.height;
+    const candidate = {
+      x: (left - canvas.left) * scaleX,
+      y: (top - canvas.top) * scaleY,
+      width: (right - left) * scaleX,
+      height: (bottom - top) * scaleY,
+    };
+    if (textEntryFocused() && lastUsableStage && lastFittedScreen
+      && Math.abs(screen.width - lastFittedScreen.width) < 1
+      && candidate.height < lastUsableStage.height - 40) {
+      return { ...lastUsableStage };
+    }
+    return candidate;
+  }
+
   function fitModel() {
     if (!model || !app) return;
-    const dpr = window.devicePixelRatio || 1;
-    const stageW = app.view.width / dpr;
-    const stageH = app.view.height / dpr;
+    const usable = usableStage();
     const margin = 0.92;
-    const sx = (stageW * margin) / model.internalModel.width;
-    const sy = (stageH * margin) / model.internalModel.height;
+    const sx = (usable.width * margin) / model.internalModel.width;
+    const sy = (usable.height * margin) / model.internalModel.height;
+    userZoom = boundNumber(Number.isFinite(userZoom) ? userZoom : 1, 0.2, 5);
     const s = Math.min(sx, sy) * userZoom;
     const modelW = model.internalModel.width * s;
     const modelH = model.internalModel.height * s;
-    const baseX = stageW / 2 - modelW / 2;
-    const baseY = stageH / 2 - modelH / 2;
-    if (!hasUserPos) { userOffsetX = stageW * 0.26; userOffsetY = 0; }
-    const KEEP = 120;
-    const mx = Math.max(-modelW + KEEP, Math.min(stageW - KEEP, baseX + userOffsetX));
-    const my = Math.max(-modelH + KEEP, Math.min(stageH - KEEP, baseY + userOffsetY));
+    const baseX = usable.x + usable.width / 2 - modelW / 2;
+    const baseY = usable.y + usable.height / 2 - modelH / 2;
+    if (!hasUserPos) {
+      userOffsetX = cameraMode === 'phone' ? 0 : usable.width * 0.26;
+      userOffsetY = 0;
+    }
+    const keepX = Math.min(120, modelW, usable.width);
+    const keepY = Math.min(120, modelH, usable.height);
+    const mx = boundNumber(baseX + userOffsetX, usable.x - modelW + keepX, usable.x + usable.width - keepX);
+    const my = boundNumber(baseY + userOffsetY, usable.y - modelH + keepY, usable.y + usable.height - keepY);
     userOffsetX = mx - baseX;
     userOffsetY = my - baseY;
     model.scale.set(s);
     model.x = mx;
     model.y = my;
+    lastUsableStage = { ...usable };
+    lastFittedScreen = stageScreen();
+  }
+
+  function captureCameraState(usable = lastUsableStage || usableStage()) {
+    if (!model || !usable || usable.width < 1 || usable.height < 1) return null;
+    const centerX = model.x + model.internalModel.width * model.scale.x / 2;
+    const centerY = model.y + model.internalModel.height * model.scale.y / 2;
+    return {
+      centerX: (centerX - usable.x) / usable.width,
+      centerY: (centerY - usable.y) / usable.height,
+      zoom: userZoom,
+    };
+  }
+
+  function sanitizeCameraState(state) {
+    if (!state || !Number.isFinite(state.centerX) || !Number.isFinite(state.centerY) || !Number.isFinite(state.zoom)) {
+      return null;
+    }
+    return {
+      centerX: boundNumber(state.centerX, -4, 5),
+      centerY: boundNumber(state.centerY, -4, 5),
+      zoom: boundNumber(state.zoom, 0.2, 5),
+    };
+  }
+
+  function applyCameraState(state) {
+    state = sanitizeCameraState(state);
+    if (!state) return false;
+    const usable = usableStage();
+    userZoom = state.zoom;
+    userOffsetX = (state.centerX - 0.5) * usable.width;
+    userOffsetY = (state.centerY - 0.5) * usable.height;
+    hasUserPos = true;
+    return true;
+  }
+
+  function resetCameraForMode(mode = cameraMode) {
+    userZoom = 1;
+    userOffsetX = mode === 'phone' ? 0 : usableStage(mode).width * 0.26;
+    userOffsetY = 0;
+    hasUserPos = false;
+  }
+
+  function cameraSnapshotForMode(mode) {
+    const state = sanitizeCameraState(cameraStates[mode]);
+    return { mode, state, hasUserPos: !!state };
+  }
+
+  function currentCameraSnapshot() {
+    return {
+      mode: cameraMode,
+      state: hasUserPos ? captureCameraState() : null,
+      hasUserPos,
+    };
+  }
+
+  function cameraTarget(snapshot) {
+    if (snapshot && snapshot.hasUserPos && sanitizeCameraState(snapshot.state)) {
+      const usable = usableStage();
+      const state = sanitizeCameraState(snapshot.state);
+      return {
+        zoom: state.zoom,
+        offsetX: (state.centerX - 0.5) * usable.width,
+        offsetY: (state.centerY - 0.5) * usable.height,
+      };
+    }
+    const usable = usableStage();
+    return {
+      zoom: 1,
+      offsetX: cameraMode === 'phone' ? 0 : usable.width * 0.26,
+      offsetY: 0,
+    };
+  }
+
+  function restoreCameraForMode(mode) {
+    const state = cameraPersistenceEnabled && sanitizeCameraState(cameraStates[mode]);
+    if (state) {
+      applyCameraState(state);
+    } else if (mode === 'desktop' && legacyDesktopCamera) {
+      userOffsetX = legacyDesktopCamera.x;
+      userOffsetY = legacyDesktopCamera.y;
+      userZoom = legacyDesktopCamera.zoom;
+      hasUserPos = true;
+      fitModel();
+      cameraStates.desktop = captureCameraState();
+      legacyDesktopCamera = null;
+      writeCameraStates();
+      return;
+    } else {
+      resetCameraForMode(mode);
+    }
+    fitModel();
+  }
+
+  function queueStageResize() {
+    if (stageResizeFrame) return;
+    stageResizeFrame = requestAnimationFrame(() => {
+      stageResizeFrame = 0;
+      resizeStage();
+    });
+  }
+
+  function resizeStage() {
+    if (!app || !app.renderer) return;
+    const nextMode = currentCameraMode();
+    const previousMode = cameraMode;
+    const screen = stageScreen();
+    const nextSize = measureStage();
+    const nextResolution = rendererResolution(nextMode);
+    const visualChanged = visualRefitPending;
+    visualRefitPending = false;
+    const modeChanged = nextMode !== previousMode;
+    const sizeChanged = Math.abs(screen.width - nextSize.width) >= 1 || Math.abs(screen.height - nextSize.height) >= 1;
+    const resolutionChanged = !Number.isFinite(app.renderer.resolution)
+      || Math.abs(app.renderer.resolution - nextResolution) >= 0.01;
+    if (!modeChanged && !sizeChanged && !resolutionChanged && !visualChanged) return;
+    if (!modeChanged && !resolutionChanged && nextMode === 'phone'
+      && textEntryFocused() && Math.abs(screen.width - nextSize.width) < 1) return;
+
+    const wasTweening = !!cameraTween;
+    const currentState = cameraPreset === 'default' && hasUserPos && !wasTweening
+      ? captureCameraState()
+      : null;
+    if (modeChanged && cameraPersistenceEnabled && currentState) cameraStates[previousMode] = currentState;
+    if (wasTweening) cancelCameraTween();
+    if (resolutionChanged) app.renderer.resolution = nextResolution;
+    if (sizeChanged || resolutionChanged) app.renderer.resize(nextSize.width, nextSize.height);
+    cameraMode = nextMode;
+    if (modeChanged && cameraPersistenceEnabled && cameraPreset === 'default' && wasTweening) {
+      savedCamera = cameraSnapshotForMode(nextMode);
+    }
+
+    if (cameraPreset === 'face') {
+      if (modeChanged && cameraPersistenceEnabled) savedCamera = cameraSnapshotForMode(nextMode);
+      const target = computeFaceCamera();
+      userZoom = target.zoom;
+      userOffsetX = target.offsetX;
+      userOffsetY = target.offsetY;
+      hasUserPos = true;
+      fitModel();
+      return;
+    }
+
+    if (wasTweening && savedCamera) {
+      const target = cameraTarget(savedCamera);
+      userZoom = target.zoom;
+      userOffsetX = target.offsetX;
+      userOffsetY = target.offsetY;
+      hasUserPos = savedCamera.hasUserPos;
+      savedCamera = null;
+      fitModel();
+    } else if (modeChanged && cameraPersistenceEnabled) {
+      savedCamera = null;
+      restoreCameraForMode(nextMode);
+    } else if (currentState) {
+      applyCameraState(currentState);
+      fitModel();
+    } else {
+      fitModel();
+    }
+  }
+
+  function watchStageSize() {
+    if (stageResizeObserver) stageResizeObserver.disconnect();
+    if (removeViewportSubscription) removeViewportSubscription();
+
+    if (window.ResizeObserver) {
+      stageResizeObserver = new ResizeObserver(queueStageResize);
+      stageResizeObserver.observe(stageElement);
+    } else {
+      window.addEventListener('resize', queueStageResize);
+    }
+
+    if (window.MobileViewport && window.MobileViewport.subscribe) {
+      removeViewportSubscription = window.MobileViewport.subscribe((event) => {
+        if (event.visualChanged && event.isPhone) visualRefitPending = true;
+        if (event.phoneChanged || visualRefitPending || currentCameraMode() !== cameraMode) queueStageResize();
+      });
+    }
+    queueStageResize();
   }
 
   let cameraPreset = 'default';
@@ -411,21 +709,19 @@ window.Live2D = (function () {
   const FACE_HEAD_FRAC = 0.30;
 
   function computeFaceCamera() {
-    const dpr = window.devicePixelRatio || 1;
-    const stageW = app.view.width / dpr;
-    const stageH = app.view.height / dpr;
+    const usable = usableStage();
     const margin = 0.92;
     const sBase = Math.min(
-      (stageW * margin) / model.internalModel.width,
-      (stageH * margin) / model.internalModel.height
+      (usable.width * margin) / model.internalModel.width,
+      (usable.height * margin) / model.internalModel.height
     );
-    const zoom = Math.min(5, (stageH * FACE_HEAD_FRAC) / (sBase * model.internalModel.height * 0.22));
+    const zoom = Math.min(5, (usable.height * FACE_HEAD_FRAC) / (sBase * model.internalModel.height * 0.22));
     const modelH = model.internalModel.height * sBase * zoom;
-    const baseY = stageH / 2 - modelH / 2;
+    const baseY = usable.y + usable.height / 2 - modelH / 2;
     return {
       zoom,
       offsetX: 0,
-      offsetY: (stageH * FACE_SCREEN_Y - FACE_CENTER_FRAC * modelH) - baseY,
+      offsetY: (usable.y + usable.height * FACE_SCREEN_Y - FACE_CENTER_FRAC * modelH) - baseY,
     };
   }
 
@@ -452,22 +748,19 @@ window.Live2D = (function () {
   function setCameraPreset(preset) {
     if (!model || !app || preset === cameraPreset) return;
     if (preset === 'face') {
-      savedCamera = { zoom: userZoom, offsetX: userOffsetX, offsetY: userOffsetY, hasUserPos };
+      savedCamera = currentCameraSnapshot();
       cameraPreset = 'face';
       hasUserPos = true; // suppress the default rest offset in fitModel
       tweenCameraTo(computeFaceCamera(), 450);
     } else {
       cameraPreset = 'default';
-      const back = savedCamera || { zoom: 1, offsetX: 0, offsetY: 0, hasUserPos: false };
-      savedCamera = null;
-      if (!back.hasUserPos) {
-        const dpr = window.devicePixelRatio || 1;
-        const restX = (app.view.width / dpr) * 0.26;
-        tweenCameraTo({ zoom: back.zoom, offsetX: restX, offsetY: 0 }, 450,
-          () => { hasUserPos = false; fitModel(); });
-      } else {
-        tweenCameraTo(back, 450);
-      }
+      const back = savedCamera || cameraSnapshotForMode(cameraMode);
+      hasUserPos = true;
+      tweenCameraTo(cameraTarget(back), 450, () => {
+        hasUserPos = back.hasUserPos;
+        savedCamera = null;
+        fitModel();
+      });
     }
   }
 
@@ -500,27 +793,72 @@ window.Live2D = (function () {
 
   function isInteractiveTarget(t) {
     return !!(t && t.closest && t.closest(
-      'button, a, input, textarea, select, .composer, .conv-sidebar, .settings-drawer, .app-header, .prompt-chips, .wardrobe-overlay'
+      'button, a, input, textarea, select, .composer, .conv-sidebar, .settings-drawer, .app-header, .prompt-chips, .wardrobe-overlay, .face-bubble, .sidebar-backdrop'
     ));
   }
 
   function savePos() {
     if (document.body.classList.contains('wardrobe-open')) return;
     if (cameraPreset === 'face') return;
-    try {
-      localStorage.setItem('l2d.pos', JSON.stringify({ x: userOffsetX, y: userOffsetY, z: userZoom }));
-    } catch (e) { }
+    if (!cameraPersistenceEnabled) return;
+    const state = captureCameraState();
+    if (!state) return;
+    cameraStates[cameraMode] = state;
+    writeCameraStates();
   }
 
   function loadPos() {
+    cameraStates = { phone: null, desktop: null };
+    legacyDesktopCamera = null;
+    if (!cameraPersistenceEnabled) return false;
     try {
-      const s = JSON.parse(localStorage.getItem('l2d.pos') || 'null');
-      if (s && typeof s.x === 'number') {
-        userOffsetX = s.x;
-        userOffsetY = typeof s.y === 'number' ? s.y : 0;
-        if (s.z) userZoom = s.z;
-        hasUserPos = true;
+      const saved = JSON.parse(localStorage.getItem(CAMERA_STORAGE_KEY) || 'null');
+      if (saved && saved.version === CAMERA_STORAGE_VERSION) {
+        cameraStates.phone = sanitizeCameraState(saved.phone);
+        cameraStates.desktop = sanitizeCameraState(saved.desktop);
       }
+    } catch (e) { }
+
+    if (!cameraStates.desktop) {
+      try {
+        const legacy = JSON.parse(localStorage.getItem('l2d.pos') || 'null');
+        if (legacy && Number.isFinite(legacy.x)) {
+          legacyDesktopCamera = {
+            x: legacy.x,
+            y: Number.isFinite(legacy.y) ? legacy.y : 0,
+            zoom: Number.isFinite(legacy.z) ? boundNumber(legacy.z, 0.2, 5) : 1,
+          };
+        }
+      } catch (e) { }
+    }
+
+    if (cameraStates[cameraMode]) {
+      applyCameraState(cameraStates[cameraMode]);
+      return false;
+    }
+    if (cameraMode !== 'desktop') {
+      resetCameraForMode(cameraMode);
+      return false;
+    }
+    if (legacyDesktopCamera) {
+      userOffsetX = legacyDesktopCamera.x;
+      userOffsetY = legacyDesktopCamera.y;
+      userZoom = legacyDesktopCamera.zoom;
+      hasUserPos = true;
+      return true;
+    }
+    resetCameraForMode(cameraMode);
+    return false;
+  }
+
+  function writeCameraStates() {
+    if (!cameraPersistenceEnabled) return;
+    try {
+      localStorage.setItem(CAMERA_STORAGE_KEY, JSON.stringify({
+        version: CAMERA_STORAGE_VERSION,
+        phone: sanitizeCameraState(cameraStates.phone),
+        desktop: sanitizeCameraState(cameraStates.desktop),
+      }));
     } catch (e) { }
   }
 

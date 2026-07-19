@@ -178,6 +178,8 @@ The same knobs work with `install.ps1` on Windows (`$env:JUN_PROVIDER='openroute
 
 **Embeddings note:** the cross-chat memory / RAG features embed messages with Ollama's `nomic-embed-text`. With OpenRouter or llama.cpp the installer asks whether to keep a local Ollama around just for that (`JUN_EMBEDDINGS=on|off`, default off). Declined, those features switch off silently - chat, tools and everything else still work.
 
+**A tiny privacy note:** the installer asks (default yes) whether to share anonymized chats, usage stats and thumbs so we can train better Jun models. A random install id keeps it detached from you; set `TELEMETRY=off` in `.env` anytime to opt out. 🌸
+
 **Running compose by hand?** The model-server containers are profile-gated: `./start.sh` derives `COMPOSE_PROFILES` from your `.env`, but a bare `docker compose up -d` needs `COMPOSE_PROFILES=ollama` (or `llamacpp`) set in `.env` or the shell.
 
 ## Knobs to turn

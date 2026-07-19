@@ -25,6 +25,31 @@
     trust: document.getElementById('moodTrustVal'),
     tension: document.getElementById('moodTensionVal'),
   };
+  const moodPhrases = {
+    affection: document.getElementById('moodAffectionPhrase'),
+    trust: document.getElementById('moodTrustPhrase'),
+    tension: document.getElementById('moodTensionPhrase'),
+  };
+  const MOOD_PHRASES = {
+    affection: [
+      [90, "i'm completely yours"], [80, 'i love you so much'], [70, 'i love you'],
+      [60, "i'm so happy with you"], [50, 'i really like you'], [40, 'i like being with you'],
+      [30, "you're growing on me"], [20, 'you seem nice'], [10, 'still getting to know you'],
+      [0, 'who are you again?'],
+    ],
+    trust: [
+      [90, "i'd trust you with anything"], [80, 'i trust you completely'], [70, 'i trust you'],
+      [60, "i'm starting to rely on you"], [50, 'i want to trust you'], [40, "i'm still a little guarded"],
+      [30, "i'm not sure about you yet"], [20, "you'll have to earn it"], [10, 'i barely know you'],
+      [0, "i don't trust you"],
+    ],
+    tension: [
+      [90, "i'm terrified"], [80, "i'm really scared"], [70, "i'm scared"],
+      [60, 'this is too much'], [50, "i'm on edge"], [40, 'a little tense'],
+      [30, 'slightly uneasy'], [20, 'mostly calm'], [10, 'i feel relaxed'],
+      [0, 'totally at ease'],
+    ],
+  };
   const moodRefreshBtn = document.getElementById('moodRefreshBtn');
   const stageEl = document.getElementById('stage');
   const stageStatus = document.getElementById('stageStatus');
@@ -42,12 +67,28 @@
   const openSettingsBtn = document.getElementById('openSettingsBtn');
   const closeSettingsBtn = document.getElementById('closeSettingsBtn');
   const drawerBackdrop = document.getElementById('drawerBackdrop');
+  const mobileReplyStatus = document.getElementById('mobileReplyStatus');
+  const mobileMenuBtn = document.getElementById('mobileMenuBtn');
+  const mobileConversationTitle = document.getElementById('mobileConversationTitle');
+  const conversationSidebar = document.getElementById('conversationSidebar');
+  const sidebarBackdrop = document.getElementById('sidebarBackdrop');
+  const sidebarBackground = [
+    document.querySelector('.app-header'),
+    document.querySelector('.chat-panel'),
+    stageEl,
+  ].filter(Boolean);
+  const sendButtonIdleMarkup = sendBtn.innerHTML;
+  const sendButtonStopMarkup = '<svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><rect x="6" y="6" width="12" height="12" rx="2"/></svg>';
 
   const messages = []; // {role:'user'|'assistant', content:string}
+  const conversationTitles = new Map();
   let logCount = 0;
   let abortFn = null;
   let autoResetTimer = null;
   let currentConversationId = null;
+  let chatGeneration = 0;
+  let conversationLoadGeneration = 0;
+  let sidebarRefreshGeneration = 0;
 
   const AUTO_RESET_MS = 3000;
 
@@ -60,6 +101,9 @@
   let cancelActiveIdleNudge = null;
   let stopActiveStream = null;
   let renderVoiceDraft = null;
+  let activeBubbleStream = null;
+  let latestAssistantReply = '';
+  let currentConversationTitle = 'New conversation';
 
   function cancelIdleNudge() {
     if (idleTimer) { clearTimeout(idleTimer); idleTimer = null; }
@@ -133,47 +177,277 @@
     return el;
   }
 
+  function addRatingControls(message, turnId) {
+    document.querySelectorAll('.msg-rate button').forEach(button => { button.disabled = true; });
+    const rate = document.createElement('div');
+    rate.className = 'msg-rate';
+    const up = document.createElement('button');
+    const down = document.createElement('button');
+    up.type = down.type = 'button';
+    up.textContent = '👍';
+    down.textContent = '👎';
+    up.setAttribute('aria-label', 'Rate this reply positively');
+    down.setAttribute('aria-label', 'Rate this reply negatively');
+    rate.append(up, down);
+    message.appendChild(rate);
+    requestAnimationFrame(() => rate.classList.add('shown'));
+
+    let rateTimer;
+    const fadeOutRate = () => {
+      clearTimeout(rateTimer);
+      if (!message.isConnected || !rate.isConnected || rate.classList.contains('hiding')) return;
+      rate.classList.add('hiding');
+      let removed = false;
+      const removeRate = event => {
+        if (event && event.target !== rate) return;
+        if (removed) return;
+        removed = true;
+        rate.remove();
+        rate.removeEventListener('transitionend', removeRate);
+      };
+      rate.addEventListener('transitionend', removeRate);
+      setTimeout(removeRate, 250);
+    };
+    rateTimer = setTimeout(fadeOutRate, 5000);
+
+    const submit = rating => {
+      void fetch('api/rating.php', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'same-origin',
+        body: JSON.stringify({ turn_id: turnId, rating }),
+      });
+    };
+    up.addEventListener('click', () => {
+      if (abortFn) return;
+      submit(1);
+      up.classList.add('selected');
+      up.disabled = down.disabled = true;
+      clearTimeout(rateTimer);
+      fadeOutRate();
+    });
+    down.addEventListener('click', async () => {
+      if (abortFn) return;
+      submit(-1);
+      up.disabled = down.disabled = true;
+      clearTimeout(rateTimer);
+      message.remove();
+      if (messages[messages.length - 1]?.role === 'assistant') messages.pop();
+      if (currentConversationId != null) {
+        try {
+          await fetch(`api/conversations.php?action=delete_last_assistant&id=${encodeURIComponent(currentConversationId)}`, {
+            method: 'POST',
+            credentials: 'same-origin',
+          });
+        } catch {}
+      }
+      updateEmptyState();
+      runChat({ idle: false });
+    });
+  }
+
   const faceBubble = (() => {
     const el = document.createElement('div');
     el.className = 'game-bubble face-bubble';
+    el.tabIndex = 0;
+    el.setAttribute('role', 'region');
+    el.setAttribute('aria-label', 'Jun reply');
     el.hidden = true;
-    document.getElementById('stage').appendChild(el);
+    document.body.appendChild(el);
     return el;
   })();
+  sidebarBackground.push(faceBubble);
   let faceBubbleRaf = 0;
+  let faceBubbleHideTimer = 0;
+  let pendingFaceBubbleHide = null;
+  let faceBubbleText = '';
+
+  function phoneMode() {
+    return !!(window.MobileViewport && MobileViewport.isPhone());
+  }
+
+  function visualRect() {
+    if (window.MobileViewport && MobileViewport.getVisualRect) return MobileViewport.getVisualRect();
+    return { left: 0, top: 0, width: innerWidth, height: innerHeight, right: innerWidth, bottom: innerHeight };
+  }
 
   function positionFaceBubble() {
-    faceBubbleRaf = requestAnimationFrame(positionFaceBubble);
     const a = window.Live2D && Live2D.faceAnchor && Live2D.faceAnchor();
     if (!a) return;
+    const viewport = visualRect();
+    const stage = stageEl.getBoundingClientRect();
+    const headerEl = document.querySelector('.app-header');
+    const header = headerEl.getBoundingClientRect();
+    const composer = document.querySelector('.composer-area').getBoundingClientRect();
+    const phone = phoneMode();
+    const mobileShell = window.matchMedia('(max-width: 900px)').matches;
+    const headerStyle = mobileShell ? getComputedStyle(headerEl) : null;
+    const sideInsetLeft = headerStyle ? Math.max(8, parseFloat(headerStyle.paddingLeft) || 0) : 8;
+    const sideInsetRight = headerStyle ? Math.max(8, parseFloat(headerStyle.paddingRight) || 0) : 8;
+    const safeLeft = Math.max(stage.left + 8, viewport.left + sideInsetLeft);
+    const safeRight = Math.min(stage.right - 8, viewport.right - sideInsetRight);
+    const safeTop = Math.max(stage.top + 40, viewport.top + (mobileShell ? header.height + 40 : 8));
+    const safeBottom = Math.min(stage.bottom - 8, phone ? composer.top - 8 : viewport.bottom - 8);
+    const text = faceBubble.querySelector('.fb-text');
+    faceBubble.style.maxHeight = '';
+    if (text) text.style.maxHeight = '';
+    if (phone) {
+      const bubbleStyle = getComputedStyle(faceBubble);
+      const cssMaxHeight = parseFloat(bubbleStyle.maxHeight) || Infinity;
+      const aboveHead = Math.max(140, a.y - 12 - safeTop);
+      const maxHeight = Math.max(0, Math.min(cssMaxHeight, aboveHead, safeBottom - safeTop));
+      const verticalPadding = (parseFloat(bubbleStyle.paddingTop) || 0)
+        + (parseFloat(bubbleStyle.paddingBottom) || 0);
+      faceBubble.style.maxHeight = maxHeight + 'px';
+      if (text) text.style.maxHeight = Math.max(0, maxHeight - verticalPadding) + 'px';
+    }
     const w = faceBubble.offsetWidth, h = faceBubble.offsetHeight;
-    let left = a.x - a.headW - w;
-    if (left < 8) left = Math.min(a.x + a.headW, window.innerWidth - w - 8);
-    const top = Math.max(40, Math.min(a.y, window.innerHeight - h - 8));
+    let left, top;
+    if (phone) {
+      left = a.x - w / 2;
+      top = a.y - h - 12;
+    } else {
+      left = a.x - a.headW - w - 12;
+      if (left < safeLeft) left = a.x + a.headW + 12;
+      top = a.y;
+    }
+    left = Math.max(safeLeft, Math.min(left, safeRight - w));
+    top = Math.max(safeTop, Math.min(top, safeBottom - h));
     faceBubble.style.left = left + 'px';
     faceBubble.style.top = top + 'px';
   }
 
-  function showFaceBubble(html) {
+  function scheduleFaceBubblePosition() {
+    cancelAnimationFrame(faceBubbleRaf);
+    faceBubbleRaf = requestAnimationFrame(() => {
+      faceBubbleRaf = 0;
+      positionFaceBubble();
+    });
+  }
+
+  function showFaceBubble(html, source = 'ephemeral') {
     clearTimeout(faceBubbleHideTimer);
-    if (window.Names) faceBubble.dataset.name = Names.getBot();
-    faceBubble.innerHTML = html;
+    pendingFaceBubbleHide = null;
+    faceBubble.dataset.source = source;
+    const botName = window.Names ? Names.getBot() : 'Jun';
+    faceBubble.dataset.name = botName;
+    faceBubble.setAttribute('aria-label', `${botName} reply`);
+    let txt = faceBubble.firstElementChild;
+    if (!txt || !txt.classList.contains('fb-text')) {
+      faceBubble.textContent = '';
+      txt = document.createElement('div');
+      txt.className = 'fb-text';
+      faceBubble.appendChild(txt);
+    }
+    txt.innerHTML = html;
     if (faceBubble.hidden) {
       faceBubble.hidden = false;
-      positionFaceBubble();
+      faceBubble.classList.remove('intro');
+      void faceBubble.offsetWidth;
+      faceBubble.classList.add('intro');
     }
+    scheduleFaceBubblePosition();
   }
 
   function hideFaceBubble() {
-    if (faceBubble.hidden) return;
+    clearTimeout(faceBubbleHideTimer);
+    faceBubbleHideTimer = 0;
+    pendingFaceBubbleHide = null;
     faceBubble.hidden = true;
+    faceBubble.classList.remove('intro');
     cancelAnimationFrame(faceBubbleRaf);
+    faceBubbleRaf = 0;
   }
 
-  let faceBubbleHideTimer = 0;
-  function scheduleFaceBubbleHide() {
+  function hideFaceBubbleAfterReading() {
+    faceBubbleHideTimer = 0;
+    const focused = document.activeElement;
+    if (faceBubble.contains(focused)) {
+      try {
+        if (focused.matches(':focus-visible')) return;
+      } catch (e) {
+        return;
+      }
+    }
+    hideFaceBubble();
+  }
+
+  function faceBubbleDelay(text, source) {
+    if (source !== 'phone') return 10000;
+    const rendered = faceBubble.querySelector('.fb-text');
+    const words = (((rendered && rendered.textContent) || text).trim().match(/\S+/g) || []).length;
+    return Math.max(6000, Math.min(30000, words * 240));
+  }
+
+  function startFaceBubbleHideTimer(text, source) {
     clearTimeout(faceBubbleHideTimer);
-    faceBubbleHideTimer = setTimeout(hideFaceBubble, 10000);
+    pendingFaceBubbleHide = null;
+    faceBubbleText = text;
+    faceBubbleHideTimer = setTimeout(hideFaceBubbleAfterReading, faceBubbleDelay(text, source));
+  }
+
+  function scheduleFaceBubbleHide(text, source) {
+    clearTimeout(faceBubbleHideTimer);
+    pendingFaceBubbleHide = { text, source };
+    faceBubbleText = text;
+    if (window.TTS && TTS.isSpeaking && TTS.isSpeaking()) return;
+    startFaceBubbleHideTimer(text, source);
+  }
+
+  function finishPendingFaceBubbleHide() {
+    if (!pendingFaceBubbleHide || faceBubble.hidden) return;
+    startFaceBubbleHideTimer(pendingFaceBubbleHide.text, pendingFaceBubbleHide.source);
+  }
+
+  function restartFaceBubbleHide() {
+    if (faceBubble.hidden || !faceBubbleText) return;
+    scheduleFaceBubbleHide(faceBubbleText, faceBubble.dataset.source || 'ephemeral');
+  }
+
+  function announceMobileReply(text) {
+    if (!mobileReplyStatus || !phoneMode() || !text.trim()) return;
+    mobileReplyStatus.textContent = '';
+    requestAnimationFrame(() => {
+      const botName = window.Names ? Names.getBot() : 'Jun';
+      mobileReplyStatus.textContent = `${botName} replied: ${text}`;
+    });
+  }
+
+  function setLatestAssistantReply(text) {
+    latestAssistantReply = text.trim();
+    if (mobileConversationTitle) {
+      mobileConversationTitle.disabled = !latestAssistantReply || !phoneMode();
+      mobileConversationTitle.title = latestAssistantReply ? 'Show latest reply' : currentConversationTitle;
+    }
+    setConversationTitle(currentConversationTitle);
+  }
+
+  function setConversationTitle(title) {
+    currentConversationTitle = title || 'New conversation';
+    if (!mobileConversationTitle) return;
+    mobileConversationTitle.textContent = currentConversationTitle;
+    mobileConversationTitle.setAttribute('aria-label', latestAssistantReply
+      ? `${currentConversationTitle}. Show latest reply`
+      : currentConversationTitle);
+  }
+
+  faceBubble.addEventListener('pointerdown', restartFaceBubbleHide);
+  faceBubble.addEventListener('scroll', restartFaceBubbleHide, { capture: true, passive: true });
+  faceBubble.addEventListener('focus', restartFaceBubbleHide);
+  faceBubble.addEventListener('keydown', restartFaceBubbleHide);
+  faceBubble.addEventListener('focusout', (event) => {
+    if (!faceBubble.contains(event.relatedTarget)) restartFaceBubbleHide();
+  });
+  if (window.ResizeObserver) new ResizeObserver(scheduleFaceBubblePosition).observe(faceBubble);
+  window.addEventListener('resize', scheduleFaceBubblePosition);
+  if (window.MobileViewport) {
+    MobileViewport.subscribe((state) => {
+      if (state.visualChanged || state.layoutChanged) scheduleFaceBubblePosition();
+      if (!state.phoneChanged) return;
+      hideFaceBubble();
+      setLatestAssistantReply(latestAssistantReply);
+      if (activeBubbleStream && (state.isPhone || activeBubbleStream.ephemeral)) activeBubbleStream.render();
+    });
   }
 
   function updateEmptyState() {
@@ -362,6 +636,8 @@
     if (abortFn) return;
     cancelIdleNudge();
     cancelAutoReset();
+    const generation = ++chatGeneration;
+    const isCurrent = () => generation === chatGeneration;
 
     const draft = appendMsg('assistant', '');
     if (ephemeral) {
@@ -402,6 +678,15 @@
 
     let visible = '';
     let shown = '';
+    let turnId = null;
+    const bubbleSource = ephemeral ? 'ephemeral' : 'phone';
+    const bubbleEnabled = () => !(window.VoiceMode && VoiceMode.isActive()) && (ephemeral || phoneMode());
+    const renderBubble = () => {
+      if (!shown.trim() || !bubbleEnabled()) return;
+      showFaceBubble(renderMarkdown(shown), bubbleSource);
+    };
+    const bubbleStream = { ephemeral: !!ephemeral, render: renderBubble, text: () => shown };
+    activeBubbleStream = bubbleStream;
     const names = makeNameFilter(sub => {
       shown += sub;
       if (!(window.VoiceMode && VoiceMode.isActive())) {
@@ -409,7 +694,7 @@
         body.appendChild(typing);
         messagesEl.scrollTop = messagesEl.scrollHeight;
       }
-      if (ephemeral) showFaceBubble(renderMarkdown(shown));
+      renderBubble();
       if (window.TTS) TTS.feed(sub);
     });
     renderVoiceDraft = () => {
@@ -422,31 +707,38 @@
       names.push(clean);
     });
 
-    sendBtn.disabled = true;
-    sendBtn.textContent = 'Stop';
+    sendBtn.disabled = false;
+    sendBtn.innerHTML = sendButtonStopMarkup;
+    sendBtn.setAttribute('aria-label', 'Stop response');
 
-    stopActiveStream = () => {
+    stopActiveStream = (discard = false) => {
+      if (!isCurrent()) return;
+      chatGeneration++;
       if (abortFn) abortFn();
       if (window.TTS) TTS.stop();
       typing.remove();
-      if (visible.trim()) messages.push({ role: 'assistant', content: visible });
+      if (!discard && visible.trim()) messages.push({ role: 'assistant', content: visible });
       else draft.remove();
-      finalize();
+      finalize(!discard);
       ui.setStatus('idle', 'idle');
       updateEmptyState();
-      scheduleAutoReset();
-      armIdleAfterReply();
+      if (!discard) {
+        scheduleAutoReset();
+        armIdleAfterReply();
+      }
     };
     const onClickStop = () => stopActiveStream();
     sendBtn.addEventListener('click', onClickStop, { once: true });
 
     cancelActiveIdleNudge = idle ? () => {
+      if (!isCurrent()) return;
+      chatGeneration++;
       if (abortFn) abortFn();
       if (window.TTS) TTS.stop();
       typing.remove();
       draft.remove();
       updateEmptyState();
-      finalize();
+      finalize(false);
     } : null;
 
     ui.setStatus('streaming', 'streaming');
@@ -459,6 +751,7 @@
         idle: !!idle, ephemeral: !!ephemeral, client_time: localTimeString() },
       {
         onDebug: (dbg) => {
+          if (!isCurrent()) return;
           if (dbg && typeof dbg.system_prompt === 'string') {
             debugSystemPromptEl.textContent = dbg.system_prompt
               + (typeof dbg.live_context === 'string'
@@ -466,32 +759,49 @@
                   : '');
           }
         },
-        onStats: (s) => { if (window.DevHud) DevHud.setGenStats(s); },
+        onStats: (s) => {
+          if (!isCurrent()) return;
+          if (typeof s?.turn_id === 'string') turnId = s.turn_id;
+          if (window.DevHud) DevHud.setGenStats(s);
+        },
         onToolStatus: (s) => {
+          if (!isCurrent()) return;
           if (s && s.state === 'running') ui.setStatus('streaming', '🔧 ' + s.name + '…');
           else ui.setStatus('streaming', 'streaming');
           logToolStatus(s);
         },
-        onThinking: (t) => { appendRaw(t); pushThinking(t); },
-        onToken: (tok) => { settleThinking(); if (window.DevHud) DevHud.tickToken(); appendRaw(tok); stream.push(tok); },
+        onThinking: (t) => { if (isCurrent()) { appendRaw(t); pushThinking(t); } },
+        onToken: (tok) => {
+          if (!isCurrent()) return;
+          settleThinking();
+          if (window.DevHud) DevHud.tickToken();
+          appendRaw(tok);
+          stream.push(tok);
+        },
         onDone: async () => {
+          if (!isCurrent()) return;
           stream.flush();
           names.flush();
           settleThinking();
           if (window.TTS) TTS.flush();
           typing.remove();
-          if (visible.trim()) messages.push({ role: 'assistant', content: visible });
-          else draft.remove();
+          if (visible.trim()) {
+            messages.push({ role: 'assistant', content: visible });
+            if (!ephemeral && turnId) addRatingControls(draft, turnId);
+          } else draft.remove();
           finalize();
           ui.setStatus('idle', 'idle');
           updateEmptyState();
           scheduleAutoReset();
           armIdleAfterReply();
-          if (window.ModelTouch) ModelTouch.onReplyDone();
           loadMood();
+          if (window.History && !ephemeral && currentConversationId) {
+            History.compact(currentConversationId).catch(() => {});
+          }
           if (window.History) await refreshSidebar();
         },
         onError: async (err) => {
+          if (!isCurrent()) return;
           stream.flush();
           names.flush();
           if (window.TTS) TTS.flush();
@@ -503,42 +813,79 @@
           updateEmptyState();
           scheduleAutoReset();
           armIdleAfterReply();
-          if (window.ModelTouch) ModelTouch.onReplyDone();
           if (window.History) await refreshSidebar();
         },
       }
     );
 
-    function finalize() {
+    function finalize(present = true) {
       abortFn = null;
-      if (ephemeral) scheduleFaceBubbleHide();
+      if (activeBubbleStream === bubbleStream) activeBubbleStream = null;
+      if (present && shown.trim()) {
+        if (!ephemeral) setLatestAssistantReply(shown);
+        if (bubbleEnabled()) {
+          renderBubble();
+          if (!ephemeral) announceMobileReply(shown);
+          scheduleFaceBubbleHide(shown, bubbleSource);
+        }
+      }
       if (window.VoiceMode && VoiceMode.isActive()) body.innerHTML = renderMarkdown(shown);
       renderVoiceDraft = null;
       cancelActiveIdleNudge = null;
       stopActiveStream = null;
       sendBtn.disabled = false;
-      sendBtn.textContent = 'Send';
+      sendBtn.innerHTML = sendButtonIdleMarkup;
+      sendBtn.setAttribute('aria-label', 'Send');
       sendBtn.removeEventListener('click', onClickStop);
     }
+  }
+
+  function discardActiveResponse() {
+    hideFaceBubble();
+    if (stopActiveStream) {
+      stopActiveStream(true);
+      return;
+    }
+    if (!abortFn) return;
+    chatGeneration++;
+    abortFn();
+    abortFn = null;
+    if (window.TTS) TTS.stop();
+    activeBubbleStream = null;
+    cancelActiveIdleNudge = null;
+    renderVoiceDraft = null;
+    sendBtn.disabled = false;
+    sendBtn.innerHTML = sendButtonIdleMarkup;
+    sendBtn.setAttribute('aria-label', 'Send');
+    ui.setStatus('idle', 'idle');
   }
 
   async function refreshSidebar() {
     if (!window.History) return;
     const ul = document.getElementById('conversationList');
     if (!ul) return;
+    const refreshGeneration = ++sidebarRefreshGeneration;
     let convs;
     try { convs = await History.list(); } catch (e) { return; }
+    if (refreshGeneration !== sidebarRefreshGeneration) return;
     ul.innerHTML = '';
+    conversationTitles.clear();
     for (const c of convs) {
       const li = document.createElement('li');
       li.className = 'conv-item' + (c.id === currentConversationId ? ' active' : '');
       li.dataset.id = String(c.id);
       const title = c.title || 'New conversation';
-      li.innerHTML = `<span class="conv-title">${escapeHtml(title)}</span>`
+      conversationTitles.set(c.id, title);
+      li.innerHTML = `<button class="conv-open" type="button"><span class="conv-title">${escapeHtml(title)}</span></button>`
         + `<button class="conv-delete" type="button" title="Delete conversation" aria-label="Delete conversation">`
         + `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/><path d="M10 11v6"/><path d="M14 11v6"/><path d="M9 6V4a2 2 0 0 1 2-2h2a2 2 0 0 1 2 2v2"/></svg>`
         + `</button>`;
-      li.addEventListener('click', () => loadConversation(c.id));
+      const openBtn = li.querySelector('.conv-open');
+      if (c.id === currentConversationId) openBtn.setAttribute('aria-current', 'page');
+      openBtn.addEventListener('click', () => {
+        setSidebarOpen(false);
+        loadConversation(c.id);
+      });
       const delBtn = li.querySelector('.conv-delete');
       delBtn.addEventListener('click', (e) => {
         e.stopPropagation();
@@ -546,6 +893,7 @@
       });
       ul.appendChild(li);
     }
+    if (currentConversationId != null) setConversationTitle(conversationTitles.get(currentConversationId));
   }
 
   async function deleteConversation(id, title) {
@@ -558,6 +906,10 @@
       danger: true,
     });
     if (!ok) return;
+    if (id === currentConversationId) {
+      discardActiveResponse();
+      conversationLoadGeneration++;
+    }
     try {
       await History.delete(id);
       if (id === currentConversationId) {
@@ -580,14 +932,23 @@
 
   function markSidebarActive(id) {
     document.querySelectorAll('#conversationList .conv-item').forEach(el => {
-      el.classList.toggle('active', Number(el.dataset.id) === id);
+      const active = Number(el.dataset.id) === id;
+      el.classList.toggle('active', active);
+      const openBtn = el.querySelector('.conv-open');
+      if (!openBtn) return;
+      if (active) openBtn.setAttribute('aria-current', 'page');
+      else openBtn.removeAttribute('aria-current');
     });
   }
 
   async function loadConversation(id) {
+    discardActiveResponse();
+    const loadGeneration = ++conversationLoadGeneration;
     currentConversationId = id;
     cancelAutoReset();
     hideFaceBubble();
+    setLatestAssistantReply('');
+    setConversationTitle(conversationTitles.get(id));
     resetIdleNudge(); // fresh context - let Jun nudge again
     if (window.TTS) TTS.stop();
     messages.length = 0;
@@ -600,6 +961,8 @@
     if (!window.History) return;
     try {
       const rows = await History.load(id);
+      if (loadGeneration !== conversationLoadGeneration || currentConversationId !== id) return;
+      let latest = '';
       for (const row of rows) {
         if (row.role === 'user') {
           appendMsg('user', row.content);
@@ -610,11 +973,16 @@
           const sb = makeStreamBuffer(clean => { visible += clean; });
           sb.push(row.content);
           sb.flush();
-          el.innerHTML = renderMarkdown(window.Names ? Names.apply(visible) : visible);
+          const shown = window.Names ? Names.apply(visible) : visible;
+          el.innerHTML = renderMarkdown(shown);
+          latest = shown;
           messages.push({ role: 'assistant', content: visible });
         }
       }
+      setLatestAssistantReply(latest);
+      setConversationTitle(conversationTitles.get(id));
     } catch (e) {
+      if (loadGeneration !== conversationLoadGeneration || currentConversationId !== id) return;
       ui.toast('Failed to load conversation: ' + e.message, 'error');
     }
   }
@@ -683,16 +1051,99 @@
     toolLogCount.textContent = '0';
   });
 
+  const narrowSidebarQuery = window.matchMedia('(max-width: 900px)');
+  let sidebarOpener = null;
+
+  function setSidebarOpen(open) {
+    if (!conversationSidebar || !sidebarBackdrop || !mobileMenuBtn) return;
+    open = !!open && narrowSidebarQuery.matches;
+    const wasOpen = document.body.classList.contains('sidebar-open');
+    if (open && !wasOpen) sidebarOpener = document.activeElement;
+    document.body.classList.toggle('sidebar-open', open);
+    conversationSidebar.classList.toggle('mobile-open', open);
+    sidebarBackdrop.classList.toggle('open', open);
+    sidebarBackdrop.setAttribute('aria-hidden', String(!open));
+    mobileMenuBtn.setAttribute('aria-expanded', String(open));
+    mobileMenuBtn.setAttribute('aria-label', open ? 'Close conversations' : 'Open conversations');
+    [...sidebarBackground, document.getElementById('toasts'), document.getElementById('devHud')]
+      .filter(Boolean).forEach(element => {
+      element.inert = open;
+      if (open) element.setAttribute('aria-hidden', 'true');
+      else element.removeAttribute('aria-hidden');
+    });
+    if (narrowSidebarQuery.matches) {
+      conversationSidebar.setAttribute('aria-hidden', String(!open));
+      conversationSidebar.inert = !open;
+    } else {
+      conversationSidebar.removeAttribute('aria-hidden');
+      conversationSidebar.inert = false;
+    }
+    if (open) {
+      const first = conversationSidebar.querySelector('button:not([disabled]), [href]');
+      if (first) first.focus();
+    } else if (wasOpen && sidebarOpener && sidebarOpener.focus && document.contains(sidebarOpener)) {
+      sidebarOpener.focus();
+      sidebarOpener = null;
+    }
+  }
+
+  function syncSidebarLayout() {
+    setSidebarOpen(false);
+    if (!narrowSidebarQuery.matches && conversationSidebar) {
+      conversationSidebar.removeAttribute('aria-hidden');
+      conversationSidebar.inert = false;
+    }
+  }
+
+  if (mobileMenuBtn) mobileMenuBtn.addEventListener('click', () => setSidebarOpen(true));
+  if (sidebarBackdrop) sidebarBackdrop.addEventListener('click', () => setSidebarOpen(false));
+  if (mobileConversationTitle) {
+    mobileConversationTitle.addEventListener('click', (event) => {
+      if (!phoneMode() || !latestAssistantReply) return;
+      showFaceBubble(renderMarkdown(latestAssistantReply), 'phone');
+      announceMobileReply(latestAssistantReply);
+      scheduleFaceBubbleHide(latestAssistantReply, 'phone');
+      if (event.detail === 0) faceBubble.focus({ preventScroll: true });
+    });
+  }
+  if (conversationSidebar) {
+    conversationSidebar.addEventListener('keydown', (e) => {
+      if (e.key === 'Escape' && document.body.classList.contains('sidebar-open')) {
+        e.preventDefault();
+        setSidebarOpen(false);
+        return;
+      }
+      if (e.key !== 'Tab' || !document.body.classList.contains('sidebar-open')) return;
+      const focusable = [...conversationSidebar.querySelectorAll('button:not([disabled]), [href], [tabindex]:not([tabindex="-1"])')]
+        .filter(el => !el.hidden && el.offsetParent !== null);
+      if (!focusable.length) return;
+      const first = focusable[0], last = focusable[focusable.length - 1];
+      if (e.shiftKey && document.activeElement === first) { e.preventDefault(); last.focus(); }
+      else if (!e.shiftKey && document.activeElement === last) { e.preventDefault(); first.focus(); }
+    });
+  }
+  if (narrowSidebarQuery.addEventListener) narrowSidebarQuery.addEventListener('change', syncSidebarLayout);
+  else narrowSidebarQuery.addListener(syncSidebarLayout);
+  syncSidebarLayout();
+
   const newChatBtn = document.getElementById('newChatBtn');
   if (newChatBtn) {
     newChatBtn.addEventListener('click', async () => {
       if (!window.History) return;
+      setSidebarOpen(false);
+      discardActiveResponse();
+      const requestGeneration = ++conversationLoadGeneration;
+      newChatBtn.disabled = true;
       try {
         const { id } = await History.create();
         await refreshSidebar();
+        if (requestGeneration !== conversationLoadGeneration) return;
         await loadConversation(id);
       } catch (e) {
+        if (requestGeneration !== conversationLoadGeneration) return;
         ui.toast('Failed to create conversation: ' + e.message, 'error');
+      } finally {
+        newChatBtn.disabled = false;
       }
     });
   }
@@ -726,12 +1177,18 @@
     if (botInput) botInput.addEventListener('change', commit);
   }
 
-  if (openSettingsBtn) openSettingsBtn.addEventListener('click', () => ui.toggleDrawer(true));
+  if (openSettingsBtn) openSettingsBtn.addEventListener('click', () => {
+    setSidebarOpen(false);
+    ui.toggleDrawer(true);
+  });
   if (closeSettingsBtn) closeSettingsBtn.addEventListener('click', () => ui.toggleDrawer(false));
   if (drawerBackdrop) drawerBackdrop.addEventListener('click', () => ui.toggleDrawer(false));
 
   const userChipBtn = document.getElementById('userChipBtn');
-  if (userChipBtn) userChipBtn.addEventListener('click', () => ui.toggleDrawer(true));
+  if (userChipBtn) userChipBtn.addEventListener('click', () => {
+    setSidebarOpen(false);
+    ui.toggleDrawer(true);
+  });
 
   const settingsNavItems = document.querySelectorAll('.settings-navitem');
   const settingsPanels = document.querySelectorAll('.settings-panel');
@@ -754,8 +1211,8 @@
     item.tabIndex = item.classList.contains('active') ? 0 : -1;
     item.addEventListener('keydown', (e) => {
       let target = -1;
-      if (e.key === 'ArrowDown') target = (idx + 1) % settingsNavItems.length;
-      else if (e.key === 'ArrowUp') target = (idx - 1 + settingsNavItems.length) % settingsNavItems.length;
+      if (e.key === 'ArrowDown' || e.key === 'ArrowRight') target = (idx + 1) % settingsNavItems.length;
+      else if (e.key === 'ArrowUp' || e.key === 'ArrowLeft') target = (idx - 1 + settingsNavItems.length) % settingsNavItems.length;
       else if (e.key === 'Home') target = 0;
       else if (e.key === 'End') target = settingsNavItems.length - 1;
       if (target < 0) return;
@@ -875,10 +1332,35 @@
     loadMemories();
   });
 
+  function setMoodFill(k) {
+    const input = moodInputs[k];
+    if (!input) return;
+    const min = Number(input.min);
+    const max = Number(input.max);
+    const t = (Number(input.value) - min) / (max - min);
+    const row = input.closest('.mood-row') || input;
+    const gauge = getComputedStyle(row).getPropertyValue('--gauge').trim();
+    row.style.setProperty('--fill', t * 100 + '%');
+    row.style.setProperty('--fill-color',
+      `color-mix(in srgb, ${gauge} ${Math.round((0.25 + 0.75 * t) * 100)}%, var(--track-empty))`);
+    row.style.setProperty('--glow',
+      `color-mix(in srgb, ${gauge} ${Math.round(Math.max(0, t - 0.35) / 0.65 * 100)}%, transparent)`);
+    setMoodPhrase(k, Number(input.value));
+  }
+  function setMoodPhrase(k, value) {
+    const el = moodPhrases[k];
+    if (!el) return;
+    const band = (MOOD_PHRASES[k] || []).find(([min]) => value >= min);
+    const text = band ? band[1] : '';
+    el.textContent = text ? (text + '  ').repeat(6) : '';
+  }
   function renderMood(state) {
     for (const k of ['affection', 'trust', 'tension']) {
       if (state && typeof state[k] === 'number') {
-        if (moodInputs[k]) moodInputs[k].value = state[k];
+        if (moodInputs[k]) {
+          moodInputs[k].value = state[k];
+          setMoodFill(k);
+        }
         if (moodVals[k]) moodVals[k].textContent = state[k];
       }
     }
@@ -911,8 +1393,10 @@
   }
   for (const k of ['affection', 'trust', 'tension']) {
     if (!moodInputs[k]) continue;
+    setMoodFill(k);
     moodInputs[k].addEventListener('input', () => {
       if (moodVals[k]) moodVals[k].textContent = moodInputs[k].value;
+      setMoodFill(k);
       const live = {};
       for (const j of ['affection', 'trust', 'tension']) {
         if (moodInputs[j]) live[j] = parseInt(moodInputs[j].value, 10) || 0;
@@ -925,6 +1409,10 @@
 
   document.addEventListener('keydown', (e) => {
     if (e.key !== 'Escape') return;
+    if (document.body.classList.contains('sidebar-open')) {
+      setSidebarOpen(false);
+      return;
+    }
     const d = document.getElementById('settingsDrawer');
     if (d && d.classList.contains('open')) ui.toggleDrawer(false);
   });
@@ -938,6 +1426,10 @@
   [collapseBtn, expandBtn].filter(Boolean).forEach(btn => {
     btn.addEventListener('click', () => {
       if (!appMain) return;
+      if (narrowSidebarQuery.matches) {
+        setSidebarOpen(false);
+        return;
+      }
       const next = !appMain.classList.contains('sidebar-collapsed');
       appMain.classList.toggle('sidebar-collapsed', next);
       localStorage.setItem('sidebar.collapsed', next ? '1' : '0');
@@ -1153,7 +1645,25 @@
       Outfit.load();
       Outfit.applyAll();
       const wBtn = document.getElementById('wardrobeBtn');
+      let shopPrefetched = false;
+      const prefetchShop = () => {
+        if (shopPrefetched) return;
+        shopPrefetched = true;
+        for (const [href, as] of [['wardrobe.html', 'document'], ['wardrobe-cutscene.webm', 'video']]) {
+          const link = document.createElement('link');
+          link.rel = 'prefetch';
+          link.as = as;
+          link.href = href;
+          document.head.appendChild(link);
+        }
+      };
+      if (wBtn) {
+        wBtn.addEventListener('pointerenter', prefetchShop);
+        wBtn.addEventListener('focus', prefetchShop);
+      }
       if (wBtn) wBtn.addEventListener('click', async () => {
+        prefetchShop();
+        ui.toggleDrawer(false);
         if (window.WardrobeReactions && !wBtn.disabled) {
           wBtn.disabled = true;
           try { await WardrobeReactions.playIntro(); } catch (e) {}
@@ -1171,7 +1681,10 @@
 
     if (window.TTS) {
       TTS.setLogger(logAction);
-      if (TTS.setOnAllDone) TTS.setOnAllDone(() => scheduleIdleNudge(IDLE_AFTER_REPLY_MS));
+      if (TTS.setOnAllDone) TTS.setOnAllDone(() => {
+        finishPendingFaceBubbleHide();
+        scheduleIdleNudge(IDLE_AFTER_REPLY_MS);
+      });
       const savedEnabled = localStorage.getItem('tts.enabled') === '1';
       const savedVoice = localStorage.getItem('tts.voice') || '';
       const savedSpeed = parseFloat(localStorage.getItem('tts.speed') || '1.0');
@@ -1225,6 +1738,7 @@
         TTS.setEnabled(savedEnabled);
         ttsChk.addEventListener('change', () => {
           TTS.setEnabled(ttsChk.checked);
+          if (!ttsChk.checked) finishPendingFaceBubbleHide();
           localStorage.setItem('tts.enabled', ttsChk.checked ? '1' : '0');
           syncVoiceDeps();
           if (window.Prefs) Prefs.pushToServer();
@@ -1268,6 +1782,7 @@
       if (window.VoiceMode) {
         VoiceMode.init({
           sttAvailable,
+          onEnter: hideFaceBubble,
           onExitMidStream: () => { if (renderVoiceDraft) renderVoiceDraft(); },
         });
       }

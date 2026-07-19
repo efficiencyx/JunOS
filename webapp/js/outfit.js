@@ -644,6 +644,46 @@ window.Outfit = (function () {
   let colorPickerEl = null, colorPickerAnchor = null, pickerState = null;
   const COLOR_PRESETS = ['#f6d6c8', '#ef8fa9', '#c76ee8', '#7754d8', '#4b7bd8', '#41a9a2', '#76ae57', '#e2b34c', '#d76b42', '#34273f'];
 
+  let popupViewportListening = false, popupViewportRaf = 0;
+
+  function visualViewportRect() {
+    if (window.MobileViewport && MobileViewport.getVisualRect) return MobileViewport.getVisualRect();
+    const viewport = window.visualViewport;
+    const left = viewport ? viewport.offsetLeft : 0;
+    const top = viewport ? viewport.offsetTop : 0;
+    const width = viewport ? viewport.width : innerWidth;
+    const height = viewport ? viewport.height : innerHeight;
+    return { left, top, width, height, right: left + width, bottom: top + height };
+  }
+
+  function phonePopupMode() {
+    return window.MobileViewport
+      ? MobileViewport.isPhone()
+      : document.documentElement.classList.contains('phone-ui');
+  }
+
+  function schedulePopupPosition() {
+    if (popupViewportRaf) cancelAnimationFrame(popupViewportRaf);
+    popupViewportRaf = requestAnimationFrame(() => {
+      popupViewportRaf = 0;
+      if (colorPickerEl && !colorPickerEl.hidden && !pickerEmbedded()) positionColorPicker();
+      if (optPopEl && !optPopEl.hidden) positionOptionsPopup();
+    });
+  }
+
+  function watchPopupViewport() {
+    if (popupViewportListening) return;
+    popupViewportListening = true;
+    if (window.MobileViewport) MobileViewport.subscribe(schedulePopupPosition);
+    else {
+      window.addEventListener('resize', schedulePopupPosition);
+      if (window.visualViewport) {
+        window.visualViewport.addEventListener('resize', schedulePopupPosition);
+        window.visualViewport.addEventListener('scroll', schedulePopupPosition);
+      }
+    }
+  }
+
   function pickerEmbedded() {
     return !!(colorPickerEl && colorPickerEl.classList.contains('ocp-embedded'));
   }
@@ -658,12 +698,23 @@ window.Outfit = (function () {
   }
 
   function positionColorPicker() {
+    if (!colorPickerAnchor || !colorPickerEl || colorPickerEl.hidden) return;
+    const viewport = visualViewportRect();
+    const sheet = phonePopupMode();
+    colorPickerEl.classList.toggle('ocp-sheet', sheet);
+    colorPickerEl.style.width = sheet ? `${viewport.width}px` : '';
+    colorPickerEl.style.maxHeight = sheet ? `${Math.max(0, viewport.height - 8)}px` : '';
+    if (sheet) {
+      colorPickerEl.style.left = `${viewport.left}px`;
+      colorPickerEl.style.top = `${Math.max(viewport.top, viewport.bottom - colorPickerEl.offsetHeight)}px`;
+      return;
+    }
     const anchor = colorPickerAnchor.getBoundingClientRect();
     const width = colorPickerEl.offsetWidth, height = colorPickerEl.offsetHeight;
     let left = anchor.right - width, top = anchor.bottom + 8;
-    if (top + height > innerHeight - 8) top = anchor.top - height - 8;
-    colorPickerEl.style.left = `${Math.max(8, Math.min(left, innerWidth - width - 8))}px`;
-    colorPickerEl.style.top = `${Math.max(8, Math.min(top, innerHeight - height - 8))}px`;
+    if (top + height > viewport.bottom - 8) top = anchor.top - height - 8;
+    colorPickerEl.style.left = `${Math.max(viewport.left + 8, Math.min(left, viewport.right - width - 8))}px`;
+    colorPickerEl.style.top = `${Math.max(viewport.top + 8, Math.min(top, viewport.bottom - height - 8))}px`;
   }
 
   function pickerColor(index = pickerState.index) {
@@ -739,6 +790,7 @@ window.Outfit = (function () {
 
   function buildColorPicker() {
     if (colorPickerEl) return;
+    watchPopupViewport();
     colorPickerEl = document.createElement('div');
     colorPickerEl.className = 'omega-color-picker';
     colorPickerEl.hidden = true;
@@ -817,14 +869,19 @@ window.Outfit = (function () {
     document.addEventListener('keydown', (e) => {
       if (e.key === 'Escape' && !colorPickerEl.hidden) { e.stopPropagation(); closeColorPicker(true); }
     }, true);
-    window.addEventListener('resize', () => closeColorPicker(false));
-    window.addEventListener('scroll', () => closeColorPicker(false), true);
+    window.addEventListener('scroll', (e) => {
+      if (colorPickerEl.hidden || pickerEmbedded()) return;
+      if (e.target instanceof Node && colorPickerEl.contains(e.target)) return;
+      if (phonePopupMode() || colorPickerEl.contains(document.activeElement)) schedulePopupPosition();
+      else closeColorPicker(false);
+    }, true);
   }
 
   function showColorPicker(anchor, label, state, embedContainer) {
     buildColorPicker();
     if (embedContainer) {
       colorPickerEl.classList.add('ocp-embedded');
+      colorPickerEl.classList.remove('ocp-sheet');
       if (colorPickerEl.parentElement !== embedContainer) embedContainer.appendChild(colorPickerEl);
       colorPickerAnchor = null;
     } else {
@@ -832,6 +889,10 @@ window.Outfit = (function () {
       if (colorPickerEl.parentElement !== document.body) document.body.appendChild(colorPickerEl);
       colorPickerAnchor = anchor;
     }
+    colorPickerEl.style.left = '';
+    colorPickerEl.style.top = '';
+    colorPickerEl.style.width = '';
+    colorPickerEl.style.maxHeight = '';
     pickerState = { ...state, index: 0, hsv: hexToHsv('#ffffff') };
     if (!pickerState.labels.length) return;
     colorPickerEl.querySelector('.ocp-title').textContent = label;
@@ -1038,21 +1099,34 @@ window.Outfit = (function () {
   }
 
   function positionOptionsPopup() {
+    if (!optPopAnchor || !optPopEl || optPopEl.hidden) return;
+    const viewport = visualViewportRect();
+    const sheet = phonePopupMode();
+    optPopEl.classList.toggle('wd-sheet', sheet);
+    optPopEl.style.width = sheet ? `${viewport.width}px` : '';
+    optPopEl.style.maxHeight = sheet ? `${Math.max(0, viewport.height - 8)}px` : '';
+    if (sheet) {
+      optPopEl.style.left = `${viewport.left}px`;
+      optPopEl.style.top = `${Math.max(viewport.top, viewport.bottom - optPopEl.offsetHeight)}px`;
+      return;
+    }
     const anchor = optPopAnchor.getBoundingClientRect();
     const width = optPopEl.offsetWidth, height = optPopEl.offsetHeight;
     let left = anchor.right - width, top = anchor.bottom + 8;
-    if (top + height > innerHeight - 8) top = anchor.top - height - 8;
-    optPopEl.style.left = `${Math.max(8, Math.min(left, innerWidth - width - 8))}px`;
-    optPopEl.style.top = `${Math.max(8, Math.min(top, innerHeight - height - 8))}px`;
+    if (top + height > viewport.bottom - 8) top = anchor.top - height - 8;
+    optPopEl.style.left = `${Math.max(viewport.left + 8, Math.min(left, viewport.right - width - 8))}px`;
+    optPopEl.style.top = `${Math.max(viewport.top + 8, Math.min(top, viewport.bottom - height - 8))}px`;
   }
 
   function buildOptionsPopup() {
     if (optPopEl) return;
+    watchPopupViewport();
     optPopEl = document.createElement('div');
     optPopEl.className = 'wd-optpop';
     optPopEl.hidden = true;
-    optPopEl.innerHTML = '<div class="wd-optpop-title"></div><div class="wd-optpop-row"></div><div class="wd-optpop-grid"></div><div class="wd-optpop-color"></div>';
+    optPopEl.innerHTML = '<div class="wd-optpop-head"><div class="wd-optpop-title"></div><button type="button" class="wd-optpop-close" aria-label="Close options" title="Close">×</button></div><div class="wd-optpop-row"></div><div class="wd-optpop-grid"></div><div class="wd-optpop-color"></div>';
     document.body.appendChild(optPopEl);
+    optPopEl.querySelector('.wd-optpop-close').addEventListener('click', () => closeOptionsPopup(true));
     document.addEventListener('pointerdown', (e) => {
       if (optPopEl.hidden || optPopEl.contains(e.target)) return;
       if (optPopAnchor && optPopAnchor.contains(e.target)) return;
@@ -1065,9 +1139,10 @@ window.Outfit = (function () {
         closeOptionsPopup(true);
       }
     }, true);
-    window.addEventListener('resize', () => closeOptionsPopup(false));
     window.addEventListener('scroll', (e) => {
-      if (!(e.target instanceof Node) || !optPopEl.contains(e.target)) closeOptionsPopup(false);
+      if (optPopEl.hidden || (e.target instanceof Node && optPopEl.contains(e.target))) return;
+      if (phonePopupMode() || optPopEl.contains(document.activeElement)) schedulePopupPosition();
+      else closeOptionsPopup(false);
     }, true);
   }
 
@@ -1155,6 +1230,115 @@ window.Outfit = (function () {
     return orb;
   }
 
+  function isNestedTileControl(tile, target) {
+    if (!(target instanceof Element)) return false;
+    const control = target.closest('button, a, input, textarea, select');
+    return !!(control && tile.contains(control));
+  }
+
+  function bindTileDrag(tile, thumbSrc, onEquip, popupCfg) {
+    tile.addEventListener('pointerdown', (e) => {
+      if (e.pointerType === 'touch' || e.button !== 0 || isNestedTileControl(tile, e.target)) return;
+      e.preventDefault();
+      try { tile.setPointerCapture(e.pointerId); } catch (err) { }
+      const sx = e.clientX, sy = e.clientY;
+      let dragging = false;
+      const move = (ev) => {
+        if (ev.pointerId !== e.pointerId) return;
+        if (!dragging && Math.hypot(ev.clientX - sx, ev.clientY - sy) > 6) {
+          dragging = true;
+          wdShowGhost(thumbSrc, ev.clientX, ev.clientY);
+        }
+        if (dragging) wdMoveGhost(ev.clientX, ev.clientY);
+      };
+      const finish = (ev, cancelled) => {
+        if (ev.pointerId !== e.pointerId) return;
+        tile.removeEventListener('pointermove', move);
+        tile.removeEventListener('pointerup', up);
+        tile.removeEventListener('pointercancel', cancel);
+        wdShowGhost(null);
+        if (cancelled) return;
+        if (!dragging) openTilePopup(tile, popupCfg);
+        else if (Live2D.isOverModel(ev.clientX, ev.clientY)) onEquip();
+      };
+      const up = (ev) => finish(ev, false);
+      const cancel = (ev) => finish(ev, true);
+      tile.addEventListener('pointermove', move);
+      tile.addEventListener('pointerup', up);
+      tile.addEventListener('pointercancel', cancel);
+    });
+
+    let touchSession = null;
+    const clearTouchSession = () => {
+      if (!touchSession) return;
+      clearTimeout(touchSession.timer);
+      window.removeEventListener('touchstart', cancelMultitouch, true);
+      window.removeEventListener('touchmove', moveTouch, true);
+      window.removeEventListener('touchend', endTouch, true);
+      window.removeEventListener('touchcancel', cancelTouch, true);
+      tile.classList.remove('wd-dragging');
+      wdShowGhost(null);
+      touchSession = null;
+    };
+    const cancelMultitouch = (e) => {
+      if (touchSession && e.touches.length > 1) clearTouchSession();
+    };
+    const moveTouch = (e) => {
+      if (!touchSession) return;
+      const touch = Array.from(e.touches).find(t => t.identifier === touchSession.id);
+      if (!touch || e.touches.length > 1) { clearTouchSession(); return; }
+      touchSession.x = touch.clientX;
+      touchSession.y = touch.clientY;
+      if (!touchSession.dragging) {
+        if (Math.hypot(touch.clientX - touchSession.sx, touch.clientY - touchSession.sy) > 8) {
+          clearTouchSession();
+        }
+        return;
+      }
+      e.preventDefault();
+      e.stopPropagation();
+      wdMoveGhost(touch.clientX, touch.clientY);
+    };
+    const endTouch = (e) => {
+      if (!touchSession) return;
+      const touch = Array.from(e.changedTouches).find(t => t.identifier === touchSession.id);
+      if (!touch) return;
+      const dragging = touchSession.dragging;
+      if (dragging) {
+        e.preventDefault();
+        e.stopPropagation();
+      }
+      clearTouchSession();
+      if (dragging) {
+        if (Live2D.isOverModel(touch.clientX, touch.clientY)) onEquip();
+      } else openTilePopup(tile, popupCfg);
+    };
+    const cancelTouch = () => clearTouchSession();
+    tile.addEventListener('touchstart', (e) => {
+      if (touchSession || e.touches.length !== 1 || isNestedTileControl(tile, e.target)) return;
+      const touch = e.changedTouches[0];
+      touchSession = {
+        id: touch.identifier,
+        sx: touch.clientX,
+        sy: touch.clientY,
+        x: touch.clientX,
+        y: touch.clientY,
+        dragging: false,
+        timer: 0,
+      };
+      touchSession.timer = setTimeout(() => {
+        if (!touchSession) return;
+        touchSession.dragging = true;
+        tile.classList.add('wd-dragging');
+        wdShowGhost(thumbSrc, touchSession.x, touchSession.y);
+      }, 400);
+      window.addEventListener('touchstart', cancelMultitouch, { capture: true, passive: true });
+      window.addEventListener('touchmove', moveTouch, { capture: true, passive: false });
+      window.addEventListener('touchend', endTouch, { capture: true, passive: false });
+      window.addEventListener('touchcancel', cancelTouch, { capture: true, passive: true });
+    }, { passive: true });
+  }
+
   function makeTile(label, thumbSrc, onEquip, colorKeys, popupCfg) {
     const tile = document.createElement('div');
     tile.className = 'wd-tile';
@@ -1164,29 +1348,7 @@ window.Outfit = (function () {
     tile.innerHTML = `${thumbSrc ? `<img draggable="false" src="${thumbSrc}">` : '<div class="wd-noimg">?</div>'}<span>${label}</span>`;
     if (colorKeys && colorKeys.length) tile.appendChild(makeSwatch(colorKeys, label));
     tile.appendChild(makeOptOrb(popupCfg));
-    tile.addEventListener('pointerdown', (e) => {
-      if (e.button !== 0) return;
-      e.preventDefault();
-      tile.setPointerCapture(e.pointerId);
-      const sx = e.clientX, sy = e.clientY;
-      let dragging = false;
-      const move = (ev) => {
-        if (!dragging && Math.hypot(ev.clientX - sx, ev.clientY - sy) > 6) {
-          dragging = true;
-          wdShowGhost(thumbSrc, ev.clientX, ev.clientY);
-        }
-        if (dragging) wdMoveGhost(ev.clientX, ev.clientY);
-      };
-      const up = (ev) => {
-        tile.removeEventListener('pointermove', move);
-        tile.removeEventListener('pointerup', up);
-        wdShowGhost(null);
-        if (!dragging) openTilePopup(tile, popupCfg);            // click = options
-        else if (Live2D.isOverModel(ev.clientX, ev.clientY)) onEquip(); // drop on Jun = wear
-      };
-      tile.addEventListener('pointermove', move);
-      tile.addEventListener('pointerup', up);
-    });
+    bindTileDrag(tile, thumbSrc, onEquip, popupCfg);
     tile.addEventListener('keydown', (e) => {
       if (e.key !== 'Enter' && e.key !== ' ') return;
       e.preventDefault();
@@ -1196,14 +1358,24 @@ window.Outfit = (function () {
   }
 
   function buildWardrobe() {
+    const coarsePointer = matchMedia('(pointer: coarse)');
     wdOverlay = document.createElement('div');
     wdOverlay.className = 'wardrobe-overlay';
     wdOverlay.innerHTML = `<div class="wd-head">
         <div class="wd-titles"><span class="wd-title">Annalie's Shop</span>
-        <span class="wd-hint">Click for options · drag onto Jun to wear</span></div>
+        <span class="wd-hint"></span></div>
         <div class="wd-actions"><button class="ghost wd-reset" type="button" title="Restore the default outfit">Reset</button>
         <button class="ghost wd-close" type="button" aria-label="Close wardrobe" title="Close">×</button></div></div>
       <div class="wd-main"><nav class="wd-rail" aria-label="Wardrobe sections"></nav><div class="wd-body"></div></div>`;
+    const hint = wdOverlay.querySelector('.wd-hint');
+    const syncHint = () => {
+      hint.textContent = coarsePointer.matches
+        ? 'Tap for options · hold and drag onto Jun to wear'
+        : 'Click for options · drag onto Jun to wear';
+    };
+    syncHint();
+    if (coarsePointer.addEventListener) coarsePointer.addEventListener('change', syncHint);
+    else coarsePointer.addListener(syncHint);
     const body = wdOverlay.querySelector('.wd-body');
     const rail = wdOverlay.querySelector('.wd-rail');
 
@@ -1341,6 +1513,13 @@ window.Outfit = (function () {
     });
 
     let removeDrag = null; // { key, x, y, removed }
+    const beginRemoveDrag = (key, x, y) => {
+      removeDrag = { key, x, y, removed: false };
+      wdTooltip.style.display = 'none';
+      setHoveredItem(key, wornDrawableMap());
+      const tile = wdOverlay.querySelector(`.wd-tile[data-item="${key}"] img, .wd-tile[data-variant-tile="${key}"] img`);
+      wdShowGhost(tile ? tile.src : '', x, y);
+    };
     let hoveredKey = null, hoveredIds = [];
     const setHoveredItem = (key, worn) => {
       if (hoveredKey === key) return;
@@ -1377,32 +1556,109 @@ window.Outfit = (function () {
       }
     });
     window.addEventListener('pointerdown', (e) => {
-      if (!document.body.classList.contains('wardrobe-open') || e.button !== 0) return;
-      if (e.target && e.target.closest && e.target.closest('.wardrobe-overlay, button, a, input, textarea, select, .composer, .conv-sidebar, .app-header')) return;
+      if (!document.body.classList.contains('wardrobe-open') || e.pointerType === 'touch' || e.button !== 0) return;
+      if (e.target && e.target.closest && e.target.closest('.wardrobe-overlay, .wd-optpop, .omega-color-picker, button, a, input, textarea, select, .composer, .conv-sidebar, .app-header')) return;
       const worn = wornDrawableMap();
       const hit = wornHitAt(e.clientX, e.clientY, worn);
       if (!hit) return;
       const key = worn.get(hit);
       e.preventDefault();
       try { e.target.setPointerCapture(e.pointerId); } catch (err) { }
-      removeDrag = { key, x: e.clientX, y: e.clientY, removed: false };
-      wdTooltip.style.display = 'none';
-      setHoveredItem(key, worn);
-      const tile = wdOverlay.querySelector(`.wd-tile[data-item="${key}"] img, .wd-tile[data-variant-tile="${key}"] img`);
-      wdShowGhost(tile ? tile.src : '', e.clientX, e.clientY);
+      beginRemoveDrag(key, e.clientX, e.clientY);
     });
     window.addEventListener('pointerup', (e) => {
-      if (!removeDrag) return;
+      if (!removeDrag || e.pointerType === 'touch') return;
       if (removeDrag.removed && Live2D.isOverModel(e.clientX, e.clientY)) {
         wornWear(removeDrag.key);
       }
       removeDrag = null;
       wdShowGhost(null);
     });
-    window.addEventListener('pointercancel', () => {
+    window.addEventListener('pointercancel', (e) => {
+      if (e.pointerType === 'touch') return;
       removeDrag = null;
       wdShowGhost(null);
     });
+
+    let removeTouch = null;
+    const clearRemoveTouch = (restore) => {
+      if (!removeTouch) return;
+      clearTimeout(removeTouch.timer);
+      window.removeEventListener('touchstart', cancelRemoveMultitouch, true);
+      window.removeEventListener('touchmove', moveRemoveTouch, true);
+      window.removeEventListener('touchend', endRemoveTouch, true);
+      window.removeEventListener('touchcancel', cancelRemoveTouch, true);
+      const removed = removeDrag && removeDrag.removed;
+      const key = removeDrag && removeDrag.key;
+      removeTouch = null;
+      removeDrag = null;
+      wdShowGhost(null);
+      setHoveredItem(null);
+      if (restore && removed && key) wornWear(key);
+    };
+    const cancelRemoveMultitouch = (e) => {
+      if (removeTouch && e.touches.length > 1) clearRemoveTouch(true);
+    };
+    const moveRemoveTouch = (e) => {
+      if (!removeTouch) return;
+      const touch = Array.from(e.touches).find(t => t.identifier === removeTouch.id);
+      if (!touch || e.touches.length > 1) { clearRemoveTouch(true); return; }
+      removeTouch.x = touch.clientX;
+      removeTouch.y = touch.clientY;
+      if (!removeTouch.dragging) {
+        if (Math.hypot(touch.clientX - removeTouch.sx, touch.clientY - removeTouch.sy) > 8) {
+          clearRemoveTouch(false);
+        }
+        return;
+      }
+      e.preventDefault();
+      e.stopPropagation();
+      wdMoveGhost(touch.clientX, touch.clientY);
+      if (removeDrag && !removeDrag.removed && Math.hypot(touch.clientX - removeDrag.x, touch.clientY - removeDrag.y) > 6) {
+        removeDrag.removed = true;
+        wornRemove(removeDrag.key);
+        setHoveredItem(null);
+      }
+    };
+    const endRemoveTouch = (e) => {
+      if (!removeTouch) return;
+      const touch = Array.from(e.changedTouches).find(t => t.identifier === removeTouch.id);
+      if (!touch) return;
+      const restore = !!(removeDrag && removeDrag.removed && Live2D.isOverModel(touch.clientX, touch.clientY));
+      if (removeTouch.dragging) {
+        e.preventDefault();
+        e.stopPropagation();
+      }
+      clearRemoveTouch(restore);
+    };
+    const cancelRemoveTouch = () => clearRemoveTouch(true);
+    window.addEventListener('touchstart', (e) => {
+      if (!document.body.classList.contains('wardrobe-open') || removeTouch || removeDrag || e.touches.length !== 1) return;
+      if (e.target && e.target.closest && e.target.closest('.wardrobe-overlay, .wd-optpop, .omega-color-picker, button, a, input, textarea, select, .composer, .conv-sidebar, .app-header')) return;
+      const touch = e.changedTouches[0];
+      const worn = wornDrawableMap();
+      const hit = wornHitAt(touch.clientX, touch.clientY, worn);
+      if (!hit) return;
+      removeTouch = {
+        id: touch.identifier,
+        key: worn.get(hit),
+        sx: touch.clientX,
+        sy: touch.clientY,
+        x: touch.clientX,
+        y: touch.clientY,
+        dragging: false,
+        timer: 0,
+      };
+      removeTouch.timer = setTimeout(() => {
+        if (!removeTouch) return;
+        removeTouch.dragging = true;
+        beginRemoveDrag(removeTouch.key, removeTouch.x, removeTouch.y);
+      }, 400);
+      window.addEventListener('touchstart', cancelRemoveMultitouch, { capture: true, passive: true });
+      window.addEventListener('touchmove', moveRemoveTouch, { capture: true, passive: false });
+      window.addEventListener('touchend', endRemoveTouch, { capture: true, passive: false });
+      window.addEventListener('touchcancel', cancelRemoveTouch, { capture: true, passive: true });
+    }, { capture: true, passive: true });
     window.addEventListener('keydown', (e) => {
       if (e.key === 'Escape' && document.body.classList.contains('wardrobe-open')) closeWardrobe();
     });

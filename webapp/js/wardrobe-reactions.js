@@ -362,7 +362,37 @@ window.WardrobeReactions = (function () {
   let textEl = null;
   let hideTimer = null;
   let currentToken = 0;
+  let cardRaf = 0;
   const lastLine = {};
+
+  function positionCard() {
+    cardRaf = requestAnimationFrame(positionCard);
+    const a = window.Live2D && Live2D.faceAnchor && Live2D.faceAnchor();
+    if (!a || !card) return;
+    const stage = document.getElementById('stage');
+    if (!stage) return;
+    const stageRect = stage.getBoundingClientRect();
+    const viewport = window.MobileViewport && MobileViewport.getVisualRect
+      ? MobileViewport.getVisualRect()
+      : { left: 0, top: 0, right: innerWidth, bottom: innerHeight, width: innerWidth, height: innerHeight };
+    const minLeft = Math.max(stageRect.left, viewport.left) + 8;
+    const maxRight = Math.min(stageRect.right, viewport.right) - 8;
+    const minTop = Math.max(stageRect.top, viewport.top) + 8;
+    const maxBottom = Math.min(stageRect.bottom, viewport.bottom) - 8;
+    const w = card.offsetWidth, h = card.offsetHeight;
+    let left = a.x - a.headW * 0.5 - w;
+    if (left < minLeft) left = Math.min(a.x + a.headW * 0.5, maxRight - w);
+    left = Math.max(minLeft, Math.min(left, maxRight - w));
+    const top = Math.max(minTop, Math.min(a.y + viewport.height * 0.18, maxBottom - h));
+    card.style.left = left - stageRect.left + 'px';
+    card.style.top = top - stageRect.top + 'px';
+  }
+
+  function showCard() {
+    if (!card) return;
+    card.classList.add('show');
+    if (!cardRaf) positionCard();
+  }
 
   function configureTts() {
     if (!window.TTS) return false;
@@ -378,11 +408,12 @@ window.WardrobeReactions = (function () {
     const stage = document.getElementById('stage');
     if (!stage) return;
     const style = document.createElement('style');
-    style.textContent = `.wardrobe-reaction { position:absolute; z-index:4; left:calc(50% - min(25vw, 270px)); top:33%; width:min(330px, 38vw); color:#fff; pointer-events:none; opacity:0; transform:translateX(-14px); transition:opacity .32s ease, transform .32s cubic-bezier(.22,1,.36,1); font-family:Arial,Helvetica,sans-serif; filter:drop-shadow(-4px 5px 0 rgba(13,11,38,.9)); } .wardrobe-reaction.show { opacity:1; transform:translateX(0); } .wardrobe-reaction-text span { opacity:0; animation:wr-letter .28s ease-out forwards; } @keyframes wr-letter { from { opacity:0; } to { opacity:1; } } .wardrobe-reaction-name { display:table; padding:7px 16px 7px 11px; background:#15142e; border-left:5px solid #ec0054; color:#fff; font-size:15px; font-weight:800; line-height:1; clip-path:polygon(0 0, 100% 0, 100% calc(100% - 9px), calc(100% - 9px) 100%, 0 100%); } .wardrobe-reaction-text { position:relative; margin-top:4px; padding:11px 18px 13px; background:rgba(25,2,44,.92); font-size:17px; font-weight:700; line-height:1.25; clip-path:polygon(0 0, 100% 0, 100% calc(100% - 12px), calc(100% - 12px) 100%, 0 100%); } @media (max-width:700px) { .wardrobe-reaction { left:12px; top:16%; width:min(300px, calc(100% - 42px)); } .wardrobe-reaction-name { font-size:13px; } .wardrobe-reaction-text { font-size:15px; } }`;
+    style.textContent = `.wardrobe-reaction { position:absolute; z-index:4; width:min(330px, 38vw); color:#fff; pointer-events:none; opacity:0; transition:opacity .32s ease; font-family:Arial,Helvetica,sans-serif; filter:drop-shadow(-4px 5px 0 rgba(13,11,38,.9)); } .wardrobe-reaction.show { opacity:1; } .wardrobe-reaction-text span { opacity:0; animation:wr-letter .28s ease-out forwards; } @keyframes wr-letter { from { opacity:0; } to { opacity:1; } } .wardrobe-reaction-name { display:table; padding:7px 16px 7px 11px; background:#15142e; border-left:5px solid #ec0054; color:#fff; font-size:15px; font-weight:800; line-height:1; clip-path:polygon(0 0, 100% 0, 100% calc(100% - 9px), calc(100% - 9px) 100%, 0 100%); } .wardrobe-reaction-text { position:relative; margin-top:4px; padding:11px 18px 13px; background:rgba(25,2,44,.92); font-size:17px; font-weight:700; line-height:1.25; clip-path:polygon(0 0, 100% 0, 100% calc(100% - 12px), calc(100% - 12px) 100%, 0 100%); } @media (max-width:700px) { .wardrobe-reaction { width:min(300px, calc(100% - 42px)); } .wardrobe-reaction-name { font-size:13px; } .wardrobe-reaction-text { font-size:15px; } }`;
     document.head.appendChild(style);
     card = document.createElement('div');
     card.className = 'wardrobe-reaction';
-    card.innerHTML = '<div class="wardrobe-reaction-name">JUN</div><div class="wardrobe-reaction-text"></div>';
+    const botName = (window.Names && Names.getBot && Names.getBot()) || 'JUN';
+    card.innerHTML = `<div class="wardrobe-reaction-name">${botName}</div><div class="wardrobe-reaction-text"></div>`;
     textEl = card.querySelector('.wardrobe-reaction-text');
     stage.appendChild(card);
   }
@@ -501,6 +532,7 @@ window.WardrobeReactions = (function () {
   function hide() {
     if (hideTimer) { clearTimeout(hideTimer); hideTimer = null; }
     if (card) card.classList.remove('show');
+    if (cardRaf) { cancelAnimationFrame(cardRaf); cardRaf = 0; }
     clearExpression();
   }
 
@@ -568,7 +600,7 @@ window.WardrobeReactions = (function () {
     openGesture(mood);
     if (card && textEl) {
       setLetters(textEl, line);
-      card.classList.add('show');
+      showCard();
     }
     return new Promise((resolve) => {
       const finish = () => { hide(); resolve(); };
@@ -615,7 +647,7 @@ window.WardrobeReactions = (function () {
         if (!card || !textEl) return;
         setLetters(textEl, display);
         applyExpression(mood);
-        card.classList.add('show');
+        showCard();
       },
       onDone() {
         if (token !== currentToken) return;

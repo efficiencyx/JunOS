@@ -2,11 +2,12 @@
 <html lang="en">
 <head>
 <meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, interactive-widget=resizes-content">
 <title>Jun OS</title>
 <link rel="icon" type="image/png" href="jun_os.png">
-<link rel="stylesheet" href="styles.css?v=30">
-<link rel="stylesheet" href="trip-loader.css?v=2">
+<script src="js/viewport.js?v=1"></script>
+<link rel="stylesheet" href="styles.css?v=39">
+<link rel="stylesheet" href="trip-loader.css?v=3">
 <script src="js/boot-gate.js?v=1"></script>
 </head>
 <body>
@@ -121,6 +122,7 @@
 <div id="toasts" aria-live="polite" aria-atomic="false"></div>
 
 <div id="drawerBackdrop" class="drawer-backdrop" aria-hidden="true"></div>
+<div id="sidebarBackdrop" class="sidebar-backdrop" aria-hidden="true"></div>
 
 <aside id="settingsDrawer" class="settings-drawer" aria-label="Settings" role="dialog" aria-modal="true">
 
@@ -203,7 +205,7 @@
             <div class="set-row-title">Think</div>
             <div class="set-row-desc">Show the model's chain-of-thought as it streams. Ignored when Reasoning is auto.</div>
           </div>
-          <div class="set-row-control"><input type="checkbox" id="thinkChk" class="toggle" aria-label="Enable chain-of-thought"></div>
+          <label class="set-row-control"><input type="checkbox" id="thinkChk" class="toggle" aria-label="Enable chain-of-thought"></label>
         </div>
         <div class="set-row">
           <div class="set-row-text">
@@ -220,7 +222,7 @@
             <div class="set-row-title">Enable voice</div>
             <div class="set-row-desc">Speak replies aloud.</div>
           </div>
-          <div class="set-row-control"><input type="checkbox" id="ttsChk" class="toggle" aria-label="Enable TTS"></div>
+          <label class="set-row-control"><input type="checkbox" id="ttsChk" class="toggle" aria-label="Enable TTS"></label>
         </div>
         <div class="set-row" data-dep="tts">
           <div class="set-row-text">
@@ -255,14 +257,14 @@
             <div class="set-row-title">Microphone <span id="voiceState" class="voice-pill" data-state="idle">off</span></div>
             <div class="set-row-desc">Talk to her instead of typing. Headphones recommended — on speakers she can hear herself.</div>
           </div>
-          <div class="set-row-control"><input type="checkbox" id="voiceChk" class="toggle" aria-label="Enable microphone"></div>
+          <label class="set-row-control"><input type="checkbox" id="voiceChk" class="toggle" aria-label="Enable microphone"></label>
         </div>
         <div class="set-row" data-dep="mic">
           <div class="set-row-text">
             <div class="set-row-title">Interrupt her</div>
             <div class="set-row-desc">Talking over her cuts her off. Turn off if she keeps interrupting herself.</div>
           </div>
-          <div class="set-row-control"><input type="checkbox" id="voiceBargeChk" class="toggle" checked aria-label="Allow interrupting"></div>
+          <label class="set-row-control"><input type="checkbox" id="voiceBargeChk" class="toggle" checked aria-label="Allow interrupting"></label>
         </div>
         <div class="set-row" data-dep="mic">
           <div class="set-row-text">
@@ -309,7 +311,7 @@
             <div class="set-row-title">Metrics overlay (HUD)</div>
             <div class="set-row-desc">Floating live readout of tokens/s, token counts, VRAM, RAM and the loaded model. Toggle anytime with <code>Ctrl+Shift+D</code>.</div>
           </div>
-          <div class="set-row-control"><input type="checkbox" id="devHudChk" class="toggle" aria-label="Show metrics HUD"></div>
+          <label class="set-row-control"><input type="checkbox" id="devHudChk" class="toggle" aria-label="Show metrics HUD"></label>
         </div>
         <div class="set-block">
           <div class="set-block-head">
@@ -318,19 +320,28 @@
           </div>
           <div class="set-row-desc">Live affection / trust / tension. Drag to override temporarily; Jun reacts on her next reply.</div>
           <div class="mood-controls">
-            <label class="mood-row">
+            <label class="mood-row mood-row--affection">
               <span class="mood-label">Affection</span>
-              <input type="range" id="moodAffection" min="0" max="100" step="1" value="50">
+              <div class="mood-track">
+                <div class="mood-clip"><span class="mood-phrase" id="moodAffectionPhrase" aria-hidden="true"></span></div>
+                <input type="range" id="moodAffection" min="0" max="100" step="1" value="50">
+              </div>
               <span class="mood-val" id="moodAffectionVal">50</span>
             </label>
-            <label class="mood-row">
+            <label class="mood-row mood-row--trust">
               <span class="mood-label">Trust</span>
-              <input type="range" id="moodTrust" min="0" max="100" step="1" value="50">
+              <div class="mood-track">
+                <div class="mood-clip"><span class="mood-phrase" id="moodTrustPhrase" aria-hidden="true"></span></div>
+                <input type="range" id="moodTrust" min="0" max="100" step="1" value="50">
+              </div>
               <span class="mood-val" id="moodTrustVal">50</span>
             </label>
-            <label class="mood-row">
+            <label class="mood-row mood-row--tension">
               <span class="mood-label">Tension</span>
-              <input type="range" id="moodTension" min="0" max="100" step="1" value="30">
+              <div class="mood-track">
+                <div class="mood-clip"><span class="mood-phrase" id="moodTensionPhrase" aria-hidden="true"></span></div>
+                <input type="range" id="moodTension" min="0" max="100" step="1" value="30">
+              </div>
               <span class="mood-val" id="moodTensionVal">30</span>
             </label>
           </div>
@@ -387,6 +398,12 @@
 <div id="app">
 
   <header class="app-header">
+    <div class="header-left">
+      <button class="mobile-menu-btn" id="mobileMenuBtn" type="button" aria-label="Open conversations" aria-controls="conversationSidebar" aria-expanded="false">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><line x1="4" y1="6" x2="20" y2="6"/><line x1="4" y1="12" x2="20" y2="12"/><line x1="4" y1="18" x2="20" y2="18"/></svg>
+      </button>
+      <button class="mobile-conversation-title" id="mobileConversationTitle" type="button" disabled>New conversation</button>
+    </div>
     <div class="header-right">
       <span id="statusPill" class="status-pill status-idle">idle</span>
       <button class="ghost" id="resetLive2DBtn" title="Reset to idle pose" aria-label="Reset pose">reset pose</button>
@@ -442,6 +459,7 @@
       </div>
 
       <div id="messages" class="messages" aria-live="polite" aria-label="Messages"></div>
+      <div id="mobileReplyStatus" class="sr-only" aria-live="polite" aria-atomic="true"></div>
 
       <div class="composer-area">
         <div class="composer">
@@ -502,22 +520,22 @@
 <script src="js/auth.js?v=6"></script>
 <script src="js/prefs.js?v=3"></script>
 <script src="js/names.js?v=1"></script>
-<script src="js/live2d.js?v=25"></script>
+<script src="js/live2d.js?v=27"></script>
 <script src="js/actions.js?v=9"></script>
 <script src="js/mods.js?v=9"></script>
-<script src="js/outfit.js?v=31"></script>
-<script src="js/touch.js?v=9"></script>
+<script src="js/outfit.js?v=33"></script>
+<script src="js/touch.js?v=11"></script>
 <script src="js/chat-api.js?v=2"></script>
 <script src="js/tts.js?v=10"></script>
 <script src="js/wardrobe-open-lines.js?v=2"></script>
-<script src="js/wardrobe-reactions.js?v=6"></script>
+<script src="js/wardrobe-reactions.js?v=13"></script>
 <script src="js/voice.js?v=1"></script>
-<script src="js/voicemode.js?v=1"></script>
+<script src="js/voicemode.js?v=2"></script>
 <script src="js/ui.js?v=6"></script>
 <script src="js/history.js?v=6"></script>
 <script src="js/devhud.js?v=2"></script>
 <script src="js/boot-fx.js?v=4"></script>
 <script src="js/trip-loader.js?v=2"></script>
-<script src="js/app.js?v=26"></script>
+<script src="js/app.js?v=35"></script>
 </body>
 </html>
