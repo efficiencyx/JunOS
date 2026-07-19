@@ -1,7 +1,7 @@
 window.VoiceMode = (function () {
   let active = false;
   let muted = false;
-  let hooks = { onExitMidStream: null, sttAvailable: null };
+  let hooks = { onEnter: null, onExitMidStream: null, sttAvailable: null };
 
   const overlay = () => document.getElementById('voiceOverlay');
 
@@ -36,6 +36,7 @@ window.VoiceMode = (function () {
       void ov.offsetHeight; // flush so the opacity transition runs
     }
     document.body.classList.add('voice-mode');
+    if (hooks.onEnter) hooks.onEnter();
     if (window.Live2D) Live2D.setCameraPreset('face');
   }
 

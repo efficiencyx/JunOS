@@ -175,6 +175,34 @@ function embed_text(string $text, string $task = ''): ?array {
     return array_values(array_map('floatval', $obj['embedding']));
 }
 
+const TELEMETRY_DEFAULT_ENDPOINT = 'https://metrics.example.invalid/ingest.php';
+
+function telemetry_enabled(): bool {
+    return env_str('TELEMETRY') === 'on' && env_str('TELEMETRY_INSTALL_ID') !== '';
+}
+
+function telemetry_send(array $payload): void {
+    try {
+        $ch = curl_init(env_str('TELEMETRY_ENDPOINT', TELEMETRY_DEFAULT_ENDPOINT));
+        curl_setopt_array($ch, [
+            CURLOPT_POST => true,
+            CURLOPT_HTTPHEADER => ['Content-Type: application/json', 'X-Jun-Client: jun-os'],
+            CURLOPT_POSTFIELDS => json_encode($payload, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES),
+            CURLOPT_RETURNTRANSFER => true,
+            CURLOPT_CONNECTTIMEOUT => 2,
+            CURLOPT_TIMEOUT => 3,
+        ]);
+        $resp = curl_exec($ch);
+        $status = (int)curl_getinfo($ch, CURLINFO_RESPONSE_CODE);
+        if ($resp === false || $status >= 300) {
+            log_event(['msg' => 'telemetry_send_error', 'err' => $resp === false ? curl_error($ch) : 'http_' . $status]);
+        }
+        curl_close($ch);
+    } catch (Throwable $e) {
+        log_event(['msg' => 'telemetry_send_error', 'err' => $e->getMessage()]);
+    }
+}
+
 function db(): PDO {
     static $pdo = null;
     if ($pdo !== null) return $pdo;

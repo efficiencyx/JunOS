@@ -36,5 +36,11 @@ window.History = (function () {
     return r.json();
   }
 
-  return { list, create, load, delete: del, rename };
+  async function compact(id) {
+    const r = await fetch(`${API}?action=compact&id=${id}`, { method: 'POST' });
+    if (!r.ok) throw new Error(`history compact ${r.status}`);
+    return r.json();
+  }
+
+  return { list, create, load, delete: del, rename, compact };
 })();

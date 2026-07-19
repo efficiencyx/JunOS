@@ -7,10 +7,12 @@ window.ModelTouch = (function () {
 
   let regions = null;
   let active = null;
+  let pending = null;
   let tickTimer = null;
   let cooldownUntil = 0;
-  let pendingCooldown = false;
 
+  const TOUCH_HOLD_MS = 180;
+  const TOUCH_DRAG_THRESHOLD = 8;
   const NOTIFY_INTERVAL_MS = 2000;
   const NOTIFY_CHANCE = 0.2;
   const COOLDOWN_MS = 10000;
@@ -43,7 +45,7 @@ window.ModelTouch = (function () {
 
   function isInteractiveTarget(t) {
     return !!(t && t.closest && t.closest(
-      'button, a, input, textarea, select, .composer, .conv-sidebar, .settings-drawer, .app-header, .prompt-chips, .wardrobe-overlay'
+      'button, a, input, textarea, select, .composer, .conv-sidebar, .settings-drawer, .app-header, .prompt-chips, .wardrobe-overlay, .face-bubble, .sidebar-backdrop'
     ));
   }
 
@@ -86,6 +88,20 @@ window.ModelTouch = (function () {
     document.body.classList.add('l2d-touching');
     tickTimer = setInterval(tick, 250);
     if (onTouch) onTouch();
+    tryNotify(performance.now());
+  }
+
+  function cancelPending() {
+    if (!pending) return;
+    clearTimeout(pending.timer);
+    pending = null;
+    document.body.classList.remove('l2d-touch-pending');
+  }
+
+  function tryNotify(now) {
+    if (!active || !sendEvent || isBusy() || now < cooldownUntil) return;
+    cooldownUntil = now + COOLDOWN_MS;
+    sendEvent(eventText(active.kind, active.side));
   }
 
   function end() {
@@ -137,15 +153,21 @@ window.ModelTouch = (function () {
 
     if (active.heldMs >= NOTIFY_INTERVAL_MS) {
       active.heldMs -= NOTIFY_INTERVAL_MS;
-      if (Math.random() < NOTIFY_CHANCE && !isBusy() && now >= cooldownUntil && sendEvent) {
-        pendingCooldown = true;
-        sendEvent(eventText(active.kind, active.side));
-      }
+      if (Math.random() < NOTIFY_CHANCE) tryNotify(now);
     }
   }
 
   function onPointerMove(e) {
+    if (pending && e.pointerId === pending.pointerId) {
+      pending.lastX = e.clientX;
+      pending.lastY = e.clientY;
+      if (Math.hypot(e.clientX - pending.startX, e.clientY - pending.startY) > TOUCH_DRAG_THRESHOLD) {
+        cancelPending();
+      }
+      return;
+    }
     if (!active || e.pointerId !== active.pointerId) return;
+    e.preventDefault();
     const now = performance.now();
     active.lastMoveAt = now;
     if (active.kind === 'head') {
@@ -173,19 +195,49 @@ window.ModelTouch = (function () {
   }
 
   function onPointerEnd(e) {
+    if (pending && e.pointerId === pending.pointerId) {
+      cancelPending();
+      return;
+    }
     if (!active || e.pointerId !== active.pointerId) return;
     end();
   }
 
   function onPointerDown(e) {
     if (e.button !== 0) return;
-    if (active) return;
+    if (active || pending) return;
     if (!window.Live2D || !window.Actions) return;
     if (document.body.classList.contains('wardrobe-open')) return;
+    if (document.body.classList.contains('sidebar-open')) return;
     if (isInteractiveTarget(e.target)) return;
     if (!Live2D.isOverModel(e.clientX, e.clientY)) return;
     const hit = classify(e.clientX, e.clientY);
     if (!hit) return;
+    if (e.pointerType === 'touch') {
+      pending = {
+        kind: hit.kind,
+        side: hit.side,
+        pointerId: e.pointerId,
+        startX: e.clientX,
+        startY: e.clientY,
+        lastX: e.clientX,
+        lastY: e.clientY,
+        timer: 0,
+      };
+      document.body.classList.add('l2d-touch-pending');
+      pending.timer = setTimeout(() => {
+        const gesture = pending;
+        if (!gesture) return;
+        pending = null;
+        document.body.classList.remove('l2d-touch-pending');
+        begin(gesture.kind, gesture.side, {
+          pointerId: gesture.pointerId,
+          clientX: gesture.lastX,
+          clientY: gesture.lastY,
+        });
+      }, TOUCH_HOLD_MS);
+      return;
+    }
     e.preventDefault();
     e.stopImmediatePropagation();
     begin(hit.kind, hit.side, e);
@@ -201,11 +253,5 @@ window.ModelTouch = (function () {
     window.addEventListener('pointercancel', onPointerEnd);
   }
 
-  function onReplyDone() {
-    if (!pendingCooldown) return;
-    pendingCooldown = false;
-    cooldownUntil = performance.now() + COOLDOWN_MS;
-  }
-
-  return { init, onReplyDone };
+  return { init };
 })();

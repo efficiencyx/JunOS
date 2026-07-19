@@ -107,6 +107,44 @@ function provider_chat_payload(
     return $payload;
 }
 
+function provider_complete_once(string $provider, string $model, array $messages, int $maxTokens = 512): ?string {
+    $endpoint = provider_chat_endpoint($provider);
+    if (provider_uses_openai_protocol($provider)) {
+        $payload = ['model' => $model, 'messages' => $messages, 'stream' => false,
+                    'temperature' => 0.3, 'max_tokens' => $maxTokens];
+    } else {
+        $payload = ['model' => $model, 'messages' => $messages, 'stream' => false, 'think' => false,
+                    'options' => ['temperature' => 0.3, 'num_ctx' => default_num_ctx(), 'num_predict' => $maxTokens]];
+    }
+
+    $ch = curl_init($endpoint);
+    curl_setopt_array($ch, [
+        CURLOPT_POST => true,
+        CURLOPT_HTTPHEADER => chat_request_headers($provider),
+        CURLOPT_POSTFIELDS => json_encode($payload, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES),
+        CURLOPT_RETURNTRANSFER => true,
+        CURLOPT_TIMEOUT => 120,
+        CURLOPT_CONNECTTIMEOUT => 10,
+    ]);
+    $resp = curl_exec($ch);
+    $status = (int)curl_getinfo($ch, CURLINFO_RESPONSE_CODE);
+    if ($resp === false || $status >= 300) {
+        log_event(['msg' => 'complete_once_error', 'err' => $resp === false ? curl_error($ch) : 'http_' . $status]);
+        curl_close($ch);
+        return null;
+    }
+    curl_close($ch);
+
+    $obj = json_decode($resp, true);
+    if (!is_array($obj)) return null;
+    $text = provider_uses_openai_protocol($provider)
+        ? ($obj['choices'][0]['message']['content'] ?? null)
+        : ($obj['message']['content'] ?? null);
+    if (!is_string($text)) return null;
+    $text = trim($text);
+    return $text !== '' ? $text : null;
+}
+
 function provider_chat_endpoint(string $provider): string {
     return provider_uses_openai_protocol($provider)
         ? chat_api_base($provider) . '/chat/completions'

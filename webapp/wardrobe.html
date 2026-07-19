@@ -2,13 +2,15 @@
 <html lang="en">
 <head>
 <meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, interactive-widget=resizes-content">
+<script src="js/viewport.js?v=1"></script>
 <title>Annalie's Shop</title>
 <link rel="icon" type="image/png" href="jun_os.png">
-<link rel="stylesheet" href="trip-loader.css?v=2">
+<link rel="stylesheet" href="trip-loader.css?v=3">
 <style>
 :root {
   --panel-w: 440px;
+  --panel-h: clamp(280px, 52dvh, 440px);
   --bg-2: #16141e;
   --bg-3: #1c1a26;
   --bg-4: #232030;
@@ -22,7 +24,7 @@
   --serif: "Iowan Old Style", "Palatino Linotype", Palatino, Georgia, serif;
 }
 * { box-sizing: border-box; }
-html, body { height: 100%; }
+html, body { height: 100%; height: 100dvh; }
 body {
   margin: 0;
   font: 14px/1.45 system-ui, sans-serif;
@@ -177,7 +179,7 @@ body.wardrobe-open .wardrobe-overlay { display: flex; animation: wd-slide-in 0.3
   background: rgba(255,255,255,0.02);
   cursor: grab;
   user-select: none; -webkit-user-select: none;
-  touch-action: none;
+  touch-action: pan-x pan-y;
   text-align: center;
   transition: border-color 0.15s, background 0.15s, transform 0.15s, box-shadow 0.15s;
 }
@@ -250,13 +252,39 @@ body.wd-over-worn-item { cursor: grab; }
   box-shadow: 0 12px 32px rgba(0,0,0,0.55);
   max-width: 356px;
 }
+.wd-optpop.wd-sheet {
+  width: 100%; max-width: none;
+  max-height: calc(var(--visual-viewport-height, 100dvh) - 8px);
+  overflow-y: auto;
+  padding: 14px calc(14px + env(safe-area-inset-right)) calc(14px + env(safe-area-inset-bottom)) calc(14px + env(safe-area-inset-left));
+  border-radius: 18px 18px 0 0;
+  border-bottom: 0;
+  overscroll-behavior: contain;
+}
+.wd-optpop.wd-sheet .wd-optpop-grid { max-height: none; overflow: visible; }
 .wd-optpop[hidden] { display: none; }
-.wd-optpop-title {
+.wd-optpop-head {
+  position: sticky; top: 0; z-index: 1;
+  display: flex; align-items: center; gap: 8px;
+  padding: 2px 0;
   margin-bottom: 8px;
+  background: var(--bg-3);
+}
+.wd-optpop-title {
+  flex: 1; min-width: 0;
   font-size: 10px; font-weight: 600;
   text-transform: uppercase; letter-spacing: 0.1em;
   color: rgba(255,255,255,0.35);
 }
+.wd-optpop-close {
+  position: relative;
+  flex: none; width: 28px; height: 28px; padding: 0;
+  border: 0; border-radius: 6px;
+  background: transparent; color: var(--muted);
+  font: 18px/1 system-ui, sans-serif; cursor: pointer;
+}
+.wd-optpop-close::before { content: ""; position: absolute; inset: -8px; }
+.wd-optpop-close:hover { color: var(--fg); background: rgba(255,255,255,0.05); }
 .wd-optpop-row { display: flex; align-items: center; gap: 8px; margin-bottom: 10px; }
 .wd-optpop-row[hidden] { display: none; }
 .wd-opt-equip {
@@ -341,6 +369,15 @@ body.wd-over-worn-item { cursor: grab; }
   box-shadow: 0 18px 55px rgba(0,0,0,.58);
   font: 12px/1.35 system-ui, sans-serif;
 }
+.omega-color-picker.ocp-sheet {
+  width: 100%; max-width: none;
+  max-height: calc(var(--visual-viewport-height, 100dvh) - 8px);
+  overflow-y: auto;
+  padding: 14px calc(14px + env(safe-area-inset-right)) calc(14px + env(safe-area-inset-bottom)) calc(14px + env(safe-area-inset-left));
+  border-radius: 18px 18px 0 0;
+  border-bottom: 0;
+  overscroll-behavior: contain;
+}
 .omega-color-picker[hidden] { display: none; }
 .ocp-head { display: flex; align-items: flex-start; justify-content: space-between; margin-bottom: 10px; }
 .ocp-head > div { display: flex; flex-direction: column; }
@@ -400,17 +437,81 @@ body.wd-over-worn-item { cursor: grab; }
 .ocp-clear:hover:not(:disabled) { border-color: var(--border-2); color: var(--fg); }
 .ocp-clear:disabled { opacity: .55; cursor: default; }
 .ocp-sv:focus-visible, .ocp-hue:focus-visible, .ocp-channel:focus-visible,
-.ocp-close:focus-visible, .ocp-presets button:focus-visible, .ocp-clear:focus-visible {
+.ocp-close:focus-visible, .ocp-presets button:focus-visible, .ocp-clear:focus-visible,
+.wd-optpop-close:focus-visible {
   outline: 2px solid var(--accent); outline-offset: 2px;
 }
 
-@media (max-width: 700px) {
-  #stage { inset: 0 0 46vh 0; }
-  .wardrobe-overlay { top: auto; left: 0; width: 100%; height: 46vh; border-left: 0; border-top: 1px solid var(--border); }
-  .wd-rail { padding: 8px 14px 0; }
+@media (max-width: 900px) {
   .spotlight, .page-title { display: none; }
-  /* No hover on touch: keep every tint swatch visible. */
-  .wd-swatch { opacity: 1; transform: none; }
+  #stageStatus {
+    left: max(14px, env(safe-area-inset-left));
+    max-width: calc(100vw - 28px);
+  }
+  html.wd-portrait #stage {
+    inset: env(safe-area-inset-top) env(safe-area-inset-right) var(--panel-h) env(safe-area-inset-left);
+  }
+  html.wd-portrait #stageStatus { bottom: calc(var(--panel-h) + 10px); }
+  html.wd-portrait .wardrobe-overlay {
+    top: auto; right: 0; bottom: 0; left: 0;
+    width: 100%; height: var(--panel-h);
+    padding-right: env(safe-area-inset-right);
+    padding-bottom: env(safe-area-inset-bottom);
+    padding-left: env(safe-area-inset-left);
+    border-top: 1px solid var(--border); border-left: 0;
+    box-shadow: 0 -20px 55px rgba(0,0,0,0.45);
+  }
+  html.wd-portrait body.wardrobe-open .wardrobe-overlay { animation-name: wd-sheet-in; }
+  html.wd-landscape { --panel-w: clamp(320px, 44vw, 400px); }
+  html.wd-landscape #stage {
+    inset: env(safe-area-inset-top) var(--panel-w) env(safe-area-inset-bottom) env(safe-area-inset-left);
+  }
+  html.wd-landscape .wardrobe-overlay {
+    width: var(--panel-w);
+    padding-top: env(safe-area-inset-top);
+    padding-right: env(safe-area-inset-right);
+    padding-bottom: env(safe-area-inset-bottom);
+  }
+  html.wd-landscape #stageStatus {
+    bottom: max(12px, env(safe-area-inset-bottom));
+    max-width: calc(100vw - var(--panel-w) - 28px);
+  }
+  .wd-head { padding: 10px 12px 8px 14px; }
+  .wd-title { font-size: 16px; }
+  .wd-rail { padding: 4px 12px 0; }
+  .wd-body { padding: 10px 14px calc(16px + env(safe-area-inset-bottom)); }
+  .wd-section { margin-top: 12px; }
+}
+@keyframes wd-sheet-in { from { transform: translateY(24px); opacity: 0; } }
+
+@media (pointer: coarse) {
+  .wd-hint { line-height: 1.3; }
+  .wd-tile {
+    touch-action: pan-x pan-y;
+    -webkit-touch-callout: none;
+  }
+  .wd-tile:hover { transform: none; box-shadow: none; }
+  .wd-tile.wd-dragging { border-color: var(--accent); background: var(--accent-soft); }
+  .wd-swatch, .wd-optorb {
+    width: 30px; height: 30px;
+    opacity: 1; transform: none;
+  }
+  .wd-swatch:hover, .wd-optorb:hover { transform: none; }
+  .wd-swatch { top: 4px; right: 4px; }
+  .wd-optorb { right: 4px; bottom: 4px; }
+  .wd-close { width: 44px; height: 44px; }
+  .wd-reset, .wd-nav, .wd-expand, .wd-opt-equip, .ocp-channel, .ocp-clear {
+    min-height: 44px;
+  }
+  .wd-expand { min-width: 44px; }
+  .wd-opt { min-height: 88px; }
+  .ocp-close { width: 44px; height: 44px; }
+  .ocp-hue { height: 44px; }
+  .ocp-value-row { height: 44px; }
+  .ocp-hex { min-height: 32px; font-size: 16px; }
+  .ocp-presets { grid-template-columns: repeat(5, 1fr); gap: 8px; }
+  .ocp-presets button { min-width: 44px; min-height: 44px; }
+  .wd-tooltip { display: none !important; }
 }
 </style>
 </head>
@@ -425,14 +526,14 @@ body.wd-over-worn-item { cursor: grab; }
 <script src="https://cdn.jsdelivr.net/npm/pixi-live2d-display@0.4.0/dist/cubism4.min.js"></script>
 <script src="js/auth.js?v=6"></script>
 <script src="js/prefs.js?v=3"></script>
-<script src="js/live2d.js?v=25"></script>
+<script src="js/live2d.js?v=27"></script>
 <script src="js/mods.js?v=9"></script>
-<script src="js/outfit.js?v=31"></script>
+<script src="js/outfit.js?v=33"></script>
 <script src="js/tts.js?v=10"></script>
 <script src="js/wardrobe-open-lines.js?v=2"></script>
 <script src="js/wardrobe-return-lines.js?v=2"></script>
-<script src="js/wardrobe-reactions.js?v=6"></script>
+<script src="js/wardrobe-reactions.js?v=13"></script>
 <script src="js/trip-loader.js?v=2"></script>
-<script src="js/wardrobe.js?v=8"></script>
+<script src="js/wardrobe.js?v=9"></script>
 </body>
 </html>
