@@ -34,6 +34,10 @@ if ! running "$NGINX"; then
   exit 1
 fi
 
+# index.html carries boot.css inlined; regenerate so the two cannot drift.
+echo "→ inlining critical css"
+php tools/build-critical-css.php
+
 echo "→ static assets → $NGINX:$DEST"
 docker cp webapp/. "$NGINX:$DEST"
 
