@@ -294,17 +294,25 @@
     if (phone) {
       const bubbleStyle = getComputedStyle(faceBubble);
       const cssMaxHeight = parseFloat(bubbleStyle.maxHeight) || Infinity;
-      const maxHeight = Math.max(0, Math.min(cssMaxHeight, safeBottom - safeTop));
+      const aboveHead = Math.max(140, a.y - 12 - safeTop);
+      const maxHeight = Math.max(0, Math.min(cssMaxHeight, aboveHead, safeBottom - safeTop));
       const verticalPadding = (parseFloat(bubbleStyle.paddingTop) || 0)
         + (parseFloat(bubbleStyle.paddingBottom) || 0);
       faceBubble.style.maxHeight = maxHeight + 'px';
       if (text) text.style.maxHeight = Math.max(0, maxHeight - verticalPadding) + 'px';
     }
     const w = faceBubble.offsetWidth, h = faceBubble.offsetHeight;
-    let left = a.x - a.headW - w - 12;
-    if (left < safeLeft) left = a.x + a.headW + 12;
+    let left, top;
+    if (phone) {
+      left = a.x - w / 2;
+      top = a.y - h - 12;
+    } else {
+      left = a.x - a.headW - w - 12;
+      if (left < safeLeft) left = a.x + a.headW + 12;
+      top = a.y;
+    }
     left = Math.max(safeLeft, Math.min(left, safeRight - w));
-    const top = Math.max(safeTop, Math.min(a.y, safeBottom - h));
+    top = Math.max(safeTop, Math.min(top, safeBottom - h));
     faceBubble.style.left = left + 'px';
     faceBubble.style.top = top + 'px';
   }
