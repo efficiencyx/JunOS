@@ -152,10 +152,6 @@
     }, AUTO_RESET_MS);
   }
 
-  if (window.marked) {
-    marked.setOptions({ gfm: true, breaks: true });
-  }
-
   function renderMarkdown(text) {
     if (!window.marked) return escapeHtml(text);
     const html = marked.parse(text || '');
@@ -1002,15 +998,6 @@
   thinkChk.addEventListener('change', () => persistPref('think', thinkChk.checked ? '1' : '0'));
 
   sendBtn.addEventListener('click', sendMessage);
-  if (window.ModelTouch) ModelTouch.init({
-    sendEvent: sendTouchEvent,
-    isBusy: () => !!abortFn,
-    onTouch: () => {
-      if (abortFn) return;
-      idleNudgeStreak = 0;
-      scheduleIdleNudge(IDLE_AFTER_REPLY_MS);
-    },
-  });
   chatInput.addEventListener('keydown', e => {
     if (e.key === 'Enter' && !e.shiftKey) {
       e.preventDefault();
@@ -1584,6 +1571,33 @@
       showAuthScreen();
       return;
     }
+
+    // The avatar stack and the per-feature scripts are worthless to a visitor
+    // who never gets past the auth screen, so they are fetched only now.
+    await loadScripts([
+      ['vendor/pixi.min.js', 'vendor/live2dcubismcore.min.js',
+       'vendor/marked.min.js', 'vendor/purify.min.js',
+       'js/actions.js?v=10', 'js/outfit.js?v=34', 'js/touch.js?v=12',
+       'js/mods.js?v=10', 'js/tts.js?v=11', 'js/voice.js?v=2',
+       'js/voicemode.js?v=3', 'js/devhud.js?v=3', 'js/trip-loader.js?v=3',
+       'js/wardrobe-open-lines.js?v=3', 'js/wardrobe-reactions.js?v=14',
+       'js/wardrobe-return-lines.js?v=3'],
+      ['vendor/cubism4.min.js'],
+      ['js/live2d.js?v=28'],
+    ]);
+
+    // Both of these configure a lazily-loaded global, so they cannot run at
+    // module scope any more - they would silently no-op before the load.
+    marked.setOptions({ gfm: true, breaks: true });
+    ModelTouch.init({
+      sendEvent: sendTouchEvent,
+      isBusy: () => !!abortFn,
+      onTouch: () => {
+        if (abortFn) return;
+        idleNudgeStreak = 0;
+        scheduleIdleNudge(IDLE_AFTER_REPLY_MS);
+      },
+    });
 
     // Coming back from the wardrobe, the return cutscene replaces the boot
     // terminal: skipping BootFX.start also makes BootFX.finish a no-op later.
