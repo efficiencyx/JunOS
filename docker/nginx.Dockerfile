@@ -12,6 +12,9 @@ COPY webapp/ /var/www/omega/
 # nginx 1.27 built-in envsubst expands *.template files at container boot
 COPY docker/nginx/templates/ /etc/nginx/templates/
 
+# Header set shared by both templates; not a .template, so it is not expanded
+COPY docker/nginx/snippets/ /etc/nginx/snippets/
+
 # Hook that selects the right config template before nginx loads them
 COPY docker/nginx/10-pick-config.sh /docker-entrypoint.d/10-pick-config.sh
 RUN chmod +x /docker-entrypoint.d/10-pick-config.sh
