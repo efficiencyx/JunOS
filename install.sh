@@ -178,23 +178,23 @@ ask_model_ref() {
     MODEL_REF="$(resolve_model "$alias")"
 }
 
-# "enable local embeddings via Ollama? [y/N]" for non-Ollama providers. RAG /
-# cross-chat memory need a local Ollama with nomic-embed-text; when declined
-# those features switch off silently. Sets $EMBED (on|off).
-# Non-interactive knob: JUN_EMBEDDINGS=on|off (default off).
-ask_embeddings() {
+# "run voice (TTS) on the GPU? [y/N]". Defaults to CPU: both shipped engines are
+# real-time there anyway, while the GPU copy holds ~2GB of VRAM the LLM would
+# otherwise use for layer offload. Sets $TTS_DEVICE_CHOICE (cpu|cuda).
+# Non-interactive knob: JUN_TTS_DEVICE=cpu|cuda (default cpu).
+ask_tts_device() {
     local v
-    if [ -n "${JUN_EMBEDDINGS:-}" ]; then
-        case "$(printf '%s' "$JUN_EMBEDDINGS" | tr '[:upper:]' '[:lower:]')" in
-            on|1|true|yes|y) EMBED=on ;; *) EMBED=off ;;
+    if [ -n "${JUN_TTS_DEVICE:-}" ]; then
+        case "$(printf '%s' "$JUN_TTS_DEVICE" | tr '[:upper:]' '[:lower:]')" in
+            cuda|gpu|1|true|yes|y) TTS_DEVICE_CHOICE=cuda ;; *) TTS_DEVICE_CHOICE=cpu ;;
         esac
     elif [ "${JUN_YES:-}" = "1" ] || [ ! -r /dev/tty ]; then
-        EMBED=off
+        TTS_DEVICE_CHOICE=cpu
     else
-        printf '     %s$%s enable local embeddings via Ollama %s(RAG memory)%s %s[y/N]%s %s→%s ' \
+        printf '     %s$%s run voice on the GPU? %s(~2GB VRAM, barely faster than CPU)%s %s[y/N]%s %s→%s ' \
             "$OK" "$R" "$DIM" "$R" "$DIM" "$R" "$ACCENT" "$R" > /dev/tty
         read -r v < /dev/tty || v=""
-        case "$v" in y|Y|yes|YES) EMBED=on ;; *) EMBED=off ;; esac
+        case "$v" in y|Y|yes|YES) TTS_DEVICE_CHOICE=cuda ;; *) TTS_DEVICE_CHOICE=cpu ;; esac
     fi
 }
 
@@ -250,8 +250,7 @@ configure() {
     case "$provider" in
     ollama)
         ask_model_ref
-        set_env OLLAMA_MODELS_TO_PULL "${MODEL_REF},nomic-embed-text"
-        set_env EMBEDDINGS on
+        set_env OLLAMA_MODELS_TO_PULL "$MODEL_REF"
         profiles=ollama
         ok "model $MODEL_REF"
         ;;
@@ -276,17 +275,10 @@ configure() {
         fi
         orm="${orm:-openrouter/auto}"
 
-        ask_embeddings
         set_env OPENROUTER_API_KEY "$key"
         set_env OPENROUTER_MODEL "$orm"
-        set_env EMBEDDINGS "$EMBED"
         profiles=""
-        if [ "$EMBED" = on ]; then
-            set_env OLLAMA_MODELS_TO_PULL "nomic-embed-text"
-            profiles=ollama
-        fi
         ok "model $orm"
-        ok "embeddings $EMBED"
         ;;
 
     llamacpp)
@@ -316,13 +308,6 @@ configure() {
             profiles=llamacpp
             ok "model ${MODEL_REF#hf.co/}"
         fi
-        ask_embeddings
-        set_env EMBEDDINGS "$EMBED"
-        if [ "$EMBED" = on ]; then
-            set_env OLLAMA_MODELS_TO_PULL "nomic-embed-text"
-            profiles="${profiles:+$profiles,}ollama"
-        fi
-        ok "embeddings $EMBED"
         ;;
     esac
 
@@ -344,6 +329,12 @@ configure() {
     fi
     set_env VOICE "$voice"
     ok "voice $voice"
+
+    if [ "$voice" = on ]; then
+        ask_tts_device
+        set_env TTS_DEVICE "$TTS_DEVICE_CHOICE"
+        ok "tts device $TTS_DEVICE_CHOICE"
+    fi
 
     ask_telemetry
     set_env TELEMETRY "$TELEMETRY"

@@ -39,7 +39,7 @@ Browser
        │  injects system_prompt.txt (static, byte-identical every turn)
        │  strips client system role
        │  appends a trailing "live context" system message AFTER the history
-       │  (clock, lore facts, recalled prior context, wardrobe, gauges) so the
+       │  (clock, lore facts, story so far, memory notes, wardrobe, gauges) so the
        │  static prefix + history stay in Ollama's KV prompt cache between turns
        │
        │  curl CURLOPT_WRITEFUNCTION ──────── NDJSON stream ──────▶ ollama /api/chat
@@ -85,8 +85,6 @@ Without all three, tokens may arrive in one batch at end-of-message even though 
 `provider_stream_round()` parses either upstream shape and returns normalized content, tool calls, usage, completion state, and errors. It emits normalized `token` and `thinking` events through the callback supplied by `chat.php`, so conversation orchestration does not depend on either wire format.
 
 `webapp/api/models.php` lists models from whichever provider is active: Ollama's `/api/tags`, or an OpenAI-style `/models` call for OpenRouter/llama.cpp. OpenRouter's catalog (~1-2 MB) is disk-cached for 1 hour (`state_dir()/openrouter_models.json`) and served stale on upstream errors rather than failing the boot-time poll.
-
-Embeddings for RAG/recall always go to Ollama's `nomic-embed-text`, independent of the chat provider — `embeddings_base_url()` defaults to `OLLAMA_URL` but can be pointed elsewhere via `EMBEDDINGS_URL`; `EMBEDDINGS` (on/off) gates the feature and defaults to on only when `AI_PROVIDER=ollama`.
 
 Reasoning effort (`low`/`medium`/`high`/`auto` → `route_reasoning()`) is forwarded upstream only for OpenRouter, as a `reasoning.effort` field on the request; Ollama gets `think`/`reasoning_effort` options instead, and llama.cpp gets neither (its context is fixed server-side).
 
@@ -293,14 +291,16 @@ Neither service publishes a port to the host. The audio sidecar additionally enf
 ## RAG
 
 Character voice is handled by the fine-tuned model itself, so there is no voice
-RAG. Two retrievers remain, driven from `webapp/api/chat.php`, each appending its
-own block to the trailing live-context message (not the system prompt, which stays
-static so Ollama's KV prompt cache holds across turns):
+RAG. Nothing in the pipeline uses embeddings; both retrieval paths are plain
+lexical matching over SQLite and a text corpus:
 
 - **Lore RAG** (`lore_retrieve` → `lore_search` in `webapp/api/lore.php`): grounds
-  replies in curated game canon via keyword matching.
-- **Cross-conversation recall** (`chat_history_retrieve`): recalls this user's
-  own past conversations via embeddings.
+  replies in curated game canon via keyword/IDF matching. It runs on every turn
+  and appends its block to the trailing live-context message (not the system
+  prompt, which stays static so Ollama's KV prompt cache holds across turns).
+- **Cross-conversation recall**: not a retriever at all — the model asks for it,
+  by calling the `search_recent_chats` / `list_recent_chats` tools described
+  under [Tool calling and durable memory](#tool-calling-and-durable-memory).
 
 ### Lore RAG (`## World facts (canon)`)
 
@@ -348,18 +348,26 @@ scores the user message against it:
 The index rebuilds itself from the corpus on demand (cached via APCu when
 available); a missing corpus degrades gracefully (block omitted).
 
-### Cross-conversation recall (`## Recalled prior context`)
+### Cross-conversation recall
 
-Factual recall across the user's past conversations, in `chat_history_retrieve`.
+There is no automatic recall pass on the request path. Reaching into other
+conversations is something the model decides to do, as a tool call, and both
+tools are ordinary SQLite queries scoped to the calling user with the current
+conversation excluded:
 
-On every `/api/chat.php` request:
+- `search_recent_chats(query, limit)` — a `content LIKE '%query%'` scan over the
+  user's messages, newest first, up to 8 hits. Each hit comes back as date,
+  conversation id, title, role, and the message collapsed to one line and
+  truncated at 500 characters. Substring matching means it is exact on names and
+  distinctive phrases and blind to paraphrase; the model is expected to pick the
+  query term, and to retry with a different one when a search comes back empty.
+- `list_recent_chats(limit)` — the user's most recently updated titled
+  conversations, each with a short tail snippet (last few turns, action tags
+  stripped, 160 characters per line). This is the "what have we been talking
+  about lately" path, used when there is no specific term to search for.
 
-1. The user's latest message is embedded with `nomic-embed-text` via `POST ollama:11434/api/embeddings`. The same vector is reused for retrieval and stored in `message_embeddings` for future lookups.
-2. It is cosine-compared against this user's stored message embeddings from **other** conversations (most recent 5000), and the top-5 hits are kept above a 0.45 similarity floor.
-3. Each hit is widened into a window of surrounding turns (1 before, 3 after) so a match lands with its context; overlapping windows in the same conversation are merged.
-4. The resulting excerpts are formatted as a "Recalled prior context" block and appended to the live-context message, for factual recall only; the model is told not to repeat or paraphrase Jun's prior lines.
-
-The retrieval is wrapped in a `try/catch`; if Ollama can't embed or the query is empty, the block is omitted and the chat continues normally. Embeddings missed at write time (e.g. Ollama was briefly down) are backfilled by `tools/compact_chat_index.php`.
+Results are returned as JSON into the tool round, so recalled material enters
+the context as a tool message rather than as an injected block.
 
 ---
 

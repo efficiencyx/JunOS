@@ -39,28 +39,21 @@ conditional requirement is `OPENROUTER_API_KEY`, needed only when
 | Variable | Default | Consumed by | What it does |
 |---|---|---|---|
 | `AI_PROVIDER` | `ollama` | `webapp/api/providers.php` (`ai_provider()`) | Selects the chat backend: `ollama` (native NDJSON API) \| `openrouter` \| `llamacpp` (both OpenAI-compatible). Invalid values fall back to `ollama`. |
-| `OLLAMA_URL` | `http://ollama:11434` (Docker) / `http://localhost:11434` (PHP fallback) | `providers.php`, `models.php` | Base URL of the Ollama instance backing chat (when `AI_PROVIDER=ollama`) and, by default, embeddings. |
-| `OLLAMA_MODELS_TO_PULL` | `hf.co/efficiencyx/Jun-LoRA-v4-E2B-GGUF:Q4_K_M,nomic-embed-text` | `ollama` service entrypoint | Comma-separated models pulled on first boot; idempotent across restarts. |
+| `OLLAMA_URL` | `http://ollama:11434` (Docker) / `http://localhost:11434` (PHP fallback) | `providers.php`, `models.php` | Base URL of the Ollama instance backing chat (when `AI_PROVIDER=ollama`). |
+| `OLLAMA_MODELS_TO_PULL` | `hf.co/efficiencyx/Jun-LoRA-v4-E2B-GGUF:Q4_K_M` | `ollama` and `php` services | Comma-separated models pulled on first boot; the first one is the backend default for background completions. |
 | `OPENROUTER_API_KEY` | *(empty)* | `providers.php` (`chat_request_headers()`) | Bearer key for OpenRouter. **Required when `AI_PROVIDER=openrouter`.** |
 | `OPENROUTER_MODEL` | `openrouter/auto` | `providers.php` (`default_chat_model()`) | Default chat model id sent to OpenRouter. |
 | `LLAMACPP_URL` | `http://llamacpp:8080` (Docker) / `http://127.0.0.1:8081` (PHP fallback) | `providers.php` (`chat_api_base()`) | Base URL of the llama.cpp `llama-server`. Point it at your own server to skip the managed `llamacpp` container. |
 | `LLAMACPP_MODEL_HF` | `efficiencyx/Jun-LoRA-v4-E2B-GGUF:Q4_K_M` | `llamacpp` service (`LLAMA_ARG_HF_REPO`), `providers.php` (cosmetic default model id) | HF `repo:quant` the managed `llama-server` downloads and loads (`llama-server -hf` syntax, no `hf.co/` prefix). |
 | `LLAMACPP_TOOLS` | `on` | `providers.php` (`provider_tools_enabled()`) | Set `off` when the loaded chat template can't do tool calling, to stop offering tools to llama.cpp. |
 
-## 3. Embeddings / RAG
-
-| Variable | Default | Consumed by | What it does |
-|---|---|---|---|
-| `EMBEDDINGS` | `on` when `AI_PROVIDER=ollama`, else `off` | `providers.php` (`embeddings_enabled()`) | Turns cross-chat recall embeddings on/off. They always run on Ollama's `nomic-embed-text` regardless of chat provider; a non-Ollama chat provider can opt back in with `EMBEDDINGS=on` plus a reachable Ollama. When off, vector-memory features degrade silently. |
-| `EMBEDDINGS_URL` | falls back to `OLLAMA_URL` | `providers.php` (`embeddings_base_url()`) | Points embedding calls at a different Ollama than the one serving chat. |
-
-## 4. Voice sidecar
+## 3. Voice sidecar
 
 | Variable | Default | Consumed by | What it does |
 |---|---|---|---|
 | `VOICE` | `on` | `start.ps1` only | **Bare-metal Windows only.** `off` skips launching the TTS/STT sidecar process. Under Docker the `tts` service always runs (no compose `voice` profile exists); `php`/frontend degrade to text-only when it's unreachable or unhealthy. |
 | `TTS_URL` | `http://tts:8001` (Docker) / `http://localhost:8001` (PHP fallback) | `webapp/api/tts.php`, `stt.php` | Base URL of the audio sidecar. The pre-rename name `KOKORO_URL` is still honored as a fallback for existing `.env` files. |
-| `TTS_DEVICE` | `auto` | `docker/tts.Dockerfile` ENV → `tts/server.py` | `cpu` \| `cuda` \| `auto`. Torch device for TTS synthesis. `auto` resolves to `cpu` unless the image was built with a GPU torch wheel (the nvidia/amd overlays do this). |
+| `TTS_DEVICE` | `cpu` | `docker/tts.Dockerfile` ENV → `tts/server.py` | `cpu` \| `cuda` \| `auto`. Torch device for TTS synthesis. `auto` resolves to `cpu` unless the image was built with a GPU torch wheel (the nvidia/amd overlays do this). Both engines are real-time on CPU; `cuda`/`auto` holds ~2GB VRAM, which usually costs more in LLM layer offload than it buys in synthesis speed. |
 | `STT_MODEL` | `base.en` | `tts/server.py` | faster-whisper model size, e.g. `tiny.en`, `base.en`, `small.en`, or a multilingual variant without `.en` for non-English. Must agree with `STT_LANG`. |
 | `STT_LANG` | `en` | `tts/server.py` (`STT_LANG` env) | Whisper language code. In `docker-compose.yml` this is wired as `STT_LANG: "${STT_LANG-en}"` (bash-style *unset*-only default, note the missing `:`) — so an **explicitly empty** `STT_LANG=` in `.env` is passed through as `""` rather than defaulting to `en`, and `server.py` treats an empty string as `None`, i.e. whisper auto-detect. Leaving the var unset entirely gets you `en`. |
 | `STT_DEVICE` | `cpu` | `tts/server.py` | `cpu` \| `cuda`. Separate from `TTS_DEVICE` by design — whisper runs on CTranslate2, which needs different CUDA/cuDNN support than the torch wheel ships. |
@@ -72,7 +65,7 @@ exposed as `.env` knobs in `docker-compose.yml` — they're internal to the
 sidecar image (bare-metal `start.ps1` does override `TTS_HOST`/`TTS_PORT`
 directly as process env when launching the venv).
 
-## 5. Telemetry
+## 4. Telemetry
 
 | Variable | Default | Consumed by | What it does |
 |---|---|---|---|
@@ -87,31 +80,31 @@ better versions of Jun. The data is anonymized with the random installation id;
 the metrics server stores only a daily-salted IP hash, never a raw IP address.
 Opt out at any time by setting `TELEMETRY=off` in `.env` and restarting Jun.
 
-## 6. Ollama tuning
+## 5. Ollama tuning
 
 | Variable | Default | Consumed by | What it does |
 |---|---|---|---|
 | `OLLAMA_FLASH_ATTENTION` | `1` | `ollama` service | Enables flash attention; required for `OLLAMA_KV_CACHE_TYPE` quantization to take effect (otherwise Ollama warns and falls back to `f16`). |
 | `OLLAMA_KV_CACHE_TYPE` | `q8_0` | `ollama` service | KV cache quantization. `q8_0` roughly halves KV memory at 16k context with negligible quality loss; `f16` opts out, `q4_0` goes smaller with a noticeable quality cost on long contexts. |
 | `OLLAMA_NUM_PARALLEL` | `1` | `ollama` service | Concurrent request slots. Left at the default, RAM stays bounded; raising it multiplies KV cache usage per slot. |
-| `OLLAMA_MAX_LOADED_MODELS` | `2` | `ollama` service | Cap on simultaneously loaded models (room for the chat model + `nomic-embed-text`). |
+| `OLLAMA_MAX_LOADED_MODELS` | `2` | `ollama` service | Cap on simultaneously loaded models (headroom to switch chat models without evicting on every swap). |
 | `OLLAMA_KEEP_ALIVE` | `5m` | `ollama` service | How long an idle model stays loaded before unloading. |
 
-## 7. State & persistence
+## 6. State & persistence
 
 | Variable | Default | Consumed by | What it does |
 |---|---|---|---|
 | `OMEGA_STATE_DIR` | `/var/lib/omega` | `webapp/api/_lib.php` (`state_dir()`) | Directory for the SQLite DB and rate-limit flat files. Under Docker this is fixed at the default (mounted as the `omega_state` named volume) — the var is not forwarded into the `php` container's environment, so this is effectively **bare-metal only** (`start.ps1` points it at `runtime\state`). |
 | `MEMORY_DIR` | `<state dir>/memory` (i.e. `/var/lib/omega/memory` under Docker) | `webapp/api/_lib.php` (`memory_file_path()`) | Directory holding per-user durable-memory JSONL files. Same Docker/bare-metal split as `OMEGA_STATE_DIR` above. **Migration note:** builds before 2026-07 defaulted to `/var/lib/jun/memory`, a path that was never mounted as a volume under Docker — memories written there were silently lost on every container recreation. The current default lives inside the persisted `omega_state` volume, so it survives rebuilds/restarts. |
 
-## 8. Bare-metal Windows only
+## 7. Bare-metal Windows only
 
 | Variable | Default | Consumed by | What it does |
 |---|---|---|---|
 | `JUN_PORT` | `8080` | `start.ps1` | Port PHP's built-in server serves the web UI on. |
 | `LLAMACPP_PORT` | `8081` | `start.ps1`, `install.ps1` | Port the bare-metal managed `llama-server` listens on. `8080` is avoided because it collides with `JUN_PORT`. |
 
-## 9. GPU overlays
+## 8. GPU overlays
 
 | Variable | Default | Consumed by | What it does |
 |---|---|---|---|
