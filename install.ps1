@@ -154,20 +154,6 @@ function Ask-ModelRef {
     return Resolve-Model $alias
 }
 
-# "enable local embeddings via Ollama? [y/N]" for non-Ollama providers. RAG /
-# cross-chat memory need a local Ollama with nomic-embed-text; when declined
-# those features switch off silently. Knob: JUN_EMBEDDINGS=on|off (default off).
-function Ask-Embeddings {
-    if ($env:JUN_EMBEDDINGS) {
-        return $(if ($env:JUN_EMBEDDINGS.ToLower() -match '^(on|1|true|yes|y)$') { 'on' } else { 'off' })
-    }
-    if ($interactive) {
-        $v = Read-Styled "     ${OK}▸${R} enable local embeddings via Ollama ${DIM}(RAG memory)${R} ${DIM}[y/N]${R} ${ACCENT}›${R} "
-        return $(if ($v -match '^(y|yes)$') { 'on' } else { 'off' })
-    }
-    return 'off'
-}
-
 function Ask-Telemetry {
     if ($env:JUN_TELEMETRY) {
         return $(if ($env:JUN_TELEMETRY.ToLower() -match '^(on|1|true|yes|y)$') { 'on' } else { 'off' })
@@ -205,15 +191,13 @@ function Configure-Jun {
 
     Step 'configure'
 
-    $embeddings = 'on'
-    $needsOllama = $true
+    $needsOllama = ($provider -eq 'ollama')
     $needsLlamacpp = $false
 
     switch ($provider) {
         'ollama' {
             $modelRef = Ask-ModelRef
-            Set-EnvKey 'OLLAMA_MODELS_TO_PULL' "$modelRef,nomic-embed-text"
-            Set-EnvKey 'EMBEDDINGS' 'on'
+            Set-EnvKey 'OLLAMA_MODELS_TO_PULL' $modelRef
             Ok "model $modelRef"
         }
         'openrouter' {
@@ -234,13 +218,9 @@ function Configure-Jun {
             }
             if (-not $orm) { $orm = 'openrouter/auto' }
 
-            $embeddings = Ask-Embeddings
             Set-EnvKey 'OPENROUTER_API_KEY' "$key"
             Set-EnvKey 'OPENROUTER_MODEL' $orm
-            $needsOllama = ($embeddings -eq 'on')
-            if ($needsOllama) { Set-EnvKey 'OLLAMA_MODELS_TO_PULL' 'nomic-embed-text' }
             Ok "model $orm"
-            Ok "embeddings $embeddings"
         }
         'llamacpp' {
             $url = $env:LLAMACPP_URL
@@ -264,14 +244,9 @@ function Configure-Jun {
                 $needsLlamacpp = $true
                 Ok "model $hfRef"
             }
-            $embeddings = Ask-Embeddings
-            $needsOllama = ($embeddings -eq 'on')
-            if ($needsOllama) { Set-EnvKey 'OLLAMA_MODELS_TO_PULL' 'nomic-embed-text' }
-            Ok "embeddings $embeddings"
         }
     }
     Set-EnvKey 'AI_PROVIDER' $provider
-    Set-EnvKey 'EMBEDDINGS' $embeddings
     Ok "provider $provider"
 
     $voice = $env:VOICE
@@ -296,7 +271,7 @@ function Configure-Jun {
     }
     Ok "telemetry $telemetry"
 
-    return @{ provider = $provider; voice = $voice; embeddings = $embeddings
+    return @{ provider = $provider; voice = $voice
               needsOllama = $needsOllama; needsLlamacpp = $needsLlamacpp }
 }
 
