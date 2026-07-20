@@ -42,11 +42,11 @@ services:
     environment:
       AI_PROVIDER: "${AI_PROVIDER:-ollama}"
       OLLAMA_URL: "${OLLAMA_URL:-http://ollama:11434}"
+      OLLAMA_MODELS_TO_PULL: "${OLLAMA_MODELS_TO_PULL:-hf.co/efficiencyx/Jun-LoRA-v4-E2B-GGUF:Q4_K_M}"
       OPENROUTER_API_KEY: "${OPENROUTER_API_KEY:-}"
       OPENROUTER_MODEL: "${OPENROUTER_MODEL:-}"
       LLAMACPP_URL: "${LLAMACPP_URL:-http://llamacpp:8080}"
-      EMBEDDINGS: "${EMBEDDINGS:-}"
-      EMBEDDINGS_URL: "${EMBEDDINGS_URL:-}"
+      OMEGA_NUM_CTX: "${OMEGA_NUM_CTX:-}"
       LLAMACPP_TOOLS: "${LLAMACPP_TOOLS:-}"
 # Keep the legacy KOKORO_URL fallback for existing .env files.
       TTS_URL: "${TTS_URL:-}"
@@ -77,7 +77,7 @@ services:
     profiles: [ollama]
     restart: unless-stopped
     environment:
-      OLLAMA_MODELS_TO_PULL: "${OLLAMA_MODELS_TO_PULL:-hf.co/efficiencyx/Jun-LoRA-v4-E2B-GGUF:Q4_K_M,nomic-embed-text}"
+      OLLAMA_MODELS_TO_PULL: "${OLLAMA_MODELS_TO_PULL:-hf.co/efficiencyx/Jun-LoRA-v4-E2B-GGUF:Q4_K_M}"
 # Limit Ollama's parallel slots and loaded models to avoid multiplying KV-cache memory.
       OLLAMA_NUM_PARALLEL: "${OLLAMA_NUM_PARALLEL:-1}"
       OLLAMA_MAX_LOADED_MODELS: "${OLLAMA_MAX_LOADED_MODELS:-2}"

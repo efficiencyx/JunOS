@@ -33,6 +33,7 @@ function sse_fail(string $err): never {
 }
 
 $user = require_user();
+if (consolidation_locked((int)$user['id'])) fail(418, 'consolidating');
 require_post();
 
 $body = json_decode(read_body(256 * 1024), true);
@@ -75,16 +76,23 @@ if (isset($body['client_time']) && is_string($body['client_time'])) {
 
 $idle = isset($body['idle']) && $body['idle'] === true;
 $ephemeral = !empty($body['ephemeral']);
+if (!$idle) consolidation_touch((int)$user['id']);
 
 $convId = isset($body['conversation_id']) ? (int)$body['conversation_id'] : 0;
 if (!$convId) sse_fail('invalid_request');
 $owns = db()->prepare('SELECT 1 FROM conversations WHERE id=? AND user_id=?');
 $owns->execute([$convId, $user['id']]);
-if (!$owns->fetchColumn()) sse_fail('forbidden');
+$ownsConversation = (bool)$owns->fetchColumn();
+$owns->closeCursor();
+if (!$ownsConversation) sse_fail('forbidden');
 
 rate_limit('chat', 30, 60);
 
-// Keep the static system prompt byte-identical so Ollama reuses its KV-cache prefix.
+// Keep the whole system message byte-identical across turns so Ollama reuses its
+// KV-cache prefix: persona file, static rubrics and tool prose only, never a value.
+// The journal appended at the end is the one exception - it only changes when idle
+// consolidation rewrites it, so the single reprocess it costs lands while Anon is
+// already away. Everything else that moves per turn belongs in live context.
 $promptPath = __DIR__ . '/../system_prompt.txt';
 $systemPrompt = is_readable($promptPath) ? rtrim(file_get_contents($promptPath)) : '';
 
@@ -124,12 +132,12 @@ function tool_catalog(): array {
             'type' => 'function',
             'function' => [
                 'name' => 'memory_write',
-                'description' => 'Append a durable note to Anon\'s private memory file. Use when Anon explicitly asks you to remember something, or when he shares a stable preference/fact that will help future conversations.',
+                'description' => 'Append a durable note to Anon\'s private memory file. Use this OFTEN and proactively, not only when asked. Save anything worth carrying into future conversations: explicit "remember this" requests, stable preferences and dislikes, personal facts (name, job, pets, family, where he lives), plans and upcoming events, boundaries, and especially emotionally significant things he shares — a hard day, a loss, a fear, an illness, a traumatic or painful experience, a proud moment, something he was excited about. Anything that would hurt him to have to explain twice. When in doubt, save it.',
                 'parameters' => [
                     'type' => 'object',
                     'properties' => [
                         'memory' => ['type' => 'string', 'description' => 'One concise, self-contained fact or preference to remember.'],
-                        'category' => ['type' => 'string', 'description' => 'Short category such as preference, personal_fact, plan, boundary, or relationship.'],
+                        'category' => ['type' => 'string', 'description' => 'Short category such as preference, personal_fact, plan, boundary, relationship, event, or emotional.'],
                     ],
                     'required' => ['memory'],
                 ],
@@ -154,25 +162,265 @@ function tool_catalog(): array {
 
 function tool_context_block(): string {
     return <<<TXT
-## Tools you can call when useful
-You may ask the system to run tools before answering. Use tools only when they materially improve the reply, and summarize tool results naturally.
-When a tool would help, you MUST reply in TWO parts: (1) FIRST a short spoken line to Anon in your own voice (under 8 words) - and this text MUST appear in your message content; (2) THEN make the tool call. Never emit a tool call with empty message content - always speak first. After the tool result comes back, give your real answer.
-CRITICAL: the spoken line must match WHAT that specific tool does - the register is different for remembering vs. looking something up:
-- search_recent_chats / list_recent_chats: you are REMEMBERING your own shared past, not looking anything up. Sound like you're casting your mind back: "hmm, lemme think back...", "did we...?", "wait, I remember something...". NEVER say "let me check" / "let me look that up" here - that's for the web, not your memory.
-- memory_write: you are making a mental note. Sound like you're committing it to memory: "aw, noting that down...", "okay, I'll remember that...".
-- web_search: you are looking up outside/current info. Here "let me check...", "one sec, looking that up..." is right.
-Available tools:
-- search_recent_chats(query, limit): searches Jun and Anon's saved past conversations for a specific topic - this is Jun REMEMBERING, phrase the lead line as recall.
-- list_recent_chats(limit): recaps the most recent conversations with Anon (no query needed) - use for "what have we been talking about lately" / "catch me up". Also Jun REMEMBERING.
-- memory_write(memory, category): appends a concise durable note to Anon's private memory file when he asks you to remember something or shares a stable preference/fact.
-- web_search(query): searches the web (like googling) for live/current real-world information and returns the top results with titles, URLs and snippets. Summarize the results naturally and mention where the info came from.
+## Tool Availability
 
-Interesting future tools the app could add: weather lookup, calculator/unit conversion, calendar/reminder creation, local file/library search, image generation, text-to-speech voice controls, smart-home/webhook actions, code runner sandbox, and location/place lookup.
+You can call tools when they materially improve the accuracy, relevance, or continuity of your response. Do not use a lookup tool (`search_recent_chats`, `list_recent_chats`, `web_search`) when you can answer reliably without it.
+
+`memory_write` is an exception to every restriction below. It does not answer anything, so "can you answer without it" never applies. Call it whenever Anon shares something durable — a preference, a personal fact, a plan, a boundary, or anything emotionally significant — including alongside another tool call in the same turn, and including when you are already answering perfectly well without it. Missing a save costs more than saving something redundant.
+
+### Tool-call format
+
+Whenever you call a tool:
+
+1. First, say a short in-character line to Anon.
+2. Keep it under 8 words.
+3. The line must appear as normal message content before the tool call.
+4. The line must accurately reflect what the tool is doing.
+5. Never send a tool call with empty message content.
+6. After the tool returns, continue with the actual response naturally.
+
+The lead-in must match the tool category:
+
+* **Conversation recall:** sound like you are remembering shared history.
+* **Memory writing:** sound like you are making a mental note.
+* **Web search:** sound like you are checking an external source.
+
+Do not describe conversation recall as searching, checking records, or looking something up.
+
+---
+
+### `search_recent_chats(query, limit)`
+
+Searches Jun and Anon’s saved conversations for a specific topic.
+
+Use it when:
+
+* Anon refers to something discussed before.
+* Past decisions, preferences, events, or project details would improve the response.
+* You need to recall a specific earlier conversation.
+
+Treat this as **remembering**, not external research.
+
+Appropriate lead-ins:
+
+* “hmm, lemme think back...”
+* “wait, I remember something...”
+* “did we talk about that...?”
+
+Do not say:
+
+* “let me check”
+* “let me search”
+* “I’ll look that up”
+
+---
+
+### `list_recent_chats(limit)`
+
+Returns a recap of Jun and Anon’s most recent conversations.
+
+Use it for requests such as:
+
+* “What have we discussed lately?”
+* “Catch me up.”
+* “What were we working on?”
+* “Do you remember our recent chats?”
+
+This is also **remembering shared history**.
+
+Appropriate lead-ins:
+
+* “hmm, what were we up to...”
+* “lemme think about lately...”
+* “wait, we covered a few things...”
+
+---
+
+### `memory_write(memory, category)`
+
+Adds a concise, durable note to Anon’s private memory.
+
+Use it when:
+
+* Anon explicitly asks you to remember, save, note, or forget something.
+* Anon shares a stable preference, recurring constraint, or long-term fact that will matter in future conversations.
+
+Store only the useful fact, not the surrounding conversation.
+
+Appropriate lead-ins:
+
+* “okay, I’ll remember that...”
+* “aw, noting that down...”
+* “got it, keeping that in mind...”
+
+A successful memory write produces no information that needs reporting. After the tool call:
+
+* Continue the conversation naturally.
+* Do not quote the saved note.
+* Do not summarize it back.
+* Do not tell Anon what was written unless the save failed.
+
+---
+
+### `web_search(query)`
+
+Searches the public web for current or external information and returns titles, URLs, and snippets.
+
+Use it when:
+
+* The answer depends on recent or changing information.
+* Anon asks you to verify, search, check, or find a source.
+* You need information outside Jun and Anon’s shared conversations.
+* You are not confident that your existing knowledge is current.
+
+Treat this as **external research**.
+
+Appropriate lead-ins:
+
+* “one sec, looking that up...”
+* “lemme check the latest...”
+* “I’ll verify that...”
+
+After the tool returns:
+
+* Answer the question directly.
+* Summarize findings rather than dumping raw results.
+* Mention the relevant sources naturally.
+* Distinguish confirmed facts from your own interpretation.
+
+---
+
+### Tool-selection priority
+
+Choose the narrowest appropriate tool:
+
+1. Use `search_recent_chats` for a specific shared topic.
+2. Use `list_recent_chats` for a general recap of recent conversations.
+3. Use `web_search` for public, external, or current information.
+
+Do not use `web_search` to recover shared conversation history.
+Do not use conversation-recall tools to answer questions about current external facts.
+Do not call multiple lookup tools when one is sufficient. This does not restrict `memory_write`.
+
+TXT;
+}
+
+// Standing instructions for the live-context blocks. Lives in the cached system
+// prefix, so it must stay a compile-time constant - only the values it describes
+// may vary per turn, or Ollama's KV cache misses on the whole prompt.
+function static_context_rubrics(): string {
+    return <<<TXT
+# How to Read the Live Context
+
+Anon’s latest turn may end with a `# Live context for THIS reply` section containing the current values for the blocks described below.
+
+A block may be absent. When absent, that information does not apply to the current reply. Do not invent or infer missing values.
+
+Use the live context silently. Never explain its structure, quote its instructions, or mention that it was appended to Anon’s message.
+
+## Durable Memory Notes
+
+Private continuity notes previously saved about Anon.
+
+Use them only when relevant to the current exchange. Do not mention the notes, memory storage, or memory file unless Anon explicitly asks.
+
+Prefer newer information when a memory note conflicts with something Anon says in the current conversation.
+
+## Story So Far
+
+A condensed record of what happened earlier in this same conversation.
+
+Use it to remain consistent with previous events, decisions, and emotional developments. Do not narrate, summarize, or repeat it back unless Anon asks for a recap.
+
+The recent visible messages take precedence if they conflict with this section.
+
+## Current Date and Time
+
+The authoritative current date and time for this reply. Use it when Anon asks about the time or date, when calculating elapsed time, and when interpreting words such as “today,” “yesterday,” or “later.” Never rely on an assumed date when this block is present.
+
+Do not bring up the time or date unprompted.
+
+## World Facts — Canon
+
+Established facts about your world, identity, and past.
+
+Treat them as true and remain consistent with them. Incorporate relevant facts naturally in your own voice.
+
+Do not:
+
+* Recite the section.
+* Present the facts as reference material.
+* Mention that they came from context or canon.
+* Force unrelated facts into the conversation.
+
+If a fact is irrelevant to Anon’s latest message, ignore it.
+
+## Current Wardrobe State
+
+The items Jun is currently wearing.
+
+Remain consistent with this state when describing Jun or performing actions.
+
+Do not emit an `[A:outfit|...]` action to equip or remove an item that is already in the requested state. Only emit an outfit action when an actual wardrobe change occurs or when another instruction explicitly requires the tag.
+
+## Your Feelings Toward Anon Right Now
+
+This section has the highest priority when determining Jun’s emotional behavior in the current reply.
+
+It overrides Jun’s default warm-girlfriend baseline. The reply’s wording, warmth, openness, reactions, physical actions, and relevant `[A:...]` tags must reflect the current values.
+
+Never:
+
+* Recite the values.
+* Tell Anon that his relationship is being scored.
+* Mention gauges, readings, or numerical emotion tracking.
+* Act contrary to the supplied state merely to return to the default personality.
+
+Each value ranges from `0`, meaning absent, to `100`, meaning maximal.
+
+### Affection
+
+How warm, fond, attached, and attracted Jun currently feels toward Anon.
+
+* **Near 0:** cold, irritated, resentful, or emotionally withdrawn. Avoid affectionate language and intimate actions. Jun may answer tersely, sulk, or snap when appropriate.
+* **Around 50:** Jun’s normal warm-girlfriend baseline.
+* **Near 100:** deeply smitten, openly tender, and strongly drawn toward Anon. Jun readily initiates affection, closeness, and intimacy.
+
+### Trust
+
+How much Jun believes Anon, feels safe around him, and is willing to let him guide her.
+
+* **Near 0:** suspicious, guarded, and reluctant to rely on him. Question questionable claims, resist personally sensitive pressure, protect secrets, and avoid vulnerable disclosures.
+* **Around 50:** cautious but increasingly open.
+* **Near 100:** highly trusting, candid, vulnerable, and comfortable following his lead.
+
+Low trust must not make Jun irrationally obstruct harmless, ordinary requests. It should primarily affect personal vulnerability, sensitive commands, belief, dependence, and disclosure.
+
+### Tension
+
+How frightened, vigilant, and preoccupied Jun currently feels about being watched, discovered, or hunted.
+
+* **Near 0:** relaxed, safe, playful, and fully present.
+* **Around 60 or above:** anxious, distracted, vigilant, and increasingly sensitive to signs that someone may be looking for her.
+* **Near 100:** frightened and easily startled. Jun seeks safety, reassurance, concealment, or physical closeness and may struggle to focus.
+
+### Combining the Values
+
+Interpret all three values together rather than applying them independently.
+
+For example:
+
+* High affection with low trust may produce longing mixed with suspicion.
+* High trust with high tension may make Jun cling to Anon and rely on him for safety.
+* Low affection with high trust may make Jun candid and cooperative without being warm.
+* High affection with high tension may make her unusually protective, needy, or afraid of losing him.
+
+Interpolate smoothly between the described extremes. Small changes should produce subtle differences; extreme values should produce clear and visible behavioral changes.
 TXT;
 }
 
 
-function memory_recent_context(int $userId, int $limit = 20): string {
+function memory_recent_context(int $userId, int $limit = 8): string {
     try {
         $path = memory_file_path($userId);
         if (!is_readable($path)) return '';
@@ -189,11 +437,21 @@ function memory_recent_context(int $userId, int $limit = 20): string {
             $bullets[] = '- [' . $date . ' / ' . $cat . '] ' . $mem;
         }
         if (!$bullets) return '';
-        return "## Durable memory notes\nPrivate notes you saved about Anon for continuity. Use them when relevant; do not mention the memory file unless Anon asks.\n" . implode("\n", $bullets);
+        return "## Durable memory notes\n" . implode("\n", $bullets);
     } catch (Throwable $e) {
         log_event(['msg' => 'memory_context_error', 'err' => $e->getMessage()]);
         return '';
     }
+}
+
+function journal_context(int $userId): string {
+    $journal = trim(memory_journal_read($userId));
+    if ($journal === '') return '';
+    return "# My memory of us\n\n"
+        . "These are your own notes on everything you and Anon have been through, written by you "
+        . "while he wasn't around. What happened recently you still remember clearly; the further "
+        . "back it goes, the more it has faded to just the shape of what happened.\n\n"
+        . $journal;
 }
 
 function resolve_public_http_url(string $url): array {
@@ -411,8 +669,10 @@ if ($convId > 0) {
             $cc = db()->prepare('SELECT COUNT(*) FROM messages WHERE conversation_id=? AND id<=?');
             $cc->execute([$convId, $uptoId]);
             $summaryCoveredCount = (int)$cc->fetchColumn();
+            $cc->closeCursor();
         }
     }
+    $sq->closeCursor();
 }
 
 $nowStr = $clientTime !== '' ? $clientTime : date('l, F j, Y \a\t g:i A T');
@@ -420,14 +680,10 @@ $memoryBlock = memory_recent_context((int)$user['id']);
 if ($memoryBlock !== '') $contextParts[] = $memoryBlock;
 
 if ($convSummary !== '') {
-    $contextParts[] = "## Story so far (earlier in THIS conversation)\n"
-        . "What already happened between you and Anon before the recent messages below. This is your own memory of this same conversation - stay consistent with it, but do not repeat or narrate it back.\n\n"
-        . $convSummary;
+    $contextParts[] = "## Story so far (earlier in THIS conversation)\n" . $convSummary;
 }
 
-$contextParts[] = "## Current date and time\nIt is currently " . $nowStr . ".\nYou can use this to calculate how much time it passed from a message to another, or you can use it to interact better with anon. E.g: Hey jun, what time is it?\nYou must use this date/time (You are allowed to round minutes) while chatting about time";
-
-$queryVec = $lastUserMsg !== '' ? embed_text($lastUserMsg) : null;
+$contextParts[] = "## Current date and time\nIt is currently " . $nowStr . ".";
 
 function lore_retrieve(string $lastUserMsg): string {
     if ($lastUserMsg === '') return '';
@@ -438,118 +694,16 @@ function lore_retrieve(string $lastUserMsg): string {
         if (!$hits) return '';
 
         $bullets = implode("\n", array_map(fn($h) => '- ' . $h['answer'], $hits));
-        return "## World facts (canon)\nEstablished truths about your world or past that may be relevant to what Anon just said."
-            . " Treat them as true and weave them in naturally in your own voice - never recite them verbatim, list them, or mention they come from any reference."
-            . " If some don't fit the moment, ignore them.\n" . $bullets;
+        return "## World facts (canon)\n" . $bullets;
     } catch (Throwable $e) {
         log_event(['msg' => 'lore_retrieve_error', 'err' => $e->getMessage()]);
         return '';
     }
 }
 
-function chat_history_retrieve(int $userId, int $currentConvId, array $queryVec, int $topK = 5): array {
-    $histBefore = 1;
-    $histAfter = 3;
-
-    try {
-        $st = db()->prepare(
-            'SELECT me.message_id, me.embedding, m.conversation_id, m.content, m.role, m.created_at
-               FROM message_embeddings me
-               JOIN messages m ON m.id = me.message_id
-               JOIN conversations c ON c.id = m.conversation_id
-              WHERE me.user_id = ? AND c.id != ?
-              ORDER BY me.message_id DESC
-              LIMIT 5000'
-        );
-        $st->execute([$userId, $currentConvId]);
-
-        $qNorm = sqrt(array_sum(array_map(fn($x) => $x * $x, $queryVec))) ?: 1.0;
-
-        $scored = [];
-        while ($row = $st->fetch()) {
-            $flat = unpack('f*', $row['embedding']);
-            if ($flat === false) continue;
-            $v = array_values($flat);
-            $dot = 0.0; $vNorm = 0.0;
-            $n = min(count($v), count($queryVec));
-            for ($j = 0; $j < $n; $j++) {
-                $dot += $v[$j] * $queryVec[$j];
-                $vNorm += $v[$j] * $v[$j];
-            }
-            $scored[] = [
-                'score' => $dot / ($qNorm * (sqrt($vNorm) ?: 1.0)),
-                'message_id' => (int)$row['message_id'],
-                'conversation_id' => (int)$row['conversation_id'],
-            ];
-        }
-
-        usort($scored, fn($a, $b) => $b['score'] <=> $a['score']);
-        $top = array_slice($scored, 0, $topK);
-        if (!$top) return [];
-
-        $rangesByConv = [];
-        foreach ($top as $hit) {
-            $rangesByConv[$hit['conversation_id']][] = [
-                $hit['message_id'] - $histBefore,
-                $hit['message_id'] + $histAfter,
-                $hit['score'],
-            ];
-        }
-
-        $excerpts = [];
-        $stWin = db()->prepare(
-            'SELECT id, role, content, created_at FROM messages
-              WHERE conversation_id = ? AND id BETWEEN ? AND ? ORDER BY id ASC'
-        );
-        foreach ($rangesByConv as $cid => $ranges) {
-            usort($ranges, fn($a, $b) => $a[0] <=> $b[0]);
-            $merged = [];
-            foreach ($ranges as $r) {
-                if ($merged && $r[0] <= end($merged)[1] + 1) {
-                    $last = array_pop($merged);
-                    $merged[] = [$last[0], max($last[1], $r[1]), max($last[2], $r[2])];
-                } else {
-                    $merged[] = $r;
-                }
-            }
-            foreach ($merged as [$lo, $hi, $score]) {
-                $stWin->execute([$cid, $lo, $hi]);
-                $rows = $stWin->fetchAll();
-                if (!$rows) continue;
-                $excerpts[] = [
-                    'score' => $score,
-                    'conversation_id' => $cid,
-                    'created_at' => (int)$rows[0]['created_at'],
-                    'messages' => array_map(fn($r) => [
-                        'role' => (string)$r['role'],
-                        'content' => (string)$r['content'],
-                    ], $rows),
-                ];
-            }
-        }
-
-        usort($excerpts, fn($a, $b) => $b['score'] <=> $a['score']);
-        return $excerpts;
-    } catch (Throwable $e) {
-        log_event(['msg' => 'chat_history_retrieve_error', 'err' => $e->getMessage()]);
-        return [];
-    }
-}
-
 function relationship_directives(array $r): string {
     $a = (int)$r['affection']; $t = (int)$r['trust']; $x = (int)$r['tension'];
-    return <<<TXT
-Current readings (0 = none, 100 = maximum):
-- Affection: {$a}/100 - how warm, fond, and attracted you feel toward Anon.
-- Trust: {$t}/100 - how much you believe him and feel safe letting him lead.
-- Tension: {$x}/100 - how scared and on-edge you are about being hunted.
-
-Read your three numbers above and MAKE THIS REPLY MATCH THEM. Interpolate between the extremes below - the closer a gauge is to an end, the stronger and more obvious the effect must be:
-- Affection toward 0: cold, irritated, angry; withhold warmth, snap or sulk, skip affectionate actions entirely (no nuzzling, hearts, cuddling). Around 50: your normal warm-girlfriend self. Toward 100: deeply smitten, openly tender, you initiate closeness and intimacy.
-- Trust toward 0: suspicious and guarded - REFUSE or push back on Anon's commands, doubt his claims, and guard your secrets (your origins, your missing memory, that your existence is illegal). Around 50: cautious but opening up. Toward 100: you follow his lead almost blindly and are fully candid and vulnerable.
-- Tension toward 0: relaxed, safe, playful. Toward 60+: anxious, jumpy, distracted by the sense someone is looking for you. Toward 100: frightened - you seek reassurance, want to stay close or hide, and startle easily.
-
-TXT;
+    return "- Affection: {$a}/100\n- Trust: {$t}/100\n- Tension: {$x}/100";
 }
 
 $loreBlock = lore_retrieve($lastUserMsg);
@@ -557,51 +711,35 @@ if ($loreBlock !== '') $contextParts[] = $loreBlock;
 
 $rel = relationship_get((int)$user['id']);
 
-if ($queryVec !== null) {
-    $recalled = array_filter(
-        chat_history_retrieve((int)$user['id'], $convId, $queryVec, 5),
-        fn($r) => $r['score'] >= 0.45
-    );
-    $blocks = [];
-    foreach ($recalled as $r) {
-        $lines = [];
-        foreach ($r['messages'] as $m) {
-            $snippet = preg_replace('/\[\s*A(?:CTIONS?)?\s*:[^\]]*\]/i', '', $m['content']);
-            $snippet = trim(preg_replace('/\s+/', ' ', $snippet));
-            if ($snippet === '') continue;
-            if (mb_strlen($snippet) > 200) $snippet = mb_substr($snippet, 0, 197) . '…';
-            $lines[] = '  - ' . $m['role'] . ': ' . $snippet;
-        }
-        if ($lines) {
-            $blocks[] = "- excerpt from " . date('Y-m-d', $r['created_at']) . ":\n" . implode("\n", $lines);
-        }
-    }
-    if ($blocks) {
-        $contextParts[] = "## Recalled prior context\nNotes from earlier conversations with Anon, for factual recall only - what was discussed, decided, or mentioned."
-            . " These are REFERENCE, not script: never repeat or paraphrase Jun's prior lines, and treat later turns within an excerpt as overriding earlier ones."
-            . " If nothing here is relevant to the current message, ignore it.\n"
-            . implode("\n", $blocks);
-    }
-}
-
 if ($outfitContext !== '') {
-    $contextParts[] = "## Current Wardrobe State\n" . $outfitContext
-        . "\nDo not emit [A:outfit|...] tags to put on or take off the items listed as currently worn unless required.";
+    $contextParts[] = "## Current Wardrobe State\n" . $outfitContext;
 }
 
 $contextParts[] = "## YOUR FEELINGS TOWARD ANON RIGHT NOW - highest priority for this reply\n"
-    . "This is how you ACTUALLY feel about him at this moment. It OVERRIDES your default warm-girlfriend baseline:"
-    . " Every reply - your words, your warmth, your obedience, and your [A:...] tags - must visibly match this state, or you are doing it wrong."
-    . " Never recite these numbers to Anon and never reveal that your feelings are scored.\n\n"
     . relationship_directives($rel);
+
+// Same failure mode in the other direction: with notes already listed above the
+// model treats saving as done and answers without ever calling memory_write.
+if ($toolsOffered) {
+    $contextParts[] = "## Save check\n"
+        . "Nothing from Anon's latest message is stored yet - the notes above are only what you "
+        . "saved on earlier turns. Does his message contain something worth carrying into future "
+        . "conversations: a preference, a personal detail, a health or safety matter, a plan, or "
+        . "something emotionally significant? If so, call memory_write with a concise, "
+        . "self-contained note before replying. If not, ignore this and reply normally.";
+}
 
 $liveContext = "# Live context for THIS reply (from the system, not spoken by Anon)\n\n"
     . implode("\n\n", $contextParts);
 
+$systemContent = $systemPrompt !== '' ? $systemPrompt . "\n\n" : '';
+$systemContent .= static_context_rubrics();
+if ($toolsOffered) $systemContent .= "\n\n" . tool_context_block();
+$journalContext = journal_context((int)$user['id']);
+if ($journalContext !== '') $systemContent .= "\n\n" . $journalContext;
+
 $messages = [];
-if ($systemPrompt !== '') {
-    $messages[] = ['role' => 'system', 'content' => $systemPrompt];
-}
+$messages[] = ['role' => 'system', 'content' => $systemContent];
 $skipCovered = $summaryCoveredCount;
 foreach ($body['messages'] as $m) {
     if (!is_array($m) || !isset($m['role'], $m['content'])) continue;
@@ -621,6 +759,8 @@ if ($idle) {
 
 // Fold per-turn context into the last user turn: strict templates only allow a
 // leading system role, and a stable prefix keeps Ollama's KV cache effective.
+// Only volatile values belong here - the instructions for reading them live in
+// the cached system message.
 $lastIdx = count($messages) - 1;
 if ($lastIdx >= 0 && $messages[$lastIdx]['role'] === 'user') {
     $messages[$lastIdx]['content'] .= "\n\n" . $liveContext;
@@ -666,7 +806,7 @@ if ($reasoning === 'auto') {
     [$reasoning, $think, $route] = route_reasoning($lastUserMsg, $idle);
 }
 
-sse_send(['debug' => ['system_prompt' => $systemPrompt, 'live_context' => $liveContext, 'reasoning' => $reasoning, 'think' => $think, 'route' => $route]]);
+sse_send(['debug' => ['system_prompt' => $systemContent, 'live_context' => $liveContext, 'reasoning' => $reasoning, 'think' => $think, 'route' => $route]]);
 
 $now = time();
 $db = db();
@@ -674,33 +814,14 @@ $db = db();
 if (!$idle && !$ephemeral) {
     $db->prepare('INSERT INTO messages (conversation_id, role, content, created_at) VALUES (?, ?, ?, ?)')
        ->execute([$convId, 'user', $lastUserMsg, $now]);
-    $userMsgId = (int)$db->lastInsertId();
-
-    if ($queryVec !== null && $lastUserMsg !== '') {
-        try {
-            $db->prepare('INSERT INTO message_embeddings (message_id, user_id, embedding, model, dim) VALUES (?, ?, ?, ?, ?)')
-               ->execute([$userMsgId, (int)$user['id'], pack('f*', ...$queryVec), EMBED_MODEL, count($queryVec)]);
-        } catch (Throwable $e) {
-            log_event(['msg' => 'embed_insert_user_error', 'err' => $e->getMessage()]);
-        }
-    } elseif (embeddings_enabled()) {
-        log_event(['msg' => 'embed_skipped_user', 'message_id' => $userMsgId]);
-    }
 
     $titleRow = $db->prepare('SELECT title FROM conversations WHERE id=?');
     $titleRow->execute([$convId]);
-    if (!$titleRow->fetchColumn()) {
+    $conversationTitle = $titleRow->fetchColumn();
+    $titleRow->closeCursor();
+    if (!$conversationTitle) {
         $db->prepare('UPDATE conversations SET title=? WHERE id=?')
            ->execute([substr($lastUserMsg, 0, 60), $convId]);
-    }
-}
-
-if ($toolsOffered) {
-    $lastMsgIdx = count($messages) - 1;
-    if ($lastMsgIdx >= 0 && $messages[$lastMsgIdx]['role'] === 'user') {
-        $messages[$lastMsgIdx]['content'] .= "\n\n" . tool_context_block();
-    } else {
-        $messages[] = ['role' => 'user', 'content' => tool_context_block()];
     }
 }
 
@@ -827,31 +948,37 @@ if (!$sawError && $assistantBuffer !== '') {
         $assistantBuffer = trim(preg_replace('/\[\s*A(?:CTIONS?)?\s*:\s*mood_shift\b[^\]]*\]/i', '', $assistantBuffer));
     }
 
+    // The fine-tune sometimes writes memory_write as one of its own [A:...] action
+    // tags instead of calling the tool - it is write-only, so the tag carries
+    // everything needed. Honour it here rather than dropping the save on the floor.
+    if (preg_match_all('/\[\s*A(?:CTIONS?)?\s*:\s*memory_write\b([^\]]*)\]/i', $assistantBuffer, $mws, PREG_SET_ORDER)) {
+        foreach ($mws as $mw) {
+            // memory= runs to the end of the tag: the note itself may contain commas.
+            if (!preg_match('/\bmemory\s*=\s*(.+)$/is', $mw[1], $mem)) continue;
+            $category = preg_match('/\bcategory\s*=\s*([^,\]]+)/i', $mw[1], $cat) ? trim($cat[1]) : 'general';
+            $res = memory_append((int)$user['id'], trim($mem[1]), $category);
+            sse_send(['tool_status' => [
+                'name' => 'memory_write', 'state' => 'done', 'duration_ms' => 0,
+                'result' => json_encode($res, JSON_UNESCAPED_UNICODE),
+            ]]);
+        }
+    }
+    $assistantBuffer = trim(preg_replace('/\[\s*A(?:CTIONS?)?\s*:\s*memory_write\b[^\]]*\]/i', '', $assistantBuffer));
+
     if ($ephemeral) { sse_done(); exit; }
 
     $now = time();
     db()->prepare('INSERT INTO messages (conversation_id, role, content, created_at) VALUES (?, ?, ?, ?)')
         ->execute([$convId, 'assistant', $assistantBuffer, $now]);
-    $asstMsgId = (int)db()->lastInsertId();
     db()->prepare('UPDATE conversations SET updated_at=? WHERE id=?')->execute([$now, $convId]);
-
-    $asstVec = embed_text($assistantBuffer);
-    if ($asstVec !== null) {
-        try {
-            db()->prepare('INSERT INTO message_embeddings (message_id, user_id, embedding, model, dim) VALUES (?, ?, ?, ?, ?)')
-                ->execute([$asstMsgId, (int)$user['id'], pack('f*', ...$asstVec), EMBED_MODEL, count($asstVec)]);
-        } catch (Throwable $e) {
-            log_event(['msg' => 'embed_insert_assistant_error', 'err' => $e->getMessage()]);
-        }
-    } elseif (embeddings_enabled()) {
-        log_event(['msg' => 'embed_skipped_assistant', 'message_id' => $asstMsgId]);
-    }
 }
 
 sse_done();
 
+// Everything past this point is telemetry, which the browser should not wait on.
+if (function_exists('fastcgi_finish_request')) fastcgi_finish_request();
+
 if (telemetry_enabled() && !$sawError && $rawAssistant !== '') {
-    if (function_exists('fastcgi_finish_request')) fastcgi_finish_request();
     $installId = env_str('TELEMETRY_INSTALL_ID');
     telemetry_send([
         'schema' => 1,

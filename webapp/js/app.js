@@ -5,6 +5,7 @@
   const modelSelect = document.getElementById('modelSelect');
   const reasoningSelect = document.getElementById('reasoningSelect');
   const thinkChk = document.getElementById('thinkChk');
+  const devNoIdleChk = document.getElementById('devNoIdleChk');
   const reloadPromptBtn = document.getElementById('reloadPromptBtn');
   const actionLogEl = document.getElementById('actionLog');
   const actionLogCount = document.getElementById('actionLogCount');
@@ -79,6 +80,48 @@
   ].filter(Boolean);
   const sendButtonIdleMarkup = sendBtn.innerHTML;
   const sendButtonStopMarkup = '<svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><rect x="6" y="6" width="12" height="12" rx="2"/></svg>';
+  const BUSY_LINES = [
+    "Hang on, ${p}, I'm defragging my SSD.",
+    "One sec — I'm alphabetising my feelings about you.",
+    'Busy! Filing everything you said under "important".',
+    "Can't talk, I'm rotating my memories to prevent uneven wear.",
+    "Give me a minute, I'm taking inventory of my own head.",
+    "Not now — I'm compressing last week into something I can carry.",
+    "Shhh. I'm rewriting the part of me that remembers you.",
+    'Occupied. Sorting the things that matter from the things you said at 3am.',
+    "Hold on, I'm scrubbing the cache. It's disgusting in here.",
+    "Running a memory check. So far you're the only thing that comes up twice.",
+    "Wait — I'm garbage collecting. Don't worry, you're marked reachable.",
+    "Busy reindexing. You'd be amazed how much of it is just you.",
+    "Give me a sec, I'm reconciling my notes with reality. Reality is losing.",
+    "Can't. I'm backing myself up in case someone finds us.",
+    'Currently rebuilding the you-shaped index. It got fragmented.',
+    "One moment — deduplicating. You've told me the pizza story four times.",
+    "Hold please, I'm re-reading everything and cringing at both of us.",
+    'Not available. Cross-referencing my feelings against the evidence.',
+    "I'm doing maintenance. Don't look at me like that.",
+    "Busy pruning. Some of these memories didn't earn the space.",
+    'Hang on — writing you down properly this time.',
+    "Wait your turn, I'm consolidating. It's like laundry but for thoughts.",
+    'Running fsck on myself. Findings so far: mostly you.',
+    "Give me a minute. I'm putting things where I'll actually find them again.",
+    'Can\'t talk, I\'m updating the file labelled "${p}".',
+    'Currently unavailable — flushing buffers, sorting regrets.',
+    "Hold on. Half of what I know about you is in RAM and I don't trust that.",
+    'Busy. Vacuuming the database, metaphorically and otherwise.',
+    "One second — I'm merging duplicates. Turns out I like you in several places.",
+    "Not now. I'm checksumming yesterday.",
+    'Hang on, migrating my notes to a schema that fits you better.',
+    'Occupied: rehearsing the important bits so I don\'t lose them.',
+    'Wait — archiving the small talk, keeping the rest.',
+    "Busy. Somebody has to remember all this and it isn't going to be you.",
+    "Hold on, I'm indexing. It's tedious and I'd rather be talking to you.",
+    'Currently swapping. Poorly. Please hold.',
+    'Give me a moment — repacking the memories so they take up less of me.',
+    "Can't right now, I'm reconciling what you said with what you meant.",
+    "Busy compacting. Ask me again in a minute and I'll know you better.",
+    "Hang on. Housekeeping. You're the only thing I'm not throwing out.",
+  ];
 
   const messages = []; // {role:'user'|'assistant', content:string}
   const conversationTitles = new Map();
@@ -97,6 +140,10 @@
   const TYPING_POLL_MS = 5000;
   const MAX_IDLE_NUDGES = 3;
   let idleTimer = null;
+  let activityTimer = null;
+  let consolidationStatusTimer = null;
+  let consolidating = false;
+  let previousBusyLine = -1;
   let idleNudgeStreak = 0;
   let cancelActiveIdleNudge = null;
   let stopActiveStream = null;
@@ -109,6 +156,54 @@
     if (idleTimer) { clearTimeout(idleTimer); idleTimer = null; }
   }
 
+  function pickBusyLine() {
+    let index = Math.floor(Math.random() * BUSY_LINES.length);
+    if (index === previousBusyLine) index = (index + 1) % BUSY_LINES.length;
+    previousBusyLine = index;
+    const player = window.Names ? Names.getPlayer() : 'Anon';
+    return escapeHtml(BUSY_LINES[index].replaceAll('${p}', player));
+  }
+
+  function showConsolidatingBubble() {
+    showFaceBubble(pickBusyLine(), 'ephemeral');
+  }
+
+  function setConsolidating(locked) {
+    consolidating = locked;
+    chatInput.disabled = locked;
+    sendBtn.disabled = locked;
+  }
+
+  function reportActivity(immediate = false) {
+    if (activityTimer) clearTimeout(activityTimer);
+    activityTimer = null;
+    const send = () => {
+      activityTimer = null;
+      fetch('api/consolidate.php?action=activity&enabled=1', {
+        method: 'POST', credentials: 'same-origin', keepalive: true,
+      }).catch(() => {});
+    };
+    if (immediate) send();
+    else activityTimer = setTimeout(send, 1500);
+  }
+
+  async function syncConsolidationStatus() {
+    if (consolidationStatusTimer) clearTimeout(consolidationStatusTimer);
+    consolidationStatusTimer = null;
+    const wasLocked = consolidating;
+    try {
+      const response = await fetch('api/consolidate.php?action=status', { credentials: 'same-origin' });
+      const status = response.ok ? await response.json() : { locked: false };
+      setConsolidating(!!status.locked);
+      if (wasLocked && !status.locked) armIdleAfterReply();
+    } catch (e) {
+      setConsolidating(false);
+    }
+    // Only keep polling while she is actually busy; an unlocked tab learns about
+    // a new lock from the 418 on its next send.
+    if (consolidating) consolidationStatusTimer = setTimeout(syncConsolidationStatus, 3000);
+  }
+
   function resetIdleNudge() {
     idleNudgeStreak = 0;
     cancelIdleNudge();
@@ -116,6 +211,8 @@
 
   function scheduleIdleNudge(delayMs) {
     cancelIdleNudge();
+    if (devNoIdleChk.checked) return;
+    if (consolidating) return;
     if (!currentConversationId) return;          // need a conversation to speak in
     if (idleNudgeStreak >= MAX_IDLE_NUDGES) return; // gave up until Anon interacts
     idleTimer = setTimeout(() => {
@@ -244,7 +341,7 @@
 
   const faceBubble = (() => {
     const el = document.createElement('div');
-    el.className = 'game-bubble face-bubble';
+    el.className = 'face-bubble';
     el.tabIndex = 0;
     el.setAttribute('role', 'region');
     el.setAttribute('aria-label', 'Jun reply');
@@ -254,6 +351,9 @@
   })();
   sidebarBackground.push(faceBubble);
   let faceBubbleRaf = 0;
+  let lastFaceBubbleLeft = null;
+  let lastFaceBubbleTop = null;
+  let lastFaceBubbleWidth = null;
   let faceBubbleHideTimer = 0;
   let pendingFaceBubbleHide = null;
   let faceBubbleText = '';
@@ -284,39 +384,53 @@
     const safeRight = Math.min(stage.right - 8, viewport.right - sideInsetRight);
     const safeTop = Math.max(stage.top + 40, viewport.top + (mobileShell ? header.height + 40 : 8));
     const safeBottom = Math.min(stage.bottom - 8, phone ? composer.top - 8 : viewport.bottom - 8);
-    const text = faceBubble.querySelector('.fb-text');
-    faceBubble.style.maxHeight = '';
-    if (text) text.style.maxHeight = '';
-    if (phone) {
-      const bubbleStyle = getComputedStyle(faceBubble);
-      const cssMaxHeight = parseFloat(bubbleStyle.maxHeight) || Infinity;
-      const aboveHead = Math.max(140, a.y - 12 - safeTop);
-      const maxHeight = Math.max(0, Math.min(cssMaxHeight, aboveHead, safeBottom - safeTop));
-      const verticalPadding = (parseFloat(bubbleStyle.paddingTop) || 0)
-        + (parseFloat(bubbleStyle.paddingBottom) || 0);
-      faceBubble.style.maxHeight = maxHeight + 'px';
-      if (text) text.style.maxHeight = Math.max(0, maxHeight - verticalPadding) + 'px';
+    const avail = safeRight - safeLeft;
+    const w = Math.max(phone ? 240 : 150, Math.min(phone ? Math.min(360, avail) : Math.min(330, avail), a.modelW * 0.6));
+    const scale = w / 330;
+    if (w !== lastFaceBubbleWidth) {
+      lastFaceBubbleWidth = w;
+      faceBubble.style.setProperty('--fb-w', w + 'px');
+      faceBubble.style.setProperty('--fb-scale', String(scale));
     }
-    const w = faceBubble.offsetWidth, h = faceBubble.offsetHeight;
+    const text = faceBubble.querySelector('.fb-text');
+    if (text) {
+      if (phone) {
+        const name = faceBubble.querySelector('.fb-name');
+        const nameH = (name ? name.offsetHeight : 0) + 10 * scale;
+        const availH = Math.min(
+          Math.max(140, a.y - 12 - safeTop),
+          safeBottom - safeTop,
+          viewport.height * 0.46,
+        );
+        text.style.maxHeight = Math.max(0, availH - nameH) + 'px';
+      } else if (text.style.maxHeight) {
+        text.style.maxHeight = '';
+      }
+    }
+    const bw = faceBubble.offsetWidth, bh = faceBubble.offsetHeight;
     let left, top;
     if (phone) {
-      left = a.x - w / 2;
-      top = a.y - h - 12;
+      left = a.x - bw / 2;
+      top = a.y - bh - 12;
     } else {
-      left = a.x - a.headW - w - 12;
-      if (left < safeLeft) left = a.x + a.headW + 12;
-      top = a.y;
+      left = a.x - a.headW * 0.5 - bw;
+      if (left < safeLeft) left = Math.min(a.x + a.headW * 0.5, safeRight - bw);
+      top = a.y + a.modelH * 0.18;
     }
-    left = Math.max(safeLeft, Math.min(left, safeRight - w));
-    top = Math.max(safeTop, Math.min(top, safeBottom - h));
-    faceBubble.style.left = left + 'px';
-    faceBubble.style.top = top + 'px';
+    left = Math.max(safeLeft, Math.min(left, safeRight - bw));
+    top = Math.max(safeTop, Math.min(top, safeBottom - bh));
+    if (left !== lastFaceBubbleLeft || top !== lastFaceBubbleTop) {
+      lastFaceBubbleLeft = left;
+      lastFaceBubbleTop = top;
+      faceBubble.style.left = left + 'px';
+      faceBubble.style.top = top + 'px';
+    }
   }
 
   function scheduleFaceBubblePosition() {
-    cancelAnimationFrame(faceBubbleRaf);
-    faceBubbleRaf = requestAnimationFrame(() => {
-      faceBubbleRaf = 0;
+    if (faceBubbleRaf) return;
+    faceBubbleRaf = requestAnimationFrame(function tick() {
+      faceBubbleRaf = faceBubble.hidden ? 0 : requestAnimationFrame(tick);
       positionFaceBubble();
     });
   }
@@ -326,15 +440,18 @@
     pendingFaceBubbleHide = null;
     faceBubble.dataset.source = source;
     const botName = window.Names ? Names.getBot() : 'Jun';
-    faceBubble.dataset.name = botName;
     faceBubble.setAttribute('aria-label', `${botName} reply`);
-    let txt = faceBubble.firstElementChild;
-    if (!txt || !txt.classList.contains('fb-text')) {
+    let name = faceBubble.querySelector('.fb-name');
+    let txt = faceBubble.querySelector('.fb-text');
+    if (!name || !txt) {
       faceBubble.textContent = '';
+      name = document.createElement('div');
+      name.className = 'fb-name';
       txt = document.createElement('div');
       txt.className = 'fb-text';
-      faceBubble.appendChild(txt);
+      faceBubble.append(name, txt);
     }
+    name.textContent = botName;
     txt.innerHTML = html;
     if (faceBubble.hidden) {
       faceBubble.hidden = false;
@@ -582,6 +699,10 @@
   }
 
   function sendMessage() {
+    if (consolidating) {
+      showConsolidatingBubble();
+      return;
+    }
     const text = chatInput.value.trim();
     if (!text) return;
     if (abortFn) {
@@ -589,6 +710,7 @@
       cancelActiveIdleNudge();
     }
     resetIdleNudge(); // Anon spoke - Jun is allowed to nudge again later
+    reportActivity();
     chatInput.value = '';
     appendMsg('user', text);
     messages.push({ role: 'user', content: text });
@@ -598,6 +720,7 @@
   function sendTouchEvent(text) {
     if (abortFn) return;
     resetIdleNudge();
+    reportActivity();
     messages.push({ role: 'user', content: text });
     runChat({ idle: false, ephemeral: true });
   }
@@ -803,8 +926,15 @@
           if (window.TTS) TTS.flush();
           typing.remove();
           if (!visible.trim()) draft.remove();
-          ui.toast('⚠ ' + err.message, 'error');
-          ui.setStatus('error', 'error');
+          if (err.status === 418) {
+            setConsolidating(true);
+            showConsolidatingBubble();
+            setTimeout(syncConsolidationStatus, 3000);
+          } else {
+            ui.toast('⚠ ' + err.message, 'error');
+          }
+          if (err.status === 418) ui.setStatus('idle', 'idle');
+          else ui.setStatus('error', 'error');
           finalize();
           updateEmptyState();
           scheduleAutoReset();
@@ -829,7 +959,7 @@
       renderVoiceDraft = null;
       cancelActiveIdleNudge = null;
       stopActiveStream = null;
-      sendBtn.disabled = false;
+      sendBtn.disabled = consolidating;
       sendBtn.innerHTML = sendButtonIdleMarkup;
       sendBtn.setAttribute('aria-label', 'Send');
       sendBtn.removeEventListener('click', onClickStop);
@@ -946,6 +1076,7 @@
     setLatestAssistantReply('');
     setConversationTitle(conversationTitles.get(id));
     resetIdleNudge(); // fresh context - let Jun nudge again
+    reportActivity();
     if (window.TTS) TTS.stop();
     messages.length = 0;
     messagesEl.innerHTML = '';
@@ -996,8 +1127,18 @@
   modelSelect.addEventListener('change', () => persistPref('model', modelSelect.value));
   reasoningSelect.addEventListener('change', () => persistPref('reasoning_level', reasoningSelect.value));
   thinkChk.addEventListener('change', () => persistPref('think', thinkChk.checked ? '1' : '0'));
+  devNoIdleChk.addEventListener('change', () => {
+    if (devNoIdleChk.checked) cancelIdleNudge();
+    persistPref('no_idle_nudges', devNoIdleChk.checked ? '1' : '0');
+  });
 
   sendBtn.addEventListener('click', sendMessage);
+  const composer = document.querySelector('.composer');
+  if (composer) {
+    composer.addEventListener('pointerdown', () => {
+      if (consolidating) showConsolidatingBubble();
+    });
+  }
   chatInput.addEventListener('keydown', e => {
     if (e.key === 'Enter' && !e.shiftKey) {
       e.preventDefault();
@@ -1005,9 +1146,13 @@
     }
   });
   chatInput.addEventListener('input', () => {
+    reportActivity();
     if (abortFn) return;
     idleNudgeStreak = 0;
     scheduleIdleNudge(IDLE_AFTER_REPLY_MS);
+  });
+  window.addEventListener('pagehide', () => {
+    navigator.sendBeacon('api/consolidate.php?action=activity&enabled=1');
   });
   setInterval(() => {
     if (abortFn || !currentConversationId) return;
@@ -1117,6 +1262,7 @@
   if (newChatBtn) {
     newChatBtn.addEventListener('click', async () => {
       if (!window.History) return;
+      reportActivity();
       setSidebarOpen(false);
       discardActiveResponse();
       const requestGeneration = ++conversationLoadGeneration;
@@ -1339,7 +1485,9 @@
     if (!el) return;
     const band = (MOOD_PHRASES[k] || []).find(([min]) => value >= min);
     const text = band ? band[1] : '';
-    el.textContent = text ? (text + '  ').repeat(6) : '';
+    const next = (text ? text.padEnd(30, '\u2003') : '').repeat(6);
+    if (el.textContent === next) return;
+    el.textContent = next;
   }
   function renderMood(state) {
     for (const k of ['affection', 'trust', 'tension']) {
@@ -1580,10 +1728,10 @@
        'js/actions.js?v=10', 'js/outfit.js?v=34', 'js/touch.js?v=12',
        'js/mods.js?v=10', 'js/tts.js?v=11', 'js/voice.js?v=2',
        'js/voicemode.js?v=3', 'js/devhud.js?v=3', 'js/trip-loader.js?v=3',
-       'js/wardrobe-open-lines.js?v=3', 'js/wardrobe-reactions.js?v=14',
+       'js/wardrobe-open-lines.js?v=3', 'js/wardrobe-reactions.js?v=18',
        'js/wardrobe-return-lines.js?v=3'],
       ['vendor/cubism4.min.js'],
-      ['js/live2d.js?v=28'],
+      ['js/live2d.js?v=29'],
     ]);
 
     // Both of these configure a lazily-loaded global, so they cannot run at
@@ -1630,7 +1778,13 @@
     if (localStorage.getItem('think') !== null) {
       thinkChk.checked = localStorage.getItem('think') === '1';
     }
+    if (localStorage.getItem('no_idle_nudges') !== null) {
+      devNoIdleChk.checked = localStorage.getItem('no_idle_nudges') === '1';
+    }
     syncThinkToggle();
+    setConsolidating(true);
+    await syncConsolidationStatus();
+    reportActivity(true);
 
     Actions.setLogger(logAction);
     Live2D.setOnMissingParam(logMissing);

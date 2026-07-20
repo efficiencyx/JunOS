@@ -2,7 +2,7 @@ FROM php:8.2-fpm-alpine
 
 # Runtime deps: curl (health probe), fcgi (cgi-fcgi healthcheck binary).
 # Build deps (autoconf, build-base) needed for `pecl install apcu`; removed after.
-RUN apk add --no-cache curl fcgi sqlite-libs \
+RUN apk add --no-cache curl fcgi sqlite-libs su-exec \
  && apk add --no-cache --virtual .build-deps autoconf build-base sqlite-dev \
  && pecl install apcu \
  && docker-php-ext-enable apcu \
@@ -28,15 +28,17 @@ RUN { \
 WORKDIR /var/www/omega
 
 COPY webapp/ /var/www/omega/
+COPY docker/php-entrypoint.sh /usr/local/bin/omega-php-entrypoint
 
 # State dir for rate-limiter flat files and SQLite DB (mounted as volume omega_state)
 RUN mkdir -p /var/lib/omega/rl \
- && chown -R www-data:www-data /var/lib/omega /var/www/omega
+ && chown -R www-data:www-data /var/lib/omega /var/www/omega \
+ && chmod +x /usr/local/bin/omega-php-entrypoint
 
 EXPOSE 9000
 
 HEALTHCHECK --interval=10s --timeout=3s --retries=3 \
     CMD cgi-fcgi -bind -connect 127.0.0.1:9000 || exit 1
 
-# Use the base image's php-fpm entrypoint/cmd
+ENTRYPOINT ["/usr/local/bin/omega-php-entrypoint"]
 CMD ["php-fpm"]

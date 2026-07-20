@@ -9,11 +9,13 @@ function request_id(): string {
 }
 
 function client_ip(): string {
-    $xff = $_SERVER['HTTP_X_FORWARDED_FOR'] ?? '';
-    if ($xff !== '') {
-        // First hop in the list is the original client. Keep only IP-ish chars.
-        $first = preg_replace('/[^0-9a-fA-F.:\/]/', '', trim(explode(',', $xff)[0]));
-        if ($first !== '') return $first;
+    // X-Forwarded-For is attacker-controlled behind the single nginx edge proxy; only trust it when an operator opts in with TRUST_PROXY=1.
+    if (env_str('TRUST_PROXY') === '1') {
+        $xff = $_SERVER['HTTP_X_FORWARDED_FOR'] ?? '';
+        if ($xff !== '') {
+            $first = preg_replace('/[^0-9a-fA-F.:]/', '', trim(explode(',', $xff)[0]));
+            if ($first !== '') return $first;
+        }
     }
     return $_SERVER['REMOTE_ADDR'] ?? 'unknown';
 }
@@ -116,65 +118,6 @@ function rate_limit(string $bucket, int $maxPerWindow, int $windowSec): void {
     fclose($fp);
 }
 
-const EMBED_MODEL = 'nomic-embed-text';
-
-function embed_text(string $text, string $task = ''): ?array {
-    if (!embeddings_enabled()) return null;
-
-    // A dead embeddings backend would otherwise cost the full connect timeout
-    // on EVERY call - and chat.php embeds twice per turn. Fail once, then
-    // short-circuit for the rest of this request.
-    static $unreachable = false;
-    if ($unreachable) return null;
-
-    $text = trim($text);
-    if ($text === '') return null;
-
-    // nomic-embed-text ranks well only when text carries a task prefix
-    // ("search_query" for the live query, "search_document" for indexed docs).
-    // Retrieval callers pass one; storage paths that must stay byte-compatible
-    // with existing message_embeddings rows leave it empty.
-    $prompt = $task !== '' ? $task . ': ' . $text : $text;
-
-    $baseUrl = embeddings_base_url();
-
-    // Resolve the host ourselves first - curl's DNS occasionally stalls inside
-    // the docker network and we'd rather not wait out the timeout.
-    $parts = parse_url($baseUrl);
-    if (isset($parts['host'])) {
-        $ip = gethostbyname($parts['host']);
-        if ($ip !== $parts['host']) {
-            $baseUrl = ($parts['scheme'] ?? 'http') . '://' . $ip;
-            if (isset($parts['port'])) $baseUrl .= ':' . $parts['port'];
-        }
-    }
-
-    $ch = curl_init($baseUrl . '/api/embeddings');
-    curl_setopt_array($ch, [
-        CURLOPT_POST => true,
-        CURLOPT_HTTPHEADER => ['Content-Type: application/json'],
-        CURLOPT_POSTFIELDS => json_encode(['model' => EMBED_MODEL, 'prompt' => $prompt]),
-        CURLOPT_RETURNTRANSFER => true,
-        CURLOPT_TIMEOUT => 30,
-        CURLOPT_CONNECTTIMEOUT => 10,
-    ]);
-    $resp = curl_exec($ch);
-    if ($resp === false) {
-        log_event(['msg' => 'embed_curl_error', 'err' => curl_error($ch)]);
-        if (curl_errno($ch) === CURLE_COULDNT_CONNECT) $unreachable = true;
-        curl_close($ch);
-        return null;
-    }
-    curl_close($ch);
-
-    $obj = json_decode($resp, true);
-    if (!isset($obj['embedding']) || !is_array($obj['embedding'])) {
-        log_event(['msg' => 'embed_bad_response']);
-        return null;
-    }
-    return array_values(array_map('floatval', $obj['embedding']));
-}
-
 const TELEMETRY_DEFAULT_ENDPOINT = 'https://metrics.example.invalid/ingest.php';
 
 function telemetry_enabled(): bool {
@@ -214,7 +157,10 @@ function db(): PDO {
         PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION,
         PDO::ATTR_DEFAULT_FETCH_MODE => PDO::FETCH_ASSOC,
     ]);
-    $pdo->exec('PRAGMA journal_mode=WAL; PRAGMA foreign_keys=ON;');
+    // busy_timeout is not optional here: the consolidation worker writes to the
+    // same file as php-fpm, and the default of 0 turns any overlap into an
+    // immediate "database is locked" instead of a short wait.
+    $pdo->exec('PRAGMA journal_mode=WAL; PRAGMA foreign_keys=ON; PRAGMA busy_timeout=5000;');
 
     // Apply any migrations/NNN_*.sql newer than the current schema version. A
     // fresh DB reads 0 (no schema_version table yet) and gets every file in
@@ -253,7 +199,7 @@ function current_user(): ?array {
     return $user = $stmt->fetch() ?: null;
 }
 
-function memory_file_path(int $userId): string {
+function memory_dir(): string {
     // Defaults under state_dir() so memories land in the persisted omega_state
     // volume. Builds before 2026-07 wrote to /var/lib/jun/memory (unmounted in
     // Docker, so lost on container recreation); set MEMORY_DIR to override.
@@ -262,18 +208,70 @@ function memory_file_path(int $userId): string {
     if (!is_dir($dir) || !is_writable($dir)) {
         throw new RuntimeException('memory_dir_unwritable');
     }
-    return $dir . '/user-' . $userId . '.jsonl';
+    return $dir;
 }
 
-function memory_append(int $userId, string $memory, string $category): array {
+function memory_file_path(int $userId): string {
+    return memory_dir() . '/user-' . $userId . '.jsonl';
+}
+
+function memory_journal_path(int $userId): string {
+    return memory_dir() . '/user-' . $userId . '.journal.md';
+}
+
+function memory_journal_read(int $userId): string {
+    try {
+        $path = memory_journal_path($userId);
+    } catch (Throwable $e) {
+        return '';
+    }
+    if (!is_readable($path)) return '';
+    return (string)@file_get_contents($path);
+}
+
+function memory_journal_write(int $userId, string $text): array {
+    try {
+        $path = memory_journal_path($userId);
+        if (is_file($path) && !copy($path, $path . '.bak')) {
+            return ['error' => 'memory_backup_failed'];
+        }
+        $tmp = tempnam(dirname($path), '.journal-');
+        if ($tmp === false) return ['error' => 'memory_temp_failed'];
+        $fp = fopen($tmp, 'wb');
+        if ($fp === false) {
+            @unlink($tmp);
+            return ['error' => 'memory_open_failed'];
+        }
+        if (fwrite($fp, $text) === false) {
+            fclose($fp);
+            @unlink($tmp);
+            return ['error' => 'memory_write_failed'];
+        }
+        if (!fclose($fp) || !rename($tmp, $path)) {
+            @unlink($tmp);
+            return ['error' => 'memory_replace_failed'];
+        }
+        @chmod($path, 0600);
+        return ['ok' => true];
+    } catch (Throwable $e) {
+        log_event(['msg' => 'memory_journal_write_error', 'user_id' => $userId, 'err' => $e->getMessage()]);
+        return ['error' => 'memory_replace_failed'];
+    }
+}
+
+function memory_normalize_entry(string $memory, string $category): array {
     $memory = trim(preg_replace('/\s+/', ' ', $memory));
     $category = trim(preg_replace('/[^a-z0-9]+/i', '_', $category), '_');
     if ($category === '') $category = 'general';
     if ($memory === '') return ['error' => 'memory_required'];
     if (mb_strlen($memory) > 800) $memory = mb_substr($memory, 0, 797) . '…';
     if (mb_strlen($category) > 40) $category = mb_substr($category, 0, 40);
+    return ['created_at' => time(), 'category' => $category, 'memory' => $memory];
+}
 
-    $entry = ['created_at' => time(), 'category' => $category, 'memory' => $memory];
+function memory_append(int $userId, string $memory, string $category): array {
+    $entry = memory_normalize_entry($memory, $category);
+    if (isset($entry['error'])) return $entry;
     $path = memory_file_path($userId);
     $fp = fopen($path, 'ab');
     if ($fp === false) return ['error' => 'memory_open_failed'];
@@ -283,6 +281,74 @@ function memory_append(int $userId, string $memory, string $category): array {
     fclose($fp);
     @chmod($path, 0600);
     return ['ok' => true, 'entry' => $entry];
+}
+
+function memory_replace_all(int $userId, array $entries): array {
+    $normalized = [];
+    foreach ($entries as $entry) {
+        if (!is_array($entry)) continue;
+        $item = memory_normalize_entry((string)($entry['memory'] ?? ''), (string)($entry['category'] ?? 'general'));
+        if (!isset($item['error'])) $normalized[] = $item;
+    }
+
+    try {
+        $path = memory_file_path($userId);
+        if (is_file($path) && !copy($path, $path . '.bak')) {
+            return ['error' => 'memory_backup_failed'];
+        }
+        $tmp = tempnam(dirname($path), '.memory-');
+        if ($tmp === false) return ['error' => 'memory_temp_failed'];
+        $fp = fopen($tmp, 'wb');
+        if ($fp === false) {
+            @unlink($tmp);
+            return ['error' => 'memory_open_failed'];
+        }
+        foreach ($normalized as $entry) {
+            if (fwrite($fp, json_encode($entry, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES) . "\n") === false) {
+                fclose($fp);
+                @unlink($tmp);
+                return ['error' => 'memory_write_failed'];
+            }
+        }
+        if (!fclose($fp) || !rename($tmp, $path)) {
+            @unlink($tmp);
+            return ['error' => 'memory_replace_failed'];
+        }
+        @chmod($path, 0600);
+        return ['ok' => true, 'entries' => $normalized];
+    } catch (Throwable $e) {
+        log_event(['msg' => 'memory_replace_error', 'user_id' => $userId, 'err' => $e->getMessage()]);
+        return ['error' => 'memory_replace_failed'];
+    }
+}
+
+function consolidation_lock_path(int $userId): string {
+    $dir = state_dir() . '/consolidating';
+    if (!is_dir($dir)) @mkdir($dir, 0700, true);
+    return $dir . '/user-' . $userId . '.lock';
+}
+
+function consolidation_locked(int $userId): bool {
+    $path = consolidation_lock_path($userId);
+    if (!is_file($path)) return false;
+    $expiry = (int)trim((string)@file_get_contents($path));
+    if ($expiry > time()) return true;
+    @unlink($path);
+    return false;
+}
+
+function consolidation_touch(int $userId, ?bool $enabled = null): void {
+    if ($enabled === null) {
+        db()->prepare(
+            'INSERT INTO memory_consolidation (user_id, last_activity) VALUES (?, ?)
+             ON CONFLICT(user_id) DO UPDATE SET last_activity = CASE WHEN enabled = 1 THEN excluded.last_activity ELSE last_activity END'
+        )->execute([$userId, time()]);
+        return;
+    }
+    db()->prepare(
+        'INSERT INTO memory_consolidation (user_id, last_activity, enabled) VALUES (?, ?, ?)
+         ON CONFLICT(user_id) DO UPDATE SET last_activity = excluded.last_activity, enabled = excluded.enabled'
+    )->execute([$userId, $enabled ? time() : 0, $enabled ? 1 : 0]);
 }
 
 function memory_list(int $userId): array {

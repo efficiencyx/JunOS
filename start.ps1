@@ -73,7 +73,6 @@ $SiteUrl   = "http://127.0.0.1:$Port"
 
 $Provider  = if ($env:AI_PROVIDER) { $env:AI_PROVIDER.ToLower() } else { 'ollama' }
 if ($Provider -notin 'ollama', 'openrouter', 'llamacpp') { $Provider = 'ollama' }
-$EmbedOn = if ($env:EMBEDDINGS) { $env:EMBEDDINGS.ToLower() -eq 'on' } else { $Provider -eq 'ollama' }
 $LlamaPort = if ($env:LLAMACPP_PORT) { $env:LLAMACPP_PORT } else { '8081' }
 $LlamacppUrl = if ($env:LLAMACPP_URL) { $env:LLAMACPP_URL } else { "http://127.0.0.1:$LlamaPort" }
 
@@ -101,7 +100,7 @@ function Test-Http([string]$url, [int]$timeoutSec = 2) {
 if ($Action -eq 'stop') {
     Step 'stopping services'
     $pids = Read-Pids
-    foreach ($name in 'php', 'tts', 'ollama', 'llamacpp') {
+    foreach ($name in 'php', 'memory', 'tts', 'ollama', 'llamacpp') {
         $p = Get-TrackedProcess $pids $name
         if ($p) {
             Ok "stopped $name (pid $($p.Id))"
@@ -117,7 +116,7 @@ if ($Action -eq 'stop') {
 if ($Action -eq 'status') {
     Step 'service status'
     $pids = Read-Pids
-    foreach ($name in 'php', 'tts', 'ollama', 'llamacpp') {
+    foreach ($name in 'php', 'memory', 'tts', 'ollama', 'llamacpp') {
         $p = Get-TrackedProcess $pids $name
         if ($p) {
             Ok ("{0,-10} running (pid {1})" -f $name, $p.Id)
@@ -146,12 +145,10 @@ function Start-Tracked([string]$name, [string]$exe, [string[]]$exeArgs) {
     return $p
 }
 
-# Needed when it's the chat provider, or for local embeddings alongside a
-# non-Ollama provider. If an Ollama server is already up (the desktop app
-# autostarts one), use it. Otherwise launch `ollama serve` ourselves, with the
-# model store inside the install folder so weights disappear with it on
-# uninstall.
-if ($Provider -eq 'ollama' -or $EmbedOn) {
+# If an Ollama server is already up (the desktop app autostarts one), use it.
+# Otherwise launch `ollama serve` ourselves, with the model store inside the
+# install folder so weights disappear with it on uninstall.
+if ($Provider -eq 'ollama') {
 if (-not (Get-Command ollama -ErrorAction SilentlyContinue)) {
     throw 'ollama is not installed. Run install.ps1 first (it installs Ollama via winget).'
 }
@@ -198,7 +195,7 @@ if ($env:OLLAMA_MODELS_TO_PULL) {
             & ollama pull $m
         }
         if ($LASTEXITCODE -ne 0) { Warn_ "pull failed: $m (continuing)" }
-        if (-not $chatModel -and $m -ne 'nomic-embed-text') { $chatModel = $m }
+        if (-not $chatModel) { $chatModel = $m }
     }
 }
 
@@ -291,9 +288,14 @@ Step "start web server on $SiteUrl"
 $env:AI_PROVIDER            = $Provider
 $env:OLLAMA_URL             = $OllamaUrl
 $env:LLAMACPP_URL           = $LlamacppUrl
-$env:EMBEDDINGS             = if ($EmbedOn) { 'on' } else { 'off' }
 $env:TTS_URL                = 'http://127.0.0.1:8001'
 $env:OMEGA_STATE_DIR        = $StateDir
+$libPath = (Join-Path $PSScriptRoot 'webapp\api\_lib.php').Replace('\', '/')
+& $phpExe -r "require '$libPath'; db();"
+if ($LASTEXITCODE -ne 0) { throw 'database migration failed' }
+$oldMemory = Get-TrackedProcess $oldPids 'memory'
+if ($oldMemory) { Stop-Process -Id $oldMemory.Id -Force -ErrorAction SilentlyContinue }
+Start-Tracked 'memory' $phpExe @((Join-Path $PSScriptRoot 'webapp\api\consolidation-worker.php')) | Out-Null
 # PHP honors this on Unix only; on Windows the built-in server stays
 # single-worker, so requests made while a chat reply is streaming (e.g. TTS)
 # queue until it finishes. Acceptable for a single local user.

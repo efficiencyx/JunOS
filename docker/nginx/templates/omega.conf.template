@@ -78,6 +78,9 @@ server {
         fastcgi_pass  php:9000;
     }
 
+    # CLI-only long-running worker; it must never be reachable over HTTP.
+    location = /api/consolidation-worker.php { return 404; }
+
     location ~ ^/api/.+\.php$ {
         limit_req zone=api burst=10;
         client_max_body_size 16k;
