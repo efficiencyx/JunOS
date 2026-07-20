@@ -652,65 +652,49 @@ input[type="checkbox"] {
   padding: 4px 0;
 }
 
-/* MDRG-style dialogue box (wardrobe transitions + ephemeral face bubble).
-   Box background lives on ::after and the name chip on ::before, with the
-   drop-shadow on the element itself: clip-path clips the filter output, so
-   clipping the element directly would erase the offset backing layer. */
-.game-bubble {
-  position: relative;
-  color: #fff;
-  font-weight: 600;
-  line-height: 1.6;
-  padding: 12px 18px;
-  min-width: 96px;
-  filter: drop-shadow(-4px 5px 0 rgba(13, 11, 38, .9));
-}
-.game-bubble::after {
-  content: '';
-  position: absolute;
-  inset: 0;
-  z-index: -1;
-  background: rgba(25, 2, 44, .92);
-  clip-path: polygon(0 0, 100% 0, 100% calc(100% - 12px), calc(100% - 12px) 100%, 0 100%);
-}
-.game-bubble[data-name]::before {
-  content: attr(data-name);
-  position: absolute;
-  top: -26px;
-  left: 0;
-  background: #15142e;
-  color: #fff;
-  font-weight: 700;
-  font-size: 13px;
-  line-height: 1;
-  padding: 7px 16px 7px 11px;
-  white-space: nowrap;
-  border-left: 5px solid #ec0054;
-  clip-path: polygon(0 0, 100% 0, 100% calc(100% - 9px), calc(100% - 9px) 100%, 0 100%);
-}
+/* MDRG-style dialogue box, matching the wardrobe reaction card. --fb-w and
+   --fb-scale are written by positionFaceBubble() so the card tracks the
+   on-screen size of the Live2D model; scale 1 == the reference metrics below. */
 .face-bubble {
-  position: absolute;
+  position: fixed;
+  z-index: 55;
   margin: 0;
-  width: fit-content;
-  max-width: min(180px, 26vw);
-  min-width: 0;
-  padding: 2px 10px;
-  font-size: 11px;
+  width: var(--fb-w, 330px);
+  max-width: 100%;
+  color: #fff;
+  font-family: Arial, Helvetica, sans-serif;
   line-height: 1.25;
   pointer-events: none;
-  z-index: 45;
-  animation: fbFloat 5s ease-in-out infinite;
-  filter: none;
+  overflow-wrap: anywhere;
 }
-.face-bubble::after { background: #191233; }
-.face-bubble[data-name]::before { top: -32px; }
 .face-bubble[hidden] { display: none; }
-.face-bubble.intro::before { animation: fbNameIn .22s ease both; }
-.face-bubble.intro::after {
+.fb-name {
+  display: table;
+  padding: calc(7px * var(--fb-scale, 1)) calc(16px * var(--fb-scale, 1)) calc(7px * var(--fb-scale, 1)) calc(11px * var(--fb-scale, 1));
+  background: #15142e;
+  border-left: calc(5px * var(--fb-scale, 1)) solid #ec0054;
+  color: #fff;
+  font-size: calc(15px * var(--fb-scale, 1));
+  font-weight: 800;
+  line-height: 1;
+  clip-path: polygon(0 0, 100% 0, 100% calc(100% - 9px * var(--fb-scale, 1)), calc(100% - 9px * var(--fb-scale, 1)) 100%, 0 100%);
+}
+.fb-text {
+  margin-top: calc(10px * var(--fb-scale, 1));
+  padding: calc(6px * var(--fb-scale, 1)) calc(18px * var(--fb-scale, 1)) calc(7px * var(--fb-scale, 1));
+  background: #191233;
+  font-size: calc(17px * var(--fb-scale, 1));
+  font-weight: 700;
+  line-height: 1.25;
+  min-width: 0;
+  clip-path: polygon(0 0, 100% 0, 100% calc(100% - 12px * var(--fb-scale, 1)), calc(100% - 12px * var(--fb-scale, 1)) 100%, 0 100%);
+}
+.fb-text pre { overflow-x: auto; }
+.face-bubble.intro .fb-name { animation: fbNameIn .22s ease both; }
+.face-bubble.intro .fb-text {
   transform-origin: top;
   animation: fbBoxIn .24s ease .22s both;
 }
-.face-bubble.intro .fb-text { animation: fbTextIn .28s ease .5s both; }
 @keyframes fbNameIn {
   from { opacity: 0; transform: translateY(4px); }
   to   { opacity: 1; transform: none; }
@@ -718,14 +702,6 @@ input[type="checkbox"] {
 @keyframes fbBoxIn {
   from { transform: scaleY(0); }
   to   { transform: scaleY(1); }
-}
-@keyframes fbTextIn {
-  from { clip-path: inset(0 100% 0 0); }
-  to   { clip-path: inset(0 0 0 0); }
-}
-@keyframes fbFloat {
-  0%, 100% { transform: translateY(0); }
-  50%      { transform: translateY(-5px); }
 }
 .msg.assistant p               { margin: 0 0 6px; }
 .msg.assistant p:last-child    { margin-bottom: 0; }
@@ -1168,6 +1144,7 @@ body.l2d-touching { cursor: grabbing; user-select: none; }
 .mood-phrase {
   display: inline-block;
   white-space: nowrap;
+  font-family: var(--font-mono, ui-monospace, monospace);
   font-size: 10px;
   font-weight: 700;
   letter-spacing: .14em;
@@ -1176,7 +1153,6 @@ body.l2d-touching { cursor: grabbing; user-select: none; }
   text-shadow: 0 1px 2px rgba(0, 0, 0, .55);
   animation: moodMarquee 10s linear infinite;
 }
-.mood-phrase:empty { animation: none; }
 @keyframes moodMarquee {
   from { transform: translateX(0); }
   to   { transform: translateX(-50%); }
@@ -1650,14 +1626,6 @@ body.voice-mode .voice-overlay { opacity: 1; }
 .mobile-conversation-title,
 .sidebar-backdrop { display: none; }
 
-.face-bubble {
-  position: fixed;
-  z-index: 55;
-  overflow-wrap: anywhere;
-}
-.face-bubble .fb-text { min-width: 0; }
-.face-bubble .fb-text pre { overflow-x: auto; }
-
 #ageGate,
 #authScreen,
 .boot-overlay,
@@ -1926,21 +1894,13 @@ html.phone-ui .composer-area {
 }
 html.phone-ui .composer textarea { font-size: 16px; }
 html.phone-ui .face-bubble {
-  width: fit-content;
-  max-width: min(360px, calc(var(--visual-viewport-width, 100vw) - 24px - env(safe-area-inset-left, 0px) - env(safe-area-inset-right, 0px)));
-  max-height: min(46vh, calc(var(--visual-viewport-height, 100dvh) - 160px));
-  padding: 10px 14px;
-  overflow: visible;
-  font-size: 15px;
-  line-height: 1.45;
   pointer-events: auto;
   touch-action: pan-x pan-y;
 }
-html.phone-ui .face-bubble .fb-text {
+html.phone-ui .fb-text {
   overflow: auto;
   overscroll-behavior: contain;
 }
-html.phone-ui .face-bubble[data-name]::before { top: -32px; }
 html.phone-ui .stage-status {
   top: calc(var(--visual-viewport-top, 0px) + var(--header-h) + env(safe-area-inset-top, 0px) + 4px);
   right: auto;
