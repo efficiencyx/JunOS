@@ -310,7 +310,7 @@ Check `docker compose logs tts`. The first run downloads ~300 MB of weights. Fro
 <details>
 <summary><b>Model's taking forever to load</b></summary>
 
-Watch `docker compose logs ollama`. The entrypoint pre-warms the first non-embedding model with an empty prompt to pull weights into VRAM. A `pre-warm failed` line is non-fatal - she'll load on your first real message.
+Watch `docker compose logs ollama`. The entrypoint pre-warms the **first** model in `OLLAMA_MODELS_TO_PULL` with an empty prompt to pull weights into VRAM, so if you keep a hand-edited list, make sure the chat model leads it. A `pre-warm failed` line is non-fatal - she'll load on your first real message.
 </details>
 
 <details>
