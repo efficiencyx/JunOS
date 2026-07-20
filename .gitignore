@@ -36,8 +36,8 @@ unsloth_compiled_cache/
 live2d_raw/
 
 # lore corpus — generated from tools/lore_dataset.jsonl by build_lore_index.php
-# (.bin/.json are leftovers from the retired embedding index; still ignored so
-# stale local copies never get committed)
+# (.bin/.json came from the embedding index, deleted in 2026-07; still ignored so
+# stale copies in older checkouts never get committed)
 webapp/lore_corpus.txt
 webapp/lore_index.bin
 webapp/lore_meta.json

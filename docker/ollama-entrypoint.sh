@@ -29,10 +29,7 @@ if [ -n "${OLLAMA_MODELS_TO_PULL:-}" ]; then
     [ -z "$m" ] && continue
     echo "[ollama-entrypoint] pulling $m"
     ollama pull "$m" || echo "[ollama-entrypoint] pull failed: $m (will continue)"
-    # Track first non-embedding model as the chat model to pre-warm.
-    if [ -z "$CHAT_MODEL" ] && [ "$m" != "nomic-embed-text" ]; then
-      CHAT_MODEL="$m"
-    fi
+    if [ -z "$CHAT_MODEL" ]; then CHAT_MODEL="$m"; fi
   done
 fi
 

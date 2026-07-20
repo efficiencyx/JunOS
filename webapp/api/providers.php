@@ -40,6 +40,25 @@ function default_chat_model(): string {
         case 'llamacpp':
             return env_str('LLAMACPP_MODEL_HF', 'efficiencyx/Jun-LoRA-v4-E2B-GGUF:Q4_K_M');
         default:
+            $configured = array_map('trim', explode(',', env_str('OLLAMA_MODELS_TO_PULL')));
+            foreach ($configured as $model) {
+                if ($model !== '' && !preg_match('/embed/i', $model)) return $model;
+            }
+
+            $ch = curl_init(chat_api_base('ollama') . '/api/tags');
+            curl_setopt_array($ch, [
+                CURLOPT_RETURNTRANSFER => true,
+                CURLOPT_CONNECTTIMEOUT => 2,
+                CURLOPT_TIMEOUT => 3,
+            ]);
+            $response = curl_exec($ch);
+            curl_close($ch);
+            $data = is_string($response) ? json_decode($response, true) : null;
+            foreach (($data['models'] ?? []) as $entry) {
+                $model = (string)($entry['name'] ?? '');
+                if ($model !== '' && !preg_match('/embed/i', $model)) return $model;
+            }
+
             return 'hf.co/efficiencyx/Jun-LoRA-v4-E2B-GGUF:Q4_K_M';
     }
 }
@@ -55,8 +74,9 @@ function default_num_ctx(): int {
         $gib = (int)$m[1] / (1024 * 1024);
     }
     if ($gib <= 0) return $ctx = 16384;
-    // MemTotal reports slightly under the nominal size, so tiers sit just above it
-    if ($gib <= 12) return $ctx = 4096;
+    // MemTotal reports slightly under the nominal size, so tiers sit just above it.
+    // System RAM is only a proxy: VRAM is what actually bounds the KV cache, so set
+    // OMEGA_NUM_CTX by hand on machines where the two diverge.
     if ($gib <= 17) return $ctx = 6144;
     if ($gib <= 25) return $ctx = 8192;
     if ($gib <= 33) return $ctx = 12288;
@@ -75,6 +95,9 @@ function provider_chat_payload(
             'model' => $model,
             'messages' => $messages,
             'stream' => true,
+            // Without a pin the chat model is the one Ollama evicts under VRAM pressure,
+            // since the embedder holds its own; every eviction also wipes the KV prompt cache.
+            'keep_alive' => -1,
             'options' => [
                 'reasoning_effort' => $reasoning,
                 'temperature' => 0.7,
@@ -107,14 +130,21 @@ function provider_chat_payload(
     return $payload;
 }
 
-function provider_complete_once(string $provider, string $model, array $messages, int $maxTokens = 512): ?string {
+function provider_complete_once(string $provider, string $model, array $messages, int $maxTokens = 512, bool $think = false, string $reasoning = 'medium'): ?string {
     $endpoint = provider_chat_endpoint($provider);
     if (provider_uses_openai_protocol($provider)) {
         $payload = ['model' => $model, 'messages' => $messages, 'stream' => false,
                     'temperature' => 0.3, 'max_tokens' => $maxTokens];
+        if ($think && $provider === 'openrouter') $payload['reasoning'] = ['effort' => $reasoning];
     } else {
-        $payload = ['model' => $model, 'messages' => $messages, 'stream' => false, 'think' => false,
-                    'options' => ['temperature' => 0.3, 'num_ctx' => default_num_ctx(), 'num_predict' => $maxTokens]];
+        $payload = ['model' => $model, 'messages' => $messages, 'stream' => false,
+                    'keep_alive' => -1,
+                    'options' => ['reasoning_effort' => $reasoning, 'temperature' => 0.3,
+                                  'num_ctx' => default_num_ctx(), 'num_predict' => $maxTokens]];
+        // Same shape as provider_chat_payload(): thinking is requested by *omitting*
+        // `think` and letting reasoning_effort drive the template. Sending think:true
+        // makes Ollama run a capability check the Jun GGUFs fail, and it 400s.
+        if (!$think) $payload['think'] = false;
     }
 
     $ch = curl_init($endpoint);
@@ -352,21 +382,6 @@ function provider_context_size(string $provider, array $payload): int {
     if ($provider === 'llamacpp') return 16384;
     if (provider_uses_openai_protocol($provider)) return 0;
     return (int)($payload['options']['num_ctx'] ?? 0);
-}
-
-// RAG / cross-chat recall embeddings. Always served by Ollama (nomic-embed-text)
-// so stored vectors stay byte-compatible; non-Ollama chat providers can opt in
-// with EMBEDDINGS=on + a reachable Ollama, or leave them off and the vector
-// features degrade silently (embed_text() returns null, every caller copes).
-function embeddings_enabled(): bool {
-    $v = strtolower(env_str('EMBEDDINGS'));
-    if ($v === 'on') return true;
-    if ($v === 'off') return false;
-    return ai_provider() === 'ollama';
-}
-
-function embeddings_base_url(): string {
-    return rtrim(env_str('EMBEDDINGS_URL', env_str('OLLAMA_URL', 'http://localhost:11434')), '/');
 }
 
 function provider_tools_enabled(): bool {
