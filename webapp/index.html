@@ -599,9 +599,9 @@ html[data-pre-auth] #app { visibility: hidden; }
 <!-- Fetched during parse but applied by boot-gate.js: the CSP forbids the
      usual media="print" onload= trick, and blocking on the full sheet would
      cost a round trip the auth screen does not need. -->
-<link rel="preload" as="style" href="styles.css?v=40">
+<link rel="preload" as="style" href="styles.css?v=43">
 <link rel="preload" as="style" href="trip-loader.css?v=4">
-<noscript><link rel="stylesheet" href="styles.css?v=40"></noscript>
+<noscript><link rel="stylesheet" href="styles.css?v=43"></noscript>
 
 <script src="js/viewport.js?v=2"></script>
 <script src="js/boot-gate.js?v=2"></script>
@@ -614,7 +614,7 @@ html[data-pre-auth] #app { visibility: hidden; }
 <script defer src="js/ui.js?v=7"></script>
 <script defer src="js/history.js?v=7"></script>
 <script defer src="js/boot-fx.js?v=5"></script>
-<script defer src="js/app.js?v=36"></script>
+<script defer src="js/app.js?v=41"></script>
 </head>
 <body>
 
@@ -918,6 +918,13 @@ html[data-pre-auth] #app { visibility: hidden; }
             <div class="set-row-desc">Floating live readout of tokens/s, token counts, VRAM, RAM and the loaded model. Toggle anytime with <code>Ctrl+Shift+D</code>.</div>
           </div>
           <label class="set-row-control"><input type="checkbox" id="devHudChk" class="toggle" aria-label="Show metrics HUD"></label>
+        </div>
+        <div class="set-row">
+          <div class="set-row-text">
+            <div class="set-row-title">Silence idle nudges</div>
+            <div class="set-row-desc">Stops Jun from speaking up on her own after a lull. She only replies when you write to her.</div>
+          </div>
+          <label class="set-row-control"><input type="checkbox" id="devNoIdleChk" class="toggle" aria-label="Silence idle nudges"></label>
         </div>
         <div class="set-block">
           <div class="set-block-head">

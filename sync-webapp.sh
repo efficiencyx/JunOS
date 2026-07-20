@@ -49,7 +49,9 @@ fi
 if running "$PHP"; then
   echo "→ php           → $PHP:$DEST"
   docker cp webapp/. "$PHP:$DEST"
-  docker exec "$PHP" chown -R www-data:www-data "$DEST"
+  # tools/ is a read-only bind mount, so chown always reports failures there;
+  # set -e would abort before the restart below and leave stale opcache running.
+  docker exec "$PHP" chown -R www-data:www-data "$DEST" 2>/dev/null || true
   echo "→ restarting php-fpm (flushes opcache)"
   docker restart "$PHP" >/dev/null
 else

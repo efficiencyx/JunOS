@@ -18,7 +18,9 @@ window.ChatAPI = (function () {
           signal: ctrl.signal,
         });
         if (!res.ok || !res.body) {
-          onError && onError(new Error(`http ${res.status}`));
+          const error = new Error(`http ${res.status}`);
+          error.status = res.status;
+          onError && onError(error);
           return;
         }
         const reader = res.body.getReader();

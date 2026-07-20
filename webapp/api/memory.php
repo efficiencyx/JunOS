@@ -31,6 +31,8 @@ try {
 
         if (!empty($body['all'])) {
             if (is_file($path)) @unlink($path);
+            $journal = memory_journal_path($userId);
+            if (is_file($journal)) @unlink($journal);
             echo json_encode(['ok' => true]);
             exit;
         }
