@@ -176,6 +176,7 @@ window.Live2D = (function () {
     im.focusController = { update: () => { }, focus: () => { }, x: 0, y: 0 };
 
     raw = getRaw(model);
+    drawableIndexById = null;
     paramIndex = new Map();
     paramMin = new Map(); paramMax = new Map(); paramDefault = new Map();
     for (let i = 0; i < raw.parameters.count; i++) {
@@ -770,15 +771,68 @@ window.Live2D = (function () {
     return Math.max(lo, Math.min(hi, v));
   }
 
+  const MOUTH_DRAWABLES = ['HitAreaOpenMouth', 'HitAreaCloseMouth', 'InnerMouth', 'SkinLipUpper'];
+  const FACE_DRAWABLES = ['HitAreaFaceStroke', 'SkinFace', 'ModdableFace'];
+  let drawableIndexById = null;
+
+  // Inverse of toModelPoint: Cubism units (y up) -> client px.
+  function fromModelPoint(x, y) {
+    const ci = raw.canvasinfo;
+    const p = new PIXI.Point(x * ci.PixelsPerUnit + ci.CanvasOriginX, ci.CanvasOriginY - y * ci.PixelsPerUnit);
+    model.internalModel.localTransform.apply(p, p);
+    model.transform.worldTransform.apply(p, p);
+    const r = app.view.getBoundingClientRect();
+    return { x: r.left + p.x, y: r.top + p.y };
+  }
+
+  function drawableBox(candidates) {
+    const D = raw.drawables;
+    if (!drawableIndexById) {
+      drawableIndexById = new Map();
+      for (let k = 0; k < D.count; k++) drawableIndexById.set(D.ids[k], k);
+    }
+    for (const id of candidates) {
+      const i = drawableIndexById.get(id);
+      if (i === undefined) continue;
+      const vp = D.vertexPositions[i];
+      let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+      for (let k = 0; k < vp.length; k += 2) {
+        if (vp[k] < minX) minX = vp[k];
+        if (vp[k] > maxX) maxX = vp[k];
+        if (vp[k + 1] < minY) minY = vp[k + 1];
+        if (vp[k + 1] > maxY) maxY = vp[k + 1];
+      }
+      if (minX === Infinity) continue;
+      const tl = fromModelPoint(minX, maxY);
+      const br = fromModelPoint(maxX, minY);
+      return { left: tl.x, top: tl.y, right: br.x, bottom: br.y };
+    }
+    return null;
+  }
+
   function faceAnchor() {
     if (!model || !app) return null;
     const r = app.view.getBoundingClientRect();
     const b = model.getBounds();
-    return {
+    const anchor = {
       x: r.left + b.x + b.width / 2,
       y: r.top + b.y + b.height * 0.09,
       headW: Math.max(b.width * 0.30, b.height * 0.12),
+      modelW: b.width,
+      modelH: b.height,
+      mouth: null,
     };
+    const mouth = raw && drawableBox(MOUTH_DRAWABLES);
+    if (mouth) {
+      const x = (mouth.left + mouth.right) / 2;
+      const face = drawableBox(FACE_DRAWABLES) || mouth;
+      anchor.mouth = {
+        x,
+        y: (mouth.top + mouth.bottom) / 2,
+        gap: Math.max(x - face.left, face.right - x, 24),
+      };
+    }
+    return anchor;
   }
 
   function isOverModel(clientX, clientY) {

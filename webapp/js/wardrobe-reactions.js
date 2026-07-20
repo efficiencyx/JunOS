@@ -363,6 +363,7 @@ window.WardrobeReactions = (function () {
   let hideTimer = null;
   let currentToken = 0;
   let cardRaf = 0;
+  let lastCardWidth = null;
   const lastLine = {};
 
   function positionCard() {
@@ -379,11 +380,17 @@ window.WardrobeReactions = (function () {
     const maxRight = Math.min(stageRect.right, viewport.right) - 8;
     const minTop = Math.max(stageRect.top, viewport.top) + 8;
     const maxBottom = Math.min(stageRect.bottom, viewport.bottom) - 8;
+    const cardW = Math.max(150, Math.min(Math.min(330, maxRight - minLeft), a.modelW * 0.6));
+    if (cardW !== lastCardWidth) {
+      lastCardWidth = cardW;
+      card.style.setProperty('--wr-w', cardW + 'px');
+      card.style.setProperty('--wr-scale', String(cardW / 330));
+    }
     const w = card.offsetWidth, h = card.offsetHeight;
     let left = a.x - a.headW * 0.5 - w;
     if (left < minLeft) left = Math.min(a.x + a.headW * 0.5, maxRight - w);
     left = Math.max(minLeft, Math.min(left, maxRight - w));
-    const top = Math.max(minTop, Math.min(a.y + viewport.height * 0.18, maxBottom - h));
+    const top = Math.max(minTop, Math.min(a.y + a.modelH * 0.18, maxBottom - h));
     card.style.left = left - stageRect.left + 'px';
     card.style.top = top - stageRect.top + 'px';
   }
@@ -408,7 +415,7 @@ window.WardrobeReactions = (function () {
     const stage = document.getElementById('stage');
     if (!stage) return;
     const style = document.createElement('style');
-    style.textContent = `.wardrobe-reaction { position:absolute; z-index:4; width:min(330px, 38vw); color:#fff; pointer-events:none; opacity:0; transition:opacity .32s ease; font-family:Arial,Helvetica,sans-serif; filter:drop-shadow(-4px 5px 0 rgba(13,11,38,.9)); } .wardrobe-reaction.show { opacity:1; } .wardrobe-reaction-text span { opacity:0; animation:wr-letter .28s ease-out forwards; } @keyframes wr-letter { from { opacity:0; } to { opacity:1; } } .wardrobe-reaction-name { display:table; padding:7px 16px 7px 11px; background:#15142e; border-left:5px solid #ec0054; color:#fff; font-size:15px; font-weight:800; line-height:1; clip-path:polygon(0 0, 100% 0, 100% calc(100% - 9px), calc(100% - 9px) 100%, 0 100%); } .wardrobe-reaction-text { position:relative; margin-top:4px; padding:11px 18px 13px; background:rgba(25,2,44,.92); font-size:17px; font-weight:700; line-height:1.25; clip-path:polygon(0 0, 100% 0, 100% calc(100% - 12px), calc(100% - 12px) 100%, 0 100%); } @media (max-width:700px) { .wardrobe-reaction { width:min(300px, calc(100% - 42px)); } .wardrobe-reaction-name { font-size:13px; } .wardrobe-reaction-text { font-size:15px; } }`;
+    style.textContent = `.wardrobe-reaction { position:absolute; z-index:4; width:var(--wr-w, 330px); max-width:100%; color:#fff; pointer-events:none; opacity:0; transition:opacity .32s ease; font-family:Arial,Helvetica,sans-serif; } .wardrobe-reaction.show { opacity:1; } .wardrobe-reaction-text span { opacity:0; animation:wr-letter .28s ease-out forwards; } @keyframes wr-letter { from { opacity:0; } to { opacity:1; } } .wardrobe-reaction-name { display:table; padding:calc(7px * var(--wr-scale, 1)) calc(16px * var(--wr-scale, 1)) calc(7px * var(--wr-scale, 1)) calc(11px * var(--wr-scale, 1)); background:#15142e; border-left:calc(5px * var(--wr-scale, 1)) solid #ec0054; color:#fff; font-size:calc(15px * var(--wr-scale, 1)); font-weight:800; line-height:1; clip-path:polygon(0 0, 100% 0, 100% calc(100% - 9px * var(--wr-scale, 1)), calc(100% - 9px * var(--wr-scale, 1)) 100%, 0 100%); } .wardrobe-reaction-text { position:relative; margin-top:calc(10px * var(--wr-scale, 1)); padding:calc(6px * var(--wr-scale, 1)) calc(18px * var(--wr-scale, 1)) calc(7px * var(--wr-scale, 1)); background:#191233; font-size:calc(17px * var(--wr-scale, 1)); font-weight:700; line-height:1.25; clip-path:polygon(0 0, 100% 0, 100% calc(100% - 12px * var(--wr-scale, 1)), calc(100% - 12px * var(--wr-scale, 1)) 100%, 0 100%); }`;
     document.head.appendChild(style);
     card = document.createElement('div');
     card.className = 'wardrobe-reaction';
