@@ -105,7 +105,9 @@ curl -fsSL https://raw.githubusercontent.com/efficiencyx/JunOS/main/install.sh |
 powershell -NoProfile -ExecutionPolicy Bypass -Command "irm https://raw.githubusercontent.com/efficiencyx/JunOS/main/install.ps1 | iex"
 ```
 
-On **Linux / macOS** this checks for **git + Docker Compose** (and offers to install what is missing via your package manager), clones the repo, writes a `.env`, sniffs out your GPU, and brings the whole stack up. If you choose to extract Jun's model from your own game copy, it also installs Python if needed and keeps the extractor's packages in a local virtual environment. Then open <http://localhost> and say hi.
+The first thing either installer asks is how to install: **Express** (the default - just press Enter) sets everything up with recommended, auto-detected settings and asks nothing else, or **Custom** walks you through the provider, model, and voice choices. Skip the question entirely with `JUN_YES=1` (Linux/macOS) or `$env:JUN_YES='1'` (Windows) for a fully unattended install.
+
+On **Linux / macOS** this checks for **git + Docker Compose** (and offers to install what is missing via your package manager), clones the repo, writes a `.env`, sniffs out your GPU, and brings the whole stack up. If you choose to extract Jun's model from your own game copy, it also installs Python if needed and keeps the extractor's packages in a local virtual environment. Then open <http://localhost> and say hi. Stop her later with `./start.sh stop`, or check on her with `./start.sh status`.
 
 On **Windows** there's no Docker involved. The installer checks for **git + Ollama** (and Python only if voice or asset recovery needs it, offering to install them with winget), then keeps everything else inside the `JunOS` folder: a portable PHP, local Python environments for voice and asset recovery when selected, downloaded model weights, and your chat history all live under `JunOS\runtime\`. Open <http://127.0.0.1:8080> and say hi; `./start.ps1 stop` shuts her down, and `./uninstall.ps1` removes the lot (asking before it touches anything machine-wide).
 
@@ -121,7 +123,15 @@ cp .env.example .env
 # open http://localhost
 ```
 
-On Linux/macOS, `start.sh` detects your GPU (NVIDIA / AMD / none) and brings everything up with the right config - see [GPU support](#picking-your-gpu). Want to skip the launcher? `docker compose up -d` works too and runs on CPU.
+Stopping and checking on her is symmetric across platforms:
+
+```sh
+./start.sh stop      # Windows: ./start.ps1 stop
+./start.sh status    # Windows: ./start.ps1 status
+./start.sh restart
+```
+
+On Linux/macOS, `start.sh` detects your GPU (NVIDIA / AMD / none) and brings everything up with the right config - see [GPU support](#picking-your-gpu). The same script stops and inspects the stack too: `./start.sh stop` (or `down`), `./start.sh status`, `./start.sh restart`, `./start.sh logs [service]`. Want to skip the launcher? `docker compose up -d` works too and runs on CPU.
 
 On Windows, `start.ps1` runs bare metal: it starts (or reuses) Ollama natively - which uses your GPU on its own, no overlays needed - plus the web server and the optional voice sidecar, then opens <http://127.0.0.1:8080>. Note the manual path still needs `install.ps1` to have run once (it downloads the portable PHP and sets up the voice venv).
 
