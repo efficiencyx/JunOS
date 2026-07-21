@@ -73,5 +73,13 @@ if [ "$gpu" = amd ]; then
   echo "  video gid=$VIDEO_GID, render gid=$RENDER_GID${HSA_OVERRIDE_GFX_VERSION:+, HSA_OVERRIDE_GFX_VERSION=$HSA_OVERRIDE_GFX_VERSION}"
 fi
 
-set -x
-exec docker compose "${files[@]}" up -d --build "$@"
+# A bare first word is a lifecycle subcommand; anything else (a flag like
+# --build, or service names) is forwarded to `up -d` exactly as before.
+case "${1:-up}" in
+  stop|down)  shift; set -x; exec docker compose "${files[@]}" down "$@" ;;
+  restart)    shift; docker compose "${files[@]}" down
+              set -x; exec docker compose "${files[@]}" up -d --build "$@" ;;
+  status|ps)  shift; set -x; exec docker compose "${files[@]}" ps "$@" ;;
+  logs)       shift; set -x; exec docker compose "${files[@]}" logs -f "$@" ;;
+  *)          set -x; exec docker compose "${files[@]}" up -d --build "$@" ;;
+esac
