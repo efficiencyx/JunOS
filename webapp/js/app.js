@@ -1465,6 +1465,35 @@
     loadMemories();
   });
 
+  function moodAccent(affection, trust, tension) {
+    const clamp = (v, lo, hi) => Math.max(lo, Math.min(hi, v));
+    const a = clamp(affection / 100, 0, 1);
+    const t = clamp(trust / 100, 0, 1);
+    const x = clamp(tension / 100, 0, 1);
+    const hue = 214 + a * 96;                    // distant blue → loving rose
+    const sat = clamp(60 + t * 28 - x * 26, 42, 92);
+    const light = clamp(74 - x * 10, 62, 78);
+    return {
+      accent: `hsl(${hue} ${sat}% ${light}%)`,
+      accent2: `hsl(${hue + 16} ${clamp(sat + 6, 42, 96)}% ${clamp(light + 7, 62, 86)}%)`,
+      soft: `hsl(${hue} ${sat}% ${light}% / .12)`,
+    };
+  }
+  function applyMoodAccent(vals) {
+    const c = moodAccent(vals.affection ?? 50, vals.trust ?? 50, vals.tension ?? 30);
+    const root = document.documentElement.style;
+    root.setProperty('--accent', c.accent);
+    root.setProperty('--accent-2', c.accent2);
+    root.setProperty('--accent-soft', c.soft);
+  }
+  function currentMood() {
+    const dflt = { affection: 50, trust: 50, tension: 30 };
+    const v = {};
+    for (const k of ['affection', 'trust', 'tension']) {
+      v[k] = moodInputs[k] ? (parseInt(moodInputs[k].value, 10) || 0) : dflt[k];
+    }
+    return v;
+  }
   function setMoodFill(k) {
     const input = moodInputs[k];
     if (!input) return;
@@ -1499,6 +1528,7 @@
         if (moodVals[k]) moodVals[k].textContent = state[k];
       }
     }
+    applyMoodAccent(currentMood());
     if (window.Live2D && Live2D.setMood) Live2D.setMood(state);
   }
   async function loadMood() {
@@ -1536,10 +1566,12 @@
       for (const j of ['affection', 'trust', 'tension']) {
         if (moodInputs[j]) live[j] = parseInt(moodInputs[j].value, 10) || 0;
       }
+      applyMoodAccent(live);
       if (window.Live2D && Live2D.setMood) Live2D.setMood(live);
     });
     moodInputs[k].addEventListener('change', pushMood);
   }
+  applyMoodAccent(currentMood());
   if (moodRefreshBtn) moodRefreshBtn.addEventListener('click', loadMood);
 
   document.addEventListener('keydown', (e) => {
