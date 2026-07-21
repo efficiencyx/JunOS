@@ -14,21 +14,27 @@
   --fg:         #e3e3e3;
   --muted:      #c4c7c5;
   --dim:        #8e9295;
-  --accent:     #7c9eff;
-  --accent-2:   #a8c7fa;
-  --accent-soft:#7c9eff1f;
+  /* Accent is Jun's mood colour: js/app.js overrides --accent/--accent-2 on
+     the root from her affection/trust/tension once she's loaded. These are the
+     resting values used before login and as a fallback. --grad is derived from
+     them, so the whole palette shifts from one place. */
+  --accent:     hsl(262 66% 71%);
+  --accent-2:   hsl(278 72% 78%);
+  --accent-soft:hsl(262 66% 71% / .12);
   --ok:         #7bd88f;
   --danger:     #ff8a8a;
   --warn:       #ffc870;
   --border:     #2d2f31;
   --border-2:   #444746;
-  --grad:       linear-gradient(74deg, #4285f4 0%, #9b72cb 48%, #d96570 100%);
-  --grad-soft:  linear-gradient(74deg, #c2d6ff 0%, #ddccf3 50%, #f6cdd6 100%);
-  --radius:     16px;
+  --grad:       linear-gradient(74deg, var(--accent), var(--accent-2));
+  --grad-soft:  linear-gradient(74deg,
+                  color-mix(in srgb, var(--accent) 42%, #fff),
+                  color-mix(in srgb, var(--accent-2) 42%, #fff));
+  --radius:     12px;
   --radius-sm:  10px;
   --radius-pill:9999px;
   --shadow:     0 4px 18px rgba(0,0,0,.4);
-  --shadow-lg:  0 8px 32px rgba(0,0,0,.55);
+  --shadow-lg:  0 10px 30px rgba(0,0,0,.5);
   --space-1:    4px;
   --space-2:    8px;
   --space-3:    12px;
@@ -74,21 +80,6 @@ html, body {
   visibility: hidden;
 }
 
-.boot-glow {
-  position: absolute;
-  width: 460px; height: 460px;
-  border-radius: 50%;
-  background: var(--grad-soft);
-  filter: blur(120px);
-  opacity: .14;
-  pointer-events: none;
-  animation: bootGlow 6s ease-in-out infinite;
-}
-@keyframes bootGlow {
-  0%, 100% { opacity: .1;  transform: scale(.95); }
-  50%      { opacity: .18; transform: scale(1.05); }
-}
-
 .boot-console {
   position: relative; z-index: 1;
   width: min(380px, 86vw);
@@ -107,10 +98,7 @@ html, body {
   font-size: 64px;
   font-weight: 600;
   line-height: 1;
-  background: var(--grad);
-  -webkit-background-clip: text;
-  background-clip: text;
-  color: transparent;
+  color: var(--accent);
   animation: bootSigilPulse 3s ease-in-out infinite;
 }
 @keyframes bootSigilPulse {
@@ -300,7 +288,7 @@ html, body {
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .boot-glow, .boot-sigil, .boot-caret, .boot-progress > span,
+  .boot-sigil, .boot-caret, .boot-progress > span,
   .boot-term-body, .boot-term-body::before,
   .boot-overlay:not([data-ready]) .boot-console {
     animation: none !important;
@@ -447,8 +435,7 @@ html[data-pre-auth] #app { visibility: hidden; }
 .auth-logo {
   font-family: ui-serif, Georgia, serif;
   font-size: 40px; font-weight: 600; line-height: 1;
-  background: var(--grad);
-  -webkit-background-clip: text; background-clip: text; color: transparent;
+  color: var(--accent);
   filter: drop-shadow(0 1px 6px rgba(0,0,0,.5));
 }
 .auth-wordmark { font-size: 17px; font-weight: 600; letter-spacing: .14em; color: var(--term-fg); }
