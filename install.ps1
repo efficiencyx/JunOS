@@ -126,6 +126,28 @@ function Set-EnvKey([string]$key, [string]$val) {
 
 $interactive = [Environment]::UserInteractive -and ($env:JUN_YES -ne '1')
 
+# First choice a non-technical user sees: Express installs everything with
+# detected defaults and asks nothing further (same effect as JUN_YES=1); Custom
+# walks the prompts. JUN_EXPRESS=1 selects Express up front.
+function Choose-InstallMode {
+    if ($env:JUN_YES -eq '1') { return }
+    if ($env:JUN_EXPRESS -match '^(1|on|yes|true)$') {
+        $env:JUN_YES = '1'; $script:interactive = $false; return
+    }
+    if (-not [Environment]::UserInteractive) { return }
+    Write-Host ''
+    Write-Host "     ${B}how should I install?${R}"
+    Write-Host "       ${ACCENT}[1]${R}  Express  ${DIM}- everything with recommended settings${R} ${DIM}(default)${R}"
+    Write-Host "       ${ACCENT}[2]${R}  Custom   ${DIM}- pick the provider, model, voice, and more${R}"
+    $ans = Read-Styled "     ${OK}▸${R} choice ${DIM}[Enter = Express]${R} ${ACCENT}›${R} "
+    if ($ans -match '^(2|custom)$') {
+        Note "custom install - I'll ask about each option below"
+    } else {
+        $env:JUN_YES = '1'; $script:interactive = $false
+        Ok 'express install - using recommended settings'
+    }
+}
+
 function Ask-ModelRef {
     $vram = Get-VramMb
     $rec  = if ($null -ne $vram) { Recommend-Alias $vram } else { $models['e2b'] }
@@ -530,6 +552,7 @@ function Install-AssetRecovery {
 # ══════════════════════════════════════════════════════════════════════════════
 
 Show-Banner
+Choose-InstallMode
 
 Step 'check dependencies'
 

@@ -717,7 +717,33 @@ confirm_deps() {
     fi
 }
 
+# First choice a non-technical user sees: Express runs the whole install with
+# detected defaults and asks nothing further (identical to JUN_YES=1); Custom
+# walks the provider/model/voice prompts. JUN_EXPRESS=1 selects Express up front.
+choose_install_mode() {
+    [ "${JUN_YES:-}" = "1" ] && return
+    case "$(printf '%s' "${JUN_EXPRESS:-}" | tr '[:upper:]' '[:lower:]')" in
+        1|on|yes|true) JUN_YES=1; export JUN_YES; return ;;
+    esac
+    # A readable /dev/tty node can still fail to open with no controlling
+    # terminal, so probe an actual open rather than trusting the mode bits.
+    { true >/dev/tty; } 2>/dev/null || return 0
+    local ans
+    {
+        printf '\n     %show should I install?%s\n' "$B" "$R"
+        printf '       %s1%s  Express  %s-%s everything with recommended settings %s(default)%s\n' "$ACCENT" "$R" "$DIM" "$R" "$DIM" "$R"
+        printf '       %s2%s  Custom   %s-%s pick the provider, model, voice, and more\n' "$ACCENT" "$R" "$DIM" "$R"
+        printf '     %s$%s choice %s[enter = Express]%s %s→%s ' "$OK" "$R" "$DIM" "$R" "$ACCENT" "$R"
+    } > /dev/tty
+    read -r ans < /dev/tty || ans=""
+    case "$ans" in
+        2|custom|Custom|CUSTOM) note "custom install - I'll ask about each option below" ;;
+        *) JUN_YES=1; export JUN_YES; ok "express install - using recommended settings" ;;
+    esac
+}
+
 banner
+choose_install_mode
 confirm_deps
 
 if [ -d "$DIR/.git" ]; then
@@ -775,8 +801,10 @@ if docker_run docker info >/dev/null 2>&1; then
             | awk '{ print "       " $0; fflush() } /pre-warm (done|failed)|pull failed/ { exit }' || true
         ok "models ready"
     fi
-    printf '\n   %s$%s %s%sready%s %s-%s open %shttp://localhost%s\n\n' \
+    printf '\n   %s$%s %s%sready%s %s-%s open %shttp://localhost%s\n' \
         "$OK" "$R" "$B" "$OK" "$R" "$DIM" "$R" "$B$ACCENT" "$R"
+    printf '   %sstop:%s ./start.sh stop   %s·%s   %sstatus:%s ./start.sh status\n\n' \
+        "$DIM" "$R" "$DIM" "$R" "$DIM" "$R"
 else
     printf '\n'
     warn_ "Docker isn't reachable yet - finish its setup and run ./start.sh from $DIR."

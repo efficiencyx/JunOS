@@ -287,10 +287,7 @@ input[type="checkbox"] {
   font-size: 22px;
   font-weight: 600;
   line-height: 1;
-  background: var(--grad);
-  -webkit-background-clip: text;
-  background-clip: text;
-  color: transparent;
+  color: var(--accent);
   flex-shrink: 0;
 }
 .sidebar-brand-name {
@@ -545,7 +542,10 @@ input[type="checkbox"] {
   flex-direction: column;
   overflow: hidden;
   background:
-    radial-gradient(70% 50% at 50% 78%, rgba(124,158,255,.10) 0%, rgba(155,114,203,.05) 40%, transparent 75%),
+    radial-gradient(70% 50% at 50% 78%,
+      color-mix(in srgb, var(--accent) 12%, transparent) 0%,
+      color-mix(in srgb, var(--accent-2) 7%, transparent) 40%,
+      transparent 75%),
     var(--bg-2);
   border-right: none;
   position: relative;
