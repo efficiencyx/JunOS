@@ -1,5 +1,8 @@
 kokoro>=0.9.4
 pocket-tts>=2.1
+# Chatterbox (original 500M) + Nano (110M). Ships its own torch/transformers pins;
+# if the resolver conflicts with kokoro/pocket-tts here, relax the version below.
+chatterbox-tts
 # STT. Runs on CTranslate2 (not torch) and decodes audio via PyAV, whose wheel
 # bundles ffmpeg - so no ffmpeg package is needed in the image.
 faster-whisper>=1.0

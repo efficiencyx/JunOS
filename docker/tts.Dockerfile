@@ -52,7 +52,14 @@ ENV TTS_HOST=0.0.0.0 \
     STT_COMPUTE=int8 \
     STT_DEVICE=cpu \
     OMP_NUM_THREADS=4 \
-    HF_HOME=/root/.cache/huggingface
+    HF_HOME=/root/.cache/huggingface \
+    CHATTERBOX_VOICES_DIR=/app/voices \
+    TTS_IDLE_UNLOAD_S=180
+
+# Chatterbox/Nano clone from reference clips in this dir. The shipped default.wav
+# is the out-of-box voice (and Nano's required reference); a compose mount can add
+# or override clips. See tts/voices/README.md for the format/naming rules.
+COPY tts/voices/ /app/voices/
 
 EXPOSE 8001
 
