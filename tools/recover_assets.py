@@ -25,9 +25,11 @@ Requires: UnityPy, Pillow  (pip install UnityPy Pillow)
 """
 
 import argparse
+import glob
 import hashlib
 import json
 import os
+import platform
 import re
 import struct
 import sys
@@ -36,19 +38,38 @@ from PIL import Image
 import UnityPy
 
 REPO = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-# Linux and Windows builds ship identical Unity data; use whichever exists.
-GAME_CANDIDATES = [
-    os.path.expanduser("~/Documenti/factorial-omega-linux-64"),
-    os.path.expanduser("~/Documenti/factorial-omega-win-64"),
-]
+# Linux and Windows builds ship identical Unity data; the folder is named
+# factorial-omega-<platform>-64 either way and holds this marker directory.
+GAME_GLOB = "factorial-omega-*-64"
+GAME_MARKER = "My Dystopian Robot Girlfriend_Data"
 DEFAULT_OUT = os.path.join(REPO, "webapp", "assets")
 
 
+def _search_roots():
+    home = os.path.expanduser("~")
+    roots = [os.getcwd(), REPO, home]
+    roots += [os.path.join(home, d) for d in ("Documents", "Documenti", "Downloads", "Desktop", "games")]
+    if platform.system() == "Windows":
+        roots += ["%s:\\" % chr(c) for c in range(ord("C"), ord("H"))]
+        roots += [p for p in (os.environ.get("ProgramFiles"), os.environ.get("ProgramFiles(x86)")) if p]
+    else:
+        roots += ["/opt", "/usr/local/games", "/games"]
+    seen, out = set(), []
+    for r in roots:
+        r = os.path.abspath(r)
+        if r not in seen and os.path.isdir(r):
+            seen.add(r)
+            out.append(r)
+    return out
+
+
 def find_game_dir():
-    for d in GAME_CANDIDATES:
-        if os.path.isdir(os.path.join(d, "My Dystopian Robot Girlfriend_Data")):
-            return d
-    sys.exit("no game install found; pass --game DIR")
+    for root in _search_roots():
+        for pat in (os.path.join(root, GAME_GLOB), os.path.join(root, "*", GAME_GLOB)):
+            for cand in sorted(glob.glob(pat)):
+                if os.path.isdir(os.path.join(cand, GAME_MARKER)):
+                    return cand
+    sys.exit("no game install found; pass --game DIR (searched for %r)" % GAME_GLOB)
 
 # Container name -> output PNG for the clothing variant swaps in outfit.js.
 VARIANTS = {
