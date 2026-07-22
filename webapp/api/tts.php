@@ -86,7 +86,7 @@ if ($action === 'tts') {
     }
 
     $engine = $body['engine'] ?? null;
-    if ($engine !== null && !in_array($engine, ['kokoro', 'pockettts'], true)) {
+    if ($engine !== null && !in_array($engine, ['kokoro', 'pockettts', 'chatterbox', 'chatternano'], true)) {
         fail(400, 'invalid_request');
     }
 
@@ -94,6 +94,12 @@ if ($action === 'tts') {
     if ($speed !== null) {
         $speed = filter_var($speed, FILTER_VALIDATE_FLOAT);
         if ($speed === false || $speed < 0.5 || $speed > 2.0) fail(400, 'invalid_request');
+    }
+
+    foreach (['exaggeration', 'cfg_weight'] as $k) {
+        if (!isset($body[$k])) continue;
+        $v = filter_var($body[$k], FILTER_VALIDATE_FLOAT);
+        if ($v === false || $v < 0.0 || $v > 1.0) fail(400, 'invalid_request');
     }
 
     $ch = curl_init($ttsUrl . '/tts');

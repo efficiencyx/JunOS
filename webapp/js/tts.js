@@ -14,14 +14,13 @@ window.TTS = (function () {
 
   let jobs = [];
   let nextId = 1;
-  let playingJobId = 0;     // id currently playing, 0 if none
+  let playingJobId = 0;
   let currentSource = null; // AudioBufferSourceNode in flight
   let rafId = 0;
   let sentenceBuf = '';     // text accumulated but not yet split into a chunk
-  let chunkIndex = 0;       // chunks emitted this reply; 0 gets the fast split
+  let chunkIndex = 0;       // chunks emitted this reply 0 gets the fast split
 
-  // Fires once the queue drains after Jun has been speaking, so callers can start
-  // their idle clock from when she stops talking rather than when the text streamed.
+  // Used for Idle clock
   let speaking = false;
   let onAllDone = () => {};
   function setOnAllDone(fn) { onAllDone = fn || (() => {}); }
@@ -71,11 +70,12 @@ window.TTS = (function () {
   }
 
   // Split only the first chunk early: it lowers first-audio latency without
-  // making every sentence sound phrase-final.
-  const HARD_BREAK_RE = /[.!?\n]/;
+  // making every sentence sound phrase-final. Jun's playful "~" is always a
+  // phrase boundary - each tilde-delimited beat becomes its own utterance so it
+  // lands with a natural falling intonation instead of running into the next.
+  const HARD_BREAK_RE = /[.!?~\n]/;
   const SOFT_BREAK_RE = /[,;:—–]/g;
   const MIN_FIRST_WORDS = 3;   // "Oh," alone reads as a whole falling utterance
-  const MAX_FIRST_WORDS = 8;   // escape hatch: opening clause with no punctuation
 
   function wordCount(s) {
     const m = s.match(/\S+/g);
@@ -100,12 +100,6 @@ window.TTS = (function () {
     const cands = [hard, soft].filter(i => i >= 0);
     if (cands.length) return cutAt(buf, Math.min.apply(null, cands));
 
-    const re = /\S+\s+/g;
-    let count = 0, end = 0;
-    while ((m = re.exec(buf))) {
-      end = m.index + m[0].length;
-      if (++count >= MAX_FIRST_WORDS) return { chunk: buf.slice(0, end), rest: buf.slice(end) };
-    }
     return null;
   }
 
@@ -113,11 +107,39 @@ window.TTS = (function () {
   const ACTION_RE = /\[\s*A(?:CTIONS?)?\s*:[^\]]*\]?/gi;
   const MARKDOWN_NOISE_RE = /[*_~`#>]+/g;
   const EMOJI_RE = /[\p{Extended_Pictographic}️‍]/gu;
+  // pocket-tts voices its stutter onsets as spelled letter names ("H-hey" ->
+  // "aitch hey"), so drop them. A letter repeated across the hyphen is the
+  // stutter marker; differing letters (T-shirt, x-ray, co-op) are left alone.
+  const STUTTER_RE = /([a-z])-(?=\1)/gi;
+
+  // Chatterbox-Nano voices bracketed paralinguistic tags natively; the other
+  // engines read them literally. So we synthesize tags from cues Jun already
+  // writes - onomatopoeia and *stage directions* - only for that engine, and
+  // strip any that slip through for the rest. Tags kept to Nano's documented set
+  // (extend cautiously: an unrecognized tag gets spoken as a word). Must run
+  // before MARKDOWN_NOISE_RE, which would otherwise eat the *...* directions.
+  const TAG_ENGINES = new Set(['chatternano']);
+  const PARA_CUES = [
+    [/\*\s*(?:laughs?|laughing)\s*\*/gi, '[laugh]'],
+    [/\*\s*(?:chuckles?|chuckling)\s*\*/gi, '[chuckle]'],
+    [/\*\s*(?:giggles?|giggling)\s*\*/gi, '[chuckle]'],
+    [/\*\s*(?:sighs?|sighing)\s*\*/gi, '[sigh]'],
+    [/\*\s*(?:gasps?|gasping)\s*\*/gi, '[gasp]'],
+    [/\*\s*(?:coughs?|coughing)\s*\*/gi, '[cough]'],
+    [/\b(?:mu)?a?ha(?:ha)+h?\b/gi, '[laugh]'],
+    [/\b(?:lol|lmao|lmfao|rofl)\b/gi, '[laugh]'],
+    [/\b(?:hehe(?:he)*|teehee)\b/gi, '[chuckle]'],
+  ];
+  const PARA_TAG_RE = /\[(?:laugh|chuckle|sigh|gasp|cough)\]/gi;
 
   function cleanForSpeech(s) {
     s = s.replace(ACTION_RE, '');
     s = s.replace(EMOJI_RE, '');
+    const tagged = TAG_ENGINES.has(engine);
+    if (tagged) for (const [re, tag] of PARA_CUES) s = s.replace(re, ` ${tag} `);
     s = s.replace(MARKDOWN_NOISE_RE, '');
+    if (!tagged) s = s.replace(PARA_TAG_RE, '');
+    if (engine === 'pockettts') s = s.replace(STUTTER_RE, '');
     s = s.replace(/\s+/g, ' ').trim();
     if (!/[\p{L}\p{N}]/u.test(s)) return '';
     return s;
