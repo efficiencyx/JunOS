@@ -71,11 +71,12 @@ window.TTS = (function () {
   }
 
   // Split only the first chunk early: it lowers first-audio latency without
-  // making every sentence sound phrase-final.
-  const HARD_BREAK_RE = /[.!?\n]/;
+  // making every sentence sound phrase-final. Jun's playful "~" is always a
+  // phrase boundary - each tilde-delimited beat becomes its own utterance so it
+  // lands with a natural falling intonation instead of running into the next.
+  const HARD_BREAK_RE = /[.!?~\n]/;
   const SOFT_BREAK_RE = /[,;:—–]/g;
   const MIN_FIRST_WORDS = 3;   // "Oh," alone reads as a whole falling utterance
-  const MAX_FIRST_WORDS = 8;   // escape hatch: opening clause with no punctuation
 
   function wordCount(s) {
     const m = s.match(/\S+/g);
@@ -100,12 +101,6 @@ window.TTS = (function () {
     const cands = [hard, soft].filter(i => i >= 0);
     if (cands.length) return cutAt(buf, Math.min.apply(null, cands));
 
-    const re = /\S+\s+/g;
-    let count = 0, end = 0;
-    while ((m = re.exec(buf))) {
-      end = m.index + m[0].length;
-      if (++count >= MAX_FIRST_WORDS) return { chunk: buf.slice(0, end), rest: buf.slice(end) };
-    }
     return null;
   }
 
