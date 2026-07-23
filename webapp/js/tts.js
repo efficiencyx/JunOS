@@ -5,6 +5,8 @@ window.TTS = (function () {
   let engine = 'kokoro';
   let voice = 'af_heart';
   let speed = 1.0;
+  let volume = 1.0;
+  let duckLevel = 1.0;
   let onLog = () => {};
 
   let audioCtx = null;
@@ -37,7 +39,7 @@ window.TTS = (function () {
     if (audioCtx) return audioCtx;
     audioCtx = new (window.AudioContext || window.webkitAudioContext)();
     masterGain = audioCtx.createGain();
-    masterGain.gain.value = 1.0;
+    masterGain.gain.value = volume * duckLevel;
     analyser = audioCtx.createAnalyser();
     analyser.fftSize = 1024;
     analyser.smoothingTimeConstant = 0.4;
@@ -56,6 +58,16 @@ window.TTS = (function () {
   function setEngine(e) { if (e) engine = e; }
   function setVoice(v) { if (v) voice = v; }
   function setSpeed(s) { speed = Math.max(0.5, Math.min(2.0, s || 1.0)); }
+  function applyOutputGain() {
+    if (!masterGain || !audioCtx) return;
+    const t = audioCtx.currentTime;
+    masterGain.gain.cancelScheduledValues(t);
+    masterGain.gain.setTargetAtTime(volume * duckLevel, t, 0.02);
+  }
+  function setVolume(v) {
+    volume = Math.max(0, Math.min(1, Number.isFinite(v) ? v : 1));
+    applyOutputGain();
+  }
   function setLogger(fn) { onLog = fn || (() => {}); }
 
   async function listVoices() {
@@ -74,7 +86,7 @@ window.TTS = (function () {
   // phrase boundary - each tilde-delimited beat becomes its own utterance so it
   // lands with a natural falling intonation instead of running into the next.
   const HARD_BREAK_RE = /[.!?~\n]/;
-  const SOFT_BREAK_RE = /[,;:—–]/g;
+  const SOFT_BREAK_RE = /[,;:-–]/g;
   const MIN_FIRST_WORDS = 3;   // "Oh," alone reads as a whole falling utterance
 
   function wordCount(s) {
@@ -310,7 +322,7 @@ window.TTS = (function () {
       if (rmsHistory[i].t < cutoff) break;
       if (rmsHistory[i].rms > max) max = rmsHistory[i].rms;
     }
-    return max;
+    return max * volume * duckLevel;
   }
 
   // Duck rather than cut, for tentative barge-in: dropping ~9dB gives the VAD a
@@ -318,11 +330,8 @@ window.TTS = (function () {
   // Jun dips for 150ms instead of being cut off mid-word. voice.js calls stop()
   // only once the speech is confirmed.
   function duck(gain) {
-    if (!masterGain) return;
-    const g = Math.max(0, Math.min(1, gain));
-    const t = audioCtx.currentTime;
-    masterGain.gain.cancelScheduledValues(t);
-    masterGain.gain.setTargetAtTime(g, t, 0.02);  // ~20ms, no click
+    duckLevel = Math.max(0, Math.min(1, gain));
+    applyOutputGain();
   }
 
   function startLipsyncLoop() {
@@ -371,7 +380,7 @@ window.TTS = (function () {
 
   return {
     setEnabled, isEnabled,
-    setEngine, setVoice, setSpeed,
+    setEngine, setVoice, setSpeed, setVolume,
     setLogger,
     listVoices,
     feed, flush, stop, speak,

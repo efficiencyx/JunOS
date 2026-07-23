@@ -22,14 +22,19 @@ ARG TORCH_INDEX=https://download.pytorch.org/whl/cpu
 
 COPY tts/requirements.txt /app/requirements.txt
 # Install torch first (from TORCH_INDEX) so the resolver doesn't later pull a
-# different build in as a transitive dependency.
-RUN pip install --no-cache-dir torch --index-url ${TORCH_INDEX} \
+# different build in as a transitive dependency. torchaudio comes from the same
+# index so its wheel build stays matched to torch's across the cpu/cu124/rocm
+# overlays (PitchShift for the karaoke guide vocal lives in torchaudio).
+RUN pip install --no-cache-dir torch torchaudio --index-url ${TORCH_INDEX} \
  && pip install --no-cache-dir -r /app/requirements.txt
 
 COPY tts/server.py /app/server.py
 
 # TTS_DEVICE: cpu | cuda | auto. "auto" uses the GPU when the installed torch
 # exposes one (so it's a no-op on the default CPU build).
+# SEP_DEVICE: cpu | cuda | auto - device for demucs karaoke stem separation.
+#   "auto" uses the GPU when torch exposes one, else CPU; a per-job CUDA failure
+#   falls back to CPU. Demucs weights (~80MB) download into HF_HOME at runtime.
 # STT_MODEL / STT_LANG: must agree. base.en is the latency/accuracy sweet spot
 #   for conversational English (distil-small.en ~150ms faster, small.en better).
 #   The ".en" models are English-ONLY - for another language you need BOTH a
@@ -47,6 +52,7 @@ COPY tts/server.py /app/server.py
 ENV TTS_HOST=0.0.0.0 \
     TTS_PORT=8001 \
     TTS_DEVICE=auto \
+    SEP_DEVICE=auto \
     STT_MODEL=base.en \
     STT_LANG=en \
     STT_COMPUTE=int8 \

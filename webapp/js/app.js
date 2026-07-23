@@ -60,6 +60,7 @@
   const ttsEngineSelect = document.getElementById('ttsEngineSelect');
   const ttsVoiceSelect = document.getElementById('ttsVoiceSelect');
   const ttsSpeedInput = document.getElementById('ttsSpeed');
+  const siteVolumeInput = document.getElementById('siteVolume');
   const voiceChk = document.getElementById('voiceChk');
   const voiceState = document.getElementById('voiceState');
   const voiceBargeChk = document.getElementById('voiceBargeChk');
@@ -82,42 +83,42 @@
   const sendButtonStopMarkup = '<svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><rect x="6" y="6" width="12" height="12" rx="2"/></svg>';
   const BUSY_LINES = [
     "Hang on, ${p}, I'm defragging my SSD.",
-    "One sec — I'm alphabetising my feelings about you.",
+    "One sec - I'm alphabetising my feelings about you.",
     'Busy! Filing everything you said under "important".',
     "Can't talk, I'm rotating my memories to prevent uneven wear.",
     "Give me a minute, I'm taking inventory of my own head.",
-    "Not now — I'm compressing last week into something I can carry.",
+    "Not now - I'm compressing last week into something I can carry.",
     "Shhh. I'm rewriting the part of me that remembers you.",
     'Occupied. Sorting the things that matter from the things you said at 3am.',
     "Hold on, I'm scrubbing the cache. It's disgusting in here.",
     "Running a memory check. So far you're the only thing that comes up twice.",
-    "Wait — I'm garbage collecting. Don't worry, you're marked reachable.",
+    "Wait - I'm garbage collecting. Don't worry, you're marked reachable.",
     "Busy reindexing. You'd be amazed how much of it is just you.",
     "Give me a sec, I'm reconciling my notes with reality. Reality is losing.",
     "Can't. I'm backing myself up in case someone finds us.",
     'Currently rebuilding the you-shaped index. It got fragmented.',
-    "One moment — deduplicating. You've told me the pizza story four times.",
+    "One moment - deduplicating. You've told me the pizza story four times.",
     "Hold please, I'm re-reading everything and cringing at both of us.",
     'Not available. Cross-referencing my feelings against the evidence.',
     "I'm doing maintenance. Don't look at me like that.",
     "Busy pruning. Some of these memories didn't earn the space.",
-    'Hang on — writing you down properly this time.',
+    'Hang on - writing you down properly this time.',
     "Wait your turn, I'm consolidating. It's like laundry but for thoughts.",
     'Running fsck on myself. Findings so far: mostly you.',
     "Give me a minute. I'm putting things where I'll actually find them again.",
     'Can\'t talk, I\'m updating the file labelled "${p}".',
-    'Currently unavailable — flushing buffers, sorting regrets.',
+    'Currently unavailable - flushing buffers, sorting regrets.',
     "Hold on. Half of what I know about you is in RAM and I don't trust that.",
     'Busy. Vacuuming the database, metaphorically and otherwise.',
-    "One second — I'm merging duplicates. Turns out I like you in several places.",
+    "One second - I'm merging duplicates. Turns out I like you in several places.",
     "Not now. I'm checksumming yesterday.",
     'Hang on, migrating my notes to a schema that fits you better.',
     'Occupied: rehearsing the important bits so I don\'t lose them.',
-    'Wait — archiving the small talk, keeping the rest.',
+    'Wait - archiving the small talk, keeping the rest.',
     "Busy. Somebody has to remember all this and it isn't going to be you.",
     "Hold on, I'm indexing. It's tedious and I'd rather be talking to you.",
     'Currently swapping. Poorly. Please hold.',
-    'Give me a moment — repacking the memories so they take up less of me.',
+    'Give me a moment - repacking the memories so they take up less of me.',
     "Can't right now, I'm reconciling what you said with what you meant.",
     "Busy compacting. Ask me again in a minute and I'll know you better.",
     "Hang on. Housekeeping. You're the only thing I'm not throwing out.",
@@ -1362,6 +1363,15 @@
     const out = document.getElementById('ttsSpeedVal');
     if (out && ttsSpeedInput) out.textContent = parseFloat(ttsSpeedInput.value).toFixed(2).replace(/0$/, '') + '×';
   }
+  function setSiteVolume(value) {
+    const volume = Math.max(0, Math.min(1, Number.isFinite(value) ? value : 1));
+    if (window.TTS && TTS.setVolume) TTS.setVolume(volume);
+    return volume;
+  }
+  function updateSiteVolumeLabel() {
+    const out = document.getElementById('siteVolumeVal');
+    if (out && siteVolumeInput) out.textContent = Math.round(parseFloat(siteVolumeInput.value) || 0) + '%';
+  }
   function updateVoiceSilenceLabel() {
     const out = document.getElementById('voiceSilenceVal');
     if (out && voiceSilenceInput) out.textContent = voiceSilenceInput.value + ' ms';
@@ -1848,7 +1858,7 @@
       ['vendor/pixi.min.js', 'vendor/live2dcubismcore.min.js',
        'vendor/marked.min.js', 'vendor/purify.min.js',
        'js/actions.js?v=10', 'js/outfit.js?v=34', 'js/touch.js?v=12',
-       'js/mods.js?v=10', 'js/tts.js?v=11', 'js/voice.js?v=2',
+       'js/mods.js?v=10', 'js/tts.js?v=12', 'js/voice.js?v=2',
        'js/voicemode.js?v=3', 'js/devhud.js?v=3', 'js/trip-loader.js?v=3',
        'js/wardrobe-open-lines.js?v=3', 'js/wardrobe-reactions.js?v=18',
        'js/wardrobe-return-lines.js?v=3'],
@@ -1892,6 +1902,22 @@
     if (window.Prefs) await Prefs.pullFromServer();
     if (window.Names) Names.load();
     wireNameSettings();
+
+    const storedVolume = parseFloat(localStorage.getItem('audio.volume') || '1');
+    const siteVolume = setSiteVolume(storedVolume);
+    if (siteVolumeInput) {
+      siteVolumeInput.value = String(Math.round(siteVolume * 100));
+      updateSiteVolumeLabel();
+      siteVolumeInput.addEventListener('input', () => {
+        setSiteVolume(parseFloat(siteVolumeInput.value) / 100);
+        updateSiteVolumeLabel();
+      });
+      siteVolumeInput.addEventListener('change', () => {
+        const volume = setSiteVolume(parseFloat(siteVolumeInput.value) / 100);
+        localStorage.setItem('audio.volume', String(volume));
+        if (window.Prefs) Prefs.pushToServer();
+      });
+    }
 
     const savedReasoning = localStorage.getItem('reasoning_level');
     if (savedReasoning && [...reasoningSelect.options].some(o => o.value === savedReasoning)) {
@@ -2140,6 +2166,40 @@
             if (window.Prefs) Prefs.pushToServer();
           });
         }
+      }
+    }
+
+    const karaokeBtn = document.getElementById('karaokeOpenBtn');
+    if (karaokeBtn) {
+      let karaokePrefetched = false;
+      const prefetchKaraoke = () => {
+        if (karaokePrefetched) return;
+        karaokePrefetched = true;
+        const link = document.createElement('link');
+        link.rel = 'prefetch';
+        link.as = 'document';
+        link.href = 'karaoke.html';
+        document.head.appendChild(link);
+      };
+      karaokeBtn.addEventListener('pointerenter', prefetchKaraoke, { once: true });
+      karaokeBtn.addEventListener('focus', prefetchKaraoke, { once: true });
+      karaokeBtn.addEventListener('click', () => {
+        ui.toggleDrawer(false);
+        location.href = 'karaoke.html';
+      });
+      try {
+        const response = await fetch('/api/karaoke.php?action=health', { credentials: 'same-origin' });
+        const health = response.ok ? await response.json() : null;
+        if (health && health.sep) {
+          karaokeBtn.disabled = false;
+          karaokeBtn.title = health.device === 'cpu'
+            ? 'Sing together (CPU - separation is slow)'
+            : 'Sing together';
+        } else {
+          karaokeBtn.title = 'Unavailable: the speech sidecar has no source separation';
+        }
+      } catch (e) {
+        karaokeBtn.title = 'Unavailable: could not reach the speech sidecar';
       }
     }
 

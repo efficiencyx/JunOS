@@ -24,18 +24,18 @@ runtime/
 # project-specific
 Junk/
 
-# Game-ripped Live2D assets — rebuilt locally with tools/recover_assets.py,
+# Game-ripped Live2D assets - rebuilt locally with tools/recover_assets.py,
 # NOT redistributed with this repo (see the NOTICE in LICENSE). Kept out of
 # git so a fork can't accidentally republish them.
 webapp/assets/
 
-# generated library cache (unsloth) — don't commit
+# generated library cache (unsloth) - don't commit
 unsloth_compiled_cache/
 
-# raw Live2D source assets — kept locally, not in the repo
+# raw Live2D source assets - kept locally, not in the repo
 live2d_raw/
 
-# lore corpus — generated from tools/lore_dataset.jsonl by build_lore_index.php
+# lore corpus - generated from tools/lore_dataset.jsonl by build_lore_index.php
 # (.bin/.json came from the embedding index, deleted in 2026-07; still ignored so
 # stale copies in older checkouts never get committed)
 webapp/lore_corpus.txt
@@ -46,5 +46,5 @@ webapp/lore_meta.json
 data/
 letsencrypt/
 
-# maintainer-hosted telemetry endpoint — kept local, not part of the app
+# maintainer-hosted telemetry endpoint - kept local, not part of the app
 metrics-server/
