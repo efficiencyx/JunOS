@@ -64,6 +64,16 @@ esac
 export COMPOSE_PROFILES="$profiles"
 echo "AI provider: $provider${profiles:+ (compose profiles: $profiles)}"
 
+tts_device="${TTS_DEVICE:-$(env_get TTS_DEVICE)}"
+tts_device="${tts_device:-cpu}"
+tts_torch_index="${TTS_TORCH_INDEX:-$(env_get TTS_TORCH_INDEX)}"
+if [ "$(printf '%s' "$tts_device" | tr '[:upper:]' '[:lower:]')" = cpu ] \
+   && [ -z "$tts_torch_index" ]; then
+  tts_torch_index=https://download.pytorch.org/whl/cpu
+fi
+export TTS_DEVICE="$tts_device"
+[ -z "$tts_torch_index" ] || export TTS_TORCH_INDEX="$tts_torch_index"
+
 gpu="$(detect_gpu)"
 files=(-f docker-compose.yml)
 
