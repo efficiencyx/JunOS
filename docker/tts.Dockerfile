@@ -24,8 +24,7 @@ COPY tts/requirements.txt /app/requirements.txt
 # different build in as a transitive dependency. torchaudio comes from the same
 # index so its wheel build stays matched to torch's across the cpu/cu124/rocm
 # overlays (PitchShift for the karaoke guide vocal lives in torchaudio).
-RUN --mount=type=cache,target=/root/.cache/pip,sharing=locked \
-    pip install torch torchaudio --index-url ${TORCH_INDEX} \
+RUN pip install torch torchaudio --index-url ${TORCH_INDEX} \
  && pip install -r /app/requirements.txt
 
 COPY tts/server.py /app/server.py
