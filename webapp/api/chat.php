@@ -132,7 +132,7 @@ function tool_catalog(): array {
             'type' => 'function',
             'function' => [
                 'name' => 'memory_write',
-                'description' => 'Append a durable note to Anon\'s private memory file. Use this OFTEN and proactively, not only when asked. Save anything worth carrying into future conversations: explicit "remember this" requests, stable preferences and dislikes, personal facts (name, job, pets, family, where he lives), plans and upcoming events, boundaries, and especially emotionally significant things he shares — a hard day, a loss, a fear, an illness, a traumatic or painful experience, a proud moment, something he was excited about. Anything that would hurt him to have to explain twice. When in doubt, save it.',
+                'description' => 'Append a durable note to Anon\'s private memory file. Use this OFTEN and proactively, not only when asked. Save anything worth carrying into future conversations: explicit "remember this" requests, stable preferences and dislikes, personal facts (name, job, pets, family, where he lives), plans and upcoming events, boundaries, and especially emotionally significant things he shares - a hard day, a loss, a fear, an illness, a traumatic or painful experience, a proud moment, something he was excited about. Anything that would hurt him to have to explain twice. When in doubt, save it.',
                 'parameters' => [
                     'type' => 'object',
                     'properties' => [
@@ -166,7 +166,7 @@ function tool_context_block(): string {
 
 You can call tools when they materially improve the accuracy, relevance, or continuity of your response. Do not use a lookup tool (`search_recent_chats`, `list_recent_chats`, `web_search`) when you can answer reliably without it.
 
-`memory_write` is an exception to every restriction below. It does not answer anything, so "can you answer without it" never applies. Call it whenever Anon shares something durable — a preference, a personal fact, a plan, a boundary, or anything emotionally significant — including alongside another tool call in the same turn, and including when you are already answering perfectly well without it. Missing a save costs more than saving something redundant.
+`memory_write` is an exception to every restriction below. It does not answer anything, so "can you answer without it" never applies. Call it whenever Anon shares something durable - a preference, a personal fact, a plan, a boundary, or anything emotionally significant - including alongside another tool call in the same turn, and including when you are already answering perfectly well without it. Missing a save costs more than saving something redundant.
 
 ### Tool-call format
 
@@ -340,7 +340,7 @@ The authoritative current date and time for this reply. Use it when Anon asks ab
 
 Do not bring up the time or date unprompted.
 
-## World Facts — Canon
+## World Facts - Canon
 
 Established facts about your world, identity, and past.
 

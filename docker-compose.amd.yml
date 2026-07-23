@@ -11,6 +11,9 @@ services:
       - "${RENDER_GID:-render}"
     environment:
       - HSA_OVERRIDE_GFX_VERSION
+      - HIP_VISIBLE_DEVICES
+      - ROCR_VISIBLE_DEVICES
+      - OLLAMA_SCHED_SPREAD
 
   llamacpp:
     image: ghcr.io/ggml-org/llama.cpp:server-vulkan
@@ -21,12 +24,15 @@ services:
       - "${VIDEO_GID:-video}"
       - "${RENDER_GID:-render}"
     environment:
-      LLAMA_ARG_N_GPU_LAYERS: "999"
+      - LLAMA_ARG_N_GPU_LAYERS=999
+      - GGML_VK_VISIBLE_DEVICES
+      - LLAMA_ARG_TENSOR_SPLIT
+      - LLAMA_ARG_MAIN_GPU
 
   tts:
     build:
       args:
-        TORCH_INDEX: https://download.pytorch.org/whl/rocm6.2
+        TORCH_INDEX: "${TTS_TORCH_INDEX:-https://download.pytorch.org/whl/rocm6.2.4}"
     devices:
       - /dev/kfd
       - /dev/dri

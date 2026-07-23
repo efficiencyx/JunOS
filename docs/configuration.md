@@ -3,7 +3,7 @@
 All runtime configuration is environment variables. Under Docker, `docker compose`
 reads `.env` in the repo root and interpolates `${VAR:-default}` into each
 service's `environment:` block in `docker-compose.yml` (and the `.nvidia`/`.amd`
-overlays) — a var only reaches a container if that container's block lists it.
+overlays) - a var only reaches a container if that container's block lists it.
 The bare-metal Windows launcher (`start.ps1`) also parses `.env` directly
 (loading `KEY=VALUE` lines as process env vars unless already set), but it
 skips anything that looks like a Docker-internal hostname:
@@ -53,15 +53,16 @@ conditional requirement is `OPENROUTER_API_KEY`, needed only when
 |---|---|---|---|
 | `VOICE` | `on` | `start.ps1` only | **Bare-metal Windows only.** `off` skips launching the TTS/STT sidecar process. Under Docker the `tts` service always runs (no compose `voice` profile exists); `php`/frontend degrade to text-only when it's unreachable or unhealthy. |
 | `TTS_URL` | `http://tts:8001` (Docker) / `http://localhost:8001` (PHP fallback) | `webapp/api/tts.php`, `stt.php` | Base URL of the audio sidecar. The pre-rename name `KOKORO_URL` is still honored as a fallback for existing `.env` files. |
-| `TTS_DEVICE` | `cpu` | `docker/tts.Dockerfile` ENV → `tts/server.py` | `cpu` \| `cuda` \| `auto`. Torch device for TTS synthesis. `auto` resolves to `cpu` unless the image was built with a GPU torch wheel (the nvidia/amd overlays do this). Both engines are real-time on CPU; `cuda`/`auto` holds ~2GB VRAM, which usually costs more in LLM layer offload than it buys in synthesis speed. |
+| `TTS_DEVICE` | `cpu` | `start.sh`, `docker/tts.Dockerfile` ENV → `tts/server.py` | `cpu` \| `cuda` \| `auto`. Torch device for TTS synthesis. `start.sh` uses the much smaller CPU torch build for `cpu`, while `cuda`/`auto` uses the active GPU overlay's CUDA or ROCm build. Both engines are real-time on CPU; GPU TTS holds ~2GB VRAM, which usually costs more in LLM layer offload than it buys in synthesis speed. |
+| `TTS_TORCH_INDEX` | derived from `TTS_DEVICE` and the GPU overlay | `start.sh`, `docker-compose.*.yml` | Advanced override for the PyTorch wheel index used to build the audio sidecar. Normally leave this unset. The launcher pins it to the CPU index for `TTS_DEVICE=cpu`; manual GPU-overlay builds retain their CUDA/ROCm defaults. |
 | `STT_MODEL` | `base.en` | `tts/server.py` | faster-whisper model size, e.g. `tiny.en`, `base.en`, `small.en`, or a multilingual variant without `.en` for non-English. Must agree with `STT_LANG`. |
-| `STT_LANG` | `en` | `tts/server.py` (`STT_LANG` env) | Whisper language code. In `docker-compose.yml` this is wired as `STT_LANG: "${STT_LANG-en}"` (bash-style *unset*-only default, note the missing `:`) — so an **explicitly empty** `STT_LANG=` in `.env` is passed through as `""` rather than defaulting to `en`, and `server.py` treats an empty string as `None`, i.e. whisper auto-detect. Leaving the var unset entirely gets you `en`. |
-| `STT_DEVICE` | `cpu` | `tts/server.py` | `cpu` \| `cuda`. Separate from `TTS_DEVICE` by design — whisper runs on CTranslate2, which needs different CUDA/cuDNN support than the torch wheel ships. |
+| `STT_LANG` | `en` | `tts/server.py` (`STT_LANG` env) | Whisper language code. In `docker-compose.yml` this is wired as `STT_LANG: "${STT_LANG-en}"` (bash-style *unset*-only default, note the missing `:`) - so an **explicitly empty** `STT_LANG=` in `.env` is passed through as `""` rather than defaulting to `en`, and `server.py` treats an empty string as `None`, i.e. whisper auto-detect. Leaving the var unset entirely gets you `en`. |
+| `STT_DEVICE` | `cpu` | `tts/server.py` | `cpu` \| `cuda`. Separate from `TTS_DEVICE` by design - whisper runs on CTranslate2, which needs different CUDA/cuDNN support than the torch wheel ships. |
 | `CORS_ORIGIN` | `http://nginx` (Docker) | `tts/server.py` (FastAPI `CORSMiddleware`) | Allowed browser origin for the sidecar's own HTTP API. Should match wherever nginx serves the frontend from; `start.ps1` sets it to the bare-metal site URL. |
 
 `TTS_HOST`, `TTS_PORT`, and `STT_COMPUTE` also exist as `ENV` defaults baked
 into `docker/tts.Dockerfile` (`0.0.0.0`, `8001`, `int8`), but they are not
-exposed as `.env` knobs in `docker-compose.yml` — they're internal to the
+exposed as `.env` knobs in `docker-compose.yml` - they're internal to the
 sidecar image (bare-metal `start.ps1` does override `TTS_HOST`/`TTS_PORT`
 directly as process env when launching the venv).
 
@@ -94,8 +95,8 @@ Opt out at any time by setting `TELEMETRY=off` in `.env` and restarting Jun.
 
 | Variable | Default | Consumed by | What it does |
 |---|---|---|---|
-| `OMEGA_STATE_DIR` | `/var/lib/omega` | `webapp/api/_lib.php` (`state_dir()`) | Directory for the SQLite DB and rate-limit flat files. Under Docker this is fixed at the default (mounted as the `omega_state` named volume) — the var is not forwarded into the `php` container's environment, so this is effectively **bare-metal only** (`start.ps1` points it at `runtime\state`). |
-| `MEMORY_DIR` | `<state dir>/memory` (i.e. `/var/lib/omega/memory` under Docker) | `webapp/api/_lib.php` (`memory_file_path()`) | Directory holding per-user durable-memory JSONL files. Same Docker/bare-metal split as `OMEGA_STATE_DIR` above. **Migration note:** builds before 2026-07 defaulted to `/var/lib/jun/memory`, a path that was never mounted as a volume under Docker — memories written there were silently lost on every container recreation. The current default lives inside the persisted `omega_state` volume, so it survives rebuilds/restarts. |
+| `OMEGA_STATE_DIR` | `/var/lib/omega` | `webapp/api/_lib.php` (`state_dir()`) | Directory for the SQLite DB and rate-limit flat files. Under Docker this is fixed at the default (mounted as the `omega_state` named volume) - the var is not forwarded into the `php` container's environment, so this is effectively **bare-metal only** (`start.ps1` points it at `runtime\state`). |
+| `MEMORY_DIR` | `<state dir>/memory` (i.e. `/var/lib/omega/memory` under Docker) | `webapp/api/_lib.php` (`memory_file_path()`) | Directory holding per-user durable-memory JSONL files. Same Docker/bare-metal split as `OMEGA_STATE_DIR` above. **Migration note:** builds before 2026-07 defaulted to `/var/lib/jun/memory`, a path that was never mounted as a volume under Docker - memories written there were silently lost on every container recreation. The current default lives inside the persisted `omega_state` volume, so it survives rebuilds/restarts. |
 
 ## 7. Bare-metal Windows only
 
@@ -112,6 +113,29 @@ Opt out at any time by setting `TELEMETRY=off` in `.env` and restarting Jun.
 | `RENDER_GID` | the literal group name `render` (compose fallback) | `docker-compose.amd.yml` | Same, for the `render` group; `start.sh` reads it off `/dev/dri/renderD128`. |
 | `HSA_OVERRIDE_GFX_VERSION` | unset | `docker-compose.amd.yml` (passed through to ROCm) | Consumer-card ROCm override, e.g. `11.0.0` for RDNA3, `10.3.0` for RDNA2. |
 
+## 9. Multi-GPU
+
+Two knobs you set, plus the vars `start.sh` / `start.ps1` derive from them. On a
+single-GPU machine none of this changes anything.
+
+| Variable | Default | Consumed by | What it does |
+|---|---|---|---|
+| `GPU_DEVICES` | `auto` | `start.sh`, `start.ps1` | `auto` orders your cards by VRAM, largest first, so the biggest one becomes device 0 for the model server. `all` leaves the driver's own order alone. Anything else is taken as an explicit comma-separated list of GPU UUIDs (NVIDIA) or indices (AMD) and passed through verbatim. |
+| `TENSOR_PARALLEL` | `off` | `start.sh`, `start.ps1`, both installers | `on` splits one model across every GPU instead of fitting it on one. Usually *slower* per token on a mismatched pair - worth it only when the model you want doesn't fit on the biggest card alone. `install.sh` / `install.ps1` offer it when they detect 2+ GPUs, and size their model recommendation off the combined VRAM when you accept. |
+
+| Derived variable | Set by | Reaches | What it does |
+|---|---|---|---|
+| `CUDA_VISIBLE_DEVICES` | `start.sh` (nvidia), `start.ps1` | `ollama`, `llamacpp` | The resolved device list, as UUIDs. UUIDs and not indices because `nvidia-smi` enumerates by PCI bus order while CUDA defaults to `FASTEST_FIRST` - index `1` means different cards to the two of them. Only exported when non-empty: an *empty* `CUDA_VISIBLE_DEVICES` means zero GPUs, not all of them. |
+| `HIP_VISIBLE_DEVICES`, `ROCR_VISIBLE_DEVICES`, `GGML_VK_VISIBLE_DEVICES` | `start.sh` (amd) | `ollama`, `llamacpp` | Same list, ROCm/Vulkan spellings. Indices here, not UUIDs. |
+| `NVIDIA_GPU_COUNT` | `start.sh` (nvidia) | `docker-compose.nvidia.yml` (`deploy.…devices.count`) | How many GPUs to reserve for the containers. The overlay asks for this number rather than `count: all`, because `all` resolves through the host's CDI spec (`/etc/cdi/nvidia.yaml`) - generated once and stale after you add a card, at which point it silently hands the container a *subset* of your GPUs. Falls back to `all` when `nvidia-smi` isn't available. |
+| `OLLAMA_SCHED_SPREAD` | `start.sh`, `start.ps1` when `TENSOR_PARALLEL=on` | `ollama` | Ollama's "always schedule model across all GPUs". Ollama has no true tensor parallelism; this spreads layers, which is the closest thing it offers. |
+| `LLAMA_ARG_SPLIT_MODE` | `start.sh` when `TENSOR_PARALLEL=on` **and** the GPU is NVIDIA; `-sm row` on the `llama-server` command line on Windows | `llamacpp` | `row` = real row/tensor split. CUDA-only, so it is deliberately not set on the AMD overlay (which runs the Vulkan llama.cpp image). |
+| `LLAMA_ARG_TENSOR_SPLIT`, `LLAMA_ARG_MAIN_GPU` | you, by hand | `llamacpp` | Passed through by both overlays if you set them, for uneven splits (`3,1`) or a different primary card. Nothing in the repo sets them. |
+
+A pre-existing Ollama that the launcher merely reuses - the Windows desktop app's,
+or a host instance on `:11434` - has its own environment, so none of the above
+applies to it. `start.ps1` says so when it takes that branch.
+
 ---
 
 ## Defaults differ by deployment mode
@@ -121,6 +145,6 @@ Compose injects Docker-internal hostnames as defaults: `http://ollama:11434`,
 `webapp/api/providers.php`, `tts.php`, and `stt.php` (used when a var is unset
 and nothing overrides it) instead target `localhost`
 (`http://localhost:11434`, `http://127.0.0.1:8081` for llama.cpp,
-`http://localhost:8001` for the audio sidecar) — the bare-metal case. In
+`http://localhost:8001` for the audio sidecar) - the bare-metal case. In
 practice `start.ps1` never relies on those PHP fallbacks: it sets its own
 `127.0.0.1`-based env vars explicitly before launching PHP.

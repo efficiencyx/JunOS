@@ -46,6 +46,19 @@ function Warn_([string]$msg)   { Write-Host "    ${WARN}⚠${R} ${WARN}${msg}${R
 function Fail_([string]$msg)   { Write-Host "    ${DANGER}✗${R} ${DANGER}${msg}${R}" }
 # ── end UI helpers ────────────────────────────────────────────────────────────
 
+# UUIDs, not indices: nvidia-smi enumerates by PCI bus order while CUDA sorts
+# by speed, so the same index means different cards to the two of them.
+function Get-GpuOrder {
+    if (-not (Get-Command nvidia-smi -ErrorAction SilentlyContinue)) { return $null }
+    $rows = & nvidia-smi --query-gpu=memory.total,uuid --format=csv,noheader,nounits 2>$null
+    $uuids = @($rows | Where-Object { $_ -match ',' } | ForEach-Object {
+        $f = $_ -split ','
+        [pscustomobject]@{ Mb = [int]($f[0].Trim()); Uuid = $f[1].Trim() }
+    } | Sort-Object Mb -Descending | ForEach-Object { $_.Uuid })
+    if ($uuids.Count -eq 0) { return $null }
+    return ($uuids -join ',')
+}
+
 $Runtime  = Join-Path $PSScriptRoot 'runtime'
 $LogDir   = Join-Path $Runtime 'logs'
 $PidFile  = Join-Path $Runtime 'pids.json'
@@ -75,6 +88,24 @@ $Provider  = if ($env:AI_PROVIDER) { $env:AI_PROVIDER.ToLower() } else { 'ollama
 if ($Provider -notin 'ollama', 'openrouter', 'llamacpp') { $Provider = 'ollama' }
 $LlamaPort = if ($env:LLAMACPP_PORT) { $env:LLAMACPP_PORT } else { '8081' }
 $LlamacppUrl = if ($env:LLAMACPP_URL) { $env:LLAMACPP_URL } else { "http://127.0.0.1:$LlamaPort" }
+
+$GpuDevices = if ($env:GPU_DEVICES) { $env:GPU_DEVICES.Trim() } else { '' }
+if (-not $GpuDevices -or $GpuDevices -eq 'auto') {
+    $GpuDevices = Get-GpuOrder
+} elseif ($GpuDevices -eq 'all') {
+    $GpuDevices = ''
+}
+# An empty CUDA_VISIBLE_DEVICES means zero GPUs, not all of them, so only set
+# it when we actually have a list. The model servers inherit it.
+if ($GpuDevices) { $env:CUDA_VISIBLE_DEVICES = $GpuDevices }
+$TensorParallel = $env:TENSOR_PARALLEL -match '^(on|1|true|yes)$'
+
+if ($Action -eq 'start') {
+    if ($GpuDevices -and ($GpuDevices -split ',').Count -gt 1) {
+        Note "GPU order (largest VRAM first): $GpuDevices"
+    }
+    if ($TensorParallel) { Note 'tensor parallel: one model split across all GPUs' }
+}
 
 function Read-Pids {
     if (Test-Path $PidFile) {
@@ -165,6 +196,9 @@ if (-not (Test-Http "$OllamaUrl/api/tags")) {
     if (-not $env:OLLAMA_KEEP_ALIVE)        { $env:OLLAMA_KEEP_ALIVE = '5m' }
     if (-not $env:OLLAMA_FLASH_ATTENTION)   { $env:OLLAMA_FLASH_ATTENTION = '1' }
     if (-not $env:OLLAMA_KV_CACHE_TYPE)     { $env:OLLAMA_KV_CACHE_TYPE = 'q8_0' }
+    # Ollama has no real tensor parallelism; spreading the layers is as close
+    # as it gets.
+    if ($TensorParallel -and -not $env:OLLAMA_SCHED_SPREAD) { $env:OLLAMA_SCHED_SPREAD = '1' }
     Start-Tracked 'ollama' 'ollama' @('serve') | Out-Null
     $ownOllama = $true
 
@@ -176,6 +210,9 @@ if (-not (Test-Http "$OllamaUrl/api/tags")) {
     Ok 'ollama serve ready'
 } else {
     Ok "using already-running Ollama at $OllamaUrl"
+    if ($GpuDevices -or $TensorParallel) {
+        Note 'it was started outside Jun, so it has its own environment - the GPU settings above do not apply to it'
+    }
     $p = Get-TrackedProcess $oldPids 'ollama'
     if ($p) { $newPids['ollama'] = $p.Id }
 }
@@ -228,8 +265,9 @@ if ($Provider -eq 'llamacpp' -and $LlamacppUrl -match '://(127\.0\.0\.1|localhos
         Step "start llama-server ($hfRef)"
         Note 'first run downloads the model'
         $env:LLAMA_CACHE = Join-Path $Runtime 'llama-cache'
-        $llamaProc = Start-Tracked 'llamacpp' 'llama-server' @(
-            '-hf', $hfRef, '--host', '127.0.0.1', '--port', $LlamaPort, '-c', '16384', '--jinja')
+        $llamaArgs = @('-hf', $hfRef, '--host', '127.0.0.1', '--port', $LlamaPort, '-c', '16384', '--jinja')
+        if ($TensorParallel) { $llamaArgs += @('-sm', 'row') }
+        $llamaProc = Start-Tracked 'llamacpp' 'llama-server' $llamaArgs
 
         # Generous deadline: the first boot downloads the GGUF before /health
         # goes green. A dead process fails fast instead of waiting it out.
@@ -260,7 +298,7 @@ if (-not $voiceOff -and (Test-Path $ttsPython)) {
         Start-Tracked 'tts' $ttsPython @((Join-Path $PSScriptRoot 'tts\server.py')) | Out-Null
     }
 } elseif (-not $voiceOff) {
-    Warn_ 'voice is on but the TTS venv is missing — re-run install.ps1 to set it up. Continuing text-only.'
+    Warn_ 'voice is on but the TTS venv is missing - re-run install.ps1 to set it up. Continuing text-only.'
 }
 
 $phpExe = Join-Path $Runtime 'php\php.exe'

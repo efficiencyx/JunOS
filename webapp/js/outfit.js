@@ -101,7 +101,7 @@ window.Outfit = (function () {
       includes: ['innermouth','tounge','tongue','teeth','saliva'], excludes: [] },
 
     // Baked into the ModdableFace texture by applyGlassesTexture, not
-    // drawable tints — hence no include patterns.
+    // drawable tints - hence no include patterns.
     { key: 'glasses_frame', label: 'Glasses frame', includes: [], excludes: [] },
     { key: 'glasses_lens', label: 'Glasses lens', includes: [], excludes: [] },
 

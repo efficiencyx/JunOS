@@ -24,7 +24,9 @@ This document is the long-form reference for the system. For a quick orientation
   Optional (profile=prod): certbot sidecar for Let's Encrypt issuance + renewal
 ```
 
-nginx serves static files from `/var/www/omega/` and FastCGI-proxies `*.php` requests to the php-fpm container. Ollama and the voice sidecar are internal-only; their ports are not published to the host. The voice sidecar on `:8001` fronts two swappable engines, Kokoro-82M (default) and kyutai pocket-tts, selected per request. Under Docker the `tts` service always runs — there is no compose `voice` profile; the `VOICE=on/off` env var only gates the bare-metal Windows launcher (`start.ps1`), which skips spawning the sidecar process when it's off. php and the frontend degrade gracefully to text-only whenever the sidecar is absent or unhealthy.
+nginx serves static files from `/var/www/omega/` and FastCGI-proxies `*.php` requests to the php-fpm container. Ollama and the voice sidecar are internal-only; their ports are not published to the host. The voice sidecar on `:8001` fronts two swappable engines, Kokoro-82M (default) and kyutai pocket-tts, selected per request. Under Docker the `tts` service always runs - there is no compose `voice` profile; the `VOICE=on/off` env var only gates the bare-metal Windows launcher (`start.ps1`), which skips spawning the sidecar process when it's off. php and the frontend degrade gracefully to text-only whenever the sidecar is absent or unhealthy.
+
+On a multi-GPU host the launcher decides which card the model server gets: `start.sh` orders the GPUs by VRAM and passes that order down as `CUDA_VISIBLE_DEVICES` (or the ROCm/Vulkan equivalents), so the largest card is device 0, and `TENSOR_PARALLEL=on` additionally lets one model span every card. See [configuration.md](configuration.md) §9 for the full set of knobs and the derived variables.
 
 ---
 
@@ -88,7 +90,7 @@ Without all three, tokens may arrive in one batch at end-of-message even though 
 
 Reasoning effort (`low`/`medium`/`high`/`auto` → `route_reasoning()`) is forwarded upstream only for OpenRouter, as a `reasoning.effort` field on the request; Ollama gets `think`/`reasoning_effort` options instead, and llama.cpp gets neither (its context is fixed server-side).
 
-llama.cpp tool support is gated by `LLAMACPP_TOOLS` (`provider_tools_enabled()` in `providers.php`) since not every chat template handles tool calling. Independent of that flag, `chat.php` has a runtime fallback: if the first streamed round comes back as an HTTP 4xx from an OpenAI-style provider, it strips `tools` from the payload and retries the same round once before giving up — this is what recovers automatically from a llama-server template that rejects the `tools` field.
+llama.cpp tool support is gated by `LLAMACPP_TOOLS` (`provider_tools_enabled()` in `providers.php`) since not every chat template handles tool calling. Independent of that flag, `chat.php` has a runtime fallback: if the first streamed round comes back as an HTTP 4xx from an OpenAI-style provider, it strips `tools` from the payload and retries the same round once before giving up - this is what recovers automatically from a llama-server template that rejects the `tools` field.
 
 ---
 
@@ -298,7 +300,7 @@ lexical matching over SQLite and a text corpus:
   replies in curated game canon via keyword/IDF matching. It runs on every turn
   and appends its block to the trailing live-context message (not the system
   prompt, which stays static so Ollama's KV prompt cache holds across turns).
-- **Cross-conversation recall**: not a retriever at all — the model asks for it,
+- **Cross-conversation recall**: not a retriever at all - the model asks for it,
   by calling the `search_recent_chats` / `list_recent_chats` tools described
   under [Tool calling and durable memory](#tool-calling-and-durable-memory).
 
@@ -355,13 +357,13 @@ conversations is something the model decides to do, as a tool call, and both
 tools are ordinary SQLite queries scoped to the calling user with the current
 conversation excluded:
 
-- `search_recent_chats(query, limit)` — a `content LIKE '%query%'` scan over the
+- `search_recent_chats(query, limit)` - a `content LIKE '%query%'` scan over the
   user's messages, newest first, up to 8 hits. Each hit comes back as date,
   conversation id, title, role, and the message collapsed to one line and
   truncated at 500 characters. Substring matching means it is exact on names and
   distinctive phrases and blind to paraphrase; the model is expected to pick the
   query term, and to retry with a different one when a search comes back empty.
-- `list_recent_chats(limit)` — the user's most recently updated titled
+- `list_recent_chats(limit)` - the user's most recently updated titled
   conversations, each with a short tail snippet (last few turns, action tags
   stripped, 160 characters per line). This is the "what have we been talking
   about lately" path, used when there is no specific term to search for.
@@ -373,9 +375,9 @@ the context as a tool message rather than as an injected block.
 
 ## Tool calling and durable memory
 
-`chat.php` offers the model up to four tools via `tool_catalog()`, always offered together (no keyword pre-filter — an earlier version silently blocked most natural asks): `search_recent_chats`, `list_recent_chats`, `memory_write`, and `web_search`. The model is instructed (`tool_context_block()`) to speak a short in-character lead line before any tool call, so a call is never emitted with empty visible content.
+`chat.php` offers the model up to four tools via `tool_catalog()`, always offered together (no keyword pre-filter - an earlier version silently blocked most natural asks): `search_recent_chats`, `list_recent_chats`, `memory_write`, and `web_search`. The model is instructed (`tool_context_block()`) to speak a short in-character lead line before any tool call, so a call is never emitted with empty visible content.
 
-Tool calls run in a bounded loop of up to 3 rounds (initial reply, one tool-informed continuation, one retry round) — `run_tool_call()` executes each of up to 4 calls per round and the result is appended as a `tool`-role message before re-streaming. `search_recent_chats`/`list_recent_chats` query the user's own `messages`/`conversations` tables (excluding the current conversation); `memory_write` calls the shared `memory_append()` helper (below).
+Tool calls run in a bounded loop of up to 3 rounds (initial reply, one tool-informed continuation, one retry round) - `run_tool_call()` executes each of up to 4 calls per round and the result is appended as a `tool`-role message before re-streaming. `search_recent_chats`/`list_recent_chats` query the user's own `messages`/`conversations` tables (excluding the current conversation); `memory_write` calls the shared `memory_append()` helper (below).
 
 `web_search` goes through `web_search_public()` → DuckDuckGo's HTML results page, parsed with regex for result links/snippets. Both it and any redirect hops it follows (`web_fetch_public()`, up to 3 redirects, 512 KB cap) are guarded by `resolve_public_http_url()`: an SSRF guard that resolves the target host's DNS A/AAAA records and rejects the request if any resolved IP is private/reserved (`FILTER_FLAG_NO_PRIV_RANGE | FILTER_FLAG_NO_RES_RANGE`), rejects userinfo-in-URL and non-standard ports, and restricts to `http`/`https`.
 

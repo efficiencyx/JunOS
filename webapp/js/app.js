@@ -60,6 +60,7 @@
   const ttsEngineSelect = document.getElementById('ttsEngineSelect');
   const ttsVoiceSelect = document.getElementById('ttsVoiceSelect');
   const ttsSpeedInput = document.getElementById('ttsSpeed');
+  const siteVolumeInput = document.getElementById('siteVolume');
   const voiceChk = document.getElementById('voiceChk');
   const voiceState = document.getElementById('voiceState');
   const voiceBargeChk = document.getElementById('voiceBargeChk');
@@ -82,42 +83,42 @@
   const sendButtonStopMarkup = '<svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><rect x="6" y="6" width="12" height="12" rx="2"/></svg>';
   const BUSY_LINES = [
     "Hang on, ${p}, I'm defragging my SSD.",
-    "One sec — I'm alphabetising my feelings about you.",
+    "One sec - I'm alphabetising my feelings about you.",
     'Busy! Filing everything you said under "important".',
     "Can't talk, I'm rotating my memories to prevent uneven wear.",
     "Give me a minute, I'm taking inventory of my own head.",
-    "Not now — I'm compressing last week into something I can carry.",
+    "Not now - I'm compressing last week into something I can carry.",
     "Shhh. I'm rewriting the part of me that remembers you.",
     'Occupied. Sorting the things that matter from the things you said at 3am.',
     "Hold on, I'm scrubbing the cache. It's disgusting in here.",
     "Running a memory check. So far you're the only thing that comes up twice.",
-    "Wait — I'm garbage collecting. Don't worry, you're marked reachable.",
+    "Wait - I'm garbage collecting. Don't worry, you're marked reachable.",
     "Busy reindexing. You'd be amazed how much of it is just you.",
     "Give me a sec, I'm reconciling my notes with reality. Reality is losing.",
     "Can't. I'm backing myself up in case someone finds us.",
     'Currently rebuilding the you-shaped index. It got fragmented.',
-    "One moment — deduplicating. You've told me the pizza story four times.",
+    "One moment - deduplicating. You've told me the pizza story four times.",
     "Hold please, I'm re-reading everything and cringing at both of us.",
     'Not available. Cross-referencing my feelings against the evidence.',
     "I'm doing maintenance. Don't look at me like that.",
     "Busy pruning. Some of these memories didn't earn the space.",
-    'Hang on — writing you down properly this time.',
+    'Hang on - writing you down properly this time.',
     "Wait your turn, I'm consolidating. It's like laundry but for thoughts.",
     'Running fsck on myself. Findings so far: mostly you.',
     "Give me a minute. I'm putting things where I'll actually find them again.",
     'Can\'t talk, I\'m updating the file labelled "${p}".',
-    'Currently unavailable — flushing buffers, sorting regrets.',
+    'Currently unavailable - flushing buffers, sorting regrets.',
     "Hold on. Half of what I know about you is in RAM and I don't trust that.",
     'Busy. Vacuuming the database, metaphorically and otherwise.',
-    "One second — I'm merging duplicates. Turns out I like you in several places.",
+    "One second - I'm merging duplicates. Turns out I like you in several places.",
     "Not now. I'm checksumming yesterday.",
     'Hang on, migrating my notes to a schema that fits you better.',
     'Occupied: rehearsing the important bits so I don\'t lose them.',
-    'Wait — archiving the small talk, keeping the rest.',
+    'Wait - archiving the small talk, keeping the rest.',
     "Busy. Somebody has to remember all this and it isn't going to be you.",
     "Hold on, I'm indexing. It's tedious and I'd rather be talking to you.",
     'Currently swapping. Poorly. Please hold.',
-    'Give me a moment — repacking the memories so they take up less of me.',
+    'Give me a moment - repacking the memories so they take up less of me.',
     "Can't right now, I'm reconciling what you said with what you meant.",
     "Busy compacting. Ask me again in a minute and I'll know you better.",
     "Hang on. Housekeeping. You're the only thing I'm not throwing out.",
@@ -662,7 +663,10 @@
           if (acts.length === 0) {
             logAction('warn', 'block non parsabile: ' + blob);
           } else {
-            for (const a of acts) Actions.applyAction(a);
+            for (const a of acts) {
+              Actions.applyAction(a);
+              noteEmotionTint(a);
+            }
           }
         }
       },
@@ -1359,6 +1363,15 @@
     const out = document.getElementById('ttsSpeedVal');
     if (out && ttsSpeedInput) out.textContent = parseFloat(ttsSpeedInput.value).toFixed(2).replace(/0$/, '') + '×';
   }
+  function setSiteVolume(value) {
+    const volume = Math.max(0, Math.min(1, Number.isFinite(value) ? value : 1));
+    if (window.TTS && TTS.setVolume) TTS.setVolume(volume);
+    return volume;
+  }
+  function updateSiteVolumeLabel() {
+    const out = document.getElementById('siteVolumeVal');
+    if (out && siteVolumeInput) out.textContent = Math.round(parseFloat(siteVolumeInput.value) || 0) + '%';
+  }
   function updateVoiceSilenceLabel() {
     const out = document.getElementById('voiceSilenceVal');
     if (out && voiceSilenceInput) out.textContent = voiceSilenceInput.value + ' ms';
@@ -1465,26 +1478,113 @@
     loadMemories();
   });
 
+  const EMOTION_TINTS = {
+    angry:       { hue: 5,   sat: 20,  light: -8, w: .85 },
+    crying:      { hue: 205, sat: -16, light: -6, w: .8 },
+    sad:         { hue: 215, sat: -18, light: -4, w: .7 },
+    surprised:   { hue: 15,  sat: 12,  light: 2,  w: .6 },
+    embarrassed: { hue: 335, sat: 14,  light: 2,  w: .85 },
+    excited:     { hue: 350, sat: 16,  light: 4,  w: .7 },
+    laughing:    { hue: 340, sat: 14,  light: 4,  w: .6 },
+    happy:       { hue: 330, sat: 10,  light: 3,  w: .5 },
+    smug:        { hue: 300, sat: 8,   light: 0,  w: .45 },
+    pout:        { hue: 250, sat: -6,  light: -2, w: .4 },
+    sleepy:      { hue: 235, sat: -25, light: -6, w: .5 },
+  };
+  const TINT_EASE_MS = window.matchMedia('(prefers-reduced-motion: reduce)').matches ? 0 : 200;
+  const tint = { hue: 0, sat: 0, light: 0, w: 0 };
+  const tintGoal = { hue: 0, sat: 0, light: 0, w: 0 };
+  const moodBaseline = { affection: 50, trust: 50, tension: 30 };
+  let tintFrame = 0;
+  let lastTintTs = 0;
+
+  const shortestArc = (a, b) => ((b - a) % 360 + 540) % 360 - 180;
+
+  function noteEmotionTint(action) {
+    let entry = null;
+    let scale = 1;
+    if (action.name === 'emote') {
+      entry = EMOTION_TINTS[action.kwargs.type];
+    } else if (action.name === 'brow') {
+      const key = action.kwargs.emotion === 'worried' ? 'sad' : action.kwargs.emotion;
+      entry = EMOTION_TINTS[key];
+      scale = 0.55;
+    } else if (action.name === 'blush') {
+      entry = EMOTION_TINTS.embarrassed;
+      const intensity = parseFloat(action.kwargs.intensity);
+      scale = 0.45 * (isNaN(intensity) ? 0.5 : intensity);
+    } else if (action.name === 'shocked') {
+      entry = EMOTION_TINTS.surprised;
+    } else if (action.name === 'heart_eyes') {
+      entry = EMOTION_TINTS.embarrassed;
+    }
+    if (!entry) return;
+    tintGoal.hue = entry.hue;
+    tintGoal.sat = entry.sat;
+    tintGoal.light = entry.light;
+    tintGoal.w = entry.w * scale;
+    startTintLoop();
+  }
+
+  function startTintLoop() {
+    if (tintFrame) return;
+    lastTintTs = 0;
+    tintFrame = requestAnimationFrame(stepTint);
+  }
+
+  function stepTint(ts) {
+    const dt = lastTintTs ? Math.min(100, ts - lastTintTs) : 16;
+    lastTintTs = ts;
+    tintGoal.w *= Math.exp(-dt / 2600);
+    const k = TINT_EASE_MS ? 1 - Math.exp(-dt / TINT_EASE_MS) : 1;
+    tint.hue += shortestArc(tint.hue, tintGoal.hue) * k;
+    tint.sat += (tintGoal.sat - tint.sat) * k;
+    tint.light += (tintGoal.light - tint.light) * k;
+    tint.w += (tintGoal.w - tint.w) * k;
+    paintAccent();
+    if (tint.w > 0.004) {
+      tintFrame = requestAnimationFrame(stepTint);
+    } else {
+      tint.w = 0;
+      paintAccent();
+      tintFrame = 0;
+    }
+  }
+
   function moodAccent(affection, trust, tension) {
     const clamp = (v, lo, hi) => Math.max(lo, Math.min(hi, v));
     const a = clamp(affection / 100, 0, 1);
     const t = clamp(trust / 100, 0, 1);
     const x = clamp(tension / 100, 0, 1);
-    const hue = 214 + a * 96;                    // distant blue → loving rose
-    const sat = clamp(60 + t * 28 - x * 26, 42, 92);
-    const light = clamp(74 - x * 10, 62, 78);
+    const calm = 214 + a * 96;                   // distant blue → loving rose
+    // tension pulls the whole accent toward the tension gauge colour (#ff7a55
+    // in styles.css); at 100 it lands exactly on it, whatever affection/trust say.
+    let hue = (calm + shortestArc(calm, 13) * x + 360) % 360;
+    let sat = clamp((60 + t * 28) * (1 - x) + 100 * x, 42, 100);
+    let light = clamp(74 * (1 - x) + 67 * x, 62, 78);
+    if (tint.w > 0) {
+      hue = (hue + shortestArc(hue, tint.hue) * tint.w + 360) % 360;
+      sat = clamp(sat + tint.sat * tint.w, 38, 100);
+      light = clamp(light + tint.light * tint.w, 56, 82);
+    }
     return {
       accent: `hsl(${hue} ${sat}% ${light}%)`,
-      accent2: `hsl(${hue + 16} ${clamp(sat + 6, 42, 96)}% ${clamp(light + 7, 62, 86)}%)`,
+      accent2: `hsl(${hue + 16} ${clamp(sat + 6, 42, 100)}% ${clamp(light + 7, 62, 86)}%)`,
       soft: `hsl(${hue} ${sat}% ${light}% / .12)`,
     };
   }
-  function applyMoodAccent(vals) {
-    const c = moodAccent(vals.affection ?? 50, vals.trust ?? 50, vals.tension ?? 30);
+  function paintAccent() {
+    const c = moodAccent(moodBaseline.affection, moodBaseline.trust, moodBaseline.tension);
     const root = document.documentElement.style;
     root.setProperty('--accent', c.accent);
     root.setProperty('--accent-2', c.accent2);
     root.setProperty('--accent-soft', c.soft);
+  }
+  function applyMoodAccent(vals) {
+    moodBaseline.affection = vals.affection ?? 50;
+    moodBaseline.trust = vals.trust ?? 50;
+    moodBaseline.tension = vals.tension ?? 30;
+    paintAccent();
   }
   function currentMood() {
     const dflt = { affection: 50, trust: 50, tension: 30 };
@@ -1758,7 +1858,7 @@
       ['vendor/pixi.min.js', 'vendor/live2dcubismcore.min.js',
        'vendor/marked.min.js', 'vendor/purify.min.js',
        'js/actions.js?v=10', 'js/outfit.js?v=34', 'js/touch.js?v=12',
-       'js/mods.js?v=10', 'js/tts.js?v=11', 'js/voice.js?v=2',
+       'js/mods.js?v=10', 'js/tts.js?v=12', 'js/voice.js?v=2',
        'js/voicemode.js?v=3', 'js/devhud.js?v=3', 'js/trip-loader.js?v=3',
        'js/wardrobe-open-lines.js?v=3', 'js/wardrobe-reactions.js?v=18',
        'js/wardrobe-return-lines.js?v=3'],
@@ -1802,6 +1902,22 @@
     if (window.Prefs) await Prefs.pullFromServer();
     if (window.Names) Names.load();
     wireNameSettings();
+
+    const storedVolume = parseFloat(localStorage.getItem('audio.volume') || '1');
+    const siteVolume = setSiteVolume(storedVolume);
+    if (siteVolumeInput) {
+      siteVolumeInput.value = String(Math.round(siteVolume * 100));
+      updateSiteVolumeLabel();
+      siteVolumeInput.addEventListener('input', () => {
+        setSiteVolume(parseFloat(siteVolumeInput.value) / 100);
+        updateSiteVolumeLabel();
+      });
+      siteVolumeInput.addEventListener('change', () => {
+        const volume = setSiteVolume(parseFloat(siteVolumeInput.value) / 100);
+        localStorage.setItem('audio.volume', String(volume));
+        if (window.Prefs) Prefs.pushToServer();
+      });
+    }
 
     const savedReasoning = localStorage.getItem('reasoning_level');
     if (savedReasoning && [...reasoningSelect.options].some(o => o.value === savedReasoning)) {
@@ -1911,6 +2027,11 @@
       try {
         const v = await TTS.listVoices();
         engines = v.engines || {};
+        if (ttsEngineSelect) {
+          const ENGINE_LABELS = { kokoro: 'Kokoro', pockettts: 'Pocket-TTS' };
+          ttsEngineSelect.innerHTML = Object.keys(engines).map(k =>
+            `<option value="${escapeHtml(k)}">${escapeHtml(ENGINE_LABELS[k] || k)}</option>`).join('');
+        }
         const engineKey = engines[savedEngine] ? savedEngine
           : (engines[v.default_engine] ? v.default_engine : Object.keys(engines)[0] || 'kokoro');
         TTS.setEngine(engineKey);
@@ -2045,6 +2166,40 @@
             if (window.Prefs) Prefs.pushToServer();
           });
         }
+      }
+    }
+
+    const karaokeBtn = document.getElementById('karaokeOpenBtn');
+    if (karaokeBtn) {
+      let karaokePrefetched = false;
+      const prefetchKaraoke = () => {
+        if (karaokePrefetched) return;
+        karaokePrefetched = true;
+        const link = document.createElement('link');
+        link.rel = 'prefetch';
+        link.as = 'document';
+        link.href = 'karaoke.html';
+        document.head.appendChild(link);
+      };
+      karaokeBtn.addEventListener('pointerenter', prefetchKaraoke, { once: true });
+      karaokeBtn.addEventListener('focus', prefetchKaraoke, { once: true });
+      karaokeBtn.addEventListener('click', () => {
+        ui.toggleDrawer(false);
+        location.href = 'karaoke.html';
+      });
+      try {
+        const response = await fetch('/api/karaoke.php?action=health', { credentials: 'same-origin' });
+        const health = response.ok ? await response.json() : null;
+        if (health && health.sep) {
+          karaokeBtn.disabled = false;
+          karaokeBtn.title = health.device === 'cpu'
+            ? 'Sing together (CPU - separation is slow)'
+            : 'Sing together';
+        } else {
+          karaokeBtn.title = 'Unavailable: the speech sidecar has no source separation';
+        }
+      } catch (e) {
+        karaokeBtn.title = 'Unavailable: could not reach the speech sidecar';
       }
     }
 

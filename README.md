@@ -275,6 +275,10 @@ RENDER_GID=$(stat -c '%g' /dev/dri/renderD128) \
   docker compose -f docker-compose.yml -f docker-compose.amd.yml up -d
 ```
 
+**Got two GPUs?** `start.sh` sorts them by VRAM and pins the biggest as device 0, so Jun loads onto the card that can actually hold her instead of whichever one the PCI bus happened to list first. Nothing to configure. To choose yourself, `GPU_DEVICES=<uuid>,<uuid>` takes an explicit list and `GPU_DEVICES=all` hands the ordering back to the driver.
+
+Want her spread across every card at once instead? `TENSOR_PARALLEL=on` (Ollama spreads the layers; llama.cpp does a real row split on CUDA). It's usually *slower* per token than keeping her on one card, so it earns its keep only when the model you want fits nowhere alone - a 12B across a 6GB + 12GB pair, say. The installer offers it if it spots two cards, and sizes its model recommendation off the combined VRAM when you say yes.
+
 **AMD consumer cards:** if ROCm doesn't officially list your GPU, set `HSA_OVERRIDE_GFX_VERSION` (e.g. `11.0.0` for RDNA3, `10.3.0` for RDNA2) - `start.sh` passes it through:
 
 ```sh

@@ -1,21 +1,38 @@
 services:
+# `count: all` resolves through the host's CDI spec, which is generated once and
+# goes stale when cards are added - it then hands over a subset. start.sh counts
+# the GPUs itself and asks for that many, which takes the legacy path instead.
   ollama:
     deploy:
       resources:
         reservations:
           devices:
             - driver: nvidia
-              count: all
+              count: ${NVIDIA_GPU_COUNT:-all}
               capabilities: [gpu]
+    environment:
+      - CUDA_VISIBLE_DEVICES
+      - OLLAMA_SCHED_SPREAD
 
   llamacpp:
     image: ghcr.io/ggml-org/llama.cpp:server-cuda
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: ${NVIDIA_GPU_COUNT:-all}
+              capabilities: [gpu]
     environment:
-      LLAMA_ARG_N_GPU_LAYERS: "999"
+      - LLAMA_ARG_N_GPU_LAYERS=999
+      - CUDA_VISIBLE_DEVICES
+      - LLAMA_ARG_SPLIT_MODE
+      - LLAMA_ARG_TENSOR_SPLIT
+      - LLAMA_ARG_MAIN_GPU
   tts:
     build:
       args:
-        TORCH_INDEX: https://download.pytorch.org/whl/cu121
+        TORCH_INDEX: "${TTS_TORCH_INDEX:-https://download.pytorch.org/whl/cu124}"
     deploy:
       resources:
         reservations:

@@ -117,11 +117,30 @@ resolve_model() {  # alias|full-ref -> full-ref
 detect_vram_mb() {
     if command -v nvidia-smi >/dev/null 2>&1; then
         nvidia-smi --query-gpu=memory.total --format=csv,noheader,nounits 2>/dev/null \
-            | head -n1 | tr -dc '0-9'
+            | tr -dc '0-9\n' | sort -nr | head -n1
     elif command -v rocm-smi >/dev/null 2>&1; then
         rocm-smi --showmeminfo vram 2>/dev/null \
-            | grep -i 'total' | grep -oE '[0-9]+' | head -n1 \
+            | grep -i 'total' | grep -oE '[0-9]+' | sort -nr | head -n1 \
             | awk '{ if ($1 > 0) print int($1 / 1048576) }'
+    fi
+}
+
+detect_vram_total_mb() {
+    if command -v nvidia-smi >/dev/null 2>&1; then
+        nvidia-smi --query-gpu=memory.total --format=csv,noheader,nounits 2>/dev/null \
+            | tr -dc '0-9\n' | awk '{ t += $1 } END { if (t > 0) print t }'
+    elif command -v rocm-smi >/dev/null 2>&1; then
+        rocm-smi --showmeminfo vram 2>/dev/null \
+            | grep -i 'total' | grep -oE '[0-9]+' \
+            | awk '{ t += $1 } END { if (t > 0) print int(t / 1048576) }'
+    fi
+}
+
+detect_gpu_count() {
+    if command -v nvidia-smi >/dev/null 2>&1; then
+        nvidia-smi --query-gpu=memory.total --format=csv,noheader,nounits 2>/dev/null | grep -c '[0-9]' || true
+    elif command -v rocm-smi >/dev/null 2>&1; then
+        rocm-smi --showmeminfo vram 2>/dev/null | grep -ci 'total' || true
     fi
 }
 
@@ -151,8 +170,14 @@ set_env() {
 }
 
 ask_model_ref() {
-    local vram rec alias ans
-    vram="$(detect_vram_mb)"
+    local vram rec alias ans label gpus
+    if [ "${TENSOR_PARALLEL:-off}" = on ]; then
+        vram="$(detect_vram_total_mb)"; label=" combined"
+    else
+        vram="$(detect_vram_mb)"; label=" on the largest card"
+    fi
+    gpus="$(detect_gpu_count)"
+    [ "${gpus:-0}" -gt 1 ] || label=""
     rec="$(recommend_model "$vram")"
 
     if [ -n "${JUN_MODEL:-}" ] || [ "${JUN_YES:-}" = "1" ] || [ ! -r /dev/tty ]; then
@@ -163,7 +188,7 @@ ask_model_ref() {
             printf '       %s1%s  Jun 12B  %s-%s highest quality\n' "$ACCENT" "$R" "$DIM" "$R"
             printf '       %s2%s  Jun E4B  %s-%s balanced\n' "$ACCENT" "$R" "$DIM" "$R"
             printf '       %s3%s  Jun E2B  %s-%s lightest / CPU-friendly\n' "$ACCENT" "$R" "$DIM" "$R"
-            [ -n "$vram" ] && printf '       %sdetected %sMB VRAM%s\n' "$DIM" "$vram" "$R"
+            [ -n "$vram" ] && printf '       %sdetected %sMB VRAM%s%s\n' "$DIM" "$vram" "$label" "$R"
             printf '     %s$%s choice %s[enter = recommended %s]%s %s→%s ' \
                 "$OK" "$R" "$DIM" "$rec" "$R" "$ACCENT" "$R"
         } > /dev/tty
@@ -195,6 +220,29 @@ ask_tts_device() {
             "$OK" "$R" "$DIM" "$R" "$DIM" "$R" "$ACCENT" "$R" > /dev/tty
         read -r v < /dev/tty || v=""
         case "$v" in y|Y|yes|YES) TTS_DEVICE_CHOICE=cuda ;; *) TTS_DEVICE_CHOICE=cpu ;; esac
+    fi
+}
+
+# "split one model across every GPU? [y/N]". Defaults off even on multi-GPU
+# boxes: on a mismatched pair, spreading is usually slower per token than
+# fitting the model on the big card alone. Sets $TENSOR_PARALLEL (on|off).
+# Non-interactive knob: JUN_TENSOR_PARALLEL=on|off (default off).
+ask_tensor_parallel() {
+    local v gpus
+    gpus="$(detect_gpu_count)"
+    if [ "${gpus:-0}" -lt 2 ]; then
+        TENSOR_PARALLEL=off
+    elif [ -n "${JUN_TENSOR_PARALLEL:-}" ]; then
+        case "$(printf '%s' "$JUN_TENSOR_PARALLEL" | tr '[:upper:]' '[:lower:]')" in
+            on|1|true|yes|y) TENSOR_PARALLEL=on ;; *) TENSOR_PARALLEL=off ;;
+        esac
+    elif [ "${JUN_YES:-}" = "1" ] || [ ! -r /dev/tty ]; then
+        TENSOR_PARALLEL=off
+    else
+        printf '     %s$%s %s GPUs found - use all of them for one model? %s(slower per token, but fits bigger models)%s %s[y/N]%s %s→%s ' \
+            "$OK" "$R" "$gpus" "$DIM" "$R" "$DIM" "$R" "$ACCENT" "$R" > /dev/tty
+        read -r v < /dev/tty || v=""
+        case "$v" in y|Y|yes|YES) TENSOR_PARALLEL=on ;; *) TENSOR_PARALLEL=off ;; esac
     fi
 }
 
@@ -246,6 +294,11 @@ configure() {
         *) printf '     %s✗%s unknown provider "%s", using Ollama\n' "$DANGER" "$R" "$provider" > /dev/tty 2>/dev/null || true
            provider=ollama ;;
     esac
+
+    TENSOR_PARALLEL=off
+    if [ "$provider" != openrouter ]; then
+        ask_tensor_parallel
+    fi
 
     case "$provider" in
     ollama)
@@ -334,6 +387,11 @@ configure() {
         ask_tts_device
         set_env TTS_DEVICE "$TTS_DEVICE_CHOICE"
         ok "tts device $TTS_DEVICE_CHOICE"
+    fi
+
+    set_env TENSOR_PARALLEL "$TENSOR_PARALLEL"
+    if [ "$TENSOR_PARALLEL" = on ]; then
+        ok "tensor parallelism on"
     fi
 
     ask_telemetry

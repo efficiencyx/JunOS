@@ -586,22 +586,22 @@ html[data-pre-auth] #app { visibility: hidden; }
 <!-- Fetched during parse but applied by boot-gate.js: the CSP forbids the
      usual media="print" onload= trick, and blocking on the full sheet would
      cost a round trip the auth screen does not need. -->
-<link rel="preload" as="style" href="styles.css?v=43">
+<link rel="preload" as="style" href="styles.css?v=44">
 <link rel="preload" as="style" href="trip-loader.css?v=4">
-<noscript><link rel="stylesheet" href="styles.css?v=43"></noscript>
+<noscript><link rel="stylesheet" href="styles.css?v=44"></noscript>
 
 <script src="js/viewport.js?v=2"></script>
-<script src="js/boot-gate.js?v=3"></script>
+<script src="js/boot-gate.js?v=4"></script>
 
 <script defer src="js/loader.js?v=1"></script>
 <script defer src="js/auth.js?v=7"></script>
-<script defer src="js/prefs.js?v=4"></script>
+<script defer src="js/prefs.js?v=5"></script>
 <script defer src="js/names.js?v=2"></script>
 <script defer src="js/chat-api.js?v=3"></script>
 <script defer src="js/ui.js?v=7"></script>
 <script defer src="js/history.js?v=7"></script>
 <script defer src="js/boot-fx.js?v=5"></script>
-<script defer src="js/app.js?v=41"></script>
+<script defer src="js/app.js?v=45"></script>
 </head>
 <body>
 
@@ -730,9 +730,9 @@ html[data-pre-auth] #app { visibility: hidden; }
         <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/><line x1="12" y1="19" x2="12" y2="23"/></svg>
         <span>Voice</span>
       </button>
-      <button class="settings-navitem" data-panel="appearance" role="tab" aria-selected="false">
-        <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20.38 3.46 16 2a4 4 0 0 1-8 0L3.62 3.46a2 2 0 0 0-1.34 2.23l.58 3.47a1 1 0 0 0 .99.84H6v10a2 2 0 0 0 2 2h8a2 2 0 0 0 2-2V10h2.15a1 1 0 0 0 .99-.84l.58-3.47a2 2 0 0 0-1.34-2.23z"/></svg>
-        <span>Appearance</span>
+      <button class="settings-navitem" data-panel="dates" role="tab" aria-selected="false">
+        <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"/></svg>
+        <span>Dates</span>
       </button>
       <button class="settings-navitem" data-panel="memory" role="tab" aria-selected="false">
         <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/></svg>
@@ -810,6 +810,16 @@ html[data-pre-auth] #app { visibility: hidden; }
       <section class="settings-panel" data-panel="voice" hidden>
         <div class="set-row">
           <div class="set-row-text">
+            <div class="set-row-title">Master volume</div>
+            <div class="set-row-desc">Controls Jun's voice and karaoke playback throughout the site.</div>
+          </div>
+          <div class="set-row-control range-control">
+            <input type="range" id="siteVolume" min="0" max="100" step="5" value="100" aria-label="Master volume">
+            <output id="siteVolumeVal" for="siteVolume">100%</output>
+          </div>
+        </div>
+        <div class="set-row">
+          <div class="set-row-text">
             <div class="set-row-title">Enable voice</div>
             <div class="set-row-desc">Speak replies aloud.</div>
           </div>
@@ -846,7 +856,7 @@ html[data-pre-auth] #app { visibility: hidden; }
         <div class="set-row">
           <div class="set-row-text">
             <div class="set-row-title">Microphone <span id="voiceState" class="voice-pill" data-state="idle">off</span></div>
-            <div class="set-row-desc">Talk to her instead of typing. Headphones recommended — on speakers she can hear herself.</div>
+            <div class="set-row-desc">Talk to her instead of typing. Headphones recommended - on speakers she can hear herself.</div>
           </div>
           <label class="set-row-control"><input type="checkbox" id="voiceChk" class="toggle" aria-label="Enable microphone"></label>
         </div>
@@ -869,13 +879,20 @@ html[data-pre-auth] #app { visibility: hidden; }
         </div>
       </section>
 
-      <section class="settings-panel" data-panel="appearance" hidden>
+      <section class="settings-panel" data-panel="dates" hidden>
         <div class="set-row">
           <div class="set-row-text">
             <div class="set-row-title">Annalie's shop</div>
-            <div class="set-row-desc">Take Jun shopping — clothing layers, colors and decals.</div>
+            <div class="set-row-desc">Take Jun shopping - clothing layers, colors and decals.</div>
           </div>
           <div class="set-row-control"><button class="secondary" id="wardrobeBtn" title="Walk to Annalie's shop">Visit the shop</button></div>
+        </div>
+        <div class="set-row">
+          <div class="set-row-text">
+            <div class="set-row-title">Karaoke night</div>
+            <div class="set-row-desc">Bring a song - Jun sings the guide while you take the mic, then she scores your take.</div>
+          </div>
+          <div class="set-row-control"><button class="secondary" id="karaokeOpenBtn" disabled title="Checking availability…">Start karaoke</button></div>
         </div>
       </section>
 

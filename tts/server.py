@@ -6,18 +6,12 @@ Out (/tts) - swappable engines, picked per-request by the `engine` field:
 
   - kokoro      - Kokoro-82M (default). Needs espeak-ng on the system.
   - pockettts   - kyutai-labs pocket-tts (100M, CPU, English + 5 langs).
-  - chatterbox  - Resemble Chatterbox (500M, GPU). Expressive; an `exaggeration`
-                  knob dials emotional intensity. Clones a voice from a reference
-                  clip, so voices are <name>.wav files in CHATTERBOX_VOICES_DIR.
-  - chatternano - Chatterbox-Nano (110M, CPU-capable). Emotion via inline
-                  paralinguistic tags ([laugh], [chuckle], ...). Clone-only, so it
-                  needs at least one reference clip in CHATTERBOX_VOICES_DIR.
 
 In (/stt) - faster-whisper transcribes a WAV posted as a raw body.
 
 The webapp's js/tts.js posts a sentence at a time to /tts and plays the returned
 WAV through an AudioContext; js/voice.js posts captured utterances to /stt.
-/voices exposes both engines' voice lists so the UI can offer an engine + voice
+/voices exposes each engine's voice list so the UI can offer an engine + voice
 picker. Run: python server.py
 
 (PHP reaches this sidecar via TTS_URL - the compose service is `tts`. The
@@ -28,7 +22,9 @@ import gc
 import io
 import logging
 import os
-import re
+import secrets
+import shutil
+import tempfile
 import threading
 import time
 from typing import Annotated
@@ -63,15 +59,13 @@ POCKET_VOICES = [
     "giovanni", "lola", "juergen", "rafael", "estelle",
 ]
 
-# Chatterbox (original 500M) and Nano (110M) clone from a reference WAV rather
-# than shipping a fixed voice bank: a "voice" is a <name>.wav dropped into this
-# directory. Mount host clips here via the compose overlay. Original also offers
-# a built-in "default" voice (no reference needed); Nano is clone-only.
-CHATTERBOX_VOICES_DIR = os.environ.get("CHATTERBOX_VOICES_DIR", "/app/voices")
-CHATTERBOX_DEFAULT = "default"
-
 DEFAULT_ENGINE = "kokoro"
-TTS_ENGINES = ("kokoro", "pockettts", "chatterbox", "chatternano")
+TTS_ENGINES = ("kokoro", "pockettts")
+
+# "demucs" is a pseudo-engine: it isn't a TTS voice, but registering it in the
+# same lifecycle lets a separation job evict the TTS engines while it runs (and
+# vice-versa) and holds _inflight so the reaper can't yank a model mid-job.
+_ALL_ENGINES = TTS_ENGINES + ("demucs",)
 
 # Only one TTS engine is ever selected at a time, so keeping several resident just
 # strands VRAM/RAM. We drop the others the instant a request picks a different one,
@@ -92,11 +86,15 @@ STT_MAX_BYTES = 4 * 1024 * 1024
 # language when you know it. See docker/tts.Dockerfile for the pairing.
 STT_LANG = (os.environ.get("STT_LANG", "en").strip().lower() or None)
 
+# Karaoke separation posts whole songs, not utterances, so it gets its own far
+# larger body cap. Separated stems live in per-token temp dirs that are dropped
+# once both are fetched, or swept after this TTL if a client never comes back.
+SEP_MAX_BYTES = 50 * 1024 * 1024
+SEP_TTL_S = 15 * 60
+
 _pipeline = None       # Kokoro KPipeline
 _pocket_model = None   # pocket-tts TTSModel
 _pocket_states = {}    # voice name -> precomputed voice state (load is non-trivial)
-_chatterbox_model = None  # Chatterbox ChatterboxTTS (500M, exaggeration control)
-_nano_model = None        # Chatterbox-Nano via ChatterboxTurboTTS(nano=True) (110M)
 
 # Model-lifecycle state. _lock guards all of it plus the model globals above; the
 # reaper only unloads when _inflight is 0 so it can't pull a model out from under
@@ -108,6 +106,9 @@ _last_used = time.monotonic()
 _whisper = None        # faster-whisper WhisperModel
 _stt_ok = None         # faster-whisper importable? resolved once, reported by /health
 _device = None         # resolved once: "cpu" or "cuda"
+_separator = None      # Demucs htdemucs model
+_sep_ok = None         # demucs importable? resolved once, reported by /health
+_sep_tokens = {}       # token -> {dir, created_at, fetched}
 
 
 def get_device():
@@ -142,6 +143,20 @@ def get_device():
                 _device = "cpu"
         log.info("TTS device: %s (TTS_DEVICE=%s)", _device, choice)
     return _device
+
+
+def get_sep_device():
+    # SEP_DEVICE: cpu | cuda | auto. Unlike get_device() this stays simple - a
+    # separation job is one big call, so a bad GPU just falls back per-job in
+    # _apply_demucs rather than needing a probe here.
+    choice = os.environ.get("SEP_DEVICE", "auto").strip().lower()
+    if choice in ("cpu", "cuda"):
+        return choice
+    try:
+        import torch
+        return "cuda" if torch.cuda.is_available() else "cpu"
+    except Exception:
+        return "cpu"
 
 
 def get_pipeline():
@@ -239,6 +254,33 @@ def get_whisper():
     return _whisper
 
 
+def _sep_available():
+    global _sep_ok
+    if _sep_ok is None:
+        try:
+            import demucs  # noqa: F401
+            _sep_ok = True
+        except Exception:
+            log.warning("demucs not installed; /separate disabled")
+            _sep_ok = False
+    return _sep_ok
+
+
+def get_separator():
+    # Lazy like the TTS engines: htdemucs weights (~80MB) download into HF_HOME on
+    # first call. The model is moved onto the device _apply_demucs picks per-job.
+    global _separator
+    if _separator is None:
+        from demucs.pretrained import get_model
+        device = get_sep_device()
+        log.info("loading Demucs (htdemucs) on %s...", device)
+        _separator = get_model("htdemucs")
+        _separator.to(device)
+        _separator.eval()
+        log.info("Demucs ready (sources=%s, sr=%s).", _separator.sources, _separator.samplerate)
+    return _separator
+
+
 def pocket_state(voice):
     state = _pocket_states.get(voice)
     if state is None:
@@ -247,51 +289,11 @@ def pocket_state(voice):
     return state
 
 
-def voice_clips():
-    # Names must satisfy the api/tts.php voice regex (^[a-z][a-z0-9_]*$); anything
-    # else is skipped so a stray filename can't reach the model.
-    clips = {}
-    try:
-        names = sorted(os.listdir(CHATTERBOX_VOICES_DIR))
-    except OSError:
-        return clips
-    for fn in names:
-        if not fn.lower().endswith(".wav"):
-            continue
-        name = fn[:-4]
-        if re.fullmatch(r"[a-z][a-z0-9_]*", name):
-            clips[name] = os.path.join(CHATTERBOX_VOICES_DIR, fn)
-    return clips
-
-
-def get_chatterbox_model():
-    global _chatterbox_model
-    if _chatterbox_model is None:
-        from chatterbox.tts import ChatterboxTTS
-        device = get_device()
-        log.info("loading Chatterbox (500M) on %s...", device)
-        _chatterbox_model = ChatterboxTTS.from_pretrained(device=device)
-        log.info("Chatterbox ready (sample_rate=%s).", _chatterbox_model.sr)
-    return _chatterbox_model
-
-
-def get_nano_model():
-    global _nano_model
-    if _nano_model is None:
-        from chatterbox.tts_turbo import ChatterboxTurboTTS
-        device = get_device()
-        log.info("loading Chatterbox-Nano (110M) on %s...", device)
-        _nano_model = ChatterboxTurboTTS.from_pretrained(device=device, nano=True)
-        log.info("Chatterbox-Nano ready (sample_rate=%s).", _nano_model.sr)
-    return _nano_model
-
-
 def _loaded_engines():
     live = []
     if _pipeline is not None: live.append("kokoro")
     if _pocket_model is not None: live.append("pockettts")
-    if _chatterbox_model is not None: live.append("chatterbox")
-    if _nano_model is not None: live.append("chatternano")
+    if _separator is not None: live.append("demucs")
     return live
 
 
@@ -307,20 +309,18 @@ def _free_torch():
 
 def _unload(names):
     # Caller holds _lock. Drops the model refs; gc + empty_cache reclaim the VRAM.
-    global _pipeline, _pocket_model, _pocket_states, _chatterbox_model, _nano_model
+    global _pipeline, _pocket_model, _pocket_states, _separator
     freed = []
     for name in names:
         if name == "kokoro" and _pipeline is not None:
             _pipeline = None; freed.append(name)
         elif name == "pockettts" and _pocket_model is not None:
             _pocket_model = None; _pocket_states = {}; freed.append(name)
-        elif name == "chatterbox" and _chatterbox_model is not None:
-            _chatterbox_model = None; freed.append(name)
-        elif name == "chatternano" and _nano_model is not None:
-            _nano_model = None; freed.append(name)
+        elif name == "demucs" and _separator is not None:
+            _separator = None; freed.append(name)
     if freed:
         _free_torch()
-        log.info("unloaded TTS engine(s): %s", ", ".join(freed))
+        log.info("unloaded engine(s): %s", ", ".join(freed))
 
 
 def _begin_use(engine):
@@ -329,7 +329,7 @@ def _begin_use(engine):
         # Only reclaim on a real switch with nothing in flight; mid-reply chunks
         # for the same engine must not trigger an unload.
         if _inflight == 0 and engine != _active_engine:
-            _unload([e for e in TTS_ENGINES if e != engine])
+            _unload([e for e in _ALL_ENGINES if e != engine])
         _active_engine = engine
         _last_used = time.monotonic()
         _inflight += 1
@@ -342,15 +342,25 @@ def _end_use():
         _last_used = time.monotonic()
 
 
+def _sweep_sep_tokens():
+    now = time.monotonic()
+    with _lock:
+        dead = [_sep_tokens.pop(t)["dir"] for t, info in list(_sep_tokens.items())
+                if now - info["created_at"] >= SEP_TTL_S]
+    for d in dead:
+        shutil.rmtree(d, ignore_errors=True)
+
+
 def _reaper():
     while True:
         time.sleep(_REAP_INTERVAL_S)
+        _sweep_sep_tokens()
         if TTS_IDLE_UNLOAD_S <= 0:
             continue
         with _lock:
             if _inflight == 0 and _loaded_engines() and \
                     (time.monotonic() - _last_used) >= TTS_IDLE_UNLOAD_S:
-                _unload(list(TTS_ENGINES))
+                _unload(list(_ALL_ENGINES))
 
 
 app = FastAPI()
@@ -366,7 +376,13 @@ app.add_middleware(
 async def on_unhandled(request: Request, exc: Exception) -> JSONResponse:
     # Anything that slips through becomes a generic 500 - no tracebacks to clients.
     log.exception("unhandled exception on %s %s", request.method, request.url.path)
-    err = "transcription_failed" if request.url.path == "/stt" else "synthesis_failed"
+    path = request.url.path
+    if path in ("/stt", "/transcribe_timed"):
+        err = "transcription_failed"
+    elif path.startswith("/separate"):
+        err = "separation_failed"
+    else:
+        err = "synthesis_failed"
     return JSONResponse({"error": err}, status_code=500)
 
 
@@ -375,9 +391,6 @@ class TTSReq(BaseModel):
     voice: str = KOKORO_DEFAULT
     # speed only affects Kokoro; pocket-tts generate_audio has no rate control.
     speed: float = Field(default=1.0, ge=0.5, le=2.0)
-    # chatterbox only: exaggeration dials emotional intensity, cfg_weight paces it.
-    exaggeration: float = Field(default=0.5, ge=0.0, le=1.0)
-    cfg_weight: float = Field(default=0.5, ge=0.0, le=1.0)
     engine: str = DEFAULT_ENGINE
 
 
@@ -406,21 +419,15 @@ def health():
     # `stt` lets the webapp hide the mic button when this build has no whisper,
     # rather than failing on the first utterance. Reports whether the dep is
     # importable, not whether the model is loaded (it loads lazily).
-    return {"ok": True, "stt": _stt_available()}
+    return {"ok": True, "stt": _stt_available(), "sep": _sep_available(), "device": get_sep_device()}
 
 
 @app.get("/voices")
 def voices():
-    clips = sorted(voice_clips().keys())
-    # "default" is Chatterbox's built-in voice, so keep it first and don't list it
-    # twice if a default.wav clip is also present.
-    cb_voices = [CHATTERBOX_DEFAULT] + [c for c in clips if c != CHATTERBOX_DEFAULT]
     return {
         "engines": {
             "kokoro": {"voices": KOKORO_VOICES, "default": KOKORO_DEFAULT},
             "pockettts": {"voices": POCKET_VOICES, "default": POCKET_DEFAULT},
-            "chatterbox": {"voices": cb_voices, "default": CHATTERBOX_DEFAULT},
-            "chatternano": {"voices": clips, "default": (CHATTERBOX_DEFAULT if CHATTERBOX_DEFAULT in clips else (clips[0] if clips else ""))},
         },
         "default_engine": DEFAULT_ENGINE,
     }
@@ -465,38 +472,6 @@ def synth_pocket(text, voice):
     return audio, model.sample_rate
 
 
-def to_mono_np(wav):
-    if hasattr(wav, "detach"):
-        wav = wav.detach().cpu().numpy()
-    wav = np.asarray(wav, dtype=np.float32)
-    return wav.reshape(-1) if wav.ndim > 1 else wav
-
-
-def synth_chatterbox(text, voice, exaggeration, cfg_weight):
-    prompt = voice_clips().get(voice)  # None -> the model's built-in default voice
-    model = get_chatterbox_model()
-    wav = to_mono_np(model.generate(
-        text, audio_prompt_path=prompt,
-        exaggeration=exaggeration, cfg_weight=cfg_weight,
-    ))
-    if not wav.size:
-        return None
-    return wav, model.sr
-
-
-def synth_nano(text, voice):
-    clips = voice_clips()
-    prompt = clips.get(voice) or next(iter(clips.values()), None)
-    if prompt is None:
-        log.warning("nano: no reference clips in %s; drop a <name>.wav there", CHATTERBOX_VOICES_DIR)
-        return None
-    model = get_nano_model()
-    wav = to_mono_np(model.generate(text, audio_prompt_path=prompt))
-    if not wav.size:
-        return None
-    return wav, model.sr
-
-
 @app.post("/tts")
 def tts(req: TTSReq):
     if not req.text:
@@ -507,10 +482,6 @@ def tts(req: TTSReq):
     try:
         if engine == "pockettts":
             result = synth_pocket(req.text, req.voice)
-        elif engine == "chatterbox":
-            result = synth_chatterbox(req.text, req.voice, req.exaggeration, req.cfg_weight)
-        elif engine == "chatternano":
-            result = synth_nano(req.text, req.voice)
         else:
             result = synth_kokoro(req.text, req.voice, req.speed)
     finally:
@@ -561,6 +532,166 @@ async def stt(request: Request):
     text = " ".join(seg.text.strip() for seg in segments).strip()
     log.info("stt: %d bytes -> %r", len(body), text)
     return JSONResponse({"text": text})
+
+
+def _decode_audio(body, target_sr, target_channels):
+    # PyAV like /stt uses (its wheel bundles ffmpeg's libs, so any container it
+    # can open works and no ffmpeg binary is needed). Planar float output lands as
+    # (channels, samples); the resampler up/down-mixes to target_channels, so a
+    # mono upload becomes the stereo demucs wants for free.
+    import av
+    layout = "stereo" if target_channels == 2 else "mono"
+    resampler = av.audio.resampler.AudioResampler(format="fltp", layout=layout, rate=target_sr)
+    container = av.open(io.BytesIO(body))
+    chunks = []
+    try:
+        for frame in container.decode(audio=0):
+            for rf in _resample(resampler, frame):
+                chunks.append(rf.to_ndarray())
+    finally:
+        container.close()
+    for rf in _resample(resampler, None):
+        chunks.append(rf.to_ndarray())
+    if not chunks:
+        return np.zeros((target_channels, 0), dtype=np.float32)
+    return np.concatenate(chunks, axis=1).astype(np.float32)
+
+
+def _resample(resampler, frame):
+    out = resampler.resample(frame)
+    if out is None:
+        return []
+    return out if isinstance(out, list) else [out]
+
+
+def _apply_demucs(model, wav):
+    import torch
+    from demucs.apply import apply_model
+    # demucs is trained on per-mix normalized input; skip this and the separation
+    # is visibly worse. Denormalize the sources with the same stats afterwards.
+    ref = wav.mean(0)
+    mean, std = ref.mean(), ref.std() + 1e-8
+    mix = ((wav - mean) / std)[None]
+
+    def run(dev):
+        model.to(dev)
+        with torch.no_grad():
+            return apply_model(model, mix.to(dev), device=dev, progress=False)[0].to("cpu")
+
+    device = get_sep_device()
+    try:
+        out = run(device)
+    except RuntimeError as e:
+        # GPU is best-effort: a CUDA OOM or bad-kernel error retries on CPU rather
+        # than failing the whole karaoke job.
+        if device != "cpu":
+            log.warning("demucs on %s failed (%s); retrying on CPU", device, e)
+            _free_torch()
+            out = run("cpu")
+        else:
+            raise
+    return out * std + mean
+
+
+def _whisper_words(audio):
+    segments, _info = get_whisper().transcribe(
+        audio, language=STT_LANG, word_timestamps=True,
+        vad_filter=False, condition_on_previous_text=False)
+    text_parts, words = [], []
+    for seg in segments:
+        text_parts.append(seg.text.strip())
+        for w in (seg.words or []):
+            words.append({"word": w.word.strip(), "start": w.start, "end": w.end})
+    return " ".join(t for t in text_parts if t).strip(), words
+
+
+@app.post("/separate")
+async def separate(request: Request):
+    if not _sep_available():
+        return JSONResponse({"error": "sep_unavailable"}, status_code=503)
+
+    body = await request.body()
+    if len(body) > SEP_MAX_BYTES:
+        return JSONResponse({"error": "audio_too_large"}, status_code=413)
+    if not body:
+        return JSONResponse({"error": "empty_audio"}, status_code=400)
+
+    import torch
+    _begin_use("demucs")
+    try:
+        model = get_separator()
+        sr = model.samplerate
+        wav = _decode_audio(body, sr, model.audio_channels)
+        if wav.shape[1] == 0:
+            return JSONResponse({"error": "empty_audio"}, status_code=400)
+        duration = wav.shape[1] / float(sr)
+
+        sources = _apply_demucs(model, torch.from_numpy(wav))
+        vi = model.sources.index("vocals")
+        vocals = sources[vi]
+        # htdemucs has no 2-stem head; the backing track is the sum of every
+        # non-vocal source (drums + bass + other).
+        instrumental = sum(sources[i] for i in range(len(model.sources)) if i != vi)
+
+        token = secrets.token_hex(16)
+        d = tempfile.mkdtemp(prefix="sep-")
+        sf.write(os.path.join(d, "instrumental.wav"), instrumental.T.numpy(), sr, subtype="PCM_16")
+        sf.write(os.path.join(d, "vocals_guide.wav"), vocals.T.numpy(), sr, subtype="PCM_16")
+        with _lock:
+            _sep_tokens[token] = {"dir": d, "created_at": time.monotonic(), "fetched": set()}
+
+        lyrics = []
+        if _stt_available():
+            _, lyrics = _whisper_words(io.BytesIO(to_wav(vocals.mean(0).numpy(), sr)))
+    finally:
+        _end_use()
+
+    log.info("separate: %d bytes -> token=%s dur=%.1fs words=%d", len(body), token, duration, len(lyrics))
+    return JSONResponse({"token": token, "duration": duration, "lyrics": lyrics})
+
+
+@app.get("/separate/stem")
+def separate_stem(token: str, which: str):
+    fname = {"instrumental": "instrumental.wav", "guide": "vocals_guide.wav"}.get(which)
+    if fname is None:
+        return JSONResponse({"error": "unknown_stem"}, status_code=404)
+    with _lock:
+        info = _sep_tokens.get(token)
+    if info is None:
+        return JSONResponse({"error": "unknown_token"}, status_code=404)
+    path = os.path.join(info["dir"], fname)
+    if not os.path.exists(path):
+        return JSONResponse({"error": "unknown_stem"}, status_code=404)
+    with open(path, "rb") as f:
+        data = f.read()
+    with _lock:
+        info["fetched"].add(which)
+        done = {"instrumental", "guide"} <= info["fetched"]
+        if done:
+            _sep_tokens.pop(token, None)
+    if done:
+        shutil.rmtree(info["dir"], ignore_errors=True)
+    return Response(content=data, media_type="audio/wav", headers={"Cache-Control": "no-store"})
+
+
+@app.post("/transcribe_timed")
+async def transcribe_timed(request: Request):
+    if not _stt_available():
+        return JSONResponse({"error": "stt_unavailable"}, status_code=503)
+
+    body = await request.body()
+    if len(body) > SEP_MAX_BYTES:
+        return JSONResponse({"error": "audio_too_large"}, status_code=413)
+    if not body:
+        return JSONResponse({"text": "", "words": []})
+
+    _begin_use("demucs")
+    try:
+        text, words = _whisper_words(io.BytesIO(body))
+    finally:
+        _end_use()
+    log.info("transcribe_timed: %d bytes -> %d words", len(body), len(words))
+    return JSONResponse({"text": text, "words": words})
 
 
 if __name__ == "__main__":

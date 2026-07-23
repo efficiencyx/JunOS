@@ -1,9 +1,8 @@
 # Audio sidecar (Kokoro-82M + pocket-tts for TTS, faster-whisper for STT). CPU
 # build by default - the models are small enough to hit comfortable real-time on
-# CPU. GPU is opt-in: the nvidia / amd compose overlays set TORCH_INDEX to a CUDA
-# / ROCm wheel index and reserve a GPU for this service, and TTS_DEVICE (below)
-# selects the runtime device. Kokoro on GPU is the single biggest latency win
-# available for voice mode (RTF ~0.3-0.6 -> ~0.03-0.05).
+# CPU. GPU is opt-in: TORCH_INDEX selects a CUDA / ROCm wheel build, and
+# TTS_DEVICE (below) selects the runtime device. Kokoro on GPU is the single
+# biggest latency win available for voice mode (RTF ~0.3-0.6 -> ~0.03-0.05).
 FROM python:3.11-slim
 
 RUN apt-get update \
@@ -17,19 +16,24 @@ RUN apt-get update \
 WORKDIR /app
 
 # Torch wheel source. CPU-only by default so pocket-tts/kokoro don't drag in
-# CUDA wheels; the nvidia/amd overlays override this to a GPU wheel index.
+# GPU wheels; the launcher selects a GPU index only when GPU TTS is requested.
 ARG TORCH_INDEX=https://download.pytorch.org/whl/cpu
 
 COPY tts/requirements.txt /app/requirements.txt
 # Install torch first (from TORCH_INDEX) so the resolver doesn't later pull a
-# different build in as a transitive dependency.
-RUN pip install --no-cache-dir torch --index-url ${TORCH_INDEX} \
- && pip install --no-cache-dir -r /app/requirements.txt
+# different build in as a transitive dependency. torchaudio comes from the same
+# index so its wheel build stays matched to torch's across the cpu/cu124/rocm
+# overlays (PitchShift for the karaoke guide vocal lives in torchaudio).
+RUN pip install torch torchaudio --index-url ${TORCH_INDEX} \
+ && pip install -r /app/requirements.txt
 
 COPY tts/server.py /app/server.py
 
 # TTS_DEVICE: cpu | cuda | auto. "auto" uses the GPU when the installed torch
 # exposes one (so it's a no-op on the default CPU build).
+# SEP_DEVICE: cpu | cuda | auto - device for demucs karaoke stem separation.
+#   "auto" uses the GPU when torch exposes one, else CPU; a per-job CUDA failure
+#   falls back to CPU. Demucs weights (~80MB) download into HF_HOME at runtime.
 # STT_MODEL / STT_LANG: must agree. base.en is the latency/accuracy sweet spot
 #   for conversational English (distil-small.en ~150ms faster, small.en better).
 #   The ".en" models are English-ONLY - for another language you need BOTH a
@@ -47,19 +51,14 @@ COPY tts/server.py /app/server.py
 ENV TTS_HOST=0.0.0.0 \
     TTS_PORT=8001 \
     TTS_DEVICE=auto \
+    SEP_DEVICE=auto \
     STT_MODEL=base.en \
     STT_LANG=en \
     STT_COMPUTE=int8 \
     STT_DEVICE=cpu \
     OMP_NUM_THREADS=4 \
     HF_HOME=/root/.cache/huggingface \
-    CHATTERBOX_VOICES_DIR=/app/voices \
     TTS_IDLE_UNLOAD_S=180
-
-# Chatterbox/Nano clone from reference clips in this dir. The shipped default.wav
-# is the out-of-box voice (and Nano's required reference); a compose mount can add
-# or override clips. See tts/voices/README.md for the format/naming rules.
-COPY tts/voices/ /app/voices/
 
 EXPOSE 8001
 

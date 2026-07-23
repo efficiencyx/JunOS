@@ -16,6 +16,24 @@ detect_gpu() {
   fi
 }
 
+# Order by VRAM so the biggest card lands at device 0. Must be UUIDs, not
+# indices: nvidia-smi enumerates by PCI bus order while CUDA defaults to
+# FASTEST_FIRST, so index 1 means different cards to the two of them.
+nvidia_visible() {
+  nvidia-smi --query-gpu=memory.total,uuid --format=csv,noheader,nounits 2>/dev/null \
+    | sort -t, -k1 -nr | cut -d, -f2 | tr -d ' \r' | paste -sd, - || true
+}
+
+nvidia_count() {
+  nvidia-smi --query-gpu=uuid --format=csv,noheader 2>/dev/null | grep -c . || true
+}
+
+amd_visible() {
+  rocm-smi --showmeminfo vram --csv 2>/dev/null \
+    | awk -F, 'NR>1 { gsub(/[^0-9]/,"",$1); gsub(/[^0-9]/,"",$2); if ($2 != "") print $2","$1 }' \
+    | sort -t, -k1 -nr | cut -d, -f2 | paste -sd, - || true
+}
+
 
 # The model-server containers are profile-gated: `ollama` runs the Ollama
 # service, `llamacpp` the llama.cpp one. Merge (never replace) what's already
@@ -46,6 +64,16 @@ esac
 export COMPOSE_PROFILES="$profiles"
 echo "AI provider: $provider${profiles:+ (compose profiles: $profiles)}"
 
+tts_device="${TTS_DEVICE:-$(env_get TTS_DEVICE)}"
+tts_device="${tts_device:-cpu}"
+tts_torch_index="${TTS_TORCH_INDEX:-$(env_get TTS_TORCH_INDEX)}"
+if [ "$(printf '%s' "$tts_device" | tr '[:upper:]' '[:lower:]')" = cpu ] \
+   && [ -z "$tts_torch_index" ]; then
+  tts_torch_index=https://download.pytorch.org/whl/cpu
+fi
+export TTS_DEVICE="$tts_device"
+[ -z "$tts_torch_index" ] || export TTS_TORCH_INDEX="$tts_torch_index"
+
 gpu="$(detect_gpu)"
 files=(-f docker-compose.yml)
 
@@ -55,6 +83,10 @@ case "$gpu" in
     if ! command -v nvidia-smi >/dev/null 2>&1; then
       echo "warning: NVIDIA selected but nvidia-smi not found - you also need" >&2
       echo "         nvidia-container-toolkit installed, or run GPU=cpu ./start.sh" >&2
+    fi
+    ngpus="$(nvidia_count)"
+    if [ "${ngpus:-0}" -gt 0 ]; then
+      export NVIDIA_GPU_COUNT="$ngpus"
     fi
     ;;
   amd)
@@ -68,9 +100,46 @@ case "$gpu" in
     ;;
 esac
 
+devices="${GPU_DEVICES:-$(env_get GPU_DEVICES)}"
+case "$devices" in
+  ""|auto)
+    case "$gpu" in
+      nvidia) devices="$(nvidia_visible)" ;;
+      amd)    devices="$(amd_visible)" ;;
+      *)      devices="" ;;
+    esac
+    ;;
+  all) devices="" ;;
+esac
+
+if [ -n "$devices" ]; then
+  case "$gpu" in
+    nvidia) export CUDA_VISIBLE_DEVICES="$devices" ;;
+    amd)    export HIP_VISIBLE_DEVICES="$devices" ROCR_VISIBLE_DEVICES="$devices" GGML_VK_VISIBLE_DEVICES="$devices" ;;
+  esac
+fi
+
+tp="${TENSOR_PARALLEL:-$(env_get TENSOR_PARALLEL)}"
+case "$(printf '%s' "$tp" | tr '[:upper:]' '[:lower:]')" in
+  on|1|true|yes) tp=on ;;
+  *)             tp=off ;;
+esac
+if [ "$tp" = on ]; then
+  export OLLAMA_SCHED_SPREAD="${OLLAMA_SCHED_SPREAD:-1}"
+  if [ "$gpu" = nvidia ]; then
+    export LLAMA_ARG_SPLIT_MODE="${LLAMA_ARG_SPLIT_MODE:-row}"
+  fi
+fi
+
 echo "GPU detected: $gpu"
 if [ "$gpu" = amd ]; then
   echo "  video gid=$VIDEO_GID, render gid=$RENDER_GID${HSA_OVERRIDE_GFX_VERSION:+, HSA_OVERRIDE_GFX_VERSION=$HSA_OVERRIDE_GFX_VERSION}"
+fi
+if [ -n "$devices" ]; then
+  echo "  devices (largest VRAM first): $devices"
+fi
+if [ "$tp" = on ]; then
+  echo "  tensor parallelism: on"
 fi
 
 # A bare first word is a lifecycle subcommand; anything else (a flag like

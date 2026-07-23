@@ -22,7 +22,7 @@ SOFTWARE.
 
 --------------------------------------------------------------------------------
 
-NOTICE — Third-party game assets
+NOTICE - Third-party game assets
 
 The MIT license above covers the source code in this repository ONLY.
 
@@ -33,12 +33,12 @@ own copy of the game by tools/recover_assets.py, and remain the property of
 their original author.
 
 You may extract these assets for local, personal use with this project. You may
-NOT redistribute or republish them — do not commit them to a public fork, a
+NOT redistribute or republish them - do not commit them to a public fork, a
 release, a mirror, or any other public location. If you fork this project, keep
 webapp/assets/ out of your published tree (it is already in .gitignore for this
 reason). Respect the wishes of the original creator.
 
-NOTICE — Vendored third-party libraries
+NOTICE - Vendored third-party libraries
 
 webapp/vendor/ holds unmodified copies of libraries that used to be loaded from
 a CDN, so that a Jun OS install boots without internet access. Each remains

@@ -112,7 +112,7 @@ window.WardrobeReactions = (function () {
         "I trust you. Even with the {item}. Even with everything.",
         "Your hands are gentle today~",
         "Changing things up with you is kinda fun.",
-        "I'll wear — or not wear — whatever makes you smile.",
+        "I'll wear - or not wear - whatever makes you smile.",
         "Take your time~ I'm not going anywhere.",
         "You always make even little things feel special.",
         "It tickles a little~ Keep going.",
