@@ -112,6 +112,29 @@ Opt out at any time by setting `TELEMETRY=off` in `.env` and restarting Jun.
 | `RENDER_GID` | the literal group name `render` (compose fallback) | `docker-compose.amd.yml` | Same, for the `render` group; `start.sh` reads it off `/dev/dri/renderD128`. |
 | `HSA_OVERRIDE_GFX_VERSION` | unset | `docker-compose.amd.yml` (passed through to ROCm) | Consumer-card ROCm override, e.g. `11.0.0` for RDNA3, `10.3.0` for RDNA2. |
 
+## 9. Multi-GPU
+
+Two knobs you set, plus the vars `start.sh` / `start.ps1` derive from them. On a
+single-GPU machine none of this changes anything.
+
+| Variable | Default | Consumed by | What it does |
+|---|---|---|---|
+| `GPU_DEVICES` | `auto` | `start.sh`, `start.ps1` | `auto` orders your cards by VRAM, largest first, so the biggest one becomes device 0 for the model server. `all` leaves the driver's own order alone. Anything else is taken as an explicit comma-separated list of GPU UUIDs (NVIDIA) or indices (AMD) and passed through verbatim. |
+| `TENSOR_PARALLEL` | `off` | `start.sh`, `start.ps1`, both installers | `on` splits one model across every GPU instead of fitting it on one. Usually *slower* per token on a mismatched pair — worth it only when the model you want doesn't fit on the biggest card alone. `install.sh` / `install.ps1` offer it when they detect 2+ GPUs, and size their model recommendation off the combined VRAM when you accept. |
+
+| Derived variable | Set by | Reaches | What it does |
+|---|---|---|---|
+| `CUDA_VISIBLE_DEVICES` | `start.sh` (nvidia), `start.ps1` | `ollama`, `llamacpp` | The resolved device list, as UUIDs. UUIDs and not indices because `nvidia-smi` enumerates by PCI bus order while CUDA defaults to `FASTEST_FIRST` — index `1` means different cards to the two of them. Only exported when non-empty: an *empty* `CUDA_VISIBLE_DEVICES` means zero GPUs, not all of them. |
+| `HIP_VISIBLE_DEVICES`, `ROCR_VISIBLE_DEVICES`, `GGML_VK_VISIBLE_DEVICES` | `start.sh` (amd) | `ollama`, `llamacpp` | Same list, ROCm/Vulkan spellings. Indices here, not UUIDs. |
+| `NVIDIA_GPU_COUNT` | `start.sh` (nvidia) | `docker-compose.nvidia.yml` (`deploy.…devices.count`) | How many GPUs to reserve for the containers. The overlay asks for this number rather than `count: all`, because `all` resolves through the host's CDI spec (`/etc/cdi/nvidia.yaml`) — generated once and stale after you add a card, at which point it silently hands the container a *subset* of your GPUs. Falls back to `all` when `nvidia-smi` isn't available. |
+| `OLLAMA_SCHED_SPREAD` | `start.sh`, `start.ps1` when `TENSOR_PARALLEL=on` | `ollama` | Ollama's "always schedule model across all GPUs". Ollama has no true tensor parallelism; this spreads layers, which is the closest thing it offers. |
+| `LLAMA_ARG_SPLIT_MODE` | `start.sh` when `TENSOR_PARALLEL=on` **and** the GPU is NVIDIA; `-sm row` on the `llama-server` command line on Windows | `llamacpp` | `row` = real row/tensor split. CUDA-only, so it is deliberately not set on the AMD overlay (which runs the Vulkan llama.cpp image). |
+| `LLAMA_ARG_TENSOR_SPLIT`, `LLAMA_ARG_MAIN_GPU` | you, by hand | `llamacpp` | Passed through by both overlays if you set them, for uneven splits (`3,1`) or a different primary card. Nothing in the repo sets them. |
+
+A pre-existing Ollama that the launcher merely reuses — the Windows desktop app's,
+or a host instance on `:11434` — has its own environment, so none of the above
+applies to it. `start.ps1` says so when it takes that branch.
+
 ---
 
 ## Defaults differ by deployment mode

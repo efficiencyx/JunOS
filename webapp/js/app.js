@@ -662,7 +662,10 @@
           if (acts.length === 0) {
             logAction('warn', 'block non parsabile: ' + blob);
           } else {
-            for (const a of acts) Actions.applyAction(a);
+            for (const a of acts) {
+              Actions.applyAction(a);
+              noteEmotionTint(a);
+            }
           }
         }
       },
@@ -1465,26 +1468,113 @@
     loadMemories();
   });
 
+  const EMOTION_TINTS = {
+    angry:       { hue: 5,   sat: 20,  light: -8, w: .85 },
+    crying:      { hue: 205, sat: -16, light: -6, w: .8 },
+    sad:         { hue: 215, sat: -18, light: -4, w: .7 },
+    surprised:   { hue: 15,  sat: 12,  light: 2,  w: .6 },
+    embarrassed: { hue: 335, sat: 14,  light: 2,  w: .85 },
+    excited:     { hue: 350, sat: 16,  light: 4,  w: .7 },
+    laughing:    { hue: 340, sat: 14,  light: 4,  w: .6 },
+    happy:       { hue: 330, sat: 10,  light: 3,  w: .5 },
+    smug:        { hue: 300, sat: 8,   light: 0,  w: .45 },
+    pout:        { hue: 250, sat: -6,  light: -2, w: .4 },
+    sleepy:      { hue: 235, sat: -25, light: -6, w: .5 },
+  };
+  const TINT_EASE_MS = window.matchMedia('(prefers-reduced-motion: reduce)').matches ? 0 : 200;
+  const tint = { hue: 0, sat: 0, light: 0, w: 0 };
+  const tintGoal = { hue: 0, sat: 0, light: 0, w: 0 };
+  const moodBaseline = { affection: 50, trust: 50, tension: 30 };
+  let tintFrame = 0;
+  let lastTintTs = 0;
+
+  const shortestArc = (a, b) => ((b - a) % 360 + 540) % 360 - 180;
+
+  function noteEmotionTint(action) {
+    let entry = null;
+    let scale = 1;
+    if (action.name === 'emote') {
+      entry = EMOTION_TINTS[action.kwargs.type];
+    } else if (action.name === 'brow') {
+      const key = action.kwargs.emotion === 'worried' ? 'sad' : action.kwargs.emotion;
+      entry = EMOTION_TINTS[key];
+      scale = 0.55;
+    } else if (action.name === 'blush') {
+      entry = EMOTION_TINTS.embarrassed;
+      const intensity = parseFloat(action.kwargs.intensity);
+      scale = 0.45 * (isNaN(intensity) ? 0.5 : intensity);
+    } else if (action.name === 'shocked') {
+      entry = EMOTION_TINTS.surprised;
+    } else if (action.name === 'heart_eyes') {
+      entry = EMOTION_TINTS.embarrassed;
+    }
+    if (!entry) return;
+    tintGoal.hue = entry.hue;
+    tintGoal.sat = entry.sat;
+    tintGoal.light = entry.light;
+    tintGoal.w = entry.w * scale;
+    startTintLoop();
+  }
+
+  function startTintLoop() {
+    if (tintFrame) return;
+    lastTintTs = 0;
+    tintFrame = requestAnimationFrame(stepTint);
+  }
+
+  function stepTint(ts) {
+    const dt = lastTintTs ? Math.min(100, ts - lastTintTs) : 16;
+    lastTintTs = ts;
+    tintGoal.w *= Math.exp(-dt / 2600);
+    const k = TINT_EASE_MS ? 1 - Math.exp(-dt / TINT_EASE_MS) : 1;
+    tint.hue += shortestArc(tint.hue, tintGoal.hue) * k;
+    tint.sat += (tintGoal.sat - tint.sat) * k;
+    tint.light += (tintGoal.light - tint.light) * k;
+    tint.w += (tintGoal.w - tint.w) * k;
+    paintAccent();
+    if (tint.w > 0.004) {
+      tintFrame = requestAnimationFrame(stepTint);
+    } else {
+      tint.w = 0;
+      paintAccent();
+      tintFrame = 0;
+    }
+  }
+
   function moodAccent(affection, trust, tension) {
     const clamp = (v, lo, hi) => Math.max(lo, Math.min(hi, v));
     const a = clamp(affection / 100, 0, 1);
     const t = clamp(trust / 100, 0, 1);
     const x = clamp(tension / 100, 0, 1);
-    const hue = 214 + a * 96;                    // distant blue → loving rose
-    const sat = clamp(60 + t * 28 - x * 26, 42, 92);
-    const light = clamp(74 - x * 10, 62, 78);
+    const calm = 214 + a * 96;                   // distant blue → loving rose
+    // tension pulls the whole accent toward the tension gauge colour (#ff7a55
+    // in styles.css); at 100 it lands exactly on it, whatever affection/trust say.
+    let hue = (calm + shortestArc(calm, 13) * x + 360) % 360;
+    let sat = clamp((60 + t * 28) * (1 - x) + 100 * x, 42, 100);
+    let light = clamp(74 * (1 - x) + 67 * x, 62, 78);
+    if (tint.w > 0) {
+      hue = (hue + shortestArc(hue, tint.hue) * tint.w + 360) % 360;
+      sat = clamp(sat + tint.sat * tint.w, 38, 100);
+      light = clamp(light + tint.light * tint.w, 56, 82);
+    }
     return {
       accent: `hsl(${hue} ${sat}% ${light}%)`,
-      accent2: `hsl(${hue + 16} ${clamp(sat + 6, 42, 96)}% ${clamp(light + 7, 62, 86)}%)`,
+      accent2: `hsl(${hue + 16} ${clamp(sat + 6, 42, 100)}% ${clamp(light + 7, 62, 86)}%)`,
       soft: `hsl(${hue} ${sat}% ${light}% / .12)`,
     };
   }
-  function applyMoodAccent(vals) {
-    const c = moodAccent(vals.affection ?? 50, vals.trust ?? 50, vals.tension ?? 30);
+  function paintAccent() {
+    const c = moodAccent(moodBaseline.affection, moodBaseline.trust, moodBaseline.tension);
     const root = document.documentElement.style;
     root.setProperty('--accent', c.accent);
     root.setProperty('--accent-2', c.accent2);
     root.setProperty('--accent-soft', c.soft);
+  }
+  function applyMoodAccent(vals) {
+    moodBaseline.affection = vals.affection ?? 50;
+    moodBaseline.trust = vals.trust ?? 50;
+    moodBaseline.tension = vals.tension ?? 30;
+    paintAccent();
   }
   function currentMood() {
     const dflt = { affection: 50, trust: 50, tension: 30 };
@@ -1911,6 +2001,11 @@
       try {
         const v = await TTS.listVoices();
         engines = v.engines || {};
+        if (ttsEngineSelect) {
+          const ENGINE_LABELS = { kokoro: 'Kokoro', pockettts: 'Pocket-TTS' };
+          ttsEngineSelect.innerHTML = Object.keys(engines).map(k =>
+            `<option value="${escapeHtml(k)}">${escapeHtml(ENGINE_LABELS[k] || k)}</option>`).join('');
+        }
         const engineKey = engines[savedEngine] ? savedEngine
           : (engines[v.default_engine] ? v.default_engine : Object.keys(engines)[0] || 'kokoro');
         TTS.setEngine(engineKey);

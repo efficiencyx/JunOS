@@ -6,18 +6,12 @@ Out (/tts) - swappable engines, picked per-request by the `engine` field:
 
   - kokoro      - Kokoro-82M (default). Needs espeak-ng on the system.
   - pockettts   - kyutai-labs pocket-tts (100M, CPU, English + 5 langs).
-  - chatterbox  - Resemble Chatterbox (500M, GPU). Expressive; an `exaggeration`
-                  knob dials emotional intensity. Clones a voice from a reference
-                  clip, so voices are <name>.wav files in CHATTERBOX_VOICES_DIR.
-  - chatternano - Chatterbox-Nano (110M, CPU-capable). Emotion via inline
-                  paralinguistic tags ([laugh], [chuckle], ...). Clone-only, so it
-                  needs at least one reference clip in CHATTERBOX_VOICES_DIR.
 
 In (/stt) - faster-whisper transcribes a WAV posted as a raw body.
 
 The webapp's js/tts.js posts a sentence at a time to /tts and plays the returned
 WAV through an AudioContext; js/voice.js posts captured utterances to /stt.
-/voices exposes both engines' voice lists so the UI can offer an engine + voice
+/voices exposes each engine's voice list so the UI can offer an engine + voice
 picker. Run: python server.py
 
 (PHP reaches this sidecar via TTS_URL - the compose service is `tts`. The
@@ -28,7 +22,6 @@ import gc
 import io
 import logging
 import os
-import re
 import threading
 import time
 from typing import Annotated
@@ -63,15 +56,8 @@ POCKET_VOICES = [
     "giovanni", "lola", "juergen", "rafael", "estelle",
 ]
 
-# Chatterbox (original 500M) and Nano (110M) clone from a reference WAV rather
-# than shipping a fixed voice bank: a "voice" is a <name>.wav dropped into this
-# directory. Mount host clips here via the compose overlay. Original also offers
-# a built-in "default" voice (no reference needed); Nano is clone-only.
-CHATTERBOX_VOICES_DIR = os.environ.get("CHATTERBOX_VOICES_DIR", "/app/voices")
-CHATTERBOX_DEFAULT = "default"
-
 DEFAULT_ENGINE = "kokoro"
-TTS_ENGINES = ("kokoro", "pockettts", "chatterbox", "chatternano")
+TTS_ENGINES = ("kokoro", "pockettts")
 
 # Only one TTS engine is ever selected at a time, so keeping several resident just
 # strands VRAM/RAM. We drop the others the instant a request picks a different one,
@@ -95,8 +81,6 @@ STT_LANG = (os.environ.get("STT_LANG", "en").strip().lower() or None)
 _pipeline = None       # Kokoro KPipeline
 _pocket_model = None   # pocket-tts TTSModel
 _pocket_states = {}    # voice name -> precomputed voice state (load is non-trivial)
-_chatterbox_model = None  # Chatterbox ChatterboxTTS (500M, exaggeration control)
-_nano_model = None        # Chatterbox-Nano via ChatterboxTurboTTS(nano=True) (110M)
 
 # Model-lifecycle state. _lock guards all of it plus the model globals above; the
 # reaper only unloads when _inflight is 0 so it can't pull a model out from under
@@ -247,51 +231,10 @@ def pocket_state(voice):
     return state
 
 
-def voice_clips():
-    # Names must satisfy the api/tts.php voice regex (^[a-z][a-z0-9_]*$); anything
-    # else is skipped so a stray filename can't reach the model.
-    clips = {}
-    try:
-        names = sorted(os.listdir(CHATTERBOX_VOICES_DIR))
-    except OSError:
-        return clips
-    for fn in names:
-        if not fn.lower().endswith(".wav"):
-            continue
-        name = fn[:-4]
-        if re.fullmatch(r"[a-z][a-z0-9_]*", name):
-            clips[name] = os.path.join(CHATTERBOX_VOICES_DIR, fn)
-    return clips
-
-
-def get_chatterbox_model():
-    global _chatterbox_model
-    if _chatterbox_model is None:
-        from chatterbox.tts import ChatterboxTTS
-        device = get_device()
-        log.info("loading Chatterbox (500M) on %s...", device)
-        _chatterbox_model = ChatterboxTTS.from_pretrained(device=device)
-        log.info("Chatterbox ready (sample_rate=%s).", _chatterbox_model.sr)
-    return _chatterbox_model
-
-
-def get_nano_model():
-    global _nano_model
-    if _nano_model is None:
-        from chatterbox.tts_turbo import ChatterboxTurboTTS
-        device = get_device()
-        log.info("loading Chatterbox-Nano (110M) on %s...", device)
-        _nano_model = ChatterboxTurboTTS.from_pretrained(device=device, nano=True)
-        log.info("Chatterbox-Nano ready (sample_rate=%s).", _nano_model.sr)
-    return _nano_model
-
-
 def _loaded_engines():
     live = []
     if _pipeline is not None: live.append("kokoro")
     if _pocket_model is not None: live.append("pockettts")
-    if _chatterbox_model is not None: live.append("chatterbox")
-    if _nano_model is not None: live.append("chatternano")
     return live
 
 
@@ -307,17 +250,13 @@ def _free_torch():
 
 def _unload(names):
     # Caller holds _lock. Drops the model refs; gc + empty_cache reclaim the VRAM.
-    global _pipeline, _pocket_model, _pocket_states, _chatterbox_model, _nano_model
+    global _pipeline, _pocket_model, _pocket_states
     freed = []
     for name in names:
         if name == "kokoro" and _pipeline is not None:
             _pipeline = None; freed.append(name)
         elif name == "pockettts" and _pocket_model is not None:
             _pocket_model = None; _pocket_states = {}; freed.append(name)
-        elif name == "chatterbox" and _chatterbox_model is not None:
-            _chatterbox_model = None; freed.append(name)
-        elif name == "chatternano" and _nano_model is not None:
-            _nano_model = None; freed.append(name)
     if freed:
         _free_torch()
         log.info("unloaded TTS engine(s): %s", ", ".join(freed))
@@ -375,9 +314,6 @@ class TTSReq(BaseModel):
     voice: str = KOKORO_DEFAULT
     # speed only affects Kokoro; pocket-tts generate_audio has no rate control.
     speed: float = Field(default=1.0, ge=0.5, le=2.0)
-    # chatterbox only: exaggeration dials emotional intensity, cfg_weight paces it.
-    exaggeration: float = Field(default=0.5, ge=0.0, le=1.0)
-    cfg_weight: float = Field(default=0.5, ge=0.0, le=1.0)
     engine: str = DEFAULT_ENGINE
 
 
@@ -411,16 +347,10 @@ def health():
 
 @app.get("/voices")
 def voices():
-    clips = sorted(voice_clips().keys())
-    # "default" is Chatterbox's built-in voice, so keep it first and don't list it
-    # twice if a default.wav clip is also present.
-    cb_voices = [CHATTERBOX_DEFAULT] + [c for c in clips if c != CHATTERBOX_DEFAULT]
     return {
         "engines": {
             "kokoro": {"voices": KOKORO_VOICES, "default": KOKORO_DEFAULT},
             "pockettts": {"voices": POCKET_VOICES, "default": POCKET_DEFAULT},
-            "chatterbox": {"voices": cb_voices, "default": CHATTERBOX_DEFAULT},
-            "chatternano": {"voices": clips, "default": (CHATTERBOX_DEFAULT if CHATTERBOX_DEFAULT in clips else (clips[0] if clips else ""))},
         },
         "default_engine": DEFAULT_ENGINE,
     }
@@ -465,38 +395,6 @@ def synth_pocket(text, voice):
     return audio, model.sample_rate
 
 
-def to_mono_np(wav):
-    if hasattr(wav, "detach"):
-        wav = wav.detach().cpu().numpy()
-    wav = np.asarray(wav, dtype=np.float32)
-    return wav.reshape(-1) if wav.ndim > 1 else wav
-
-
-def synth_chatterbox(text, voice, exaggeration, cfg_weight):
-    prompt = voice_clips().get(voice)  # None -> the model's built-in default voice
-    model = get_chatterbox_model()
-    wav = to_mono_np(model.generate(
-        text, audio_prompt_path=prompt,
-        exaggeration=exaggeration, cfg_weight=cfg_weight,
-    ))
-    if not wav.size:
-        return None
-    return wav, model.sr
-
-
-def synth_nano(text, voice):
-    clips = voice_clips()
-    prompt = clips.get(voice) or next(iter(clips.values()), None)
-    if prompt is None:
-        log.warning("nano: no reference clips in %s; drop a <name>.wav there", CHATTERBOX_VOICES_DIR)
-        return None
-    model = get_nano_model()
-    wav = to_mono_np(model.generate(text, audio_prompt_path=prompt))
-    if not wav.size:
-        return None
-    return wav, model.sr
-
-
 @app.post("/tts")
 def tts(req: TTSReq):
     if not req.text:
@@ -507,10 +405,6 @@ def tts(req: TTSReq):
     try:
         if engine == "pockettts":
             result = synth_pocket(req.text, req.voice)
-        elif engine == "chatterbox":
-            result = synth_chatterbox(req.text, req.voice, req.exaggeration, req.cfg_weight)
-        elif engine == "chatternano":
-            result = synth_nano(req.text, req.voice)
         else:
             result = synth_kokoro(req.text, req.voice, req.speed)
     finally:

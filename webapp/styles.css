@@ -196,7 +196,7 @@ input[type="checkbox"] {
   background: currentColor;
 }
 .status-idle      { background: var(--bg-3); color: var(--muted); }
-.status-streaming { background: #1a2a40; color: var(--accent); }
+.status-streaming { background: #1a2a40; color: #7c9eff; }
 .status-tts       { background: #1a2a1e; color: var(--ok); }
 .status-error     { background: #3a1f23; color: var(--danger); }
 
