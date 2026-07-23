@@ -112,33 +112,10 @@ window.TTS = (function () {
   // stutter marker; differing letters (T-shirt, x-ray, co-op) are left alone.
   const STUTTER_RE = /([a-z])-(?=\1)/gi;
 
-  // Chatterbox-Nano voices bracketed paralinguistic tags natively; the other
-  // engines read them literally. So we synthesize tags from cues Jun already
-  // writes - onomatopoeia and *stage directions* - only for that engine, and
-  // strip any that slip through for the rest. Tags kept to Nano's documented set
-  // (extend cautiously: an unrecognized tag gets spoken as a word). Must run
-  // before MARKDOWN_NOISE_RE, which would otherwise eat the *...* directions.
-  const TAG_ENGINES = new Set(['chatternano']);
-  const PARA_CUES = [
-    [/\*\s*(?:laughs?|laughing)\s*\*/gi, '[laugh]'],
-    [/\*\s*(?:chuckles?|chuckling)\s*\*/gi, '[chuckle]'],
-    [/\*\s*(?:giggles?|giggling)\s*\*/gi, '[chuckle]'],
-    [/\*\s*(?:sighs?|sighing)\s*\*/gi, '[sigh]'],
-    [/\*\s*(?:gasps?|gasping)\s*\*/gi, '[gasp]'],
-    [/\*\s*(?:coughs?|coughing)\s*\*/gi, '[cough]'],
-    [/\b(?:mu)?a?ha(?:ha)+h?\b/gi, '[laugh]'],
-    [/\b(?:lol|lmao|lmfao|rofl)\b/gi, '[laugh]'],
-    [/\b(?:hehe(?:he)*|teehee)\b/gi, '[chuckle]'],
-  ];
-  const PARA_TAG_RE = /\[(?:laugh|chuckle|sigh|gasp|cough)\]/gi;
-
   function cleanForSpeech(s) {
     s = s.replace(ACTION_RE, '');
     s = s.replace(EMOJI_RE, '');
-    const tagged = TAG_ENGINES.has(engine);
-    if (tagged) for (const [re, tag] of PARA_CUES) s = s.replace(re, ` ${tag} `);
     s = s.replace(MARKDOWN_NOISE_RE, '');
-    if (!tagged) s = s.replace(PARA_TAG_RE, '');
     if (engine === 'pockettts') s = s.replace(STUTTER_RE, '');
     s = s.replace(/\s+/g, ' ').trim();
     if (!/[\p{L}\p{N}]/u.test(s)) return '';

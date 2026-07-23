@@ -99,13 +99,25 @@ function Resolve-Model([string]$a) {
     }
 }
 
-function Get-VramMb {
-    if (Get-Command nvidia-smi -ErrorAction SilentlyContinue) {
-        $out = & nvidia-smi --query-gpu=memory.total --format=csv,noheader,nounits 2>$null
-        if ($out) { return [int](($out -split "`n")[0].Trim()) }
-    }
-    return $null
+function Get-GpuMemoryMb {
+    if (-not (Get-Command nvidia-smi -ErrorAction SilentlyContinue)) { return @() }
+    $out = & nvidia-smi --query-gpu=memory.total --format=csv,noheader,nounits 2>$null
+    return @($out | Where-Object { $_ -match '\d' } | ForEach-Object { [int]($_.Trim()) })
 }
+
+function Get-VramMb {
+    $mb = @(Get-GpuMemoryMb)
+    if ($mb.Count -eq 0) { return $null }
+    return [int](($mb | Measure-Object -Maximum).Maximum)
+}
+
+function Get-VramTotalMb {
+    $mb = @(Get-GpuMemoryMb)
+    if ($mb.Count -eq 0) { return $null }
+    return [int](($mb | Measure-Object -Sum).Sum)
+}
+
+function Get-GpuCount { return @(Get-GpuMemoryMb).Count }
 
 function Recommend-Alias([int]$mb) {
     if ($mb -ge 23500) { return 'hf.co/efficiencyx/Jun-LoRA-v4-12B-GGUF:Q8_0' }
@@ -149,7 +161,8 @@ function Choose-InstallMode {
 }
 
 function Ask-ModelRef {
-    $vram = Get-VramMb
+    $gpus = Get-GpuCount
+    $vram = if ($script:tensorParallel -eq 'on') { Get-VramTotalMb } else { Get-VramMb }
     $rec  = if ($null -ne $vram) { Recommend-Alias $vram } else { $models['e2b'] }
 
     $alias = $env:JUN_MODEL
@@ -160,7 +173,13 @@ function Ask-ModelRef {
             Write-Host "       ${ACCENT}[1]${R}  Jun 12B  ${DIM}- highest quality${R}"
             Write-Host "       ${ACCENT}[2]${R}  Jun E4B  ${DIM}- balanced${R}"
             Write-Host "       ${ACCENT}[3]${R}  Jun E2B  ${DIM}- lightest / CPU-friendly${R}"
-            if ($null -ne $vram) { Write-Host "       ${DIM}detected ${vram}MB VRAM${R}" }
+            if ($null -ne $vram) {
+                $vramNote = ''
+                if ($gpus -ge 2) {
+                    $vramNote = if ($script:tensorParallel -eq 'on') { " across $gpus GPUs" } else { ' on the largest GPU' }
+                }
+                Write-Host "       ${DIM}detected ${vram}MB VRAM${vramNote}${R}"
+            }
             $ans = Read-Styled "     ${OK}▸${R} choice ${DIM}[Enter = recommended ${rec}]${R} ${ACCENT}›${R} "
             switch ($ans) {
                 '1' { $alias = '12b' }
@@ -174,6 +193,15 @@ function Ask-ModelRef {
         }
     }
     return Resolve-Model $alias
+}
+
+function Ask-TensorParallel {
+    if ($env:JUN_TENSOR_PARALLEL) {
+        return $(if ($env:JUN_TENSOR_PARALLEL.ToLower() -match '^(on|1|true|yes|y)$') { 'on' } else { 'off' })
+    }
+    if (-not $interactive -or (Get-GpuCount) -lt 2) { return 'off' }
+    $v = Read-Styled "     ${OK}▸${R} use all GPUs for one model? ${DIM}(fits bigger models, but slower per token)${R} ${DIM}[y/N]${R} ${ACCENT}›${R} "
+    return $(if ($v -match '^(y|yes)$') { 'on' } else { 'off' })
 }
 
 function Ask-Telemetry {
@@ -212,6 +240,10 @@ function Configure-Jun {
     }
 
     Step 'configure'
+
+    # Asked before the model prompt: splitting across cards changes how much
+    # VRAM the recommendation gets to assume.
+    $script:tensorParallel = if ($provider -eq 'openrouter') { 'off' } else { Ask-TensorParallel }
 
     $needsOllama = ($provider -eq 'ollama')
     $needsLlamacpp = $false
@@ -270,6 +302,9 @@ function Configure-Jun {
     }
     Set-EnvKey 'AI_PROVIDER' $provider
     Ok "provider $provider"
+
+    Set-EnvKey 'TENSOR_PARALLEL' $script:tensorParallel
+    if ($script:tensorParallel -eq 'on') { Ok 'tensor parallel on' }
 
     $voice = $env:VOICE
     if ($voice) {
