@@ -11,11 +11,13 @@ RUN apk add --no-cache curl fcgi sqlite-libs su-exec \
  && rm -rf /tmp/pear
 
 # PHP tuning: security + performance
-# post_max_size covers the STT WAV upload (/api/stt.php). It's global, but nginx
-# caps every other location at 16k/256k, so those never reach this limit.
+# post_max_size covers the largest upload (/api/karaoke.php's audio body); the
+# STT WAV upload fits well under it. It's global, but nginx caps every other
+# location at 16k/256k, so those never reach this limit.
 RUN { \
-      echo 'post_max_size=4M'; \
-      echo 'upload_max_filesize=1M'; \
+      echo 'post_max_size=30M'; \
+      echo 'upload_max_filesize=30M'; \
+      echo 'max_execution_time=300'; \
       echo 'memory_limit=128M'; \
       echo 'expose_php=Off'; \
       echo 'display_errors=Off'; \

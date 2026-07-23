@@ -264,7 +264,7 @@ function Configure-Jun {
                 $key = [Runtime.InteropServices.Marshal]::PtrToStringAuto(
                     [Runtime.InteropServices.Marshal]::SecureStringToBSTR($sec))
             }
-            if (-not $key) { Warn_ 'no API key set — add OPENROUTER_API_KEY to .env before chatting' }
+            if (-not $key) { Warn_ 'no API key set - add OPENROUTER_API_KEY to .env before chatting' }
 
             $orm = $env:OPENROUTER_MODEL
             if (-not $orm -and $interactive) {
@@ -381,7 +381,7 @@ function Install-MachineTools([string[]]$missing, [switch]$Optional) {
         $proceed = $answer -match '^(y|yes)$'
     }
     if (-not $proceed) {
-        Note 'okay, leaving it to you — install the tools above and re-run this installer.'
+        Note 'okay, leaving it to you - install the tools above and re-run this installer.'
         if ($Optional) { return } else { exit 1 }
     }
 
@@ -489,7 +489,7 @@ function Install-Tts {
         Install-MachineTools @('python') -Optional
         $python = Get-UsablePython
         if (-not $python) {
-            Warn_ 'Python still not found — skipping voice. Re-run install.ps1 after installing it.'
+            Warn_ 'Python still not found - skipping voice. Re-run install.ps1 after installing it.'
             Set-EnvKey 'VOICE' 'off'
             return
         }
@@ -503,7 +503,7 @@ function Install-Tts {
     & $py -m pip install torch --index-url https://download.pytorch.org/whl/cpu
     & $py -m pip install -r (Join-Path (Get-Location) 'tts\requirements.txt')
     if ($LASTEXITCODE -ne 0) {
-        Warn_ 'TTS setup failed — continuing text-only. Re-run install.ps1 to retry.'
+        Warn_ 'TTS setup failed - continuing text-only. Re-run install.ps1 to retry.'
         Set-EnvKey 'VOICE' 'off'
     } else {
         Ok 'TTS voice engine ready'
@@ -639,7 +639,7 @@ if ($voice -eq 'on') { Install-Tts }
 Step 'asset policy'
 Warn_ "Jun's Live2D model & textures belong to the creator of"
 Warn_ 'My Dystopian Robot Girlfriend. tools/recover_assets.py rebuilds'
-Warn_ 'them from YOUR game copy, for personal use only — do NOT'
+Warn_ 'them from YOUR game copy, for personal use only - do NOT'
 Warn_ 'republish them (public fork, release, mirror). See NOTICE in LICENSE.'
 
 # Opt-in extraction of the Live2D assets from the user's own game install.

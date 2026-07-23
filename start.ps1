@@ -211,7 +211,7 @@ if (-not (Test-Http "$OllamaUrl/api/tags")) {
 } else {
     Ok "using already-running Ollama at $OllamaUrl"
     if ($GpuDevices -or $TensorParallel) {
-        Note 'it was started outside Jun, so it has its own environment — the GPU settings above do not apply to it'
+        Note 'it was started outside Jun, so it has its own environment - the GPU settings above do not apply to it'
     }
     $p = Get-TrackedProcess $oldPids 'ollama'
     if ($p) { $newPids['ollama'] = $p.Id }
@@ -298,7 +298,7 @@ if (-not $voiceOff -and (Test-Path $ttsPython)) {
         Start-Tracked 'tts' $ttsPython @((Join-Path $PSScriptRoot 'tts\server.py')) | Out-Null
     }
 } elseif (-not $voiceOff) {
-    Warn_ 'voice is on but the TTS venv is missing — re-run install.ps1 to set it up. Continuing text-only.'
+    Warn_ 'voice is on but the TTS venv is missing - re-run install.ps1 to set it up. Continuing text-only.'
 }
 
 $phpExe = Join-Path $Runtime 'php\php.exe'

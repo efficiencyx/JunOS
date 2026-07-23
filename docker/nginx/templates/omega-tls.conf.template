@@ -97,6 +97,19 @@ server {
         fastcgi_pass  php:9000;
     }
 
+    # Karaoke: large audio upload for source separation + a long demucs runtime.
+    location = /api/karaoke.php {
+        limit_req zone=api burst=5 nodelay;
+        client_max_body_size 30m;
+        fastcgi_read_timeout 300s;
+
+        gzip off;
+
+        include fastcgi_params;
+        fastcgi_param SCRIPT_FILENAME /var/www/omega/api/karaoke.php;
+        fastcgi_pass  php:9000;
+    }
+
     # CLI-only long-running worker; it must never be reachable over HTTP.
     location = /api/consolidation-worker.php { return 404; }
 
