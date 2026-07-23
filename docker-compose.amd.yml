@@ -32,7 +32,7 @@ services:
   tts:
     build:
       args:
-        TORCH_INDEX: https://download.pytorch.org/whl/rocm6.2.4
+        TORCH_INDEX: "${TTS_TORCH_INDEX:-https://download.pytorch.org/whl/rocm6.2.4}"
     devices:
       - /dev/kfd
       - /dev/dri

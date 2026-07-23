@@ -32,7 +32,7 @@ services:
   tts:
     build:
       args:
-        TORCH_INDEX: https://download.pytorch.org/whl/cu124
+        TORCH_INDEX: "${TTS_TORCH_INDEX:-https://download.pytorch.org/whl/cu124}"
     deploy:
       resources:
         reservations:

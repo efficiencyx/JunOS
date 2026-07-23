@@ -1,9 +1,8 @@
 # Audio sidecar (Kokoro-82M + pocket-tts for TTS, faster-whisper for STT). CPU
 # build by default - the models are small enough to hit comfortable real-time on
-# CPU. GPU is opt-in: the nvidia / amd compose overlays set TORCH_INDEX to a CUDA
-# / ROCm wheel index and reserve a GPU for this service, and TTS_DEVICE (below)
-# selects the runtime device. Kokoro on GPU is the single biggest latency win
-# available for voice mode (RTF ~0.3-0.6 -> ~0.03-0.05).
+# CPU. GPU is opt-in: TORCH_INDEX selects a CUDA / ROCm wheel build, and
+# TTS_DEVICE (below) selects the runtime device. Kokoro on GPU is the single
+# biggest latency win available for voice mode (RTF ~0.3-0.6 -> ~0.03-0.05).
 FROM python:3.11-slim
 
 RUN apt-get update \
@@ -17,7 +16,7 @@ RUN apt-get update \
 WORKDIR /app
 
 # Torch wheel source. CPU-only by default so pocket-tts/kokoro don't drag in
-# CUDA wheels; the nvidia/amd overlays override this to a GPU wheel index.
+# GPU wheels; the launcher selects a GPU index only when GPU TTS is requested.
 ARG TORCH_INDEX=https://download.pytorch.org/whl/cpu
 
 COPY tts/requirements.txt /app/requirements.txt
@@ -25,8 +24,9 @@ COPY tts/requirements.txt /app/requirements.txt
 # different build in as a transitive dependency. torchaudio comes from the same
 # index so its wheel build stays matched to torch's across the cpu/cu124/rocm
 # overlays (PitchShift for the karaoke guide vocal lives in torchaudio).
-RUN pip install --no-cache-dir torch torchaudio --index-url ${TORCH_INDEX} \
- && pip install --no-cache-dir -r /app/requirements.txt
+RUN --mount=type=cache,target=/root/.cache/pip,sharing=locked \
+    pip install torch torchaudio --index-url ${TORCH_INDEX} \
+ && pip install -r /app/requirements.txt
 
 COPY tts/server.py /app/server.py
 
