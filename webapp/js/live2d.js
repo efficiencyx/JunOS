@@ -120,7 +120,6 @@ window.Live2D = (function () {
       antialias: true,
       autoDensity: true,
       resolution: rendererResolution(cameraMode),
-      preserveDrawingBuffer: true,
     });
     stageEl.appendChild(app.view);
 
