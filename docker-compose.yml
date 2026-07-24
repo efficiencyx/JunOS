@@ -130,8 +130,8 @@ services:
     environment:
       CORS_ORIGIN: "${CORS_ORIGIN:-http://nginx}"
       TTS_DEVICE: "${TTS_DEVICE:-auto}"
-      STT_MODEL: "${STT_MODEL:-base.en}"
-      STT_LANG: "${STT_LANG-en}"
+      STT_MODEL: "${STT_MODEL:-base}"
+      STT_LANG: "${STT_LANG-}"
       STT_DEVICE: "${STT_DEVICE:-cpu}"
     volumes:
       - tts_cache:/root/.cache

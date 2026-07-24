@@ -11,8 +11,8 @@ In (/stt) - faster-whisper transcribes a WAV posted as a raw body.
 
 The webapp's js/tts.js posts a sentence at a time to /tts and plays the returned
 WAV through an AudioContext; js/voice.js posts captured utterances to /stt.
-/voices exposes each engine's voice list so the UI can offer an engine + voice
-picker. Run: python server.py
+/voices exposes each engine's voice list (and, for pocket-tts, its selectable
+languages) so the UI can offer an engine + voice + language picker. Run: python server.py
 
 (PHP reaches this sidecar via TTS_URL - the compose service is `tts`. The
 legacy KOKORO_URL name from older .env files is still honored as a fallback.)
@@ -49,8 +49,10 @@ KOKORO_VOICES = [
     "bf_alice", "bf_emma", "bf_isabella", "bf_lily",
 ]
 
-# pocket-tts built-in voice prompts (bare names). English defaults; the tail of
-# the list is other languages (giovanni=it, lola=es, juergen=de, rafael=pt, estelle=fr).
+# pocket-tts predefined voice prompts (bare names). These are timbres only - the
+# spoken language is a separate axis (POCKET_LANGUAGES below): every voice has a
+# per-language embedding, so any voice pairs with any language. giovanni/lola/
+# juergen/rafael/estelle were recorded by non-English speakers and keep that accent.
 POCKET_DEFAULT = "eve"
 POCKET_VOICES = [
     "alba", "anna", "azelma", "bill_boerst", "caro_davy", "charles", "cosette",
@@ -58,6 +60,22 @@ POCKET_VOICES = [
     "mary", "michael", "paul", "peter_yearsley", "stuart_bell", "vera",
     "giovanni", "lola", "juergen", "rafael", "estelle",
 ]
+
+# pocket-tts bakes the language into the model weights: load_model(language=...) is
+# a different checkpoint that actually pronounces that language, and it resolves
+# predefined voices to that language's embeddings. We expose only the configs pocket
+# blessed upstream - French and Spanish/German ship as larger 24-layer builds, hence
+# the _24l ids. `id` is the load_model() argument; `label` is what the UI shows.
+POCKET_DEFAULT_LANG = "english"
+POCKET_LANGUAGES = [
+    {"id": "english", "label": "English"},
+    {"id": "french_24l", "label": "French"},
+    {"id": "german_24l", "label": "German"},
+    {"id": "italian", "label": "Italian"},
+    {"id": "portuguese", "label": "Portuguese"},
+    {"id": "spanish_24l", "label": "Spanish"},
+]
+POCKET_LANG_IDS = frozenset(lang["id"] for lang in POCKET_LANGUAGES)
 
 DEFAULT_ENGINE = "kokoro"
 TTS_ENGINES = ("kokoro", "pockettts")
@@ -84,7 +102,7 @@ STT_MAX_BYTES = 4 * 1024 * 1024
 # no ".en" suffix). Empty string = auto-detect per utterance, which costs an
 # extra decode pass and is unreliable on utterances under ~2s - prefer naming the
 # language when you know it. See docker/tts.Dockerfile for the pairing.
-STT_LANG = (os.environ.get("STT_LANG", "en").strip().lower() or None)
+STT_LANG = (os.environ.get("STT_LANG", "").strip().lower() or None)
 
 # Karaoke separation posts whole songs, not utterances, so it gets its own far
 # larger body cap. Separated stems live in per-token temp dirs that are dropped
@@ -93,8 +111,13 @@ SEP_MAX_BYTES = 50 * 1024 * 1024
 SEP_TTL_S = 15 * 60
 
 _pipeline = None       # Kokoro KPipeline
-_pocket_model = None   # pocket-tts TTSModel
-_pocket_states = {}    # voice name -> precomputed voice state (load is non-trivial)
+_pocket_model = None   # pocket-tts TTSModel (one language resident at a time)
+_pocket_lang = None    # language the resident pocket model was loaded for
+_pocket_states = {}    # voice name -> precomputed voice state for _pocket_lang
+# Serializes the pocket load/reload so a /warm preload and a concurrent synth can't
+# both load a checkpoint at once. Held during the multi-second load, so the second
+# caller waits and reuses the result instead of doubling the work.
+_pocket_load_lock = threading.Lock()
 
 # Model-lifecycle state. _lock guards all of it plus the model globals above; the
 # reaper only unloads when _inflight is 0 so it can't pull a model out from under
@@ -171,27 +194,37 @@ def get_pipeline():
     return _pipeline
 
 
-def get_pocket_model():
+def get_pocket_model(language=POCKET_DEFAULT_LANG):
     # load_model() is relatively slow and downloads weights into HF_HOME on first
     # call, so we keep it lazy - the engine is only paid for if actually selected.
-    global _pocket_model
-    if _pocket_model is None:
-        import inspect
-        from pocket_tts import TTSModel
-        device = get_device()
-        # Not every pocket-tts release exposes a `device` kwarg; pass it only when
-        # the signature accepts it, otherwise fall back to a post-load .to(device).
-        kwargs = {}
-        if "device" in inspect.signature(TTSModel.load_model).parameters:
-            kwargs["device"] = device
-        log.info("loading pocket-tts model on %s...", device)
-        _pocket_model = TTSModel.load_model(**kwargs)
-        if not kwargs and device != "cpu" and hasattr(_pocket_model, "to"):
-            try:
-                _pocket_model.to(device)
-            except Exception:
-                log.warning("pocket-tts: could not move model to %s; using its default device", device)
-        log.info("pocket-tts ready (sample_rate=%s).", _pocket_model.sample_rate)
+    # The language is baked into the weights, so a language switch is a full reload;
+    # we keep only one resident (matching the one-engine-at-a-time policy) and drop
+    # its per-language voice states along with it.
+    global _pocket_model, _pocket_lang, _pocket_states
+    with _pocket_load_lock:
+        if _pocket_model is not None and _pocket_lang != language:
+            _pocket_model = None
+            _pocket_states = {}
+            _free_torch()
+        if _pocket_model is None:
+            import inspect
+            from pocket_tts import TTSModel
+            device = get_device()
+            # Not every pocket-tts release exposes a `device` kwarg; pass it only when
+            # the signature accepts it, otherwise fall back to a post-load .to(device).
+            device_via_kwarg = "device" in inspect.signature(TTSModel.load_model).parameters
+            kwargs = {"language": language}
+            if device_via_kwarg:
+                kwargs["device"] = device
+            log.info("loading pocket-tts model (%s) on %s...", language, device)
+            _pocket_model = TTSModel.load_model(**kwargs)
+            _pocket_lang = language
+            if not device_via_kwarg and device != "cpu" and hasattr(_pocket_model, "to"):
+                try:
+                    _pocket_model.to(device)
+                except Exception:
+                    log.warning("pocket-tts: could not move model to %s; using its default device", device)
+            log.info("pocket-tts ready (lang=%s sample_rate=%s).", language, _pocket_model.sample_rate)
     return _pocket_model
 
 
@@ -219,7 +252,7 @@ def get_whisper():
     global _whisper
     if _whisper is None:
         from faster_whisper import WhisperModel
-        model = os.environ.get("STT_MODEL", "base.en")
+        model = os.environ.get("STT_MODEL", "base")
         compute = os.environ.get("STT_COMPUTE", "int8")
         threads = int(os.environ.get("OMP_NUM_THREADS", "4"))
         # STT_DEVICE, NOT TTS_DEVICE - and defaulting to cpu rather than auto.
@@ -281,10 +314,10 @@ def get_separator():
     return _separator
 
 
-def pocket_state(voice):
+def pocket_state(model, voice):
     state = _pocket_states.get(voice)
     if state is None:
-        state = get_pocket_model().get_state_for_audio_prompt(voice)
+        state = model.get_state_for_audio_prompt(voice)
         _pocket_states[voice] = state
     return state
 
@@ -309,13 +342,13 @@ def _free_torch():
 
 def _unload(names):
     # Caller holds _lock. Drops the model refs; gc + empty_cache reclaim the VRAM.
-    global _pipeline, _pocket_model, _pocket_states, _separator
+    global _pipeline, _pocket_model, _pocket_lang, _pocket_states, _separator
     freed = []
     for name in names:
         if name == "kokoro" and _pipeline is not None:
             _pipeline = None; freed.append(name)
         elif name == "pockettts" and _pocket_model is not None:
-            _pocket_model = None; _pocket_states = {}; freed.append(name)
+            _pocket_model = None; _pocket_lang = None; _pocket_states = {}; freed.append(name)
         elif name == "demucs" and _separator is not None:
             _separator = None; freed.append(name)
     if freed:
@@ -392,6 +425,14 @@ class TTSReq(BaseModel):
     # speed only affects Kokoro; pocket-tts generate_audio has no rate control.
     speed: float = Field(default=1.0, ge=0.5, le=2.0)
     engine: str = DEFAULT_ENGINE
+    # pocket-tts only; ignored by Kokoro (which is American English).
+    lang: str = POCKET_DEFAULT_LANG
+
+
+class WarmReq(BaseModel):
+    lang: str = POCKET_DEFAULT_LANG
+    voice: str = POCKET_DEFAULT
+    engine: str = "pockettts"
 
 
 @app.on_event("startup")
@@ -427,7 +468,12 @@ def voices():
     return {
         "engines": {
             "kokoro": {"voices": KOKORO_VOICES, "default": KOKORO_DEFAULT},
-            "pockettts": {"voices": POCKET_VOICES, "default": POCKET_DEFAULT},
+            "pockettts": {
+                "voices": POCKET_VOICES,
+                "default": POCKET_DEFAULT,
+                "languages": POCKET_LANGUAGES,
+                "default_language": POCKET_DEFAULT_LANG,
+            },
         },
         "default_engine": DEFAULT_ENGINE,
     }
@@ -460,10 +506,11 @@ def synth_kokoro(text, voice, speed):
     return np.concatenate(chunks), KOKORO_SAMPLE_RATE
 
 
-def synth_pocket(text, voice):
+def synth_pocket(text, voice, language):
     voice = voice if voice in POCKET_VOICES else POCKET_DEFAULT
-    model = get_pocket_model()
-    audio = model.generate_audio(pocket_state(voice), text)
+    language = language if language in POCKET_LANG_IDS else POCKET_DEFAULT_LANG
+    model = get_pocket_model(language)
+    audio = model.generate_audio(pocket_state(model, voice), text)
     if hasattr(audio, "detach"):
         audio = audio.detach().cpu().numpy()
     audio = np.asarray(audio, dtype=np.float32)
@@ -481,7 +528,7 @@ def tts(req: TTSReq):
     _begin_use(engine)
     try:
         if engine == "pockettts":
-            result = synth_pocket(req.text, req.voice)
+            result = synth_pocket(req.text, req.voice, req.lang)
         else:
             result = synth_kokoro(req.text, req.voice, req.speed)
     finally:
@@ -496,6 +543,26 @@ def tts(req: TTSReq):
         media_type="audio/wav",
         headers={"Cache-Control": "no-store"},
     )
+
+
+@app.post("/warm")
+def warm(req: WarmReq):
+    # Preload a pocket-tts language checkpoint (and its voice state) so a later
+    # /tts request in that language skips the multi-second load. The client fires
+    # this while the LLM is still generating, hiding the swap behind it. Kokoro has
+    # no per-language weights, so warming it is a no-op. A language switch here is a
+    # full reload, same as synth - it just happens off the reply's critical path.
+    if req.engine != "pockettts":
+        return {"ok": True, "warmed": None}
+    language = req.lang if req.lang in POCKET_LANG_IDS else POCKET_DEFAULT_LANG
+    voice = req.voice if req.voice in POCKET_VOICES else POCKET_DEFAULT
+    _begin_use("pockettts")
+    try:
+        model = get_pocket_model(language)
+        pocket_state(model, voice)
+    finally:
+        _end_use()
+    return {"ok": True, "warmed": language}
 
 
 @app.post("/stt")

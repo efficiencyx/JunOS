@@ -180,6 +180,79 @@ if ($action === 'transcribe') {
     exit;
 }
 
+if ($action === 'lyrics') {
+    header('Content-Type: application/json');
+
+    $title = trim((string)($_GET['title'] ?? ''));
+    $artist = trim((string)($_GET['artist'] ?? ''));
+    $album = trim((string)($_GET['album'] ?? ''));
+    $duration = (int)($_GET['duration'] ?? 0);
+
+    if ($title === '') { echo json_encode(['found' => false]); exit; }
+
+    // LRCLIB asks clients to identify themselves with a linked User-Agent.
+    $ua = 'Jun-OS Karaoke (https://github.com/efficiencyx/jun)';
+    $fetch = function (string $url) use ($ua): array {
+        $ch = curl_init($url);
+        curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
+        curl_setopt($ch, CURLOPT_USERAGENT, $ua);
+        curl_setopt($ch, CURLOPT_CONNECTTIMEOUT, 5);
+        curl_setopt($ch, CURLOPT_TIMEOUT, 10);
+        $res = curl_exec($ch);
+        $code = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+        curl_close($ch);
+        return [$res, $code];
+    };
+
+    $base = 'https://lrclib.net/api';
+    $result = null;
+
+    // Exact-signature lookup first: LRCLIB matches artist+track+album+duration.
+    if ($artist !== '' && $duration > 0) {
+        $q = http_build_query([
+            'artist_name' => $artist,
+            'track_name'  => $title,
+            'album_name'  => $album,
+            'duration'    => $duration,
+        ]);
+        [$res, $code] = $fetch("$base/get?$q");
+        if (is_string($res) && $code === 200) {
+            $data = json_decode($res, true);
+            if (is_array($data)) $result = $data;
+        }
+    }
+
+    // Fall back to fuzzy search, preferring the first hit that carries synced lyrics.
+    if ($result === null) {
+        $q = http_build_query(['track_name' => $title, 'artist_name' => $artist]);
+        [$res, $code] = $fetch("$base/search?$q");
+        if (is_string($res) && $code === 200) {
+            $list = json_decode($res, true);
+            if (is_array($list) && $list) {
+                $result = $list[0];
+                foreach ($list as $item) {
+                    if (!empty($item['syncedLyrics'])) { $result = $item; break; }
+                }
+            }
+        }
+    }
+
+    if (!is_array($result)) { echo json_encode(['found' => false]); exit; }
+
+    $synced = !empty($result['syncedLyrics']) && is_string($result['syncedLyrics']) ? $result['syncedLyrics'] : null;
+    $plain = !empty($result['plainLyrics']) && is_string($result['plainLyrics']) ? $result['plainLyrics'] : null;
+    if ($synced === null && $plain === null) { echo json_encode(['found' => false]); exit; }
+
+    echo json_encode([
+        'found'      => true,
+        'synced'     => $synced,
+        'plain'      => $plain,
+        'trackName'  => $result['trackName'] ?? $title,
+        'artistName' => $result['artistName'] ?? $artist,
+    ]);
+    exit;
+}
+
 http_response_code(400);
 header('Content-Type: application/json');
 echo json_encode(['error' => 'unknown_action']);
