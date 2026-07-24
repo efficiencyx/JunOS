@@ -84,7 +84,7 @@ STT_MAX_BYTES = 4 * 1024 * 1024
 # no ".en" suffix). Empty string = auto-detect per utterance, which costs an
 # extra decode pass and is unreliable on utterances under ~2s - prefer naming the
 # language when you know it. See docker/tts.Dockerfile for the pairing.
-STT_LANG = (os.environ.get("STT_LANG", "en").strip().lower() or None)
+STT_LANG = (os.environ.get("STT_LANG", "").strip().lower() or None)
 
 # Karaoke separation posts whole songs, not utterances, so it gets its own far
 # larger body cap. Separated stems live in per-token temp dirs that are dropped
@@ -219,7 +219,7 @@ def get_whisper():
     global _whisper
     if _whisper is None:
         from faster_whisper import WhisperModel
-        model = os.environ.get("STT_MODEL", "base.en")
+        model = os.environ.get("STT_MODEL", "base")
         compute = os.environ.get("STT_COMPUTE", "int8")
         threads = int(os.environ.get("OMP_NUM_THREADS", "4"))
         # STT_DEVICE, NOT TTS_DEVICE - and defaulting to cpu rather than auto.
