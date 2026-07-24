@@ -1976,7 +1976,7 @@
        'js/wardrobe-open-lines.js?v=3', 'js/wardrobe-reactions.js?v=18',
        'js/wardrobe-return-lines.js?v=3'],
       ['vendor/cubism4.min.js'],
-      ['js/live2d.js?v=29'],
+      ['js/live2d.js?v=33'],
     ]);
 
     // Both of these configure a lazily-loaded global, so they cannot run at
