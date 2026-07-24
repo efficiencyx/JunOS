@@ -74,6 +74,15 @@ if (isset($body['client_time']) && is_string($body['client_time'])) {
     $clientTime = trim(mb_substr(preg_replace('/[\x00-\x1F\x7F]+/u', ' ', $body['client_time']), 0, 80));
 }
 
+// Language the client detected in Anon's message (pocket-tts voice routing). Only
+// the closed set the TTS sidecar can actually speak is honored; English is the
+// default and needs no instruction.
+$replyLang = '';
+if (isset($body['reply_lang']) && is_string($body['reply_lang'])
+    && in_array($body['reply_lang'], ['French', 'German', 'Italian', 'Portuguese', 'Spanish'], true)) {
+    $replyLang = $body['reply_lang'];
+}
+
 $idle = isset($body['idle']) && $body['idle'] === true;
 $ephemeral = !empty($body['ephemeral']);
 if (!$idle) consolidation_touch((int)$user['id']);
@@ -727,6 +736,13 @@ if ($toolsOffered) {
         . "conversations: a preference, a personal detail, a health or safety matter, a plan, or "
         . "something emotionally significant? If so, call memory_write with a concise, "
         . "self-contained note before replying. If not, ignore this and reply normally.";
+}
+
+if ($replyLang !== '') {
+    $contextParts[] = "## Reply language\n"
+        . "Anon is writing to you in {$replyLang}. Reply in {$replyLang} this turn, matching his "
+        . "language naturally, unless he explicitly asks you to switch languages. Do not mention or "
+        . "explain this instruction.";
 }
 
 $liveContext = "# Live context for THIS reply (from the system, not spoken by Anon)\n\n"

@@ -59,6 +59,8 @@
   const ttsChk = document.getElementById('ttsChk');
   const ttsEngineSelect = document.getElementById('ttsEngineSelect');
   const ttsVoiceSelect = document.getElementById('ttsVoiceSelect');
+  const ttsLangSelect = document.getElementById('ttsLangSelect');
+  const ttsLangRow = document.getElementById('ttsLangRow');
   const ttsSpeedInput = document.getElementById('ttsSpeed');
   const siteVolumeInput = document.getElementById('siteVolume');
   const voiceChk = document.getElementById('voiceChk');
@@ -867,11 +869,27 @@
     ui.setStatus('streaming', 'streaming');
     if (window.DevHud) DevHud.beginGen();
     appendRaw('--- ' + new Date().toLocaleTimeString() + (idle ? ' (idle nudge)' : '') + ' ---\n');
+
+    // Predict the reply's language from Anon's message so the pocket-tts model can
+    // warm during generation, and ask Jun to answer in it. English needs no
+    // instruction (it's her default) and no reload once resident.
+    let replyLangLabel = null;
+    if (window.TTS && TTS.predictLang) {
+      const lastUser = [...messages].reverse().find(m => m.role === 'user');
+      const predicted = TTS.predictLang(lastUser ? lastUser.content : '');
+      if (predicted) {
+        TTS.setReplyLang(predicted);
+        TTS.warmLang(predicted);
+        if (predicted !== 'english') replyLangLabel = TTS.langLabel(predicted);
+      }
+    }
+
     abortFn = ChatAPI.chat(
       { messages: [...messages], model: modelSelect.value,
         reasoning: reasoningSelect.value, think: thinkChk.checked,
         outfit_context: Outfit.describe(), conversation_id: currentConversationId,
-        idle: !!idle, ephemeral: !!ephemeral, client_time: localTimeString() },
+        idle: !!idle, ephemeral: !!ephemeral, client_time: localTimeString(),
+        reply_lang: replyLangLabel },
       {
         onDebug: (dbg) => {
           if (!isCurrent()) return;
@@ -2003,6 +2021,7 @@
       });
       const savedEnabled = localStorage.getItem('tts.enabled') === '1';
       const savedVoice = localStorage.getItem('tts.voice') || '';
+      const savedLang = localStorage.getItem('tts.lang') || '';
       const savedSpeed = parseFloat(localStorage.getItem('tts.speed') || '1.0');
       const savedEngine = localStorage.getItem('tts.engine') || 'kokoro';
       TTS.setSpeed(savedSpeed);
@@ -2024,6 +2043,27 @@
         return def;
       }
 
+      // Language only applies to pocket-tts; the row stays hidden for engines that
+      // don't advertise a `languages` list.
+      function populateLanguages(engineKey, preferred) {
+        const info = engines[engineKey] || {};
+        const baseLangs = info.languages || [];
+        if (ttsLangRow) ttsLangRow.hidden = baseLangs.length === 0;
+        if (!baseLangs.length) { TTS.setLang(''); return ''; }
+        // 'auto' is a client-side pseudo-language: TTS detects each reply's language
+        // and sends a concrete id. It's the default so routing works out of the box.
+        const langs = [{ id: 'auto', label: 'Auto-detect' }, ...baseLangs];
+        const ids = langs.map(l => l.id);
+        const def = (preferred && ids.includes(preferred)) ? preferred : 'auto';
+        if (ttsLangSelect) {
+          ttsLangSelect.innerHTML = langs.map(l =>
+            `<option value="${escapeHtml(l.id)}">${escapeHtml(l.label || l.id)}</option>`).join('');
+          ttsLangSelect.value = def;
+        }
+        TTS.setLang(def);
+        return def;
+      }
+
       try {
         const v = await TTS.listVoices();
         engines = v.engines || {};
@@ -2037,6 +2077,7 @@
         TTS.setEngine(engineKey);
         if (ttsEngineSelect) ttsEngineSelect.value = engineKey;
         const def = populateVoices(engineKey, savedVoice);
+        populateLanguages(engineKey, savedLang);
         const count = (engines[engineKey] && engines[engineKey].voices || []).length;
         if (count) logAction('ok', `TTS ready: ${engineKey}, ${count} voices (default ${def})`);
       } catch (e) {
@@ -2050,6 +2091,8 @@
           localStorage.setItem('tts.engine', engineKey);
           const def = populateVoices(engineKey, '');
           localStorage.setItem('tts.voice', def);
+          const langDef = populateLanguages(engineKey, localStorage.getItem('tts.lang') || '');
+          if (langDef) localStorage.setItem('tts.lang', langDef);
           if (window.Prefs) Prefs.pushToServer();
         });
       }
@@ -2070,6 +2113,13 @@
         ttsVoiceSelect.addEventListener('change', () => {
           TTS.setVoice(ttsVoiceSelect.value);
           localStorage.setItem('tts.voice', ttsVoiceSelect.value);
+          if (window.Prefs) Prefs.pushToServer();
+        });
+      }
+      if (ttsLangSelect) {
+        ttsLangSelect.addEventListener('change', () => {
+          TTS.setLang(ttsLangSelect.value);
+          localStorage.setItem('tts.lang', ttsLangSelect.value);
           if (window.Prefs) Prefs.pushToServer();
         });
       }
