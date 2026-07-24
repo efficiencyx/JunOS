@@ -44,6 +44,14 @@ window.Live2D = (function () {
 
   let lastTickMs = performance.now();
   let animating = false;
+  let wasAnimating = false;
+  let needsRender = true;
+  let tickDeltaMs = 0;
+
+  // Visual state that does not flow through the parameter array - tints, drawable
+  // opacity and order, recomposited atlases, the camera transform - has no other
+  // signal that the canvas is stale, so every mutator funnels through here.
+  function markDirty() { needsRender = true; }
   let onMissingParam = null;        // callback(name)
   const reportedMissing = new Set();
   let publicTint = null;            // tinting API object, built in init()
@@ -163,7 +171,9 @@ window.Live2D = (function () {
     });
 
     onStatus('Building model...');
-    model = await Live2DModel.from(settings, { autoInteract: false, autoUpdate: true });
+    // autoUpdate would put the model's delta accumulator on PIXI.Ticker.shared,
+    // a second rAF loop we cannot pace; tick() feeds it instead.
+    model = await Live2DModel.from(settings, { autoInteract: false, autoUpdate: false });
     for (const texture of model.textures) {
       const baseTexture = texture.baseTexture;
       baseTexture.alphaMode = PIXI.ALPHA_MODES.PMA;
@@ -271,7 +281,12 @@ window.Live2D = (function () {
     window.addEventListener('pointerup', endDrag);
     window.addEventListener('pointercancel', endDrag);
 
+    // Application registers its own render at UPDATE_PRIORITY.LOW; swap it for
+    // one that decides whether the frame is worth drawing. Same priority, so the
+    // camera tween still lands before the draw rather than a frame behind it.
+    app.ticker.remove(app.render, app);
     app.ticker.add(tick);
+    app.ticker.add(renderIfDirty, null, PIXI.UPDATE_PRIORITY.LOW);
 
     let forcedOrderBelow = [];               // [belowId, aboveId] pairs, re-applied each frame
     const forcedMultiplyColor = new Map();   // drawableId -> [r,g,b,a]
@@ -379,33 +394,38 @@ window.Live2D = (function () {
       setMultiply(drawableId, rgb) {
         if (rgb) forcedMultiplyColor.set(drawableId, [rgb[0], rgb[1], rgb[2], 1]);
         else forcedMultiplyColor.delete(drawableId);
+        markDirty();
       },
       setScreen(drawableId, rgb) {
         if (rgb) forcedScreenColor.set(drawableId, [rgb[0], rgb[1], rgb[2], 1]);
         else forcedScreenColor.delete(drawableId);
+        markDirty();
       },
       setHighlight(drawableId, rgb) {
         if (rgb) drawableHighlights.set(drawableId, [rgb[0], rgb[1], rgb[2]]);
         else drawableHighlights.delete(drawableId);
+        markDirty();
       },
       setOpacity(drawableId, op) {
         if (op == null) forcedDrawableOpacity.delete(drawableId);
         else forcedDrawableOpacity.set(drawableId, op);
+        markDirty();
       },
       listDrawables() { return Array.from(raw.drawables.ids); },
-      setOrderBelow(pairs) { forcedOrderBelow = pairs || []; },
+      setOrderBelow(pairs) { forcedOrderBelow = pairs || []; markDirty(); },
     };
 
     window.__l2d = {
       model, raw,
-      hide(name) { forcedDrawableOpacity.set(name, 0); },
-      show(name) { forcedDrawableOpacity.delete(name); },
-      hideAll() { for (const id of raw.drawables.ids) forcedDrawableOpacity.set(id, 0); },
-      showAll() { forcedDrawableOpacity.clear(); },
+      hide(name) { forcedDrawableOpacity.set(name, 0); markDirty(); },
+      show(name) { forcedDrawableOpacity.delete(name); markDirty(); },
+      hideAll() { for (const id of raw.drawables.ids) forcedDrawableOpacity.set(id, 0); markDirty(); },
+      showAll() { forcedDrawableOpacity.clear(); markDirty(); },
       listDrawables() { return Array.from(raw.drawables.ids); },
       hideRange(from, to) {
         const ids = raw.drawables.ids;
         for (let i = from; i < to && i < ids.length; i++) forcedDrawableOpacity.set(ids[i], 0);
+        markDirty();
       },
       visibleDrawables() {
         const out = [];
@@ -413,10 +433,10 @@ window.Live2D = (function () {
         for (let i = 0; i < raw.drawables.count; i++) if (ops[i] > 0.01) out.push([ids[i], ops[i]]);
         return out;
       },
-      tint(name, rgb) { forcedMultiplyColor.set(name, [rgb[0], rgb[1], rgb[2], 1]); },
-      untint(name) { forcedMultiplyColor.delete(name); },
-      screenTint(name, rgb) { forcedScreenColor.set(name, [rgb[0], rgb[1], rgb[2], 1]); },
-      unscreen(name) { forcedScreenColor.delete(name); },
+      tint(name, rgb) { forcedMultiplyColor.set(name, [rgb[0], rgb[1], rgb[2], 1]); markDirty(); },
+      untint(name) { forcedMultiplyColor.delete(name); markDirty(); },
+      screenTint(name, rgb) { forcedScreenColor.set(name, [rgb[0], rgb[1], rgb[2], 1]); markDirty(); },
+      unscreen(name) { forcedScreenColor.delete(name); markDirty(); },
     };
 
     onStatus(`OK - ${raw.parameters.count} params, ${raw.parts.count} parts`);
@@ -526,6 +546,7 @@ window.Live2D = (function () {
     model.y = my;
     lastUsableStage = { ...usable };
     lastFittedScreen = stageScreen();
+    markDirty();
   }
 
   function captureCameraState(usable = lastUsableStage || usableStage()) {
@@ -935,6 +956,7 @@ window.Live2D = (function () {
   function setTarget(param, value) {
     if (!paramIndex.has(param)) { reportMissing(param); return false; }
     targetParams.set(param, clamp(param, value));
+    markDirty();
     return true;
   }
 
@@ -964,10 +986,12 @@ window.Live2D = (function () {
 
   function stopLoop(param) {
     loops.delete(param);
+    markDirty();
   }
 
   function stopAllLoops() {
     loops.clear();
+    markDirty();
   }
 
   function scheduleSequence(steps) {
@@ -1086,6 +1110,7 @@ window.Live2D = (function () {
   let mouthOverride = null; // null | 0..1, drives ParamMouthOpen each tick when set (e.g. TTS lipsync)
 
   function setMouthOverride(v) {
+    markDirty();
     if (v == null) { mouthOverride = null; return; }
     mouthOverride = Math.max(0, Math.min(1, v));
   }
@@ -1278,9 +1303,6 @@ window.Live2D = (function () {
       else settling = true;
       currentValues.set(id, next);
     }
-    animating = settling || loops.size > 0 || blinkPhase !== null
-      || pendingSequences.length > 0 || mouthOverride != null || cameraTween !== null;
-    app.ticker.maxFPS = animating ? ACTIVE_FPS : IDLE_FPS;
 
     const ps = raw.parameters;
     for (const [id, val] of currentValues) {
@@ -1335,6 +1357,25 @@ window.Live2D = (function () {
       if (idx !== undefined) ps.values[idx] = v;
       currentValues.set('ParamEyeOpen', v);
     }
+
+    animating = settling || loops.size > 0 || blinkPhase !== null
+      || pendingSequences.length > 0 || mouthOverride != null || cameraTween !== null;
+    app.ticker.maxFPS = animating ? ACTIVE_FPS : IDLE_FPS;
+    tickDeltaMs = dt;
+  }
+
+  function renderIfDirty() {
+    if (!raw) return;
+    // wasAnimating buys one trailing frame: the tick that settles a parameter or
+    // ends a blink writes the final value and only then reports itself idle.
+    const draw = animating || wasAnimating || needsRender;
+    wasAnimating = animating;
+    if (!draw) return;
+    needsRender = false;
+    // _render only flushes parameters into the drawables when deltaTime is
+    // non-zero, so the accumulator has to be fed on every frame we draw.
+    model.update(tickDeltaMs);
+    app.render();
   }
 
   function findDrawables(includes, excludes) {
@@ -1548,6 +1589,7 @@ window.Live2D = (function () {
       ctx.restore();
     }
     _uploadTexture(texIndex, c);
+    markDirty();
   }
 
   async function setDrawableTexture(drawableId, url, overlay) {
