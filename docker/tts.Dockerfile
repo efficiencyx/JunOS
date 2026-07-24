@@ -5,6 +5,12 @@
 # biggest latency win available for voice mode (RTF ~0.3-0.6 -> ~0.03-0.05).
 FROM python:3.11-slim
 
+# uv installs the Python deps much faster than pip - it resolves and downloads
+# packages in parallel and unzips them natively, overlapping fetch with extract.
+# That's the bulk of the build on the GPU overlays, where torch is a multi-GB
+# ROCm/CUDA wheel. Otherwise identical to pip: same wheels, same TORCH_INDEX.
+COPY --from=ghcr.io/astral-sh/uv:latest /uv /uvx /bin/
+
 RUN apt-get update \
  && apt-get install -y --no-install-recommends \
       espeak-ng \
@@ -19,13 +25,19 @@ WORKDIR /app
 # GPU wheels; the launcher selects a GPU index only when GPU TTS is requested.
 ARG TORCH_INDEX=https://download.pytorch.org/whl/cpu
 
-COPY tts/requirements.txt /app/requirements.txt
 # Install torch first (from TORCH_INDEX) so the resolver doesn't later pull a
-# different build in as a transitive dependency. torchaudio comes from the same
-# index so its wheel build stays matched to torch's across the cpu/cu124/rocm
-# overlays (PitchShift for the karaoke guide vocal lives in torchaudio).
-RUN pip install torch torchaudio --index-url ${TORCH_INDEX} \
- && pip install -r /app/requirements.txt
+# different build in as a transitive dependency, and keep it in its own layer
+# ahead of the requirements COPY so editing requirements.txt doesn't re-run this
+# multi-GB install. torchaudio comes from the same index so its wheel build stays
+# matched to torch's across the cpu/cu124/rocm overlays (PitchShift for the
+# karaoke guide vocal lives in torchaudio). No BuildKit cache mount here on
+# purpose - `docker compose build` on the legacy builder errors on --mount, so we
+# rely on uv's speed instead. UV_HTTP_TIMEOUT is raised for the slow ROCm CDN so
+# a large wheel doesn't trip uv's default stall timeout.
+RUN UV_HTTP_TIMEOUT=120 uv pip install --system torch torchaudio --index-url ${TORCH_INDEX}
+
+COPY tts/requirements.txt /app/requirements.txt
+RUN uv pip install --system -r /app/requirements.txt
 
 COPY tts/server.py /app/server.py
 

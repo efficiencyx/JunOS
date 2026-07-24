@@ -9,6 +9,7 @@ window.Prefs = (function () {
     'tts.enabled',
     'tts.engine',
     'tts.voice',
+    'tts.lang',
     'tts.speed',
     'audio.volume',
     'voice.bargein',
