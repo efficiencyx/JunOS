@@ -3,6 +3,12 @@ window.Live2D = (function () {
 
   const LERP_TAU_MS = 150; // exponential smoothing time constant
 
+  // Motion, physics, breath and pose are all disabled on the internal model, so
+  // between a blink and a fidget the frame is identical to the last one. Uncapped
+  // rAF re-renders it at the display's refresh rate regardless; these cap that.
+  const ACTIVE_FPS = 60;
+  const IDLE_FPS = 30;
+
   let app = null;
   let model = null;
   let raw = null;            // raw Cubism core model (parts, parameters, drawables)
@@ -37,6 +43,7 @@ window.Live2D = (function () {
   let lastFittedScreen = null;
 
   let lastTickMs = performance.now();
+  let animating = false;
   let onMissingParam = null;        // callback(name)
   const reportedMissing = new Set();
   let publicTint = null;            // tinting API object, built in init()
@@ -1260,6 +1267,7 @@ window.Live2D = (function () {
     }
 
     const alpha = 1 - Math.exp(-dt / LERP_TAU_MS);
+    let settling = false;
     for (const [id, target] of targetParams) {
       const cur = currentValues.get(id);
       if (cur === undefined) { currentValues.set(id, target); continue; }
@@ -1267,8 +1275,12 @@ window.Live2D = (function () {
       // Snap when close: params that gate drawable visibility (ParamHeadpat)
       // must actually reach 0, not decay asymptotically forever.
       if (Math.abs(target - next) < 0.001) next = target;
+      else settling = true;
       currentValues.set(id, next);
     }
+    animating = settling || loops.size > 0 || blinkPhase !== null
+      || pendingSequences.length > 0 || mouthOverride != null || cameraTween !== null;
+    app.ticker.maxFPS = animating ? ACTIVE_FPS : IDLE_FPS;
 
     const ps = raw.parameters;
     for (const [id, val] of currentValues) {
