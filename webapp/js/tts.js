@@ -5,6 +5,7 @@ window.TTS = (function () {
   let engine = 'kokoro';
   let voice = 'af_heart';
   let lang = 'english';     // pocket-tts only; Kokoro ignores it
+  let autoLang = false;     // when true, route pocket-tts language from the reply text
   let speed = 1.0;
   let volume = 1.0;
   let duckLevel = 1.0;
@@ -58,7 +59,13 @@ window.TTS = (function () {
 
   function setEngine(e) { if (e) engine = e; }
   function setVoice(v) { if (v) voice = v; }
-  function setLang(l) { if (l) lang = l; }
+  // 'auto' turns on per-reply detection; a concrete id pins that language. The
+  // detector only ever emits ids the sidecar knows, so 'auto' never leaves here.
+  function setLang(l) {
+    if (!l) return;
+    if (l === 'auto') { autoLang = true; return; }
+    autoLang = false; lang = l;
+  }
   function setSpeed(s) { speed = Math.max(0.5, Math.min(2.0, s || 1.0)); }
   function applyOutputGain() {
     if (!masterGain || !audioCtx) return;
@@ -136,6 +143,60 @@ window.TTS = (function () {
     return s;
   }
 
+  // Route pocket-tts by the reply's language. A tiny stopword detector is enough
+  // to tell the six pocket languages apart on a sentence or two, and it stays
+  // dependency-free. Keys are the sidecar's language ids. Diacritics are stripped
+  // before matching (so "tres"/"très" both hit) with the accented forms folded
+  // into the ASCII lists; a few high-signal characters are scored separately.
+  const STOPWORDS = {
+    english: 'the and you that is are was were this with have not but what your they for can will here there about just like know really yeah',
+    french_24l: 'je tu vous nous est sont les une des pas ne que qui pour dans avec mais tres oui bonjour merci moi toi etre fait comme cette suis',
+    german_24l: 'der die das und ist sind nicht ich du wir ein eine mit auf fur aber auch wie was sehr ja mehr noch schon hier jetzt dich mich bitte danke',
+    italian: 'il lo gli le un una che non sono per con mio tuo sei ma piu molto come cosa ecco si anche questo adesso grazie ciao bene fare',
+    portuguese: 'os as um uma que nao voce para com meu sua mas mais muito como isso sim entao obrigado ola tudo bem agora fazer aqui tao',
+    spanish_24l: 'el los las un una que no es con para mi tu pero mas muy como qué si esto esta hola gracias ahora aqui bien hacer tan muchas',
+  };
+  const STOP = Object.fromEntries(
+    Object.entries(STOPWORDS).map(([k, v]) => [k, new Set(v.split(' '))]));
+  const DETECT_LOCK_CHARS = 40;   // stop re-detecting once this much text agrees
+
+  function detectLang(text) {
+    const raw = text.toLowerCase();
+    const toks = raw.normalize('NFD').replace(/[\u0300-\u036f]/g, '').match(/[a-z]+/g) || [];
+    if (toks.length < 2) return null;
+    const score = { english: 0, french_24l: 0, german_24l: 0, italian: 0, portuguese: 0, spanish_24l: 0 };
+    for (const t of toks) for (const k in STOP) if (STOP[k].has(t)) score[k]++;
+    if (/ß/.test(raw)) score.german_24l += 2;
+    if (/[ñ¿¡]/.test(raw)) score.spanish_24l += 2;
+    if (/[ãõ]/.test(raw)) score.portuguese += 2;
+    const ranked = Object.entries(score).sort((a, b) => b[1] - a[1]);
+    const [bestLang, bestScore] = ranked[0];
+    if (bestLang === 'english') return 'english';
+    // Only leave English when a non-English language clearly wins - a lone "no" or
+    // "la" shouldn't yank an English reply into Spanish.
+    if (bestScore >= 2 && bestScore - score.english >= 2 && bestScore > ranked[1][1]) return bestLang;
+    return null;
+  }
+
+  let detectBuf = '';       // cleaned reply text accumulated for detection
+  let detectedLang = null;  // best guess for the current reply, or null
+  let detectLocked = false;
+
+  function updateDetect(text) {
+    if (!autoLang || engine !== 'pockettts' || detectLocked) return;
+    detectBuf += ' ' + text;
+    const guess = detectLang(detectBuf);
+    if (guess) {
+      detectedLang = guess;
+      if (detectBuf.length >= DETECT_LOCK_CHARS) detectLocked = true;
+    }
+  }
+
+  function effectiveLang() {
+    if (!autoLang || engine !== 'pockettts') return lang;
+    return detectedLang || 'english';
+  }
+
   function feed(textChunk) {
     if (!enabled || !textChunk) return;
     sentenceBuf += textChunk;
@@ -162,6 +223,9 @@ window.TTS = (function () {
   function resetReply() {
     chunkIndex = 0;
     firstChunkSynthed = false;
+    detectBuf = '';
+    detectedLang = null;
+    detectLocked = false;
   }
 
   // Keep the first chunk uncontended, then allow later synthesis in parallel.
@@ -174,9 +238,11 @@ window.TTS = (function () {
     // Chrome's autoplay policy leaves the context suspended until a gesture.
     if (audioCtx.state === 'suspended') audioCtx.resume().catch(() => {});
 
+    updateDetect(text);
     const id = nextId++;
     const job = {
       id, text,
+      lang: effectiveLang(),   // snapshot per chunk so later refinement doesn't rewrite earlier ones
       abort: new AbortController(),
       status: 'queued',
       audioBuffer: null,
@@ -204,7 +270,7 @@ window.TTS = (function () {
         const res = await fetch(`${TTS_URL}?action=tts`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ text: job.text, voice, speed, engine, lang }),
+          body: JSON.stringify({ text: job.text, voice, speed, engine, lang: job.lang }),
           signal: job.abort.signal,
         });
         // 204 (nothing to say) is a 2xx, so it can't be caught under !res.ok.
