@@ -34,11 +34,13 @@ COPY tts/server.py /app/server.py
 # SEP_DEVICE: cpu | cuda | auto - device for demucs karaoke stem separation.
 #   "auto" uses the GPU when torch exposes one, else CPU; a per-job CUDA failure
 #   falls back to CPU. Demucs weights (~80MB) download into HF_HOME at runtime.
-# STT_MODEL / STT_LANG: must agree. base.en is the latency/accuracy sweet spot
-#   for conversational English (distil-small.en ~150ms faster, small.en better).
-#   The ".en" models are English-ONLY - for another language you need BOTH a
-#   multilingual model and a matching language, e.g. STT_MODEL=base STT_LANG=it.
-#   STT_LANG="" auto-detects (extra decode pass, shaky under ~2s of audio).
+# STT_MODEL / STT_LANG: must agree. base is the multilingual default with
+#   STT_LANG="" (auto-detect per utterance/song). The ".en" builds (base.en,
+#   small.en) are English-ONLY and a touch faster/sharper on English - pair one
+#   with STT_LANG=en if you never leave English. For better non-English accuracy
+#   size up the multilingual model (small, medium, large-v3), CPU cost permitting.
+#   Auto-detect costs an extra decode pass and is shaky under ~2s of audio; pin
+#   STT_LANG to a code (it, es, de, ...) when you know the language.
 #   Note Kokoro only speaks American English; the pockettts engine is the one
 #   with it/es/de/pt/fr voices, so a non-English loop needs engine=pockettts too.
 # STT_DEVICE: cpu | cuda. Separate from TTS_DEVICE and defaults to cpu on
@@ -52,8 +54,8 @@ ENV TTS_HOST=0.0.0.0 \
     TTS_PORT=8001 \
     TTS_DEVICE=auto \
     SEP_DEVICE=auto \
-    STT_MODEL=base.en \
-    STT_LANG=en \
+    STT_MODEL=base \
+    STT_LANG= \
     STT_COMPUTE=int8 \
     STT_DEVICE=cpu \
     OMP_NUM_THREADS=4 \
