@@ -869,11 +869,27 @@
     ui.setStatus('streaming', 'streaming');
     if (window.DevHud) DevHud.beginGen();
     appendRaw('--- ' + new Date().toLocaleTimeString() + (idle ? ' (idle nudge)' : '') + ' ---\n');
+
+    // Predict the reply's language from Anon's message so the pocket-tts model can
+    // warm during generation, and ask Jun to answer in it. English needs no
+    // instruction (it's her default) and no reload once resident.
+    let replyLangLabel = null;
+    if (window.TTS && TTS.predictLang) {
+      const lastUser = [...messages].reverse().find(m => m.role === 'user');
+      const predicted = TTS.predictLang(lastUser ? lastUser.content : '');
+      if (predicted) {
+        TTS.setReplyLang(predicted);
+        TTS.warmLang(predicted);
+        if (predicted !== 'english') replyLangLabel = TTS.langLabel(predicted);
+      }
+    }
+
     abortFn = ChatAPI.chat(
       { messages: [...messages], model: modelSelect.value,
         reasoning: reasoningSelect.value, think: thinkChk.checked,
         outfit_context: Outfit.describe(), conversation_id: currentConversationId,
-        idle: !!idle, ephemeral: !!ephemeral, client_time: localTimeString() },
+        idle: !!idle, ephemeral: !!ephemeral, client_time: localTimeString(),
+        reply_lang: replyLangLabel },
       {
         onDebug: (dbg) => {
           if (!isCurrent()) return;

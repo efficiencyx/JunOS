@@ -171,30 +171,66 @@ window.TTS = (function () {
     if (/[ãõ]/.test(raw)) score.portuguese += 2;
     const ranked = Object.entries(score).sort((a, b) => b[1] - a[1]);
     const [bestLang, bestScore] = ranked[0];
+    // null means "no opinion yet" so callers can hold the sticky previous language
+    // instead of snapping to English on thin evidence (a lone "no"/"la"/"ok").
+    if (bestScore < 2 || bestScore <= ranked[1][1]) return null;
     if (bestLang === 'english') return 'english';
-    // Only leave English when a non-English language clearly wins - a lone "no" or
-    // "la" shouldn't yank an English reply into Spanish.
-    if (bestScore >= 2 && bestScore - score.english >= 2 && bestScore > ranked[1][1]) return bestLang;
+    if (bestScore - score.english >= 2) return bestLang;
     return null;
   }
 
-  let detectBuf = '';       // cleaned reply text accumulated for detection
-  let detectedLang = null;  // best guess for the current reply, or null
-  let detectLocked = false;
+  const LANG_LABELS = {
+    english: 'English', french_24l: 'French', german_24l: 'German',
+    italian: 'Italian', portuguese: 'Portuguese', spanish_24l: 'Spanish',
+  };
+  function langLabel(id) { return LANG_LABELS[id] || ''; }
 
+  let lastLang = 'english';   // language of the conversation so far - the sticky
+                              // fallback, so an Italian chat doesn't reset to English
+  let detectBuf = '';         // cleaned reply text accumulated for verification
+  let replyLang = null;       // language locked in for the reply being synthesized
+  let replyLangLocked = false;
+
+  // Predict a reply's language from the user's message so the caller can preload
+  // the right pocket-tts model during LLM generation. Falls back to the
+  // conversation's language rather than always English.
+  function predictLang(text) {
+    if (!enabled || !autoLang || engine !== 'pockettts') return null;
+    return detectLang(text || '') || lastLang;
+  }
+
+  // Fire-and-forget: ask the sidecar to load a language checkpoint ahead of synth.
+  function warmLang(l) {
+    if (!enabled || !autoLang || engine !== 'pockettts' || !l) return;
+    fetch(`${TTS_URL}?action=warm`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ lang: l, voice, engine }),
+    }).catch(() => {});
+  }
+
+  function setReplyLang(l) {
+    if (!autoLang || engine !== 'pockettts') return;
+    replyLang = l || lastLang;
+    replyLangLocked = false;
+  }
+
+  // Verify the prediction against the reply text. Only a confident disagreement in
+  // the opening words switches the language, and once locked it never flips again -
+  // so a stray foreign word mid-sentence can't trigger a model reload.
   function updateDetect(text) {
-    if (!autoLang || engine !== 'pockettts' || detectLocked) return;
+    if (!autoLang || engine !== 'pockettts' || replyLangLocked) return;
     detectBuf += ' ' + text;
     const guess = detectLang(detectBuf);
     if (guess) {
-      detectedLang = guess;
-      if (detectBuf.length >= DETECT_LOCK_CHARS) detectLocked = true;
+      if (guess !== replyLang) { replyLang = guess; warmLang(guess); }
+      if (detectBuf.length >= DETECT_LOCK_CHARS) replyLangLocked = true;
     }
   }
 
   function effectiveLang() {
     if (!autoLang || engine !== 'pockettts') return lang;
-    return detectedLang || 'english';
+    return replyLang || lastLang;
   }
 
   function feed(textChunk) {
@@ -223,9 +259,9 @@ window.TTS = (function () {
   function resetReply() {
     chunkIndex = 0;
     firstChunkSynthed = false;
+    if (replyLang) lastLang = replyLang;   // carry this reply's language forward
     detectBuf = '';
-    detectedLang = null;
-    detectLocked = false;
+    replyLangLocked = false;
   }
 
   // Keep the first chunk uncontended, then allow later synthesis in parallel.
@@ -454,5 +490,6 @@ window.TTS = (function () {
     feed, flush, stop, speak,
     isSpeaking, setOnAllDone,
     outputRms, duck,
+    predictLang, warmLang, setReplyLang, langLabel,
   };
 })();

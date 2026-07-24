@@ -133,6 +133,47 @@ if ($action === 'tts') {
     exit;
 }
 
+if ($action === 'warm') {
+    require_post();
+    require_content_type('application/json');
+
+    rate_limit('tts_warm', 60, 60);
+
+    $rawBody = read_body(1024);
+    $body = json_decode($rawBody, true);
+    if (!is_array($body)) fail(400, 'invalid_request');
+
+    $lang = $body['lang'] ?? null;
+    if ($lang !== null && (!is_string($lang) || !preg_match('/^[a-z][a-z0-9_]*$/', $lang))) {
+        fail(400, 'invalid_request');
+    }
+
+    header('Content-Type: application/json');
+
+    $ch = curl_init($ttsUrl . '/warm');
+    curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
+    curl_setopt($ch, CURLOPT_POST, true);
+    curl_setopt($ch, CURLOPT_POSTFIELDS, $rawBody);
+    curl_setopt($ch, CURLOPT_HTTPHEADER, ['Content-Type: application/json']);
+    curl_setopt($ch, CURLOPT_CONNECTTIMEOUT, 5);
+    // A cold language checkpoint load can run several seconds; the client doesn't
+    // block on this, so give the sidecar room to finish the preload.
+    curl_setopt($ch, CURLOPT_TIMEOUT, 120);
+    $res = curl_exec($ch);
+    $code = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+    curl_close($ch);
+
+    if ($res === false) {
+        http_response_code(502);
+        echo json_encode(['error' => 'tts_unreachable']);
+        exit;
+    }
+
+    http_response_code($code >= 500 ? 502 : $code);
+    echo $res === false ? json_encode(['error' => 'tts_failed']) : $res;
+    exit;
+}
+
 http_response_code(400);
 header('Content-Type: application/json');
 echo json_encode(['error' => 'unknown_action']);
