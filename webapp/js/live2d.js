@@ -128,13 +128,17 @@ window.Live2D = (function () {
     cameraPersistenceEnabled = !ignoreSavedPos;
     const initialSize = measureStage();
 
+    // Rendering above 1x already supersamples, which is what the soft-edged art
+    // needs; MSAA on top of that costs a multisampled backbuffer for nothing.
+    const resolution = rendererResolution();
+
     app = new PIXI.Application({
       width: initialSize.width,
       height: initialSize.height,
       backgroundAlpha: 0,          // transparent canvas: model floats on the page background
-      antialias: true,
+      antialias: resolution < 2,
       autoDensity: true,
-      resolution: rendererResolution(cameraMode),
+      resolution,
     });
     stageEl.appendChild(app.view);
 
@@ -455,9 +459,12 @@ window.Live2D = (function () {
     }
   }
 
-  function rendererResolution(mode) {
-    const resolution = window.devicePixelRatio || 1;
-    return mode === 'phone' ? Math.min(2, resolution) : resolution;
+  // Fill rate scales with the square of this, and every clipping mask is
+  // rasterized at it too. Phone already capped here; desktop had no ceiling.
+  const MAX_RESOLUTION = 2;
+
+  function rendererResolution() {
+    return Math.min(MAX_RESOLUTION, window.devicePixelRatio || 1);
   }
 
   function measureStage() {
@@ -654,7 +661,7 @@ window.Live2D = (function () {
     const previousMode = cameraMode;
     const screen = stageScreen();
     const nextSize = measureStage();
-    const nextResolution = rendererResolution(nextMode);
+    const nextResolution = rendererResolution();
     const visualChanged = visualRefitPending;
     visualRefitPending = false;
     const modeChanged = nextMode !== previousMode;
