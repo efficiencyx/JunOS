@@ -1,8 +1,8 @@
-# Audio sidecar (Kokoro-82M + pocket-tts for TTS, faster-whisper for STT). CPU
-# build by default - the models are small enough to hit comfortable real-time on
-# CPU. GPU is opt-in: TORCH_INDEX selects a CUDA / ROCm wheel build, and
-# TTS_DEVICE (below) selects the runtime device. Kokoro on GPU is the single
-# biggest latency win available for voice mode (RTF ~0.3-0.6 -> ~0.03-0.05).
+# Voice sidecar (Kokoro-82M + pocket-tts for TTS, faster-whisper for STT). CPU
+# build: the models are small enough to hit comfortable real-time on CPU, and a
+# GPU copy holds ~2GB of VRAM the LLM wants for layer offload. Karaoke stem
+# separation - the one audio job that genuinely wants a GPU - runs in its own
+# sidecar (docker/karaoke.Dockerfile), which is why nothing here is GPU-built.
 FROM python:3.11-slim
 
 # uv installs the Python deps much faster than pip - it resolves and downloads
@@ -21,20 +21,17 @@ RUN apt-get update \
 
 WORKDIR /app
 
-# Torch wheel source. CPU-only by default so pocket-tts/kokoro don't drag in
-# GPU wheels; the launcher selects a GPU index only when GPU TTS is requested.
+# Torch wheel source. CPU-only, so kokoro/pocket-tts can't drag a multi-GB GPU
+# build in as a transitive dependency. Overridable (TTS_TORCH_INDEX) for the rare
+# bare-metal case that wants GPU voice; no compose overlay touches it.
 ARG TORCH_INDEX=https://download.pytorch.org/whl/cpu
 
 # Install torch first (from TORCH_INDEX) so the resolver doesn't later pull a
 # different build in as a transitive dependency, and keep it in its own layer
 # ahead of the requirements COPY so editing requirements.txt doesn't re-run this
-# multi-GB install. torchaudio comes from the same index so its wheel build stays
-# matched to torch's across the cpu/cu124/rocm overlays (PitchShift for the
-# karaoke guide vocal lives in torchaudio). No BuildKit cache mount here on
-# purpose - `docker compose build` on the legacy builder errors on --mount, so we
-# rely on uv's speed instead. UV_HTTP_TIMEOUT is raised for the slow ROCm CDN so
-# a large wheel doesn't trip uv's default stall timeout.
-RUN UV_HTTP_TIMEOUT=120 uv pip install --system torch torchaudio --index-url ${TORCH_INDEX}
+# install. No BuildKit cache mount here on purpose - `docker compose build` on
+# the legacy builder errors on --mount, so we rely on uv's speed instead.
+RUN UV_HTTP_TIMEOUT=120 uv pip install --system torch --index-url ${TORCH_INDEX}
 
 COPY tts/requirements.txt /app/requirements.txt
 RUN uv pip install --system -r /app/requirements.txt
@@ -42,10 +39,8 @@ RUN uv pip install --system -r /app/requirements.txt
 COPY tts/server.py /app/server.py
 
 # TTS_DEVICE: cpu | cuda | auto. "auto" uses the GPU when the installed torch
-# exposes one (so it's a no-op on the default CPU build).
-# SEP_DEVICE: cpu | cuda | auto - device for demucs karaoke stem separation.
-#   "auto" uses the GPU when torch exposes one, else CPU; a per-job CUDA failure
-#   falls back to CPU. Demucs weights (~80MB) download into HF_HOME at runtime.
+# exposes one, so it's a no-op on this CPU build and only bites when TORCH_INDEX
+# was overridden.
 # STT_MODEL / STT_LANG: must agree. base is the multilingual default with
 #   STT_LANG="" (auto-detect per utterance/song). The ".en" builds (base.en,
 #   small.en) are English-ONLY and a touch faster/sharper on English - pair one
@@ -62,10 +57,10 @@ COPY tts/server.py /app/server.py
 # OMP_NUM_THREADS bounds torch's intra-op pool and is also read by server.py as
 #   whisper's cpu_threads. Unpinned, both libraries grab every core and fight
 #   when STT and TTS overlap. Raise it on a big box, drop to 2 on a 4-core one.
-ENV TTS_HOST=0.0.0.0 \
+ENV SIDECAR_ROLE=tts \
+    TTS_HOST=0.0.0.0 \
     TTS_PORT=8001 \
     TTS_DEVICE=auto \
-    SEP_DEVICE=auto \
     STT_MODEL=base \
     STT_LANG= \
     STT_COMPUTE=int8 \

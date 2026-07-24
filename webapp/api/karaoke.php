@@ -4,8 +4,10 @@ require_once __DIR__ . '/_lib.php';
 
 require_user();
 
-// KOKORO_URL is the pre-rename name of TTS_URL, honored for existing .env files.
-$ttsUrl = rtrim(env_str('TTS_URL', env_str('KOKORO_URL', 'http://localhost:8001')), '/');
+// Separation runs in its own sidecar so it can hold a GPU torch while the voice
+// one stays on CPU. Bare-metal installs serve both roles from a single process,
+// so fall back to the voice sidecar's URL (and its pre-rename KOKORO_URL name).
+$sepUrl = rtrim(env_str('KARAOKE_URL', env_str('TTS_URL', env_str('KOKORO_URL', 'http://localhost:8001'))), '/');
 $action = $_GET['action'] ?? '';
 
 // Source separation is heavy and long; one request evicts the chat model first,
@@ -51,7 +53,7 @@ function evict_chat_model(): void {
 if ($action === 'health') {
     header('Content-Type: application/json');
 
-    $ch = curl_init($ttsUrl . '/health');
+    $ch = curl_init($sepUrl . '/health');
     curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
     curl_setopt($ch, CURLOPT_CONNECTTIMEOUT, 5);
     curl_setopt($ch, CURLOPT_TIMEOUT, 10);
@@ -77,7 +79,7 @@ if ($action === 'separate') {
     $rawBody = read_body(KARAOKE_MAX_BYTES);
     if ($rawBody === '') fail(400, 'invalid_request');
 
-    $ch = curl_init($ttsUrl . '/separate');
+    $ch = curl_init($sepUrl . '/separate');
     curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
     curl_setopt($ch, CURLOPT_POST, true);
     curl_setopt($ch, CURLOPT_POSTFIELDS, $rawBody);
@@ -86,7 +88,9 @@ if ($action === 'separate') {
     // otherwise stall a full second before the body goes out.
     curl_setopt($ch, CURLOPT_HTTPHEADER, ['Content-Type: application/octet-stream', 'Expect:']);
     curl_setopt($ch, CURLOPT_CONNECTTIMEOUT, 5);
-    curl_setopt($ch, CURLOPT_TIMEOUT, 300);
+    // Demucs on CPU runs slower than realtime, so a full-length song can sit well
+    // past five minutes. Kept in step with fastcgi_read_timeout on this location.
+    curl_setopt($ch, CURLOPT_TIMEOUT, 900);
     $res = curl_exec($ch);
     $code = curl_getinfo($ch, CURLINFO_HTTP_CODE);
     curl_close($ch);
@@ -115,7 +119,7 @@ if ($action === 'stem') {
     if (!in_array($which, ['instrumental', 'guide'], true)) fail(400, 'invalid_request');
     if (!is_string($token) || !preg_match('/^[0-9a-f]+$/', $token)) fail(400, 'invalid_request');
 
-    $url = $ttsUrl . '/separate/stem?token=' . urlencode($token) . '&which=' . urlencode($which);
+    $url = $sepUrl . '/separate/stem?token=' . urlencode($token) . '&which=' . urlencode($which);
     $ch = curl_init($url);
     curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
     curl_setopt($ch, CURLOPT_CONNECTTIMEOUT, 5);
@@ -151,7 +155,7 @@ if ($action === 'transcribe') {
     $rawBody = read_body(KARAOKE_MAX_BYTES);
     if ($rawBody === '') fail(400, 'invalid_request');
 
-    $ch = curl_init($ttsUrl . '/transcribe_timed');
+    $ch = curl_init($sepUrl . '/transcribe_timed');
     curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
     curl_setopt($ch, CURLOPT_POST, true);
     curl_setopt($ch, CURLOPT_POSTFIELDS, $rawBody);

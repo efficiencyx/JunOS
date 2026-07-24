@@ -72,7 +72,7 @@ if (Test-Path .env) {
             $k = $Matches[1]; $v = $Matches[2].Trim()
             # Docker-internal hostnames from .env.example don't resolve on bare
             # metal; ignore them and use our localhost defaults instead.
-            if ($v -match '://(ollama|tts|kokoro|nginx|php|llamacpp)\b') { continue }
+            if ($v -match '://(ollama|tts|kokoro|karaoke|nginx|php|llamacpp)\b') { continue }
             if (-not (Get-Item "env:$k" -ErrorAction SilentlyContinue)) {
                 Set-Item "env:$k" $v
             }
@@ -327,6 +327,9 @@ $env:AI_PROVIDER            = $Provider
 $env:OLLAMA_URL             = $OllamaUrl
 $env:LLAMACPP_URL           = $LlamacppUrl
 $env:TTS_URL                = 'http://127.0.0.1:8001'
+# One sidecar process serves both roles here, unlike Docker where karaoke is its
+# own (GPU-capable) container.
+$env:KARAOKE_URL            = 'http://127.0.0.1:8001'
 $env:OMEGA_STATE_DIR        = $StateDir
 $libPath = (Join-Path $PSScriptRoot 'webapp\api\_lib.php').Replace('\', '/')
 & $phpExe -r "require '$libPath'; db();"

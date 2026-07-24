@@ -9,6 +9,13 @@ Out (/tts) - swappable engines, picked per-request by the `engine` field:
 
 In (/stt) - faster-whisper transcribes a WAV posted as a raw body.
 
+Karaoke (/separate, /transcribe_timed) - htdemucs splits a song into a backing
+track and a guide vocal, whisper times the words. Under Docker this half runs as
+a second container off the same file (SIDECAR_ROLE=karaoke, docker/karaoke.
+Dockerfile) so it can hold a GPU torch while the voice sidecar stays on CPU;
+each image installs only its own deps, and the missing ones degrade to 503 via
+the _available() probes. Bare-metal installs run one process for both roles.
+
 The webapp's js/tts.js posts a sentence at a time to /tts and plays the returned
 WAV through an AudioContext; js/voice.js posts captured utterances to /stt.
 /voices exposes each engine's voice list (and, for pocket-tts, its selectable
@@ -79,6 +86,10 @@ POCKET_LANG_IDS = frozenset(lang["id"] for lang in POCKET_LANGUAGES)
 
 DEFAULT_ENGINE = "kokoro"
 TTS_ENGINES = ("kokoro", "pockettts")
+
+# tts | karaoke. Only affects the startup pre-warm and what /health advertises -
+# every route stays mounted in both roles and answers 503 when its dep is absent.
+SIDECAR_ROLE = os.environ.get("SIDECAR_ROLE", "tts").strip().lower()
 
 # "demucs" is a pseudo-engine: it isn't a TTS voice, but registering it in the
 # same lifecycle lets a separation job evict the TTS engines while it runs (and
@@ -441,17 +452,21 @@ def prewarm():
     # doesn't eat the pipeline + default-voice cold start. pocket-tts warms
     # lazily on its first request instead.
     global _last_used
-    try:
-        for _gs, _ps, _audio in get_pipeline()("Hi.", voice=KOKORO_DEFAULT, speed=1.0):
-            pass
-        log.info("pre-warm done (engine=kokoro voice=%s)", KOKORO_DEFAULT)
-    except Exception:
-        log.exception("pre-warm failed (non-fatal)")
+    if SIDECAR_ROLE != "karaoke":
+        try:
+            for _gs, _ps, _audio in get_pipeline()("Hi.", voice=KOKORO_DEFAULT, speed=1.0):
+                pass
+            log.info("pre-warm done (engine=kokoro voice=%s)", KOKORO_DEFAULT)
+        except Exception:
+            log.exception("pre-warm failed (non-fatal)")
 
     # Start the idle clock only now, so prewarm's duration isn't counted against it.
     _last_used = time.monotonic()
+    # Unconditional: the reaper also sweeps expired separation tokens, which have
+    # to be cleaned up even where idle unloading is switched off.
+    threading.Thread(target=_reaper, name="tts-reaper", daemon=True).start()
+    log.info("sidecar role: %s", SIDECAR_ROLE)
     if TTS_IDLE_UNLOAD_S > 0:
-        threading.Thread(target=_reaper, name="tts-reaper", daemon=True).start()
         log.info("model reaper on: idle unload after %.0fs", TTS_IDLE_UNLOAD_S)
 
 
@@ -460,7 +475,8 @@ def health():
     # `stt` lets the webapp hide the mic button when this build has no whisper,
     # rather than failing on the first utterance. Reports whether the dep is
     # importable, not whether the model is loaded (it loads lazily).
-    return {"ok": True, "stt": _stt_available(), "sep": _sep_available(), "device": get_sep_device()}
+    return {"ok": True, "role": SIDECAR_ROLE, "stt": _stt_available(),
+            "sep": _sep_available(), "device": get_sep_device()}
 
 
 @app.get("/voices")

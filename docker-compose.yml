@@ -51,6 +51,7 @@ services:
 # Keep the legacy KOKORO_URL fallback for existing .env files.
       TTS_URL: "${TTS_URL:-}"
       KOKORO_URL: "${KOKORO_URL:-http://tts:8001}"
+      KARAOKE_URL: "${KARAOKE_URL:-http://karaoke:8001}"
       TELEMETRY: "${TELEMETRY:-}"
       TELEMETRY_INSTALL_ID: "${TELEMETRY_INSTALL_ID:-}"
       TELEMETRY_ENDPOINT: "${TELEMETRY_ENDPOINT:-}"
@@ -125,16 +126,50 @@ services:
       context: .
       dockerfile: docker/tts.Dockerfile
       network: host
+      args:
+        TORCH_INDEX: "${TTS_TORCH_INDEX:-https://download.pytorch.org/whl/cpu}"
     container_name: omega-tts
     restart: unless-stopped
     environment:
       CORS_ORIGIN: "${CORS_ORIGIN:-http://nginx}"
-      TTS_DEVICE: "${TTS_DEVICE:-auto}"
+      TTS_DEVICE: "${TTS_DEVICE:-cpu}"
       STT_MODEL: "${STT_MODEL:-base}"
       STT_LANG: "${STT_LANG-}"
       STT_DEVICE: "${STT_DEVICE:-cpu}"
     volumes:
       - tts_cache:/root/.cache
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://127.0.0.1:8001/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 30
+      start_period: 300s
+    security_opt:
+      - "no-new-privileges:true"
+    networks: [omega]
+
+# Same server.py as `tts`, built with demucs and (on the GPU overlays) a CUDA /
+# ROCm torch. Profile-gated because that image is multi-GB and only karaoke needs
+# it; with the profile off, api/karaoke.php simply can't reach the host and the
+# webapp greys the karaoke button out.
+  karaoke:
+    build:
+      context: .
+      dockerfile: docker/karaoke.Dockerfile
+      network: host
+      args:
+        TORCH_INDEX: "${KARAOKE_TORCH_INDEX:-https://download.pytorch.org/whl/cpu}"
+    container_name: omega-karaoke
+    profiles: [karaoke]
+    restart: unless-stopped
+    environment:
+      CORS_ORIGIN: "${CORS_ORIGIN:-http://nginx}"
+      SEP_DEVICE: "${SEP_DEVICE:-auto}"
+      STT_MODEL: "${STT_MODEL:-base}"
+      STT_LANG: "${STT_LANG-}"
+      STT_DEVICE: "${STT_DEVICE:-cpu}"
+    volumes:
+      - karaoke_cache:/root/.cache
     healthcheck:
       test: ["CMD", "curl", "-fsS", "http://127.0.0.1:8001/health"]
       interval: 10s
@@ -167,6 +202,7 @@ volumes:
     # Pinned to the pre-rename volume name so existing installs keep their
     # already-downloaded model weights (~300MB+) instead of re-fetching.
     name: omega_kokoro_cache
+  karaoke_cache:
   omega_state:
   letsencrypt:
   certbot_webroot:

@@ -61,18 +61,33 @@ case "$provider" in
   *) add_profile ollama ;;
 esac
 
+karaoke="${KARAOKE:-$(env_get KARAOKE)}"
+case "$(printf '%s' "$karaoke" | tr '[:upper:]' '[:lower:]')" in
+  on|1|true|yes) add_profile karaoke ;;
+esac
+
 export COMPOSE_PROFILES="$profiles"
 echo "AI provider: $provider${profiles:+ (compose profiles: $profiles)}"
+case ",${profiles}," in
+  *,karaoke,*) ;;
+  *) echo "karaoke: off (set KARAOKE=on in .env to build its sidecar)" ;;
+esac
 
 tts_device="${TTS_DEVICE:-$(env_get TTS_DEVICE)}"
-tts_device="${tts_device:-cpu}"
-tts_torch_index="${TTS_TORCH_INDEX:-$(env_get TTS_TORCH_INDEX)}"
-if [ "$(printf '%s' "$tts_device" | tr '[:upper:]' '[:lower:]')" = cpu ] \
-   && [ -z "$tts_torch_index" ]; then
-  tts_torch_index=https://download.pytorch.org/whl/cpu
+export TTS_DEVICE="${tts_device:-cpu}"
+
+# The GPU overlays build the karaoke sidecar against a CUDA/ROCm torch. Pin the
+# CPU index instead when separation is set to run on the CPU, so a multi-GB wheel
+# isn't downloaded for a device nobody asked for.
+sep_device="${SEP_DEVICE:-$(env_get SEP_DEVICE)}"
+sep_device="${sep_device:-auto}"
+karaoke_torch_index="${KARAOKE_TORCH_INDEX:-$(env_get KARAOKE_TORCH_INDEX)}"
+if [ "$(printf '%s' "$sep_device" | tr '[:upper:]' '[:lower:]')" = cpu ] \
+   && [ -z "$karaoke_torch_index" ]; then
+  karaoke_torch_index=https://download.pytorch.org/whl/cpu
 fi
-export TTS_DEVICE="$tts_device"
-[ -z "$tts_torch_index" ] || export TTS_TORCH_INDEX="$tts_torch_index"
+export SEP_DEVICE="$sep_device"
+[ -z "$karaoke_torch_index" ] || export KARAOKE_TORCH_INDEX="$karaoke_torch_index"
 
 gpu="$(detect_gpu)"
 files=(-f docker-compose.yml)

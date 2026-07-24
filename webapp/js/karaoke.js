@@ -28,6 +28,8 @@ window.Karaoke = (function () {
   let pendingLrclib = null;      // { text, kind:'lrc'|'txt' } fetched from LRCLIB per load
   let splitPicks = null;
   let setupStep = 0;
+  let sepAbort = null;
+  let clockTimer = null, clockStartedAt = 0, clockEta = null;
 
   const $ = (id) => document.getElementById(id);
   const overlay = () => $('karaokeOverlay');
@@ -105,6 +107,59 @@ window.Karaoke = (function () {
     const setup = $('karaokeSetup');
     if (setup) setup.setAttribute('aria-busy', b ? 'true' : 'false');
     document.querySelectorAll('[data-karaoke-back]').forEach(button => { button.disabled = b; });
+    if (!b) stopClock();
+  }
+
+  function fmtClock(seconds) {
+    const whole = Math.max(0, Math.round(seconds));
+    return Math.floor(whole / 60) + ':' + String(whole % 60).padStart(2, '0');
+  }
+
+  // Deliberately a wide range rather than a countdown: htdemucs runs slower than
+  // realtime on CPU and far faster on a GPU, whisper then reads the vocal stem
+  // back, and a first-ever run also pays for downloading the model.
+  function estimateSeparation(duration, device) {
+    if (!duration || (device !== 'cpu' && device !== 'cuda')) return null;
+    return device === 'cpu' ? [duration * 1.2, duration * 2.6] : [duration * 0.15, duration * 0.5];
+  }
+
+  function fmtEta(eta) {
+    const mins = (s) => Math.max(1, Math.round(s / 60));
+    const low = mins(eta[0]), high = mins(eta[1]);
+    return low === high ? `usually about ${low} min` : `usually ${low}-${high} min`;
+  }
+
+  function renderClock() {
+    const el = $('karaokeProgressDetail');
+    if (!el || !clockStartedAt) return;
+    const elapsed = (Date.now() - clockStartedAt) / 1000;
+    let text = fmtClock(elapsed) + ' elapsed';
+    if (clockEta) {
+      text += elapsed > clockEta[1] ? ' · longer than expected, still working' : ' · ' + fmtEta(clockEta);
+    }
+    el.textContent = text;
+  }
+
+  function startClock(eta) {
+    clockStartedAt = Date.now();
+    clockEta = eta || null;
+    renderClock();
+    if (!clockTimer) clockTimer = setInterval(renderClock, 1000);
+  }
+
+  function stopClock() {
+    if (clockTimer) { clearInterval(clockTimer); clockTimer = null; }
+    clockStartedAt = 0;
+    clockEta = null;
+    const el = $('karaokeProgressDetail');
+    if (el) el.textContent = '';
+  }
+
+  function setCancellable(fn) {
+    const btn = $('karaokeCancelBtn');
+    if (!btn) return;
+    btn.hidden = !fn;
+    btn.onclick = fn || null;
   }
   function setLyricsSrc(src) {
     const el = $('karaokeLyricsSrc');
@@ -537,18 +592,38 @@ window.Karaoke = (function () {
       let rec = await idbGet(hash);
       if (!rec) {
         const h = await health();
+        let sourceDuration = 0;
+        try {
+          setStatus('Reading the track…');
+          sourceDuration = (await decodeCopy(raw)).duration;
+        } catch (e) {
+          // Only needed for the estimate; separation reports a bad file properly.
+        }
         setStatus(h.device === 'cpu'
-          ? 'Separating stems on CPU - this can take a few minutes…'
-          : 'Separating stems…');
-        const sepRes = await fetch(`${API}?action=separate`, {
-          method: 'POST',
-          credentials: 'same-origin',
-          headers: { 'Content-Type': 'application/octet-stream' },
-          body: raw,
-        });
+          ? 'Splitting the vocals off on CPU…'
+          : 'Splitting the vocals off…');
+        startClock(estimateSeparation(sourceDuration, h.device));
+        // Aborting only stops us waiting - the sidecar carries on to the end of
+        // the job it already started, there is no cancel on the demucs side.
+        sepAbort = new AbortController();
+        setCancellable(() => sepAbort && sepAbort.abort());
+        let sepRes;
+        try {
+          sepRes = await fetch(`${API}?action=separate`, {
+            method: 'POST',
+            credentials: 'same-origin',
+            headers: { 'Content-Type': 'application/octet-stream' },
+            body: raw,
+            signal: sepAbort.signal,
+          });
+        } finally {
+          setCancellable(null);
+          sepAbort = null;
+        }
         if (!sepRes.ok) throw new Error(`separate http ${sepRes.status}`);
         const meta = await sepRes.json();
-        setStatus('Fetching stems…');
+        setStatus('Fetching the stems…');
+        startClock(null);
         const [instrumental, guide] = await Promise.all([
           fetchStem('instrumental', meta.token),
           fetchStem('guide', meta.token),
@@ -556,8 +631,9 @@ window.Karaoke = (function () {
         rec = { hash, instrumental, guide, lyrics: meta.lyrics || [], duration: meta.duration || 0 };
         await idbPut(rec);
       } else {
-        setStatus('Loaded from cache…');
+        setStatus('Already split - loading from cache…');
       }
+      stopClock();
 
       const [instrBuf, guideBuf] = await Promise.all([decodeCopy(rec.instrumental), decodeCopy(rec.guide)]);
       const duration = rec.duration || Math.max(instrBuf.duration, guideBuf.duration);
@@ -581,10 +657,16 @@ window.Karaoke = (function () {
         start();
       }
     } catch (e) {
-      console.error(e);
       setStatus('');
-      ui.toast('⚠ Karaoke failed: ' + e.message, 'error');
+      if (e.name === 'AbortError') {
+        ui.toast('Stopped waiting on the split', 'info');
+      } else {
+        console.error(e);
+        ui.toast('⚠ Karaoke failed: ' + e.message, 'error');
+      }
     } finally {
+      setCancellable(null);
+      sepAbort = null;
       setBusy(false);
     }
   }
@@ -746,7 +828,10 @@ window.Karaoke = (function () {
     const breakdown = [];
     sections.forEach((sec, idx) => {
       if (sec.owner === 'jun') return;
-      const refN = sec.words.map(w => ({ t: (w.start + w.end) / 2, w: normWord(w.word) })).filter(r => r.w);
+      const refN = sec.words
+        .map((w, wi) => ({ i: wi, t: (w.start + w.end) / 2, w: normWord(w.word) }))
+        .filter(r => r.w);
+      const hits = new Set();
       let m = 0;
       for (const r of refN) {
         let best = -1, bestDt = Infinity;
@@ -757,12 +842,38 @@ window.Karaoke = (function () {
           const dt = Math.abs(u.t - r.t);
           if (dt <= TOLERANCE && dt < bestDt) { best = i; bestDt = dt; }
         }
-        if (best >= 0) { userN[best].used = true; m++; }
+        if (best >= 0) { userN[best].used = true; m++; hits.add(r.i); }
       }
       matched += m; total += refN.length;
-      if (sec.owner === 'you') breakdown.push({ index: idx, owner: sec.owner, matched: m, total: refN.length });
+      if (sec.owner === 'you') breakdown.push({
+        index: idx,
+        owner: sec.owner,
+        matched: m,
+        total: refN.length,
+        // Words that normalise to nothing are punctuation-only and were never
+        // scorable, so they render plain rather than as something you missed.
+        words: sec.words.map((w, wi) => ({
+          word: w.word,
+          scorable: !!normWord(w.word),
+          hit: hits.has(wi),
+        })),
+      });
     });
     return { matched, total, score: total ? Math.round(matched / total * 100) : 0, breakdown, scored: total > 0 };
+  }
+
+  const SCORE_GRADES = [
+    [90, 'she is going to bring this up later'],
+    [75, 'you carried that'],
+    [60, 'solid - she covered for you on a few'],
+    [40, 'you knew the chorus, at least'],
+    [20, 'mostly enthusiasm'],
+    [0, 'she sang, you watched'],
+  ];
+
+  function gradeFor(score) {
+    const found = SCORE_GRADES.find(([floor]) => score >= floor);
+    return found ? found[1] : SCORE_GRADES[SCORE_GRADES.length - 1][1];
   }
 
   function renderScore(r) {
@@ -771,12 +882,20 @@ window.Karaoke = (function () {
     box.hidden = false;
     if (!r.scored) {
       box.innerHTML = `<div class="karaoke-score-num">-</div>
-        <div class="karaoke-score-sub">no scored lines this take</div>`;
+        <div class="karaoke-score-sub">nothing of yours to score this take</div>`;
       return;
     }
-    const rows = r.breakdown.map(b => `<li>Line ${b.index + 1} <span>${b.matched}/${b.total}</span></li>`).join('');
+    const rows = r.breakdown.map(b => {
+      const words = b.words.map(w => {
+        const cls = !w.scorable ? 'skip' : (w.hit ? 'hit' : 'miss');
+        return `<span class="${cls}">${escapeHtml(w.word)}</span>`;
+      }).join(' ');
+      return `<li><span class="karaoke-score-words">${words}</span>
+        <span class="karaoke-score-count">${b.matched}/${b.total}</span></li>`;
+    }).join('');
     box.innerHTML = `<div class="karaoke-score-num">${r.score}</div>
-      <div class="karaoke-score-sub">${r.matched} / ${r.total} words</div>` +
+      <div class="karaoke-score-grade">${escapeHtml(gradeFor(r.score))}</div>
+      <div class="karaoke-score-sub">${r.matched} of ${r.total} words landed in time</div>` +
       (rows ? `<ul class="karaoke-score-list">${rows}</ul>` : '');
   }
 

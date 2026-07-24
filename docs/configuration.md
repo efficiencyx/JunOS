@@ -47,24 +47,35 @@ conditional requirement is `OPENROUTER_API_KEY`, needed only when
 | `LLAMACPP_MODEL_HF` | `efficiencyx/Jun-LoRA-v4-E2B-GGUF:Q4_K_M` | `llamacpp` service (`LLAMA_ARG_HF_REPO`), `providers.php` (cosmetic default model id) | HF `repo:quant` the managed `llama-server` downloads and loads (`llama-server -hf` syntax, no `hf.co/` prefix). |
 | `LLAMACPP_TOOLS` | `on` | `providers.php` (`provider_tools_enabled()`) | Set `off` when the loaded chat template can't do tool calling, to stop offering tools to llama.cpp. |
 
-## 3. Voice sidecar
+## 3. Audio sidecars
+
+Two containers off one `tts/server.py`: `tts` (voice, always CPU) and `karaoke`
+(stem separation, GPU by default, profile-gated). Bare-metal installs run a
+single process in both roles.
 
 | Variable | Default | Consumed by | What it does |
 |---|---|---|---|
 | `VOICE` | `on` | `start.ps1` only | **Bare-metal Windows only.** `off` skips launching the TTS/STT sidecar process. Under Docker the `tts` service always runs (no compose `voice` profile exists); `php`/frontend degrade to text-only when it's unreachable or unhealthy. |
-| `TTS_URL` | `http://tts:8001` (Docker) / `http://localhost:8001` (PHP fallback) | `webapp/api/tts.php`, `stt.php` | Base URL of the audio sidecar. The pre-rename name `KOKORO_URL` is still honored as a fallback for existing `.env` files. |
-| `TTS_DEVICE` | `cpu` | `start.sh`, `docker/tts.Dockerfile` ENV → `tts/server.py` | `cpu` \| `cuda` \| `auto`. Torch device for TTS synthesis. `start.sh` uses the much smaller CPU torch build for `cpu`, while `cuda`/`auto` uses the active GPU overlay's CUDA or ROCm build. Both engines are real-time on CPU; GPU TTS holds ~2GB VRAM, which usually costs more in LLM layer offload than it buys in synthesis speed. |
-| `TTS_TORCH_INDEX` | derived from `TTS_DEVICE` and the GPU overlay | `start.sh`, `docker-compose.*.yml` | Advanced override for the PyTorch wheel index used to build the audio sidecar. Normally leave this unset. The launcher pins it to the CPU index for `TTS_DEVICE=cpu`; manual GPU-overlay builds retain their CUDA/ROCm defaults. |
-| `STT_MODEL` | `base` | `tts/server.py` | faster-whisper model. Default `base` is multilingual; the `.en` builds (`tiny.en`, `base.en`, `small.en`) are English-only and slightly faster/sharper on English. Size up the multilingual model (`small`, `medium`, `large-v3`) for better non-English accuracy. Must agree with `STT_LANG`. |
+| `TTS_URL` | `http://tts:8001` (Docker) / `http://localhost:8001` (PHP fallback) | `webapp/api/tts.php`, `stt.php` | Base URL of the voice sidecar. The pre-rename name `KOKORO_URL` is still honored as a fallback for existing `.env` files. |
+| `TTS_DEVICE` | `cpu` | `start.sh`, `docker/tts.Dockerfile` ENV → `tts/server.py` | `cpu` \| `cuda` \| `auto`. Torch device for TTS synthesis. The image ships a CPU torch, so `auto` resolves to CPU there and `cuda` only means something on bare metal or after a `TTS_TORCH_INDEX` override. Both engines are real-time on CPU; GPU TTS holds ~2GB VRAM, which costs more in LLM layer offload than it buys in synthesis speed. |
+| `TTS_TORCH_INDEX` | `https://download.pytorch.org/whl/cpu` | `docker-compose.yml` → `docker/tts.Dockerfile` | Advanced override for the PyTorch wheel index the voice image builds against. No GPU overlay touches it any more - that plumbing moved to `KARAOKE_TORCH_INDEX`. Normally leave this unset. |
+| `KARAOKE` | `on` | `install.sh` writes it, `start.sh` reads it | `on` adds the `karaoke` compose profile, which builds and runs the separation sidecar (a few GB: demucs plus a CUDA/ROCm torch). `off` leaves the container out entirely; `api/karaoke.php` then can't reach it and the webapp greys the karaoke button out. `start.sh` prints `karaoke: off` when the profile is absent, since an `.env` predating this split has no `KARAOKE` key. |
+| `KARAOKE_URL` | `http://karaoke:8001` (Docker) / falls back to `TTS_URL` | `webapp/api/karaoke.php` | Base URL of the separation sidecar. The fallback chain is `KARAOKE_URL` → `TTS_URL` → `KOKORO_URL` → `http://localhost:8001`, so bare-metal installs serving both roles from one process need no extra config. |
+| `SEP_DEVICE` | `auto` (`cuda` or `cpu` as chosen at install) | `start.sh`, `docker/karaoke.Dockerfile` ENV → `tts/server.py` | `cpu` \| `cuda` \| `auto`. Torch device for demucs. Unlike `TTS_DEVICE` this one is worth the VRAM - a 4-minute song is minutes on CPU and seconds on a card - and `api/karaoke.php` evicts the chat model from Ollama before each job so the two don't fight. A per-job CUDA failure (OOM, bad kernel) retries on CPU instead of failing the song. |
+| `KARAOKE_TORCH_INDEX` | CUDA/ROCm on the GPU overlays, CPU otherwise | `start.sh`, `docker-compose.*.yml` | Advanced override for the karaoke image's PyTorch wheel index. `start.sh` pins the CPU index when `SEP_DEVICE=cpu`, so declining GPU separation doesn't download a multi-GB GPU wheel. |
+| `STT_MODEL` | `base` | `tts/server.py` (both sidecars) | faster-whisper model. Karaoke uses the same model for the timed lyric track. Default `base` is multilingual; the `.en` builds (`tiny.en`, `base.en`, `small.en`) are English-only and slightly faster/sharper on English. Size up the multilingual model (`small`, `medium`, `large-v3`) for better non-English accuracy. Must agree with `STT_LANG`. |
 | `STT_LANG` | `""` (auto-detect) | `tts/server.py` (`STT_LANG` env) | Whisper language code. In `docker-compose.yml` this is wired as `STT_LANG: "${STT_LANG-}"` (bash-style *unset*-only default, note the missing `:`) - so an unset var and an explicitly empty `STT_LANG=` both pass through as `""`, and `server.py` treats an empty string as `None`, i.e. whisper auto-detects the language per utterance/song. Pin a code (`en`, `it`, `es`, ...) when you know the language to skip the detection pass. |
 | `STT_DEVICE` | `cpu` | `tts/server.py` | `cpu` \| `cuda`. Separate from `TTS_DEVICE` by design - whisper runs on CTranslate2, which needs different CUDA/cuDNN support than the torch wheel ships. |
 | `CORS_ORIGIN` | `http://nginx` (Docker) | `tts/server.py` (FastAPI `CORSMiddleware`) | Allowed browser origin for the sidecar's own HTTP API. Should match wherever nginx serves the frontend from; `start.ps1` sets it to the bare-metal site URL. |
 
-`TTS_HOST`, `TTS_PORT`, and `STT_COMPUTE` also exist as `ENV` defaults baked
-into `docker/tts.Dockerfile` (`0.0.0.0`, `8001`, `int8`), but they are not
+`TTS_HOST`, `TTS_PORT`, `STT_COMPUTE`, and `SIDECAR_ROLE` also exist as `ENV`
+defaults baked into `docker/tts.Dockerfile` / `docker/karaoke.Dockerfile`
+(`0.0.0.0`, `8001`, `int8`, and `tts`/`karaoke` respectively), but they are not
 exposed as `.env` knobs in `docker-compose.yml` - they're internal to the
-sidecar image (bare-metal `start.ps1` does override `TTS_HOST`/`TTS_PORT`
-directly as process env when launching the venv).
+sidecar images (bare-metal `start.ps1` does override `TTS_HOST`/`TTS_PORT`
+directly as process env when launching the venv). `SIDECAR_ROLE` only decides
+whether the Kokoro pre-warm runs at startup and what `/health` advertises; every
+route stays mounted in both roles.
 
 ## 4. Telemetry
 

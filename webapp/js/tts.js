@@ -107,8 +107,26 @@ window.TTS = (function () {
     return { chunk: buf.slice(0, i + 1), rest: buf.slice(i + 1) };
   }
 
+  // A run of dots is a trailing-off beat, not a sentence end - breaking inside it
+  // leaves orphan "." chunks that cleanForSpeech drops, so the pause the engines
+  // render for "..." is lost. A lone trailing dot waits for the next token, since
+  // it may turn out to be the first dot of one.
+  function hardBreak(buf) {
+    for (let i = 0; i < buf.length; i++) {
+      if (!HARD_BREAK_RE.test(buf[i])) continue;
+      if (buf[i] === '.') {
+        let end = i;
+        while (buf[end + 1] === '.') end++;
+        if (end > i) { i = end; continue; }
+        if (i === buf.length - 1) return -1;
+      }
+      return i;
+    }
+    return -1;
+  }
+
   function nextChunk(buf, first) {
-    const hard = buf.search(HARD_BREAK_RE);
+    const hard = hardBreak(buf);
     if (!first) return hard < 0 ? null : cutAt(buf, hard);
 
     let soft = -1;
@@ -152,7 +170,7 @@ window.TTS = (function () {
     english: 'the and you that is are was were this with have not but what your they for can will here there about just like know really yeah',
     french_24l: 'je tu vous nous est sont les une des pas ne que qui pour dans avec mais tres oui bonjour merci moi toi etre fait comme cette suis',
     german_24l: 'der die das und ist sind nicht ich du wir ein eine mit auf fur aber auch wie was sehr ja mehr noch schon hier jetzt dich mich bitte danke',
-    italian: 'il lo gli le un una che non sono per con mio tuo sei ma piu molto come cosa ecco si anche questo adesso grazie ciao bene fare',
+    italian: 'il lo gli le un una che non sono per con mio tuo sei ma piu molto come cosa ecco si anche questo adesso grazie ciao bene fare degli della dello nella sulla quello allora ancora niente qualcosa insieme davvero proprio magari quindi comunque cioe sempre dimmi senti guarda faccio voglio sto stai vado dai amore cosi perche pero quando dove tutto tanto oggi domani forse certo vero mi ti ho hai',
     portuguese: 'os as um uma que nao voce para com meu sua mas mais muito como isso sim entao obrigado ola tudo bem agora fazer aqui tao',
     spanish_24l: 'el los las un una que no es con para mi tu pero mas muy como qué si esto esta hola gracias ahora aqui bien hacer tan muchas',
   };
@@ -178,12 +196,6 @@ window.TTS = (function () {
     if (bestScore - score.english >= 2) return bestLang;
     return null;
   }
-
-  const LANG_LABELS = {
-    english: 'English', french_24l: 'French', german_24l: 'German',
-    italian: 'Italian', portuguese: 'Portuguese', spanish_24l: 'Spanish',
-  };
-  function langLabel(id) { return LANG_LABELS[id] || ''; }
 
   let lastLang = 'english';   // language of the conversation so far - the sticky
                               // fallback, so an Italian chat doesn't reset to English
@@ -490,6 +502,6 @@ window.TTS = (function () {
     feed, flush, stop, speak,
     isSpeaking, setOnAllDone,
     outputRms, duck,
-    predictLang, warmLang, setReplyLang, langLabel,
+    predictLang, warmLang, setReplyLang,
   };
 })();

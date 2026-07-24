@@ -818,6 +818,34 @@ input[type="checkbox"] {
   margin: 0 auto;
 }
 
+.consolidation-banner {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 10px 14px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--bg-3);
+  font-size: 13px;
+  line-height: 1.45;
+}
+.consolidation-banner[hidden] { display: none; }
+.consolidation-mark {
+  flex-shrink: 0;
+  width: 8px;
+  height: 8px;
+  margin-top: 6px;
+  border-radius: 50%;
+  background: var(--accent);
+}
+.consolidation-banner[data-kind="busy"] .consolidation-mark { animation: pulse 1.4s ease-in-out infinite; }
+.consolidation-banner[data-kind="done"] .consolidation-mark { background: var(--ok); }
+.consolidation-banner[data-kind="warn"] { border-color: var(--warn); }
+.consolidation-banner[data-kind="warn"] .consolidation-mark { background: var(--warn); }
+.consolidation-text { min-width: 0; }
+.consolidation-title { color: var(--fg); font-weight: 600; }
+.consolidation-sub { color: var(--muted); margin-top: 2px; }
+
 .composer {
   display: flex;
   align-items: flex-end;
@@ -1882,6 +1910,21 @@ body.karaoke-mode .karaoke-overlay {
 }
 @keyframes karaoke-spin { to { transform: rotate(360deg); } }
 @media (prefers-reduced-motion: reduce) { .karaoke-spinner { animation: none; } }
+.karaoke-progress-text { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.karaoke-progress-detail { color: var(--term-dim); opacity: .75; font-variant-numeric: tabular-nums; }
+.karaoke-cancel {
+  margin-left: auto;
+  flex: none;
+  background: none;
+  border: 1px solid var(--border-2);
+  border-radius: var(--radius-sm);
+  color: var(--term-dim);
+  font: inherit;
+  padding: 3px 10px;
+  cursor: pointer;
+}
+.karaoke-cancel:hover { color: var(--fg); border-color: var(--term-accent); }
+.karaoke-cancel[hidden] { display: none; }
 
 .karaoke-stage {
   display: flex;
@@ -1890,6 +1933,10 @@ body.karaoke-mode .karaoke-overlay {
   gap: 20px;
   width: min(720px, 92vw);
   max-height: 82vh;
+  /* The score card only appears after a take, and with a full lyric line per
+     section it can outgrow what the lyrics already claim - scroll rather than
+     push the controls off the bottom. */
+  overflow-y: auto;
 }
 .karaoke-turn {
   display: inline-flex;
@@ -1962,13 +2009,14 @@ body.karaoke-mode .karaoke-overlay {
   background: var(--border-2);
 }
 
-.karaoke-controls { display: flex; align-items: center; gap: 12px; }
+.karaoke-controls { display: flex; align-items: center; gap: 12px; flex: none; }
 .karaoke-vol { width: 120px; accent-color: var(--accent); }
 
 .karaoke-score {
   display: flex;
   flex-direction: column;
   align-items: center;
+  flex: none;
   gap: 4px;
   padding: 10px 24px;
   border-radius: var(--radius);
@@ -1976,19 +2024,32 @@ body.karaoke-mode .karaoke-overlay {
   border: 1px solid var(--border);
 }
 .karaoke-score-num { font-size: 40px; font-weight: 700; color: var(--accent); line-height: 1; }
+.karaoke-score-grade { font-size: 13px; color: var(--fg); }
 .karaoke-score-sub { font-size: 13px; color: var(--muted); }
 .karaoke-score-list {
   list-style: none;
-  margin: 4px 0 0;
+  margin: 6px 0 0;
   padding: 0;
   display: flex;
   flex-direction: column;
-  gap: 2px;
+  gap: 4px;
   font-size: 12px;
   color: var(--muted);
+  width: 100%;
+  max-height: 24vh;
+  overflow-y: auto;
 }
-.karaoke-score-list li { display: flex; justify-content: space-between; gap: 16px; }
-.karaoke-score-list li span { color: var(--fg); }
+.karaoke-score-list li {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 16px;
+}
+.karaoke-score-words { color: var(--fg); }
+.karaoke-score-words .hit { color: var(--ok); }
+.karaoke-score-words .miss { color: var(--dim); text-decoration: line-through; }
+.karaoke-score-words .skip { color: var(--dim); }
+.karaoke-score-count { flex: none; color: var(--muted); font-variant-numeric: tabular-nums; }
 
 @media (prefers-reduced-motion: reduce) {
   .karaoke-line { transition: none; }

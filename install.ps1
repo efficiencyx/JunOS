@@ -318,6 +318,23 @@ function Configure-Jun {
     Set-EnvKey 'VOICE' $voice
     Ok "voice $voice"
 
+    # Bare metal runs one sidecar process for both roles, so karaoke here is just
+    # a second pip install into the same venv rather than a separate service.
+    # It stays on CPU: the Windows venv is built against the CPU torch wheel.
+    $karaoke = $env:KARAOKE
+    if ($karaoke) {
+        $karaoke = if ($karaoke.ToLower() -match '^(off|0|false|no)$') { 'off' } else { 'on' }
+    } elseif ($interactive -and $voice -eq 'on') {
+        $v = Read-Styled "     ${OK}▸${R} enable karaoke ${DIM}(sing along - adds a few GB)${R} ${DIM}[Y/n]${R} ${ACCENT}›${R} "
+        $karaoke = if ($v -match '^(n|no)$') { 'off' } else { 'on' }
+    } elseif ($voice -eq 'on') {
+        $karaoke = 'on'
+    } else {
+        $karaoke = 'off'
+    }
+    Set-EnvKey 'KARAOKE' $karaoke
+    Ok "karaoke $karaoke"
+
     $telemetry = Ask-Telemetry
     Set-EnvKey 'TELEMETRY' $telemetry
     if ($telemetry -eq 'on') {
@@ -328,7 +345,7 @@ function Configure-Jun {
     }
     Ok "telemetry $telemetry"
 
-    return @{ provider = $provider; voice = $voice
+    return @{ provider = $provider; voice = $voice; karaoke = $karaoke
               needsOllama = $needsOllama; needsLlamacpp = $needsLlamacpp }
 }
 
@@ -479,34 +496,56 @@ function Install-Php {
     }
 }
 
-function Install-Tts {
+function Install-Tts([string]$Karaoke = 'off') {
     $venv = Join-Path (Get-Location) 'runtime\tts-venv'
     $py = Join-Path $venv 'Scripts\python.exe'
-    if (Test-Path $py) { return }
 
-    $python = Get-UsablePython
-    if (-not $python) {
-        Install-MachineTools @('python') -Optional
+    if (-not (Test-Path $py)) {
         $python = Get-UsablePython
         if (-not $python) {
-            Warn_ 'Python still not found - skipping voice. Re-run install.ps1 after installing it.'
+            Install-MachineTools @('python') -Optional
+            $python = Get-UsablePython
+            if (-not $python) {
+                Warn_ 'Python still not found - skipping voice. Re-run install.ps1 after installing it.'
+                Set-EnvKey 'VOICE' 'off'
+                Set-EnvKey 'KARAOKE' 'off'
+                return
+            }
+        }
+
+        Step 'set up TTS voice engine (a few GB, one-time)'
+        & $python.Source -m venv $venv
+        & $py -m pip install --upgrade pip
+        # CPU torch wheel first so the resolver doesn't pull CUDA builds in as a
+        # transitive dep; both voice models hit real-time on CPU.
+        & $py -m pip install torch --index-url https://download.pytorch.org/whl/cpu
+        & $py -m pip install -r (Join-Path (Get-Location) 'tts\requirements.txt')
+        if ($LASTEXITCODE -ne 0) {
+            Warn_ 'TTS setup failed - continuing text-only. Re-run install.ps1 to retry.'
             Set-EnvKey 'VOICE' 'off'
+            Set-EnvKey 'KARAOKE' 'off'
             return
         }
+        Ok 'TTS voice engine ready'
     }
 
-    Step 'set up TTS voice engine (a few GB, one-time)'
-    & $python.Source -m venv $venv
-    & $py -m pip install --upgrade pip
-    # CPU torch wheel first so the resolver doesn't pull CUDA builds in as a
-    # transitive dep; both voice models hit real-time on CPU.
-    & $py -m pip install torch --index-url https://download.pytorch.org/whl/cpu
-    & $py -m pip install -r (Join-Path (Get-Location) 'tts\requirements.txt')
+    if ($Karaoke -ne 'on') { return }
+    # Bare metal serves both roles from one process, so karaoke is an extra layer
+    # on the same venv. Docker splits them into two containers instead, which is
+    # where GPU separation lives - this venv is CPU-only.
+    # Probe through cmd: a failed import writes a traceback to stderr, which
+    # $ErrorActionPreference='Stop' would turn into a terminating error.
+    cmd /c "`"$py`" -c `"import demucs`" >nul 2>nul"
+    if ($LASTEXITCODE -eq 0) { return }
+
+    Step 'set up karaoke stem separation (a few GB, one-time)'
+    & $py -m pip install torchaudio --index-url https://download.pytorch.org/whl/cpu
+    & $py -m pip install -r (Join-Path (Get-Location) 'tts\requirements-karaoke.txt')
     if ($LASTEXITCODE -ne 0) {
-        Warn_ 'TTS setup failed - continuing text-only. Re-run install.ps1 to retry.'
-        Set-EnvKey 'VOICE' 'off'
+        Warn_ 'karaoke setup failed - the rest still works. Re-run install.ps1 to retry.'
+        Set-EnvKey 'KARAOKE' 'off'
     } else {
-        Ok 'TTS voice engine ready'
+        Ok 'karaoke ready'
     }
 }
 
@@ -634,7 +673,7 @@ if ($cfg.needsLlamacpp -and -not (Get-Command llama-server -ErrorAction Silently
 }
 
 Install-Php
-if ($voice -eq 'on') { Install-Tts }
+if ($voice -eq 'on') { Install-Tts $cfg.karaoke }
 
 Step 'asset policy'
 Warn_ "Jun's Live2D model & textures belong to the creator of"

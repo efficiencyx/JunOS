@@ -29,10 +29,13 @@ services:
       - LLAMA_ARG_TENSOR_SPLIT
       - LLAMA_ARG_MAIN_GPU
 
-  tts:
+# Only the karaoke sidecar gets a GPU. The voice sidecar stays CPU-only by
+# design - Kokoro is real-time there, and its GPU copy would sit on ~2GB of VRAM
+# the LLM wants for layer offload.
+  karaoke:
     build:
       args:
-        TORCH_INDEX: "${TTS_TORCH_INDEX:-https://download.pytorch.org/whl/rocm6.2.4}"
+        TORCH_INDEX: "${KARAOKE_TORCH_INDEX:-https://download.pytorch.org/whl/rocm6.2.4}"
     devices:
       - /dev/kfd
       - /dev/dri

@@ -8,7 +8,18 @@ $userId = (int)$user['id'];
 $action = $_GET['action'] ?? '';
 
 if ($_SERVER['REQUEST_METHOD'] === 'GET' && $action === 'status') {
-    echo json_encode(['locked' => consolidation_locked($userId)]);
+    $status = consolidation_status($userId);
+    $stmt = db()->prepare('SELECT last_run, last_status, last_note_count FROM memory_consolidation WHERE user_id = ?');
+    $stmt->execute([$userId]);
+    $row = $stmt->fetch();
+    if ($row && (int)$row['last_run'] > 0 && (string)$row['last_status'] !== '') {
+        $status['last'] = [
+            'at'     => (int)$row['last_run'],
+            'status' => (string)$row['last_status'],
+            'notes'  => (int)$row['last_note_count'],
+        ];
+    }
+    echo json_encode($status);
     exit;
 }
 

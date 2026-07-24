@@ -3,11 +3,10 @@ pocket-tts>=2.1
 # STT. Runs on CTranslate2 (not torch) and decodes audio via PyAV, whose wheel
 # bundles ffmpeg - so no ffmpeg package is needed in the image.
 faster-whisper>=1.0
+# CPU wheel here on purpose - see docker/tts.Dockerfile. Karaoke separation is a
+# separate sidecar (requirements-karaoke.txt) precisely so this one never needs a
+# GPU torch competing with the LLM for VRAM.
 torch>=2.5
-# Karaoke stem separation (htdemucs). Needs torch>=2.1 (satisfied above) and does
-# not pull torchaudio - that's installed from the torch index in tts.Dockerfile so
-# its wheel build matches torch's.
-demucs>=4.0,<4.2
 fastapi>=0.110
 uvicorn[standard]>=0.27
 soundfile>=0.12
