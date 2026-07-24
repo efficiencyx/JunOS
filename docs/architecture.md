@@ -17,14 +17,18 @@ This document is the long-form reference for the system. For a quick orientation
   └──────────┘            │  │  static │                 │  HTTP            │
                           │  │  files  │                 ├──────────────── ▶│ ollama :11434
                           │  └─────────┘                 │                  │
-                          │                              └──────────────── ▶│ tts :8001
+                          │                              ├──────────────── ▶│ tts :8001
+                          │                              └──────────────── ▶│ karaoke :8001
                           └─────────────────────────────────────────────────┘
 
-  Volumes: ollama_data, llamacpp_cache, tts_cache, omega_state, letsencrypt, certbot_webroot
+  Volumes: ollama_data, llamacpp_cache, tts_cache, karaoke_cache, omega_state, letsencrypt, certbot_webroot
+  Optional (profile=karaoke): karaoke sidecar for stem separation
   Optional (profile=prod): certbot sidecar for Let's Encrypt issuance + renewal
 ```
 
-nginx serves static files from `/var/www/omega/` and FastCGI-proxies `*.php` requests to the php-fpm container. Ollama and the voice sidecar are internal-only; their ports are not published to the host. The voice sidecar on `:8001` fronts two swappable engines, Kokoro-82M (default) and kyutai pocket-tts, selected per request. Under Docker the `tts` service always runs - there is no compose `voice` profile; the `VOICE=on/off` env var only gates the bare-metal Windows launcher (`start.ps1`), which skips spawning the sidecar process when it's off. php and the frontend degrade gracefully to text-only whenever the sidecar is absent or unhealthy.
+nginx serves static files from `/var/www/omega/` and FastCGI-proxies `*.php` requests to the php-fpm container. Ollama and the audio sidecars are internal-only; their ports are not published to the host. The voice sidecar on `:8001` fronts two swappable engines, Kokoro-82M (default) and kyutai pocket-tts, selected per request. Under Docker the `tts` service always runs - there is no compose `voice` profile; the `VOICE=on/off` env var only gates the bare-metal Windows launcher (`start.ps1`), which skips spawning the sidecar process when it's off. php and the frontend degrade gracefully to text-only whenever the sidecar is absent or unhealthy.
+
+Karaoke stem separation runs the *same* `tts/server.py` in a second container (`profiles: [karaoke]`, `SIDECAR_ROLE=karaoke`) built from `docker/karaoke.Dockerfile`: demucs and a CUDA/ROCm torch, no Kokoro or pocket-tts. The split exists so the two can want different hardware - separation is minutes on CPU versus seconds on a GPU, while voice synthesis is real-time on CPU and a GPU copy would only take VRAM away from the LLM. Each image installs only its own dependencies, and `server.py`'s `_stt_available()`/`_sep_available()` probes turn a missing one into a 503 rather than a crash, so the shared file is safe in both roles. Bare-metal installs (Windows, Colab) run a single process that serves both, which is why `api/karaoke.php` falls back to `TTS_URL` when `KARAOKE_URL` is unset.
 
 On a multi-GPU host the launcher decides which card the model server gets: `start.sh` orders the GPUs by VRAM and passes that order down as `CUDA_VISIBLE_DEVICES` (or the ROCm/Vulkan equivalents), so the largest card is device 0, and `TENSOR_PARALLEL=on` additionally lets one model span every card. See [configuration.md](configuration.md) §9 for the full set of knobs and the derived variables.
 

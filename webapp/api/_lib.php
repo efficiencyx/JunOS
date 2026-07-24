@@ -328,13 +328,50 @@ function consolidation_lock_path(int $userId): string {
     return $dir . '/user-' . $userId . '.lock';
 }
 
+// Older builds wrote a bare expiry timestamp here. That still decodes to an int,
+// so a lock file left behind by one of them reads as an expiry with no phase
+// rather than as a corrupt lock nobody can clear.
+function consolidation_lock_read(int $userId): ?array {
+    $raw = @file_get_contents(consolidation_lock_path($userId));
+    if ($raw === false) return null;
+    $data = json_decode(trim($raw), true);
+    if (is_int($data)) $data = ['expiry' => $data];
+    if (!is_array($data) || !isset($data['expiry'])) return null;
+    return [
+        'expiry'  => (int)$data['expiry'],
+        'started' => (int)($data['started'] ?? 0),
+        'phase'   => (string)($data['phase'] ?? ''),
+    ];
+}
+
+function consolidation_lock_write(int $userId, int $expiry, int $started, string $phase): void {
+    @file_put_contents(
+        consolidation_lock_path($userId),
+        json_encode(['expiry' => $expiry, 'started' => $started, 'phase' => $phase]),
+        LOCK_EX
+    );
+}
+
 function consolidation_locked(int $userId): bool {
     $path = consolidation_lock_path($userId);
     if (!is_file($path)) return false;
-    $expiry = (int)trim((string)@file_get_contents($path));
-    if ($expiry > time()) return true;
+    $lock = consolidation_lock_read($userId);
+    // An unreadable lock is cleared too, or a truncated write would block every
+    // later run: consolidation_run only retries fopen(x) once this returns false.
+    if ($lock !== null && $lock['expiry'] > time()) return true;
     @unlink($path);
     return false;
+}
+
+function consolidation_status(int $userId): array {
+    if (!consolidation_locked($userId)) return ['locked' => false];
+    $lock = consolidation_lock_read($userId);
+    if ($lock === null) return ['locked' => false];
+    return [
+        'locked'  => true,
+        'phase'   => $lock['phase'],
+        'elapsed' => $lock['started'] > 0 ? max(0, time() - $lock['started']) : 0,
+    ];
 }
 
 function consolidation_touch(int $userId, ?bool $enabled = null): void {
