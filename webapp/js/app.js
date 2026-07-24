@@ -2031,12 +2031,14 @@
       // don't advertise a `languages` list.
       function populateLanguages(engineKey, preferred) {
         const info = engines[engineKey] || {};
-        const langs = info.languages || [];
-        if (ttsLangRow) ttsLangRow.hidden = langs.length === 0;
-        if (!langs.length) { TTS.setLang(''); return ''; }
+        const baseLangs = info.languages || [];
+        if (ttsLangRow) ttsLangRow.hidden = baseLangs.length === 0;
+        if (!baseLangs.length) { TTS.setLang(''); return ''; }
+        // 'auto' is a client-side pseudo-language: TTS detects each reply's language
+        // and sends a concrete id. It's the default so routing works out of the box.
+        const langs = [{ id: 'auto', label: 'Auto-detect' }, ...baseLangs];
         const ids = langs.map(l => l.id);
-        const def = (preferred && ids.includes(preferred)) ? preferred
-          : (ids.includes(info.default_language) ? info.default_language : ids[0]);
+        const def = (preferred && ids.includes(preferred)) ? preferred : 'auto';
         if (ttsLangSelect) {
           ttsLangSelect.innerHTML = langs.map(l =>
             `<option value="${escapeHtml(l.id)}">${escapeHtml(l.label || l.id)}</option>`).join('');
