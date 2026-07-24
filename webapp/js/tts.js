@@ -4,6 +4,7 @@ window.TTS = (function () {
   let enabled = false;
   let engine = 'kokoro';
   let voice = 'af_heart';
+  let lang = 'english';     // pocket-tts only; Kokoro ignores it
   let speed = 1.0;
   let volume = 1.0;
   let duckLevel = 1.0;
@@ -57,6 +58,7 @@ window.TTS = (function () {
 
   function setEngine(e) { if (e) engine = e; }
   function setVoice(v) { if (v) voice = v; }
+  function setLang(l) { if (l) lang = l; }
   function setSpeed(s) { speed = Math.max(0.5, Math.min(2.0, s || 1.0)); }
   function applyOutputGain() {
     if (!masterGain || !audioCtx) return;
@@ -202,7 +204,7 @@ window.TTS = (function () {
         const res = await fetch(`${TTS_URL}?action=tts`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ text: job.text, voice, speed, engine }),
+          body: JSON.stringify({ text: job.text, voice, speed, engine, lang }),
           signal: job.abort.signal,
         });
         // 204 (nothing to say) is a 2xx, so it can't be caught under !res.ok.
@@ -380,7 +382,7 @@ window.TTS = (function () {
 
   return {
     setEnabled, isEnabled,
-    setEngine, setVoice, setSpeed, setVolume,
+    setEngine, setVoice, setLang, setSpeed, setVolume,
     setLogger,
     listVoices,
     feed, flush, stop, speak,

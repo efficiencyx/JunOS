@@ -59,6 +59,8 @@
   const ttsChk = document.getElementById('ttsChk');
   const ttsEngineSelect = document.getElementById('ttsEngineSelect');
   const ttsVoiceSelect = document.getElementById('ttsVoiceSelect');
+  const ttsLangSelect = document.getElementById('ttsLangSelect');
+  const ttsLangRow = document.getElementById('ttsLangRow');
   const ttsSpeedInput = document.getElementById('ttsSpeed');
   const siteVolumeInput = document.getElementById('siteVolume');
   const voiceChk = document.getElementById('voiceChk');
@@ -2003,6 +2005,7 @@
       });
       const savedEnabled = localStorage.getItem('tts.enabled') === '1';
       const savedVoice = localStorage.getItem('tts.voice') || '';
+      const savedLang = localStorage.getItem('tts.lang') || '';
       const savedSpeed = parseFloat(localStorage.getItem('tts.speed') || '1.0');
       const savedEngine = localStorage.getItem('tts.engine') || 'kokoro';
       TTS.setSpeed(savedSpeed);
@@ -2024,6 +2027,25 @@
         return def;
       }
 
+      // Language only applies to pocket-tts; the row stays hidden for engines that
+      // don't advertise a `languages` list.
+      function populateLanguages(engineKey, preferred) {
+        const info = engines[engineKey] || {};
+        const langs = info.languages || [];
+        if (ttsLangRow) ttsLangRow.hidden = langs.length === 0;
+        if (!langs.length) { TTS.setLang(''); return ''; }
+        const ids = langs.map(l => l.id);
+        const def = (preferred && ids.includes(preferred)) ? preferred
+          : (ids.includes(info.default_language) ? info.default_language : ids[0]);
+        if (ttsLangSelect) {
+          ttsLangSelect.innerHTML = langs.map(l =>
+            `<option value="${escapeHtml(l.id)}">${escapeHtml(l.label || l.id)}</option>`).join('');
+          ttsLangSelect.value = def;
+        }
+        TTS.setLang(def);
+        return def;
+      }
+
       try {
         const v = await TTS.listVoices();
         engines = v.engines || {};
@@ -2037,6 +2059,7 @@
         TTS.setEngine(engineKey);
         if (ttsEngineSelect) ttsEngineSelect.value = engineKey;
         const def = populateVoices(engineKey, savedVoice);
+        populateLanguages(engineKey, savedLang);
         const count = (engines[engineKey] && engines[engineKey].voices || []).length;
         if (count) logAction('ok', `TTS ready: ${engineKey}, ${count} voices (default ${def})`);
       } catch (e) {
@@ -2050,6 +2073,8 @@
           localStorage.setItem('tts.engine', engineKey);
           const def = populateVoices(engineKey, '');
           localStorage.setItem('tts.voice', def);
+          const langDef = populateLanguages(engineKey, localStorage.getItem('tts.lang') || '');
+          if (langDef) localStorage.setItem('tts.lang', langDef);
           if (window.Prefs) Prefs.pushToServer();
         });
       }
@@ -2070,6 +2095,13 @@
         ttsVoiceSelect.addEventListener('change', () => {
           TTS.setVoice(ttsVoiceSelect.value);
           localStorage.setItem('tts.voice', ttsVoiceSelect.value);
+          if (window.Prefs) Prefs.pushToServer();
+        });
+      }
+      if (ttsLangSelect) {
+        ttsLangSelect.addEventListener('change', () => {
+          TTS.setLang(ttsLangSelect.value);
+          localStorage.setItem('tts.lang', ttsLangSelect.value);
           if (window.Prefs) Prefs.pushToServer();
         });
       }

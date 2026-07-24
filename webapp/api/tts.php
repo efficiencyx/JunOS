@@ -90,6 +90,13 @@ if ($action === 'tts') {
         fail(400, 'invalid_request');
     }
 
+    // pocket-tts language id (e.g. english, french_24l). The sidecar clamps unknown
+    // values to its default; we only enforce the shape here.
+    $lang = $body['lang'] ?? null;
+    if ($lang !== null && (!is_string($lang) || !preg_match('/^[a-z][a-z0-9_]*$/', $lang))) {
+        fail(400, 'invalid_request');
+    }
+
     $speed = $body['speed'] ?? null;
     if ($speed !== null) {
         $speed = filter_var($speed, FILTER_VALIDATE_FLOAT);
