@@ -18,6 +18,16 @@ function consolidation_repair_watermarks(PDO $db): void {
     );
 }
 
+// Only ever called for a run that actually reached the model: a skipped poll must
+// not overwrite the outcome the client is still showing, nor advance last_run.
+function consolidation_record_result(int $userId, string $status, int $noteCount = 0): void {
+    db()->prepare(
+        'INSERT INTO memory_consolidation (user_id, last_run, last_status, last_note_count) VALUES (?, ?, ?, ?)
+         ON CONFLICT(user_id) DO UPDATE SET last_run = excluded.last_run,
+             last_status = excluded.last_status, last_note_count = excluded.last_note_count'
+    )->execute([$userId, time(), $status, $noteCount]);
+}
+
 function journal_parse(string $doc): array {
     $entries = [];
     foreach (preg_split('/\R/', $doc) as $line) {
@@ -137,11 +147,12 @@ PROMPT;
 
 function consolidation_run(int $userId, ?int $idleBefore = null): array {
     $lockPath = consolidation_lock_path($userId);
-    $lockExpiry = time() + 600;
+    $startedAt = time();
+    $lockExpiry = $startedAt + 600;
     $lock = @fopen($lockPath, 'x');
     if ($lock === false && !consolidation_locked($userId)) $lock = @fopen($lockPath, 'x');
     if ($lock === false) return ['running' => true];
-    fwrite($lock, (string)$lockExpiry);
+    fwrite($lock, json_encode(['expiry' => $lockExpiry, 'started' => $startedAt, 'phase' => 'notes']));
     fclose($lock);
     @chmod($lockPath, 0600);
 
@@ -236,27 +247,34 @@ PROMPT;
             && !($oldCount > 0 && count($entries) < ceil($oldCount * 0.4));
         if (!$valid) {
             log_event(['msg' => 'memory_consolidation_rejected', 'user_id' => $userId, 'old_count' => $oldCount, 'new_count' => is_array($entries) ? count($entries) : null]);
+            consolidation_record_result($userId, 'rejected', $oldCount);
             return ['ok' => false];
         }
 
         $result = memory_replace_all($userId, $entries);
         if (empty($result['ok'])) {
             log_event(['msg' => 'memory_consolidation_write_failed', 'user_id' => $userId, 'error' => $result['error'] ?? 'unknown']);
+            consolidation_record_result($userId, 'error', $oldCount);
             return ['ok' => false];
         }
 
+        consolidation_lock_write($userId, $lockExpiry, $startedAt, 'journal');
         consolidation_write_journal($userId, $lines);
 
         $db->prepare(
-            'INSERT INTO memory_consolidation (user_id, upto_id, last_run) VALUES (?, ?, ?)
-             ON CONFLICT(user_id) DO UPDATE SET upto_id = excluded.upto_id, last_run = excluded.last_run'
-        )->execute([$userId, $maxId, time()]);
+            'INSERT INTO memory_consolidation (user_id, upto_id, last_run, last_status, last_note_count)
+             VALUES (?, ?, ?, ?, ?)
+             ON CONFLICT(user_id) DO UPDATE SET upto_id = excluded.upto_id, last_run = excluded.last_run,
+                 last_status = excluded.last_status, last_note_count = excluded.last_note_count'
+        )->execute([$userId, $maxId, time(), 'ok', count($result['entries'])]);
         log_event(['msg' => 'memory_consolidation_complete', 'user_id' => $userId, 'upto_id' => $maxId, 'note_count' => count($result['entries'])]);
         return ['ok' => true];
     } catch (Throwable $e) {
         log_event(['msg' => 'memory_consolidation_error', 'user_id' => $userId, 'err' => $e->getMessage()]);
+        try { consolidation_record_result($userId, 'error'); } catch (Throwable $ignored) {}
         return ['ok' => false];
     } finally {
-        if ((int)trim((string)@file_get_contents($lockPath)) === $lockExpiry) @unlink($lockPath);
+        $held = consolidation_lock_read($userId);
+        if ($held !== null && $held['expiry'] === $lockExpiry) @unlink($lockPath);
     }
 }

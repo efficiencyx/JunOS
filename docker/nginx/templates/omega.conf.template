@@ -82,7 +82,10 @@ server {
     location = /api/karaoke.php {
         limit_req zone=api burst=5 nodelay;
         client_max_body_size 30m;
-        fastcgi_read_timeout 300s;
+        # Demucs on CPU runs slower than realtime and whisper then reads the vocal
+        # stem back, so a full-length song can sit well past five minutes. Keep in
+        # step with CURLOPT_TIMEOUT in api/karaoke.php.
+        fastcgi_read_timeout 900s;
 
         gzip off;
 

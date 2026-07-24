@@ -16,6 +16,9 @@
   const toolLogCount = document.getElementById('toolLogCount');
   const clearToolLogBtn = document.getElementById('clearToolLogBtn');
   const debugSystemPromptEl = document.getElementById('debugSystemPrompt');
+  const consolidationBanner = document.getElementById('consolidationBanner');
+  const consolidationTitle = document.getElementById('consolidationTitle');
+  const consolidationSub = document.getElementById('consolidationSub');
   const moodInputs = {
     affection: document.getElementById('moodAffection'),
     trust: document.getElementById('moodTrust'),
@@ -142,9 +145,22 @@
   const IDLE_AFTER_JOIN_MS  = 45000;
   const TYPING_POLL_MS = 5000;
   const MAX_IDLE_NUDGES = 3;
+
+  const CONSOLIDATION_PHASES = {
+    notes: 'Re-reading what you said and writing down what matters',
+    journal: 'Rewriting her journal of the two of you',
+  };
+  const CONSOLIDATION_PHASE_UNKNOWN = 'Working through everything since you last spoke';
+  const CONSOLIDATION_SLOW_AFTER_S = 90;
+  const CONSOLIDATION_OUTCOME_MS = 9000;
+  const CONSOLIDATION_OUTCOME_MAX_AGE_S = 180;
   let idleTimer = null;
   let activityTimer = null;
   let consolidationStatusTimer = null;
+  let consolidationTicker = null;
+  let consolidationOutcomeTimer = null;
+  let consolidationPhase = '';
+  let consolidationStartedAt = 0;
   let consolidating = false;
   let previousBusyLine = -1;
   let idleNudgeStreak = 0;
@@ -171,10 +187,92 @@
     showFaceBubble(pickBusyLine(), 'ephemeral');
   }
 
-  function setConsolidating(locked) {
+  function formatElapsed(seconds) {
+    const whole = Math.max(0, Math.round(seconds));
+    return Math.floor(whole / 60) + ':' + String(whole % 60).padStart(2, '0');
+  }
+
+  function setConsolidationBanner(kind, title, sub) {
+    if (!consolidationBanner) return;
+    consolidationBanner.hidden = false;
+    consolidationBanner.dataset.kind = kind;
+    consolidationTitle.textContent = title;
+    consolidationSub.textContent = sub;
+  }
+
+  function hideConsolidationBanner() {
+    if (consolidationBanner) consolidationBanner.hidden = true;
+  }
+
+  function renderConsolidationBanner() {
+    const elapsed = (Date.now() - consolidationStartedAt) / 1000;
+    const phase = CONSOLIDATION_PHASES[consolidationPhase] || CONSOLIDATION_PHASE_UNKNOWN;
+    const slow = elapsed >= CONSOLIDATION_SLOW_AFTER_S
+      ? ' · runs on your local model, so it can take a few minutes'
+      : '';
+    setConsolidationBanner('busy', 'Jun is tidying her memory', phase + ' · ' + formatElapsed(elapsed) + slow);
+  }
+
+  function showConsolidationOutcome(last) {
+    if (!last || (Date.now() / 1000) - last.at > CONSOLIDATION_OUTCOME_MAX_AGE_S) {
+      hideConsolidationBanner();
+      return;
+    }
+    if (last.status === 'ok') {
+      setConsolidationBanner('done', 'Jun is caught up', last.notes
+        ? `She's keeping ${last.notes} note${last.notes === 1 ? '' : 's'} about you — Settings › Memory has the list.`
+        : 'Nothing new this time that was worth writing down.');
+    } else if (last.status === 'rejected') {
+      setConsolidationBanner('warn', "Jun couldn't finish tidying",
+        'What the model gave back did not look right, so she left her notes exactly as they were.');
+    } else {
+      setConsolidationBanner('warn', "Jun couldn't finish tidying",
+        'Something broke partway through. Nothing was changed — she will try again after the next lull.');
+    }
+    if (consolidationOutcomeTimer) clearTimeout(consolidationOutcomeTimer);
+    consolidationOutcomeTimer = setTimeout(() => {
+      consolidationOutcomeTimer = null;
+      hideConsolidationBanner();
+    }, CONSOLIDATION_OUTCOME_MS);
+  }
+
+  function setConsolidating(locked, status) {
+    const wasLocked = consolidating;
     consolidating = locked;
     chatInput.disabled = locked;
     sendBtn.disabled = locked;
+    chatInput.placeholder = locked ? 'Jun is busy with her memory…' : 'Write to Jun…';
+
+    if (locked) {
+      if (consolidationOutcomeTimer) {
+        clearTimeout(consolidationOutcomeTimer);
+        consolidationOutcomeTimer = null;
+      }
+      if (status && status.phase) consolidationPhase = status.phase;
+      // Anchor the ticker to the server's elapsed, so a tab that learns about the
+      // run from a 418 - or joins halfway through - still counts from the truth.
+      // Re-anchoring only on real drift keeps the display off the 1s rounding.
+      if (status && Number.isFinite(status.elapsed)) {
+        const anchor = Date.now() - status.elapsed * 1000;
+        if (!consolidationStartedAt || Math.abs(anchor - consolidationStartedAt) > 2000) {
+          consolidationStartedAt = anchor;
+        }
+      } else if (!consolidationStartedAt) {
+        consolidationStartedAt = Date.now();
+      }
+      renderConsolidationBanner();
+      if (!consolidationTicker) consolidationTicker = setInterval(renderConsolidationBanner, 1000);
+      return;
+    }
+
+    if (consolidationTicker) {
+      clearInterval(consolidationTicker);
+      consolidationTicker = null;
+    }
+    consolidationPhase = '';
+    consolidationStartedAt = 0;
+    if (wasLocked) showConsolidationOutcome(status && status.last);
+    else if (!consolidationOutcomeTimer) hideConsolidationBanner();
   }
 
   function reportActivity(immediate = false) {
@@ -197,7 +295,7 @@
     try {
       const response = await fetch('api/consolidate.php?action=status', { credentials: 'same-origin' });
       const status = response.ok ? await response.json() : { locked: false };
-      setConsolidating(!!status.locked);
+      setConsolidating(!!status.locked, status);
       if (wasLocked && !status.locked) armIdleAfterReply();
     } catch (e) {
       setConsolidating(false);
@@ -871,16 +969,14 @@
     appendRaw('--- ' + new Date().toLocaleTimeString() + (idle ? ' (idle nudge)' : '') + ' ---\n');
 
     // Predict the reply's language from Anon's message so the pocket-tts model can
-    // warm during generation, and ask Jun to answer in it. English needs no
-    // instruction (it's her default) and no reload once resident.
-    let replyLangLabel = null;
+    // warm during generation. This only routes the voice - the prediction never
+    // reaches the model, which mirrors Anon's language from the conversation itself.
     if (window.TTS && TTS.predictLang) {
       const lastUser = [...messages].reverse().find(m => m.role === 'user');
       const predicted = TTS.predictLang(lastUser ? lastUser.content : '');
       if (predicted) {
         TTS.setReplyLang(predicted);
         TTS.warmLang(predicted);
-        if (predicted !== 'english') replyLangLabel = TTS.langLabel(predicted);
       }
     }
 
@@ -888,8 +984,7 @@
       { messages: [...messages], model: modelSelect.value,
         reasoning: reasoningSelect.value, think: thinkChk.checked,
         outfit_context: Outfit.describe(), conversation_id: currentConversationId,
-        idle: !!idle, ephemeral: !!ephemeral, client_time: localTimeString(),
-        reply_lang: replyLangLabel },
+        idle: !!idle, ephemeral: !!ephemeral, client_time: localTimeString() },
       {
         onDebug: (dbg) => {
           if (!isCurrent()) return;
@@ -1876,7 +1971,7 @@
       ['vendor/pixi.min.js', 'vendor/live2dcubismcore.min.js',
        'vendor/marked.min.js', 'vendor/purify.min.js',
        'js/actions.js?v=10', 'js/outfit.js?v=34', 'js/touch.js?v=12',
-       'js/mods.js?v=10', 'js/tts.js?v=12', 'js/voice.js?v=2',
+       'js/mods.js?v=10', 'js/tts.js?v=15', 'js/voice.js?v=2',
        'js/voicemode.js?v=3', 'js/devhud.js?v=3', 'js/trip-loader.js?v=3',
        'js/wardrobe-open-lines.js?v=3', 'js/wardrobe-reactions.js?v=18',
        'js/wardrobe-return-lines.js?v=3'],
@@ -1948,7 +2043,11 @@
       devNoIdleChk.checked = localStorage.getItem('no_idle_nudges') === '1';
     }
     syncThinkToggle();
-    setConsolidating(true);
+    // Pre-lock the composer until the first status check answers, but leave the
+    // banner alone: it only ever speaks for a state the server confirmed, so a
+    // normal load never flashes a consolidation notice it is about to retract.
+    chatInput.disabled = true;
+    sendBtn.disabled = true;
     await syncConsolidationStatus();
     reportActivity(true);
 
@@ -2246,10 +2345,10 @@
             ? 'Sing together (CPU - separation is slow)'
             : 'Sing together';
         } else {
-          karaokeBtn.title = 'Unavailable: the speech sidecar has no source separation';
+          karaokeBtn.title = 'Unavailable: the karaoke sidecar is not running';
         }
       } catch (e) {
-        karaokeBtn.title = 'Unavailable: could not reach the speech sidecar';
+        karaokeBtn.title = 'Unavailable: could not reach the karaoke sidecar';
       }
     }
 

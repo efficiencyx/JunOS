@@ -211,9 +211,12 @@ Everything's environment variables (see `.env.example`; the full reference lives
 | `OPENROUTER_API_KEY` / `OPENROUTER_MODEL` | OpenRouter credentials + default model | - / `openrouter/auto` |
 | `LLAMACPP_URL` | Where PHP finds llama-server (custom URL skips the managed one) | `http://llamacpp:8080` |
 | `LLAMACPP_MODEL_HF` | HF `repo:quant` the managed llama-server loads (`-hf` syntax) | `efficiencyx/Jun-LoRA-v4-E2B-GGUF:Q4_K_M` |
-| `COMPOSE_PROFILES` | Which model-server containers run (`ollama`, `llamacpp`) | `ollama` |
+| `COMPOSE_PROFILES` | Which optional containers run (`ollama`, `llamacpp`, `karaoke`, `prod`) | `ollama` |
 | `TTS_URL` | Where the PHP TTS/STT proxies find the voice sidecar (legacy name `KOKORO_URL` still works) | `http://tts:8001` |
-| `TTS_DEVICE` | `cpu` \| `cuda` \| `auto` for voice synthesis. Both engines are real-time on CPU, and `cuda` parks ~2 GB of VRAM that your LLM almost certainly wants more | `cpu` |
+| `TTS_DEVICE` | `cpu` \| `cuda` \| `auto` for voice synthesis. The Docker image is CPU-only on purpose - both engines are real-time there, and a GPU copy parks ~2 GB of VRAM that your LLM almost certainly wants more | `cpu` |
+| `KARAOKE` | `on`/`off` - builds and runs the karaoke sidecar (its own container, a few GB with demucs and a GPU torch) | `on` |
+| `KARAOKE_URL` | Where the PHP karaoke proxy finds that sidecar; falls back to `TTS_URL` on bare metal, where one process serves both | `http://karaoke:8001` |
+| `SEP_DEVICE` | `cpu` \| `cuda` \| `auto` for splitting a song into stems. This is the audio job that actually wants a GPU: minutes on CPU, seconds on a card, and the VRAM goes back afterwards | `auto` |
 | `OMEGA_NUM_CTX` | Context window. Auto-detected from system RAM, which is only a proxy for the VRAM that actually bounds the KV cache - set it by hand if the model crowds your GPU | *(auto)* |
 | `TELEMETRY` | `on`/`off` - the anonymized sharing described [above](#choosing-an-ai-provider) | `on` |
 | `CORS_ORIGIN` | `Access-Control-Allow-Origin` for the voice sidecar | `http://nginx` |
@@ -322,6 +325,12 @@ Check `docker compose logs tts`. The first run downloads ~300 MB of weights. Fro
 </details>
 
 <details>
+<summary><b>The karaoke button is greyed out</b></summary>
+
+Karaoke lives in its own container, so it only runs with `KARAOKE=on` in `.env` (`./install.sh` asks; `./start.sh` prints `karaoke: off` when it isn't). Check `docker compose logs karaoke` and `docker compose exec nginx wget -qO- http://karaoke:8001/health` - `"sep":true` means separation is ready, and `"device"` tells you whether it got the GPU.
+</details>
+
+<details>
 <summary><b>Model's taking forever to load</b></summary>
 
 Watch `docker compose logs ollama`. The entrypoint pre-warms the **first** model in `OLLAMA_MODELS_TO_PULL` with an empty prompt to pull weights into VRAM, so if you keep a hand-edited list, make sure the chat model leads it. A `pre-warm failed` line is non-fatal - she'll load on your first real message.
@@ -340,7 +349,7 @@ The same command's `UNTIL` column should read `Forever`. A five-minute expiry me
 ```
 .
 ├── docker/                    Dockerfiles, nginx templates, entrypoints
-├── tts/                       Audio sidecar: TTS (Kokoro / pocket-tts) + STT (FastAPI, server.py)
+├── tts/                       Audio sidecar: TTS (Kokoro / pocket-tts) + STT + karaoke separation (FastAPI, server.py)
 ├── tools/                     Lore-corpus builder + dataset, critical-CSS inliner, chat-index compaction, asset recovery
 ├── docs/                      architecture.md, configuration.md + screenshots/
 ├── webapp/                    Everything served by nginx / php-fpm

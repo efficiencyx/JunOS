@@ -203,23 +203,46 @@ ask_model_ref() {
     MODEL_REF="$(resolve_model "$alias")"
 }
 
-# "run voice (TTS) on the GPU? [y/N]". Defaults to CPU: both shipped engines are
-# real-time there anyway, while the GPU copy holds ~2GB of VRAM the LLM would
-# otherwise use for layer offload. Sets $TTS_DEVICE_CHOICE (cpu|cuda).
-# Non-interactive knob: JUN_TTS_DEVICE=cpu|cuda (default cpu).
-ask_tts_device() {
+# "enable karaoke? [Y/n]". Its sidecar is a separate container from the voice
+# one - it carries demucs and, on a GPU box, a multi-GB CUDA/ROCm torch - so
+# saying no here keeps that whole image out of the install. Sets $KARAOKE (on|off).
+# Non-interactive knob: JUN_KARAOKE=on|off (default on).
+ask_karaoke() {
     local v
-    if [ -n "${JUN_TTS_DEVICE:-}" ]; then
-        case "$(printf '%s' "$JUN_TTS_DEVICE" | tr '[:upper:]' '[:lower:]')" in
-            cuda|gpu|1|true|yes|y) TTS_DEVICE_CHOICE=cuda ;; *) TTS_DEVICE_CHOICE=cpu ;;
+    if [ -n "${JUN_KARAOKE:-}" ]; then
+        case "$(printf '%s' "$JUN_KARAOKE" | tr '[:upper:]' '[:lower:]')" in
+            off|0|false|no|n) KARAOKE=off ;; *) KARAOKE=on ;;
         esac
     elif [ "${JUN_YES:-}" = "1" ] || [ ! -r /dev/tty ]; then
-        TTS_DEVICE_CHOICE=cpu
+        KARAOKE=on
     else
-        printf '     %s$%s run voice on the GPU? %s(~2GB VRAM, barely faster than CPU)%s %s[y/N]%s %s→%s ' \
+        printf '     %s$%s enable karaoke %s(sing along - adds a few GB)%s %s[Y/n]%s %s→%s ' \
             "$OK" "$R" "$DIM" "$R" "$DIM" "$R" "$ACCENT" "$R" > /dev/tty
         read -r v < /dev/tty || v=""
-        case "$v" in y|Y|yes|YES) TTS_DEVICE_CHOICE=cuda ;; *) TTS_DEVICE_CHOICE=cpu ;; esac
+        case "$v" in n|N|no|NO) KARAOKE=off ;; *) KARAOKE=on ;; esac
+    fi
+}
+
+# "run karaoke separation on the GPU? [Y/n]". Only asked when a card is actually
+# present; defaults to yes because splitting a song is minutes on CPU and seconds
+# on a GPU, and it only holds VRAM while a song is being prepared. Sets
+# $SEP_DEVICE (cuda|cpu). Non-interactive knob: JUN_KARAOKE_GPU=on|off (default on).
+ask_karaoke_gpu() {
+    local v gpus
+    gpus="$(detect_gpu_count)"
+    if [ "${gpus:-0}" -lt 1 ]; then
+        SEP_DEVICE=cpu
+    elif [ -n "${JUN_KARAOKE_GPU:-}" ]; then
+        case "$(printf '%s' "$JUN_KARAOKE_GPU" | tr '[:upper:]' '[:lower:]')" in
+            off|0|false|no|n|cpu) SEP_DEVICE=cpu ;; *) SEP_DEVICE=cuda ;;
+        esac
+    elif [ "${JUN_YES:-}" = "1" ] || [ ! -r /dev/tty ]; then
+        SEP_DEVICE=cuda
+    else
+        printf '     %s$%s use the GPU to split songs? %s(much faster; frees the VRAM again afterwards)%s %s[Y/n]%s %s→%s ' \
+            "$OK" "$R" "$DIM" "$R" "$DIM" "$R" "$ACCENT" "$R" > /dev/tty
+        read -r v < /dev/tty || v=""
+        case "$v" in n|N|no|NO) SEP_DEVICE=cpu ;; *) SEP_DEVICE=cuda ;; esac
     fi
 }
 
@@ -383,10 +406,24 @@ configure() {
     set_env VOICE "$voice"
     ok "voice $voice"
 
+    # The voice sidecar is CPU-only on purpose: both engines are real-time there,
+    # and a GPU copy would sit on VRAM the LLM wants for layer offload.
     if [ "$voice" = on ]; then
-        ask_tts_device
-        set_env TTS_DEVICE "$TTS_DEVICE_CHOICE"
-        ok "tts device $TTS_DEVICE_CHOICE"
+        set_env TTS_DEVICE cpu
+    fi
+
+    ask_karaoke
+    set_env KARAOKE "$KARAOKE"
+    if [ "$KARAOKE" = on ]; then
+        ask_karaoke_gpu
+        set_env SEP_DEVICE "$SEP_DEVICE"
+        if [ "$SEP_DEVICE" = cuda ]; then
+            ok "karaoke on, splitting songs on the GPU"
+        else
+            ok "karaoke on, splitting songs on the CPU"
+        fi
+    else
+        ok "karaoke off"
     fi
 
     set_env TENSOR_PARALLEL "$TENSOR_PARALLEL"
