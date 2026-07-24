@@ -25,6 +25,7 @@ window.Karaoke = (function () {
   let junVolume = 0.8;
   let pendingLyrics = null;      // { text, kind:'lrc'|'txt', name } applied at next loadFile
   let pendingId3 = null;
+  let pendingLrclib = null;      // { text, kind:'lrc'|'txt' } fetched from LRCLIB per load
   let splitPicks = null;
   let setupStep = 0;
 
@@ -300,6 +301,77 @@ window.Karaoke = (function () {
     }
   }
 
+  function id3TextFrame(buf, off, size) {
+    const bytes = new Uint8Array(buf, off, size);
+    const dec = id3Decoder(bytes[0]);
+    return dec.decode(bytes.subarray(1)).replace(/\0+$/, '').trim();
+  }
+
+  function parseId3Tags(buf) {
+    const meta = { title: '', artist: '', album: '' };
+    try {
+      const dv = new DataView(buf);
+      if (dv.byteLength < 10) return meta;
+      if (dv.getUint8(0) !== 0x49 || dv.getUint8(1) !== 0x44 || dv.getUint8(2) !== 0x33) return meta;
+      const ver = dv.getUint8(3);
+      const syncsafe = (a, b, c, d) => (a << 21) | (b << 14) | (c << 7) | d;
+      const tagSize = syncsafe(dv.getUint8(6), dv.getUint8(7), dv.getUint8(8), dv.getUint8(9));
+      const end = Math.min(10 + tagSize, dv.byteLength);
+      const frameSize = ver >= 4
+        ? (p) => syncsafe(dv.getUint8(p), dv.getUint8(p + 1), dv.getUint8(p + 2), dv.getUint8(p + 3))
+        : (p) => ((dv.getUint8(p) << 24) | (dv.getUint8(p + 1) << 16) | (dv.getUint8(p + 2) << 8) | dv.getUint8(p + 3)) >>> 0;
+      const want = { TIT2: 'title', TPE1: 'artist', TALB: 'album' };
+      let pos = 10;
+      while (pos + 10 <= end) {
+        const id = String.fromCharCode(dv.getUint8(pos), dv.getUint8(pos + 1), dv.getUint8(pos + 2), dv.getUint8(pos + 3));
+        if (!/^[A-Z0-9]{4}$/.test(id)) break;
+        const size = frameSize(pos + 4) >>> 0;
+        const body = pos + 10;
+        if (size <= 0 || body + size > dv.byteLength) break;
+        const key = want[id];
+        if (key && !meta[key]) meta[key] = id3TextFrame(buf, body, size);
+        pos = body + size;
+      }
+    } catch (e) { /* leave meta blank on any malformed tag */ }
+    return meta;
+  }
+
+  function metaFromFilename(name) {
+    const base = (name || '').replace(/\.[^.]+$/, '');
+    const parts = base.split(/\s+-\s+/);
+    if (parts.length >= 2) return { artist: parts[0].trim(), title: parts.slice(1).join(' - ').trim(), album: '' };
+    return { artist: '', title: base.trim(), album: '' };
+  }
+
+  function trackMeta(buf, name) {
+    const tags = parseId3Tags(buf);
+    const fromName = metaFromFilename(name);
+    return {
+      title: tags.title || fromName.title,
+      artist: tags.artist || fromName.artist,
+      album: tags.album || fromName.album,
+    };
+  }
+
+  async function fetchLrclib(meta, duration) {
+    if (!meta || !meta.title) return null;
+    const params = new URLSearchParams({ action: 'lyrics', title: meta.title });
+    if (meta.artist) params.set('artist', meta.artist);
+    if (meta.album) params.set('album', meta.album);
+    if (duration) params.set('duration', String(Math.round(duration)));
+    try {
+      const r = await fetch(`${API}?${params.toString()}`, { credentials: 'same-origin' });
+      if (!r.ok) return null;
+      const data = await r.json();
+      if (!data || !data.found) return null;
+      if (data.synced) return { kind: 'lrc', text: data.synced };
+      if (data.plain) return { kind: 'txt', text: data.plain };
+      return null;
+    } catch (e) {
+      return null;
+    }
+  }
+
   function interpolateTimings(words, duration) {
     const n = words.length;
     if (!n) return;
@@ -423,6 +495,14 @@ window.Karaoke = (function () {
       const secs = sectionsFromPlainText(pendingLyrics.text, whisperWords, duration);
       if (secs.length) return { sections: secs, src: 'file (.txt)' };
     }
+    if (pendingLrclib && pendingLrclib.kind === 'lrc') {
+      const lines = parseLrc(pendingLrclib.text);
+      if (lines.length) return { sections: sectionsFromLines(lines, duration), src: 'LRCLIB (synced)' };
+    }
+    if (pendingLrclib && pendingLrclib.kind === 'txt') {
+      const secs = sectionsFromPlainText(pendingLrclib.text, whisperWords, duration);
+      if (secs.length) return { sections: secs, src: 'LRCLIB' };
+    }
     if (pendingId3) {
       if (pendingId3.type === 'synced' && pendingId3.lines.length)
         return { sections: sectionsFromLines(pendingId3.lines, duration), src: 'embedded' };
@@ -451,6 +531,8 @@ window.Karaoke = (function () {
       const raw = await file.arrayBuffer();
       const hash = await sha256Hex(raw);
       pendingId3 = parseId3Lyrics(raw);
+      pendingLrclib = null;
+      const meta = trackMeta(raw, file.name);
 
       let rec = await idbGet(hash);
       if (!rec) {
@@ -479,6 +561,12 @@ window.Karaoke = (function () {
 
       const [instrBuf, guideBuf] = await Promise.all([decodeCopy(rec.instrumental), decodeCopy(rec.guide)]);
       const duration = rec.duration || Math.max(instrBuf.duration, guideBuf.duration);
+
+      if (!pendingLyrics) {
+        setStatus('Looking up lyrics…');
+        pendingLrclib = await fetchLrclib(meta, duration);
+      }
+
       const built = buildSections(rec.lyrics || [], duration);
       track = { hash, duration, instrBuf, guideBuf, sections: built.sections, lyricsSrc: built.src };
       setLyricsSrc(built.src);
@@ -588,6 +676,7 @@ window.Karaoke = (function () {
     track = null;
     pendingLyrics = null;
     pendingId3 = null;
+    pendingLrclib = null;
     setStatus('');
     setBusy(false);
     setLyricsChoice('auto');
