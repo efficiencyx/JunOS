@@ -95,7 +95,11 @@ window.TTS = (function () {
   // phrase boundary - each tilde-delimited beat becomes its own utterance so it
   // lands with a natural falling intonation instead of running into the next.
   const HARD_BREAK_RE = /[.!?~\n]/;
-  const SOFT_BREAK_RE = /[,;:-–]/g;
+  // Only real punctuation breaks a chunk. Keep the dashes out: an ASCII hyphen
+  // lands mid-word ("co-op", Jun's "H-hey" stutters), and writing it inside the
+  // class turned ':-–' into a range over every letter, which cut the first chunk
+  // at whatever character followed the third word.
+  const SOFT_BREAK_RE = /[,;:]/g;
   const MIN_FIRST_WORDS = 3;   // "Oh," alone reads as a whole falling utterance
 
   function wordCount(s) {
