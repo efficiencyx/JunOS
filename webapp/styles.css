@@ -703,6 +703,47 @@ input[type="checkbox"] {
   from { transform: scaleY(0); }
   to   { transform: scaleY(1); }
 }
+/* Sits above every gate and drawer: while Jun is gone the app is not usable. */
+#fleeOverlay {
+  position: fixed;
+  inset: 0;
+  z-index: 10001;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: var(--space-4);
+  background: radial-gradient(1200px 800px at 50% 40%,
+    color-mix(in srgb, var(--bg-2) 88%, transparent) 0%,
+    color-mix(in srgb, var(--bg) 96%, transparent) 65%);
+  backdrop-filter: blur(14px) saturate(140%);
+  -webkit-backdrop-filter: blur(14px) saturate(140%);
+}
+#fleeOverlay[hidden] { display: none; }
+
+.flee-reason {
+  font-style: italic;
+  color: var(--muted);
+}
+.flee-eta {
+  font-size: 34px;
+  font-weight: 800;
+  line-height: 1;
+  color: var(--accent);
+  font-variant-numeric: tabular-nums;
+  letter-spacing: .02em;
+}
+
+.msg.silence {
+  align-self: stretch;
+  max-width: 100%;
+  background: transparent;
+  border: none;
+  padding: 4px 0;
+  color: var(--muted);
+  font-style: italic;
+  font-size: 13px;
+  user-select: none;
+}
 .msg.assistant p               { margin: 0 0 6px; }
 .msg.assistant p:last-child    { margin-bottom: 0; }
 .msg.assistant strong          { color: var(--accent-2); font-weight: 700; }

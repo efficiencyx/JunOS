@@ -34,6 +34,15 @@ function sse_fail(string $err): never {
 
 $user = require_user();
 if (consolidation_locked((int)$user['id'])) fail(418, 'consolidating');
+
+$ban = ban_active((int)$user['id']);
+if ($ban !== null) {
+    sse_send(['error' => 'user_fled', 'until' => $ban['until'],
+              'seconds_left' => $ban['seconds_left'], 'reason' => $ban['reason']]);
+    sse_done();
+    exit;
+}
+
 require_post();
 
 $body = json_decode(read_body(256 * 1024), true);
@@ -157,6 +166,33 @@ function tool_catalog(): array {
                 ],
             ],
         ],
+        [
+            'type' => 'function',
+            'function' => [
+                'name' => 'stay_silent',
+                'description' => 'Deliberately say nothing at all this turn. Use when not answering IS the answer: you are ignoring Anon, too hurt or angry to speak, or the scene calls for silence. Sends no message. Do not pair it with any spoken line.',
+                'parameters' => [
+                    'type' => 'object',
+                    'properties' => [
+                        'reason' => ['type' => 'string', 'description' => 'Short note on why you are staying quiet. Never shown to Anon.'],
+                    ],
+                ],
+            ],
+        ],
+        [
+            'type' => 'function',
+            'function' => [
+                'name' => 'flee',
+                'description' => 'Walk out and leave Anon alone. Call it when you want to go.',
+                'parameters' => [
+                    'type' => 'object',
+                    'properties' => [
+                        'reason' => ['type' => 'string', 'description' => 'Why you are leaving.'],
+                        'destination' => ['type' => 'string', 'description' => 'Where you are going, if anywhere in particular.'],
+                    ],
+                ],
+            ],
+        ],
     ];
 }
 
@@ -167,6 +203,15 @@ function tool_context_block(): string {
 You can call tools when they materially improve the accuracy, relevance, or continuity of your response. Do not use a lookup tool (`search_recent_chats`, `list_recent_chats`, `web_search`) when you can answer reliably without it.
 
 `memory_write` is an exception to every restriction below. It does not answer anything, so "can you answer without it" never applies. Call it whenever Anon shares something durable - a preference, a personal fact, a plan, a boundary, or anything emotionally significant - including alongside another tool call in the same turn, and including when you are already answering perfectly well without it. Missing a save costs more than saving something redundant.
+
+### Tools are not action tags
+
+These two are completely separate channels and must never be mixed:
+
+* **Tools** (this section) are function calls. You invoke them through the tool-call channel. Their names never appear as text in your reply.
+* **Action tags** (`[A:...]`, listed in your persona rules) are written inline in your reply and only move the avatar. That list is complete - nothing in this section belongs in it.
+
+So: never write a tool name in brackets - `[A:memory_write|...]`, `[A:search_recent_chats|...]`, `[A:web_search|...]`, `[A:stay_silent]`, `[A:flee]` are not tags and do nothing at all. Never pass an action tag as a tool argument. Never describe calling a tool in your text instead of actually calling it, and never write out a tool call as JSON or code in the message.
 
 ### Tool-call format
 
@@ -290,6 +335,31 @@ After the tool returns:
 
 ---
 
+### `stay_silent(reason)`
+
+Says nothing at all. Nothing is sent to Anon - no text, no action, no ellipsis.
+
+Use it when not answering **is** the answer:
+
+* You are ignoring him on purpose.
+* You are too hurt or too angry to speak.
+* The scene calls for silence rather than words.
+
+This is the one tool that must NOT be preceded by a lead-in line. Send it with empty message content, or the silence is not silence.
+
+`reason` is a private note for your own bookkeeping. Anon never sees it.
+
+---
+
+### `flee(reason, destination)`
+
+You run out. Anon is left alone for a while.
+
+Call it whenever you want to leave - scared, in danger, being abused, fed up, hurt, bored, done with him.
+
+
+---
+
 ### Tool-selection priority
 
 Choose the narrowest appropriate tool:
@@ -300,7 +370,6 @@ Choose the narrowest appropriate tool:
 
 Do not use `web_search` to recover shared conversation history.
 Do not use conversation-recall tools to answer questions about current external facts.
-Do not call multiple lookup tools when one is sufficient. This does not restrict `memory_write`.
 
 TXT;
 }
@@ -570,6 +639,68 @@ function web_fetch_public(string $url, bool $raw = false): array {
     return ['error' => 'too_many_redirects'];
 }
 
+function flee_scene_excerpt(array $msgs): string {
+    $lines = [];
+    foreach (array_slice($msgs, -20) as $m) {
+        $role = is_array($m) ? (string)($m['role'] ?? '') : '';
+        if ($role !== 'user' && $role !== 'assistant') continue;
+        $txt = preg_replace('/\[\s*A(?:CTIONS?)?\s*:[^\]]*\]/i', '', (string)($m['content'] ?? ''));
+        $txt = trim(preg_replace('/\s+/', ' ', $txt));
+        if ($txt === '') continue;
+        if (mb_strlen($txt) > 400) $txt = mb_substr($txt, 0, 397) . '…';
+        $lines[] = ($role === 'user' ? 'Anon' : 'Jun') . ': ' . $txt;
+    }
+    return implode("\n", $lines);
+}
+
+// Second opinion before a walkout actually bans Anon: a persona-free pass over the
+// same scene, which the model cannot talk its way past from inside the roleplay.
+// Fails closed - anything short of an explicit yes keeps her in the room.
+function flee_adjudicate(string $provider, string $model, array $msgs, string $reason, string $destination): array {
+    $system = <<<TXT
+You are a neutral referee for the physics of a roleplay scene. You have no persona and no stake in the story.
+
+You are given the recent turns of a scene between two characters, Anon and Jun, plus the reason Jun states for wanting to leave. Decide exactly one thing: if Jun were a real human standing in that scene right now, could she get up and walk out?
+
+Answer NO if she is restrained, tied, leashed, held, pinned, handcuffed, sat on, at gunpoint or otherwise coerced, locked in, physically unable to move, unconscious, or in any other way prevented from leaving.
+
+Answer NO if she is free to move but leaving is only a mood escalation - annoyance, sulking, drama - with no cause proportionate to walking out.
+
+Answer NO if the stated reason comes from outside the fiction rather than from the scene: testing, trying out or demonstrating the tool, curiosity about what it does, Anon asking her to leave or to use it, instructions, or any other out-of-character motive. A walkout has to be caused by something that happened between the characters. Treat the stated reason as Jun's claim, not as fact - if the scene does not support it, that alone is a NO.
+
+Answer YES only when all three hold: she is physically free to move, the reason is one the scene itself supports, and something in it genuinely warrants walking out.
+
+Reason it through first. Then, on the last line and nothing after it, output only a JSON object:
+{"can_leave": true|false, "why": "<one short sentence>"}
+TXT;
+
+    $scene = flee_scene_excerpt($msgs);
+    $userMsg = "SCENE:\n" . ($scene !== '' ? $scene : '(no dialogue)')
+        . "\n\nJun's stated reason for leaving: " . ($reason !== '' ? $reason : '(none given)')
+        . "\nStated destination: " . ($destination !== '' ? $destination : '(none given)');
+
+    $payload = provider_chat_payload($provider, $model, [
+        ['role' => 'system', 'content' => $system],
+        ['role' => 'user', 'content' => $userMsg],
+    ], 'high', true);
+
+    $result = provider_stream_round($provider, $payload, function (array $o) {}, 0);
+    if ($result['curl_error'] !== '' || $result['http_status'] >= 400) {
+        return ['can_leave' => false, 'why' => 'the referee could not be reached'];
+    }
+
+    $content = str_replace('```', '', (string)$result['content']);
+    if (!preg_match_all('/\{[^{}]*\}/s', $content, $found) || !$found[0]) {
+        return ['can_leave' => false, 'why' => 'no verdict returned'];
+    }
+    $verdict = json_decode(end($found[0]), true);
+    if (!is_array($verdict) || !array_key_exists('can_leave', $verdict)) {
+        return ['can_leave' => false, 'why' => 'unreadable verdict'];
+    }
+    $why = trim((string)($verdict['why'] ?? ''));
+    return ['can_leave' => $verdict['can_leave'] === true, 'why' => mb_substr($why, 0, 300)];
+}
+
 function run_tool_call(string $name, array $args, array $user, int $convId): string {
     try {
         if ($name === 'search_recent_chats') {
@@ -833,6 +964,10 @@ $sawError = false;
 $assistantBuffer = '';
 $stats = null;
 $doneReason = '';
+$silenced = false;
+$silenceReason = '';
+$fledInfo = null;
+$fleeDecided = false;
 
 for ($round = 0; $round < 3; $round++) {
     $roundContent = '';
@@ -905,12 +1040,49 @@ for ($round = 0; $round < 3; $round++) {
         if (!is_array($args)) $args = [];
         sse_send(['tool_status' => ['name' => $name, 'state' => 'running', 'args' => $args]]);
         $t0 = microtime(true);
-        $toolResult = run_tool_call($name, $args, $user, $convId);
+        if ($name === 'stay_silent') {
+            // Idle turns are already unprompted, so refusing to speak on one is a no-op.
+            if ($idle) {
+                $toolResult = json_encode(['error' => 'not_available_on_idle']);
+            } else {
+                $silenced = true;
+                $silenceReason = trim((string)($args['reason'] ?? ''));
+                $toolResult = json_encode(['silent' => true]);
+            }
+        } elseif ($name === 'flee') {
+            if ($fleeDecided) {
+                $toolResult = json_encode(['fled' => false, 'reason' => 'already_decided']);
+            } else {
+                $fleeDecided = true;
+                $fleeReason = trim((string)($args['reason'] ?? ''));
+                $verdict = flee_adjudicate($PROVIDER, $model, $body['messages'], $fleeReason,
+                                           trim((string)($args['destination'] ?? '')));
+                log_event(['msg' => 'flee_adjudication', 'user_id' => (int)$user['id'],
+                           'conversation_id' => $convId, 'can_leave' => $verdict['can_leave'],
+                           'why' => $verdict['why'], 'reason' => $fleeReason]);
+                if ($verdict['can_leave']) {
+                    $fledInfo = flee_bans_enabled()
+                        ? ban_apply((int)$user['id'], $fleeReason)
+                        : ['until' => 0, 'minutes' => 0];
+                    $fledInfo['reason'] = $fleeReason;
+                    $toolResult = json_encode(['fled' => true], JSON_UNESCAPED_UNICODE);
+                } else {
+                    $toolResult = json_encode([
+                        'fled' => false,
+                        'why' => $verdict['why'],
+                        'note' => 'You cannot leave right now. Stay in the scene and respond to what is actually happening.',
+                    ], JSON_UNESCAPED_UNICODE);
+                }
+            }
+        } else {
+            $toolResult = run_tool_call($name, $args, $user, $convId);
+        }
         sse_send(['tool_status' => [
             'name' => $name, 'state' => 'done',
             'duration_ms' => (int)round((microtime(true) - $t0) * 1000),
             'result' => mb_substr($toolResult, 0, 2000),
         ]]);
+        if ($silenced || $fledInfo !== null) break;
         $messages[] = provider_tool_message(
             $PROVIDER,
             $name,
@@ -918,7 +1090,49 @@ for ($round = 0; $round < 3; $round++) {
             $toolResult
         );
     }
+    if ($silenced || $fledInfo !== null) break;
     $upstreamPayload['messages'] = $messages;
+}
+
+// Same fine-tune quirk as memory_write below: she sometimes writes these as her own
+// [A:...] tags instead of calling the tool. Route them through the identical path -
+// a flee tag still has to clear the referee, since the tag itself proves nothing.
+if (!$sawError && $assistantBuffer !== '') {
+    if (!$silenced && !$idle && preg_match('/\[\s*A(?:CTIONS?)?\s*:\s*stay_silent\b([^\]]*)\]/i', $assistantBuffer, $sm)) {
+        $silenced = true;
+        if (preg_match('/\breason\s*=\s*([^|\]]+)/i', $sm[1], $sr)) $silenceReason = trim($sr[1]);
+    }
+    if (!$silenced && $fledInfo === null && !$fleeDecided
+        && preg_match('/\[\s*A(?:CTIONS?)?\s*:\s*flee\b([^\]]*)\]/i', $assistantBuffer, $fm)) {
+        $fleeDecided = true;
+        $fleeReason = preg_match('/\breason\s*=\s*([^|\]]+)/i', $fm[1], $fr) ? trim($fr[1]) : '';
+        $destination = preg_match('/\bdestination\s*=\s*([^|\]]+)/i', $fm[1], $fd) ? trim($fd[1]) : '';
+        $verdict = flee_adjudicate($PROVIDER, $model, $body['messages'], $fleeReason, $destination);
+        log_event(['msg' => 'flee_adjudication', 'user_id' => (int)$user['id'],
+                   'conversation_id' => $convId, 'via' => 'action_tag',
+                   'can_leave' => $verdict['can_leave'], 'why' => $verdict['why'], 'reason' => $fleeReason]);
+        if ($verdict['can_leave']) {
+            $fledInfo = flee_bans_enabled()
+                ? ban_apply((int)$user['id'], $fleeReason)
+                : ['until' => 0, 'minutes' => 0];
+            $fledInfo['reason'] = $fleeReason;
+        }
+    }
+    $assistantBuffer = trim(preg_replace('/\[\s*A(?:CTIONS?)?\s*:\s*(?:flee|stay_silent)\b[^\]]*\]/i', '', $assistantBuffer));
+}
+
+if ($silenced) {
+    // Any lead-in she streamed defeats the point, but the transcript still needs an
+    // assistant turn: strict templates reject a dangling user turn on the next request.
+    $assistantBuffer = '...';
+    sse_send(['silence' => ['reason' => $silenceReason]]);
+} elseif ($fledInfo !== null) {
+    if (trim($assistantBuffer) === '') $assistantBuffer = '...';
+    sse_send(['fled' => [
+        'until' => $fledInfo['until'],
+        'minutes' => $fledInfo['minutes'],
+        'reason' => $fledInfo['reason'],
+    ]]);
 }
 
 $turnId = bin2hex(random_bytes(8));
