@@ -192,6 +192,76 @@
     return Math.floor(whole / 60) + ':' + String(whole % 60).padStart(2, '0');
   }
 
+  const fleeOverlay = document.getElementById('fleeOverlay');
+  const fleeReasonEl = document.getElementById('fleeReason');
+  const fleeEtaEl = document.getElementById('fleeEta');
+  let fleeUntil = 0;
+  let fleeReason = '';
+  let fleeTicker = null;
+
+  function fleeActive() { return fleeUntil > Date.now(); }
+
+  function fleeCountdown() { return formatElapsed((fleeUntil - Date.now()) / 1000); }
+
+  function composerPlaceholder() {
+    if (fleeActive()) return 'Jun walked out. Back in ' + fleeCountdown();
+    return consolidating ? 'Jun is busy with her memory…' : 'Write to Jun…';
+  }
+
+  function renderFleeOverlay() {
+    if (!fleeOverlay) return;
+    fleeOverlay.hidden = !fleeActive();
+    if (!fleeActive()) return;
+    if (fleeReasonEl) {
+      fleeReasonEl.hidden = fleeReason === '';
+      fleeReasonEl.textContent = fleeReason ? '“' + fleeReason + '”' : '';
+    }
+    if (fleeEtaEl) fleeEtaEl.textContent = 'back in ' + fleeCountdown();
+  }
+
+  function syncComposerLock() {
+    const locked = consolidating || fleeActive();
+    chatInput.disabled = locked;
+    sendBtn.disabled = locked;
+    chatInput.placeholder = composerPlaceholder();
+  }
+
+  function endFleeLock() {
+    fleeUntil = 0;
+    fleeReason = '';
+    if (fleeTicker) { clearInterval(fleeTicker); fleeTicker = null; }
+    renderFleeOverlay();
+    syncComposerLock();
+  }
+
+  function startFleeLock(untilMs, reason) {
+    fleeUntil = untilMs;
+    fleeReason = (reason || '').trim();
+    if (!fleeActive()) { endFleeLock(); return; }
+    cancelIdleNudge();
+    if (window.Voice && Voice.isEnabled()) {
+      Voice.disable();
+      if (voiceChk) voiceChk.checked = false;
+    }
+    if (!fleeTicker) {
+      fleeTicker = setInterval(() => {
+        if (!fleeActive()) { endFleeLock(); return; }
+        chatInput.placeholder = composerPlaceholder();
+        renderFleeOverlay();
+      }, 1000);
+    }
+    renderFleeOverlay();
+    syncComposerLock();
+  }
+
+  // The server owns the deadline: a lock lifted server-side has to disappear here
+  // on the next status poll rather than sitting out a countdown of its own.
+  function syncFleeLock(status) {
+    const ban = status && status.ban;
+    if (ban && ban.until) startFleeLock(ban.until * 1000, ban.reason || '');
+    else if (fleeActive()) endFleeLock();
+  }
+
   function setConsolidationBanner(kind, title, sub) {
     if (!consolidationBanner) return;
     consolidationBanner.hidden = false;
@@ -239,9 +309,7 @@
   function setConsolidating(locked, status) {
     const wasLocked = consolidating;
     consolidating = locked;
-    chatInput.disabled = locked;
-    sendBtn.disabled = locked;
-    chatInput.placeholder = locked ? 'Jun is busy with her memory…' : 'Write to Jun…';
+    syncComposerLock();
 
     if (locked) {
       if (consolidationOutcomeTimer) {
@@ -296,13 +364,14 @@
       const response = await fetch('api/consolidate.php?action=status', { credentials: 'same-origin' });
       const status = response.ok ? await response.json() : { locked: false };
       setConsolidating(!!status.locked, status);
+      if (response.ok) syncFleeLock(status);
       if (wasLocked && !status.locked) armIdleAfterReply();
     } catch (e) {
       setConsolidating(false);
     }
     // Only keep polling while she is actually busy; an unlocked tab learns about
     // a new lock from the 418 on its next send.
-    if (consolidating) consolidationStatusTimer = setTimeout(syncConsolidationStatus, 3000);
+    if (consolidating || fleeActive()) consolidationStatusTimer = setTimeout(syncConsolidationStatus, 3000);
   }
 
   function resetIdleNudge() {
@@ -314,6 +383,7 @@
     cancelIdleNudge();
     if (devNoIdleChk.checked) return;
     if (consolidating) return;
+    if (fleeActive()) return;
     if (!currentConversationId) return;          // need a conversation to speak in
     if (idleNudgeStreak >= MAX_IDLE_NUDGES) return; // gave up until Anon interacts
     idleTimer = setTimeout(() => {
@@ -803,6 +873,10 @@
   }
 
   function sendMessage() {
+    if (fleeActive()) {
+      ui.toast('⚠ ' + composerPlaceholder(), 'error');
+      return;
+    }
     if (consolidating) {
       showConsolidatingBubble();
       return;
@@ -822,7 +896,7 @@
   }
 
   function sendTouchEvent(text) {
-    if (abortFn) return;
+    if (abortFn || fleeActive()) return;
     resetIdleNudge();
     reportActivity();
     messages.push({ role: 'user', content: text });
@@ -902,6 +976,7 @@
     let visible = '';
     let shown = '';
     let turnId = null;
+    let silenced = false;
     const bubbleSource = ephemeral ? 'ephemeral' : 'phone';
     const bubbleEnabled = () => !(window.VoiceMode && VoiceMode.isActive()) && (ephemeral || phoneMode());
     const renderBubble = () => {
@@ -1006,6 +1081,23 @@
           else ui.setStatus('streaming', 'streaming');
           logToolStatus(s);
         },
+        onSilence: () => {
+          if (!isCurrent()) return;
+          // She chose to say nothing, so whatever leaked into the bubble first
+          // never happened - drop it and mark the turn instead.
+          silenced = true;
+          if (window.TTS) TTS.stop();
+          hideFaceBubble();
+          visible = '';
+          shown = '';
+          typing.remove();
+          draft.className = 'msg silence';
+          draft.textContent = 'Jun says nothing.';
+        },
+        onFled: (info) => {
+          if (!isCurrent()) return;
+          startFleeLock((info.until || 0) * 1000, info.reason);
+        },
         onThinking: (t) => { if (isCurrent()) { appendRaw(t); pushThinking(t); } },
         onToken: (tok) => {
           if (!isCurrent()) return;
@@ -1021,7 +1113,13 @@
           settleThinking();
           if (window.TTS) TTS.flush();
           typing.remove();
-          if (visible.trim()) {
+          if (silenced) {
+            // The flushes above can still push held-back bytes; none of it exists.
+            visible = '';
+            shown = '';
+            if (window.TTS) TTS.stop();
+            messages.push({ role: 'assistant', content: '...' });
+          } else if (visible.trim()) {
             messages.push({ role: 'assistant', content: visible });
             if (!ephemeral && turnId) addRatingControls(draft, turnId);
           } else draft.remove();
@@ -1043,7 +1141,10 @@
           if (window.TTS) TTS.flush();
           typing.remove();
           if (!visible.trim()) draft.remove();
-          if (err.status === 418) {
+          if (err.message === 'user_fled') {
+            const info = err.data || {};
+            startFleeLock((info.until || 0) * 1000, info.reason);
+          } else if (err.status === 418) {
             setConsolidating(true);
             showConsolidatingBubble();
             setTimeout(syncConsolidationStatus, 3000);
@@ -1076,7 +1177,7 @@
       renderVoiceDraft = null;
       cancelActiveIdleNudge = null;
       stopActiveStream = null;
-      sendBtn.disabled = consolidating;
+      sendBtn.disabled = consolidating || fleeActive();
       sendBtn.innerHTML = sendButtonIdleMarkup;
       sendBtn.setAttribute('aria-label', 'Send');
       sendBtn.removeEventListener('click', onClickStop);
@@ -1097,7 +1198,7 @@
     activeBubbleStream = null;
     cancelActiveIdleNudge = null;
     renderVoiceDraft = null;
-    sendBtn.disabled = false;
+    sendBtn.disabled = consolidating || fleeActive();
     sendBtn.innerHTML = sendButtonIdleMarkup;
     sendBtn.setAttribute('aria-label', 'Send');
     ui.setStatus('idle', 'idle');

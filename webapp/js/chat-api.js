@@ -6,7 +6,7 @@ window.ChatAPI = (function () {
     return r.json();
   }
 
-  function chat({ messages, model, reasoning, think, outfit_context, conversation_id, idle, ephemeral, client_time }, { onToken, onThinking, onDone, onError, onDebug, onStats, onToolStatus }) {
+  function chat({ messages, model, reasoning, think, outfit_context, conversation_id, idle, ephemeral, client_time }, { onToken, onThinking, onDone, onError, onDebug, onStats, onToolStatus, onSilence, onFled }) {
     const ctrl = new AbortController();
 
     (async () => {
@@ -43,7 +43,14 @@ window.ChatAPI = (function () {
               }
               try {
                 const obj = JSON.parse(payload);
-                if (obj.error) { onError && onError(new Error(obj.error)); continue; }
+                if (obj.error) {
+                  const err = new Error(obj.error);
+                  err.data = obj;
+                  onError && onError(err);
+                  continue;
+                }
+                if (obj.silence) { onSilence && onSilence(obj.silence); continue; }
+                if (obj.fled) { onFled && onFled(obj.fled); continue; }
                 if (obj.debug) { onDebug && onDebug(obj.debug); continue; }
                 if (obj.stats) { onStats && onStats(obj.stats); continue; }
                 if (obj.tool_status) { onToolStatus && onToolStatus(obj.tool_status); continue; }

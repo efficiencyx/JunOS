@@ -454,6 +454,54 @@ function start_session(int $userId): string {
     return $token;
 }
 
+// Lockout applied when Jun walks out of a conversation via the flee tool. Only
+// chat.php honours it - history and settings stay reachable while she is gone.
+function flee_bans_enabled(): bool {
+    return strtolower(env_str('FLEE_BANS', 'on')) !== 'off';
+}
+
+function ban_active(int $userId): ?array {
+    if (!flee_bans_enabled()) return null;
+    try {
+        $st = db()->prepare('SELECT until, reason FROM user_bans WHERE user_id=?');
+        $st->execute([$userId]);
+        $row = $st->fetch();
+        $st->closeCursor();
+        if (!$row) return null;
+        $until = (int)$row['until'];
+        if ($until <= time()) return null;
+        return ['until' => $until, 'reason' => (string)($row['reason'] ?? ''), 'seconds_left' => $until - time()];
+    } catch (Throwable $e) {
+        log_event(['msg' => 'ban_active_error', 'err' => $e->getMessage()]);
+        return null;
+    }
+}
+
+function ban_apply(int $userId, string $reason): array {
+    $now = time();
+    $strikes = 0;
+    try {
+        $st = db()->prepare('SELECT strikes, last_ban FROM user_bans WHERE user_id=?');
+        $st->execute([$userId]);
+        $row = $st->fetch();
+        $st->closeCursor();
+        // A day without walking out wipes the escalation.
+        if ($row && $now - (int)$row['last_ban'] < 86400) $strikes = (int)$row['strikes'];
+        $strikes++;
+        $minutes = (int)min(30, 5 * (2 ** ($strikes - 1)));
+        $until = $now + $minutes * 60;
+        db()->prepare(
+            'INSERT INTO user_bans (user_id, until, strikes, last_ban, reason) VALUES (?, ?, ?, ?, ?)
+             ON CONFLICT(user_id) DO UPDATE SET until=excluded.until, strikes=excluded.strikes,
+                                                last_ban=excluded.last_ban, reason=excluded.reason'
+        )->execute([$userId, $until, $strikes, $now, mb_substr(trim($reason), 0, 300)]);
+        return ['until' => $until, 'minutes' => $minutes];
+    } catch (Throwable $e) {
+        log_event(['msg' => 'ban_apply_error', 'err' => $e->getMessage()]);
+        return ['until' => $now + 300, 'minutes' => 5];
+    }
+}
+
 // Hidden per-user relationship state (one row per user; persists across all of
 // that user's conversations). Scores are 0-100. chat.php injects behavioral
 // directives from these and nudges them via Jun's [A:mood_shift|...] tag;

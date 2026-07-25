@@ -19,6 +19,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'GET' && $action === 'status') {
             'notes'  => (int)$row['last_note_count'],
         ];
     }
+    $ban = ban_active($userId);
+    if ($ban !== null) $status['ban'] = ['until' => $ban['until'], 'reason' => $ban['reason']];
     echo json_encode($status);
     exit;
 }
