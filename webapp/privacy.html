@@ -1,0 +1,267 @@
+<!doctype html>
+<!-- As you can clearly see the UI is vibecoded slop, I do not care your opinion :3 -->
+<!-- I care more about user's privacy than refining an UI  -->
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="color-scheme" content="dark">
+<meta name="robots" content="noindex">
+<title>Privacy notice · Jun OS</title>
+<link rel="icon" type="image/png" href="favicon.png?v=1">
+<link rel="stylesheet" href="boot.css?v=2">
+<link rel="stylesheet" href="styles.css?v=46">
+<link rel="stylesheet" href="privacy.css?v=2">
+</head>
+<body class="privacy-page">
+
+<a class="privacy-back" href="index.html">
+  <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="19" y1="12" x2="5" y2="12"/><polyline points="12 19 5 12 12 5"/></svg>
+  Back to Jun
+</a>
+
+<div class="privacy-shell">
+
+  <header class="privacy-hero">
+    <div class="privacy-eyebrow">
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
+      Jun OS
+    </div>
+    <h1>Privacy notice</h1>
+    <p class="privacy-lede">What leaves your machine, what never does, and what you can make us
+    delete. Written to be read, not survived.</p>
+    <div class="privacy-badges">
+      <span class="privacy-badge">Version 2026-07-25.2</span>
+      <span class="privacy-badge">≈4 min read</span>
+    </div>
+  </header>
+
+  <section class="privacy-summary" aria-labelledby="tldr">
+    <h2 id="tldr">The short version</h2>
+    <ul>
+      <li>
+        <span class="privacy-tick" aria-hidden="true">✓</span>
+        <span><strong>Jun runs on your machine.</strong> Your account, chats, her memory and
+        every setting stay in a database there.</span>
+      </li>
+      <li>
+        <span class="privacy-tick" aria-hidden="true">✓</span>
+        <span><strong>One thing can leave, only if you say yes:</strong> a copy of your chats,
+        used to train better Jun models.</span>
+      </li>
+      <li>
+        <span class="privacy-tick" aria-hidden="true">✓</span>
+        <span><strong>Saying no costs you nothing.</strong> Declining does not disable any
+        feature of Jun, and the app is designed not to ask you again.</span>
+      </li>
+      <li>
+        <span class="privacy-tick" aria-hidden="true">✓</span>
+        <span><strong>You can change your mind whenever</strong>, from Settings, and ask for
+        what you already shared to be deleted.</span>
+      </li>
+    </ul>
+  </section>
+
+  <div class="privacy-body">
+
+    <nav class="privacy-toc" aria-label="On this page">
+      <p class="privacy-toc-title">On this page</p>
+      <ol>
+        <li><a href="#who">Who is responsible</a></li>
+        <li><a href="#what">What sharing sends</a></li>
+        <li><a href="#anonymous">Is it anonymous?</a></li>
+        <li><a href="#why">Why, and on what basis</a></li>
+        <li><a href="#rights">Your choices and rights</a></li>
+        <li><a href="#retention">How long it is kept</a></li>
+        <li><a href="#where">Where the data goes</a></li>
+        <li><a href="#other">Other services</a></li>
+        <li><a href="#misc">Automated decisions &amp; children</a></li>
+        <li><a href="#changes">Changes</a></li>
+      </ol>
+    </nav>
+
+    <main class="privacy-prose">
+
+      <section id="who">
+        <h2>Who is responsible</h2>
+        <p>Jun OS is an unofficial fan project. Two different parties are involved, and it
+        matters which is which:</p>
+        <div class="privacy-split">
+          <div class="privacy-card">
+            <h3>You</h3>
+            <p>Or whoever runs this install. You control the machine, the database and the
+            accounts on it. Unless you expose your install or its database yourself, none of
+            that is transmitted to the maintainer.</p>
+          </div>
+          <div class="privacy-card">
+            <h3>The maintainer</h3>
+            <p>Andrea Torelli, of <span class="privacy-nowrap">andrealab.it</span>, Italy, operates the
+            metrics server that receives shared chats and is the data controller for that data
+            only.</p>
+          </div>
+        </div>
+        <p class="privacy-contact">
+          <span class="privacy-contact-label">Privacy contact</span>
+          <a href="mailto:andrea@andrealab.it">andrea@andrealab.it</a>
+          <span class="privacy-contact-note">Withdrawal, erasure, access — or just a question.</span>
+        </p>
+        <p class="privacy-callout privacy-callout-todo">
+          <strong>Maintainer:</strong> put your full legal name in place of "Andrea" above, and
+          confirm the country, before you publish. Art. 13(1)(a) wants the controller
+          identifiable, and a first name is thin — this was left for you rather than guessed.
+          Delete this box afterwards.
+        </p>
+      </section>
+
+      <section id="what">
+        <h2>What sharing sends</h2>
+        <p>Only if you turn on <em>Share my chats for training</em>. Then, for each message you
+        send:</p>
+        <div class="privacy-split">
+          <div class="privacy-card privacy-card-sent">
+            <h3><span class="privacy-mark privacy-mark-yes" aria-hidden="true">↑</span> Sent</h3>
+            <ul>
+              <li>What you typed, word for word, and Jun's reply, word for word — including
+              sexual and otherwise intimate content, since that is what this app is for</li>
+              <li>A 👍 or 👎 if you rate a reply</li>
+              <li>Jun's three relationship gauges — affection, trust, tension — as they stood
+              before and after the message, since they are part of what the model is told and a
+              shared turn means nothing without them</li>
+              <li>Which model and provider answered, the context size, token counts and timings</li>
+              <li>A random installation id, a per-account tag derived from it, and a
+              per-conversation tag, so turns can be read in order</li>
+            </ul>
+          </div>
+          <div class="privacy-card privacy-card-kept">
+            <h3><span class="privacy-mark privacy-mark-no" aria-hidden="true">✕</span> Never sent</h3>
+            <ul>
+              <li>Your email address or your password</li>
+              <li>Your IP address as such — the app never puts it in what it sends, though the
+              network connection itself necessarily carries it (see
+              <a href="#retention">how long it is kept</a>)</li>
+              <li>Your name, or the name you gave Jun</li>
+              <li>Jun's memory notes about you, her journal or your wardrobe</li>
+              <li>Anything from before you turned sharing on</li>
+            </ul>
+          </div>
+        </div>
+        <p class="privacy-callout">Turning sharing on is <strong>never retroactive</strong>. Old
+        conversations stay where they are.</p>
+      </section>
+
+      <section id="anonymous">
+        <h2>Is it anonymous?</h2>
+        <p>No — and we would rather say so than reassure you incorrectly.</p>
+        <p>The data is <strong>pseudonymous</strong>: it carries no directly identifying field,
+        but the installation id is stable, so everything shared from one install stays linked
+        together, and free-typed chat text can itself contain personal details you chose to
+        write. Treat shared chats as personal data that happens not to be labelled with your
+        name — which is exactly why we ask before taking any, and why you can have it deleted.</p>
+      </section>
+
+      <section id="why">
+        <h2>Why, and on what basis</h2>
+        <p>The purpose is to train and evaluate better Jun models, and nothing else. Shared
+        chats are not sold, not used for advertising, and not used to profile you.</p>
+        <p>The legal basis is your consent: art. 6(1)(a) GDPR, and art. 9(2)(a) for the parts
+        that reveal your sex life or sexual orientation, which intimate roleplay generally does.
+        Consent is the only basis relied on, so there is nothing to "object" to — you simply
+        withdraw it.</p>
+      </section>
+
+      <section id="rights">
+        <h2>Your choices and rights</h2>
+        <dl class="privacy-rights">
+          <dt>Withdraw consent <span class="privacy-where">Settings → Privacy</span></dt>
+          <dd>As easy to take back as it was to give. Sharing stops immediately, and declining
+          does not disable any feature of Jun.</dd>
+
+          <dt>Erasure <span class="privacy-art">art. 17</span>
+            <span class="privacy-where">Settings → Privacy → Request deletion</span></dt>
+          <dd>Sends the metrics server a request to delete the telemetry retained for your
+          account — removing it from the stored corpus and from future processing and training
+          runs, subject to backup retention periods where those still apply.</dd>
+
+          <dt>Access, rectification, restriction, portability
+            <span class="privacy-art">art. 15, 16, 18, 20</span></dt>
+          <dd>Email the contact above. You will be asked for your installation id, which you can
+          read from <code>TELEMETRY_INSTALL_ID</code> in your <code>.env</code>.</dd>
+
+          <dt>Complain <span class="privacy-art">art. 77</span></dt>
+          <dd>To your national data protection authority, if you think this notice or the
+          handling of your data is wrong — in Italy, where the maintainer is based, that is the
+          <span class="privacy-nowrap">Garante per la Protezione dei Dati Personali</span>.</dd>
+        </dl>
+        <p class="privacy-callout privacy-callout-limit">
+          <strong>One honest limit.</strong> Once shared turns have been folded into a trained
+          model, an erasure request removes them from the stored corpus and from every future
+          training run — but it cannot subtract them from model weights that already exist.
+        </p>
+      </section>
+
+      <section id="retention">
+        <h2>How long it is kept</h2>
+        <dl class="privacy-rights">
+          <dt>Shared chat turns <span class="privacy-art">36 months</span></dt>
+          <dd>Then deleted automatically, whether or not you ask. Ratings are kept alongside the
+          turn they refer to and go with it. You can have yours deleted sooner at any time.</dd>
+
+          <dt>IP address hashes <span class="privacy-art">30 days</span></dt>
+          <dd>Your IP address is not stored in plain form. The server receives it as part of the
+          network connection and converts it into a short-lived daily-salted hash, used solely
+          for abuse protection and cleared after 30 days.</dd>
+        </dl>
+        <p>These periods are enforced by a scheduled prune on the server, which also compacts the
+        database so deleted text does not linger in the file. Backups taken before a deletion age
+        out on their own retention cycle.</p>
+      </section>
+
+      <section id="where">
+        <h2>Where the data goes</h2>
+        <p>To the metrics server named in <code>TELEMETRY_ENDPOINT</code>, operated by the
+        maintainer. It and its backups are located within the European Economic Area, so there
+        is no transfer of your data to a third country. Shared chats are not disclosed to third-party
+        analytics or advertising services, and none are embedded in this app at all. Hosting and
+        backup providers act as processors on the maintainer's instructions.</p>
+        <p>Sharing is transmitted over HTTPS, and reasonable technical and organisational
+        measures are used to protect what is stored — though no transmission or storage system
+        can be guaranteed completely secure.</p>
+        <p>If you run your own install of Jun OS and point it at a different endpoint, that
+        operator's arrangements apply instead of these — see
+        <a href="#other">Other services</a>.</p>
+      </section>
+
+      <section id="other">
+        <h2>Other services this app can talk to</h2>
+        <p>Independently of sharing, whichever AI provider you pick is where your messages go.
+        With the bundled Ollama or llama.cpp that is your own machine, and nothing leaves it. If
+        you configure a hosted provider instead — <strong>OpenRouter</strong> is the one shipped
+        today — your prompts are sent to that provider and are governed by its own privacy
+        policy rather than this one. Voice and karaoke run locally in sidecar containers.</p>
+      </section>
+
+      <section id="misc">
+        <h2>Automated decisions &amp; children</h2>
+        <p>Jun's replies are generated by a language model, but nothing here makes automated
+        decisions that have legal effects for you, or that similarly significantly affect you,
+        within the meaning of art. 22.</p>
+        <p>This app displays adult content and is for people aged 18 or over. It is not intended
+        for children, and no data is knowingly collected from them.</p>
+      </section>
+
+      <section id="changes">
+        <h2>Changes</h2>
+        <p>If what is collected or why changes materially, the version at the top of this notice
+        is bumped and you are asked to decide again. A previous yes does not carry over.</p>
+      </section>
+
+      <footer class="privacy-footer">
+        <a href="index.html">← Back to Jun</a>
+        <span>Version 2026-07-25.2</span>
+      </footer>
+
+    </main>
+  </div>
+</div>
+</body>
+</html>

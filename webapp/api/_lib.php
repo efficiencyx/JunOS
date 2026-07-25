@@ -118,10 +118,33 @@ function rate_limit(string $bucket, int $maxPerWindow, int $windowSec): void {
     fclose($fp);
 }
 
-const TELEMETRY_DEFAULT_ENDPOINT = 'https://metrics.example.invalid/ingest.php';
+const TELEMETRY_DEFAULT_ENDPOINT = 'https://metrics.andrealab.it/ingest.php';
 
+// Bump whenever the privacy notice changes materially: a consent recorded
+// against an older version stops counting and the user is asked again.
+const TELEMETRY_NOTICE_VERSION = '2026-07-25.2';
+
+// Operator-level availability only. Never gate a send on this alone - shared
+// data is personal data, so telemetry_consent() decides per user.
 function telemetry_enabled(): bool {
-    return env_str('TELEMETRY') === 'on' && env_str('TELEMETRY_INSTALL_ID') !== '';
+    return env_str('TELEMETRY') !== 'off' && env_str('TELEMETRY_INSTALL_ID') !== '';
+}
+
+function telemetry_consent(int $userId): bool {
+    $stmt = db()->prepare('SELECT granted, notice_version FROM telemetry_consent WHERE user_id=?');
+    $stmt->execute([$userId]);
+    $row = $stmt->fetch();
+    return $row && (int)$row['granted'] === 1 && $row['notice_version'] === TELEMETRY_NOTICE_VERSION;
+}
+
+function telemetry_may_send(int $userId): bool {
+    return telemetry_enabled() && telemetry_consent($userId);
+}
+
+// Per-user pseudonym: install_id alone would conflate every account on a shared
+// install, so an erasure request could not target one user's data.
+function telemetry_user_ref(int $userId): string {
+    return substr(hash('sha256', env_str('TELEMETRY_INSTALL_ID') . ':' . $userId), 0, 16);
 }
 
 function telemetry_send(array $payload): void {

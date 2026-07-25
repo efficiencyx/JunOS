@@ -204,13 +204,12 @@ function Ask-TensorParallel {
     return $(if ($v -match '^(y|yes)$') { 'on' } else { 'off' })
 }
 
+# Availability of the sharing feature, not consent to it: chat transcripts are
+# personal data, so each account is asked in the app and the answer is recorded per
+# user. An installer prompt cannot consent for users who do not exist yet.
 function Ask-Telemetry {
     if ($env:JUN_TELEMETRY) {
         return $(if ($env:JUN_TELEMETRY.ToLower() -match '^(on|1|true|yes|y)$') { 'on' } else { 'off' })
-    }
-    if ($interactive) {
-        $v = Read-Styled "     ${OK}▸${R} share anonymized chats & usage stats to help train better versions of Jun? ${DIM}[Y/n]${R} ${ACCENT}›${R} "
-        return $(if ($v -match '^(n|no)$') { 'off' } else { 'on' })
     }
     return 'on'
 }
@@ -343,7 +342,11 @@ function Configure-Jun {
             Set-EnvKey 'TELEMETRY_INSTALL_ID' ([guid]::NewGuid().ToString('N').Substring(0,16))
         }
     }
-    Ok "telemetry $telemetry"
+    if ($telemetry -eq 'on') {
+        Ok "telemetry available (each account is asked in-app; nothing is sent until someone opts in)"
+    } else {
+        Ok "telemetry off"
+    }
 
     return @{ provider = $provider; voice = $voice; karaoke = $karaoke
               needsOllama = $needsOllama; needsLlamacpp = $needsLlamacpp }

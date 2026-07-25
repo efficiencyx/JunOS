@@ -81,16 +81,31 @@ route stays mounted in both roles.
 
 | Variable | Default | Consumed by | What it does |
 |---|---|---|---|
-| `TELEMETRY` | `on` when chosen in an installer | `webapp/api/chat.php`, `rating.php` | Set to `off` to stop sending telemetry. Restart after changing it. |
-| `TELEMETRY_INSTALL_ID` | random 16-hex-character id from the installer | `webapp/api/_lib.php` | Anonymous per-installation identifier. It is kept when reinstalling. |
+| `TELEMETRY` | `on` | `webapp/api/_lib.php` | Whether sharing is *offered*. `off` removes the option and no account can be asked. Restart after changing it. |
+| `TELEMETRY_INSTALL_ID` | random 16-hex-character id from the installer | `webapp/api/_lib.php` | Pseudonymous per-installation identifier, kept when reinstalling. Also the seed for the per-account `user_ref`. |
 | `TELEMETRY_ENDPOINT` | project metrics endpoint | `webapp/api/_lib.php` | URL of the maintainer-hosted telemetry ingest endpoint. |
 
-When enabled, telemetry sends chat turns (including user-typed text exactly as
-written and assistant replies, with `{f_playerName}` / `{f_botName}` placeholders
-left intact), model usage statistics, and thumb ratings. It is used to train
-better versions of Jun. The data is anonymized with the random installation id;
-the metrics server stores only a daily-salted IP hash, never a raw IP address.
-Opt out at any time by setting `TELEMETRY=off` in `.env` and restarting Jun.
+`TELEMETRY=on` is not consent. Nothing is sent until an individual account opts
+in: on first login the app shows a blocking prompt, the answer is stored in the
+`telemetry_consent` table with a timestamp and the notice version, and both
+`chat.php` and `rating.php` gate every send on `telemetry_may_send()`. An absent
+row means no, so upgrades and fresh installs both start silent.
+
+What a consenting account sends: chat turns (user-typed text exactly as written
+and assistant replies, with `{f_playerName}` / `{f_botName}` placeholders left
+intact), model usage statistics, and thumb ratings, used to train better versions
+of Jun. Each payload carries `install_id`, a per-account `user_ref`
+(`sha256(install_id:user_id)`, truncated) and a per-conversation tag. The
+per-account ref exists so an erasure request can target one user on a shared
+install; the metrics server stores only a daily-salted IP hash, never a raw IP.
+
+This data is **pseudonymous, not anonymous** - the install id is stable and chat
+text can contain whatever the user typed - so it is personal data, and the
+intimate parts fall under GDPR art. 9. Do not describe it as anonymized in the UI,
+the docs or the README. Users withdraw or request erasure under Settings →
+Privacy (`webapp/api/consent.php`); the notice lives at `webapp/privacy.html` and
+its version string is `TELEMETRY_NOTICE_VERSION` in `_lib.php` - bump it when the
+notice changes materially and everyone is asked again.
 
 ## 5. Ollama tuning
 
