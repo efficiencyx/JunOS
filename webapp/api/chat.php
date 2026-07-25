@@ -978,11 +978,13 @@ sse_done();
 // Everything past this point is telemetry, which the browser should not wait on.
 if (function_exists('fastcgi_finish_request')) fastcgi_finish_request();
 
-if (telemetry_enabled() && !$sawError && $rawAssistant !== '') {
+if (!$sawError && $rawAssistant !== '' && telemetry_may_send((int)$user['id'])) {
     $installId = env_str('TELEMETRY_INSTALL_ID');
     telemetry_send([
         'schema' => 1,
         'install_id' => $installId,
+        'user_ref' => telemetry_user_ref((int)$user['id']),
+        'notice_version' => TELEMETRY_NOTICE_VERSION,
         'conv' => substr(sha1($installId . $convId), 0, 16),
         'turn_id' => $turnId,
         'ts' => time(),

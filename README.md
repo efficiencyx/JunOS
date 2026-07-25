@@ -192,7 +192,9 @@ The same knobs work with `install.ps1` on Windows (`$env:JUN_PROVIDER='openroute
 
 **No second model needed:** lore lookup and cross-chat recall are both plain text matching (keyword/IDF over the corpus, `LIKE` over your history), so picking OpenRouter or llama.cpp doesn't cost you any features and doesn't drag a local Ollama along for the ride.
 
-**A tiny privacy note:** the installer asks (default yes) whether to share anonymized chats, usage stats and thumbs so we can train better Jun models. A random install id keeps it detached from you; set `TELEMETRY=off` in `.env` anytime to opt out. 🌸
+**A tiny privacy note:** Jun asks you *once*, in the app, whether you'd like to share your chats, usage stats and thumbs so we can train better Jun models - and nothing leaves your machine unless you say yes. It's tagged with a random install id, never your email or your IP, though we won't call it anonymous: it's your words, and free-typed words have a habit of being personal. Say no and absolutely nothing changes about how she works. One click under **Settings → Privacy** to change your mind, another to have what you shared deleted, and the whole story lives in the [privacy notice](webapp/privacy.html). Never want to be asked at all? `TELEMETRY=off` in `.env`. 🌸
+
+**Hosting Jun for other people?** Then heads up: the moment someone other than you has an account on your install, their chats are personal data and *you're* the one responsible for them, not us. Jun already does the hard part for you - consent is off until each person opts in, the notice is right there, and withdrawal and deletion both work - but the boring parts are yours: keep the box encrypted and the backups too, don't hand the database to anyone, and if you point `TELEMETRY_ENDPOINT` at your own collector, edit [`webapp/privacy.html`](webapp/privacy.html) so it names *you* instead of us. [`docs/data-protection.md`](docs/data-protection.md) is the paperwork we keep for our own collector - crib from it. 🗂️
 
 **Running compose by hand?** The model-server containers are profile-gated: `./start.sh` derives `COMPOSE_PROFILES` from your `.env`, but a bare `docker compose up -d` needs `COMPOSE_PROFILES=ollama` (or `llamacpp`) set in `.env` or the shell.
 
@@ -218,7 +220,7 @@ Everything's environment variables (see `.env.example`; the full reference lives
 | `KARAOKE_URL` | Where the PHP karaoke proxy finds that sidecar; falls back to `TTS_URL` on bare metal, where one process serves both | `http://karaoke:8001` |
 | `SEP_DEVICE` | `cpu` \| `cuda` \| `auto` for splitting a song into stems. This is the audio job that actually wants a GPU: minutes on CPU, seconds on a card, and the VRAM goes back afterwards | `auto` |
 | `OMEGA_NUM_CTX` | Context window. Auto-detected from system RAM, which is only a proxy for the VRAM that actually bounds the KV cache - set it by hand if the model crowds your GPU | *(auto)* |
-| `TELEMETRY` | `on`/`off` - the anonymized sharing described [above](#choosing-an-ai-provider) | `on` |
+| `TELEMETRY` | `on`/`off` - whether Jun may *offer* the sharing described [above](#choosing-an-ai-provider). She still asks before sending anything | `on` |
 | `CORS_ORIGIN` | `Access-Control-Allow-Origin` for the voice sidecar | `http://nginx` |
 
 ## Under the hood
