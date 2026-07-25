@@ -1971,7 +1971,7 @@
       ['vendor/pixi.min.js', 'vendor/live2dcubismcore.min.js',
        'vendor/marked.min.js', 'vendor/purify.min.js',
        'js/actions.js?v=10', 'js/outfit.js?v=34', 'js/touch.js?v=12',
-       'js/mods.js?v=10', 'js/tts.js?v=15', 'js/voice.js?v=2',
+       'js/mods.js?v=10', 'js/tts.js?v=16', 'js/voice.js?v=2',
        'js/voicemode.js?v=3', 'js/devhud.js?v=3', 'js/trip-loader.js?v=3',
        'js/wardrobe-open-lines.js?v=3', 'js/wardrobe-reactions.js?v=18',
        'js/wardrobe-return-lines.js?v=3'],

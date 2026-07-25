@@ -275,11 +275,12 @@ def safe_component(value):
 
 
 class Recovery:
-    def __init__(self, game, out):
+    def __init__(self, game, out, atlas_size=None):
         data = os.path.join(game, "My Dystopian Robot Girlfriend_Data")
         if not os.path.isdir(data):
             sys.exit(f"game data dir not found: {data}")
         self.out = out
+        self.atlas_size = atlas_size
         self.failures = []
         print("loading Unity files...")
         self.res = UnityPy.load(os.path.join(data, "resources.assets"))
@@ -429,7 +430,13 @@ class Recovery:
         if len(atlas) != n_slots:
             sys.exit(f"only resolved atlas slots {sorted(atlas)} of {n_slots}")
         for tn, pid in sorted(atlas.items()):
-            self.save(self.res_objs[pid].read().image, f"texture_{tn:02d}.png")
+            img = self.res_objs[pid].read().image
+            if self.atlas_size and self.atlas_size < img.width:
+                # The atlases are the webapp's whole GPU budget: each 4096 one
+                # costs 64 MB of VRAM uncompressed, and nothing in the renderer
+                # assumes a size (UVs are normalized, mipmaps are off).
+                img = img.resize((self.atlas_size, self.atlas_size), Image.LANCZOS)
+            self.save(img, f"texture_{tn:02d}.png")
 
     def recover_variants(self):
         def composite(out, cname):
@@ -565,9 +572,12 @@ def main():
     ap = argparse.ArgumentParser(description="Recover webapp/assets from the game install")
     ap.add_argument("--game", default=None, help="game install dir (default: auto-detect)")
     ap.add_argument("--out", default=DEFAULT_OUT, help="output assets dir")
+    ap.add_argument("--atlas-size", type=int, default=None, metavar="PX",
+                    help="downscale the base atlases to PX x PX (native 4096). "
+                         "2048 cuts atlas VRAM from 192 MB to 48 MB")
     args = ap.parse_args()
 
-    r = Recovery(args.game or find_game_dir(), args.out)
+    r = Recovery(args.game or find_game_dir(), args.out, args.atlas_size)
     print("model...");    r.recover_moc3()
     print("atlases...");  r.recover_atlases()
     print("variants..."); r.recover_variants()
