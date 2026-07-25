@@ -624,9 +624,9 @@ html[data-pre-auth] #app { visibility: hidden; }
 <!-- Fetched during parse but applied by boot-gate.js: the CSP forbids the
      usual media="print" onload= trick, and blocking on the full sheet would
      cost a round trip the auth screen does not need. -->
-<link rel="preload" as="style" href="styles.css?v=46">
+<link rel="preload" as="style" href="styles.css?v=48">
 <link rel="preload" as="style" href="trip-loader.css?v=4">
-<noscript><link rel="stylesheet" href="styles.css?v=46"></noscript>
+<noscript><link rel="stylesheet" href="styles.css?v=48"></noscript>
 
 <script defer src="js/viewport.js?v=3"></script>
 <script src="js/boot-gate.js?v=5"></script>
@@ -635,12 +635,12 @@ html[data-pre-auth] #app { visibility: hidden; }
 <script defer src="js/auth.js?v=7"></script>
 <script defer src="js/prefs.js?v=5"></script>
 <script defer src="js/names.js?v=2"></script>
-<script defer src="js/chat-api.js?v=4"></script>
+<script defer src="js/chat-api.js?v=5"></script>
 <script defer src="js/ui.js?v=7"></script>
 <script defer src="js/history.js?v=7"></script>
 <script defer src="js/boot-fx.js?v=5"></script>
 <script defer src="js/consent.js?v=1"></script>
-<script defer src="js/app.js?v=51"></script>
+<script defer src="js/app.js?v=54"></script>
 </head>
 <body>
 
@@ -668,6 +668,15 @@ html[data-pre-auth] #app { visibility: hidden; }
       <button id="dataConsentDecline" type="button">Don't share</button>
       <button id="dataConsentAccept" type="button">Share my chats</button>
     </div>
+  </div>
+</div>
+
+<div id="fleeOverlay" hidden>
+  <div class="age-gate-panel flee-panel" role="dialog" aria-modal="true" aria-labelledby="fleeTitle">
+    <h1 id="fleeTitle">Out looking for Jun…</h1>
+    <p class="flee-reason" id="fleeReason" hidden></p>
+    <div class="flee-eta" id="fleeEta" role="status" aria-live="polite">—</div>
+    <p>She walked out and took the phone with her. Nothing to do but wait for her to cool off.</p>
   </div>
 </div>
 
