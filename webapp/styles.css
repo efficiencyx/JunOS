@@ -2516,3 +2516,15 @@ html.phone-ui .voice-overlay-controls { bottom: calc(20px + env(safe-area-inset-
   .conv-sidebar,
   .sidebar-backdrop { transition: none; }
 }
+
+.set-row-link {
+  padding: 7px 14px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-pill);
+  background: var(--bg-3);
+  color: var(--muted);
+  font-size: 13px;
+  text-decoration: none;
+  transition: color .14s, background .14s, border-color .14s;
+}
+.set-row-link:hover { background: var(--bg-hover); color: var(--fg); border-color: var(--border-2); }

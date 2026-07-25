@@ -2442,6 +2442,10 @@
         console.warn('[History] init failed:', e.message);
       }
     }
+
+    // Last, so the consent gate lands on the ready chat instead of the boot
+    // overlay - but still before the user can send anything worth sharing.
+    if (window.Consent) await Consent.init();
   })();
 
   function validateActionMap(modelParamIds) {

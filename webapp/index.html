@@ -312,7 +312,7 @@ html[data-age-gated] #app { visibility: hidden; }
 
 html[data-pre-auth] #app { visibility: hidden; }
 
-#ageGate {
+#ageGate, #dataConsentGate {
   position: fixed;
   inset: 0;
   z-index: 10000;
@@ -322,7 +322,7 @@ html[data-pre-auth] #app { visibility: hidden; }
   background:
     radial-gradient(1200px 800px at 50% 40%, #161b27 0%, var(--bg) 60%, #07080c 100%);
 }
-#ageGate[hidden] { display: none; }
+#ageGate[hidden], #dataConsentGate[hidden] { display: none; }
 
 .age-gate-panel {
   display: flex;
@@ -374,6 +374,44 @@ html[data-pre-auth] #app { visibility: hidden; }
   background: var(--bg-3);
   color: var(--fg);
 }
+
+.age-gate-panel.consent-panel {
+  max-width: 480px;
+  text-align: left;
+  align-items: stretch;
+  gap: var(--space-3);
+}
+.age-gate-panel.consent-panel ul {
+  margin: 0;
+  padding-left: 20px;
+  color: var(--muted);
+  font-size: 13px;
+  line-height: 1.6;
+}
+.age-gate-panel.consent-panel .consent-actions {
+  display: flex;
+  gap: var(--space-3);
+  margin-top: var(--space-2);
+}
+.age-gate-panel.consent-panel .consent-actions button {
+  flex: 1;
+  padding: var(--space-3) var(--space-4);
+  font-size: 14px;
+}
+/* Equal visual weight on both choices: a muted "decline" beside a primary
+   "accept" is the deceptive-design pattern that invalidates the consent. */
+.age-gate-panel.consent-panel #dataConsentDecline {
+  background: var(--bg-3);
+  color: var(--fg);
+  border: 1px solid var(--border);
+}
+.age-gate-panel.consent-panel #dataConsentDecline:hover { border-color: var(--fg); }
+.age-gate-panel.consent-panel a {
+  color: var(--accent);
+  text-decoration: none;
+  border-bottom: 1px solid color-mix(in srgb, var(--accent) 40%, transparent);
+}
+.age-gate-panel.consent-panel a:hover { border-bottom-color: var(--accent); }
 
 
 #authScreen {
@@ -586,12 +624,12 @@ html[data-pre-auth] #app { visibility: hidden; }
 <!-- Fetched during parse but applied by boot-gate.js: the CSP forbids the
      usual media="print" onload= trick, and blocking on the full sheet would
      cost a round trip the auth screen does not need. -->
-<link rel="preload" as="style" href="styles.css?v=45">
+<link rel="preload" as="style" href="styles.css?v=46">
 <link rel="preload" as="style" href="trip-loader.css?v=4">
-<noscript><link rel="stylesheet" href="styles.css?v=45"></noscript>
+<noscript><link rel="stylesheet" href="styles.css?v=46"></noscript>
 
 <script defer src="js/viewport.js?v=3"></script>
-<script src="js/boot-gate.js?v=4"></script>
+<script src="js/boot-gate.js?v=5"></script>
 
 <script defer src="js/loader.js?v=1"></script>
 <script defer src="js/auth.js?v=7"></script>
@@ -601,7 +639,8 @@ html[data-pre-auth] #app { visibility: hidden; }
 <script defer src="js/ui.js?v=7"></script>
 <script defer src="js/history.js?v=7"></script>
 <script defer src="js/boot-fx.js?v=5"></script>
-<script defer src="js/app.js?v=50"></script>
+<script defer src="js/consent.js?v=1"></script>
+<script defer src="js/app.js?v=51"></script>
 </head>
 <body>
 
@@ -611,6 +650,24 @@ html[data-pre-auth] #app { visibility: hidden; }
     <p>This site may display explicit content intended for adults only. You must be 18 or older to continue.</p>
     <button id="ageGateAccept">I am 18 or older</button>
     <button id="ageGateLeave">Leave</button>
+  </div>
+</div>
+
+<div id="dataConsentGate" hidden>
+  <div class="age-gate-panel consent-panel" role="dialog" aria-modal="true" aria-labelledby="dataConsentTitle">
+    <h1 id="dataConsentTitle">Share your chats with Jun's makers?</h1>
+    <p>Jun gets better when we can train her on real conversations. That is entirely your call, and saying no changes nothing about how she works for you.</p>
+    <p>If you say yes, each turn you send is copied to the project's metrics server:</p>
+    <ul>
+      <li>what you typed and what Jun replied, word for word, including sexual content</li>
+      <li>the model you used and its speed counters</li>
+      <li>any 👍 / 👎 you give a reply</li>
+    </ul>
+    <p>It is tagged with a random installation id, never your email address or your IP address, and it is used only to train and evaluate Jun models. You can withdraw in one click under Settings → Privacy, and ask us to delete what was already sent. Full details in the <a href="privacy.html" target="_blank" rel="noopener">privacy notice</a>.</p>
+    <div class="consent-actions">
+      <button id="dataConsentDecline" type="button">Don't share</button>
+      <button id="dataConsentAccept" type="button">Share my chats</button>
+    </div>
   </div>
 </div>
 
@@ -741,6 +798,10 @@ html[data-pre-auth] #app { visibility: hidden; }
       <button class="settings-navitem" data-panel="developer" role="tab" aria-selected="false">
         <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="16 18 22 12 16 6"/><polyline points="8 6 2 12 8 18"/></svg>
         <span>Developer</span>
+      </button>
+      <button class="settings-navitem" data-panel="privacy" role="tab" aria-selected="false">
+        <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
+        <span>Privacy</span>
       </button>
       <button class="settings-navitem" data-panel="account" role="tab" aria-selected="false">
         <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
@@ -1000,6 +1061,30 @@ html[data-pre-auth] #app { visibility: hidden; }
           <div class="set-row-title">Missing parameters</div>
           <div class="set-row-desc">Live2D params referenced by action_map.json but absent from the model.</div>
           <div id="missingParams" class="action-log small"></div>
+        </div>
+      </section>
+
+      <section class="settings-panel" data-panel="privacy" hidden>
+        <div class="set-row">
+          <div class="set-row-text">
+            <div class="set-row-title">Share my chats for training</div>
+            <div class="set-row-desc">Sends each turn you send - your words and Jun's, verbatim - plus model stats and thumb ratings to the project's metrics server, tagged with a random installation id and never your email or IP. Off unless you turn it on.</div>
+          </div>
+          <label class="set-row-control"><input type="checkbox" id="telemetryChk" class="toggle" aria-label="Share my chats for training"></label>
+        </div>
+        <div class="set-row">
+          <div class="set-row-text">
+            <div class="set-row-title">Delete what I already shared</div>
+            <div class="set-row-desc">Asks the metrics server to erase every turn sent from this account, and turns sharing off. <span id="telemetryEraseState"></span></div>
+          </div>
+          <div class="set-row-control"><button class="secondary danger" id="telemetryEraseBtn" type="button">Request deletion</button></div>
+        </div>
+        <div class="set-row">
+          <div class="set-row-text">
+            <div class="set-row-title">Privacy notice</div>
+            <div class="set-row-desc">What is collected, why, how long it is kept, and your rights.</div>
+          </div>
+          <div class="set-row-control"><a class="set-row-link" href="privacy.html" target="_blank" rel="noopener">Open</a></div>
         </div>
       </section>
 

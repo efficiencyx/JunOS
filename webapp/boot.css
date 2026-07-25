@@ -302,7 +302,7 @@ html[data-age-gated] #app { visibility: hidden; }
 
 html[data-pre-auth] #app { visibility: hidden; }
 
-#ageGate {
+#ageGate, #dataConsentGate {
   position: fixed;
   inset: 0;
   z-index: 10000;
@@ -312,7 +312,7 @@ html[data-pre-auth] #app { visibility: hidden; }
   background:
     radial-gradient(1200px 800px at 50% 40%, #161b27 0%, var(--bg) 60%, #07080c 100%);
 }
-#ageGate[hidden] { display: none; }
+#ageGate[hidden], #dataConsentGate[hidden] { display: none; }
 
 .age-gate-panel {
   display: flex;
@@ -364,6 +364,44 @@ html[data-pre-auth] #app { visibility: hidden; }
   background: var(--bg-3);
   color: var(--fg);
 }
+
+.age-gate-panel.consent-panel {
+  max-width: 480px;
+  text-align: left;
+  align-items: stretch;
+  gap: var(--space-3);
+}
+.age-gate-panel.consent-panel ul {
+  margin: 0;
+  padding-left: 20px;
+  color: var(--muted);
+  font-size: 13px;
+  line-height: 1.6;
+}
+.age-gate-panel.consent-panel .consent-actions {
+  display: flex;
+  gap: var(--space-3);
+  margin-top: var(--space-2);
+}
+.age-gate-panel.consent-panel .consent-actions button {
+  flex: 1;
+  padding: var(--space-3) var(--space-4);
+  font-size: 14px;
+}
+/* Equal visual weight on both choices: a muted "decline" beside a primary
+   "accept" is the deceptive-design pattern that invalidates the consent. */
+.age-gate-panel.consent-panel #dataConsentDecline {
+  background: var(--bg-3);
+  color: var(--fg);
+  border: 1px solid var(--border);
+}
+.age-gate-panel.consent-panel #dataConsentDecline:hover { border-color: var(--fg); }
+.age-gate-panel.consent-panel a {
+  color: var(--accent);
+  text-decoration: none;
+  border-bottom: 1px solid color-mix(in srgb, var(--accent) 40%, transparent);
+}
+.age-gate-panel.consent-panel a:hover { border-bottom-color: var(--accent); }
 
 
 #authScreen {

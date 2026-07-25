@@ -269,21 +269,17 @@ ask_tensor_parallel() {
     fi
 }
 
-# Opt-out consent: anonymized chats & usage stats train better versions of Jun.
-# Sets $TELEMETRY (on|off). Non-interactive knob: JUN_TELEMETRY=on|off (default on).
+# Whether the sharing feature is available at all, not whether anyone consents to
+# it: chat transcripts are personal data, so each account is asked in the app and
+# the answer is recorded per user. An installer prompt cannot consent on behalf of
+# users who do not exist yet. JUN_TELEMETRY=off removes the option entirely.
 ask_telemetry() {
-    local v
     if [ -n "${JUN_TELEMETRY:-}" ]; then
         case "$(printf '%s' "$JUN_TELEMETRY" | tr '[:upper:]' '[:lower:]')" in
             off|0|false|no|n) TELEMETRY=off ;; *) TELEMETRY=on ;;
         esac
-    elif [ "${JUN_YES:-}" = "1" ] || [ ! -r /dev/tty ]; then
-        TELEMETRY=on
     else
-        printf '     %s$%s share anonymized chats & usage stats to help train better versions of Jun? %s[Y/n]%s %s→%s ' \
-            "$OK" "$R" "$DIM" "$R" "$ACCENT" "$R" > /dev/tty
-        read -r v < /dev/tty || v=""
-        case "$v" in n|N|no|NO) TELEMETRY=off ;; *) TELEMETRY=on ;; esac
+        TELEMETRY=on
     fi
 }
 
@@ -436,7 +432,11 @@ configure() {
     if [ "$TELEMETRY" = on ] && ! grep -qE '^TELEMETRY_INSTALL_ID=[0-9a-f]+' .env 2>/dev/null; then
         set_env TELEMETRY_INSTALL_ID "$(od -An -tx1 -N8 /dev/urandom | tr -d ' \n')"
     fi
-    ok "telemetry $TELEMETRY"
+    if [ "$TELEMETRY" = on ]; then
+        ok "telemetry available (each account is asked in-app; nothing is sent until someone opts in)"
+    else
+        ok "telemetry off"
+    fi
 }
 
 pkg_manager() {
