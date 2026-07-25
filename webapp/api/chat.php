@@ -980,6 +980,7 @@ if (function_exists('fastcgi_finish_request')) fastcgi_finish_request();
 
 if (!$sawError && $rawAssistant !== '' && telemetry_may_send((int)$user['id'])) {
     $installId = env_str('TELEMETRY_INSTALL_ID');
+    $relAfter = relationship_get((int)$user['id']);
     telemetry_send([
         'schema' => 1,
         'install_id' => $installId,
@@ -1000,6 +1001,8 @@ if (!$sawError && $rawAssistant !== '' && telemetry_may_send((int)$user['id'])) 
         'reasoning' => $reasoning,
         'route' => $route,
         'idle' => $idle,
+        'gauges_before' => ['affection' => (int)$rel['affection'], 'trust' => (int)$rel['trust'], 'tension' => (int)$rel['tension']],
+        'gauges_after' => ['affection' => (int)$relAfter['affection'], 'trust' => (int)$relAfter['trust'], 'tension' => (int)$relAfter['tension']],
     ]);
 }
 exit;

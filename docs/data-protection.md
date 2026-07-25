@@ -11,7 +11,7 @@ practice.
 | | |
 |---|---|
 | **Last reviewed** | 2026-07-25 |
-| **Notice version in force** | `2026-07-25` (`TELEMETRY_NOTICE_VERSION` in `webapp/api/_lib.php`) |
+| **Notice version in force** | `2026-07-25.2` (`TELEMETRY_NOTICE_VERSION` in `webapp/api/_lib.php`) |
 
 ## Scope
 
@@ -45,9 +45,9 @@ the processing involves art. 9 data. Hence this record.
 |---|---|
 | **Purpose** | Training and evaluating the Jun conversational models. No other purpose. No advertising, no sale, no profiling of individuals, no automated decisions about anyone. |
 | **Categories of data subject** | Adult users (18+) of Jun OS installs who have explicitly opted in. |
-| **Categories of personal data** | Verbatim user-typed messages and model replies; 👍/👎 ratings; model name, provider, context size, token counts, timings; a stable random `install_id`; a per-account `user_ref` (truncated `sha256(install_id:user_id)`); a per-conversation tag; a daily-salted hash of the sending IP address. |
+| **Categories of personal data** | Verbatim user-typed messages and model replies; 👍/👎 ratings; the three relationship gauges (affection, trust, tension) before and after each turn, which form part of the prompt the model saw; model name, provider, context size, token counts, timings; a stable random `install_id`; a per-account `user_ref` (truncated `sha256(install_id:user_id)`); a per-conversation tag; a daily-salted hash of the sending IP address. |
 | **Special categories (art. 9)** | Yes — data concerning sex life and sexual orientation, inherent in the content of intimate roleplay. Treated as art. 9 data throughout. |
-| **Not collected** | Email addresses, passwords, raw IP addresses, real names, the name given to the character, memory notes, journals, wardrobe or relationship state, and anything predating consent. |
+| **Not collected** | Email addresses, passwords, raw IP addresses, real names, the name given to the character, memory notes, journals, wardrobe, and anything predating consent. |
 | **Lawful basis** | Art. 6(1)(a) consent; art. 9(2)(a) explicit consent for the special-category element. Consent is the sole basis — no legitimate-interest fallback is claimed. |
 | **Recipients** | None. No processors, no analytics vendors, no sub-processors. |
 | **Third-country transfers** | None. Server and backups within the EEA. *(If the host ever moves outside the EEA, add the art. 46 safeguard here and to the notice.)* |
