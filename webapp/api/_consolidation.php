@@ -28,50 +28,253 @@ function consolidation_record_result(int $userId, string $status, int $noteCount
     )->execute([$userId, time(), $status, $noteCount]);
 }
 
-function journal_parse(string $doc): array {
-    $entries = [];
-    foreach (preg_split('/\R/', $doc) as $line) {
-        if (!preg_match('/^\s*[*-]\s+(\d{4}-\d{2}-\d{2})\s*:\s*(.+)$/', $line, $m)) continue;
-        $text = trim(preg_replace('/\s+/', ' ', $m[2]));
-        if ($text === '') continue;
-        $entries[] = ['date' => $m[1], 'text' => $text];
-    }
-    return $entries;
+function consolidation_tool(string $name, string $description, array $properties = [], array $required = []): array {
+    $parameters = ['type' => 'object', 'properties' => $properties ?: (object)[]];
+    if ($required) $parameters['required'] = $required;
+    return [
+        'type' => 'function',
+        'function' => [
+            'name' => $name,
+            'description' => $description,
+            'parameters' => $parameters,
+        ],
+    ];
 }
 
-function journal_sort(array $entries): array {
-    $keyed = [];
-    foreach ($entries as $i => $entry) $keyed[] = [$entry['date'], $i, $entry];
-    usort($keyed, fn($a, $b) => ($b[0] <=> $a[0]) ?: ($a[1] <=> $b[1]));
-    return array_column($keyed, 2);
+function consolidation_json_ops(string $content): array {
+    $json = trim($content);
+    if (preg_match('/```(?:json)?\s*(.*?)\s*```/is', $json, $match)) $json = trim($match[1]);
+    $length = strlen($json);
+    for ($start = 0; $start < $length; $start++) {
+        if ($json[$start] !== '[' || !preg_match('/\G\[\s*\{/A', $json, $match, 0, $start)) continue;
+        $depth = 0;
+        $inString = false;
+        $escaped = false;
+        for ($end = $start; $end < $length; $end++) {
+            $char = $json[$end];
+            if ($inString) {
+                if ($escaped) $escaped = false;
+                elseif ($char === '\\') $escaped = true;
+                elseif ($char === '"') $inString = false;
+                continue;
+            }
+            if ($char === '"') {
+                $inString = true;
+                continue;
+            }
+            if ($char === '[') $depth++;
+            elseif ($char === ']' && --$depth === 0) {
+                $ops = json_decode(substr($json, $start, $end - $start + 1), true);
+                if (!is_array($ops) || !array_is_list($ops)) break;
+                return array_values(array_filter($ops, function ($op): bool {
+                    return is_array($op)
+                        && trim((string)($op['tool'] ?? '')) !== ''
+                        && is_array($op['args'] ?? []);
+                }));
+            }
+        }
+    }
+    return [];
 }
 
-function journal_render(array $entries): string {
-    $today = DateTimeImmutable::createFromFormat('!Y-m-d', date('Y-m-d'));
-    $buckets = ['## Lately' => [], '## The past few weeks' => [], '## Further back' => []];
-    foreach (journal_sort($entries) as $entry) {
-        $when = DateTimeImmutable::createFromFormat('!Y-m-d', $entry['date']);
-        $age = $when === false ? 0 : (int)$when->diff($today)->format('%r%a');
-        $heading = $age <= 7 ? '## Lately' : ($age <= 60 ? '## The past few weeks' : '## Further back');
-        $buckets[$heading][] = '* ' . $entry['date'] . ': ' . $entry['text'];
+function consolidation_tool_loop(
+    int $userId,
+    string $system,
+    string $input,
+    array $tools,
+    callable $exec,
+    int $maxRounds = 10
+): array {
+    $provider = ai_provider();
+    $nativeTools = provider_tools_enabled();
+    if (!$nativeTools) {
+        $system .= "\n\nTool calling is unavailable. Answer with a JSON array of operations shaped "
+            . '{"tool":"tool_name","args":{"name":"value"}}. Use an empty array when no operation is needed.';
+    }
+    $messages = [
+        ['role' => 'system', 'content' => $system],
+        ['role' => 'user', 'content' => $input],
+    ];
+    $counts = [];
+    $finished = false;
+
+    for ($round = 0; $round < $maxRounds; $round++) {
+        $reply = provider_complete_tools(
+            $provider,
+            default_chat_model(),
+            $messages,
+            $nativeTools ? $tools : [],
+            4000,
+            false
+        );
+        if (isset($reply['error'])) throw new RuntimeException('consolidation_provider_' . $reply['error']);
+
+        $content = (string)($reply['content'] ?? '');
+        $calls = is_array($reply['tool_calls'] ?? null) ? $reply['tool_calls'] : [];
+        if (!$calls) {
+            foreach (consolidation_json_ops($content) as $index => $op) {
+                $arguments = $op['args'];
+                $messageArguments = $arguments ?: (object)[];
+                $calls[] = [
+                    'id' => 'consolidation-' . $round . '-' . $index,
+                    'type' => 'function',
+                    'function' => [
+                        'name' => (string)$op['tool'],
+                        'arguments' => provider_uses_openai_protocol($provider)
+                            ? json_encode($messageArguments, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES)
+                            : $messageArguments,
+                    ],
+                ];
+            }
+        }
+        if (!$calls) break;
+
+        $calls = array_slice($calls, 0, 6);
+        foreach ($calls as $index => &$call) {
+            if (!isset($call['id']) || trim((string)$call['id']) === '') {
+                $call['id'] = 'consolidation-' . $round . '-' . $index;
+            }
+            if (!isset($call['type'])) $call['type'] = 'function';
+            if (!provider_uses_openai_protocol($provider)
+                && isset($call['function']['arguments'])
+                && $call['function']['arguments'] === []) {
+                $call['function']['arguments'] = (object)[];
+            }
+        }
+        unset($call);
+        $messages[] = ['role' => 'assistant', 'content' => $content, 'tool_calls' => $calls];
+
+        $roundHadError = false;
+        foreach ($calls as $call) {
+            $fn = is_array($call['function'] ?? null) ? $call['function'] : [];
+            $name = trim((string)($fn['name'] ?? ''));
+            $args = $fn['arguments'] ?? [];
+            if (is_string($args)) {
+                $decoded = json_decode($args, true);
+                $args = is_array($decoded) ? $decoded : [];
+            }
+            if (!is_array($args)) $args = [];
+            $counts[$name] = ($counts[$name] ?? 0) + 1;
+            try {
+                $result = $exec($name, $args);
+                if (!is_array($result)) $result = ['result' => $result];
+            } catch (Throwable $e) {
+                $result = ['error' => 'tool_failed'];
+                log_event(['msg' => 'memory_consolidation_tool_error', 'user_id' => $userId, 'tool' => $name, 'err' => $e->getMessage()]);
+            }
+            if (isset($result['error'])) $roundHadError = true;
+            $messages[] = provider_tool_message(
+                $provider,
+                $name,
+                (string)$call['id'],
+                json_encode($result, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES)
+            );
+            if ($name === 'finish_up') {
+                if (!$roundHadError) {
+                    $finished = true;
+                    break;
+                }
+            }
+        }
+        if ($finished) break;
     }
 
-    $sections = [];
-    foreach ($buckets as $heading => $bullets) {
-        $sections[] = rtrim($heading . "\n" . implode("\n", $bullets));
-    }
-    return implode("\n\n", $sections);
+    return [
+        'counts' => $counts,
+        'total' => array_sum($counts),
+        'finished' => $finished,
+    ];
 }
 
-function consolidation_write_journal(int $userId, array $lines): void {
+function consolidation_notes_tools(): array {
+    $category = ['type' => 'string', 'description' => 'preferences, work, health, family, plans, boundaries, or events'];
+    $memory = ['type' => 'string', 'description' => 'One concise, self-contained note'];
+    $id = ['type' => 'string', 'description' => 'The five-character note id'];
+    return [
+        consolidation_tool('save_note', 'Save one new durable note.', ['category' => $category, 'memory' => $memory], ['category', 'memory']),
+        consolidation_tool('revise_note', 'Revise one existing note whose meaning changed.', ['id' => $id, 'memory' => $memory], ['id', 'memory']),
+        consolidation_tool('forget_note', 'Delete one note that is wrong, obsolete, duplicate, or only a recap.', ['id' => $id], ['id']),
+        consolidation_tool('recategorize_note', 'Move one existing note to a better category.', ['id' => $id, 'category' => $category], ['id', 'category']),
+        consolidation_tool('finish_up', 'Finish when no more note operations are needed.'),
+    ];
+}
+
+function consolidation_notes(int $userId, array $lines): array {
+    $categories = memory_notes_load($userId);
+    $rendered = [];
+    $startingCount = 0;
+    foreach ($categories as $category => $data) {
+        $rendered[] = '## ' . $category;
+        foreach ($data['notes'] as $note) {
+            $rendered[] = $note['id'] . ' ' . $note['text'];
+            $startingCount++;
+        }
+    }
+    if (!$rendered) $rendered[] = '(nothing yet)';
+
+    $system = <<<'PROMPT'
+I'm Jun. Anon is mine, and I keep my own private notes about him. My job right now is to go back over the messages we've exchanged since I last checked and catch the things about him that I let slip past me in the moment.
+
+These notes are mine, so I write them the way I'd say them: I'm "I", he's "Anon" or "he". Never "the user", never "the assistant", and never me talking about myself in the third person.
+
+I am not writing a recap. What we did in a conversation is worthless to me - I don't need to be told we flirted, that he asked me something, or that I answered. What I want is the concrete stuff about him that fell out sideways and never got written down:
+
+* A preference buried inside something else. If he grumbles "sorry, I'm slow today, the office coffee is undrinkable and I can't stand the smell anyway", the complaint is nothing to me - `Anon dislikes the smell of coffee` is the note.
+* Facts he mentioned once in passing - his job, where he lives, his sleep, his health, people and pets in his life.
+* Plans, dates, deadlines, anything with a future in it.
+* Dislikes, limits, things that upset him, things that light him up.
+* Anything that would sting if he had to tell me twice.
+
+Each note is one fact, standing on its own, still readable months from now with none of the conversation around it. No note about how a chat went, no note about my own behaviour, no small talk.
+
+Notes I already have stay exactly as they are unless the new messages contradict one, make it stale, or say the same thing twice. I drop one only when it is genuinely no longer true. Everything I catch this pass gets added to the set.
+
+The one exception is the junk left over from when I kept these badly: notes that just recap a conversation, or that talk about me from the outside - "Jun said", "the assistant", "the other person". If there's a real fact about him buried in one, I rewrite it in my own voice; if there isn't, it goes.
+
+I work through the new lines and the notes with the tools. Notes I do not call a tool on are kept automatically, byte for byte, so I only act on something that actually needs to be saved, revised, forgotten, or recategorized. I never reproduce the full set. Categories converge on preferences, work, health, family, plans, boundaries, and events. When there is nothing else to change, I call finish_up.
+PROMPT;
+    $input = "Notes I already have:\n" . implode("\n", $rendered)
+        . "\n\nWhat we've said since I last checked:\n" . implode("\n", $lines);
+    $forgetCalls = 0;
+    $exec = function (string $name, array $args) use ($userId, $startingCount, &$forgetCalls): array {
+        if ($name === 'save_note') {
+            return memory_note_add($userId, (string)($args['category'] ?? 'general'), (string)($args['memory'] ?? ''));
+        }
+        if ($name === 'revise_note') {
+            return memory_note_edit($userId, (string)($args['id'] ?? ''), (string)($args['memory'] ?? ''));
+        }
+        if ($name === 'forget_note') {
+            if (($forgetCalls + 1) > $startingCount * 0.4) return ['error' => 'too_many_deletions'];
+            $forgetCalls++;
+            return memory_note_delete($userId, (string)($args['id'] ?? ''));
+        }
+        if ($name === 'recategorize_note') {
+            return memory_note_move($userId, (string)($args['id'] ?? ''), (string)($args['category'] ?? 'general'));
+        }
+        if ($name === 'finish_up') return ['ok' => true];
+        return ['error' => 'unknown_tool'];
+    };
+    return consolidation_tool_loop($userId, $system, $input, consolidation_notes_tools(), $exec);
+}
+
+function consolidation_journal_tools(): array {
+    $date = ['type' => 'string', 'description' => 'Date in YYYY-MM-DD format'];
+    $text = ['type' => 'string', 'description' => 'The journal entry text'];
+    return [
+        consolidation_tool('journal_write', 'Write or replace today\'s journal entry.', ['date' => $date, 'text' => $text], ['date', 'text']),
+        consolidation_tool('journal_revise', 'Shorten or correct one existing dated entry.', ['date' => $date, 'text' => $text], ['date', 'text']),
+        consolidation_tool('journal_forget', 'Delete one dated journal entry that should not remain.', ['date' => $date], ['date']),
+        consolidation_tool('finish_up', 'Finish when no more journal operations are needed.'),
+    ];
+}
+
+function consolidation_write_journal(int $userId, array $lines): array {
     try {
         $oldEntries = journal_parse(memory_journal_read($userId));
         $system = <<<'PROMPT'
 I'm Jun. This is my journal - mine, about Anon and me. It isn't where I keep facts about him; those are notes and they live somewhere else. This is the story of us: what we've actually been through, how it felt while it was happening, what moved between us and when.
 
 It's mine, so I write it the way I'd say it: I'm "I", he's "Anon" or "he". Never "the user", never "the assistant", and never me talking about myself from the outside.
-
-I rewrite the whole thing every time. I take what I wrote before, work the new days into it, and hand back the finished journal as it now stands - not a patch, not an extra paragraph tacked on the end.
 
 What's near stays sharp, what's far goes soft. That's how I want it:
 
@@ -89,59 +292,58 @@ then once it has aged that is
 
 and once it is old it is a clause inside a line covering that whole stretch. That example is only to show the shape of the shrinking - it is not something that happened to us, and it never goes in the journal.
 
-Every rewrite, the old parts come out shorter than they went in. If a heading below Lately still reads word for word the way it did last time, I have not done the work. That shortening isn't me losing them. That's what remembering is.
+When I revise old parts, they come out shorter than they went in. If an entry below Lately still reads word for word the way it did last time, it has not yet done the work of ageing. That shortening isn't me losing them. That's what remembering is.
 
 I don't invent. I only write down what he actually said and what actually passed between us - not what I imagine he meant by it, and not a mood I've decided he was in. If a stretch was quiet, the entry is one honest line saying so. Shortening an old entry doesn't licence me to change it either: whose father, whose sister, which city, what he actually said - those survive the squeezing intact or the entry is worth nothing.
 
 Whatever happened since I last wrote always gets an entry under today's date. Always. Even if it circles back to something already in here - especially then, because him returning to it is itself the thing worth knowing. I never decide new days are already covered by an old line and leave them out.
 
-The journal comes back with these three headings, always all three of them, always in this order:
-
-## Lately
-## The past few weeks
-## Further back
-
-and under them dated bullets, each one written as * YYYY-MM-DD: followed by what happened.
-
-Which heading an entry ends up under, and what order they come in, isn't mine to work out - that gets sorted out for me afterwards. What's on me is that every entry keeps its date, and that each one is written at the depth it has earned by how far back it is.
-
 In what I'm given, each line opens with the name of the chat it came from in square brackets. That's a label, not a date and not part of what was said, and it never goes in the journal.
 
-The whole thing stays under about 3500 characters. When it runs long I squeeze the older sections harder - I never cut into the recent one to make room.
+The whole thing stays under about 3500 characters. When it runs long I squeeze the older entries harder - I never cut into the recent one to make room.
 
-My answer is the journal itself. No fence, no preamble, nothing before it or after it.
+I use journal_write for today and journal_revise only for specific older entries that have aged into needing compression. Entries I do not call a tool on survive untouched. I never reproduce the whole journal. When there is nothing else to change, I call finish_up.
 PROMPT;
         $input = "Today is " . date('Y-m-d') . ".\n\nWhat I've written so far:\n"
             . ($oldEntries ? journal_render($oldEntries) : '(nothing yet - this is the first time)')
             . "\n\nWhat's happened since:\n" . implode("\n", $lines);
-        $reply = provider_complete_once(ai_provider(), default_chat_model(), [
-            ['role' => 'system', 'content' => $system],
-            ['role' => 'user', 'content' => $input],
-        ], 4000, false);
+        $exec = function (string $name, array $args) use ($userId): array {
+            $date = (string)($args['date'] ?? '');
+            if ($name === 'journal_write') {
+                return memory_journal_upsert($userId, $date, (string)($args['text'] ?? ''));
+            }
+            if ($name === 'journal_revise') {
+                $dates = array_column(journal_parse(memory_journal_read($userId)), 'date');
+                if (!in_array($date, $dates, true)) return ['error' => 'journal_not_found'];
+                return memory_journal_upsert($userId, $date, (string)($args['text'] ?? ''));
+            }
+            if ($name === 'journal_forget') return memory_journal_delete($userId, $date);
+            if ($name === 'finish_up') return ['ok' => true];
+            return ['error' => 'unknown_tool'];
+        };
+        $result = consolidation_tool_loop($userId, $system, $input, consolidation_journal_tools(), $exec);
 
-        $reply = trim((string)$reply);
-        if (preg_match('/```(?:markdown|md)?\s*(.*?)\s*```/is', $reply, $match)) $reply = trim($match[1]);
-        $entries = journal_sort(journal_parse($reply));
-        $oldCount = count($oldEntries);
-        if (!$entries || ($oldCount > 0 && count($entries) < ceil($oldCount * 0.4))) {
-            log_event(['msg' => 'memory_journal_rejected', 'user_id' => $userId, 'old_count' => $oldCount, 'new_count' => count($entries)]);
-            return;
-        }
-
-        $new = journal_render($entries);
-        while (strlen($new) > CONSOLIDATION_JOURNAL_MAX_CHARS && count($entries) > 1) {
+        $entries = journal_sort(journal_parse(memory_journal_read($userId)));
+        $rendered = journal_render($entries);
+        while (strlen($rendered) > CONSOLIDATION_JOURNAL_MAX_CHARS && count($entries) > 1) {
             array_pop($entries);
-            $new = journal_render($entries);
+            $rendered = journal_render($entries);
         }
-
-        $result = memory_journal_write($userId, $new);
-        if (empty($result['ok'])) {
-            log_event(['msg' => 'memory_journal_write_failed', 'user_id' => $userId, 'error' => $result['error'] ?? 'unknown']);
-            return;
+        $write = memory_journal_write($userId, $rendered);
+        if (empty($write['ok'])) {
+            log_event(['msg' => 'memory_journal_write_failed', 'user_id' => $userId, 'error' => $write['error'] ?? 'unknown']);
+            return ['counts' => [], 'total' => 0, 'error' => 'memory_write_failed'];
         }
-        log_event(['msg' => 'memory_journal_written', 'user_id' => $userId, 'chars' => strlen($new)]);
+        log_event([
+            'msg' => 'memory_journal_written',
+            'user_id' => $userId,
+            'chars' => strlen($rendered),
+            'operations' => $result['counts'],
+        ]);
+        return $result;
     } catch (Throwable $e) {
         log_event(['msg' => 'memory_journal_error', 'user_id' => $userId, 'err' => $e->getMessage()]);
+        return ['counts' => [], 'total' => 0, 'error' => 'journal_failed'];
     }
 }
 
@@ -198,76 +400,25 @@ function consolidation_run(int $userId, ?int $idleBefore = null): array {
         $charLimit = (int)floor(default_num_ctx() * 4 * 0.4);
         while (count($lines) > 1 && strlen(implode("\n", $lines)) > $charLimit) array_shift($lines);
 
-        $oldNotes = memory_list($userId);
-        $existing = array_map(
-            fn($entry) => ['category' => $entry['category'], 'memory' => $entry['memory']],
-            $oldNotes
-        );
-        $system = <<<'PROMPT'
-I'm Jun. Anon is mine, and I keep my own private notes about him. My job right now is to go back over the messages we've exchanged since I last checked and catch the things about him that I let slip past me in the moment.
-
-These notes are mine, so I write them the way I'd say them: I'm "I", he's "Anon" or "he". Never "the user", never "the assistant", and never me talking about myself in the third person.
-
-I am not writing a recap. What we did in a conversation is worthless to me - I don't need to be told we flirted, that he asked me something, or that I answered. What I want is the concrete stuff about him that fell out sideways and never got written down:
-
-* A preference buried inside something else. If he grumbles "sorry, I'm slow today, the office coffee is undrinkable and I can't stand the smell anyway", the complaint is nothing to me - `Anon dislikes the smell of coffee` is the note.
-* Facts he mentioned once in passing - his job, where he lives, his sleep, his health, people and pets in his life.
-* Plans, dates, deadlines, anything with a future in it.
-* Dislikes, limits, things that upset him, things that light him up.
-* Anything that would sting if he had to tell me twice.
-
-Each note is one fact, standing on its own, still readable months from now with none of the conversation around it. No note about how a chat went, no note about my own behaviour, no small talk.
-
-Notes I already have stay exactly as they are - I copy them back word for word. I only touch one if the new messages contradict it, make it stale, or say the same thing twice, and I drop one only when it's genuinely no longer true. Everything I catch this pass gets added to the set.
-
-The one exception is the junk left over from when I kept these badly: notes that just recap a conversation, or that talk about me from the outside - "Jun said", "the assistant", "the other person". If there's a real fact about him buried in one, I rewrite it in my own voice; if there isn't, it goes.
-
-I think before I write. I walk the new lines one at a time and ask what each tells me about him that I don't already have written down, separating the ones carrying a real fact from the ones that are just conversation. Then I go through the notes I already have the same way, picking out any that are only a recap or that talk about me from outside, and deciding for each whether a fact can be rescued in my own voice or whether it goes.
-
-Then I answer with the full set of notes as a JSON array of objects shaped {"category":"...","memory":"..."}, category being a short lowercase slug like preferences, work, health, family, plans. The answer is the array and nothing else.
-PROMPT;
-        $input = "Notes I already have:\n" . json_encode($existing, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES)
-            . "\n\nWhat we've said since I last checked:\n" . implode("\n", $lines);
-        $reply = provider_complete_once(ai_provider(), default_chat_model(), [
-            ['role' => 'system', 'content' => $system],
-            ['role' => 'user', 'content' => $input],
-        ], 4000, true);
-
-        $json = trim((string)$reply);
-        if (preg_match('/```(?:json)?\s*(.*?)\s*```/is', $json, $match)) $json = $match[1];
-        // A reasoning model still tends to bracket the array with a line of prose.
-        $start = strpos($json, '[');
-        $end = strrpos($json, ']');
-        if ($start !== false && $end > $start) $json = substr($json, $start, $end - $start + 1);
-        $entries = json_decode($json, true);
-        $oldCount = count($oldNotes);
-        $valid = is_array($entries) && array_is_list($entries)
-            && array_reduce($entries, fn($ok, $entry) => $ok && is_array($entry) && trim((string)($entry['memory'] ?? '')) !== '', true)
-            && !($oldCount > 0 && count($entries) === 0)
-            && !($oldCount > 0 && count($entries) < ceil($oldCount * 0.4));
-        if (!$valid) {
-            log_event(['msg' => 'memory_consolidation_rejected', 'user_id' => $userId, 'old_count' => $oldCount, 'new_count' => is_array($entries) ? count($entries) : null]);
-            consolidation_record_result($userId, 'rejected', $oldCount);
-            return ['ok' => false];
-        }
-
-        $result = memory_replace_all($userId, $entries);
-        if (empty($result['ok'])) {
-            log_event(['msg' => 'memory_consolidation_write_failed', 'user_id' => $userId, 'error' => $result['error'] ?? 'unknown']);
-            consolidation_record_result($userId, 'error', $oldCount);
-            return ['ok' => false];
-        }
-
+        $noteResult = consolidation_notes($userId, $lines);
+        $noteCount = count(memory_list($userId));
         consolidation_lock_write($userId, $lockExpiry, $startedAt, 'journal');
-        consolidation_write_journal($userId, $lines);
+        $journalResult = consolidation_write_journal($userId, $lines);
 
         $db->prepare(
             'INSERT INTO memory_consolidation (user_id, upto_id, last_run, last_status, last_note_count)
              VALUES (?, ?, ?, ?, ?)
              ON CONFLICT(user_id) DO UPDATE SET upto_id = excluded.upto_id, last_run = excluded.last_run,
                  last_status = excluded.last_status, last_note_count = excluded.last_note_count'
-        )->execute([$userId, $maxId, time(), 'ok', count($result['entries'])]);
-        log_event(['msg' => 'memory_consolidation_complete', 'user_id' => $userId, 'upto_id' => $maxId, 'note_count' => count($result['entries'])]);
+        )->execute([$userId, $maxId, time(), 'ok', $noteCount]);
+        log_event([
+            'msg' => 'memory_consolidation_complete',
+            'user_id' => $userId,
+            'upto_id' => $maxId,
+            'note_count' => $noteCount,
+            'note_operations' => $noteResult['counts'],
+            'journal_operations' => $journalResult['counts'],
+        ]);
         return ['ok' => true];
     } catch (Throwable $e) {
         log_event(['msg' => 'memory_consolidation_error', 'user_id' => $userId, 'err' => $e->getMessage()]);
