@@ -175,6 +175,66 @@ function provider_complete_once(string $provider, string $model, array $messages
     return $text !== '' ? $text : null;
 }
 
+function provider_complete_tools(string $provider, string $model, array $messages, array $tools, int $maxTokens = 1024, bool $think = false, string $reasoning = 'medium'): array {
+    $endpoint = provider_chat_endpoint($provider);
+    if (provider_uses_openai_protocol($provider)) {
+        $payload = [
+            'model' => $model,
+            'messages' => $messages,
+            'stream' => false,
+            'temperature' => 0.3,
+            'max_tokens' => $maxTokens,
+        ];
+        if ($tools) $payload['tools'] = $tools;
+        if ($think && $provider === 'openrouter') $payload['reasoning'] = ['effort' => $reasoning];
+    } else {
+        $payload = [
+            'model' => $model,
+            'messages' => $messages,
+            'stream' => false,
+            'keep_alive' => -1,
+            'options' => [
+                'reasoning_effort' => $reasoning,
+                'temperature' => 0.3,
+                'num_ctx' => default_num_ctx(),
+                'num_predict' => $maxTokens,
+            ],
+        ];
+        if ($tools) $payload['tools'] = $tools;
+        if (!$think) $payload['think'] = false;
+    }
+
+    $ch = curl_init($endpoint);
+    curl_setopt_array($ch, [
+        CURLOPT_POST => true,
+        CURLOPT_HTTPHEADER => chat_request_headers($provider),
+        CURLOPT_POSTFIELDS => json_encode($payload, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES),
+        CURLOPT_RETURNTRANSFER => true,
+        CURLOPT_TIMEOUT => 120,
+        CURLOPT_CONNECTTIMEOUT => 10,
+    ]);
+    $resp = curl_exec($ch);
+    $status = (int)curl_getinfo($ch, CURLINFO_RESPONSE_CODE);
+    if ($resp === false || $status >= 300) {
+        $error = $resp === false ? curl_error($ch) : 'http_' . $status;
+        log_event(['msg' => 'complete_tools_error', 'provider' => $provider, 'err' => $error]);
+        curl_close($ch);
+        return ['content' => '', 'tool_calls' => [], 'error' => $error];
+    }
+    curl_close($ch);
+
+    $obj = json_decode($resp, true);
+    if (!is_array($obj)) return ['content' => '', 'tool_calls' => [], 'error' => 'invalid_response'];
+    $message = provider_uses_openai_protocol($provider)
+        ? ($obj['choices'][0]['message'] ?? null)
+        : ($obj['message'] ?? null);
+    if (!is_array($message)) return ['content' => '', 'tool_calls' => [], 'error' => 'invalid_response'];
+    return [
+        'content' => is_string($message['content'] ?? null) ? trim($message['content']) : '',
+        'tool_calls' => is_array($message['tool_calls'] ?? null) ? $message['tool_calls'] : [],
+    ];
+}
+
 function provider_chat_endpoint(string $provider): string {
     return provider_uses_openai_protocol($provider)
         ? chat_api_base($provider) . '/chat/completions'

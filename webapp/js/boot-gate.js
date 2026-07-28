@@ -9,7 +9,7 @@ document.documentElement.setAttribute('data-pre-auth', '1');
 // The pre-app screens are styled by the inlined critical CSS, so the full
 // sheets are applied here instead of blocking the parser on them. They are
 // already in flight from the <link rel="preload"> tags in the head.
-for (const href of ['styles.css?v=46', 'trip-loader.css?v=4']) {
+for (const href of ['styles.css?v=49', 'trip-loader.css?v=4']) {
   const link = document.createElement('link');
   link.rel = 'stylesheet';
   link.href = href;

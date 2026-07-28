@@ -1180,8 +1180,110 @@ body.l2d-touching { cursor: grabbing; user-select: none; }
 .set-block { padding: 16px 0; border-bottom: 1px solid var(--border); }
 .set-block:last-child { border-bottom: none; }
 .set-block-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 10px; }
+.set-block-head .count {
+  min-width: 24px;
+  padding: 2px 7px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-pill);
+  background: var(--bg-3);
+  color: var(--accent-2);
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+  text-align: center;
+}
 .set-block .set-row-desc { margin: 4px 0 12px; }
 .set-block .color-preview-segment { border-radius: 3px; }
+
+.memory-graph-wrap {
+  position: relative;
+  min-height: 330px;
+  margin: var(--space-3) 0;
+  overflow: hidden;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  background:
+    radial-gradient(circle at 50% 45%, rgba(122, 137, 184, .11), transparent 55%),
+    var(--bg-3);
+  isolation: isolate;
+}
+.memory-graph {
+  display: block;
+  width: 100%;
+  height: 100%;
+  min-height: 330px;
+  cursor: grab;
+  touch-action: none;
+}
+.memory-graph.dragging { cursor: grabbing; }
+.memory-graph-status {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  padding: var(--space-5);
+  color: var(--muted);
+  font-size: 13px;
+  text-align: center;
+  pointer-events: none;
+}
+.memory-graph-status[hidden] { display: none; }
+.memory-reader {
+  position: absolute;
+  top: var(--space-3);
+  right: var(--space-3);
+  z-index: 2;
+  width: min(280px, calc(100% - 24px));
+  max-height: calc(100% - 24px);
+  overflow: auto;
+  padding: var(--space-4);
+  border: 1px solid rgba(255, 255, 255, .14);
+  border-radius: var(--radius-md);
+  background: color-mix(in srgb, var(--bg-elev) 94%, transparent);
+  box-shadow: var(--shadow-md);
+  backdrop-filter: blur(12px);
+}
+.memory-reader[hidden] { display: none; }
+.memory-reader-close {
+  position: absolute;
+  top: 6px;
+  right: 6px;
+  width: 30px;
+  height: 30px;
+  padding: 0;
+  font-size: 18px;
+}
+.memory-reader-meta {
+  padding-right: 28px;
+  color: var(--accent-2);
+  font-family: ui-monospace, monospace;
+  font-size: 10px;
+  letter-spacing: .08em;
+  text-transform: uppercase;
+}
+.memory-reader-title {
+  margin: 5px 28px var(--space-3) 0;
+  color: var(--fg);
+  font-size: 16px;
+}
+.memory-reader-body {
+  color: var(--fg-2);
+  font-size: 13px;
+  line-height: 1.5;
+}
+.memory-reader-body p { margin: 0; white-space: pre-wrap; }
+.memory-reader-body ul {
+  display: grid;
+  gap: var(--space-2);
+  margin: 0;
+  padding-left: 18px;
+}
+.memory-add {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(110px, .45fr) auto;
+  gap: var(--space-2);
+  margin: var(--space-3) 0;
+}
+.memory-add input { min-width: 0; width: 100%; }
 
 .mood-controls { display: grid; gap: var(--space-3); }
 .mood-row {
@@ -2509,6 +2611,17 @@ html.phone-ui .mood-row input[type="range"]::-moz-range-track {
 html.phone-ui .memory-add { display: grid; grid-template-columns: 1fr; gap: var(--space-2); }
 html.phone-ui .memory-add input,
 html.phone-ui .memory-add button { width: 100%; }
+html.phone-ui .memory-graph-wrap,
+html.phone-ui .memory-graph { min-height: 260px; }
+html.phone-ui .memory-reader {
+  inset: auto 0 0;
+  width: 100%;
+  max-height: 70%;
+  border-right: 0;
+  border-bottom: 0;
+  border-left: 0;
+  border-radius: var(--radius-md) var(--radius-md) 0 0;
+}
 html.phone-ui .mood-row { grid-template-columns: 64px minmax(0, 1fr) 28px; gap: var(--space-2); }
 html.phone-ui input[type="text"],
 html.phone-ui input[type="password"],
