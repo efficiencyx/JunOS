@@ -381,13 +381,29 @@ the context as a tool message rather than as an injected block.
 
 ## Tool calling and durable memory
 
-`chat.php` offers the model up to four tools via `tool_catalog()`, always offered together (no keyword pre-filter - an earlier version silently blocked most natural asks): `search_recent_chats`, `list_recent_chats`, `memory_write`, and `web_search`. The model is instructed (`tool_context_block()`) to speak a short in-character lead line before any tool call, so a call is never emitted with empty visible content.
+`chat.php` offers its tools via `tool_catalog()` with no keyword pre-filter. The durable-memory tool is `memory_write(memory, category)`, which calls `memory_note_add()` and converges notes on the categories `preferences`, `work`, `health`, `family`, `plans`, `boundaries`, and `events`. The streamed-response salvage path accepts the fine-tune's legacy `[A:memory_write|...]` form and sends it through the same helper.
 
-Tool calls run in a bounded loop of up to 3 rounds (initial reply, one tool-informed continuation, one retry round) - `run_tool_call()` executes each of up to 4 calls per round and the result is appended as a `tool`-role message before re-streaming. `search_recent_chats`/`list_recent_chats` query the user's own `messages`/`conversations` tables (excluding the current conversation); `memory_write` calls the shared `memory_append()` helper (below).
+Chat tool calls run in a bounded loop of up to 3 rounds. Each result is appended as a `tool`-role message before the model continues. `search_recent_chats`/`list_recent_chats` query the user's own `messages`/`conversations` tables with the current conversation excluded.
 
 `web_search` goes through `web_search_public()` → DuckDuckGo's HTML results page, parsed with regex for result links/snippets. Both it and any redirect hops it follows (`web_fetch_public()`, up to 3 redirects, 512 KB cap) are guarded by `resolve_public_http_url()`: an SSRF guard that resolves the target host's DNS A/AAAA records and rejects the request if any resolved IP is private/reserved (`FILTER_FLAG_NO_PRIV_RANGE | FILTER_FLAG_NO_RES_RANGE`), rejects userinfo-in-URL and non-standard ports, and restricts to `http`/`https`.
 
-Durable memories are per-user JSONL files, one line per fact, written by `memory_append()` in `webapp/api/_lib.php` under `memory_file_path()`. They live at `MEMORY_DIR` (default `<state dir>/memory`, i.e. `/var/lib/omega/memory`), inside the persisted `omega_state` Docker volume so they survive container recreation. Each request re-reads the file (`memory_recent_context()` in `chat.php`, last 20 entries) and injects it as a `## Durable memory notes` block in the live context. `webapp/api/memory.php` exposes `GET` (list), `POST` (append), and `DELETE` (remove one entry by index+timestamp, or wipe with `{"all":true}`) for the settings-drawer memory panel in the frontend.
+Durable memories live under `MEMORY_DIR` (default `<state dir>/memory`, i.e. `/var/lib/omega/memory`) in an Obsidian-compatible per-user directory:
+
+```text
+user-{id}/
+  preferences.md
+  work.md
+  journal.md
+  meta.json
+```
+
+Each category file has a Markdown heading and one bullet per fact. PHP appends a stable five-character `^blockid` to every bullet; optional `[[category]]` wikilinks become cross-category graph edges. `meta.json` maps block ids to created/updated timestamps so note files remain clean and hand-editable. Mutations serialize through a per-user write lock, and each file replacement uses backup → temporary file → rename. A separately locked lazy migration triggers when either legacy artifact exists, groups former `user-{id}.jsonl` entries into category files, preserves their timestamps, moves the journal, and renames the legacy files to `*.migrated`.
+
+`memory_recent_context()` renders the complete compacted note set under category headings, unwraps wikilinks, and caps the live-context block at 2500 characters by dropping the least recently updated categories first. It remains in the trailing live-context message, preserving the static prompt prefix and Ollama KV-cache reuse.
+
+`webapp/api/memory.php` returns category summaries, stable-id facts, parsed journal entries, and their original dates. `POST` adds a fact; `DELETE {"id":"abc12"}` removes one; `DELETE {"all":true}` wipes the user's directory and migrated backups. The Settings → Memory panel renders the payload as a dependency-free Canvas 2D constellation: category and journal hubs anchor fact/date leaves, wikilinks draw cross-edges, and a visually hidden list mirrors the canvas for assistive technology.
+
+Idle consolidation in `_consolidation.php` is a bounded tool-calling agent rather than a document-regeneration pass. The notes phase can save, revise, forget, or recategorize one stable id at a time; untouched bullets are never rewritten. The journal phase upserts or revises named dates and then re-renders server-side age buckets. `provider_complete_tools()` supports Ollama and OpenAI-compatible responses. When native tools are disabled with `LLAMACPP_TOOLS=off`, the same executor consumes a JSON operation array instead. A per-run guard refuses note deletions beyond 40% of the starting set, while a zero-operation run is a valid successful consolidation.
 
 ---
 

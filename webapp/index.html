@@ -624,12 +624,12 @@ html[data-pre-auth] #app { visibility: hidden; }
 <!-- Fetched during parse but applied by boot-gate.js: the CSP forbids the
      usual media="print" onload= trick, and blocking on the full sheet would
      cost a round trip the auth screen does not need. -->
-<link rel="preload" as="style" href="styles.css?v=48">
+<link rel="preload" as="style" href="styles.css?v=49">
 <link rel="preload" as="style" href="trip-loader.css?v=4">
-<noscript><link rel="stylesheet" href="styles.css?v=48"></noscript>
+<noscript><link rel="stylesheet" href="styles.css?v=49"></noscript>
 
 <script defer src="js/viewport.js?v=3"></script>
-<script src="js/boot-gate.js?v=5"></script>
+<script src="js/boot-gate.js?v=6"></script>
 
 <script defer src="js/loader.js?v=1"></script>
 <script defer src="js/auth.js?v=7"></script>
@@ -640,7 +640,8 @@ html[data-pre-auth] #app { visibility: hidden; }
 <script defer src="js/history.js?v=7"></script>
 <script defer src="js/boot-fx.js?v=5"></script>
 <script defer src="js/consent.js?v=1"></script>
-<script defer src="js/app.js?v=54"></script>
+<script defer src="js/memory-graph.js?v=2"></script>
+<script defer src="js/app.js?v=55"></script>
 </head>
 <body>
 
@@ -979,8 +980,18 @@ html[data-pre-auth] #app { visibility: hidden; }
             <div class="set-row-title">Saved memories</div>
             <span class="count" id="memoryCount">0</span>
           </div>
-          <div class="set-row-desc">Durable notes Jun keeps about you between conversations. She reads the most recent ones before every reply.</div>
-          <div id="memoryList" class="memory-list" aria-live="polite"></div>
+          <div class="set-row-desc">Durable notes Jun keeps about you between conversations, grouped by category alongside her journal.</div>
+          <div class="memory-graph-wrap" id="memoryGraphWrap">
+            <canvas class="memory-graph" id="memoryGraph" aria-label="Interactive constellation of saved memories"></canvas>
+            <div class="memory-graph-status" id="memoryGraphStatus" aria-live="polite">Open this panel to load memories.</div>
+            <aside class="memory-reader" id="memoryReader" hidden>
+              <button class="memory-reader-close ghost" id="memoryReaderClose" type="button" aria-label="Close memory reader">×</button>
+              <div class="memory-reader-meta" id="memoryReaderMeta"></div>
+              <h3 class="memory-reader-title" id="memoryReaderTitle"></h3>
+              <div class="memory-reader-body" id="memoryReaderBody"></div>
+            </aside>
+          </div>
+          <ul class="sr-only" id="memoryA11y"></ul>
           <div class="memory-add">
             <input type="text" id="memoryAddInput" maxlength="800" placeholder="Add a memory…" aria-label="New memory">
             <input type="text" id="memoryAddCategory" maxlength="40" placeholder="category" aria-label="Memory category">

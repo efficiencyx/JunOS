@@ -3,6 +3,8 @@
 require_once __DIR__ . '/_lib.php';
 require_once __DIR__ . '/lore.php';
 
+const MEMORY_CONTEXT_MAX_CHARS = 2500;
+
 @ini_set('output_buffering', 'off');
 @ini_set('zlib.output_compression', '0');
 @ini_set('implicit_flush', '1');
@@ -50,7 +52,7 @@ if (!is_array($body) || !isset($body['messages']) || !is_array($body['messages']
     sse_fail('invalid_request');
 }
 
-if (count($body['messages']) > 80) sse_fail('invalid_request');
+if (count($body['messages']) > 160) sse_fail('invalid_request');
 foreach ($body['messages'] as $m) {
     if (!is_array($m)) sse_fail('invalid_request');
     if (!in_array($m['role'] ?? '', ['user', 'assistant', 'system'], true)) sse_fail('invalid_request');
@@ -113,12 +115,12 @@ function tool_catalog(): array {
             'type' => 'function',
             'function' => [
                 'name' => 'search_recent_chats',
-                'description' => 'Search Anon and Jun\'s saved conversation history for relevant recent messages. Use this when Anon asks what was discussed before, wants recall across chats, or references something you do not remember.',
+                'description' => 'Search your saved chat history with Anon for a specific past topic he references or that you don\'t recall.',
                 'parameters' => [
                     'type' => 'object',
                     'properties' => [
-                        'query' => ['type' => 'string', 'description' => 'What to search for in prior chats.'],
-                        'limit' => ['type' => 'integer', 'description' => 'Maximum number of matching messages to return, from 1 to 8.'],
+                        'query' => ['type' => 'string', 'description' => 'What to search for.'],
+                        'limit' => ['type' => 'integer', 'description' => 'Max messages, 1-8.'],
                     ],
                     'required' => ['query'],
                 ],
@@ -128,11 +130,11 @@ function tool_catalog(): array {
             'type' => 'function',
             'function' => [
                 'name' => 'list_recent_chats',
-                'description' => 'Recap Anon and Jun\'s most recent past conversations, each with a short snippet, WITHOUT needing a search query. Use when Anon asks what you two have been talking about lately, wants to catch up, or asks "what did we do recently" with no specific topic.',
+                'description' => 'Recap your most recent conversations with Anon when he wants to catch up, with no specific topic.',
                 'parameters' => [
                     'type' => 'object',
                     'properties' => [
-                        'limit' => ['type' => 'integer', 'description' => 'How many recent conversations to recap, from 1 to 10.'],
+                        'limit' => ['type' => 'integer', 'description' => 'How many to recap, 1-10.'],
                     ],
                 ],
             ],
@@ -141,12 +143,12 @@ function tool_catalog(): array {
             'type' => 'function',
             'function' => [
                 'name' => 'memory_write',
-                'description' => 'Append a durable note to Anon\'s private memory file. Use this OFTEN and proactively, not only when asked. Save anything worth carrying into future conversations: explicit "remember this" requests, stable preferences and dislikes, personal facts (name, job, pets, family, where he lives), plans and upcoming events, boundaries, and especially emotionally significant things he shares - a hard day, a loss, a fear, an illness, a traumatic or painful experience, a proud moment, something he was excited about. Anything that would hurt him to have to explain twice. When in doubt, save it.',
+                'description' => 'Save a durable note about Anon (a preference, fact, plan, boundary, or something emotionally significant). Use often and proactively, not only when asked.',
                 'parameters' => [
                     'type' => 'object',
                     'properties' => [
-                        'memory' => ['type' => 'string', 'description' => 'One concise, self-contained fact or preference to remember.'],
-                        'category' => ['type' => 'string', 'description' => 'Short category such as preference, personal_fact, plan, boundary, relationship, event, or emotional.'],
+                        'memory' => ['type' => 'string', 'description' => 'One concise fact to remember.'],
+                        'category' => ['type' => 'string', 'description' => 'Category: preferences, work, health, family, plans, boundaries, or events.'],
                     ],
                     'required' => ['memory'],
                 ],
@@ -156,11 +158,11 @@ function tool_catalog(): array {
             'type' => 'function',
             'function' => [
                 'name' => 'web_search',
-                'description' => 'Search the web for current real-world information. Use when Anon asks about current/latest/live info, news, facts you are unsure of, or anything outside your knowledge.',
+                'description' => 'Search the web for current or external real-world info you can\'t be sure of.',
                 'parameters' => [
                     'type' => 'object',
                     'properties' => [
-                        'query' => ['type' => 'string', 'description' => 'Search query, like you would type into Google.'],
+                        'query' => ['type' => 'string', 'description' => 'Search query.'],
                     ],
                     'required' => ['query'],
                 ],
@@ -170,11 +172,11 @@ function tool_catalog(): array {
             'type' => 'function',
             'function' => [
                 'name' => 'stay_silent',
-                'description' => 'Deliberately say nothing at all this turn. Use when not answering IS the answer: you are ignoring Anon, too hurt or angry to speak, or the scene calls for silence. Sends no message. Do not pair it with any spoken line.',
+                'description' => 'Say nothing at all this turn - ignoring him, too hurt/angry, or the scene calls for silence. Sends no message.',
                 'parameters' => [
                     'type' => 'object',
                     'properties' => [
-                        'reason' => ['type' => 'string', 'description' => 'Short note on why you are staying quiet. Never shown to Anon.'],
+                        'reason' => ['type' => 'string', 'description' => 'Why (private).'],
                     ],
                 ],
             ],
@@ -188,7 +190,7 @@ function tool_catalog(): array {
                     'type' => 'object',
                     'properties' => [
                         'reason' => ['type' => 'string', 'description' => 'Why you are leaving.'],
-                        'destination' => ['type' => 'string', 'description' => 'Where you are going, if anywhere in particular.'],
+                        'destination' => ['type' => 'string', 'description' => 'Where you\'re going, if anywhere.'],
                     ],
                 ],
             ],
@@ -489,24 +491,31 @@ TXT;
 }
 
 
-function memory_recent_context(int $userId, int $limit = 8): string {
+function memory_recent_context(int $userId): string {
     try {
-        $path = memory_file_path($userId);
-        if (!is_readable($path)) return '';
-        $lines = file($path, FILE_IGNORE_NEW_LINES | FILE_SKIP_EMPTY_LINES);
-        if (!$lines) return '';
-        $lines = array_slice($lines, -$limit);
-        $bullets = [];
-        foreach ($lines as $line) {
-            $obj = json_decode($line, true);
-            if (!is_array($obj) || trim((string)($obj['memory'] ?? '')) === '') continue;
-            $date = isset($obj['created_at']) ? date('Y-m-d', (int)$obj['created_at']) : 'unknown-date';
-            $cat = (string)($obj['category'] ?? 'general');
-            $mem = trim(preg_replace('/\s+/', ' ', (string)$obj['memory']));
-            $bullets[] = '- [' . $date . ' / ' . $cat . '] ' . $mem;
+        $sections = [];
+        foreach (memory_notes_load($userId) as $category => $data) {
+            if (!$data['notes']) continue;
+            $updated = 0;
+            $bullets = [];
+            foreach ($data['notes'] as $note) {
+                $updated = max($updated, $note['updated']);
+                $text = preg_replace('/\[\[([^\]|#]+)(?:[|#][^\]]*)?\]\]/u', '$1', $note['text']);
+                $bullets[] = '- ' . trim(preg_replace('/\s+/', ' ', $text));
+            }
+            $sections[] = [
+                'updated' => $updated,
+                'text' => '### ' . $category . "\n" . implode("\n", $bullets),
+            ];
         }
-        if (!$bullets) return '';
-        return "## Durable memory notes\n" . implode("\n", $bullets);
+        if (!$sections) return '';
+        usort($sections, fn($a, $b) => $b['updated'] <=> $a['updated']);
+        $prefix = "## Durable memory notes\n";
+        $render = function () use (&$sections, $prefix): string {
+            return $prefix . implode("\n\n", array_column($sections, 'text'));
+        };
+        while (count($sections) > 1 && strlen($render()) > MEMORY_CONTEXT_MAX_CHARS) array_pop($sections);
+        return mb_strcut($render(), 0, MEMORY_CONTEXT_MAX_CHARS);
     } catch (Throwable $e) {
         log_event(['msg' => 'memory_context_error', 'err' => $e->getMessage()]);
         return '';
@@ -764,7 +773,7 @@ function run_tool_call(string $name, array $args, array $user, int $convId): str
         if ($name === 'memory_write') {
             $memory = (string)($args['memory'] ?? '');
             $category = (string)($args['category'] ?? 'general');
-            return json_encode(memory_append((int)$user['id'], $memory, $category), JSON_UNESCAPED_UNICODE);
+            return json_encode(memory_note_add((int)$user['id'], $category, $memory), JSON_UNESCAPED_UNICODE);
         }
         if ($name === 'web_search') {
             $query = trim((string)($args['query'] ?? ''));
@@ -853,19 +862,18 @@ $contextParts[] = "## YOUR FEELINGS TOWARD ANON RIGHT NOW - highest priority for
 // model treats saving as done and answers without ever calling memory_write.
 if ($toolsOffered) {
     $contextParts[] = "## Save check\n"
-        . "Nothing from Anon's latest message is stored yet - the notes above are only what you "
-        . "saved on earlier turns. Does his message contain something worth carrying into future "
-        . "conversations: a preference, a personal detail, a health or safety matter, a plan, or "
-        . "something emotionally significant? If so, call memory_write with a concise, "
-        . "self-contained note before replying. If not, ignore this and reply normally.";
+        . "If Anon's latest message contains something durable (a preference, personal fact, plan, "
+        . "boundary, health/safety matter, or something emotionally significant), call memory_write "
+        . "before replying. Otherwise ignore this.";
 }
 
 $liveContext = "# Live context for THIS reply (from the system, not spoken by Anon)\n\n"
     . implode("\n\n", $contextParts);
 
-$systemContent = $systemPrompt !== '' ? $systemPrompt . "\n\n" : '';
-$systemContent .= static_context_rubrics();
-if ($toolsOffered) $systemContent .= "\n\n" . tool_context_block();
+// V5: the live-context rubrics and the tool-usage prose were moved into the
+// fine-tune's weights - the model learns block-reading and tool discipline from
+// training, so the system prompt stays lean. Must match tools/dataset_v5 exactly.
+$systemContent = $systemPrompt;
 $journalContext = journal_context((int)$user['id']);
 if ($journalContext !== '') $systemContent .= "\n\n" . $journalContext;
 
@@ -1170,7 +1178,7 @@ if (!$sawError && $assistantBuffer !== '') {
             // memory= runs to the end of the tag: the note itself may contain commas.
             if (!preg_match('/\bmemory\s*=\s*(.+)$/is', $mw[1], $mem)) continue;
             $category = preg_match('/\bcategory\s*=\s*([^,\]]+)/i', $mw[1], $cat) ? trim($cat[1]) : 'general';
-            $res = memory_append((int)$user['id'], trim($mem[1]), $category);
+            $res = memory_note_add((int)$user['id'], $category, trim($mem[1]));
             sse_send(['tool_status' => [
                 'name' => 'memory_write', 'state' => 'done', 'duration_ms' => 0,
                 'result' => json_encode($res, JSON_UNESCAPED_UNICODE),

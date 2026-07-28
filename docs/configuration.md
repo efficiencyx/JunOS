@@ -45,7 +45,7 @@ conditional requirement is `OPENROUTER_API_KEY`, needed only when
 | `OPENROUTER_MODEL` | `openrouter/auto` | `providers.php` (`default_chat_model()`) | Default chat model id sent to OpenRouter. |
 | `LLAMACPP_URL` | `http://llamacpp:8080` (Docker) / `http://127.0.0.1:8081` (PHP fallback) | `providers.php` (`chat_api_base()`) | Base URL of the llama.cpp `llama-server`. Point it at your own server to skip the managed `llamacpp` container. |
 | `LLAMACPP_MODEL_HF` | `efficiencyx/Jun-LoRA-v4-E2B-GGUF:Q4_K_M` | `llamacpp` service (`LLAMA_ARG_HF_REPO`), `providers.php` (cosmetic default model id) | HF `repo:quant` the managed `llama-server` downloads and loads (`llama-server -hf` syntax, no `hf.co/` prefix). |
-| `LLAMACPP_TOOLS` | `on` | `providers.php` (`provider_tools_enabled()`) | Set `off` when the loaded chat template can't do tool calling, to stop offering tools to llama.cpp. |
+| `LLAMACPP_TOOLS` | `on` | `providers.php` (`provider_tools_enabled()`) | Set `off` when the loaded chat template cannot do native tool calling. Chat stops offering tools, while memory consolidation falls back to model-produced JSON operation arrays executed by the same guarded tool loop. |
 
 ## 3. Audio sidecars
 
@@ -122,7 +122,7 @@ notice changes materially and everyone is asked again.
 | Variable | Default | Consumed by | What it does |
 |---|---|---|---|
 | `OMEGA_STATE_DIR` | `/var/lib/omega` | `webapp/api/_lib.php` (`state_dir()`) | Directory for the SQLite DB and rate-limit flat files. Under Docker this is fixed at the default (mounted as the `omega_state` named volume) - the var is not forwarded into the `php` container's environment, so this is effectively **bare-metal only** (`start.ps1` points it at `runtime\state`). |
-| `MEMORY_DIR` | `<state dir>/memory` (i.e. `/var/lib/omega/memory` under Docker) | `webapp/api/_lib.php` (`memory_file_path()`) | Directory holding per-user durable-memory JSONL files. Same Docker/bare-metal split as `OMEGA_STATE_DIR` above. **Migration note:** builds before 2026-07 defaulted to `/var/lib/jun/memory`, a path that was never mounted as a volume under Docker - memories written there were silently lost on every container recreation. The current default lives inside the persisted `omega_state` volume, so it survives rebuilds/restarts. |
+| `MEMORY_DIR` | `<state dir>/memory` (i.e. `/var/lib/omega/memory` under Docker) | `webapp/api/_lib.php` (`memory_dir()`, `memory_user_dir()`) | Root for per-user Markdown memory directories (`user-{id}/*.md` plus `meta.json`). Legacy `user-{id}.jsonl` and journal files migrate lazily and are retained as `*.migrated`. Same Docker/bare-metal split as `OMEGA_STATE_DIR` above. **Older-default note:** builds before 2026-07 used `/var/lib/jun/memory`, which was not mounted under Docker and did not survive container recreation; the current default is inside the persisted `omega_state` volume. |
 
 ## 7. Bare-metal Windows only
 

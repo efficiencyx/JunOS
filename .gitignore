@@ -42,6 +42,17 @@ webapp/lore_corpus.txt
 webapp/lore_index.bin
 webapp/lore_meta.json
 
+# extracted game dialogue - personal-use only per LICENSE NOTICE, kept local
+tools/dataset_v5/raw_game_text/
+tools/dataset_v5/dialogue_all.jsonl
+tools/dataset_v5/jun_style_corpus.jsonl
+tools/dataset_v5/style_corpus.jsonl
+tools/dataset_v5/verbatim_seed.jsonl
+
+# V5 training data - generated dialogue + verbatim game seed rows, kept local
+tools/dataset_v5/content/
+tools/dataset_v5/out/
+
 # deploy state (created at runtime)
 data/
 letsencrypt/

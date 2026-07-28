@@ -1557,6 +1557,7 @@
       const label = item.querySelector('span');
       if (settingsPanelTitle && label) settingsPanelTitle.textContent = label.textContent;
       if (key === 'developer') loadMood(); // pull fresh scores when the panel opens
+      if (window.MemoryGraph) MemoryGraph.setActive(key === 'memory');
       if (key === 'memory') loadMemories();
     });
     item.tabIndex = item.classList.contains('active') ? 0 : -1;
@@ -1599,58 +1600,19 @@
   }
   syncVoiceDeps();
 
-  const memoryList = document.getElementById('memoryList');
   const memoryCount = document.getElementById('memoryCount');
   async function loadMemories() {
-    if (!memoryList) return;
-    memoryList.textContent = 'Loading…';
+    if (!window.MemoryGraph) return;
+    MemoryGraph.setActive(true);
+    MemoryGraph.setStatus('Loading…');
     try {
       const r = await fetch('/api/memory.php', { credentials: 'same-origin' });
       if (!r.ok) throw new Error('http ' + r.status);
-      renderMemories((await r.json()).memories || []);
+      const memoryData = await r.json();
+      if (memoryCount) memoryCount.textContent = Array.isArray(memoryData.notes) ? memoryData.notes.length : 0;
+      MemoryGraph.setData(memoryData);
     } catch (e) {
-      memoryList.textContent = 'Could not load memories.';
-    }
-  }
-  function renderMemories(items) {
-    if (memoryCount) memoryCount.textContent = items.length;
-    memoryList.replaceChildren();
-    if (!items.length) {
-      memoryList.textContent = 'No memories yet. Ask Jun to remember something, or add one below.';
-      return;
-    }
-    for (const m of items.slice().reverse()) {
-      const row = document.createElement('div');
-      row.className = 'memory-item';
-      const meta = document.createElement('div');
-      meta.className = 'memory-meta';
-      const date = m.created_at ? new Date(m.created_at * 1000).toLocaleDateString() : '';
-      meta.textContent = `${date} · ${m.category}`;
-      const text = document.createElement('div');
-      text.className = 'memory-text';
-      text.textContent = m.memory;
-      const del = document.createElement('button');
-      del.className = 'ghost memory-del';
-      del.title = 'Delete this memory';
-      del.setAttribute('aria-label', 'Delete memory');
-      del.textContent = '✕';
-      del.addEventListener('click', async () => {
-        del.disabled = true;
-        try {
-          const r = await fetch('/api/memory.php', {
-            method: 'DELETE',
-            credentials: 'same-origin',
-            headers: { 'content-type': 'application/json' },
-            body: JSON.stringify({ id: m.id, created_at: m.created_at }),
-          });
-          if (!r.ok) throw new Error('http ' + r.status);
-        } catch (e) {
-          logAction('err', 'failed to delete memory');
-        }
-        loadMemories(); // reload either way: ids shift after any change
-      });
-      row.append(meta, text, del);
-      memoryList.appendChild(row);
+      MemoryGraph.setStatus('Could not load memories.');
     }
   }
   const memoryAddBtn = document.getElementById('memoryAddBtn');
@@ -1677,7 +1639,14 @@
   if (memoryAddInput) memoryAddInput.addEventListener('keydown', (e) => { if (e.key === 'Enter') addMemory(); });
   const memoryClearBtn = document.getElementById('memoryClearBtn');
   if (memoryClearBtn) memoryClearBtn.addEventListener('click', async () => {
-    if (!window.confirm('Delete ALL saved memories? This cannot be undone.')) return;
+    const ok = await ui.confirm({
+      title: 'Delete all memories',
+      message: 'Delete every saved note and journal entry? This cannot be undone.',
+      confirmLabel: 'Delete all',
+      cancelLabel: 'Cancel',
+      danger: true,
+    });
+    if (!ok) return;
     try {
       const r = await fetch('/api/memory.php', {
         method: 'DELETE',
