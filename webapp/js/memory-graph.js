@@ -107,9 +107,8 @@
 
   function resize() {
     if (!wrap || !canvas) return;
-    var rect = wrap.getBoundingClientRect();
-    var nextWidth = Math.round(rect.width);
-    var nextHeight = Math.round(rect.height);
+    var nextWidth = wrap.clientWidth;
+    var nextHeight = wrap.clientHeight;
     if (nextWidth <= 0 || nextHeight <= 0) return;
     dpr = Math.min(2, window.devicePixelRatio || 1);
     if (nextWidth === width && nextHeight === height
