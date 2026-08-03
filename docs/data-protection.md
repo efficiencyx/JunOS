@@ -10,8 +10,8 @@ practice.
 
 | | |
 |---|---|
-| **Last reviewed** | 2026-07-25 |
-| **Notice version in force** | `2026-07-25.2` (`TELEMETRY_NOTICE_VERSION` in `webapp/api/_lib.php`) |
+| **Last reviewed** | 2026-07-29 |
+| **Notice version in force** | `2026-07-29.1` (`TELEMETRY_NOTICE_VERSION` in `webapp/api/_lib.php`) |
 
 ## Scope
 
@@ -26,7 +26,7 @@ maintainer-operated metrics server for model training.**
 
 | Field | Value |
 |---|---|
-| Controller | *(maintainer's full name — mirror `webapp/privacy.html`)*, operating `andrealab.it` |
+| Controller | Andrea Torelli, operating `andrealab.it`, Italy |
 | Privacy contact | `andrea@andrealab.it` |
 | Role | Sole controller for shared telemetry. Not a processor for anyone. |
 | Art. 27 EU representative | Not required — the controller is established in Italy. |
@@ -43,15 +43,15 @@ the processing involves art. 9 data. Hence this record.
 
 | Field | Detail |
 |---|---|
-| **Purpose** | Training and evaluating the Jun conversational models. No other purpose. No advertising, no sale, no profiling of individuals, no automated decisions about anyone. |
-| **Categories of data subject** | Adult users (18+) of Jun OS installs who have explicitly opted in. |
-| **Categories of personal data** | Verbatim user-typed messages and model replies; 👍/👎 ratings; the three relationship gauges (affection, trust, tension) before and after each turn, which form part of the prompt the model saw; model name, provider, context size, token counts, timings; a stable random `install_id`; a per-account `user_ref` (truncated `sha256(install_id:user_id)`); a per-conversation tag; a daily-salted hash of the sending IP address. |
+| **Purpose** | Preparing and reviewing a corpus, evaluating Jun responses, training Jun LoRA adapters and potentially publishing adapters that pass the documented anonymity and memorisation assessment. No advertising, sale or profiling of individuals. |
+| **Categories of data subject** | Adult users (18+) of private Jun OS installs who have explicitly opted in; people whom those users may identify in free-text chats despite being told not to. |
+| **Categories of personal data** | Up to the first 8,192 bytes of verbatim user text and raw model output. The raw output is captured before hidden action, relationship and `memory_write` tags are removed from the visible reply. Also: 👍/👎 ratings; the three relationship gauges (affection, trust, tension) before and after each turn; model name, provider, context size, token counts, timings, reasoning setting, request route and idle-state flag; a stable random `install_id`; a per-account `user_ref` (truncated `sha256(install_id:user_id)`); conversation and turn tags; timestamps; schema, event and notice-version fields; connection IP addresses and request metadata processed by Cloudflare and the origin; a daily-salted IP hash retained by the origin. |
 | **Special categories (art. 9)** | Yes — data concerning sex life and sexual orientation, inherent in the content of intimate roleplay. Treated as art. 9 data throughout. |
-| **Not collected** | Email addresses, passwords, raw IP addresses, real names, the name given to the character, memory notes, journals, wardrobe, and anything predating consent. |
-| **Lawful basis** | Art. 6(1)(a) consent; art. 9(2)(a) explicit consent for the special-category element. Consent is the sole basis — no legitimate-interest fallback is claimed. |
-| **Recipients** | None. No processors, no analytics vendors, no sub-processors. |
-| **Third-country transfers** | None. Server and backups within the EEA. *(If the host ever moves outside the EEA, add the art. 46 safeguard here and to the notice.)* |
-| **Retention** | Chat turns 36 months (`RETENTION_DAYS`); IP hashes 30 days (`IP_HASH_RETENTION_DAYS`); both in `metrics-server/db.php`, enforced by `admin-cli.php prune`. |
+| **Not collected as payload fields** | Account email addresses, passwords, real names, the name given to the character, existing saved memory notes, journals and wardrobe. Any of these may still appear if a user types them into shared chat text. A proposed memory may also appear in a hidden `memory_write` tag in the raw model output. Conversation text predating consent is not uploaded retroactively. |
+| **Lawful basis** | For the consenting user's submitted data: art. 6(1)(a) consent and art. 9(2)(a) explicit consent for special-category data. No legitimate-interest fallback is claimed. A user's consent cannot authorise processing of another person's data; third-party data is prohibited and remains an unresolved risk requiring controls in the DPIA. |
+| **Recipients** | Cloudflare, Inc., relevant Cloudflare group companies and subprocessors used to deliver and protect the endpoint. Cloudflare acts as processor for content and customer logs and describes itself as controller for certain network data it creates. No advertising or third-party analytics recipients. |
+| **Third-country transfers** | The origin and backups are in Italy. Cloudflare operates a global network and may process data in the United States and other countries. EEA-to-US transfers rely on Cloudflare's EU–US Data Privacy Framework certification, with the European Commission's Standard Contractual Clauses and supplementary measures as fallback under Cloudflare's DPA. |
+| **Retention** | Chat turns 36 months (`RETENTION_DAYS`); origin IP hashes 30 days (`IP_HASH_RETENTION_DAYS`); encrypted backup copies no more than 30 days. Official public adapter downloads remain until six months after a tested successor supersedes them; independent copies may persist. |
 | **Security measures** | See §5. |
 
 ## 3. Consent mechanics (art. 7)
@@ -64,6 +64,8 @@ Demonstrability is the point of the design, so the specifics matter:
   and no pre-selection. Installers do not ask and cannot consent on a user's behalf.
 * Each decision is stored per account in the `telemetry_consent` table with a
   server-set timestamp and the notice version in force — the art. 7(1) evidence.
+  This record is held by the private install, not by the central controller, and is
+  therefore an unresolved demonstrability risk.
 * Withdrawal is one click in Settings → Privacy, no harder than giving consent
   (art. 7(3)), and costs the user no functionality.
 * A material change to the notice means bumping `TELEMETRY_NOTICE_VERSION`, which
@@ -75,15 +77,20 @@ Demonstrability is the point of the design, so the specifics matter:
 | Right | How it is served |
 |---|---|
 | Withdraw consent (art. 7(3)) | Settings → Privacy toggle; immediate. |
-| Erasure (art. 17) | Settings → Privacy → Request deletion sends `event:"erasure_request"`; the server deletes all rows for that `install_id` + `user_ref`, logs the request and row count in `erasures`, and the next prune vacuums the file. |
-| Access, rectification, restriction, portability (art. 15, 16, 18, 20) | By email to the privacy contact, identified by the user's `TELEMETRY_INSTALL_ID`. Answer within one month (art. 12(3)). |
+| Erasure (art. 17) | Settings → Privacy → Request deletion records withdrawal locally and attempts to send `event:"erasure_request"` for the `install_id` + `user_ref`. The current client status proves initiation, not collector completion. Email follow-up is available for confirmation. |
+| Access, rectification, restriction, portability (art. 15, 16, 18, 20) | By email to the privacy contact, identified by both `TELEMETRY_INSTALL_ID` and the account-specific `user_ref`. Answer within one month (art. 12(3)). |
 | Object (art. 21) | Not applicable — processing rests on consent, which is withdrawn rather than objected to. |
 | Automated decision-making (art. 22) | None carried out. |
 
-**Known limits, stated in the notice rather than hidden:** erasure cannot recover JSONL
-exports already taken (re-export after prunes instead of reusing old dumps), and cannot
-unlearn model weights already trained. Erasure requests arriving with no valid
-`user_ref` are rejected, not widened to a whole install.
+**Known limits, stated in the notice rather than hidden:** the app does not currently
+receive a deletion-completion acknowledgement, and a normal account cannot display its
+own `user_ref`. Erasure must propagate to corpus exports and to any restored backup
+before it returns to use. Erasure requests arriving with no valid `user_ref` are rejected,
+not widened to a whole install.
+
+A trained adapter is not assumed to be anonymous. It may be published only after a
+documented assessment concludes that direct or indirect identification and extraction of
+personal training data are very unlikely. An adapter that fails is scrapped or retrained.
 
 ## 5. Security (art. 32)
 
@@ -91,40 +98,70 @@ Implemented:
 
 * Ingest is POST-only with a 64 KB body cap, per-IP token-bucket rate limiting, and
   strict payload validation.
-* Raw IP addresses are never written — only a daily-salted hash, itself cleared after
-  30 days.
+* The origin does not persist raw IP addresses — only a daily-salted hash, itself
+  cleared after 30 days. Cloudflare separately processes connection IP addresses and
+  request metadata under its DPA.
 * The admin dashboard requires a password plus a confirmed TOTP second factor; sessions
   are cookie-based and only get `Secure` over HTTPS.
 * `data/` is gitignored, so no chat content can reach the public repository.
 * Prune vacuums the database so deleted content does not persist in freed pages.
+* The origin VM and its backup copies reside on an encrypted hypervisor storage layer in
+  Italy. Backups expire within 30 days.
+* Cloudflare's DPA version 6.4, effective 2026-04-03, incorporates the EU SCCs and its
+  transfer provisions. Keep evidence that the DPA applies to the account and review
+  Cloudflare's subprocessor changes.
 
 **Operator duties that are not code and must not be skipped:**
 
 * TLS in front of the server, always. Never expose the dashboard without it.
-* Full-disk or filesystem encryption on the host, and **encrypted backups**. A corpus of
-  intimate chats is the one asset here whose leak would genuinely harm people.
+* Keep hypervisor encryption enabled and protect its keys separately from credentials
+  that can read the running VM. A corpus of intimate chats is the one asset here whose
+  leak would genuinely harm people.
 * Restrict the admin surface to known addresses where practical.
 * Keep exports off general-purpose machines; treat a JSONL dump as the same category of
   data as the database.
 
-## 6. DPIA screening (art. 35)
+## 6. DPIA status (art. 35)
 
-**Conclusion: no DPIA required at current scale. Documented rather than assumed.**
+**Conclusion: a DPIA is required and remains pending.**
 
-Art. 35(3)(b) triggers on processing special-category data *on a large scale*. Assessed
-against the EDPB criteria — number of data subjects, volume of data, duration,
-geographic extent — a fan project with an opted-in population in the dozens to low
-hundreds is not large-scale processing. Weighing against a DPIA: consent is explicit and
-freely given, there is no profiling or automated decision-making, no vulnerable-group
-targeting (18+ only), no data matching or combining across sources, and no innovative
-technology applied to the subjects themselves.
+The Italian Garante's art. 35(4) list requires a DPIA where innovative technology,
+including artificial intelligence, is combined with another EDPB high-risk criterion.
+This processing combines AI development with sensitive and highly personal sexual chat
+data. Small scale does not remove that combination. The Garante's 3 July 2026 Character
+AI decision confirms that undocumented internal risk reviews are not a substitute for a
+formal DPIA.
 
-**Re-run this screening if any of the following happens:** the opted-in population
-reaches roughly a thousand accounts; the data is used for a purpose other than training
-Jun; any recipient other than the maintainer is introduced; or profiling of individual
-users begins. Record the date and outcome of each re-screening here.
+The DPIA must cover collection, Cloudflare transfers, corpus review and exports,
+third-party data, consent evidence, rights handling, backup restoration, age
+self-declaration, LoRA training, privacy testing and public distribution. Operating the
+collector while this remains pending is a recorded compliance risk and must not be
+described as GDPR-compliant.
 
-## 7. Breach procedure (art. 33, 34)
+## 7. Public adapter release control
+
+Before any adapter trained on shared chats is published:
+
+1. Record its exact source-corpus snapshot and every erasure applied before training.
+2. Test for rare-string memorisation, prompt-based extraction and direct or indirect
+   identification, comparing the adapter with its unmodified base model.
+3. Publish only if extraction and identification are documented as very unlikely.
+4. Scrap or retrain every failing adapter; disclosure alone is not a substitute.
+5. Remove the official download six months after a tested successor supersedes it.
+   Record that independent copies may persist and retain the assessment and lineage.
+
+## 8. Unresolved risks
+
+* The controller cannot independently demonstrate consent because the authoritative
+  record remains on each private installation.
+* The erasure call has no end-to-end acknowledgement or completion-status check.
+* Users cannot read their own `user_ref` through the app, impairing email-based rights.
+* Free-text chat can contain personal and special-category data about non-consenting
+  third parties; the notice and prohibition do not replace technical and review controls.
+* The 18+ gate is a self-declaration, not verified age assurance.
+* The formal DPIA and its residual-risk decision are not complete.
+
+## 9. Breach procedure (art. 33, 34)
 
 Decide this now, because the clock is 72 hours and it starts on awareness, not on
 diagnosis.
@@ -144,9 +181,17 @@ diagnosis.
 5. Record the facts, effects and remedial action taken — required for every breach even
    when not notified.
 
-## 8. Minors
+## 10. Minors
 
-The app is 18+ and gated by a self-declaration, which is not verification. Some
-under-18 use is realistically possible, and consent below the Italian digital-consent
-age of 14 would be invalid regardless of what was clicked. Delete any data on becoming
-aware that it came from a minor, without waiting for a request.
+The app is 18+ and gated by a self-declaration, which is not verification or age
+assurance. Some under-18 use is realistically possible. Consent to this adult-data
+processing must not be accepted from a minor; delete any data on becoming aware that it
+came from one, without waiting for a request.
+
+## References
+
+* [GDPR, including arts. 13–17, 30, 32 and 35](https://eur-lex.europa.eu/legal-content/EN/TXT/?uri=CELEX%3A32016R0679)
+* [EDPB Opinion 28/2024 on personal data in AI models](https://www.edpb.europa.eu/documents/opinion-of-the-board-art-64/opinion-282024-on-certain-data-protection-aspects-related-to_en)
+* [Italian Garante art. 35(4) DPIA list](https://www.garanteprivacy.it/documents/10160/0/ALLEGATO%2B1%2BElenco%2Bdelle%2Btipologie%2Bdi%2Btrattamenti%2Bsoggetti%2Bal%2Bmeccanismo%2Bdi%2Bcoerenza%2Bda%2Bsottoporre%2Ba%2Bvalutazione%2Bdi%2Bimpatto)
+* [Italian Garante decision of 3 July 2026 concerning Character AI](https://www.garanteprivacy.it/web/guest/home/docweb/-/docweb-display/docweb/10269571)
+* [Cloudflare Customer DPA](https://www.cloudflare.com/en-gb/cloudflare-customer-dpa/)

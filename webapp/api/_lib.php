@@ -122,7 +122,7 @@ const TELEMETRY_DEFAULT_ENDPOINT = 'https://metrics.andrealab.it/ingest.php';
 
 // Bump whenever the privacy notice changes materially: a consent recorded
 // against an older version stops counting and the user is asked again.
-const TELEMETRY_NOTICE_VERSION = '2026-07-25.2';
+const TELEMETRY_NOTICE_VERSION = '2026-07-29.1';
 
 // Operator-level availability only. Never gate a send on this alone - shared
 // data is personal data, so telemetry_consent() decides per user.
