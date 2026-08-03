@@ -367,6 +367,8 @@ html[data-pre-auth] #app { visibility: hidden; }
 
 .age-gate-panel.consent-panel {
   max-width: 480px;
+  max-height: calc(100dvh - 32px);
+  overflow-y: auto;
   text-align: left;
   align-items: stretch;
   gap: var(--space-3);

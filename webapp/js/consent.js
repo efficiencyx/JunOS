@@ -67,9 +67,9 @@ window.Consent = (function () {
     if (eraseBtn) {
       eraseBtn.addEventListener('click', async () => {
         const ok = await ui.confirm({
-          title: 'Delete shared data',
-          message: 'Ask the metrics server to erase everything shared from this account? Sharing will also be turned off.',
-          confirmLabel: 'Request deletion',
+          title: 'Submit deletion request',
+          message: 'Submit a request to erase everything shared from this account? Sharing will also be turned off. Submission is not confirmation that deletion has finished.',
+          confirmLabel: 'Submit request',
           cancelLabel: 'Cancel',
           danger: true,
         });
@@ -80,7 +80,7 @@ window.Consent = (function () {
           state.granted = false;
           state.erasure_requested_at = Math.floor(Date.now() / 1000);
           renderSettings();
-          ui.toast('Deletion requested.', 'ok');
+          ui.toast('Deletion request submitted; this is not confirmation of completion.', 'ok');
         } catch (e) {
           ui.toast('Could not reach the server. Try again later.', 'error');
         } finally {

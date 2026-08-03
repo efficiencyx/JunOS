@@ -91,13 +91,19 @@ in: on first login the app shows a blocking prompt, the answer is stored in the
 `chat.php` and `rating.php` gate every send on `telemetry_may_send()`. An absent
 row means no, so upgrades and fresh installs both start silent.
 
-What a consenting account sends: chat turns (user-typed text exactly as written
-and assistant replies, with `{f_playerName}` / `{f_botName}` placeholders left
-intact), model usage statistics, and thumb ratings, used to train better versions
-of Jun. Each payload carries `install_id`, a per-account `user_ref`
+What an explicitly consenting account sends: chat turns (user-typed text exactly
+as written and raw model replies, with `{f_playerName}` / `{f_botName}`
+placeholders left intact). Both are truncated to 8,192 bytes. Raw replies are
+captured before hidden action, relationship and `memory_write` tags are stripped
+from the visible reply. Sharing also includes relationship gauges, model usage
+statistics, and thumb ratings. The data is used to prepare and review a corpus, evaluate Jun, train LoRA
+adapters and potentially publish adapters that pass the documented anonymity and
+memorisation assessment. Each payload carries `install_id`, a per-account `user_ref`
 (`sha256(install_id:user_id)`, truncated) and a per-conversation tag. The
 per-account ref exists so an erasure request can target one user on a shared
-install; the metrics server stores only a daily-salted IP hash, never a raw IP.
+install. Cloudflare and the origin necessarily process the connection IP and request
+metadata; the origin retains only a daily-salted IP hash for 30 days rather than
+persisting the raw address.
 
 This data is **pseudonymous, not anonymous** - the install id is stable and chat
 text can contain whatever the user typed - so it is personal data, and the
