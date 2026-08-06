@@ -77,43 +77,7 @@ directly as process env when launching the venv). `SIDECAR_ROLE` only decides
 whether the Kokoro pre-warm runs at startup and what `/health` advertises; every
 route stays mounted in both roles.
 
-## 4. Telemetry
-
-| Variable | Default | Consumed by | What it does |
-|---|---|---|---|
-| `TELEMETRY` | `on` | `webapp/api/_lib.php` | Whether sharing is *offered*. `off` removes the option and no account can be asked. Restart after changing it. |
-| `TELEMETRY_INSTALL_ID` | random 16-hex-character id from the installer | `webapp/api/_lib.php` | Pseudonymous per-installation identifier, kept when reinstalling. Also the seed for the per-account `user_ref`. |
-| `TELEMETRY_ENDPOINT` | project metrics endpoint | `webapp/api/_lib.php` | URL of the maintainer-hosted telemetry ingest endpoint. |
-
-`TELEMETRY=on` is not consent. Nothing is sent until an individual account opts
-in: on first login the app shows a blocking prompt, the answer is stored in the
-`telemetry_consent` table with a timestamp and the notice version, and both
-`chat.php` and `rating.php` gate every send on `telemetry_may_send()`. An absent
-row means no, so upgrades and fresh installs both start silent.
-
-What an explicitly consenting account sends: chat turns (user-typed text exactly
-as written and raw model replies, with `{f_playerName}` / `{f_botName}`
-placeholders left intact). Both are truncated to 8,192 bytes. Raw replies are
-captured before hidden action, relationship and `memory_write` tags are stripped
-from the visible reply. Sharing also includes relationship gauges, model usage
-statistics, and thumb ratings. The data is used to prepare and review a corpus, evaluate Jun, train LoRA
-adapters and potentially publish adapters that pass the documented anonymity and
-memorisation assessment. Each payload carries `install_id`, a per-account `user_ref`
-(`sha256(install_id:user_id)`, truncated) and a per-conversation tag. The
-per-account ref exists so an erasure request can target one user on a shared
-install. Cloudflare and the origin necessarily process the connection IP and request
-metadata; the origin retains only a daily-salted IP hash for 30 days rather than
-persisting the raw address.
-
-This data is **pseudonymous, not anonymous** - the install id is stable and chat
-text can contain whatever the user typed - so it is personal data, and the
-intimate parts fall under GDPR art. 9. Do not describe it as anonymized in the UI,
-the docs or the README. Users withdraw or request erasure under Settings →
-Privacy (`webapp/api/consent.php`); the notice lives at `webapp/privacy.html` and
-its version string is `TELEMETRY_NOTICE_VERSION` in `_lib.php` - bump it when the
-notice changes materially and everyone is asked again.
-
-## 5. Ollama tuning
+## 4. Ollama tuning
 
 | Variable | Default | Consumed by | What it does |
 |---|---|---|---|
@@ -123,21 +87,21 @@ notice changes materially and everyone is asked again.
 | `OLLAMA_MAX_LOADED_MODELS` | `2` | `ollama` service | Cap on simultaneously loaded models (headroom to switch chat models without evicting on every swap). |
 | `OLLAMA_KEEP_ALIVE` | `5m` | `ollama` service | How long an idle model stays loaded before unloading. |
 
-## 6. State & persistence
+## 5. State & persistence
 
 | Variable | Default | Consumed by | What it does |
 |---|---|---|---|
 | `OMEGA_STATE_DIR` | `/var/lib/omega` | `webapp/api/_lib.php` (`state_dir()`) | Directory for the SQLite DB and rate-limit flat files. Under Docker this is fixed at the default (mounted as the `omega_state` named volume) - the var is not forwarded into the `php` container's environment, so this is effectively **bare-metal only** (`start.ps1` points it at `runtime\state`). |
 | `MEMORY_DIR` | `<state dir>/memory` (i.e. `/var/lib/omega/memory` under Docker) | `webapp/api/_lib.php` (`memory_dir()`, `memory_user_dir()`) | Root for per-user Markdown memory directories (`user-{id}/*.md` plus `meta.json`). Legacy `user-{id}.jsonl` and journal files migrate lazily and are retained as `*.migrated`. Same Docker/bare-metal split as `OMEGA_STATE_DIR` above. **Older-default note:** builds before 2026-07 used `/var/lib/jun/memory`, which was not mounted under Docker and did not survive container recreation; the current default is inside the persisted `omega_state` volume. |
 
-## 7. Bare-metal Windows only
+## 6. Bare-metal Windows only
 
 | Variable | Default | Consumed by | What it does |
 |---|---|---|---|
 | `JUN_PORT` | `8080` | `start.ps1` | Port PHP's built-in server serves the web UI on. |
 | `LLAMACPP_PORT` | `8081` | `start.ps1`, `install.ps1` | Port the bare-metal managed `llama-server` listens on. `8080` is avoided because it collides with `JUN_PORT`. |
 
-## 8. GPU overlays
+## 7. GPU overlays
 
 | Variable | Default | Consumed by | What it does |
 |---|---|---|---|
@@ -145,7 +109,7 @@ notice changes materially and everyone is asked again.
 | `RENDER_GID` | the literal group name `render` (compose fallback) | `docker-compose.amd.yml` | Same, for the `render` group; `start.sh` reads it off `/dev/dri/renderD128`. |
 | `HSA_OVERRIDE_GFX_VERSION` | unset | `docker-compose.amd.yml` (passed through to ROCm) | Consumer-card ROCm override, e.g. `11.0.0` for RDNA3, `10.3.0` for RDNA2. |
 
-## 9. Multi-GPU
+## 8. Multi-GPU
 
 Two knobs you set, plus the vars `start.sh` / `start.ps1` derive from them. On a
 single-GPU machine none of this changes anything.

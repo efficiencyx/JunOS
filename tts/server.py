@@ -503,7 +503,16 @@ def to_wav(audio, sample_rate):
         audio = audio / peak
 
     buf = io.BytesIO()
-    sf.write(buf, audio, sample_rate, format="WAV", subtype="PCM_16")
+    channels = 1 if audio.ndim == 1 else audio.shape[1]
+    # AI Act art. 50(2) wants generated audio machine-readably marked. libsndfile
+    # only emits the LIST/INFO chunk if the strings are set before any samples are
+    # written, so this can't use the plain sf.write() one-liner.
+    with sf.SoundFile(buf, "w", samplerate=sample_rate, channels=channels,
+                      format="WAV", subtype="PCM_16") as f:
+        f.title = "AI-generated speech"
+        f.software = "Jun OS text-to-speech"
+        f.comment = "Artificially generated audio. Synthetic speech produced by a text-to-speech model; not a recording of a real person."
+        f.write(audio)
     buf.seek(0)
     return buf.read()
 

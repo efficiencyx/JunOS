@@ -118,57 +118,6 @@ function rate_limit(string $bucket, int $maxPerWindow, int $windowSec): void {
     fclose($fp);
 }
 
-const TELEMETRY_DEFAULT_ENDPOINT = 'https://metrics.andrealab.it/ingest.php';
-
-// Bump whenever the privacy notice changes materially: a consent recorded
-// against an older version stops counting and the user is asked again.
-const TELEMETRY_NOTICE_VERSION = '2026-07-29.1';
-
-// Operator-level availability only. Never gate a send on this alone - shared
-// data is personal data, so telemetry_consent() decides per user.
-function telemetry_enabled(): bool {
-    return env_str('TELEMETRY') !== 'off' && env_str('TELEMETRY_INSTALL_ID') !== '';
-}
-
-function telemetry_consent(int $userId): bool {
-    $stmt = db()->prepare('SELECT granted, notice_version FROM telemetry_consent WHERE user_id=?');
-    $stmt->execute([$userId]);
-    $row = $stmt->fetch();
-    return $row && (int)$row['granted'] === 1 && $row['notice_version'] === TELEMETRY_NOTICE_VERSION;
-}
-
-function telemetry_may_send(int $userId): bool {
-    return telemetry_enabled() && telemetry_consent($userId);
-}
-
-// Per-user pseudonym: install_id alone would conflate every account on a shared
-// install, so an erasure request could not target one user's data.
-function telemetry_user_ref(int $userId): string {
-    return substr(hash('sha256', env_str('TELEMETRY_INSTALL_ID') . ':' . $userId), 0, 16);
-}
-
-function telemetry_send(array $payload): void {
-    try {
-        $ch = curl_init(env_str('TELEMETRY_ENDPOINT', TELEMETRY_DEFAULT_ENDPOINT));
-        curl_setopt_array($ch, [
-            CURLOPT_POST => true,
-            CURLOPT_HTTPHEADER => ['Content-Type: application/json', 'X-Jun-Client: jun-os'],
-            CURLOPT_POSTFIELDS => json_encode($payload, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES),
-            CURLOPT_RETURNTRANSFER => true,
-            CURLOPT_CONNECTTIMEOUT => 2,
-            CURLOPT_TIMEOUT => 3,
-        ]);
-        $resp = curl_exec($ch);
-        $status = (int)curl_getinfo($ch, CURLINFO_RESPONSE_CODE);
-        if ($resp === false || $status >= 300) {
-            log_event(['msg' => 'telemetry_send_error', 'err' => $resp === false ? curl_error($ch) : 'http_' . $status]);
-        }
-        curl_close($ch);
-    } catch (Throwable $e) {
-        log_event(['msg' => 'telemetry_send_error', 'err' => $e->getMessage()]);
-    }
-}
-
 function db(): PDO {
     static $pdo = null;
     if ($pdo !== null) return $pdo;

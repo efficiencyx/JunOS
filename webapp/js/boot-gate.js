@@ -1,23 +1,19 @@
-// Runs before the body renders (loaded as a blocking <script> in <head>).
-// Externalized from an inline script so it passes the nginx CSP, which does
-// not allow 'unsafe-inline' for script-src.
+// Not inline: the nginx CSP has no 'unsafe-inline' for script-src, so this is a
+// blocking <script> in <head> instead.
 
-// Keep the app shell hidden until the session check resolves, so unlogged
-// visitors never see the chat UI or the AI-provider boot overlay.
 document.documentElement.setAttribute('data-pre-auth', '1');
 
-// The pre-app screens are styled by the inlined critical CSS, so the full
-// sheets are applied here instead of blocking the parser on them. They are
-// already in flight from the <link rel="preload"> tags in the head.
-for (const href of ['styles.css?v=49', 'trip-loader.css?v=4']) {
+// Applied here rather than as <link> tags so they don't block the parser - the
+// pre-app screens are covered by the inlined critical CSS until these land.
+for (const href of ['styles.css?v=50', 'trip-loader.css?v=4']) {
   const link = document.createElement('link');
   link.rel = 'stylesheet';
   link.href = href;
   document.head.appendChild(link);
 }
 
+// The 18+ gate comes before everything, login included.
 if (localStorage.getItem('omega.adultConsent.v1') !== '1') {
-  // First visit: the 18+ gate must come before anything else, including login.
   document.documentElement.setAttribute('data-age-gated', '1');
   document.addEventListener('DOMContentLoaded', () => {
     const gate = document.getElementById('ageGate');
