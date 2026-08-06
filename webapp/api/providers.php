@@ -63,11 +63,72 @@ function default_chat_model(): string {
     }
 }
 
+function ollama_api_json(string $path, ?array $post = null, int $timeout = 3): array {
+    $ch = curl_init(chat_api_base('ollama') . $path);
+    $opts = [
+        CURLOPT_RETURNTRANSFER => true,
+        CURLOPT_CONNECTTIMEOUT => 2,
+        CURLOPT_TIMEOUT => $timeout,
+    ];
+    if ($post !== null) {
+        $opts[CURLOPT_POST] = true;
+        $opts[CURLOPT_POSTFIELDS] = json_encode($post);
+        $opts[CURLOPT_HTTPHEADER] = ['Content-Type: application/json'];
+    }
+    curl_setopt_array($ch, $opts);
+    $response = curl_exec($ch);
+    curl_close($ch);
+    $data = is_string($response) ? json_decode($response, true) : null;
+    return is_array($data) ? $data : [];
+}
+
+function ollama_model_weights_mb(string $model): int {
+    static $cache = [];
+    if (isset($cache[$model])) return $cache[$model];
+    foreach ((ollama_api_json('/api/tags')['models'] ?? []) as $entry) {
+        if ((string)($entry['name'] ?? '') !== $model) continue;
+        return $cache[$model] = (int)round(((int)($entry['size'] ?? 0)) / 1048576);
+    }
+    return $cache[$model] = 0;
+}
+
+// MiB the KV cache costs per token at q8_0 on the models this ships with,
+// measured off llama.cpp's own kv_cache size line. Deliberately rounded up:
+// overestimating costs context, underestimating costs a partial offload.
+const KV_MIB_PER_TOKEN = 0.2;
+const VRAM_RESERVE_MB = 2048;
+const CTX_TIERS = [6144, 8192, 12288, 16384];
+
+// Headroom left on the card once the weights and a working reserve are taken
+// out. Zero when the GPU size is unknown - see OMEGA_GPU_VRAM_MB in start.sh.
+function gpu_ctx_headroom_mb(): int {
+    $vram = (int)env_str('OMEGA_GPU_VRAM_MB', '0');
+    if ($vram <= 0) return 0;
+    $weights = ollama_model_weights_mb(default_chat_model());
+    if ($weights <= 0) return 0;
+    return (int)($vram - VRAM_RESERVE_MB - $weights);
+}
+
 function default_num_ctx(): int {
     static $ctx = null;
     if ($ctx !== null) return $ctx;
     $override = (int)env_str('OMEGA_NUM_CTX', '0');
     if ($override > 0) return $ctx = $override;
+
+    // VRAM is what actually bounds the KV cache, so prefer it when the card size
+    // made it through from start.sh. Under 4 GiB of headroom the answer would be
+    // a context too small to hold a conversation anyway, so fall through to the
+    // RAM tiers and let Ollama spill rather than crippling the window.
+    $headroom = gpu_ctx_headroom_mb();
+    if ($headroom >= 4096) {
+        $fits = (int)($headroom / KV_MIB_PER_TOKEN);
+        $ctx = CTX_TIERS[0];
+        foreach (CTX_TIERS as $tier) {
+            if ($fits >= $tier) $ctx = $tier;
+        }
+        return $ctx;
+    }
+
     $gib = 0.0;
     $meminfo = @file_get_contents('/proc/meminfo');
     if ($meminfo && preg_match('/^MemTotal:\s+(\d+)\s*kB/m', $meminfo, $m)) {
@@ -81,6 +142,46 @@ function default_num_ctx(): int {
     if ($gib <= 25) return $ctx = 8192;
     if ($gib <= 33) return $ctx = 12288;
     return $ctx = 16384;
+}
+
+// Ollama decides its layer split once, against the VRAM free at load time, and
+// the keep_alive=-1 pin below then holds that decision forever - so a model that
+// loaded while something else owned the GPU serves every later message from the
+// CPU. Evicting it lets the next call re-fit against a now-idle card.
+function ollama_evict_if_partially_offloaded(string $model): void {
+    static $done = false;
+    if ($done || ai_provider() !== 'ollama') return;
+    $done = true;
+
+    // Only worth refitting when the weights plus a working reserve actually fit
+    // the card. Where they don't, a partial offload is the best it can do and
+    // evicting would just reload it badly once per message.
+    if (gpu_ctx_headroom_mb() <= 0) return;
+
+    $loaded = null;
+    foreach ((ollama_api_json('/api/ps')['models'] ?? []) as $entry) {
+        if ((string)($entry['name'] ?? '') === $model) { $loaded = $entry; break; }
+    }
+    if ($loaded === null) return;
+
+    $size = (float)($loaded['size'] ?? 0);
+    $vram = (float)($loaded['size_vram'] ?? 0);
+    if ($size <= 0 || $vram / $size >= 0.9) return;
+
+    // One eviction per cooldown: if it re-fits just as badly, something outside
+    // our control holds the VRAM and reloading every turn is worse than slow.
+    $stamp = state_dir() . '/ollama-refit.stamp';
+    $last = is_file($stamp) ? (int)@file_get_contents($stamp) : 0;
+    if (time() - $last < 600) return;
+    @file_put_contents($stamp, (string)time());
+
+    log_event([
+        'msg' => 'ollama_partial_offload_evict',
+        'model' => $model,
+        'size_vram' => (int)$vram,
+        'size' => (int)$size,
+    ]);
+    ollama_api_json('/api/generate', ['model' => $model, 'keep_alive' => 0], 10);
 }
 
 function provider_chat_payload(
@@ -171,7 +272,7 @@ function provider_complete_once(string $provider, string $model, array $messages
         ? ($obj['choices'][0]['message']['content'] ?? null)
         : ($obj['message']['content'] ?? null);
     if (!is_string($text)) return null;
-    $text = trim($text);
+    $text = provider_strip_think($text);
     return $text !== '' ? $text : null;
 }
 
@@ -230,7 +331,7 @@ function provider_complete_tools(string $provider, string $model, array $message
         : ($obj['message'] ?? null);
     if (!is_array($message)) return ['content' => '', 'tool_calls' => [], 'error' => 'invalid_response'];
     return [
-        'content' => is_string($message['content'] ?? null) ? trim($message['content']) : '',
+        'content' => is_string($message['content'] ?? null) ? provider_strip_think($message['content']) : '',
         'tool_calls' => is_array($message['tool_calls'] ?? null) ? $message['tool_calls'] : [],
     ];
 }
@@ -252,7 +353,73 @@ function provider_stream_state(): array {
         'stream_error' => false,
         'curl_error' => '',
         'duration_ns' => 0,
+        'think_open' => false,
+        'think_hold' => '',
     ];
+}
+
+function provider_strip_think(string $text): string {
+    $text = preg_replace('/<think>.*?<\/think>/is', '', $text);
+    $text = preg_replace('/^\s*<think>.*$/is', '', $text);
+    return trim($text);
+}
+
+function provider_route_think_token(string $token, array &$state, callable $emit): void {
+    $buf = $state['think_hold'] . $token;
+    $state['think_hold'] = '';
+
+    while ($buf !== '') {
+        $tag = $state['think_open'] ? '</think>' : '<think>';
+        $pos = stripos($buf, $tag);
+        if ($pos === false) break;
+        $head = substr($buf, 0, $pos);
+        if ($head !== '') {
+            if ($state['think_open']) {
+                $emit(['thinking' => $head]);
+            } else {
+                $emit(['token' => $head]);
+                $state['content'] .= $head;
+            }
+        }
+        $buf = substr($buf, $pos + strlen($tag));
+        $state['think_open'] = !$state['think_open'];
+    }
+
+    if ($buf === '') return;
+
+    // A tag can straddle two stream chunks: hold back any trailing prefix of one.
+    $tag = $state['think_open'] ? '</think>' : '<think>';
+    $hold = 0;
+    for ($n = min(strlen($tag) - 1, strlen($buf)); $n > 0; $n--) {
+        if (strcasecmp(substr($buf, -$n), substr($tag, 0, $n)) === 0) {
+            $hold = $n;
+            break;
+        }
+    }
+    if ($hold > 0) {
+        $state['think_hold'] = substr($buf, -$hold);
+        $buf = substr($buf, 0, strlen($buf) - $hold);
+    }
+    if ($buf === '') return;
+
+    if ($state['think_open']) {
+        $emit(['thinking' => $buf]);
+    } else {
+        $emit(['token' => $buf]);
+        $state['content'] .= $buf;
+    }
+}
+
+function provider_flush_think_hold(array &$state, callable $emit): void {
+    $rest = $state['think_hold'];
+    $state['think_hold'] = '';
+    if ($rest === '') return;
+    if ($state['think_open']) {
+        $emit(['thinking' => $rest]);
+    } else {
+        $emit(['token' => $rest]);
+        $state['content'] .= $rest;
+    }
 }
 
 function provider_parse_ollama_chunk(string $chunk, string &$buf, array &$state, callable $emit): void {
@@ -292,10 +459,9 @@ function provider_parse_ollama_chunk(string $chunk, string &$buf, array &$state,
         }
 
         $token = (string)($obj['message']['content'] ?? '');
-        if ($token !== '') {
-            $emit(['token' => $token]);
-            $state['content'] .= $token;
-        }
+        if ($token !== '') provider_route_think_token($token, $state, $emit);
+
+        if (!empty($obj['done'])) provider_flush_think_hold($state, $emit);
     }
 }
 
@@ -363,10 +529,9 @@ function provider_parse_openai_chunk(
         }
 
         $token = (string)($delta['content'] ?? '');
-        if ($token !== '') {
-            $emit(['token' => $token]);
-            $state['content'] .= $token;
-        }
+        if ($token !== '') provider_route_think_token($token, $state, $emit);
+
+        if (!empty($choice['finish_reason'])) provider_flush_think_hold($state, $emit);
     }
 }
 

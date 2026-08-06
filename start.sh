@@ -28,6 +28,19 @@ nvidia_count() {
   nvidia-smi --query-gpu=uuid --format=csv,noheader 2>/dev/null | grep -c . || true
 }
 
+# Largest card's VRAM, in MiB. php runs without any GPU device node, so it can
+# only learn the card size from here - see default_num_ctx() in api/providers.php.
+nvidia_vram_mb() {
+  nvidia-smi --query-gpu=memory.total --format=csv,noheader,nounits 2>/dev/null \
+    | sort -nr | head -n1 | tr -d ' \r' || true
+}
+
+amd_vram_mb() {
+  rocm-smi --showmeminfo vram --csv 2>/dev/null \
+    | awk -F, 'NR>1 { gsub(/[^0-9]/,"",$2); if ($2 != "") print int($2/1048576) }' \
+    | sort -nr | head -n1 || true
+}
+
 amd_visible() {
   rocm-smi --showmeminfo vram --csv 2>/dev/null \
     | awk -F, 'NR>1 { gsub(/[^0-9]/,"",$1); gsub(/[^0-9]/,"",$2); if ($2 != "") print $2","$1 }' \
@@ -56,9 +69,32 @@ case "$provider" in
     case "${llamacpp_url:-http://llamacpp:8080}" in
       http://llamacpp:8080) add_profile llamacpp ;;
     esac
+    llamacpp_model_file="$(env_get LLAMACPP_MODEL_FILE)"
+    if [ -n "$llamacpp_model_file" ]; then
+      export LLAMACPP_MODEL_FILE="$llamacpp_model_file"
+      llamacpp_models_dir="$(env_get LLAMACPP_MODELS_DIR)"
+      export LLAMACPP_MODELS_DIR="${llamacpp_models_dir:-./models}"
+      if [ ! -f "$LLAMACPP_MODELS_DIR/$LLAMACPP_MODEL_FILE" ]; then
+        echo "error: LLAMACPP_MODEL_FILE not found: $LLAMACPP_MODELS_DIR/$LLAMACPP_MODEL_FILE" >&2
+        exit 1
+      fi
+      llamacpp_alias="$(env_get LLAMACPP_MODEL_ALIAS)"
+      [ -z "$llamacpp_alias" ] || export LLAMACPP_MODEL_ALIAS="$llamacpp_alias"
+    fi
     ;;
   openrouter) : ;;
-  *) add_profile ollama ;;
+  *)
+    # Managed ollama container unless the user pointed at their own.
+    case "$(env_get OLLAMA_URL)" in
+      ''|http://ollama:11434) add_profile ollama ;;
+    esac
+    ;;
+esac
+
+voice="${VOICE:-$(env_get VOICE)}"
+case "$(printf '%s' "${voice:-on}" | tr '[:upper:]' '[:lower:]')" in
+  off|0|false|no) ;;
+  *) add_profile voice ;;
 esac
 
 karaoke="${KARAOKE:-$(env_get KARAOKE)}"
@@ -91,6 +127,7 @@ export SEP_DEVICE="$sep_device"
 
 gpu="$(detect_gpu)"
 files=(-f docker-compose.yml)
+[ -z "${LLAMACPP_MODEL_FILE:-}" ] || files+=(-f docker-compose.llamacpp-local.yml)
 
 case "$gpu" in
   nvidia)
@@ -103,6 +140,7 @@ case "$gpu" in
     if [ "${ngpus:-0}" -gt 0 ]; then
       export NVIDIA_GPU_COUNT="$ngpus"
     fi
+    probed_vram_mb="$(nvidia_vram_mb)"
     ;;
   amd)
     files+=(-f docker-compose.amd.yml)
@@ -112,8 +150,15 @@ case "$gpu" in
     [ -n "$rgid" ] || rgid="$(getent group render | cut -d: -f3 || true)"
     export VIDEO_GID="${vgid:-44}"
     export RENDER_GID="${rgid:-105}"
+    probed_vram_mb="$(amd_vram_mb)"
     ;;
 esac
+
+# A hand-set value always wins: probing reports the whole card, which is wrong
+# when something else on the machine permanently owns part of it.
+vram_mb="${OMEGA_GPU_VRAM_MB:-$(env_get OMEGA_GPU_VRAM_MB)}"
+vram_mb="${vram_mb:-${probed_vram_mb:-}}"
+[ -z "$vram_mb" ] || export OMEGA_GPU_VRAM_MB="$vram_mb"
 
 devices="${GPU_DEVICES:-$(env_get GPU_DEVICES)}"
 case "$devices" in
@@ -156,6 +201,36 @@ fi
 if [ "$tp" = on ]; then
   echo "  tensor parallelism: on"
 fi
+if [ -n "${OMEGA_GPU_VRAM_MB:-}" ]; then
+  echo "  vram: ${OMEGA_GPU_VRAM_MB} MiB"
+fi
+
+# Ollama sizes its layer offload once, against whatever VRAM is free the moment
+# it loads, and api/providers.php pins that load with keep_alive=-1. If the
+# karaoke sidecar's CUDA torch is initialising in the same window the model can
+# land mostly on the CPU and stay there, which costs ~1000x on prefill. Hold
+# karaoke back until the model server answers.
+wait_for_ollama() {
+  local i status
+  for i in $(seq 1 90); do
+    status="$(docker inspect -f '{{.State.Health.Status}}' omega-ollama 2>/dev/null || true)"
+    [ "$status" = healthy ] && return 0
+    sleep 2
+  done
+  echo "warning: omega-ollama did not report healthy; starting karaoke anyway" >&2
+}
+
+staged_up() {
+  case ",${profiles}," in
+    *,karaoke,*) ;;
+    *) return 1 ;;
+  esac
+  case ",${profiles}," in
+    *,ollama,*) ;;
+    *) return 1 ;;
+  esac
+  [ "$#" -eq 0 ]
+}
 
 # A bare first word is a lifecycle subcommand; anything else (a flag like
 # --build, or service names) is forwarded to `up -d` exactly as before.
@@ -165,5 +240,12 @@ case "${1:-up}" in
               set -x; exec docker compose "${files[@]}" up -d --build "$@" ;;
   status|ps)  shift; set -x; exec docker compose "${files[@]}" ps "$@" ;;
   logs)       shift; set -x; exec docker compose "${files[@]}" logs -f "$@" ;;
-  *)          set -x; exec docker compose "${files[@]}" up -d --build "$@" ;;
+  *)          if staged_up "$@"; then
+                set -x
+                docker compose "${files[@]}" up -d --build --scale karaoke=0
+                { set +x; } 2>/dev/null
+                wait_for_ollama
+                set -x
+              fi
+              set -x; exec docker compose "${files[@]}" up -d --build "$@" ;;
 esac
