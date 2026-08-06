@@ -556,8 +556,10 @@ function showBoot() {
      'js/wardrobe-open-lines.js?v=3', 'js/wardrobe-reactions.js?v=18',
      'js/wardrobe-return-lines.js?v=3'],
     ['vendor/cubism4.min.js'],
-    ['js/live2d.js?v=33'],
   ]);
+  // live2d.js is an ES module now, so it cannot ride in a loadScripts group -
+  // and it destructures PIXI.live2d at eval time, hence the await above first.
+  await import('./live2d.js?v=34');
 
   // Both of these configure a lazily-loaded global, so they cannot run at
   // module scope any more - they would silently no-op before the load.
