@@ -1,8 +1,8 @@
-import { VOICE_STATE_LABELS, renderVoiceDraft, sendFromVoice, stopActiveStream, sttAvailable } from '../app.js?v=60';
-import { voiceBargeChk, voiceChk, voiceSilenceInput, voiceState } from './dom.js?v=60';
-import { hideFaceBubble } from './face-bubble.js?v=60';
-import { logAction } from './logging.js?v=60';
-import { syncVoiceDeps, updateVoiceSilenceLabel } from './settings.js?v=60';
+import { VOICE_STATE_LABELS, renderVoiceDraft, sendFromVoice, stopActiveStream, sttAvailable } from '../app.js?v=61';
+import { voiceBargeChk, voiceChk, voiceSilenceInput, voiceState } from './dom.js?v=61';
+import { hideFaceBubble } from './face-bubble.js?v=61';
+import { logAction } from './logging.js?v=61';
+import { syncVoiceDeps, updateVoiceSilenceLabel } from './settings.js?v=61';
 
 // Same as wire-tts: optional subsystem, self-contained wiring.
 export async function wireVoice() {

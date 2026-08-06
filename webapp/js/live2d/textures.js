@@ -1,5 +1,5 @@
-import { markDirty, model, publicTint, raw } from '../live2d.js?v=60';
-import { findDrawables } from './geometry.js?v=60';
+import { markDirty, model, publicTint, raw } from '../live2d.js?v=61';
+import { findDrawables } from './geometry.js?v=61';
 
 export function tintByPattern(includes, excludes, rgb) {
   if (!publicTint) return [];
@@ -109,9 +109,10 @@ function _uploadTexture(texIndex, canvas) {
   const bt = model.textures[texIndex].baseTexture;
   bt.alphaMode = PIXI.ALPHA_MODES.PMA;
   const res = bt.resource;
+  // Only the source is swapped: resource width/height are getter-only, and the
+  // composite canvas is allocated at the atlas's own size anyway. Assigning them
+  // used to be a silent no-op under the old sloppy-mode IIFE; in a module it throws.
   res.source = canvas;
-  res.width = canvas.width;
-  res.height = canvas.height;
   const uid = model.glContextID;
   if (uid >= 0 && bt._glTextures[uid]) {
     delete bt._glTextures[uid];
@@ -124,8 +125,7 @@ function _restoreOriginalTexture(texIndex, origSource) {
   bt.alphaMode = PIXI.ALPHA_MODES.PMA;
   const res = bt.resource;
   res.source = origSource;
-  res.width = origSource.naturalWidth || origSource.width;
-  res.height = origSource.naturalHeight || origSource.height;
+
   const uid = model.glContextID;
   if (uid >= 0 && bt._glTextures[uid]) {
     delete bt._glTextures[uid];

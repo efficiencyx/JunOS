@@ -1,10 +1,10 @@
-import { appendMsg, currentConversationId, discardActiveResponse, messages, renderMarkdown, setConversationTitle, setCurrentConversationId, sidebarRefreshGeneration, updateEmptyState } from '../app.js?v=60';
-import { IDLE_AFTER_JOIN_MS, cancelAutoReset, reportActivity, resetIdleNudge, scheduleIdleNudge } from './consolidation.js?v=60';
-import { conversationSidebar, messagesEl, mobileConversationTitle, mobileMenuBtn, narrowSidebarQuery, reloadPromptBtn, resetLive2DBtn, sidebarBackdrop, sidebarBackground } from './dom.js?v=60';
-import { announceMobileReply, faceBubble, hideFaceBubble, latestAssistantReply, scheduleFaceBubbleHide, setLatestAssistantReply, showFaceBubble } from './face-bubble.js?v=60';
-import { logAction } from './logging.js?v=60';
-import { makeStreamBuffer } from './stream-filters.js?v=60';
-import { escapeHtml, phoneMode } from './util.js?v=60';
+import { appendMsg, currentConversationId, discardActiveResponse, messages, renderMarkdown, setConversationTitle, setCurrentConversationId, updateEmptyState } from '../app.js?v=61';
+import { IDLE_AFTER_JOIN_MS, cancelAutoReset, reportActivity, resetIdleNudge, scheduleIdleNudge } from './consolidation.js?v=61';
+import { conversationSidebar, messagesEl, mobileConversationTitle, mobileMenuBtn, narrowSidebarQuery, reloadPromptBtn, resetLive2DBtn, sidebarBackdrop, sidebarBackground } from './dom.js?v=61';
+import { announceMobileReply, faceBubble, hideFaceBubble, latestAssistantReply, scheduleFaceBubbleHide, setLatestAssistantReply, showFaceBubble } from './face-bubble.js?v=61';
+import { logAction } from './logging.js?v=61';
+import { makeStreamBuffer } from './stream-filters.js?v=61';
+import { escapeHtml, phoneMode } from './util.js?v=61';
 
 const conversationTitles = new Map();
 export async function refreshSidebar() {
@@ -118,6 +118,8 @@ export async function loadConversation(id) {
       } else if (row.role === 'assistant') {
         const el = appendMsg('assistant', '');
         let visible = '';
+
+let sidebarRefreshGeneration = 0;
 
 let conversationLoadGeneration = 0;
         const sb = makeStreamBuffer(clean => { visible += clean; });

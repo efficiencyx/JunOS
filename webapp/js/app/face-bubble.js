@@ -1,6 +1,6 @@
-import { composer, currentConversationTitle, setConversationTitle } from '../app.js?v=60';
-import { mobileConversationTitle, mobileReplyStatus, sidebarBackground, stageEl } from './dom.js?v=60';
-import { phoneMode, visualRect } from './util.js?v=60';
+import { currentConversationTitle, setConversationTitle } from '../app.js?v=61';
+import { mobileConversationTitle, mobileReplyStatus, sidebarBackground, stageEl } from './dom.js?v=61';
+import { phoneMode, visualRect } from './util.js?v=61';
 
 export let latestAssistantReply = '';
 export const faceBubble = (() => {
