@@ -1,0 +1,75 @@
+/* Live2D stage */
+/* Full-screen, click-through layer. The character floats over the whole page
+   and is repositioned by dragging (hit-tested in live2d.js). Sits above the
+   chat content but below the header chrome, drawer, and overlays. */
+#stage {
+  position: fixed;
+  inset: 0;
+  z-index: 40;
+  background: transparent;
+  pointer-events: none;
+  overflow: hidden;
+}
+#stage canvas { display: block; width: 100%; height: 100%; }
+
+body.l2d-dragging { cursor: grabbing; user-select: none; }
+body.l2d-touching { cursor: grabbing; user-select: none; }
+
+/* Skeleton shimmer while model loads (disabled: stage is now a full-screen
+   click-through layer, so a viewport-wide shimmer would flash the whole page). */
+.stage-skeleton {
+  display: none;
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(
+    90deg,
+    transparent 0%,
+    rgba(124, 158, 255, .07) 40%,
+    rgba(124, 158, 255, .14) 50%,
+    rgba(124, 158, 255, .07) 60%,
+    transparent 100%
+  );
+  background-size: 200% 100%;
+  animation: shimmer 1.6s infinite linear;
+  z-index: 5;
+  pointer-events: none;
+}
+.stage-skeleton.hidden { display: none; }
+
+@keyframes shimmer {
+  0%   { background-position: 200% 0; }
+  100% { background-position: -200% 0; }
+}
+
+.stage-toolbar {
+  position: absolute;
+  top: 12px;
+  right: 12px;
+  display: flex;
+  gap: 6px;
+  z-index: 10;
+  background: rgba(20, 24, 32, .85);
+  backdrop-filter: blur(10px);
+  padding: 6px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow);
+}
+
+.stage-status {
+  position: absolute;
+  bottom: 12px;
+  left: 12px;
+  font-family: 'JetBrains Mono', ui-monospace, monospace;
+  font-size: 11px;
+  color: var(--muted);
+  background: rgba(20, 24, 32, .85);
+  padding: 6px 10px;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--border);
+  max-width: 60%;
+  z-index: 10;
+}
+.stage-status.error  { color: var(--danger); border-color: #5c2a30; }
+.stage-status.hidden { display: none; }
+

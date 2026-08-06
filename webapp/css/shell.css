@@ -1,0 +1,119 @@
+/* App shell header */
+#app {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  height: 100vh;
+  overflow: hidden;
+}
+
+/* Floating top-right controls (Gemini-style). Taken out of flow so the sidebar
+   and chat run full-height and the brand sits at the very top. */
+.app-header {
+  position: absolute;
+  top: 0;
+  right: 0;
+  z-index: 60;
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  height: var(--header-h);
+  padding: 0 var(--space-5);
+  background: transparent;
+  border-bottom: none;
+}
+
+.header-title {
+  font-size: 18px;
+  font-weight: 500;
+  letter-spacing: .2px;
+  color: var(--muted);
+}
+
+.header-right {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  margin-left: auto;
+}
+
+/* Art. 50(1) AI Act disclosure - must stay visible at all times, so it is not
+   themed by --accent and never hidden at mobile widths like the other chrome. */
+.ai-badge {
+  display: inline-flex;
+  align-items: center;
+  padding: 3px 8px;
+  border: 1px solid var(--border);
+  border-radius: 20px;
+  background: var(--bg-3);
+  color: var(--muted);
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: .6px;
+  text-decoration: none;
+}
+.ai-badge:hover { color: var(--fg); }
+
+.status-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 3px 10px;
+  border-radius: 20px;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: .4px;
+  text-transform: uppercase;
+  transition: background .2s, color .2s;
+}
+.status-pill::before {
+  content: '';
+  display: inline-block;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: currentColor;
+}
+.status-idle      { background: var(--bg-3); color: var(--muted); }
+.status-streaming { background: #1a2a40; color: #7c9eff; }
+.status-tts       { background: #1a2a1e; color: var(--ok); }
+.status-error     { background: #3a1f23; color: var(--danger); }
+
+/* Mic state, next to the hands-free toggle. Borrows .status-pill's shape but
+   sits inline in a settings row, so it's smaller and not uppercased - the labels
+   are sentences ("listening to the room…"), not status codes.
+   Hands-free gives no other feedback that it heard you; this is it. */
+.voice-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  margin-left: 8px;
+  padding: 2px 8px;
+  border-radius: var(--radius-pill);
+  font-size: 11px;
+  font-weight: 500;
+  vertical-align: middle;
+  background: var(--bg-3);
+  color: var(--muted);
+  transition: background .2s, color .2s;
+}
+.voice-pill::before {
+  content: '';
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: currentColor;
+  flex-shrink: 0;
+}
+.voice-pill[data-state="listening"],
+.voice-pill[data-state="maybe"]       { background: #1a2a40; color: var(--accent); }
+.voice-pill[data-state="speech"]      { background: #1a2a1e; color: var(--ok); }
+.voice-pill[data-state="thinking"]    { background: #2e2717; color: var(--warn); }
+.voice-pill[data-state="calibrating"] { background: #2e2717; color: var(--warn); }
+.voice-pill[data-state="calibrating"]::before,
+.voice-pill[data-state="speech"]::before { animation: voice-pulse 1s ease-in-out infinite; }
+@keyframes voice-pulse { 50% { opacity: .25; } }
+@media (prefers-reduced-motion: reduce) {
+  .voice-pill::before { animation: none !important; }
+}
+
