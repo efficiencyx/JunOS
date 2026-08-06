@@ -3,6 +3,7 @@ import { ttsChk, ttsEngineSelect, ttsLangRow, ttsLangSelect, ttsSpeedInput, ttsV
 import { finishPendingFaceBubbleHide } from './face-bubble.js?v=1';
 import { logAction } from './logging.js?v=1';
 import { syncVoiceDeps, updateTtsSpeedLabel } from './settings.js?v=1';
+import { escapeHtml } from './util.js?v=1';
 
 // Pulled out of bootstrap(): TTS is optional and its wiring is one long block of
 // preference plumbing that has nothing to say about the rest of startup.
