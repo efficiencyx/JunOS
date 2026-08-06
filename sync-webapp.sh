@@ -36,7 +36,11 @@ fi
 
 # index.html carries boot.css inlined; regenerate so the two cannot drift.
 echo "→ inlining critical css"
-php tools/build-critical-css.php
+if command -v php >/dev/null; then
+  php tools/build-critical-css.php
+else
+  docker run --rm -v "$PWD:/w" -w /w php:cli php tools/build-critical-css.php
+fi
 
 echo "→ static assets → $NGINX:$DEST"
 docker cp webapp/. "$NGINX:$DEST"

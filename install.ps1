@@ -204,16 +204,6 @@ function Ask-TensorParallel {
     return $(if ($v -match '^(y|yes)$') { 'on' } else { 'off' })
 }
 
-# Availability of the sharing feature, not consent to it: chat transcripts are
-# personal data, so each account is asked in the app and the answer is recorded per
-# user. An installer prompt cannot consent for users who do not exist yet.
-function Ask-Telemetry {
-    if ($env:JUN_TELEMETRY) {
-        return $(if ($env:JUN_TELEMETRY.ToLower() -match '^(on|1|true|yes|y)$') { 'on' } else { 'off' })
-    }
-    return 'on'
-}
-
 function Configure-Jun {
     $provider = if ($env:JUN_PROVIDER) { $env:JUN_PROVIDER.ToLower() } else { '' }
     if (-not $provider) {
@@ -333,20 +323,6 @@ function Configure-Jun {
     }
     Set-EnvKey 'KARAOKE' $karaoke
     Ok "karaoke $karaoke"
-
-    $telemetry = Ask-Telemetry
-    Set-EnvKey 'TELEMETRY' $telemetry
-    if ($telemetry -eq 'on') {
-        $hasInstallId = (Test-Path .env) -and (Get-Content .env | Where-Object { $_ -match '^TELEMETRY_INSTALL_ID=[0-9a-fA-F]+$' })
-        if (-not $hasInstallId) {
-            Set-EnvKey 'TELEMETRY_INSTALL_ID' ([guid]::NewGuid().ToString('N').Substring(0,16))
-        }
-    }
-    if ($telemetry -eq 'on') {
-        Ok "telemetry available (each account is asked in-app; nothing is sent until someone opts in)"
-    } else {
-        Ok "telemetry off"
-    }
 
     return @{ provider = $provider; voice = $voice; karaoke = $karaoke
               needsOllama = $needsOllama; needsLlamacpp = $needsLlamacpp }

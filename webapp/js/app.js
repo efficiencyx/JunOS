@@ -290,14 +290,14 @@
     }
     if (last.status === 'ok') {
       setConsolidationBanner('done', 'Jun is caught up', last.notes
-        ? `She's keeping ${last.notes} note${last.notes === 1 ? '' : 's'} about you — Settings › Memory has the list.`
+        ? `She's keeping ${last.notes} note${last.notes === 1 ? '' : 's'} about you. Settings › Memory has the list.`
         : 'Nothing new this time that was worth writing down.');
     } else if (last.status === 'rejected') {
       setConsolidationBanner('warn', "Jun couldn't finish tidying",
         'What the model gave back did not look right, so she left her notes exactly as they were.');
     } else {
       setConsolidationBanner('warn', "Jun couldn't finish tidying",
-        'Something broke partway through. Nothing was changed — she will try again after the next lull.');
+        'Something broke partway through. Nothing was changed, she will try again after the next lull.');
     }
     if (consolidationOutcomeTimer) clearTimeout(consolidationOutcomeTimer);
     consolidationOutcomeTimer = setTimeout(() => {
@@ -441,7 +441,7 @@
     return el;
   }
 
-  function addRatingControls(message, turnId) {
+  function addRatingControls(message) {
     document.querySelectorAll('.msg-rate button').forEach(button => { button.disabled = true; });
     const rate = document.createElement('div');
     rate.className = 'msg-rate';
@@ -474,17 +474,8 @@
     };
     rateTimer = setTimeout(fadeOutRate, 5000);
 
-    const submit = rating => {
-      void fetch('api/rating.php', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        credentials: 'same-origin',
-        body: JSON.stringify({ turn_id: turnId, rating }),
-      });
-    };
     up.addEventListener('click', () => {
       if (abortFn) return;
-      submit(1);
       up.classList.add('selected');
       up.disabled = down.disabled = true;
       clearTimeout(rateTimer);
@@ -492,7 +483,6 @@
     });
     down.addEventListener('click', async () => {
       if (abortFn) return;
-      submit(-1);
       up.disabled = down.disabled = true;
       clearTimeout(rateTimer);
       message.remove();
@@ -975,7 +965,6 @@
 
     let visible = '';
     let shown = '';
-    let turnId = null;
     let silenced = false;
     const bubbleSource = ephemeral ? 'ephemeral' : 'phone';
     const bubbleEnabled = () => !(window.VoiceMode && VoiceMode.isActive()) && (ephemeral || phoneMode());
@@ -1072,7 +1061,6 @@
         },
         onStats: (s) => {
           if (!isCurrent()) return;
-          if (typeof s?.turn_id === 'string') turnId = s.turn_id;
           if (window.DevHud) DevHud.setGenStats(s);
         },
         onToolStatus: (s) => {
@@ -1121,7 +1109,7 @@
             messages.push({ role: 'assistant', content: '...' });
           } else if (visible.trim()) {
             messages.push({ role: 'assistant', content: visible });
-            if (!ephemeral && turnId) addRatingControls(draft, turnId);
+            if (!ephemeral) addRatingControls(draft);
           } else draft.remove();
           finalize();
           ui.setStatus('idle', 'idle');
@@ -2512,10 +2500,6 @@
         console.warn('[History] init failed:', e.message);
       }
     }
-
-    // Last, so the consent gate lands on the ready chat instead of the boot
-    // overlay - but still before the user can send anything worth sharing.
-    if (window.Consent) await Consent.init();
   })();
 
   function validateActionMap(modelParamIds) {

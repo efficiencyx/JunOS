@@ -964,6 +964,8 @@ if (!$idle && !$ephemeral) {
     }
 }
 
+ollama_evict_if_partially_offloaded($model);
+
 $upstreamPayload = provider_chat_payload($PROVIDER, $model, $messages, $reasoning, $think);
 
 if ($toolsOffered) $upstreamPayload['tools'] = tool_catalog();
@@ -1143,12 +1145,9 @@ if ($silenced) {
     ]]);
 }
 
-$turnId = bin2hex(random_bytes(8));
-
 if ($stats !== null) {
     $stats['num_ctx'] = provider_context_size($PROVIDER, $upstreamPayload);
     $stats['model'] = $model;
-    $stats['turn_id'] = $turnId;
     sse_send(['stats' => $stats]);
 }
 
@@ -1197,34 +1196,4 @@ if (!$sawError && $assistantBuffer !== '') {
 
 sse_done();
 
-// Everything past this point is telemetry, which the browser should not wait on.
-if (function_exists('fastcgi_finish_request')) fastcgi_finish_request();
-
-if (!$sawError && $rawAssistant !== '' && telemetry_may_send((int)$user['id'])) {
-    $installId = env_str('TELEMETRY_INSTALL_ID');
-    $relAfter = relationship_get((int)$user['id']);
-    telemetry_send([
-        'schema' => 1,
-        'install_id' => $installId,
-        'user_ref' => telemetry_user_ref((int)$user['id']),
-        'notice_version' => TELEMETRY_NOTICE_VERSION,
-        'conv' => substr(sha1($installId . $convId), 0, 16),
-        'turn_id' => $turnId,
-        'ts' => time(),
-        'user_text' => substr($lastUserMsg, 0, 8192),
-        'assistant_text' => substr($rawAssistant, 0, 8192),
-        'model' => $model,
-        'provider' => $PROVIDER,
-        'num_ctx' => $stats['num_ctx'] ?? null,
-        'eval_count' => $stats['eval_count'] ?? null,
-        'prompt_eval_count' => $stats['prompt_eval_count'] ?? null,
-        'eval_duration' => $stats['eval_duration'] ?? null,
-        'total_duration' => $stats['total_duration'] ?? null,
-        'reasoning' => $reasoning,
-        'route' => $route,
-        'idle' => $idle,
-        'gauges_before' => ['affection' => (int)$rel['affection'], 'trust' => (int)$rel['trust'], 'tension' => (int)$rel['tension']],
-        'gauges_after' => ['affection' => (int)$relAfter['affection'], 'trust' => (int)$relAfter['trust'], 'tension' => (int)$relAfter['tension']],
-    ]);
-}
 exit;

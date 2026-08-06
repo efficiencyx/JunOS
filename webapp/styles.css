@@ -175,6 +175,23 @@ input[type="checkbox"] {
   margin-left: auto;
 }
 
+/* Art. 50(1) AI Act disclosure - must stay visible at all times, so it is not
+   themed by --accent and never hidden at mobile widths like the other chrome. */
+.ai-badge {
+  display: inline-flex;
+  align-items: center;
+  padding: 3px 8px;
+  border: 1px solid var(--border);
+  border-radius: 20px;
+  background: var(--bg-3);
+  color: var(--muted);
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: .6px;
+  text-decoration: none;
+}
+.ai-badge:hover { color: var(--fg); }
+
 .status-pill {
   display: inline-flex;
   align-items: center;
@@ -2278,6 +2295,7 @@ body.karaoke-mode .karaoke-overlay {
     pointer-events: none;
   }
   .app-header button,
+  .app-header .ai-badge,
   .app-header .status-pill { pointer-events: auto; }
   .header-left {
     display: flex;

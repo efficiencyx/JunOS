@@ -1,9 +1,7 @@
-// Sequential-groups script loader for everything deferred past the auth check.
-//
-// Each group loads in parallel; the next group waits for it. Only two real
-// ordering edges exist in this app (cubism4 needs PIXI + the Cubism core,
-// live2d.js destructures PIXI.live2d at eval time), so grouping keeps the
-// critical chain three deep instead of serialising seventeen files.
+// Groups load in parallel, one group after another. There are only two real
+// ordering edges here (cubism4 needs PIXI + the Cubism core, live2d.js
+// destructures PIXI.live2d at eval time) so this stays three deep rather than
+// serialising seventeen files.
 
 window.loadScripts = function (groups) {
   const load = (src) => new Promise((resolve, reject) => {

@@ -9,9 +9,9 @@
 <meta name="robots" content="noindex">
 <title>Privacy notice · Jun OS</title>
 <link rel="icon" type="image/png" href="favicon.png?v=1">
-<link rel="stylesheet" href="boot.css?v=2">
+<link rel="stylesheet" href="boot.css?v=4">
 <link rel="stylesheet" href="styles.css?v=48">
-<link rel="stylesheet" href="privacy.css?v=2">
+<link rel="stylesheet" href="privacy.css?v=3">
 </head>
 <body class="privacy-page">
 
@@ -28,11 +28,11 @@
       Jun OS
     </div>
     <h1>Privacy notice</h1>
-    <p class="privacy-lede">What leaves your machine, what never does, and what you can make us
-    delete. Written to be read, not survived.</p>
+    <p class="privacy-lede">Nothing leaves your machine. Here is what that means in
+    practice, and the bits the law wants said out loud.</p>
     <div class="privacy-badges">
-      <span class="privacy-badge">Version 2026-07-29.1</span>
-      <span class="privacy-badge">≈7 min read</span>
+      <span class="privacy-badge">Version 2026-08-03.2</span>
+      <span class="privacy-badge">≈2 min read</span>
     </div>
   </header>
 
@@ -47,19 +47,13 @@
       </li>
       <li>
         <span class="privacy-tick" aria-hidden="true">✓</span>
-        <span><strong>The maintainer receives only what you explicitly consent to share:</strong>
-        future chat turns used to prepare, evaluate and train Jun LoRA adapters, some of which
-        may be released publicly after privacy testing.</span>
+        <span><strong>Nothing is sent to the maintainer.</strong> Jun OS has no telemetry, no
+        analytics and no phone-home of any kind.</span>
       </li>
       <li>
         <span class="privacy-tick" aria-hidden="true">✓</span>
-        <span><strong>Saying no costs you nothing.</strong> Declining does not disable any
-        feature of Jun, and the app is designed not to ask you again.</span>
-      </li>
-      <li>
-        <span class="privacy-tick" aria-hidden="true">✓</span>
-        <span><strong>You can change your mind whenever</strong>, from Settings, and ask for
-        what you already shared to be deleted.</span>
+        <span><strong>Deleting is deleting.</strong> Remove the app and its state directory and
+        the data is gone; there is no copy anywhere else.</span>
       </li>
     </ul>
   </section>
@@ -69,260 +63,65 @@
     <nav class="privacy-toc" aria-label="On this page">
       <p class="privacy-toc-title">On this page</p>
       <ol>
-        <li><a href="#who">Who is responsible</a></li>
-        <li><a href="#what">What sharing sends</a></li>
-        <li><a href="#anonymous">Is it anonymous?</a></li>
-        <li><a href="#why">Why, and on what basis</a></li>
-        <li><a href="#other-people">Information about other people</a></li>
-        <li><a href="#rights">Your choices and rights</a></li>
-        <li><a href="#retention">How long it is kept</a></li>
-        <li><a href="#where">Where the data goes</a></li>
-        <li><a href="#models">Public LoRA adapters</a></li>
+        <li><a href="#local">Where your data lives</a></li>
         <li><a href="#other">Other services</a></li>
+        <li><a href="#ai-system">Jun is an AI system</a></li>
         <li><a href="#misc">Automated decisions &amp; children</a></li>
-        <li><a href="#changes">Changes</a></li>
       </ol>
     </nav>
 
     <main class="privacy-prose">
 
-      <section id="who">
-        <h2>Who is responsible</h2>
-        <p>Jun OS is an unofficial fan project. Two different parties are involved, and it
-        matters which is which:</p>
-        <div class="privacy-split">
-          <div class="privacy-card">
-            <h3>You</h3>
-            <p>Jun OS is intended as a private installation. You control its machine, database
-            and accounts. Your account, locally stored conversations, memory and settings are
-            not available to the maintainer unless you expose them yourself or explicitly
-            consent to the separate sharing described below.</p>
-          </div>
-          <div class="privacy-card">
-            <h3>The maintainer</h3>
-            <p>Andrea Torelli, of <span class="privacy-nowrap">andrealab.it</span>, Italy, operates the
-            metrics server. He is the data controller only for copies you explicitly share with
-            that server. Cloudflare processes network traffic on his behalf as an infrastructure
-            processor for content and customer logs, and describes certain network data it
-            creates as data for which it acts as controller.</p>
-          </div>
-        </div>
-        <p class="privacy-contact">
-          <span class="privacy-contact-label">Privacy contact</span>
-          <a href="mailto:andrea@andrealab.it">andrea@andrealab.it</a>
-          <span class="privacy-contact-note">Withdrawal, erasure, access — or just a question.</span>
-        </p>
-      </section>
-
-      <section id="what">
-        <h2>What sharing sends</h2>
-        <p>Only if you explicitly turn on <em>Share my chats for training</em>. Then, for each
-        future message you send:</p>
-        <div class="privacy-split">
-          <div class="privacy-card privacy-card-sent">
-            <h3><span class="privacy-mark privacy-mark-yes" aria-hidden="true">↑</span> Sent</h3>
-            <ul>
-              <li>Up to the first 8,192 bytes of what you typed and the model's raw reply,
-              including sexual or otherwise intimate content and any information about real
-              people that you put in the chat</li>
-              <li>The raw reply is captured before hidden control tags are removed from the
-              visible message. It can therefore contain action tags, relationship bookkeeping
-              and memory text that the model proposes saving from the conversation</li>
-              <li>A 👍 or 👎 if you rate a reply</li>
-              <li>Jun's three relationship gauges — affection, trust, tension — as they stood
-              before and after the message, since they are part of what the model is told and a
-              shared turn means nothing without them</li>
-              <li>Which model and provider answered, the context size, token counts, timings,
-              reasoning setting, request route and idle-state flag</li>
-              <li>A random installation id; a per-account tag derived from it; conversation,
-              turn and time tags, so turns and later ratings can be associated correctly</li>
-              <li>Your connection IP address and request metadata are necessarily processed by
-              Cloudflare and the origin server. The Jun payload has no IP field; the origin
-              retains only a daily-salted IP hash for abuse protection</li>
-            </ul>
-          </div>
-          <div class="privacy-card privacy-card-kept">
-            <h3><span class="privacy-mark privacy-mark-no" aria-hidden="true">✕</span> Not read from your account</h3>
-            <ul>
-              <li>Your account email address, password or name as separate fields — but anything
-              you type into a shared chat is included in its text</li>
-              <li>The name you gave Jun as a separate field</li>
-              <li>Your existing saved memory notes, journal and wardrobe as separate fields.
-              A proposed memory written inside the raw model reply is included as described
-              above</li>
-              <li>The text of conversations from before you turned sharing on</li>
-            </ul>
-          </div>
-        </div>
-        <p class="privacy-callout">Turning sharing on is <strong>never retroactive</strong>. Old
-        conversation text stays where it is. If you later rate an older reply while sharing is
-        on, only the rating and its turn tag may be sent; the older text is not uploaded.</p>
-      </section>
-
-      <section id="anonymous">
-        <h2>Is it anonymous?</h2>
-        <p>No — and we would rather say so than reassure you incorrectly.</p>
-        <p>The data is <strong>pseudonymous</strong>: it carries no directly identifying field,
-        but the installation id is stable, so everything shared from one install stays linked
-        together, and free-typed chat text can itself contain personal details you chose to
-        write. Treat shared chats as personal data that happens not to be labelled with your
-        name — which is exactly why we ask before taking any, and why you can have it deleted.</p>
-      </section>
-
-      <section id="why">
-        <h2>Why, and on what basis</h2>
-        <p>The purposes are to prepare and review a training corpus, evaluate Jun's responses,
-        train Jun LoRA adapters and, after the assessment described below, potentially publish
-        those adapters. Shared chats are not sold, not used for advertising, and not used to
-        profile you.</p>
-        <p>The legal basis is your consent: art. 6(1)(a) GDPR, and art. 9(2)(a) for the parts
-        that reveal your sex life or sexual orientation, which intimate roleplay generally does.
-        Providing this data is voluntary, is not required by a contract or by law, and saying no
-        has no effect on any Jun feature. Consent is the only basis relied on for your submitted
-        data, so you withdraw it rather than objecting to consent-based processing.</p>
-      </section>
-
-      <section id="other-people">
-        <h2>Information about other people</h2>
-        <p>Your consent covers personal data about you. It cannot give consent for somebody
-        else. <strong>Do not put identifiable information about another real person in a chat
-        you share</strong>, especially information about their health, sex life, sexual
-        orientation, beliefs or other private circumstances. Use fictional details instead.</p>
-        <p>If a shared chat nevertheless contains another person's data, its source is the Jun
-        user who typed it. That data is not intentionally sought for training. If you believe
-        the corpus contains information about you that somebody else supplied, email the privacy
-        contact so it can be located, restricted and, where required, erased. This section also
-        makes the information required by art. 14 GDPR publicly available to affected
-        non-users.</p>
-      </section>
-
-      <section id="rights">
-        <h2>Your choices and rights</h2>
-        <dl class="privacy-rights">
-          <dt>Withdraw consent <span class="privacy-where">Settings → Privacy</span></dt>
-          <dd>As easy to take back as it was to give. Sharing stops immediately, and declining
-          does not disable any feature of Jun.</dd>
-
-          <dt>Erasure <span class="privacy-art">art. 17</span>
-            <span class="privacy-where">Settings → Privacy → Request deletion</span></dt>
-          <dd>Turns sharing off locally and attempts to send the metrics server a request to
-          delete telemetry retained for your account. The in-app “requested” status confirms
-          the request was initiated, not that deletion has finished. Email the privacy contact
-          if you want confirmation or the request appears not to complete.</dd>
-
-          <dt>Access, rectification, restriction, portability
-            <span class="privacy-art">art. 15, 16, 18, 20</span></dt>
-          <dd>Email the contact above. Account-specific requests require both the installation
-          id from <code>TELEMETRY_INSTALL_ID</code> in your <code>.env</code> and the
-          <code>user_ref</code> derived from that id and your local numeric account id. The
-          in-app erasure request supplies both automatically; email the contact for help if you
-          cannot retrieve them.</dd>
-
-          <dt>Complain <span class="privacy-art">art. 77</span></dt>
-          <dd>To your national data protection authority, if you think this notice or the
-          handling of your data is wrong — in Italy, where the maintainer is based, that is the
-          <a href="https://www.garanteprivacy.it/" target="_blank" rel="noopener"
-          class="privacy-nowrap">Garante per la Protezione dei Dati Personali</a>.</dd>
-        </dl>
-      </section>
-
-      <section id="retention">
-        <h2>How long it is kept</h2>
-        <dl class="privacy-rights">
-          <dt>Shared chat turns <span class="privacy-art">36 months</span></dt>
-          <dd>Then deleted automatically, whether or not you ask. Ratings are kept alongside the
-          turn they refer to and go with it. You can have yours deleted sooner at any time.</dd>
-
-          <dt>IP address hashes <span class="privacy-art">30 days</span></dt>
-          <dd>Your IP address is not stored in plain form. The server receives it as part of the
-          network connection and converts it into a short-lived daily-salted hash, used solely
-          for abuse protection and cleared after 30 days.</dd>
-
-          <dt>Backups <span class="privacy-art">30 days</span></dt>
-          <dd>Backups containing shared turns expire within 30 days. They are isolated from
-          ordinary use. If a backup is restored after an erasure, recorded deletions are applied
-          again before the corpus returns to use.</dd>
-        </dl>
-        <p>These periods are enforced by scheduled pruning. The live database and its backups
-        are stored in Italy on an encrypted hypervisor storage layer. Encryption protects
-        powered-off storage and backup copies; authorised processing still occurs while the
-        server is running.</p>
-      </section>
-
-      <section id="where">
-        <h2>Where the data goes</h2>
-        <p>The JSON payload goes through Cloudflare to the metrics server named in
-        <code>TELEMETRY_ENDPOINT</code>. The origin server and all corpus backups are operated
-        by the maintainer in Italy. Cloudflare processes connection IP addresses, request
-        metadata and content in transit as an infrastructure processor and may process data in
-        the United States or other countries through its global network and subprocessors.</p>
-        <p>For EEA-to-US transfers, Cloudflare states that it relies on its certification under
-        the EU–US Data Privacy Framework and, if that certification is unavailable, the European
-        Commission's Standard Contractual Clauses with supplementary measures. Its current
-        arrangements are described in Cloudflare's
-        <a href="https://www.cloudflare.com/en-gb/cloudflare-customer-dpa/" target="_blank"
-        rel="noopener">Data Processing Addendum</a> and
-        <a href="https://www.cloudflare.com/policies/privacy/" target="_blank"
-        rel="noopener">privacy policy</a>.</p>
-        <p>Shared chats are not disclosed to advertising or third-party analytics services.
-        Cloudflare and its subprocessors process content and customer logs to deliver and
-        protect the metrics endpoint. Cloudflare describes its separate processing of network
-        data, and its role for that data, in the privacy policy linked above.</p>
-        <p>Sharing is transmitted over HTTPS, and reasonable technical and organisational
-        measures are used to protect what is stored — though no transmission or storage system
-        can be guaranteed completely secure.</p>
-        <p>If you run your own install of Jun OS and point it at a different endpoint, that
-        operator's arrangements apply instead of these — see
-        <a href="#other">Other services</a>.</p>
-      </section>
-
-      <section id="models">
-        <h2>Public LoRA adapters</h2>
-        <p>A LoRA adapter trained on shared chats is not assumed to be anonymous merely because
-        it is smaller than a full model. Before publication, the maintainer documents an
-        assessment of memorisation, extraction and identification risk. An adapter is published
-        only where it is very unlikely that a person can be identified from it, directly or
-        indirectly, and very unlikely that personal training data can be extracted through
-        prompts. An adapter that fails is scrapped or retrained and tested again.</p>
-        <p>Only an adapter that passes that assessment is treated as anonymous. Official
-        downloads remain available until six months after a tested successor supersedes it.
-        Independent copies made while it was public may remain available afterwards and cannot
-        reliably be recalled. The assessment and the adapter's training lineage are retained so
-        the decision can be reviewed if new evidence of leakage appears.</p>
+      <section id="local">
+        <h2>Where your data lives</h2>
+        <p>Jun OS is an unofficial fan project meant to be installed and run by you, on your own
+        machine. Your account, your conversations, Jun’s memory notes and journal, the
+        relationship gauges, the wardrobe and every setting are written to a database and a state
+        directory on that machine and stay there. The app never uploads them.</p>
+        <p>Whoever controls the machine controls the data: if you run Jun for other people, their
+        chats are on your box and it is on you to keep it, and its backups, to yourself.</p>
       </section>
 
       <section id="other">
         <h2>Other services this app can talk to</h2>
-        <p>Independently of sharing, whichever AI provider you pick is where your messages go.
-        With the bundled Ollama or llama.cpp that is your own machine, and nothing leaves it. If
-        you configure a hosted provider instead — <strong>OpenRouter</strong> is the one shipped
-        today — your prompts are sent to that provider. As the operator of a private install,
-        you choose that separate processing and should review the provider's role, retention,
-        recipients, international transfers and privacy terms before enabling it. That provider
-        processing is separate from Andrea's metrics collector. Voice and karaoke run locally in
-        sidecar containers.</p>
+        <p>Whichever AI provider you pick is where your messages go. With the bundled Ollama or
+        llama.cpp that is your own machine, and nothing leaves it. If you configure a hosted
+        provider instead (<strong>OpenRouter</strong> is the one shipped today), your prompts are
+        sent to that provider, and its terms and retention apply to them. Review those before
+        enabling it. Voice and karaoke run locally in sidecar containers.</p>
+      </section>
+
+      <section id="ai-system">
+        <h2>Jun is an AI system</h2>
+        <p>Jun is not a person and there is no person behind her. Her replies come from a
+        language model, her voice from a text-to-speech model, and her expressions and poses
+        from action tags the model writes into its own output. Nothing she says is a statement
+        of fact about the world, about you, or about anyone else, and she has no feelings,
+        memory or intentions beyond the notes and gauges this app stores for her. She is a
+        fan-made character from a fictional game, not a real individual.</p>
+        <p>This is the disclosure required by art. 50(1) of Regulation (EU) 2024/1689 (the AI
+        Act), which applies from 2 August 2026. If you run your own instance for anyone other
+        than yourself, you are its deployer and the deployer duties in art. 50 are yours.</p>
+        <p>Generated audio carries provenance metadata marking it as artificially generated, as
+        required by art. 50(2). Jun’s chat text is generated too, and stays on your machine.
+        Assistive functions that only process material you supply (speech recognition on your
+        microphone, karaoke stem separation on your own audio files) do not generate
+        synthetic content and are not marked.</p>
       </section>
 
       <section id="misc">
         <h2>Automated decisions &amp; children</h2>
-        <p>Jun's replies are generated by a language model, but nothing here makes automated
+        <p>Jun’s replies are generated by a language model, but nothing here makes automated
         decisions that have legal effects for you, or that similarly significantly affect you,
         within the meaning of art. 22.</p>
         <p>This app displays adult content and is for people aged 18 or over. It is not intended
-        for children, and telemetry from a person known to be under 18 is deleted. The current
-        age gate is a self-declaration, not independent age verification or age assurance.</p>
-      </section>
-
-      <section id="changes">
-        <h2>Changes</h2>
-        <p>If what is collected, why it is used, who receives it or the model-release practice
-        changes materially, the version at the top of this notice is bumped and you are asked to
-        decide again. A previous yes does not carry over.</p>
+        for children. The current age gate is a self-declaration, not independent age
+        verification or age assurance.</p>
       </section>
 
       <footer class="privacy-footer">
         <a href="index.html">← Back to Jun</a>
-        <span>Version 2026-07-29.1</span>
+        <span>Version 2026-08-03.2</span>
       </footer>
 
     </main>
