@@ -57,5 +57,8 @@ tools/dataset_v5/out/
 data/
 letsencrypt/
 
-# maintainer-hosted telemetry endpoint - kept local, not part of the app
-metrics-server/
+# local .env snapshots kept while switching backends
+.env.bak-*
+
+# built from the extracted game dialogue - same reason as dataset_v5/out/
+tools/dataset_v6/train.jsonl

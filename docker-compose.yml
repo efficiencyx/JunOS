@@ -47,17 +47,16 @@ services:
       OPENROUTER_MODEL: "${OPENROUTER_MODEL:-}"
       LLAMACPP_URL: "${LLAMACPP_URL:-http://llamacpp:8080}"
       OMEGA_NUM_CTX: "${OMEGA_NUM_CTX:-}"
+# start.sh probes this on the host; php has no GPU device node of its own.
+      OMEGA_GPU_VRAM_MB: "${OMEGA_GPU_VRAM_MB:-}"
       LLAMACPP_TOOLS: "${LLAMACPP_TOOLS:-}"
 # Keep the legacy KOKORO_URL fallback for existing .env files.
       TTS_URL: "${TTS_URL:-}"
       KOKORO_URL: "${KOKORO_URL:-http://tts:8001}"
       KARAOKE_URL: "${KARAOKE_URL:-http://karaoke:8001}"
-      TELEMETRY: "${TELEMETRY:-}"
-      TELEMETRY_INSTALL_ID: "${TELEMETRY_INSTALL_ID:-}"
-      TELEMETRY_ENDPOINT: "${TELEMETRY_ENDPOINT:-}"
     volumes:
       - omega_state:/var/lib/omega
-      - ./tools:/var/www/omega/tools:ro
+      - ./tools:/var/www/omega/tools
 # Model-server and TTS dependencies remain soft because their profiles vary.
     healthcheck:
       test: ["CMD", "cgi-fcgi", "-bind", "-connect", "127.0.0.1:9000"]
@@ -130,6 +129,7 @@ services:
         TORCH_INDEX: "${TTS_TORCH_INDEX:-https://download.pytorch.org/whl/cpu}"
     container_name: omega-tts
     restart: unless-stopped
+    profiles: [voice]
     environment:
       CORS_ORIGIN: "${CORS_ORIGIN:-http://nginx}"
       TTS_DEVICE: "${TTS_DEVICE:-cpu}"
