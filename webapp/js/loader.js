@@ -1,7 +1,10 @@
-// Groups load in parallel, one group after another. There are only two real
-// ordering edges here (cubism4 needs PIXI + the Cubism core, live2d.js
-// destructures PIXI.live2d at eval time) so this stays three deep rather than
-// serialising seventeen files.
+// Groups load in parallel, one group after another. Only one real ordering edge
+// is left here - cubism4 needs PIXI plus the Cubism core - so this stays two
+// deep rather than serialising seventeen files. live2d.js used to be a third
+// group; it is an ES module now and app.js imports it after these resolve.
+//
+// Classic scripts only. A module needs type="module", and s.async = false does
+// not order it against these anyway.
 
 window.loadScripts = function (groups) {
   const load = (src) => new Promise((resolve, reject) => {
