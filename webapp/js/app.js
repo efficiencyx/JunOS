@@ -1,15 +1,21 @@
-import { showAuthScreen } from './app/auth-screen.js?v=1';
-import { IDLE_AFTER_REPLY_MS, TYPING_POLL_MS, armIdleAfterReply, cancelActiveIdleNudge, cancelAutoReset, cancelIdleNudge, composerPlaceholder, consolidating, fleeActive, reportActivity, resetIdleNudge, scheduleAutoReset, scheduleIdleNudge, setCancelActiveIdleNudge, setConsolidating, showConsolidatingBubble, startFleeLock, syncConsolidationStatus } from './app/consolidation.js?v=1';
-import { chatInput, debugSystemPromptEl, devNoIdleChk, messagesEl, messagesEmpty, missingParamsEl, mobileConversationTitle, modelSelect, narrowSidebarQuery, reasoningSelect, sendBtn, sendButtonIdleMarkup, sendButtonStopMarkup, siteVolumeInput, stageEl, stageSkeleton, thinkChk } from './app/dom.js?v=1';
-import { announceMobileReply, faceBubble, hideFaceBubble, latestAssistantReply, restartFaceBubbleHide, scheduleFaceBubbleHide, scheduleFaceBubblePosition, setLatestAssistantReply, showFaceBubble } from './app/face-bubble.js?v=1';
-import { appendRaw, logAction, logMissing, logToolStatus, setStageStatus } from './app/logging.js?v=1';
-import { loadMood } from './app/mood.js?v=1';
-import { setSiteVolume, syncThinkToggle, updateSiteVolumeLabel, wireNameSettings } from './app/settings.js?v=1';
-import { loadConversation, refreshSidebar, setSidebarOpen } from './app/sidebar.js?v=1';
-import { makeNameFilter, makeStreamBuffer } from './app/stream-filters.js?v=1';
-import { escapeHtml, localTimeString, phoneMode } from './app/util.js?v=1';
-import { wireTts } from './app/wire-tts.js?v=1';
-import { wireVoice } from './app/wire-voice.js?v=1';
+// The ?v= on an import is part of the module's identity, not just a cache key:
+// load this file as app.js?v=60 from index.html while its children import
+// ../app.js?v=1 and the browser instantiates it twice, which turns the import
+// cycles into a TDZ error. Every URL in this graph - the <script> tag, the
+// imports below, and every ?v= inside js/app/ - must carry the same number.
+
+import { showAuthScreen } from './app/auth-screen.js?v=60';
+import { IDLE_AFTER_REPLY_MS, TYPING_POLL_MS, armIdleAfterReply, cancelActiveIdleNudge, cancelAutoReset, cancelIdleNudge, composerPlaceholder, consolidating, fleeActive, reportActivity, resetIdleNudge, scheduleAutoReset, scheduleIdleNudge, setCancelActiveIdleNudge, setConsolidating, showConsolidatingBubble, startFleeLock, syncConsolidationStatus } from './app/consolidation.js?v=60';
+import { chatInput, debugSystemPromptEl, devNoIdleChk, messagesEl, messagesEmpty, missingParamsEl, mobileConversationTitle, modelSelect, narrowSidebarQuery, reasoningSelect, sendBtn, sendButtonIdleMarkup, sendButtonStopMarkup, siteVolumeInput, stageEl, stageSkeleton, thinkChk } from './app/dom.js?v=60';
+import { announceMobileReply, faceBubble, hideFaceBubble, latestAssistantReply, restartFaceBubbleHide, scheduleFaceBubbleHide, scheduleFaceBubblePosition, setLatestAssistantReply, showFaceBubble } from './app/face-bubble.js?v=60';
+import { appendRaw, logAction, logMissing, logToolStatus, setStageStatus } from './app/logging.js?v=60';
+import { loadMood } from './app/mood.js?v=60';
+import { setSiteVolume, syncThinkToggle, updateSiteVolumeLabel, wireNameSettings } from './app/settings.js?v=60';
+import { loadConversation, refreshSidebar, setSidebarOpen } from './app/sidebar.js?v=60';
+import { makeNameFilter, makeStreamBuffer } from './app/stream-filters.js?v=60';
+import { escapeHtml, localTimeString, phoneMode } from './app/util.js?v=60';
+import { wireTts } from './app/wire-tts.js?v=60';
+import { wireVoice } from './app/wire-voice.js?v=60';
 
 export const messages = []; // {role:'user'|'assistant', content:string}
 export let abortFn = null;
@@ -559,7 +565,7 @@ function showBoot() {
   ]);
   // live2d.js is an ES module now, so it cannot ride in a loadScripts group -
   // and it destructures PIXI.live2d at eval time, hence the await above first.
-  await import('./live2d.js?v=34');
+  await import('./live2d.js?v=60');
 
   // Both of these configure a lazily-loaded global, so they cannot run at
   // module scope any more - they would silently no-op before the load.
