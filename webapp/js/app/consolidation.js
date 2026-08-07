@@ -1,4 +1,4 @@
-import { abortFn, currentConversationId, runChat } from '../app.js?v=61';
+import { abortFn, currentConversationId, runChat } from '../app.js?v=62';
 import { chatInput, consolidationBanner, consolidationSub, consolidationTitle, devNoIdleChk, fleeEtaEl, fleeOverlay, fleeReasonEl, sendBtn, voiceChk } from './dom.js?v=61';
 import { showFaceBubble } from './face-bubble.js?v=61';
 import { logAction } from './logging.js?v=61';

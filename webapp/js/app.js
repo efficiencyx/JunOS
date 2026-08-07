@@ -1,5 +1,5 @@
 // The ?v= on an import is part of the module's identity, not just a cache key:
-// load this file as app.js?v=61 from index.html while its children import
+// load this file as app.js?v=62 from index.html while its children import
 // ../app.js?v=1 and the browser instantiates it twice, which turns the import
 // cycles into a TDZ error. Every URL in this graph - the <script> tag, the
 // imports below, and every ?v= inside js/app/ - must carry the same number.
@@ -11,7 +11,7 @@ import { announceMobileReply, faceBubble, hideFaceBubble, latestAssistantReply, 
 import { appendRaw, logAction, logMissing, logToolStatus, setStageStatus } from './app/logging.js?v=61';
 import { loadMood } from './app/mood.js?v=61';
 import { setSiteVolume, syncThinkToggle, updateSiteVolumeLabel, wireNameSettings } from './app/settings.js?v=61';
-import { loadConversation, refreshSidebar, setSidebarOpen } from './app/sidebar.js?v=61';
+import { loadConversation, refreshSidebar, setSidebarOpen } from './app/sidebar.js?v=62';
 import { makeNameFilter, makeStreamBuffer } from './app/stream-filters.js?v=61';
 import { escapeHtml, localTimeString, phoneMode } from './app/util.js?v=61';
 import { wireTts } from './app/wire-tts.js?v=61';
@@ -790,11 +790,9 @@ function showBoot() {
   modelSelect.innerHTML = m.models.map(n =>
     `<option value="${escapeHtml(n)}">${escapeHtml(n)}</option>`).join('');
   const prefer = [
-    'hf.co/efficiencyx/Jun-LoRA-v4-12B-GGUF:Q8_0',
-    'hf.co/efficiencyx/Jun-LoRA-v4-12B-GGUF:Q6_K',
-    'hf.co/efficiencyx/Jun-LoRA-v4-12B-GGUF:Q5_K_M',
-    'hf.co/efficiencyx/Jun-LoRA-v4-12B-GGUF:Q4_K_M',
-    'hf.co/efficiencyx/Jun-LoRA-v4-12B-GGUF:Q3_K_M',
+    'hf.co/efficiencyx/Jun-LoRA-12B-GGUF:Q8_0',
+    'hf.co/efficiencyx/Jun-LoRA-12B-GGUF:Q6_K',
+    'hf.co/efficiencyx/Jun-LoRA-12B-GGUF:Q4_K_M',
     'hf.co/efficiencyx/Jun-LoRA-v4-E4B-GGUF:Q8_0',
     'hf.co/efficiencyx/Jun-LoRA-v4-E4B-GGUF:Q6_K',
     'hf.co/efficiencyx/Jun-LoRA-v4-E4B-GGUF:Q4_K_M',
