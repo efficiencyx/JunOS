@@ -33,7 +33,7 @@ webapp/assets/
 unsloth_compiled_cache/
 
 # dataset generation tools
-tools/dataset_v6
+tools/dataset_v5
 tools/dataset_v6
 
 # raw Live2D source assets - kept locally, not in the repo
