@@ -101,7 +101,7 @@ run_live() {
     fi
 }
 
-MODEL_12B="hf.co/efficiencyx/Jun-LoRA-v4-12B-GGUF:Q4_K_M"
+MODEL_12B="hf.co/efficiencyx/Jun-LoRA-12B-GGUF:Q4_K_M"
 MODEL_E4B="hf.co/efficiencyx/Jun-LoRA-v4-E4B-GGUF:Q4_K_M"
 MODEL_E2B="hf.co/efficiencyx/Jun-LoRA-v4-E2B-GGUF:Q4_K_M"
 
@@ -147,8 +147,8 @@ detect_gpu_count() {
 recommend_model() {
     local mb="$1"
     [ -z "$mb" ] && { echo "$MODEL_E2B"; return; }
-    if   [ "$mb" -ge 23500 ]; then echo "hf.co/efficiencyx/Jun-LoRA-v4-12B-GGUF:Q8_0"
-    elif [ "$mb" -ge 15500 ]; then echo "hf.co/efficiencyx/Jun-LoRA-v4-12B-GGUF:Q6_K"
+    if   [ "$mb" -ge 23500 ]; then echo "hf.co/efficiencyx/Jun-LoRA-12B-GGUF:Q8_0"
+    elif [ "$mb" -ge 15500 ]; then echo "hf.co/efficiencyx/Jun-LoRA-12B-GGUF:Q6_K"
     elif [ "$mb" -ge 11500 ]; then echo "$MODEL_12B"
     elif [ "$mb" -ge 9500 ]; then echo "hf.co/efficiencyx/Jun-LoRA-v4-E4B-GGUF:Q8_0"
     elif [ "$mb" -ge 7500 ]; then echo "$MODEL_E4B"

@@ -7,6 +7,7 @@ live2d_raw/
 live2d_raw/raw_sources/
 tools/
 docs/
+webapp/api/review.php
 tts/.venv/
 **/__pycache__/
 **/*.pyc

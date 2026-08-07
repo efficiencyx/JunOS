@@ -32,6 +32,22 @@ webapp/assets/
 # generated library cache (unsloth) - don't commit
 unsloth_compiled_cache/
 
+# dataset generation tools
+tools/dataset_v5
+tools/dataset_v6
+
+# LoRA training pipeline and its debug scratch - operates on the gitignored
+# dataset dirs, nothing in the running stack imports it. Not to be confused with
+# colab.ipynb, which serves the app and stays tracked.
+train_jun.py
+train_think_colab.ipynb
+tools/build_dataset_v6.py
+diag_labels.py
+diag_thinking.py
+smoke_thinking.py
+from_think_tags.py
+webapp/api/review.php
+
 # raw Live2D source assets - kept locally, not in the repo
 live2d_raw/
 
@@ -42,16 +58,6 @@ webapp/lore_corpus.txt
 webapp/lore_index.bin
 webapp/lore_meta.json
 
-# extracted game dialogue - personal-use only per LICENSE NOTICE, kept local
-tools/dataset_v5/raw_game_text/
-tools/dataset_v5/dialogue_all.jsonl
-tools/dataset_v5/jun_style_corpus.jsonl
-tools/dataset_v5/style_corpus.jsonl
-tools/dataset_v5/verbatim_seed.jsonl
-
-# V5 training data - generated dialogue + verbatim game seed rows, kept local
-tools/dataset_v5/content/
-tools/dataset_v5/out/
 
 # deploy state (created at runtime)
 data/
@@ -59,6 +65,3 @@ letsencrypt/
 
 # local .env snapshots kept while switching backends
 .env.bak-*
-
-# built from the extracted game dialogue - same reason as dataset_v5/out/
-tools/dataset_v6/train.jsonl

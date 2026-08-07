@@ -85,7 +85,7 @@ $manualUrls = @{
 }
 
 $models = @{
-    '12b' = 'hf.co/efficiencyx/Jun-LoRA-v4-12B-GGUF:Q4_K_M'
+    '12b' = 'hf.co/efficiencyx/Jun-LoRA-12B-GGUF:Q4_K_M'
     'e4b' = 'hf.co/efficiencyx/Jun-LoRA-v4-E4B-GGUF:Q4_K_M'
     'e2b' = 'hf.co/efficiencyx/Jun-LoRA-v4-E2B-GGUF:Q4_K_M'
 }
@@ -120,8 +120,8 @@ function Get-VramTotalMb {
 function Get-GpuCount { return @(Get-GpuMemoryMb).Count }
 
 function Recommend-Alias([int]$mb) {
-    if ($mb -ge 23500) { return 'hf.co/efficiencyx/Jun-LoRA-v4-12B-GGUF:Q8_0' }
-    if ($mb -ge 15500) { return 'hf.co/efficiencyx/Jun-LoRA-v4-12B-GGUF:Q6_K' }
+    if ($mb -ge 23500) { return 'hf.co/efficiencyx/Jun-LoRA-12B-GGUF:Q8_0' }
+    if ($mb -ge 15500) { return 'hf.co/efficiencyx/Jun-LoRA-12B-GGUF:Q6_K' }
     if ($mb -ge 11500) { return $models['12b'] }
     if ($mb -ge 9500) { return 'hf.co/efficiencyx/Jun-LoRA-v4-E4B-GGUF:Q8_0' }
     if ($mb -ge 7500) { return $models['e4b'] }

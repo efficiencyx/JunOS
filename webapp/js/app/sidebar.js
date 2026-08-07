@@ -1,4 +1,4 @@
-import { appendMsg, currentConversationId, discardActiveResponse, messages, renderMarkdown, setConversationTitle, setCurrentConversationId, updateEmptyState } from '../app.js?v=61';
+import { appendMsg, currentConversationId, discardActiveResponse, messages, renderMarkdown, setConversationTitle, setCurrentConversationId, updateEmptyState } from '../app.js?v=62';
 import { IDLE_AFTER_JOIN_MS, cancelAutoReset, reportActivity, resetIdleNudge, scheduleIdleNudge } from './consolidation.js?v=61';
 import { conversationSidebar, messagesEl, mobileConversationTitle, mobileMenuBtn, narrowSidebarQuery, reloadPromptBtn, resetLive2DBtn, sidebarBackdrop, sidebarBackground } from './dom.js?v=61';
 import { announceMobileReply, faceBubble, hideFaceBubble, latestAssistantReply, scheduleFaceBubbleHide, setLatestAssistantReply, showFaceBubble } from './face-bubble.js?v=61';
@@ -7,6 +7,8 @@ import { makeStreamBuffer } from './stream-filters.js?v=61';
 import { escapeHtml, phoneMode } from './util.js?v=61';
 
 const conversationTitles = new Map();
+let sidebarRefreshGeneration = 0;
+let conversationLoadGeneration = 0;
 export async function refreshSidebar() {
   if (!window.History) return;
   const ul = document.getElementById('conversationList');
@@ -118,10 +120,6 @@ export async function loadConversation(id) {
       } else if (row.role === 'assistant') {
         const el = appendMsg('assistant', '');
         let visible = '';
-
-let sidebarRefreshGeneration = 0;
-
-let conversationLoadGeneration = 0;
         const sb = makeStreamBuffer(clean => { visible += clean; });
         sb.push(row.content);
         sb.flush();
