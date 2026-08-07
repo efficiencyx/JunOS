@@ -33,7 +33,8 @@ webapp/assets/
 unsloth_compiled_cache/
 
 # dataset generation tools
-tools/dataset_*
+tools/dataset_v6
+tools/dataset_v6
 
 # raw Live2D source assets - kept locally, not in the repo
 live2d_raw/
@@ -52,6 +53,3 @@ letsencrypt/
 
 # local .env snapshots kept while switching backends
 .env.bak-*
-
-# built from the extracted game dialogue - same reason as dataset_v5/out/
-tools/dataset_v6/train.jsonl
