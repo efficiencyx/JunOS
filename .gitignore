@@ -36,6 +36,18 @@ unsloth_compiled_cache/
 tools/dataset_v5
 tools/dataset_v6
 
+# LoRA training pipeline and its debug scratch - operates on the gitignored
+# dataset dirs, nothing in the running stack imports it. Not to be confused with
+# colab.ipynb, which serves the app and stays tracked.
+train_jun.py
+train_think_colab.ipynb
+tools/build_dataset_v6.py
+diag_labels.py
+diag_thinking.py
+smoke_thinking.py
+from_think_tags.py
+webapp/api/review.php
+
 # raw Live2D source assets - kept locally, not in the repo
 live2d_raw/
 
