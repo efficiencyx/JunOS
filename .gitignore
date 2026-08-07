@@ -32,6 +32,9 @@ webapp/assets/
 # generated library cache (unsloth) - don't commit
 unsloth_compiled_cache/
 
+# dataset generation tools
+tools/dataset_*
+
 # raw Live2D source assets - kept locally, not in the repo
 live2d_raw/
 
@@ -48,10 +51,6 @@ tools/dataset_v5/dialogue_all.jsonl
 tools/dataset_v5/jun_style_corpus.jsonl
 tools/dataset_v5/style_corpus.jsonl
 tools/dataset_v5/verbatim_seed.jsonl
-
-# V5 training data - generated dialogue + verbatim game seed rows, kept local
-tools/dataset_v5/content/
-tools/dataset_v5/out/
 
 # deploy state (created at runtime)
 data/
