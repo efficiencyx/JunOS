@@ -1,4 +1,4 @@
-import { VOICE_STATE_LABELS, renderVoiceDraft, sendFromVoice, stopActiveStream, sttAvailable } from '../app.js?v=61';
+import { VOICE_STATE_LABELS, renderVoiceDraft, sendFromVoice, stopActiveStream, sttAvailable } from '../app.js?v=62';
 import { voiceBargeChk, voiceChk, voiceSilenceInput, voiceState } from './dom.js?v=61';
 import { hideFaceBubble } from './face-bubble.js?v=61';
 import { logAction } from './logging.js?v=61';
