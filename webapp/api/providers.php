@@ -231,6 +231,56 @@ function provider_chat_payload(
     return $payload;
 }
 
+function generate_chat_title(string $userMessage): ?string {
+    if (ai_provider() !== 'ollama') return null;
+    $model = env_str('TITLE_MODEL', 'hf.co/efficiencyx/Titlewen-GGUF:F16');
+    if ($model === '') return null;
+
+    $msg = preg_replace('/\[\s*A(?:CTIONS?)?\s*:[^\]]*\]/i', '', $userMessage);
+    $msg = trim(preg_replace('/\s+/', ' ', $msg));
+    if ($msg === '') return null;
+    $msg = substr($msg, 0, 500);
+
+    // num_gpu=0 pins it to CPU and keep_alive=-1 keeps it resident: it must never take VRAM
+    // or a GPU slot from the unpinned chat model (see OLLAMA_MAX_LOADED_MODELS in compose).
+    $result = ollama_api_json('/api/chat', [
+        'model' => $model,
+        'messages' => [
+            // No system prompt on purpose: the fine-tune maps a bare user turn to a title, and
+            // any instruction in a system turn becomes the strongest thing in a short context -
+            // "hi" then titles the chat "Title Generation" instead of greeting it.
+            ['role' => 'user', 'content' => $msg],
+            // Qwen3 base: left alone it spends the whole budget reasoning and returns an empty
+            // content. Its template drops the <|im_end|> after a trailing assistant turn, so this
+            // prefills a closed, empty think block and the model starts straight on the title.
+            // Neither `think: false` nor a /no_think system suffix works here.
+            ['role' => 'assistant', 'content' => "<think>\n\n</think>\n\n"],
+        ],
+        'stream' => false,
+        'keep_alive' => -1,
+        'options' => [
+            'num_gpu' => 0,
+            'temperature' => 0,
+            'num_predict' => 24,
+        ],
+    ], 20);
+
+    $title = trim(provider_strip_think((string)($result['message']['content'] ?? '')));
+    if ($title === '') return null;
+    $title = trim(strtok($title, "\n"));
+    $title = trim($title, " \t\n\r\0\x0B\"'");
+    $title = trim(preg_replace('/\s+/', ' ', $title));
+    $title = preg_replace('/^Title:\s*/i', '', $title);
+    if (strlen($title) > 60) {
+        $title = substr($title, 0, 60);
+        $lastSpace = strrpos($title, ' ');
+        if ($lastSpace !== false) $title = substr($title, 0, $lastSpace);
+        $title = rtrim($title);
+    }
+    if ($title === '' || !preg_match('/[a-zA-Z]/', $title)) return null;
+    return $title;
+}
+
 function provider_complete_once(string $provider, string $model, array $messages, int $maxTokens = 512, bool $think = false, string $reasoning = 'medium'): ?string {
     $endpoint = provider_chat_endpoint($provider);
     if (provider_uses_openai_protocol($provider)) {

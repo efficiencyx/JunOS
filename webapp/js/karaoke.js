@@ -204,7 +204,10 @@ window.Karaoke = (function () {
 
   function platformFlavor() {
     const authTerm = $('authTerm');
-    let os = authTerm && authTerm.dataset.os;
+    const forced = new URLSearchParams(location.search).get('os');
+    let os = (forced === 'mac' || forced === 'windows' || forced === 'linux')
+      ? forced
+      : authTerm && authTerm.dataset.os;
     if (!os) {
       const platform = (navigator.userAgentData && navigator.userAgentData.platform)
         || navigator.platform || navigator.userAgent || '';

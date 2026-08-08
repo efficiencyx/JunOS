@@ -46,6 +46,13 @@ server {
 
     client_max_body_size 16k;
 
+    # A literal host in fastcgi_pass is resolved once at config load and cached
+    # forever, so a php container that restarts onto a new IP leaves nginx
+    # dialling the old one (which docker may have reassigned) until nginx itself
+    # is restarted. Going through a variable defers resolution to request time.
+    resolver 127.0.0.11 valid=10s ipv6=off;
+    set $php_upstream php:9000;
+
     add_header Strict-Transport-Security  "max-age=31536000; includeSubDomains" always;
     include /etc/nginx/snippets/security-headers.conf;
 
@@ -70,7 +77,7 @@ server {
 
         include fastcgi_params;
         fastcgi_param SCRIPT_FILENAME /var/www/omega/api/chat.php;
-        fastcgi_pass  php:9000;
+        fastcgi_pass  $php_upstream;
     }
 
     location = /api/tts.php {
@@ -81,7 +88,7 @@ server {
 
         include fastcgi_params;
         fastcgi_param SCRIPT_FILENAME /var/www/omega/api/tts.php;
-        fastcgi_pass  php:9000;
+        fastcgi_pass  $php_upstream;
     }
 
     # Accept the larger WAV upload body.
@@ -94,7 +101,7 @@ server {
 
         include fastcgi_params;
         fastcgi_param SCRIPT_FILENAME /var/www/omega/api/stt.php;
-        fastcgi_pass  php:9000;
+        fastcgi_pass  $php_upstream;
     }
 
     # Karaoke: large audio upload for source separation + a long demucs runtime.
@@ -107,7 +114,7 @@ server {
 
         include fastcgi_params;
         fastcgi_param SCRIPT_FILENAME /var/www/omega/api/karaoke.php;
-        fastcgi_pass  php:9000;
+        fastcgi_pass  $php_upstream;
     }
 
     # CLI-only long-running worker; it must never be reachable over HTTP.
@@ -119,7 +126,7 @@ server {
 
         include fastcgi_params;
         fastcgi_param SCRIPT_FILENAME /var/www/omega$fastcgi_script_name;
-        fastcgi_pass  php:9000;
+        fastcgi_pass  $php_upstream;
     }
 
     # Prevent direct PHP access outside /api.

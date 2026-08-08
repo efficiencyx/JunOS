@@ -41,6 +41,7 @@ conditional requirement is `OPENROUTER_API_KEY`, needed only when
 | `AI_PROVIDER` | `ollama` | `webapp/api/providers.php` (`ai_provider()`) | Selects the chat backend: `ollama` (native NDJSON API) \| `openrouter` \| `llamacpp` (both OpenAI-compatible). Invalid values fall back to `ollama`. |
 | `OLLAMA_URL` | `http://ollama:11434` (Docker) / `http://localhost:11434` (PHP fallback) | `providers.php`, `models.php` | Base URL of the Ollama instance backing chat (when `AI_PROVIDER=ollama`). |
 | `OLLAMA_MODELS_TO_PULL` | `hf.co/efficiencyx/Jun-LoRA-v4-E2B-GGUF:Q4_K_M` | `ollama` and `php` services | Comma-separated models pulled on first boot; the first one is the backend default for background completions. |
+| `TITLE_MODEL` | `hf.co/efficiencyx/Titlewen-GGUF:F16` | `ollama` and `php` services, `providers.php` (`generate_chat_title()`) | Small dedicated model used to auto-title new conversations from the first user message. Pinned to CPU (`num_gpu: 0`) and kept resident (`keep_alive: -1`) so it never competes with the chat model for VRAM; the entrypoint pulls and pins it on boot. Set empty to disable and fall back to truncating that message; only used when `AI_PROVIDER=ollama`. |
 | `OPENROUTER_API_KEY` | *(empty)* | `providers.php` (`chat_request_headers()`) | Bearer key for OpenRouter. **Required when `AI_PROVIDER=openrouter`.** |
 | `OPENROUTER_MODEL` | `openrouter/auto` | `providers.php` (`default_chat_model()`) | Default chat model id sent to OpenRouter. |
 | `LLAMACPP_URL` | `http://llamacpp:8080` (Docker) / `http://127.0.0.1:8081` (PHP fallback) | `providers.php` (`chat_api_base()`) | Base URL of the llama.cpp `llama-server`. Point it at your own server to skip the managed `llamacpp` container. |
@@ -84,7 +85,7 @@ route stays mounted in both roles.
 | `OLLAMA_FLASH_ATTENTION` | `1` | `ollama` service | Enables flash attention; required for `OLLAMA_KV_CACHE_TYPE` quantization to take effect (otherwise Ollama warns and falls back to `f16`). |
 | `OLLAMA_KV_CACHE_TYPE` | `q8_0` | `ollama` service | KV cache quantization. `q8_0` roughly halves KV memory at 16k context with negligible quality loss; `f16` opts out, `q4_0` goes smaller with a noticeable quality cost on long contexts. |
 | `OLLAMA_NUM_PARALLEL` | `1` | `ollama` service | Concurrent request slots. Left at the default, RAM stays bounded; raising it multiplies KV cache usage per slot. |
-| `OLLAMA_MAX_LOADED_MODELS` | `2` | `ollama` service | Cap on simultaneously loaded models (headroom to switch chat models without evicting on every swap). |
+| `OLLAMA_MAX_LOADED_MODELS` | `3` | `ollama` service | Cap on simultaneously loaded models. One slot is permanently held by the pinned `TITLE_MODEL`, leaving headroom to switch chat models without evicting on every swap. |
 | `OLLAMA_KEEP_ALIVE` | `5m` | `ollama` service | How long an idle model stays loaded before unloading. |
 
 ## 5. State & persistence

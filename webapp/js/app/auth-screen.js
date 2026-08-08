@@ -6,6 +6,8 @@ const authFormSignup = document.getElementById('authFormSignup');
 const signOutBtn = document.getElementById('signOutBtn');
 
 function detectOS() {
+  const forced = new URLSearchParams(location.search).get('os');
+  if (forced === 'mac' || forced === 'windows' || forced === 'linux') return forced;
   const p = (navigator.userAgentData && navigator.userAgentData.platform)
     || navigator.platform || navigator.userAgent || '';
   const s = p.toLowerCase();

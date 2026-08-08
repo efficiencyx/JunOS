@@ -100,13 +100,98 @@ body.wardrobe-open .wardrobe-overlay { display: flex; animation: wd-slide-in 0.3
 }
 .wd-hint { display: block; margin-top: 2px; font-size: 11px; color: rgba(255,255,255,0.35); letter-spacing: 0.02em; }
 .wd-actions { display: flex; align-items: center; gap: 6px; }
-.wd-reset {
+.wd-reset, .wd-looks {
   border: 1px solid rgba(255,255,255,0.08); color: rgba(255,255,255,0.4);
   font: inherit; font-size: 11px; white-space: nowrap;
   padding: 5px 10px; border-radius: 6px;
   transition: border-color 0.15s, color 0.15s;
 }
-.wd-reset:hover { border-color: rgba(196,160,240,0.4); color: var(--accent); background: none; }
+.wd-reset:hover, .wd-looks:hover { border-color: rgba(196,160,240,0.4); color: var(--accent); background: none; }
+.wd-looks.on { border-color: rgba(196,160,240,0.4); color: var(--accent); background: var(--accent-soft); }
+
+/* No z-index here on purpose: backdrop / #stage / dialog must interleave in the
+   root stacking context so the live model shows through the right-hand pane. */
+.wd-looks-modal { position: fixed; inset: 0; pointer-events: none; }
+.wd-looks-modal[hidden] { display: none; }
+.wd-looks-backdrop { position: absolute; inset: 0; z-index: 78; pointer-events: auto; background: rgba(8,6,12,0.72); backdrop-filter: blur(2px); }
+.wd-looks-dialog {
+  position: absolute; inset: 0;
+  display: grid; grid-template-columns: minmax(260px, 320px) 1fr;
+  gap: 14px;
+  width: min(920px, calc(100vw - 48px));
+  height: min(620px, calc(100dvh - 64px));
+  margin: auto;
+  pointer-events: none;
+}
+
+.wd-looks-side {
+  position: relative; z-index: 80; pointer-events: auto;
+  display: flex; flex-direction: column;
+  min-height: 0;
+  padding: 14px 14px 16px;
+  border: 1px solid var(--border-2); border-radius: 14px;
+  background: var(--bg-3);
+  box-shadow: 0 18px 48px rgba(0,0,0,0.55);
+}
+/* Deliberately transparent: #stage is repositioned into this box while open. */
+.wd-looks-stage {
+  position: relative; z-index: 80; pointer-events: none;
+  border: 1px solid var(--border); border-radius: 14px;
+  background: none;
+  box-shadow: inset 0 0 90px rgba(196,160,240,0.06);
+}
+body.looks-open #stage { z-index: 79; }
+/* The panel sits under the backdrop but keeps its own compositing layer, so it
+   needs the blur applied directly to read as dimmed with everything else. */
+body.looks-open .wardrobe-overlay {
+  filter: blur(3px) saturate(0.85) brightness(0.7);
+  pointer-events: none;
+}
+.wd-looks-save { display: flex; gap: 6px; margin-bottom: 10px; }
+.wd-looks-name {
+  flex: 1; min-width: 0;
+  background: rgba(255,255,255,0.03);
+  border: 1px solid rgba(255,255,255,0.08); border-radius: 6px;
+  color: var(--fg); font: inherit; font-size: 12px;
+  padding: 6px 8px;
+}
+.wd-looks-name::placeholder { color: rgba(255,255,255,0.25); }
+.wd-looks-name:focus { outline: none; border-color: rgba(196,160,240,0.4); }
+.wd-looks-add {
+  flex: none;
+  border: 1px solid rgba(196,160,240,0.25); border-radius: 6px;
+  color: var(--accent); font: inherit; font-size: 11px;
+  padding: 6px 10px;
+}
+.wd-looks-add:hover { background: var(--accent-soft); color: var(--accent); }
+.wd-looks-list { flex: 1; min-height: 0; overflow-y: auto; display: flex; flex-direction: column; gap: 4px; scrollbar-width: thin; }
+.wd-look {
+  display: flex; align-items: stretch; gap: 2px;
+  border: 1px solid var(--border); border-radius: 8px;
+  background: rgba(255,255,255,0.02);
+  transition: border-color 0.15s, background 0.15s;
+}
+.wd-look:hover { border-color: var(--border-2); }
+.wd-look.on { border-color: rgba(196,160,240,0.25); background: var(--accent-soft); }
+.wd-look-main {
+  flex: 1; min-width: 0;
+  display: flex; align-items: baseline; gap: 8px;
+  padding: 8px 10px;
+  border: 0; border-radius: 8px 0 0 8px;
+  background: none; color: var(--fg);
+  font: inherit; font-size: 13px; text-align: left; cursor: pointer;
+}
+.wd-look-name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.wd-look-date { flex: none; font-size: 10px; color: rgba(255,255,255,0.3); }
+.wd-look-del {
+  flex: none; width: 30px;
+  border: 0; border-radius: 0 8px 8px 0;
+  background: none; color: rgba(255,255,255,0.25);
+  font: 16px/1 system-ui, sans-serif; cursor: pointer;
+}
+.wd-look-del:hover { color: #e08a8a; background: rgba(255,255,255,0.04); }
+.wd-looks-empty { padding: 14px 4px; font-size: 12px; color: var(--muted); line-height: 1.5; }
+.wd-looks-hint { margin-top: 10px; font-size: 10px; color: rgba(255,255,255,0.3); letter-spacing: 0.02em; }
 .wd-close { font-size: 18px; line-height: 1; width: 28px; height: 28px; padding: 0; color: rgba(255,255,255,0.35); }
 .wd-close:hover { color: var(--fg); background: rgba(255,255,255,0.05); }
 
@@ -462,6 +547,14 @@ body.wd-over-worn-item { cursor: grab; }
     box-shadow: 0 -20px 55px rgba(0,0,0,0.45);
   }
   html.wd-portrait body.wardrobe-open .wardrobe-overlay { animation-name: wd-sheet-in; }
+  /* Keep Jun visible above the sheet so preview-on-hover still shows something. */
+  .wd-looks-dialog {
+    grid-template-columns: 1fr; grid-template-rows: 1fr minmax(0, 55%);
+    width: calc(100vw - 20px); height: calc(100dvh - 28px);
+    gap: 10px;
+  }
+  .wd-looks-stage { grid-row: 1; }
+  .wd-looks-side { grid-row: 2; }
   html.wd-landscape { --panel-w: clamp(320px, 44vw, 400px); }
   html.wd-landscape #stage {
     inset: env(safe-area-inset-top) var(--panel-w) env(safe-area-inset-bottom) env(safe-area-inset-left);
@@ -500,7 +593,7 @@ body.wd-over-worn-item { cursor: grab; }
   .wd-swatch { top: 4px; right: 4px; }
   .wd-optorb { right: 4px; bottom: 4px; }
   .wd-close { width: 44px; height: 44px; }
-  .wd-reset, .wd-nav, .wd-expand, .wd-opt-equip, .ocp-channel, .ocp-clear {
+  .wd-reset, .wd-looks, .wd-looks-add, .wd-look-main, .wd-look-del, .wd-nav, .wd-expand, .wd-opt-equip, .ocp-channel, .ocp-clear {
     min-height: 44px;
   }
   .wd-expand { min-width: 44px; }
@@ -528,7 +621,7 @@ body.wd-over-worn-item { cursor: grab; }
 <script defer src="js/prefs.js?v=4"></script>
 <script type="module" src="js/live2d.js?v=61"></script>
 <script defer src="js/mods.js?v=10"></script>
-<script defer src="js/outfit.js?v=34"></script>
+<script defer src="js/outfit.js?v=42"></script>
 <script defer src="js/tts.js?v=14"></script>
 <script defer src="js/wardrobe-open-lines.js?v=3"></script>
 <script defer src="js/wardrobe-return-lines.js?v=3"></script>
