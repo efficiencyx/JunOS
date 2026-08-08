@@ -18,10 +18,15 @@ window.Outfit = (function () {
       colorPatterns: ['skirt'] },
     { key: 'pants', label: 'Pants', param: 'ParamPantsEnabled', defaultOn: false, excludes: ['skirt','dress','dress1'],
       colorPatterns: ['pants'] },
-    { key: 'bra', label: 'Bra', param: 'ParamBraEnabled', defaultOn: true,
+    { key: 'bra', label: 'Bra', param: 'ParamBraEnabled', defaultOn: true, excludes: ['bikini_top'],
       colorPatterns: ['bra'], colorExcludes: ['skin','braid'] },
-    { key: 'panties', label: 'Panties', param: 'ParamPantiesEnabled', defaultOn: true,
+    { key: 'panties', label: 'Panties', param: 'ParamPantiesEnabled', defaultOn: true, excludes: ['bikini_bot'],
       colorPatterns: ['panties'], colorExcludes: ['logo'] },
+    // v0.97.5 swimwear: no rig parameters, so visibility overrides only.
+    { key: 'bikini_top', label: 'Bikini top', defaultOn: false, excludes: ['bra'],
+      colorPatterns: ['bikinitop'], visibilityPatterns: ['bikinitop'], visOn: 1, visOff: 0 },
+    { key: 'bikini_bot', label: 'Bikini bottom', defaultOn: false, excludes: ['panties'],
+      colorPatterns: ['bikinibot'], visibilityPatterns: ['bikinibot'], visOn: 1, visOff: 0 },
     // The shoe parameters do not control drawable opacity in this moc3.
     { key: 'shoe_l', label: 'Left shoe', param: 'ParamShoeLOn', defaultOn: true,
       colorPatterns: ['shoe_l'], visibilityPatterns: ['shoe_l'], visOn: 1, visOff: 0 },
@@ -62,6 +67,12 @@ window.Outfit = (function () {
       textures: { H3_Front: { url: 'assets/variants/hair/hime/H3_Front.png', overlay: true } } },
     { key: 'hair_h4', label: 'Ponytail', section: 'hair', defaultOn: false,
       visibilityPatterns: ['h4_'], visOn: 1, visOff: 0 },
+    // v0.97.5 clip for the default hair: swaps H0's front bang for the pinned
+    // one. Must stay after hair_h0 - its 'h0_' sweep would otherwise show both.
+    { key: 'hair_clip', label: 'Hair clip', section: 'hair', defaultOn: false,
+      requires: 'hair_h0', hideWhenOn: ['h0_front_bang'],
+      colorPatterns: ['hairclip'],
+      visibilityPatterns: ['h0_frontclippedup'], visOn: 1, visOff: 0 },
   ];
 
   const COLOR_GROUPS = [
@@ -399,15 +410,21 @@ window.Outfit = (function () {
   function applyItems() {
     const textureMap = {};
     for (const it of ITEMS) {
-      if (it.param) Live2D.setTarget(it.param, state[it.key] ? 1 : 0);
+      const on = state[it.key] && (!it.requires || state[it.requires]);
+      if (it.param) Live2D.setTarget(it.param, on ? 1 : 0);
       if (it.visibilityPatterns && Live2D.opacityByPattern) {
         const visOn  = it.visOn  !== undefined ? it.visOn  : null;
         const visOff = it.visOff !== undefined ? it.visOff : 0;
         Live2D.opacityByPattern(it.visibilityPatterns, it.visibilityExcludes,
-          state[it.key] ? visOn : visOff);
+          on ? visOn : visOff);
+      }
+      // Only stamped while worn; the owning item re-asserts these every pass,
+      // so clearing the override here would fight it.
+      if (on && it.hideWhenOn && Live2D.opacityByPattern) {
+        Live2D.opacityByPattern(it.hideWhenOn, [], 0);
       }
       for (const [drawable, texture] of Object.entries(it.textures || {})) {
-        textureMap[drawable] = state[it.key] ? texture : null;
+        textureMap[drawable] = on ? texture : null;
       }
     }
     if (Live2D.setDrawableTextures && Object.keys(textureMap).length) Live2D.setDrawableTextures(textureMap);
@@ -1012,6 +1029,272 @@ window.Outfit = (function () {
     syncUI();
   }
 
+  function exportPreset() {
+    return { items: { ...state }, colors: { ...colors }, variants: { ...variantState } };
+  }
+
+  // Returns the slots that actually moved, so callers can skip the expensive
+  // parts of applyAll() - a full applyVariants() recomposes every atlas.
+  function loadPresetState(preset) {
+    if (!preset || typeof preset !== 'object') return null;
+    const { items = {}, colors: cols = {}, variants = {} } = preset;
+    const changed = { items: false, colors: false, variants: [] };
+    for (const it of ITEMS) {
+      const on = items[it.key];
+      if (typeof on === 'boolean' && state[it.key] !== on) {
+        state[it.key] = on;
+        changed.items = true;
+      }
+    }
+    for (const g of COLOR_GROUPS) {
+      const c = cols[g.key];
+      if ((typeof c === 'string' || c === null) && colors[g.key] !== c) {
+        colors[g.key] = c;
+        changed.colors = true;
+      }
+    }
+    for (const v of VARIANTS) {
+      const i = variants[v.key];
+      if (Number.isInteger(i) && i >= 0 && i < v.options.length && variantState[v.key] !== i) {
+        variantState[v.key] = i;
+        changed.variants.push(v.key);
+      }
+    }
+    return changed;
+  }
+
+  function applyChanged(changed) {
+    if (!changed) return;
+    if (changed.items) applyItems();
+    for (const key of changed.variants) applyVariants(key);
+    if (changed.colors || changed.items || changed.variants.length) applyColors();
+    if (changed.items && window.Mods) Mods.applyAll();
+  }
+
+  function applyPreset(preset) {
+    clearTimeout(previewTimer);
+    const changed = loadPresetState(preset);
+    if (!changed) return;
+    previewBase = null;
+    save();
+    saveColors();
+    saveVariants();
+    applyChanged(changed);
+    syncUI();
+  }
+
+  // The preview is look-at-only: dressing gestures on the model are suspended
+  // while the modal is up.
+  const looksOpen = () => document.body.classList.contains('looks-open');
+
+  // Preview dresses the model without touching storage; previewBase holds the
+  // look to fall back to until the user either commits or leaves the card.
+  let previewBase = null;
+  function previewPreset(preset) {
+    if (!preset) return;
+    if (!previewBase) previewBase = exportPreset();
+    applyChanged(loadPresetState(preset));
+  }
+  // Sliding the pointer down the list would otherwise queue one full
+  // re-dress per row it crosses.
+  let previewTimer = null;
+  function schedulePreview(preset) {
+    clearTimeout(previewTimer);
+    previewTimer = setTimeout(() => previewPreset(preset), 90);
+  }
+  function endPreview() {
+    clearTimeout(previewTimer);
+    if (!previewBase) return;
+    const base = previewBase;
+    previewBase = null;
+    applyChanged(loadPresetState(base));
+  }
+
+  const Presets = (function () {
+    const url = '/api/wardrobe.php';
+    let cache = [];
+
+    async function list() {
+      const r = await fetch(url, { credentials: 'same-origin' });
+      if (!r.ok) throw new Error('load failed');
+      cache = await r.json();
+      return cache;
+    }
+    async function save(name) {
+      const r = await fetch(url, {
+        method: 'POST',
+        credentials: 'same-origin',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ name, data: exportPreset() }),
+      });
+      if (!r.ok) throw new Error('save failed');
+      return list();
+    }
+    async function remove(id) {
+      const r = await fetch(`${url}?id=${encodeURIComponent(id)}`, {
+        method: 'DELETE', credentials: 'same-origin',
+      });
+      if (!r.ok) throw new Error('delete failed');
+      return list();
+    }
+    const find = (id) => cache.find(p => String(p.id) === String(id)) || null;
+
+    return { list, save, remove, find, get cache() { return cache; } };
+  })();
+
+  let looksEl = null, looksActiveId = null, clearWornHover = null;
+
+  function buildLooks() {
+    looksEl = document.createElement('div');
+    looksEl.className = 'wd-looks-modal';
+    looksEl.hidden = true;
+    looksEl.setAttribute('role', 'dialog');
+    looksEl.setAttribute('aria-modal', 'true');
+    looksEl.setAttribute('aria-label', 'Saved outfits');
+    looksEl.innerHTML = `<div class="wd-looks-backdrop"></div>
+      <div class="wd-looks-dialog">
+        <div class="wd-looks-side">
+          <div class="wd-optpop-head">
+            <div class="wd-optpop-title">Saved outfits</div>
+            <button type="button" class="wd-optpop-close" aria-label="Close saved outfits" title="Close">×</button>
+          </div>
+          <div class="wd-looks-save">
+            <input class="wd-looks-name" type="text" maxlength="60" placeholder="Name this outfit" aria-label="Outfit name">
+            <button type="button" class="ghost wd-looks-add">Save current</button>
+          </div>
+          <div class="wd-looks-list" role="list"></div>
+          <div class="wd-looks-hint"></div>
+        </div>
+        <div class="wd-looks-stage" aria-hidden="true"></div>
+      </div>`;
+    document.body.appendChild(looksEl);
+
+    const list = looksEl.querySelector('.wd-looks-list');
+    const hint = looksEl.querySelector('.wd-looks-hint');
+    const nameInput = looksEl.querySelector('.wd-looks-name');
+    const coarsePointer = matchMedia('(pointer: coarse)');
+
+    const stamp = (t) => {
+      const d = new Date(t * 1000);
+      return d.toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
+    };
+
+    function render() {
+      list.innerHTML = '';
+      for (const p of Presets.cache) {
+        const row = document.createElement('div');
+        row.className = 'wd-look';
+        row.setAttribute('role', 'listitem');
+        row.classList.toggle('on', String(p.id) === String(looksActiveId));
+
+        const main = document.createElement('button');
+        main.type = 'button';
+        main.className = 'wd-look-main';
+        main.innerHTML = `<span class="wd-look-name"></span><span class="wd-look-date">${stamp(p.updated_at)}</span>`;
+        main.querySelector('.wd-look-name').textContent = p.name;
+
+        const preview = () => schedulePreview(p.data);
+        if (!coarsePointer.matches) {
+          main.addEventListener('pointerenter', preview);
+          main.addEventListener('pointerleave', endPreview);
+        }
+        main.addEventListener('focus', preview);
+        main.addEventListener('blur', endPreview);
+        main.addEventListener('click', () => {
+          applyPreset(p.data);
+          looksActiveId = p.id;
+          nameInput.value = p.name;
+          render();
+        });
+
+        const del = document.createElement('button');
+        del.type = 'button';
+        del.className = 'wd-look-del';
+        del.title = `Delete "${p.name}"`;
+        del.setAttribute('aria-label', `Delete ${p.name}`);
+        del.textContent = '×';
+        del.addEventListener('click', async () => {
+          if (!window.confirm(`Delete the outfit "${p.name}"?`)) return;
+          endPreview();
+          try {
+            await Presets.remove(p.id);
+            if (String(looksActiveId) === String(p.id)) looksActiveId = null;
+            render();
+          } catch (e) { hint.textContent = 'Could not delete that outfit.'; }
+        });
+
+        row.append(main, del);
+        list.appendChild(row);
+      }
+      if (!Presets.cache.length) {
+        const empty = document.createElement('div');
+        empty.className = 'wd-looks-empty';
+        empty.textContent = 'No outfits saved yet. Dress Jun, then name and save the outfit.';
+        list.appendChild(empty);
+      }
+      hint.textContent = Presets.cache.length
+        ? (coarsePointer.matches ? 'Tap an outfit to wear it' : 'Hover an outfit to preview it on Jun · click to wear it')
+        : '';
+    }
+
+    async function saveCurrent() {
+      const name = nameInput.value.trim();
+      if (!name) { nameInput.focus(); return; }
+      endPreview();
+      try {
+        await Presets.save(name);
+        const saved = Presets.cache.find(p => p.name === name);
+        looksActiveId = saved ? saved.id : null;
+        render();
+      } catch (e) { hint.textContent = 'Could not save that outfit.'; }
+    }
+    looksEl.querySelector('.wd-looks-add').addEventListener('click', saveCurrent);
+    nameInput.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter') { e.preventDefault(); saveCurrent(); }
+    });
+    looksEl.querySelector('.wd-optpop-close').addEventListener('click', () => toggleLooks(false));
+    looksEl.querySelector('.wd-looks-backdrop').addEventListener('click', () => toggleLooks(false));
+    document.addEventListener('keydown', (e) => {
+      if (e.key === 'Escape' && !looksEl.hidden) toggleLooks(false);
+    });
+
+    // The dialog's right pane is an empty hole; the real Live2D stage is moved
+    // under it so the preview is the live model, not a second renderer.
+    const pane = looksEl.querySelector('.wd-looks-stage');
+    if (window.ResizeObserver) new ResizeObserver(syncStageHole).observe(pane);
+    window.addEventListener('resize', () => { if (!looksEl.hidden) syncStageHole(); });
+
+    looksEl.render = render;
+    render();
+    Presets.list().then(render).catch(() => { hint.textContent = 'Could not load your saved outfits.'; });
+  }
+
+  function syncStageHole() {
+    const stage = document.getElementById('stage');
+    if (!stage || !looksEl || looksEl.hidden) return;
+    const r = looksEl.querySelector('.wd-looks-stage').getBoundingClientRect();
+    if (!r.width || !r.height) return;
+    stage.style.inset = `${r.top}px ${innerWidth - r.right}px ${innerHeight - r.bottom}px ${r.left}px`;
+  }
+
+  function toggleLooks(force) {
+    if (!looksEl) buildLooks();
+    const open = force === undefined ? looksEl.hidden : force;
+    if (!open) endPreview();
+    looksEl.hidden = !open;
+    document.body.classList.toggle('looks-open', open);
+    if (open && clearWornHover) clearWornHover();
+    if (wdOverlay) wdOverlay.querySelector('.wd-looks').classList.toggle('on', open);
+    const stage = document.getElementById('stage');
+    if (open) {
+      syncStageHole();
+      Presets.list().then(looksEl.render).catch(() => {});
+      looksEl.querySelector('.wd-looks-name').focus();
+    } else if (stage) {
+      stage.style.inset = '';
+    }
+  }
+
   let wdOverlay = null, wdTooltip = null, wdGhost = null, wdUpdateExpand = null;
 
   const itemPatterns = (it) => it.colorPatterns || it.visibilityPatterns || [];
@@ -1362,9 +1645,10 @@ window.Outfit = (function () {
     wdOverlay = document.createElement('div');
     wdOverlay.className = 'wardrobe-overlay';
     wdOverlay.innerHTML = `<div class="wd-head">
-        <div class="wd-titles"><span class="wd-title">Annalie's Shop</span>
-        <span class="wd-hint"></span></div>
-        <div class="wd-actions"><button class="ghost wd-reset" type="button" title="Restore the default outfit">Reset</button>
+        <div class="wd-titles"><span class="wd-hint"></span></div>
+        <div class="wd-actions">
+        <button class="ghost wd-looks" type="button" title="Saved outfits">Outfits</button>
+        <button class="ghost wd-reset" type="button" title="Restore the default outfit">Reset</button>
         <button class="ghost wd-close" type="button" aria-label="Close wardrobe" title="Close">×</button></div></div>
       <div class="wd-main"><nav class="wd-rail" aria-label="Wardrobe sections"></nav><div class="wd-body"></div></div>`;
     const hint = wdOverlay.querySelector('.wd-hint');
@@ -1512,6 +1796,13 @@ window.Outfit = (function () {
       if (window.confirm('Restore Jun\'s default outfit and colors?')) reset();
     });
 
+    wdOverlay.querySelector('.wd-looks').addEventListener('click', () => toggleLooks());
+
+    clearWornHover = () => {
+      setHoveredItem(null);
+      wdTooltip.style.display = 'none';
+    };
+
     let removeDrag = null; // { key, x, y, removed }
     const beginRemoveDrag = (key, x, y) => {
       removeDrag = { key, x, y, removed: false };
@@ -1531,7 +1822,7 @@ window.Outfit = (function () {
       document.body.classList.toggle('wd-over-worn-item', !!key);
     };
     window.addEventListener('pointermove', (e) => {
-      if (!document.body.classList.contains('wardrobe-open')) return;
+      if (!document.body.classList.contains('wardrobe-open') || looksOpen()) return;
       if (removeDrag) {
         wdMoveGhost(e.clientX, e.clientY);
         if (!removeDrag.removed && Math.hypot(e.clientX - removeDrag.x, e.clientY - removeDrag.y) > 6) {
@@ -1556,7 +1847,8 @@ window.Outfit = (function () {
       }
     });
     window.addEventListener('pointerdown', (e) => {
-      if (!document.body.classList.contains('wardrobe-open') || e.pointerType === 'touch' || e.button !== 0) return;
+      if (!document.body.classList.contains('wardrobe-open') || looksOpen()) return;
+      if (e.pointerType === 'touch' || e.button !== 0) return;
       if (e.target && e.target.closest && e.target.closest('.wardrobe-overlay, .wd-optpop, .omega-color-picker, button, a, input, textarea, select, .composer, .conv-sidebar, .app-header')) return;
       const worn = wornDrawableMap();
       const hit = wornHitAt(e.clientX, e.clientY, worn);
@@ -1633,7 +1925,8 @@ window.Outfit = (function () {
     };
     const cancelRemoveTouch = () => clearRemoveTouch(true);
     window.addEventListener('touchstart', (e) => {
-      if (!document.body.classList.contains('wardrobe-open') || removeTouch || removeDrag || e.touches.length !== 1) return;
+      if (!document.body.classList.contains('wardrobe-open') || looksOpen()) return;
+      if (removeTouch || removeDrag || e.touches.length !== 1) return;
       if (e.target && e.target.closest && e.target.closest('.wardrobe-overlay, .wd-optpop, .omega-color-picker, button, a, input, textarea, select, .composer, .conv-sidebar, .app-header')) return;
       const touch = e.changedTouches[0];
       const worn = wornDrawableMap();
@@ -1660,7 +1953,7 @@ window.Outfit = (function () {
       window.addEventListener('touchcancel', cancelRemoveTouch, { capture: true, passive: true });
     }, { capture: true, passive: true });
     window.addEventListener('keydown', (e) => {
-      if (e.key === 'Escape' && document.body.classList.contains('wardrobe-open')) closeWardrobe();
+      if (e.key === 'Escape' && !looksOpen() && document.body.classList.contains('wardrobe-open')) closeWardrobe();
     });
 
     syncWardrobe();
@@ -1711,6 +2004,7 @@ window.Outfit = (function () {
       return;
     }
     document.body.classList.remove('wardrobe-open');
+    if (looksEl) toggleLooks(false);
     if (window.WardrobeReactions) WardrobeReactions.deactivate();
     closeOptionsPopup(false);
     wdTooltip.style.display = 'none';
@@ -1763,6 +2057,11 @@ window.Outfit = (function () {
       dress_alt: ['dress1'],
       socks: ['stockings'],
       catears: ['cat_ears'],
+      bikini: ['bikini_top', 'bikini_bot'],
+      swimsuit: ['bikini_top', 'bikini_bot'],
+      bikini_bottom: ['bikini_bot'],
+      hairclip: ['hair_clip'],
+      clip: ['hair_clip'],
     };
     const keys = aliases[item] || (ITEMS.some(it => it.key === item) ? [item] : []);
 

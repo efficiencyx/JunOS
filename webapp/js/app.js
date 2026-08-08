@@ -4,14 +4,14 @@
 // cycles into a TDZ error. Every URL in this graph - the <script> tag, the
 // imports below, and every ?v= inside js/app/ - must carry the same number.
 
-import { showAuthScreen } from './app/auth-screen.js?v=61';
+import { showAuthScreen } from './app/auth-screen.js?v=62';
 import { IDLE_AFTER_REPLY_MS, TYPING_POLL_MS, armIdleAfterReply, cancelActiveIdleNudge, cancelAutoReset, cancelIdleNudge, composerPlaceholder, consolidating, fleeActive, reportActivity, resetIdleNudge, scheduleAutoReset, scheduleIdleNudge, setCancelActiveIdleNudge, setConsolidating, showConsolidatingBubble, startFleeLock, syncConsolidationStatus } from './app/consolidation.js?v=61';
 import { chatInput, debugSystemPromptEl, devNoIdleChk, messagesEl, messagesEmpty, missingParamsEl, mobileConversationTitle, modelSelect, narrowSidebarQuery, reasoningSelect, sendBtn, sendButtonIdleMarkup, sendButtonStopMarkup, siteVolumeInput, stageEl, stageSkeleton, thinkChk } from './app/dom.js?v=61';
 import { announceMobileReply, faceBubble, hideFaceBubble, latestAssistantReply, restartFaceBubbleHide, scheduleFaceBubbleHide, scheduleFaceBubblePosition, setLatestAssistantReply, showFaceBubble } from './app/face-bubble.js?v=61';
 import { appendRaw, logAction, logMissing, logToolStatus, setStageStatus } from './app/logging.js?v=61';
 import { loadMood } from './app/mood.js?v=61';
 import { setSiteVolume, syncThinkToggle, updateSiteVolumeLabel, wireNameSettings } from './app/settings.js?v=61';
-import { loadConversation, refreshSidebar, setSidebarOpen } from './app/sidebar.js?v=62';
+import { loadConversation, refreshSidebar, setSidebarOpen } from './app/sidebar.js?v=63';
 import { makeNameFilter, makeStreamBuffer } from './app/stream-filters.js?v=61';
 import { escapeHtml, localTimeString, phoneMode } from './app/util.js?v=61';
 import { wireTts } from './app/wire-tts.js?v=61';
@@ -555,7 +555,7 @@ function showBoot() {
   await loadScripts([
     ['vendor/pixi.min.js', 'vendor/live2dcubismcore.min.js',
      'vendor/marked.min.js', 'vendor/purify.min.js',
-     'js/actions.js?v=10', 'js/outfit.js?v=34', 'js/touch.js?v=12',
+     'js/actions.js?v=10', 'js/outfit.js?v=42', 'js/touch.js?v=12',
      'js/mods.js?v=10', 'js/tts.js?v=16', 'js/voice.js?v=2',
      'js/voicemode.js?v=3', 'js/devhud.js?v=3', 'js/trip-loader.js?v=3',
      'js/wardrobe-open-lines.js?v=3', 'js/wardrobe-reactions.js?v=18',

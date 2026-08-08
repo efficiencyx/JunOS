@@ -26,6 +26,9 @@ export async function refreshSidebar() {
     const title = c.title || 'New conversation';
     conversationTitles.set(c.id, title);
     li.innerHTML = `<button class="conv-open" type="button"><span class="conv-title">${escapeHtml(title)}</span></button>`
+      + `<button class="conv-rename" type="button" title="Rename conversation" aria-label="Rename conversation">`
+      + `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M17 3a2.83 2.83 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z"/><path d="M15 5l4 4"/></svg>`
+      + `</button>`
       + `<button class="conv-delete" type="button" title="Delete conversation" aria-label="Delete conversation">`
       + `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/><path d="M10 11v6"/><path d="M14 11v6"/><path d="M9 6V4a2 2 0 0 1 2-2h2a2 2 0 0 1 2 2v2"/></svg>`
       + `</button>`;
@@ -35,6 +38,11 @@ export async function refreshSidebar() {
       setSidebarOpen(false);
       loadConversation(c.id);
     });
+    const renameBtn = li.querySelector('.conv-rename');
+    renameBtn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      startRename(li, c.id);
+    });
     const delBtn = li.querySelector('.conv-delete');
     delBtn.addEventListener('click', (e) => {
       e.stopPropagation();
@@ -43,6 +51,60 @@ export async function refreshSidebar() {
     ul.appendChild(li);
   }
   if (currentConversationId != null) setConversationTitle(conversationTitles.get(currentConversationId));
+}
+
+function startRename(li, id) {
+  if (!window.History) return;
+  const titleSpan = li.querySelector('.conv-title');
+  if (!titleSpan) return;
+  const oldTitle = conversationTitles.get(id) ?? titleSpan.textContent;
+
+  const input = document.createElement('input');
+  input.className = 'conv-title-input';
+  input.type = 'text';
+  input.value = oldTitle;
+  titleSpan.replaceWith(input);
+  input.focus();
+  input.select();
+
+  let settled = false;
+  const restore = (text) => {
+    const span = document.createElement('span');
+    span.className = 'conv-title';
+    span.textContent = text;
+    input.replaceWith(span);
+  };
+
+  const commit = async () => {
+    if (settled) return;
+    settled = true;
+    const next = input.value.trim();
+    if (!next || next === oldTitle) {
+      restore(oldTitle);
+      return;
+    }
+    try {
+      await History.rename(id, next);
+      conversationTitles.set(id, next);
+      restore(next);
+      if (id === currentConversationId) setConversationTitle(next);
+    } catch (e) {
+      ui.toast('Failed to rename conversation: ' + e.message, 'error');
+      restore(oldTitle);
+    }
+  };
+
+  input.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter') {
+      e.preventDefault();
+      commit();
+    } else if (e.key === 'Escape') {
+      e.preventDefault();
+      settled = true;
+      restore(oldTitle);
+    }
+  });
+  input.addEventListener('blur', commit);
 }
 
 async function deleteConversation(id, title) {
