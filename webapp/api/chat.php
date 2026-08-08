@@ -953,15 +953,6 @@ $db = db();
 if (!$idle && !$ephemeral) {
     $db->prepare('INSERT INTO messages (conversation_id, role, content, created_at) VALUES (?, ?, ?, ?)')
        ->execute([$convId, 'user', $lastUserMsg, $now]);
-
-    $titleRow = $db->prepare('SELECT title FROM conversations WHERE id=?');
-    $titleRow->execute([$convId]);
-    $conversationTitle = $titleRow->fetchColumn();
-    $titleRow->closeCursor();
-    if (!$conversationTitle) {
-        $db->prepare('UPDATE conversations SET title=? WHERE id=?')
-           ->execute([substr($lastUserMsg, 0, 60), $convId]);
-    }
 }
 
 ollama_evict_if_partially_offloaded($model);
@@ -1192,6 +1183,18 @@ if (!$sawError && $assistantBuffer !== '') {
     db()->prepare('INSERT INTO messages (conversation_id, role, content, created_at) VALUES (?, ?, ?, ?)')
         ->execute([$convId, 'assistant', $assistantBuffer, $now]);
     db()->prepare('UPDATE conversations SET updated_at=? WHERE id=?')->execute([$now, $convId]);
+
+    if (!$idle && !$ephemeral) {
+        $titleRow = db()->prepare('SELECT title FROM conversations WHERE id=?');
+        $titleRow->execute([$convId]);
+        $conversationTitle = $titleRow->fetchColumn();
+        $titleRow->closeCursor();
+        if (!$conversationTitle) {
+            $newTitle = generate_chat_title($lastUserMsg) ?: substr($lastUserMsg, 0, 60);
+            db()->prepare('UPDATE conversations SET title=? WHERE id=?')
+                ->execute([$newTitle, $convId]);
+        }
+    }
 }
 
 sse_done();

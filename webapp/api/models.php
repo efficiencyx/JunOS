@@ -70,9 +70,12 @@ if ($provider === 'openrouter') {
     header('Cache-Control: public, max-age=10');
     $data = http_get_json(rtrim(env_str('OLLAMA_URL', 'http://localhost:11434'), '/') . '/api/tags');
     if (is_array($data['models'] ?? null)) {
+        $titleModel = env_str('TITLE_MODEL', 'hf.co/efficiencyx/Titlewen-GGUF:F16');
         $models = [];
         foreach ($data['models'] as $m) {
-            if (isset($m['name'])) $models[] = $m['name'];
+            if (!isset($m['name'])) continue;
+            if ($m['name'] === $titleModel || stripos($m['name'], 'title') !== false) continue;
+            $models[] = $m['name'];
         }
     }
 }

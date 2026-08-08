@@ -33,6 +33,18 @@ if [ -n "${OLLAMA_MODELS_TO_PULL:-}" ]; then
   done
 fi
 
+if [ -n "${TITLE_MODEL:-}" ]; then
+  echo "[ollama-entrypoint] pulling $TITLE_MODEL"
+  ollama pull "$TITLE_MODEL" || echo "[ollama-entrypoint] pull failed: $TITLE_MODEL (will continue)"
+  # Load it CPU-only and pin it (keep_alive -1): titling must never take VRAM from the chat model.
+  echo "[ollama-entrypoint] pinning $TITLE_MODEL to CPU..."
+  curl -s -X POST "http://127.0.0.1:11434/api/generate" \
+    -H 'Content-Type: application/json' \
+    -d "{\"model\":\"$TITLE_MODEL\",\"prompt\":\"\",\"stream\":false,\"keep_alive\":-1,\"options\":{\"num_gpu\":0}}" >/dev/null \
+    && echo "[ollama-entrypoint] title model pinned" \
+    || echo "[ollama-entrypoint] title model pin failed (non-fatal)"
+fi
+
 # Pre-warm: load the chat model into VRAM now so the first user message
 # doesn't pay the ~2 min cold-load cost.
 if [ -n "$CHAT_MODEL" ]; then

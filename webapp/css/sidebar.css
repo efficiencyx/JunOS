@@ -219,6 +219,7 @@
   white-space: nowrap;
 }
 
+.conv-rename,
 .conv-delete {
   flex-shrink: 0;
   display: inline-flex;
@@ -235,10 +236,26 @@
   opacity: 0;
   transition: opacity .12s, background .12s, color .12s;
 }
+.conv-item:hover .conv-rename,
+.conv-item.active .conv-rename,
 .conv-item:hover .conv-delete,
 .conv-item.active .conv-delete { opacity: 1; }
+.conv-rename:hover { background: var(--bg-hover); color: var(--fg); }
+.conv-rename:focus-visible { opacity: 1; }
 .conv-delete:hover { background: rgba(255,138,138,.14); color: var(--danger); }
 .conv-delete:focus-visible { opacity: 1; }
+
+.conv-title-input {
+  flex: 1;
+  min-width: 0;
+  width: 100%;
+  font: inherit;
+  color: inherit;
+  background: var(--bg-hover);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  padding: 2px 6px;
+}
 
 .sidebar-footer {
   border-top: 1px solid var(--border);
