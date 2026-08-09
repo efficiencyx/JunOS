@@ -1,9 +1,9 @@
-import { IDLE_AFTER_REPLY_MS, scheduleIdleNudge } from './consolidation.js?v=61';
-import { ttsChk, ttsEngineSelect, ttsLangRow, ttsLangSelect, ttsSpeedInput, ttsVoiceSelect } from './dom.js?v=61';
-import { finishPendingFaceBubbleHide } from './face-bubble.js?v=61';
-import { logAction } from './logging.js?v=61';
-import { syncVoiceDeps, updateTtsSpeedLabel } from './settings.js?v=61';
-import { escapeHtml } from './util.js?v=61';
+import { IDLE_AFTER_REPLY_MS, scheduleIdleNudge } from './consolidation.js?v=70';
+import { ttsChk, ttsEngineSelect, ttsLangRow, ttsLangSelect, ttsSpeedInput, ttsVoiceSelect } from './dom.js?v=70';
+import { finishPendingFaceBubbleHide } from './face-bubble.js?v=70';
+import { logAction } from './logging.js?v=70';
+import { syncVoiceDeps, updateTtsSpeedLabel } from './settings.js?v=70';
+import { escapeHtml } from './util.js?v=70';
 
 // Pulled out of bootstrap(): TTS is optional and its wiring is one long block of
 // preference plumbing that has nothing to say about the rest of startup.

@@ -9,7 +9,13 @@ window.DevHud = (function () {
   let pollTimer = null;
   let visible = false;
 
-  let gen = { t0: 0, tFirst: 0, tokens: 0, final: null };
+  let gen = { t0: 0, tFirst: 0, tLast: 0, active: 0, chunks: 0, final: null };
+
+  // A turn can stall for seconds between rounds while a tool runs, and those gaps
+  // are not decode time - charging them to the rate makes the live figure read far
+  // below what the model is doing. Only intervals short enough to be token spacing
+  // count toward it.
+  const MAX_TOKEN_GAP_MS = 400;
 
   function fmtBytes(n) {
     if (!n) return '-';
@@ -144,18 +150,27 @@ window.DevHud = (function () {
 
 
   function beginGen() {
-    gen = { t0: performance.now(), tFirst: 0, tokens: 0, final: null };
-    put('tps', '…'); put('ttft', '…'); put('gentok', '0'); put('ptok', '-'); put('ctx', '-');
+    gen = { t0: performance.now(), tFirst: 0, tLast: 0, active: 0, chunks: 0, final: null };
+    put('tps', '…'); put('ttft', '…'); put('gentok', '~0'); put('ptok', '-'); put('ctx', '-');
   }
 
+  // Counts stream chunks, not tokens: on the ollama path the two coincide, but an
+  // OpenAI-compatible upstream can batch several tokens into one delta. Everything
+  // derived from it is therefore shown as an estimate until the upstream's own
+  // counters land in setGenStats.
   function tickToken() {
     if (!gen.t0) return;
     const now = performance.now();
-    if (!gen.tFirst) { gen.tFirst = now; put('ttft', ((now - gen.t0) / 1000).toFixed(2) + ' s'); }
-    gen.tokens++;
-    const dt = (now - gen.tFirst) / 1000;
-    if (dt > 0.05) put('tps', (gen.tokens / dt).toFixed(1));
-    put('gentok', String(gen.tokens));
+    if (!gen.tFirst) {
+      gen.tFirst = now;
+      put('ttft', ((now - gen.t0) / 1000).toFixed(2) + ' s');
+    } else {
+      gen.active += Math.min(now - gen.tLast, MAX_TOKEN_GAP_MS);
+    }
+    gen.tLast = now;
+    gen.chunks++;
+    if (gen.active > 250) put('tps', '~' + (gen.chunks / (gen.active / 1000)).toFixed(1));
+    put('gentok', '~' + gen.chunks);
   }
 
   function setGenStats(s) {

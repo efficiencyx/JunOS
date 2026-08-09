@@ -1,0 +1,133 @@
+/* The welcome-back scene. The chat chrome is blurred with a filter on the
+   elements themselves rather than a backdrop-filter overlay: the Live2D canvas
+   sits at z-index 40 between the chrome and any overlay we could add, so a
+   backdrop blur would take the model down with the background. */
+
+body.welcome-scene .app-header,
+body.welcome-scene .conv-sidebar,
+body.welcome-scene .chat-panel {
+  filter: blur(7px) saturate(.55) brightness(.7);
+  opacity: .5;
+  transition: filter .5s ease, opacity .5s ease;
+  pointer-events: none;
+}
+.app-header,
+.conv-sidebar,
+.chat-panel { transition: filter .45s ease, opacity .45s ease; }
+
+.welcome-scene-fx {
+  position: fixed;
+  inset: 0;
+  z-index: 45; /* over the stage (40), under the dialogue box (55) */
+  pointer-events: none;
+  opacity: 0;
+  transition: opacity .55s ease;
+}
+body.welcome-scene .welcome-scene-fx { opacity: 1; }
+.welcome-scene-fx[hidden] { display: none; }
+
+/* Vignette plus a bloom in her accent colour, which is already the mood colour
+   painted by app/mood.js - so the scene is tinted by the relationship without
+   this file knowing anything about tiers. */
+.welcome-scene-fx::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background:
+    radial-gradient(120% 90% at 50% 45%, transparent 38%,
+      color-mix(in srgb, var(--bg) 72%, transparent) 78%,
+      color-mix(in srgb, #000 82%, transparent) 100%),
+    radial-gradient(60% 45% at 50% 42%,
+      color-mix(in srgb, var(--scene-tint, var(--accent)) 22%, transparent) 0%,
+      transparent 70%);
+}
+
+/* Letterbox. Cheap, and it says "this is a scene" faster than anything else. */
+.welcome-scene-fx::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background:
+    linear-gradient(to bottom, #000 0 var(--bar), transparent var(--bar)),
+    linear-gradient(to top, #000 0 var(--bar), transparent var(--bar));
+  --bar: 0px;
+  transition: --bar .6s ease;
+}
+body.welcome-scene .welcome-scene-fx::after { --bar: 7vh; }
+
+@property --bar {
+  syntax: "<length>";
+  inherits: false;
+  initial-value: 0px;
+}
+
+/* A single accent hairline that sweeps down once as she appears - the same
+   scanline vocabulary as the boot terminal. */
+.welcome-scene-sweep {
+  position: absolute;
+  left: 0;
+  right: 0;
+  height: 2px;
+  top: 0;
+  background: linear-gradient(90deg, transparent,
+    color-mix(in srgb, var(--scene-tint, var(--accent)) 85%, transparent), transparent);
+  opacity: 0;
+}
+body.welcome-scene .welcome-scene-sweep { animation: welcomeSweep 1.15s ease-out .15s both; }
+
+@keyframes welcomeSweep {
+  0%   { opacity: 0; transform: translateY(0); }
+  15%  { opacity: .9; }
+  100% { opacity: 0; transform: translateY(100vh); }
+}
+
+/* The dialogue box is the one thing that must stay legible over the vignette. */
+body.welcome-scene .face-bubble {
+  filter: drop-shadow(0 10px 28px rgb(0 0 0 / .75));
+}
+body.welcome-scene .fb-name {
+  border-left-color: color-mix(in srgb, var(--scene-tint, var(--accent)) 80%, #ec0054);
+}
+
+/* Every line re-plays this, not just the first: welcome.js replays .intro per
+   line so each one physically opens instead of the text swapping in place. */
+body.welcome-scene .face-bubble.intro .fb-name {
+  animation: welcomeNameIn .26s cubic-bezier(.16, 1.1, .3, 1) both;
+}
+body.welcome-scene .face-bubble.intro .fb-text {
+  transform-origin: top;
+  animation: welcomeBoxOpen .34s cubic-bezier(.16, 1.25, .3, 1) .16s both;
+}
+body.welcome-scene .face-bubble.intro .fb-text > * {
+  animation: welcomeTextIn .3s ease .34s both;
+}
+
+@keyframes welcomeNameIn {
+  from { opacity: 0; transform: translateX(-14px); clip-path: inset(0 100% 0 0); }
+  to   { opacity: 1; transform: none; clip-path: inset(0 0 0 0); }
+}
+/* Overshoots on the way open so the panel snaps rather than eases. */
+@keyframes welcomeBoxOpen {
+  0%   { transform: scaleY(0);    opacity: .35; }
+  70%  { transform: scaleY(1.07); opacity: 1; }
+  100% { transform: scaleY(1);    opacity: 1; }
+}
+@keyframes welcomeTextIn {
+  from { opacity: 0; transform: translateY(4px); }
+  to   { opacity: 1; transform: none; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  body.welcome-scene .face-bubble.intro .fb-name,
+  body.welcome-scene .face-bubble.intro .fb-text,
+  body.welcome-scene .face-bubble.intro .fb-text > * { animation: none; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .welcome-scene-fx,
+  body.welcome-scene .app-header,
+  body.welcome-scene .conv-sidebar,
+  body.welcome-scene .chat-panel { transition: none; }
+  body.welcome-scene .welcome-scene-fx::after { --bar: 0px; transition: none; }
+  body.welcome-scene .welcome-scene-sweep { animation: none; }
+}

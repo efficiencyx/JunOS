@@ -187,6 +187,20 @@ function memory_file_path(int $userId): string {
     return memory_dir() . '/user-' . $userId . '.jsonl';
 }
 
+// A note saying "tomorrow" is only readable next to the day it was written, but
+// stamping every note costs a category off the tail of the context budget - so
+// only the ones whose wording is anchored to their own writing date get a date.
+const MEMORY_RELATIVE_TIME_RE = '/\b(today|tonight|tomorrow|yesterday|this (?:morning|afternoon|evening|week|month|weekend)|last (?:night|week|month|weekend)|next (?:week|month|weekend|monday|tuesday|wednesday|thursday|friday|saturday|sunday)|in (?:a few|a couple of|\d{1,2}) (?:days?|weeks?|months?)|days? from now|weeks? from now)\b/i';
+
+function memory_note_stamp(array $note): string {
+    if (!preg_match(MEMORY_RELATIVE_TIME_RE, (string)$note['text'])) return '';
+    $created = (int)($note['created'] ?? 0);
+    if ($created <= 0) return '';
+    $days = (int)floor((time() - $created) / 86400);
+    $ago = $days <= 0 ? 'today' : ($days === 1 ? '1 day ago' : $days . ' days ago');
+    return '(noted ' . date('l j F Y', $created) . ', ' . $ago . ') ';
+}
+
 function memory_normalize_entry(string $memory, string $category): array {
     $memory = trim(preg_replace('/\s+/', ' ', $memory));
     $category = memory_category_note_slug($category);
@@ -771,6 +785,43 @@ function consolidation_touch(int $userId, ?bool $enabled = null): void {
         'INSERT INTO memory_consolidation (user_id, last_activity, enabled) VALUES (?, ?, ?)
          ON CONFLICT(user_id) DO UPDATE SET last_activity = excluded.last_activity, enabled = excluded.enabled'
     )->execute([$userId, $enabled ? time() : 0, $enabled ? 1 : 0]);
+}
+
+// Lines consolidation decided Jun wants to say the next time Anon appears. The
+// queue is drained on read: a refresh two minutes later must not replay it.
+const WELCOME_MAX_MESSAGES = 3;
+const WELCOME_MAX_CHARS = 240;
+
+function welcome_queue_set(int $userId, array $messages): void {
+    $clean = [];
+    foreach ($messages as $message) {
+        if (!is_string($message)) continue;
+        $text = trim(preg_replace('/\s+/', ' ', $message));
+        if ($text === '') continue;
+        $clean[] = mb_substr($text, 0, WELCOME_MAX_CHARS);
+        if (count($clean) >= WELCOME_MAX_MESSAGES) break;
+    }
+    if (!$clean) return;
+    db()->prepare(
+        'INSERT INTO welcome_queue (user_id, messages, generated_at) VALUES (?, ?, ?)
+         ON CONFLICT(user_id) DO UPDATE SET messages = excluded.messages, generated_at = excluded.generated_at'
+    )->execute([$userId, json_encode($clean, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES), time()]);
+}
+
+function welcome_queue_read(int $userId, bool $drain = true): array {
+    try {
+        $stmt = db()->prepare('SELECT messages FROM welcome_queue WHERE user_id = ?');
+        $stmt->execute([$userId]);
+        $raw = $stmt->fetchColumn();
+        if ($raw === false) return [];
+        if ($drain) db()->prepare('DELETE FROM welcome_queue WHERE user_id = ?')->execute([$userId]);
+        $messages = json_decode((string)$raw, true);
+        if (!is_array($messages)) return [];
+        return array_values(array_filter($messages, fn($m) => is_string($m) && trim($m) !== ''));
+    } catch (Throwable $e) {
+        log_event(['msg' => 'welcome_queue_read_error', 'user_id' => $userId, 'err' => $e->getMessage()]);
+        return [];
+    }
 }
 
 function require_user(): array {

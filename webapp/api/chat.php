@@ -501,7 +501,7 @@ function memory_recent_context(int $userId): string {
             foreach ($data['notes'] as $note) {
                 $updated = max($updated, $note['updated']);
                 $text = preg_replace('/\[\[([^\]|#]+)(?:[|#][^\]]*)?\]\]/u', '$1', $note['text']);
-                $bullets[] = '- ' . trim(preg_replace('/\s+/', ' ', $text));
+                $bullets[] = '- ' . memory_note_stamp($note) . trim(preg_replace('/\s+/', ' ', $text));
             }
             $sections[] = [
                 'updated' => $updated,
@@ -510,7 +510,9 @@ function memory_recent_context(int $userId): string {
         }
         if (!$sections) return '';
         usort($sections, fn($a, $b) => $b['updated'] <=> $a['updated']);
-        $prefix = "## Durable memory notes\n";
+        $prefix = "## Durable memory notes\n"
+            . "Where a note carries the day you wrote it, anything said in relative terms - "
+            . "\"tomorrow\", \"next week\" - is relative to that day, not to now.\n";
         $render = function () use (&$sections, $prefix): string {
             return $prefix . implode("\n\n", array_column($sections, 'text'));
         };
@@ -816,14 +818,15 @@ if ($convId > 0) {
 }
 
 $nowStr = $clientTime !== '' ? $clientTime : date('l, F j, Y \a\t g:i A T');
+// Kept directly above the notes: dated notes are only readable against it.
+$contextParts[] = "## Current date and time\nIt is currently " . $nowStr . ".";
+
 $memoryBlock = memory_recent_context((int)$user['id']);
 if ($memoryBlock !== '') $contextParts[] = $memoryBlock;
 
 if ($convSummary !== '') {
     $contextParts[] = "## Story so far (earlier in THIS conversation)\n" . $convSummary;
 }
-
-$contextParts[] = "## Current date and time\nIt is currently " . $nowStr . ".";
 
 function lore_retrieve(string $lastUserMsg): string {
     if ($lastUserMsg === '') return '';
@@ -980,7 +983,18 @@ for ($round = 0; $round < 3; $round++) {
         $result = provider_stream_round($PROVIDER, $upstreamPayload, 'sse_send', $round);
         $roundContent = $result['content'];
         $toolCalls = $result['tool_calls'];
-        if ($result['stats'] !== null) $stats = $result['stats'];
+        if ($result['stats'] !== null) {
+            // Generation is spread over every tool round, so those counters accumulate.
+            // The prompt ones do not: each round re-sends the whole transcript including
+            // the previous round's output, so the last round's figure is the real one.
+            $prev = $stats;
+            $stats = $result['stats'];
+            if ($prev !== null) {
+                $stats['eval_count'] += $prev['eval_count'];
+                $stats['eval_duration'] += $prev['eval_duration'];
+                $stats['total_duration'] += $prev['total_duration'];
+            }
+        }
         if ($result['done_reason'] !== '') $doneReason = $result['done_reason'];
         if ($result['stream_error']) $sawError = true;
 
