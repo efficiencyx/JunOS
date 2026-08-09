@@ -1,8 +1,8 @@
-import { abortFn, currentConversationId, runChat } from '../app.js?v=62';
-import { chatInput, consolidationBanner, consolidationSub, consolidationTitle, devNoIdleChk, fleeEtaEl, fleeOverlay, fleeReasonEl, sendBtn, voiceChk } from './dom.js?v=61';
-import { showFaceBubble } from './face-bubble.js?v=61';
-import { logAction } from './logging.js?v=61';
-import { escapeHtml, formatElapsed } from './util.js?v=61';
+import { abortFn, currentConversationId, runChat } from '../app.js?v=70';
+import { chatInput, consolidationBanner, consolidationSub, consolidationTitle, devNoIdleChk, fleeEtaEl, fleeOverlay, fleeReasonEl, sendBtn, voiceChk } from './dom.js?v=70';
+import { showFaceBubble } from './face-bubble.js?v=70';
+import { logAction } from './logging.js?v=70';
+import { escapeHtml, formatElapsed } from './util.js?v=70';
 
 const BUSY_LINES = [
   "Hang on, ${p}, I'm defragging my SSD.",
@@ -58,6 +58,7 @@ const MAX_IDLE_NUDGES = 3;
 const CONSOLIDATION_PHASES = {
   notes: 'Re-reading what you said and writing down what matters',
   journal: 'Rewriting her journal of the two of you',
+  welcome: 'Deciding what she wants to tell you when you get back',
 };
 const CONSOLIDATION_PHASE_UNKNOWN = 'Working through everything since you last spoke';
 const CONSOLIDATION_SLOW_AFTER_S = 90;

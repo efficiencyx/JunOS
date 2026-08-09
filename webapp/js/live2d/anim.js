@@ -1,7 +1,7 @@
-import { LERP_TAU_MS, app, currentValues, forcedPartOpacity, loops, markDirty, model, paramDefault, paramIndex, paramMax, paramMin, pendingSequences, raw, scheduleSequence, startLoop, stopLoop, targetParams } from '../live2d.js?v=61';
-import { cameraTween } from './camera.js?v=61';
-import { clamp } from './geometry.js?v=61';
-import { S } from './state.js?v=61';
+import { LERP_TAU_MS, app, currentValues, forcedPartOpacity, loops, markDirty, model, paramDefault, paramIndex, paramMax, paramMin, pendingSequences, raw, scheduleSequence, startLoop, stopLoop, targetParams } from '../live2d.js?v=70';
+import { cameraTween } from './camera.js?v=70';
+import { clamp } from './geometry.js?v=70';
+import { S } from './state.js?v=70';
 
 const ACTIVE_FPS = 60;
 const IDLE_FPS = 30;
@@ -74,12 +74,36 @@ function moodTier() {
   return 'neutral';
 }
 
+function daypart() {
+  const h = new Date().getHours();
+  if (h < 5) return 'night';
+  if (h < 11) return 'morning';
+  if (h < 18) return 'day';
+  if (h < 23) return 'evening';
+  return 'night';
+}
+
+// Multiplies the mood-derived fidget delay: she settles at night and after
+// midnight barely moves, while evening is when she has energy to spend.
+const DAYPART_PACE = { night: 2.1, morning: 1.35, day: 1, evening: 0.85 };
+
+// Applied on top of the mood baseline, so a happy 2am still reads as tired.
+const DAYPART_BASELINE = {
+  night:   { eyeOpen: -0.28, browY: -0.15, breath: 1.5, ear: -0.4 },
+  morning: { eyeOpen: -0.12, browY: -0.05, breath: 1.2, ear: -0.15 },
+  day:     { eyeOpen: 0, browY: 0, breath: 1, ear: 0 },
+  evening: { eyeOpen: 0, browY: 0.05, breath: 0.9, ear: 0.1 },
+};
+
 function trySet(param, value) {
   if (paramIndex.has(param)) targetParams.set(param, clamp(param, value));
 }
 
 function applyMoodBaseline() {
   const { warmth, fear } = moodFactors();
+  const hour = DAYPART_BASELINE[daypart()];
+  // Fear overrides tiredness: she is not drowsy while she is frightened.
+  const drowsy = 1 - Math.min(1, fear / 0.4);
 
   trySet('ParamMouthForm', warmth > 0 ? warmth * 0.6 : warmth * 0.4);
   const brow = warmth * 0.4 - fear * 0.6;
@@ -87,17 +111,20 @@ function applyMoodBaseline() {
   trySet('ParamBrowREmote', brow);
   trySet('ParamBrowLRot', fear * 0.3);
   trySet('ParamBrowRRot', -fear * 0.3);
-  trySet('ParamBrowLY', warmth * 0.2 + fear * 0.3);
-  trySet('ParamBrowRY', warmth * 0.2 + fear * 0.3);
+  const browY = warmth * 0.2 + fear * 0.3 + hour.browY * drowsy;
+  trySet('ParamBrowLY', browY);
+  trySet('ParamBrowRY', browY);
 
-  const ear = fear > 0.3 ? -1 : (warmth > 0.3 ? 1 : (warmth < -0.3 ? -0.6 : 0));
+  let ear = fear > 0.3 ? -1 : (warmth > 0.3 ? 1 : (warmth < -0.3 ? -0.6 : 0));
+  ear += hour.ear * drowsy;
   trySet('ParamEarL', ear);
   trySet('ParamEarR', ear);
 
   trySet('ParamEyesHappy', warmth >= 0.7 && fear === 0 ? 0.6 : 0);
   trySet('ParamBlush', warmth >= 0.7 && fear === 0 ? 0.25 : 0);
   trySet('ParamIrisZoom', -0.4 * fear);
-  trySet('ParamEyeOpen', fear > 0.3 ? 1 : (warmth < -0.4 ? 0.7 : 1));
+  const eyeOpen = fear > 0.3 ? 1 : (warmth < -0.4 ? 0.7 : 1);
+  trySet('ParamEyeOpen', eyeOpen + hour.eyeOpen * drowsy);
 
   if (fear > 0.4) {
     tryLoop('ParamHeadZ', 0.01 + 0.02 * fear, 220);
@@ -111,7 +138,7 @@ function applyMoodBaseline() {
     trySet('ParamHeadZ', paramDefault.get('ParamHeadZ') || 0);
     trySet('ParamHeadX', paramDefault.get('ParamHeadX') || 0);
     trySet('ParamBodyX', paramDefault.get('ParamBodyX') || 0);
-    tryLoop('ParamBodyY', warmth > 0.4 ? 0.2 : 0.15, warmth > 0.4 ? 3000 : 3800);
+    tryLoop('ParamBodyY', warmth > 0.4 ? 0.2 : 0.15, (warmth > 0.4 ? 3000 : 3800) * hour.breath);
   }
 }
 let blinkPhase = null; // { startMs, closeMs, holdMs, openMs }
@@ -129,6 +156,9 @@ function tryLoop(param, amplitude, period_ms) {
 
 function triggerBlink() {
   if (!paramIndex.has('ParamEyeOpen')) return;
+  // A yawn or a doze holds the eyes shut for its whole run; blinking underneath
+  // it snaps them back open mid-sequence.
+  if (pendingSequences.some(s => s.param === 'ParamEyeOpen')) return;
   blinkPhase = { startMs: performance.now(), closeMs: 70, holdMs: 50, openMs: 120 };
 }
 
@@ -209,6 +239,32 @@ const FIDGETS = [
   ] },
   { moods: ['scared'], kind: 'pose', param: 'ParamArmLUp', value: -1, pairValue: { ParamArmRUp: -1 }, hold: 2600 },
   { moods: ['nervous'], kind: 'pose', param: 'ParamArmLRot', value: 0.2, pairValue: { ParamArmRRot: -0.2 }, hold: 1200 },
+
+  { parts: ['night', 'morning'], kind: 'seq', param: 'ParamMouthOpen', steps: [
+    { params: { ParamMouthOpen: 0.35, ParamEyeOpen: 0.5 }, dt_ms: 0 },
+    { params: { ParamMouthOpen: 1, ParamEyeOpen: 0, ParamBrowLY: 0.4, ParamBrowRY: 0.4 }, dt_ms: 500 },
+    { params: { ParamMouthOpen: 0.8, ParamEyeOpen: 0 }, dt_ms: 900 },
+    { params: { ParamMouthOpen: 0, ParamEyeOpen: 1, ParamBrowLY: 0, ParamBrowRY: 0 }, dt_ms: 700 },
+  ] },
+  { parts: ['night'], kind: 'seq', param: 'ParamEyeOpen', steps: [
+    { params: { ParamEyeOpen: 0.15 }, dt_ms: 0 },
+    { params: { ParamEyeOpen: 0.15 }, dt_ms: 2600 },
+    { params: { ParamEyeOpen: 1 }, dt_ms: 500 },
+  ] },
+  { parts: ['night'], kind: 'seq', param: 'ParamHeadY', steps: [
+    { params: { ParamHeadY: -0.5, ParamEyeOpen: 0.2 }, dt_ms: 0 },
+    { params: { ParamHeadY: -0.55, ParamEyeOpen: 0.1 }, dt_ms: 2200 },
+    { params: { ParamHeadY: 0, ParamEyeOpen: 1 }, dt_ms: 600 },
+  ] },
+  { parts: ['night'], kind: 'pose', param: 'ParamArmLUp', value: 0.4, pairValue: { ParamArmLRot: 0.5 }, hold: 2000 },
+  { parts: ['morning'], kind: 'seq', param: 'ParamArmLUp', steps: [
+    { params: { ParamArmLUp: 1, ParamArmRUp: 1, ParamBodyY: 0.3, ParamEyeOpen: 0.2 }, dt_ms: 0 },
+    { params: { ParamArmLUp: 1, ParamArmRUp: 1, ParamBodyY: 0.35, ParamMouthOpen: 0.4 }, dt_ms: 1100 },
+    { params: { ParamArmLUp: 0, ParamArmRUp: 0, ParamBodyY: 0, ParamMouthOpen: 0, ParamEyeOpen: 1 }, dt_ms: 800 },
+  ] },
+  { parts: ['evening'], kind: 'loop', param: 'ParamTailWiggle', amp: 0.7, period: 750, duration: 3000 },
+  { parts: ['evening'], kind: 'loop', param: 'ParamBodyX', amp: 0.35, period: 2400, duration: 4800 },
+  { parts: ['day'], kind: 'loop', param: 'ParamEyeballLX', amp: 0.45, period: 2000, duration: 4000, pair: 'ParamEyeballRX' },
 ];
 
 const FIDGET_DELAYS = {
@@ -222,6 +278,11 @@ const FIDGET_DELAYS = {
 function runFidget(f) {
   if (f.kind === 'seq') {
     scheduleSequence(f.steps);
+    // A sequence's last step is an absolute value, so anything it touched that
+    // the baseline also owns (eyes, brows, mouth form) stays where the sequence
+    // left it until the gauges next move. Restore once it has finished.
+    const total = f.steps.reduce((sum, s) => sum + s.dt_ms, 0);
+    setTimeout(() => { if (idleActive) applyMoodBaseline(); }, total + 200);
     return;
   }
   if (f.kind === 'pose') {
@@ -248,20 +309,41 @@ function runFidget(f) {
   }, f.duration);
 }
 
+let lastDaypart = '';
+let fidgetsEnabled = true;
+
+// Blinking deliberately keeps running: a scripted scene wants the arms and head
+// left alone, but a model that stops blinking for ten seconds reads as frozen.
+export function setFidgetsEnabled(on) {
+  fidgetsEnabled = !!on;
+  if (fidgetsEnabled && idleActive) scheduleFidget();
+}
+
 function scheduleFidget() {
   if (fidgetTimeout) clearTimeout(fidgetTimeout);
   const tier = moodTier();
+  const part = daypart();
   const [lo, hi] = FIDGET_DELAYS[tier] || FIDGET_DELAYS.neutral;
-  const delay = lo + Math.random() * (hi - lo);
+  const pace = DAYPART_PACE[part] || 1;
+  const delay = (lo + Math.random() * (hi - lo)) * pace;
   fidgetTimeout = setTimeout(() => {
     if (!idleActive) return;
+    if (!fidgetsEnabled) return; // setFidgetsEnabled re-arms the loop
+    const now = daypart();
+    // The clock rolls over during long sessions; the baseline is otherwise only
+    // recomputed when the gauges move, which could be hours.
+    if (now !== lastDaypart) {
+      lastDaypart = now;
+      applyMoodBaseline();
+    }
     const candidates = [];
     for (const f of FIDGETS) {
       if (!paramIndex.has(f.param)) continue;
       if (f.moods && !f.moods.includes(tier)) continue;
+      if (f.parts && !f.parts.includes(now)) continue;
       candidates.push(f);
-      // mood-specific fidgets get double weight so the mood reads clearly
-      if (f.moods) candidates.push(f);
+      // mood- and hour-specific fidgets get double weight so both read clearly
+      if (f.moods || f.parts) candidates.push(f);
     }
     if (candidates.length) {
       runFidget(candidates[Math.floor(Math.random() * candidates.length)]);
@@ -272,6 +354,7 @@ function scheduleFidget() {
 
 export function startIdle() {
   idleActive = true;
+  lastDaypart = daypart();
   applyMoodBaseline();
   scheduleBlink();
   scheduleFidget();
