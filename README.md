@@ -37,11 +37,9 @@ In short it's an AI wrapper
 </details>
 <details>
 <summary>Videos</summary>
-
-| Chat Interface | Wardrobe Interface |
+|:---:|Karaoke, Ignore The user singing|
+| <video src="https://github.com/user-attachments/assets/f27859ad-9fee-467b-84a8-4f7630d2e2b6" width="512" controls></video> | <img src="docs/screenshots/wardrobe.png" alt="Chat Interface" width="512"> |
 |:---:|:---:|
-| <video src="docs/screenshots/memories.mp4" width="320" height="240" controls></video> | <img src="docs/screenshots/wardrobe.png" alt="Chat Interface" width="512"> |
-| <img src="docs/screenshots/welcomeback.png" alt="Welcomeback Reaction" width="512"> | <img src="docs/screenshots/voicemode.png" alt="Voice Mode" width="512"> |
 
 </details>
 
@@ -53,7 +51,9 @@ In short it's an AI wrapper
 - **You can talk back.** Turn on the mic and it's a hands-free conversation.
 - **She has feelings about you.** Affection, trust and tension move with every exchange, and she treats you accordingly.
 - **She remembers.** She'll bring up things you said in other chats, and quietly keeps notes and a journal between sessions.
-- **She knows her lore.** Ask her about the game's world and she stays in canon.
+- **She knows her lore.** Ask her a
+
+bout the game's world and she stays in canon.
 - **She'll sing with you.** 🎤 Load a song, get timed lyrics, and see how close you got.
 - **Dress her up.** A whole wardrobe to toggle and recolor - she'll tell you what she thinks of it.
 - **Bring your mods.** Game-mod zips load straight into the browser.
