@@ -40,7 +40,7 @@ In short it's an AI wrapper
 
 | Chat Interface | Wardrobe Interface |
 |:---:|:---:|
-| <video src="docs/screenshots/memories.mp4" alt="Chat Interface" width="512"> | <img src="docs/screenshots/wardrobe.png" alt="Chat Interface" width="512"> |
+| <video src="docs/screenshots/memories.mp4" width="320" height="240" controls></video> | <img src="docs/screenshots/wardrobe.png" alt="Chat Interface" width="512"> |
 | <img src="docs/screenshots/welcomeback.png" alt="Welcomeback Reaction" width="512"> | <img src="docs/screenshots/voicemode.png" alt="Voice Mode" width="512"> |
 
 </details>
