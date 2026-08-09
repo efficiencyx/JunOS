@@ -1,10 +1,6 @@
 <div align="center">
 
-<img src="jun_os.png" alt="Jun OS" width="96">
-
-# Jun OS
-
-**A *Factorial Omega* fan project - give Jun a voice, and a mind of her own, all on your own machine.**
+<img src="docs/screenshots/hero.png" alt="Jun OS" width="1024">
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 ![PHP](https://img.shields.io/badge/PHP-8.2-777BB4?logo=php&logoColor=white)
@@ -14,7 +10,6 @@
 ![LLM](https://img.shields.io/badge/LLM-Ollama%20%C2%B7%20llama.cpp-black)
 ![Platforms](https://img.shields.io/badge/platforms-Linux%20%7C%20macOS%20%7C%20Windows-informational)
 ![No build step](https://img.shields.io/badge/frontend-no%20build%20step-success)
-![Made by fans](https://img.shields.io/badge/made%20by-fans-ff7096)
 
 [What she does](#what-she-does) · [Quickstart](#meet-her-in-five-minutes) · [Colab](#no-gpu-no-problem) · [Models](#her-brains) · [Config](#knobs-to-turn) · [Architecture](#under-the-hood) · [Help](#when-things-go-sideways)
 
@@ -31,15 +26,23 @@ In short it's an AI wrapper
 > 🔞 **Heads up - this is built on an adult (18+) game.** *Factorial Omega* is a mature, NSFW dating sim, and Jun OS carries that DNA: there's an adult-content gate at signup, and how spicy things get is up to you. Keep it on your own machine, keep it to consenting adults.
 
 > ⚠️ Unofficial fan project. Not affiliated with Incontinent Cell or the *Factorial Omega* team - we just like Jun a lot. All rights to the game and its characters belong to their owners.
-
 ## Look at her
+<details>
+<summary>Images</summary>
 
-<!-- TODO: drop real captures in docs/screenshots/ (chat.png, action.png, demo.gif).
-     A 10-second screen recording sells this way harder than a still does. -->
-
-| Chatting + reacting live | Talking, with lipsync |
+| <img src="docs/screenshots/chat.png" alt="Chat Interface" width="512"> | <img src="docs/screenshots/wardrobe.png" alt="Chat Interface" width="512"> |
 |:---:|:---:|
-| ![Chat interface](docs/screenshots/chat.png) | ![Character reacting](docs/screenshots/action.png) |
+| <img src="docs/screenshots/welcomeback.png" alt="Welcomeback Reaction" width="512"> | <img src="docs/screenshots/voicemode.png" alt="Voice Mode" width="512"> |
+
+</details>
+<details>
+<summary>Videos</summary>
+|:---:|Karaoke, Ignore The user singing|
+| <video src="https://github.com/user-attachments/assets/f27859ad-9fee-467b-84a8-4f7630d2e2b6" width="512" controls></video> | <img src="docs/screenshots/wardrobe.png" alt="Chat Interface" width="512"> |
+|:---:|:---:|
+
+</details>
+
 
 ## What she does
 
@@ -48,7 +51,9 @@ In short it's an AI wrapper
 - **You can talk back.** Turn on the mic and it's a hands-free conversation.
 - **She has feelings about you.** Affection, trust and tension move with every exchange, and she treats you accordingly.
 - **She remembers.** She'll bring up things you said in other chats, and quietly keeps notes and a journal between sessions.
-- **She knows her lore.** Ask her about the game's world and she stays in canon.
+- **She knows her lore.** Ask her a
+
+bout the game's world and she stays in canon.
 - **She'll sing with you.** 🎤 Load a song, get timed lyrics, and see how close you got.
 - **Dress her up.** A whole wardrobe to toggle and recolor - she'll tell you what she thinks of it.
 - **Bring your mods.** Game-mod zips load straight into the browser.

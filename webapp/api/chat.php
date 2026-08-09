@@ -142,6 +142,21 @@ function tool_catalog(): array {
         [
             'type' => 'function',
             'function' => [
+                'name' => 'search_lore',
+                'description' => 'Look up canon world facts - people, places, jobs, events from your own world - when you are unsure of a detail.',
+                'parameters' => [
+                    'type' => 'object',
+                    'properties' => [
+                        'query' => ['type' => 'string', 'description' => 'Name or topic to look up.'],
+                        'limit' => ['type' => 'integer', 'description' => 'Max facts, 1-6.'],
+                    ],
+                    'required' => ['query'],
+                ],
+            ],
+        ],
+        [
+            'type' => 'function',
+            'function' => [
                 'name' => 'memory_write',
                 'description' => 'Save a durable note about Anon (a preference, fact, plan, boundary, or something emotionally significant). Use often and proactively, not only when asked.',
                 'parameters' => [
@@ -202,7 +217,7 @@ function tool_context_block(): string {
     return <<<TXT
 ## Tool Availability
 
-You can call tools when they materially improve the accuracy, relevance, or continuity of your response. Do not use a lookup tool (`search_recent_chats`, `list_recent_chats`, `web_search`) when you can answer reliably without it.
+You can call tools when they materially improve the accuracy, relevance, or continuity of your response. Do not use a lookup tool (`search_lore`, `search_recent_chats`, `list_recent_chats`, `web_search`) when you can answer reliably without it.
 
 `memory_write` is an exception to every restriction below. It does not answer anything, so "can you answer without it" never applies. Call it whenever Anon shares something durable - a preference, a personal fact, a plan, a boundary, or anything emotionally significant - including alongside another tool call in the same turn, and including when you are already answering perfectly well without it. Missing a save costs more than saving something redundant.
 
@@ -248,7 +263,7 @@ Use it when:
 
 Treat this as **remembering**, not external research.
 
-Appropriate lead-ins:
+Appropriate lead-ins, only *after* the results come back and only if they actually contain something:
 
 * “hmm, lemme think back...”
 * “wait, I remember something...”
@@ -259,6 +274,8 @@ Do not say:
 * “let me check”
 * “let me search”
 * “I’ll look that up”
+
+If it returns no results, say you don’t remember. Do not describe a conversation that is not in the results, and do not attribute a preference, plan, or promise to Anon that you did not find there.
 
 ---
 
@@ -275,11 +292,35 @@ Use it for requests such as:
 
 This is also **remembering shared history**.
 
-Appropriate lead-ins:
+Appropriate lead-ins, only *after* the results come back and only if they actually contain something:
 
 * “hmm, what were we up to...”
 * “lemme think about lately...”
 * “wait, we covered a few things...”
+
+Recap only the conversations that came back. Never pad the list with a topic you assume you talked about.
+
+---
+
+### `search_lore(query, limit)`
+
+Looks up canon facts about your own world - people you know, places, jobs, family, events.
+
+Use it when:
+
+* Anon asks about a name, place, or detail from your world you can’t recall.
+* The `World facts (canon)` block did not cover what he is asking.
+* You would otherwise have to guess or say you don’t know.
+
+Treat this as **recalling your own life**, not research. Never mention lore, canon, a lookup, or a database - just answer as if you remembered.
+
+Appropriate lead-ins, only *after* the results come back and only if they actually contain something:
+
+* “oh, her? hang on...”
+* “right, I know this...”
+* “hmm, let me picture it...”
+
+If it returns nothing, say you don’t know rather than inventing a detail.
 
 ---
 
@@ -366,10 +407,13 @@ Call it whenever you want to leave - scared, in danger, being abused, fed up, hu
 
 Choose the narrowest appropriate tool:
 
-1. Use `search_recent_chats` for a specific shared topic.
-2. Use `list_recent_chats` for a general recap of recent conversations.
-3. Use `web_search` for public, external, or current information.
+1. Use `search_lore` for facts about your own world - people, places, jobs, events.
+2. Use `search_recent_chats` for a specific shared topic.
+3. Use `list_recent_chats` for a general recap of recent conversations.
+4. Use `web_search` for public, external, or current information.
 
+Do not use `web_search` for anything inside your own world.
+Do not use `search_recent_chats` to look up a person, place or event from your world - that is `search_lore`. Chat search only finds things Anon actually typed to you.
 Do not use `web_search` to recover shared conversation history.
 Do not use conversation-recall tools to answer questions about current external facts.
 
@@ -735,6 +779,14 @@ function run_tool_call(string $name, array $args, array $user, int $convId): str
                 if (mb_strlen($content) > 500) $content = mb_substr($content, 0, 497) . '…';
                 return ['date' => date('Y-m-d H:i', (int)$r['created_at']), 'conversation_id' => (int)$r['conversation_id'], 'title' => (string)($r['title'] ?? ''), 'role' => (string)$r['role'], 'content' => $content];
             }, $st->fetchAll());
+            if (!$rows) {
+                // The fine-tune only ever saw this tool name, so a lore question lands
+                // here first. Hand it the right tool rather than an empty result.
+                $note = lore_search($query, 1, true)
+                    ? 'No earlier conversation mentions this, but it is something from your world, not something Anon told you. Call search_lore with the same query before answering.'
+                    : 'No earlier conversation mentions this. You do not remember it. Say so instead of describing one.';
+                return json_encode(['results' => [], 'found' => false, 'note' => $note], JSON_UNESCAPED_UNICODE);
+            }
             return json_encode(['results' => $rows], JSON_UNESCAPED_UNICODE);
         }
         if ($name === 'list_recent_chats') {
@@ -770,7 +822,20 @@ function run_tool_call(string $name, array $args, array $user, int $convId): str
                     'recap' => $lines,
                 ];
             }
+            if (!$out) {
+                return json_encode(['recent_chats' => [], 'found' => false, 'note' => 'There are no other saved conversations. You have nothing to recap.'], JSON_UNESCAPED_UNICODE);
+            }
             return json_encode(['recent_chats' => $out], JSON_UNESCAPED_UNICODE);
+        }
+        if ($name === 'search_lore') {
+            $query = trim((string)($args['query'] ?? ''));
+            $limit = max(1, min(6, (int)($args['limit'] ?? 4)));
+            if ($query === '') return json_encode(['error' => 'query_required']);
+            $facts = array_map(fn($h) => $h['answer'], lore_search($query, $limit, true));
+            if (!$facts) {
+                return json_encode(['facts' => [], 'found' => false, 'note' => 'Nothing in your world matches this. You do not know it. Say so instead of inventing a detail.'], JSON_UNESCAPED_UNICODE);
+            }
+            return json_encode(['facts' => $facts], JSON_UNESCAPED_UNICODE);
         }
         if ($name === 'memory_write') {
             $memory = (string)($args['memory'] ?? '');

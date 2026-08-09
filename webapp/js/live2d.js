@@ -2,11 +2,11 @@
 // wardrobe.html/karaoke.html, app.js's await import(), and every ?v= inside
 // js/live2d/ have to agree, or the browser builds a second copy of the graph.
 
-import { renderIfDirty, resetIdle, setFidgetsEnabled, setMood, setMouthOverride, startIdle, stopIdle, tick } from './live2d/anim.js?v=70';
-import { cameraPreset, cameraStates, captureCameraState, currentCameraMode, fitModel, loadPos, measureStage, rendererResolution, savePos, setCameraPreset, watchStageSize, writeCameraStates } from './live2d/camera.js?v=70';
-import { clamp, drawableAt, drawableThumb, faceAnchor, findDrawables, hitTest, isInteractiveTarget, isOverModel } from './live2d/geometry.js?v=70';
-import { S } from './live2d/state.js?v=70';
-import { installVariantCompositor, listDrawables, opacityByPattern, screenByPattern, setDrawableOpacity, setDrawableOrderBelow, setDrawableScreen, setDrawableTexture, setDrawableTextures, setDrawableTint, tintByPattern } from './live2d/textures.js?v=70';
+import { renderIfDirty, resetIdle, setFidgetsEnabled, setMood, setMouthOverride, startIdle, stopIdle, tick } from './live2d/anim.js?v=71';
+import { cameraPreset, cameraStates, captureCameraState, currentCameraMode, fitModel, loadPos, measureStage, rendererResolution, savePos, setCameraPreset, watchStageSize, writeCameraStates } from './live2d/camera.js?v=71';
+import { clamp, drawableAt, drawableThumb, faceAnchor, findDrawables, hitTest, isInteractiveTarget, isOverModel } from './live2d/geometry.js?v=71';
+import { S } from './live2d/state.js?v=71';
+import { installVariantCompositor, listDrawables, opacityByPattern, screenByPattern, setDrawableOpacity, setDrawableOrderBelow, setDrawableScreen, setDrawableTexture, setDrawableTextures, setDrawableTint, tintByPattern } from './live2d/textures.js?v=71';
 
 const { Live2DModel, Cubism4ModelSettings } = PIXI.live2d;
 
