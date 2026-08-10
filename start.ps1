@@ -1,5 +1,4 @@
-﻿#!/usr/bin/env pwsh
-[CmdletBinding()]
+﻿[CmdletBinding()]
 param(
     [ValidateSet('start', 'stop', 'status')]
     [string]$Action = 'start',
