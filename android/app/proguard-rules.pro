@@ -1,0 +1,4 @@
+-keep class com.chaquo.python.** { *; }
+-keep class com.efficiencyx.junos.inference.NativeLlamaBridge { *; }
+-keepclasseswithmembernames class * { native <methods>; }
+-dontwarn io.ktor.**
