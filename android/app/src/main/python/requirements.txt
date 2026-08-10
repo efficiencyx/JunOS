@@ -1,0 +1,4 @@
+UnityPy==1.7.43
+Pillow==11.0.0
+lz4==4.3.2
+Brotli==1.1.0
