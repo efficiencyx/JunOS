@@ -1,5 +1,5 @@
-import { app, markDirty, model } from '../live2d.js?v=71';
-import { S } from './state.js?v=71';
+import { app, markDirty, model } from '../live2d.js?v=72';
+import { S } from './state.js?v=72';
 
 const CAMERA_STORAGE_KEY = 'l2d.camera';
 const CAMERA_STORAGE_VERSION = 2;
@@ -23,8 +23,8 @@ export function currentCameraMode() {
   }
 }
 
-// Fill rate scales with the square of this, and every clipping mask is
-// rasterized at it too. Phone already capped here; desktop had no ceiling.
+// Fill rate goes up with the square of this, and every clipping mask is drawn
+// at it as well. phone was already capped here, desktop had no cap at all.
 const MAX_RESOLUTION = 2;
 
 export function rendererResolution() {

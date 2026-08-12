@@ -1,20 +1,22 @@
-// Same version rule as app.js: this file's <script type="module"> tags in
-// wardrobe.html/karaoke.html, app.js's await import(), and every ?v= inside
-// js/live2d/ have to agree, or the browser builds a second copy of the graph.
+// Same version rule as app.js. this file's <script type="module"> tags in
+// wardrobe.html and karaoke.html, app.js's await import(), and every ?v=
+// inside js/live2d/ all have to match, or the browser builds a second copy
+// of the graph.
 
-import { renderIfDirty, resetIdle, setFidgetsEnabled, setMood, setMouthOverride, startIdle, stopIdle, tick } from './live2d/anim.js?v=71';
-import { cameraPreset, cameraStates, captureCameraState, currentCameraMode, fitModel, loadPos, measureStage, rendererResolution, savePos, setCameraPreset, watchStageSize, writeCameraStates } from './live2d/camera.js?v=71';
-import { clamp, drawableAt, drawableThumb, faceAnchor, findDrawables, hitTest, isInteractiveTarget, isOverModel } from './live2d/geometry.js?v=71';
-import { S } from './live2d/state.js?v=71';
-import { installVariantCompositor, listDrawables, opacityByPattern, screenByPattern, setDrawableOpacity, setDrawableOrderBelow, setDrawableScreen, setDrawableTexture, setDrawableTextures, setDrawableTint, tintByPattern } from './live2d/textures.js?v=71';
+import { renderIfDirty, resetIdle, setFidgetsEnabled, setMood, setMouthOverride, startIdle, stopIdle, tick } from './live2d/anim.js?v=72';
+import { cameraPreset, cameraStates, captureCameraState, currentCameraMode, fitModel, loadPos, measureStage, rendererResolution, savePos, setCameraPreset, watchStageSize, writeCameraStates } from './live2d/camera.js?v=72';
+import { clamp, drawableAt, drawableThumb, faceAnchor, findDrawables, hitTest, isInteractiveTarget, isOverModel } from './live2d/geometry.js?v=72';
+import { S } from './live2d/state.js?v=72';
+import { installVariantCompositor, listDrawables, opacityByPattern, screenByPattern, setDrawableOpacity, setDrawableOrderBelow, setDrawableScreen, setDrawableTexture, setDrawableTextures, setDrawableTint, tintByPattern } from './live2d/textures.js?v=72';
 
 const { Live2DModel, Cubism4ModelSettings } = PIXI.live2d;
 
 export const LERP_TAU_MS = 150; // exponential smoothing time constant
 
-// Motion, physics, breath and pose are all disabled on the internal model, so
-// between a blink and a fidget the frame is identical to the last one. Uncapped
-// rAF re-renders it at the display's refresh rate regardless; these cap that.
+// Motion, physics, breath and pose are all off on the internal model, so
+// between a blink and a fidget the frame is the same as the one before. rAF
+// with no cap draws it again at the screen's refresh rate anyway, these put
+// a stop to that.
 export let app = null;
 export let model = null;
 export let raw = null;            // raw Cubism core model (parts, parameters, drawables)
@@ -59,7 +61,7 @@ function patchCubismFrag(src) {
     /(uniform\s+vec4\s+u_baseColor\s*;)/,
     '$1\nuniform vec4 u_multiplyColor;\nuniform vec4 u_screenColor;'
   );
-  // Scale screen colors by alpha to avoid coloring transparent texels.
+  // Scale screen colors by alpha or we end up coloring see through texels.
   const helper = '\nvec4 omegaTint(vec4 c) {\n'
     + '  c.rgb = min(c.rgb, vec3(c.a));\n'
     + '  c.rgb = c.rgb * u_multiplyColor.rgb;\n'
@@ -108,8 +110,8 @@ async function init({ stageEl, onStatus, ignoreSavedPos }) {
   S.cameraPersistenceEnabled = !ignoreSavedPos;
   const initialSize = measureStage();
 
-  // Rendering above 1x already supersamples, which is what the soft-edged art
-  // needs; MSAA on top of that costs a multisampled backbuffer for nothing.
+  // Drawing above 1x is already supersampling, which is what the soft edged
+  // art wants. MSAA on top of it buys a multisampled backbuffer for nothing.
   const resolution = rendererResolution();
 
   app = new PIXI.Application({
@@ -122,7 +124,7 @@ async function init({ stageEl, onStatus, ignoreSavedPos }) {
   });
   stageEl.appendChild(app.view);
 
-  // pixi-live2d-display 0.4 ignores drawable colors, so inject shader uniforms.
+  // pixi-live2d-display 0.4 ignores drawable colors, so we push in uniforms.
   installColorShaderPatch(app.renderer.gl);
 
   onStatus('Loading Live2D assets...');
@@ -136,9 +138,10 @@ async function init({ stageEl, onStatus, ignoreSavedPos }) {
   const textures = [t0, t1, t2];
   while (textures.length < 8) textures.push(TRANSPARENT);
 
-  // The extracted atlas mixes premultiplied and straight-alpha edge pixels.
-  // Upload it as PMA, then normalize each sampled pixel in the shader so
-  // neither representation can produce a bright or dark fringe.
+  // The atlas we pulled out mixes two ways of storing transparency. in
+  // premultiplied alpha the colour is already faded by it, in straight alpha it
+  // is not, and this art has both along its edges. send it up as PMA, then fix up each sampled pixel in the
+  // shader so neither kind can leave a bright or a dark fringe.
   for (const url of textures) {
     PIXI.BaseTexture.from(url, {
       alphaMode: PIXI.ALPHA_MODES.PMA,
@@ -155,8 +158,9 @@ async function init({ stageEl, onStatus, ignoreSavedPos }) {
   });
 
   onStatus('Building model...');
-  // autoUpdate would put the model's delta accumulator on PIXI.Ticker.shared,
-  // a second rAF loop we cannot pace; tick() feeds it instead.
+  // autoUpdate would hang the model's delta accumulator off
+  // PIXI.Ticker.shared, a second rAF loop we can't set the pace for, so
+  // tick() feeds it instead.
   model = await Live2DModel.from(settings, { autoInteract: false, autoUpdate: false });
   for (const texture of model.textures) {
     const baseTexture = texture.baseTexture;
@@ -265,9 +269,10 @@ async function init({ stageEl, onStatus, ignoreSavedPos }) {
   window.addEventListener('pointerup', endDrag);
   window.addEventListener('pointercancel', endDrag);
 
-  // Application registers its own render at UPDATE_PRIORITY.LOW; swap it for
-  // one that decides whether the frame is worth drawing. Same priority, so the
-  // camera tween still lands before the draw rather than a frame behind it.
+  // Application puts its own render in at UPDATE_PRIORITY.LOW, so swap it for
+  // one that works out whether the frame is worth drawing at all. same
+  // priority, so the camera tween still lands before the draw and not a frame
+  // after it.
   app.ticker.remove(app.render, app);
   app.ticker.add(tick);
   app.ticker.add(renderIfDirty, null, PIXI.UPDATE_PRIORITY.LOW);
@@ -296,11 +301,11 @@ async function init({ stageEl, onStatus, ignoreSavedPos }) {
           const i = d.ids.indexOf(id);
           if (i < 0) continue;
           d.opacities[i] = op;
-          // Restore visibility that Cubism clears for zero-opacity outfits.
+          // Put back the visibility Cubism clears on zero opacity outfits.
           if (op > 0.0001) d.dynamicFlags[i] |= 0x01;
         }
       }
-      // Apply overrides before both our and Cubism's render-order sorts.
+      // Do the overrides before our sort and Cubism's sort both run.
       if (d && forcedOrderBelow.length) {
         const ro = d.renderOrders;
         for (const [below, above] of forcedOrderBelow) {
@@ -314,7 +319,7 @@ async function init({ stageEl, onStatus, ignoreSavedPos }) {
       if (d) {
         const tmp = [];
         for (let i = 0; i < d.count; i++) {
-          // Cubism filters on visibility, not opacity; match it to align tinting.
+          // Cubism goes by visibility, not opacity. match it or tints slip.
           const visible = (d.dynamicFlags[i] & 0x01) !== 0;
           if (visible) tmp.push(i);
         }
@@ -341,7 +346,7 @@ async function init({ stageEl, onStatus, ignoreSavedPos }) {
       }
     };
 
-    // Cubism binds its shader inside drawMesh, so set uniforms at draw time.
+    // Cubism binds its shader inside drawMesh, so set the uniforms then.
     const origDrawElements = gl.drawElements;
     gl.drawElements = function (mode, count, type, offset) {
       const prog = gl.getParameter(gl.CURRENT_PROGRAM);
@@ -501,7 +506,7 @@ function debugParam(param) {
   };
 }
 
-// The rest of the app is still classic scripts, so the public API stays on window.
+// The classic scripts loader.js pulls in get to the renderer through this.
 window.Live2D = {
   init,
   setTarget,

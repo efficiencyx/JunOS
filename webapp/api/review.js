@@ -1,9 +1,9 @@
-// Loaded as a file rather than inlined because the stack's CSP is
-// `script-src 'self'` - an inline <script> here is silently blocked, which
-// leaves every message body invisible (transparent textarea, unpainted layer).
+// Loaded as a file and not inlined, the stack's CSP is `script-src 'self'` so
+// an inline <script> here is blocked without a word, and then every message
+// body is invisible, a see through textarea over a layer nothing painted.
 
-// Markers are kept in the output (only dimmed) so the highlight layer stays
-// character-for-character aligned with the textarea underneath it.
+// The markers stay in the output, just dimmed, so the highlight layer lines up
+// character for character with the textarea under it.
 const paint = t => {
   let s = t.replace(/[&<>]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;' }[c]));
   const wrap = (cls, open, body, close) =>

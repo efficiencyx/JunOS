@@ -25,8 +25,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'GET' && $action === 'status') {
     exit;
 }
 
-// Must be read before the client reports activity for this session, or the
-// absence it is measuring has already been overwritten with "just now".
+// Has to be read BEFORE the client reports activity for this session, or the
+// absence it is measuring is already written over with "just now".
 if ($_SERVER['REQUEST_METHOD'] === 'GET' && $action === 'welcome') {
     $preview = isset($_GET['preview']) ? [
         'away' => max(0, (int)($_GET['away'] ?? 0)),

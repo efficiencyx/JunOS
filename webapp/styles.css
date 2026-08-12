@@ -1,4 +1,5 @@
-/* An index, not a stylesheet: the sheets below are this file split up, kept in
+/* An index, not a stylesheet. the sheets below ARE this file, split up and kept
+   in
    cascade order. responsive.css overrides everything before it, so it stays
    last. The :root tokens live in boot.css, which loads before any of this.
 

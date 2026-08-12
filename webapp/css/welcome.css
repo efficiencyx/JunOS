@@ -1,4 +1,4 @@
-/* The welcome-back scene. The chat chrome is blurred with a filter on the
+/* The welcome back scene. we blur the chat frame with a filter on the
    elements themselves rather than a backdrop-filter overlay: the Live2D canvas
    sits at z-index 40 between the chrome and any overlay we could add, so a
    backdrop blur would take the model down with the background. */
@@ -18,7 +18,7 @@ body.welcome-scene .chat-panel {
 .welcome-scene-fx {
   position: fixed;
   inset: 0;
-  z-index: 45; /* over the stage (40), under the dialogue box (55) */
+  z-index: 45; /* above the stage at 40, below the dialogue box at 55 */
   pointer-events: none;
   opacity: 0;
   transition: opacity .55s ease;
@@ -26,7 +26,7 @@ body.welcome-scene .chat-panel {
 body.welcome-scene .welcome-scene-fx { opacity: 1; }
 .welcome-scene-fx[hidden] { display: none; }
 
-/* Vignette plus a bloom in her accent colour, which is already the mood colour
+/* A vignette and a glow in her accent colour, which app/mood.js already paints
    painted by app/mood.js - so the scene is tinted by the relationship without
    this file knowing anything about tiers. */
 .welcome-scene-fx::before {
@@ -42,7 +42,7 @@ body.welcome-scene .welcome-scene-fx { opacity: 1; }
       transparent 70%);
 }
 
-/* Letterbox. Cheap, and it says "this is a scene" faster than anything else. */
+/* Black bars. cheap, and nothing else says "this is a scene" as fast. */
 .welcome-scene-fx::after {
   content: "";
   position: absolute;
@@ -81,7 +81,7 @@ body.welcome-scene .welcome-scene-sweep { animation: welcomeSweep 1.15s ease-out
   100% { opacity: 0; transform: translateY(100vh); }
 }
 
-/* The dialogue box is the one thing that must stay legible over the vignette. */
+/* The dialogue box is the ONE thing that has to stay readable over the vignette. */
 body.welcome-scene .face-bubble {
   filter: drop-shadow(0 10px 28px rgb(0 0 0 / .75));
 }

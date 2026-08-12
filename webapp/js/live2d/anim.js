@@ -1,7 +1,7 @@
-import { LERP_TAU_MS, app, currentValues, forcedPartOpacity, loops, markDirty, model, paramDefault, paramIndex, paramMax, paramMin, pendingSequences, raw, scheduleSequence, startLoop, stopLoop, targetParams } from '../live2d.js?v=71';
-import { cameraTween } from './camera.js?v=71';
-import { clamp } from './geometry.js?v=71';
-import { S } from './state.js?v=71';
+import { LERP_TAU_MS, app, currentValues, forcedPartOpacity, loops, markDirty, model, paramDefault, paramIndex, paramMax, paramMin, pendingSequences, raw, scheduleSequence, startLoop, stopLoop, targetParams } from '../live2d.js?v=72';
+import { cameraTween } from './camera.js?v=72';
+import { clamp } from './geometry.js?v=72';
+import { S } from './state.js?v=72';
 
 const ACTIVE_FPS = 60;
 const IDLE_FPS = 30;
@@ -11,9 +11,9 @@ let animating = false;
 let wasAnimating = false;
 let tickDeltaMs = 0;
 
-// Visual state that does not flow through the parameter array - tints, drawable
-// opacity and order, recomposited atlases, the camera transform - has no other
-// signal that the canvas is stale, so every mutator funnels through here.
+// Some visual state never goes through the parameter array. tints, drawable
+// opacity and order, rebuilt atlases, the camera transform. nothing else tells
+// us the canvas is out of date, so everything that changes those comes here.
 const STATEFUL_PARAMS = new Set([
   'ParamShirtEnabled', 'ParamBraEnabled', 'ParamPantiesEnabled',
   'ParamSkirtEnabled', 'ParamHoodieEnabled', 'ParamPantsEnabled',
@@ -83,11 +83,11 @@ function daypart() {
   return 'night';
 }
 
-// Multiplies the mood-derived fidget delay: she settles at night and after
-// midnight barely moves, while evening is when she has energy to spend.
+// Multiplies the fidget delay we get from mood. she calms down at night and
+// after midnight she barely moves, evening is when she has energy to burn.
 const DAYPART_PACE = { night: 2.1, morning: 1.35, day: 1, evening: 0.85 };
 
-// Applied on top of the mood baseline, so a happy 2am still reads as tired.
+// Goes on top of the mood baseline, so a happy 2am still looks tired.
 const DAYPART_BASELINE = {
   night:   { eyeOpen: -0.28, browY: -0.15, breath: 1.5, ear: -0.4 },
   morning: { eyeOpen: -0.12, browY: -0.05, breath: 1.2, ear: -0.15 },
@@ -102,7 +102,7 @@ function trySet(param, value) {
 function applyMoodBaseline() {
   const { warmth, fear } = moodFactors();
   const hour = DAYPART_BASELINE[daypart()];
-  // Fear overrides tiredness: she is not drowsy while she is frightened.
+  // Fear wins over tired. she is not sleepy while she is scared.
   const drowsy = 1 - Math.min(1, fear / 0.4);
 
   trySet('ParamMouthForm', warmth > 0 ? warmth * 0.6 : warmth * 0.4);
@@ -156,8 +156,8 @@ function tryLoop(param, amplitude, period_ms) {
 
 function triggerBlink() {
   if (!paramIndex.has('ParamEyeOpen')) return;
-  // A yawn or a doze holds the eyes shut for its whole run; blinking underneath
-  // it snaps them back open mid-sequence.
+  // A yawn or a doze keeps the eyes shut the Whole time. a blink underneath
+  // would pop them open in the middle of it.
   if (pendingSequences.some(s => s.param === 'ParamEyeOpen')) return;
   blinkPhase = { startMs: performance.now(), closeMs: 70, holdMs: 50, openMs: 120 };
 }
@@ -278,9 +278,10 @@ const FIDGET_DELAYS = {
 function runFidget(f) {
   if (f.kind === 'seq') {
     scheduleSequence(f.steps);
-    // A sequence's last step is an absolute value, so anything it touched that
-    // the baseline also owns (eyes, brows, mouth form) stays where the sequence
-    // left it until the gauges next move. Restore once it has finished.
+    // The last step of a sequence is a fixed value, so anything it touched
+    // that the baseline also owns, eyes and brows and mouth form, stays where
+    // the sequence put it until the gauges move again. put it back once the
+    // sequence is done.
     const total = f.steps.reduce((sum, s) => sum + s.dt_ms, 0);
     setTimeout(() => { if (idleActive) applyMoodBaseline(); }, total + 200);
     return;
@@ -312,8 +313,8 @@ function runFidget(f) {
 let lastDaypart = '';
 let fidgetsEnabled = true;
 
-// Blinking deliberately keeps running: a scripted scene wants the arms and head
-// left alone, but a model that stops blinking for ten seconds reads as frozen.
+// Blinking keeps going on purpose. a scripted scene wants the arms and head
+// left alone, but a model that stops blinking for ten seconds looks frozen.
 export function setFidgetsEnabled(on) {
   fidgetsEnabled = !!on;
   if (fidgetsEnabled && idleActive) scheduleFidget();
@@ -330,8 +331,8 @@ function scheduleFidget() {
     if (!idleActive) return;
     if (!fidgetsEnabled) return; // setFidgetsEnabled re-arms the loop
     const now = daypart();
-    // The clock rolls over during long sessions; the baseline is otherwise only
-    // recomputed when the gauges move, which could be hours.
+    // The hour changes during a long session, and otherwise we only redo the
+    // baseline when the gauges move, which could be hours away.
     if (now !== lastDaypart) {
       lastDaypart = now;
       applyMoodBaseline();
@@ -342,7 +343,7 @@ function scheduleFidget() {
       if (f.moods && !f.moods.includes(tier)) continue;
       if (f.parts && !f.parts.includes(now)) continue;
       candidates.push(f);
-      // mood- and hour-specific fidgets get double weight so both read clearly
+      // fidgets tied to mood and to the hour get double weight so both show
       if (f.moods || f.parts) candidates.push(f);
     }
     if (candidates.length) {
@@ -388,8 +389,8 @@ export function tick() {
     const cur = currentValues.get(id);
     if (cur === undefined) { currentValues.set(id, target); continue; }
     let next = cur + (target - cur) * alpha;
-    // Snap when close: params that gate drawable visibility (ParamHeadpat)
-    // must actually reach 0, not decay asymptotically forever.
+    // Snap when it is close. params that turn drawables on and off, like
+    // ParamHeadpat, have to really hit 0 and not creep toward it for Ever.
     if (Math.abs(target - next) < 0.001) next = target;
     else settling = true;
     currentValues.set(id, next);
@@ -416,7 +417,7 @@ export function tick() {
     }
   }
 
-  // Bypass smoothing so lipsync tracks audio amplitude tightly.
+  // Skip the smoothing so lipsync stays tight on the audio level.
   if (mouthOverride != null) {
     const idx = paramIndex.get('ParamMouthOpen');
     if (idx !== undefined) {
@@ -457,14 +458,14 @@ export function tick() {
 
 export function renderIfDirty() {
   if (!raw) return;
-  // wasAnimating buys one trailing frame: the tick that settles a parameter or
-  // ends a blink writes the final value and only then reports itself idle.
+  // wasAnimating buys us one more frame. the tick that settles a parameter or
+  // ends a blink writes the last value first, then says it is idle.
   const draw = animating || wasAnimating || S.needsRender;
   wasAnimating = animating;
   if (!draw) return;
   S.needsRender = false;
-  // _render only flushes parameters into the drawables when deltaTime is
-  // non-zero, so the accumulator has to be fed on every frame we draw.
+  // _render only pushes parameters into the drawables when deltaTime is not
+  // zero, so we have to feed the accumulator on every frame we draw.
   model.update(tickDeltaMs);
   app.render();
 }

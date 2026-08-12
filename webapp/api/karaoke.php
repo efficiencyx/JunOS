@@ -4,24 +4,25 @@ require_once __DIR__ . '/_lib.php';
 
 require_user();
 
-// Separation runs in its own sidecar so it can hold a GPU torch while the voice
-// one stays on CPU. Bare-metal installs serve both roles from a single process,
-// so fall back to the voice sidecar's URL (and its pre-rename KOKORO_URL name).
+// Separation gets its own sidecar so it can hold a GPU torch while the voice
+// one stays on the CPU. a bare metal install runs both roles in one process,
+// so fall back to the voice sidecar's URL, and to KOKORO_URL, its old name.
 $sepUrl = rtrim(env_str('KARAOKE_URL', env_str('TTS_URL', env_str('KOKORO_URL', 'http://localhost:8001'))), '/');
 $action = $_GET['action'] ?? '';
 
-// Source separation is heavy and long; one request evicts the chat model first,
-// so 30/60s is generous headroom over any realistic karaoke session.
+// Splitting a song is heavy and slow, and one request throws the chat model
+// out first, so 30/60s is plenty for any real karaoke session.
 rate_limit('karaoke', 30, 60);
 
-// 30MB ≈ a few minutes of compressed audio, well past a single song. Kept in
-// step with nginx client_max_body_size, PHP post_max_size, and the sidecar's
-// own upload cap - all have to allow it through.
+// 30MB is a few minutes of compressed audio, well past one song. keep it in
+// step with nginx client_max_body_size, PHP post_max_size and the sidecar's
+// own upload cap, all of them have to let it through.
 const KARAOKE_MAX_BYTES = 30 * 1024 * 1024;
 
-// Free the LLM's VRAM before demucs runs, so the two don't fight over the GPU.
-// Best-effort and Ollama-only: /api/ps and keep_alive:0 are Ollama-specific, and
-// a failed eviction must never block separation - worst case the two contend.
+// Give the LLM's VRAM back before demucs starts, so the two don't fight over
+// the GPU. we try and move on, and it is Ollama only, /api/ps and keep_alive:0
+// are Ollama things. a failed eviction must never stop the separation, worst
+// case they both want the card.
 function evict_chat_model(): void {
     if (ai_provider() !== 'ollama') return;
 
@@ -83,13 +84,12 @@ if ($action === 'separate') {
     curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
     curl_setopt($ch, CURLOPT_POST, true);
     curl_setopt($ch, CURLOPT_POSTFIELDS, $rawBody);
-    // "Expect:" disables libcurl's 100-continue handshake, which it adds for
-    // bodies over 1KB - a song is megabytes, and a non-answering sidecar would
-    // otherwise stall a full second before the body goes out.
+    // "Expect:" for the same reason as api/stt.php: a megabyte body would
+    // otherwise stall a full second on libcurl's 100-continue handshake.
     curl_setopt($ch, CURLOPT_HTTPHEADER, ['Content-Type: application/octet-stream', 'Expect:']);
     curl_setopt($ch, CURLOPT_CONNECTTIMEOUT, 5);
-    // Demucs on CPU runs slower than realtime, so a full-length song can sit well
-    // past five minutes. Kept in step with fastcgi_read_timeout on this location.
+    // Demucs on the CPU is slower than realtime, so a whole song can take well
+    // over five minutes. keep it in step with fastcgi_read_timeout here.
     curl_setopt($ch, CURLOPT_TIMEOUT, 900);
     $res = curl_exec($ch);
     $code = curl_getinfo($ch, CURLINFO_HTTP_CODE);
@@ -194,7 +194,7 @@ if ($action === 'lyrics') {
 
     if ($title === '') { echo json_encode(['found' => false]); exit; }
 
-    // LRCLIB asks clients to identify themselves with a linked User-Agent.
+    // LRCLIB asks us to say who we are in the User-Agent, with a link.
     $ua = 'Jun-OS Karaoke (https://github.com/efficiencyx/jun)';
     $fetch = function (string $url) use ($ua): array {
         $ch = curl_init($url);
@@ -211,7 +211,7 @@ if ($action === 'lyrics') {
     $base = 'https://lrclib.net/api';
     $result = null;
 
-    // Exact-signature lookup first: LRCLIB matches artist+track+album+duration.
+    // Try the exact match first, LRCLIB wants artist, track, album, duration.
     if ($artist !== '' && $duration > 0) {
         $q = http_build_query([
             'artist_name' => $artist,
@@ -226,7 +226,7 @@ if ($action === 'lyrics') {
         }
     }
 
-    // Fall back to fuzzy search, preferring the first hit that carries synced lyrics.
+    // Otherwise search loosely and take the first hit that has synced lyrics.
     if ($result === null) {
         $q = http_build_query(['track_name' => $title, 'artist_name' => $artist]);
         [$res, $code] = $fetch("$base/search?$q");

@@ -27,14 +27,14 @@ Write-Host "This removes Jun from: $root"
 Write-Host "Chat history, settings and downloaded models in that folder will be deleted."
 if (-not (Confirm-Step 'Continue?')) { Write-Host 'Aborted, nothing touched.'; exit 0 }
 
-# 1. Stop everything we started.
+# Stop everything we started.
 $start = Join-Path $root 'start.ps1'
 if (Test-Path $start) {
     & $start stop
 }
 
-# 2. The model servers are the machine-wide pieces Jun really installed for
-#    itself (which one depends on the provider chosen at install time).
+# The model servers are the machine-wide pieces Jun really installed for itself
+# (which one depends on the provider chosen at install time).
 if (Get-Command llama-server -ErrorAction SilentlyContinue) {
     if (Confirm-Step 'Uninstall llama.cpp too (machine-wide app)?') {
         Get-Process 'llama-server*' -ErrorAction SilentlyContinue | Stop-Process -Force -ErrorAction SilentlyContinue
@@ -60,7 +60,7 @@ if (Get-Command ollama -ErrorAction SilentlyContinue) {
     }
 }
 
-# 3. Delete the folder itself (from outside it, since this script lives inside).
+# From outside the folder, since this script lives inside it.
 Set-Location $env:USERPROFILE
 Remove-Item -LiteralPath $root -Recurse -Force
 Write-Host "Removed $root. Jun is uninstalled."

@@ -16,9 +16,9 @@ detect_gpu() {
   fi
 }
 
-# Order by VRAM so the biggest card lands at device 0. Must be UUIDs, not
-# indices: nvidia-smi enumerates by PCI bus order while CUDA defaults to
-# FASTEST_FIRST, so index 1 means different cards to the two of them.
+# Sort by VRAM so the biggest card ends up as device 0. it has to be UUIDs and
+# NOT indices, nvidia-smi counts cards in slot order while CUDA sorts them
+# fastest first, so index 1 means a different card to each of them.
 nvidia_visible() {
   nvidia-smi --query-gpu=memory.total,uuid --format=csv,noheader,nounits 2>/dev/null \
     | sort -t, -k1 -nr | cut -d, -f2 | tr -d ' \r' | paste -sd, - || true
@@ -28,8 +28,8 @@ nvidia_count() {
   nvidia-smi --query-gpu=uuid --format=csv,noheader 2>/dev/null | grep -c . || true
 }
 
-# Largest card's VRAM, in MiB. php runs without any GPU device node, so it can
-# only learn the card size from here - see default_num_ctx() in api/providers.php.
+# VRAM on the biggest card, in MiB. php has no GPU device of its own so this is
+# the ONLY way it finds out, see default_num_ctx() in api/providers.php.
 nvidia_vram_mb() {
   nvidia-smi --query-gpu=memory.total --format=csv,noheader,nounits 2>/dev/null \
     | sort -nr | head -n1 | tr -d ' \r' || true
@@ -48,10 +48,11 @@ amd_visible() {
 }
 
 
-# The model-server containers are profile-gated: `ollama` runs the Ollama
-# service, `llamacpp` the llama.cpp one. Merge (never replace) what's already
-# in the shell (e.g. COMPOSE_PROFILES=prod ./start.sh) and in .env, then inject
-# what AI_PROVIDER implies - so a pre-provider-era .env still boots ollama.
+# The model servers sit behind compose profiles, `ollama` runs the Ollama one
+# and `llamacpp` the llama.cpp one. we MERGE with whatever is already set in the
+# shell, like COMPOSE_PROFILES=prod ./start.sh, and in .env, we never replace it,
+# then add what AI_PROVIDER implies. that way an old .env from before providers
+# existed still boots ollama.
 env_get() { sed -n "s/^$1=//p" .env 2>/dev/null | tail -n1 || true; }
 add_profile() {
   case ",${profiles}," in *,"$1",*) ;; *) profiles="${profiles:+$profiles,}$1" ;; esac
@@ -65,7 +66,7 @@ provider="$(env_get AI_PROVIDER)"; provider="${provider:-ollama}"
 llamacpp_url="$(env_get LLAMACPP_URL)"
 case "$provider" in
   llamacpp)
-    # Managed llama-server container unless the user pointed at their own.
+    # We run llama-server ourselves unless you pointed us at your own.
     case "${llamacpp_url:-http://llamacpp:8080}" in
       http://llamacpp:8080) add_profile llamacpp ;;
     esac
@@ -84,7 +85,7 @@ case "$provider" in
     ;;
   openrouter) : ;;
   *)
-    # Managed ollama container unless the user pointed at their own.
+    # We run ollama ourselves unless you pointed us at your own.
     case "$(env_get OLLAMA_URL)" in
       ''|http://ollama:11434) add_profile ollama ;;
     esac
@@ -112,9 +113,9 @@ esac
 tts_device="${TTS_DEVICE:-$(env_get TTS_DEVICE)}"
 export TTS_DEVICE="${tts_device:-cpu}"
 
-# The GPU overlays build the karaoke sidecar against a CUDA/ROCm torch. Pin the
-# CPU index instead when separation is set to run on the CPU, so a multi-GB wheel
-# isn't downloaded for a device nobody asked for.
+# The GPU overlays build the karaoke sidecar with a CUDA or ROCm torch. when
+# separation is set to run on the CPU we pin the CPU index instead, so we don't
+# pull down a multi-GB wheel for hardware nobody asked to use.
 sep_device="${SEP_DEVICE:-$(env_get SEP_DEVICE)}"
 sep_device="${sep_device:-auto}"
 karaoke_torch_index="${KARAOKE_TORCH_INDEX:-$(env_get KARAOKE_TORCH_INDEX)}"
@@ -205,11 +206,10 @@ if [ -n "${OMEGA_GPU_VRAM_MB:-}" ]; then
   echo "  vram: ${OMEGA_GPU_VRAM_MB} MiB"
 fi
 
-# Ollama sizes its layer offload once, against whatever VRAM is free the moment
-# it loads, and api/providers.php pins that load with keep_alive=-1. If the
-# karaoke sidecar's CUDA torch is initialising in the same window the model can
-# land mostly on the CPU and stay there, which costs ~1000x on prefill. Hold
-# karaoke back until the model server answers.
+# Ollama's layer split is decided at load time and then pinned (see
+# default_num_ctx() and the keep_alive=-1 pin in api/providers.php), so a model
+# that loads while the karaoke sidecar's CUDA torch is initialising stays mostly
+# on the CPU - ~1000x on prefill. Hold karaoke back until the model server answers.
 wait_for_ollama() {
   local i status
   for i in $(seq 1 90); do

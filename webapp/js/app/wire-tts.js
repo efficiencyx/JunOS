@@ -1,12 +1,12 @@
-import { IDLE_AFTER_REPLY_MS, scheduleIdleNudge } from './consolidation.js?v=71';
-import { ttsChk, ttsEngineSelect, ttsLangRow, ttsLangSelect, ttsSpeedInput, ttsVoiceSelect } from './dom.js?v=71';
-import { finishPendingFaceBubbleHide } from './face-bubble.js?v=71';
-import { logAction } from './logging.js?v=71';
-import { syncVoiceDeps, updateTtsSpeedLabel } from './settings.js?v=71';
-import { escapeHtml } from './util.js?v=71';
+import { IDLE_AFTER_REPLY_MS, scheduleIdleNudge } from './consolidation.js?v=72';
+import { ttsChk, ttsEngineSelect, ttsLangRow, ttsLangSelect, ttsSpeedInput, ttsVoiceSelect } from './dom.js?v=72';
+import { finishPendingFaceBubbleHide } from './face-bubble.js?v=72';
+import { logAction } from './logging.js?v=72';
+import { syncVoiceDeps, updateTtsSpeedLabel } from './settings.js?v=72';
+import { escapeHtml } from './util.js?v=72';
 
-// Pulled out of bootstrap(): TTS is optional and its wiring is one long block of
-// preference plumbing that has nothing to say about the rest of startup.
+// Taken out of bootstrap(). TTS is optional and its wiring is one long block
+// of preference plumbing that says nothing about the rest of startup.
 export async function wireTts() {
   if (window.TTS) {
     TTS.setLogger(logAction);
@@ -38,15 +38,16 @@ export async function wireTts() {
       return def;
     }
 
-    // Language only applies to pocket-tts; the row stays hidden for engines that
-    // don't advertise a `languages` list.
+    // Language is a pocket-tts thing only. the row stays hidden for engines
+    // that don't give us a `languages` list.
     function populateLanguages(engineKey, preferred) {
       const info = engines[engineKey] || {};
       const baseLangs = info.languages || [];
       if (ttsLangRow) ttsLangRow.hidden = baseLangs.length === 0;
       if (!baseLangs.length) { TTS.setLang(''); return ''; }
-      // 'auto' is a client-side pseudo-language: TTS detects each reply's language
-      // and sends a concrete id. It's the default so routing works out of the box.
+      // 'auto' is a fake language that lives in the client. TTS works out
+      // each reply's language and sends a real id. it is the default so this
+      // works with no setup.
       const langs = [{ id: 'auto', label: 'Auto-detect' }, ...baseLangs];
       const ids = langs.map(l => l.id);
       const def = (preferred && ids.includes(preferred)) ? preferred : 'auto';

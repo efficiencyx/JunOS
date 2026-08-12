@@ -1,6 +1,6 @@
-import { app, forcedDrawableOpacity, model, paramMax, paramMin, publicTint, raw } from '../live2d.js?v=71';
-import { S } from './state.js?v=71';
-import { _baseAtlas, _uvRect } from './textures.js?v=71';
+import { app, forcedDrawableOpacity, model, paramMax, paramMin, publicTint, raw } from '../live2d.js?v=72';
+import { S } from './state.js?v=72';
+import { _baseAtlas, _uvRect } from './textures.js?v=72';
 
 export function clamp(id, v) {
   const lo = paramMin.get(id), hi = paramMax.get(id);
@@ -123,8 +123,8 @@ function pointInMesh(D, i, p) {
   return false;
 }
 
-// Point-in-mesh test against specific drawables regardless of visibility,
-// for the model's invisible HitArea* meshes.
+// Checks a point against certain drawables even when they are hidden, for the
+// model's invisible HitArea* meshes.
 export function hitTest(clientX, clientY, ids) {
   if (!model || !raw || !app) return null;
   const p = toModelPoint(clientX, clientY);
@@ -148,7 +148,7 @@ export function drawableAt(clientX, clientY, onlyIds, tolerancePx) {
     if (only && !only.has(D.ids[i])) continue;
     const forcedOpacity = forcedDrawableOpacity.get(D.ids[i]);
     const opacity = forcedOpacity == null ? D.opacities[i] : forcedOpacity;
-    // Include layers forced visible by the renderer.
+    // Take in layers the renderer is holding visible.
     const visible = (D.dynamicFlags[i] & 0x01) || (forcedOpacity != null && forcedOpacity > 0.0001);
     if (!visible || opacity < 0.01) continue;
     candidates.push(i);
@@ -156,8 +156,8 @@ export function drawableAt(clientX, clientY, onlyIds, tolerancePx) {
     if (pointInMesh(D, i, p)) { best = D.ids[i]; bestOrder = D.renderOrders[i]; }
   }
   if (best || !tolerancePx) return best;
-  // Nothing under the cursor exactly: fall back to padded bounding boxes,
-  // smallest box wins so thin accessories are not shadowed by garments.
+  // Nothing exactly under the cursor, so fall back to padded boxes. the
+  // smallest box wins, or a big garment would swallow a thin accessory.
   const q = model.toModelPosition(new PIXI.Point(clientX - rect.left + tolerancePx, clientY - rect.top));
   const tol = Math.abs((q.x - ci.CanvasOriginX) / ci.PixelsPerUnit - p.x);
   let bestArea = Infinity;

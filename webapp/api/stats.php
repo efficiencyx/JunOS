@@ -1,7 +1,8 @@
 <?php
-// Dev HUD backend: loaded-model VRAM/RAM footprint (Ollama /api/ps) + host memory.
-// Polled every few seconds while the HUD is open, so keep it cheap and never fatal -
-// any upstream hiccup returns the half we could gather, not an error page.
+// Backend for the dev HUD. how much VRAM and RAM the loaded model takes, from
+// Ollama /api/ps, plus host memory. the HUD asks every few seconds while it is
+// open so keep this cheap and Never fatal, if something upstream hiccups we
+// give back the half we got and not an error page.
 require_once __DIR__ . '/_lib.php';
 
 header('Content-Type: application/json');
@@ -12,9 +13,9 @@ rate_limit('stats', 60, 60);
 
 $out = ['models' => [], 'vram_bytes' => 0, 'ram_model_bytes' => 0, 'host' => null];
 
-// /api/ps is Ollama-specific; with a non-Ollama chat provider there's nothing
-// to ask (and no point paying the connect timeout on every HUD poll) - report
-// host memory only.
+// /api/ps is an Ollama thing. with any other chat provider there is nobody to
+// ask, and no reason to pay the connect timeout on every HUD poll, so we just
+// report host memory.
 $res = false;
 if (ai_provider() === 'ollama') {
     $ollamaUrl = rtrim(env_str('OLLAMA_URL', 'http://localhost:11434'), '/');
@@ -46,8 +47,9 @@ if ($res !== false) {
     }
 }
 
-// Host/container memory from /proc/meminfo (kB). Without a cgroup memory cap this
-// reflects the host box, which is what "system RAM" means for a self-hosted setup.
+// Host or container memory out of /proc/meminfo, in kB. with no cgroup memory
+// cap this is the host box, which is what "system RAM" means when you run it
+// yourself.
 $meminfo = @file_get_contents('/proc/meminfo');
 if ($meminfo !== false) {
     $kv = [];

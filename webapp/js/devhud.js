@@ -11,10 +11,10 @@ window.DevHud = (function () {
 
   let gen = { t0: 0, tFirst: 0, tLast: 0, active: 0, chunks: 0, final: null };
 
-  // A turn can stall for seconds between rounds while a tool runs, and those gaps
-  // are not decode time - charging them to the rate makes the live figure read far
-  // below what the model is doing. Only intervals short enough to be token spacing
-  // count toward it.
+  // A turn can sit there for seconds between rounds while a tool runs, and
+  // that time is not decoding. if we count it the live number comes out way
+  // under what the model is really doing, so only gaps short enough to be
+  // the space between tokens count.
   const MAX_TOKEN_GAP_MS = 400;
 
   function fmtBytes(n) {
@@ -154,10 +154,10 @@ window.DevHud = (function () {
     put('tps', '…'); put('ttft', '…'); put('gentok', '~0'); put('ptok', '-'); put('ctx', '-');
   }
 
-  // Counts stream chunks, not tokens: on the ollama path the two coincide, but an
-  // OpenAI-compatible upstream can batch several tokens into one delta. Everything
-  // derived from it is therefore shown as an estimate until the upstream's own
-  // counters land in setGenStats.
+  // Counts stream chunks, not tokens. on the ollama path they are the same,
+  // but an OpenAI style upstream can put several tokens in one delta. so
+  // anything we work out from this is shown as an estimate until the
+  // upstream's own counters arrive in setGenStats.
   function tickToken() {
     if (!gen.t0) return;
     const now = performance.now();

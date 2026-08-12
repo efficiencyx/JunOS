@@ -149,7 +149,7 @@
 
   .conv-sidebar { display: none; }
 
-  /* On mobile, drop the full-screen overlay: she sits in a normal top panel. */
+  /* On a phone there is no full screen overlay, she sits in a panel up top. */
   #stage {
     position: static;
     z-index: auto;
@@ -328,7 +328,8 @@
 }
 .devhud-sep { height: 1px; background: var(--border); margin: 5px 0; }
 
-/* Voice mode keeps hidden chat chrome in the layout for a stable stage. */
+/* Voice mode leaves the hidden chat frame taking up space, so the stage
+   doesn't jump. */
 body.voice-mode .chat-panel,
 body.voice-mode .conv-sidebar,
 body.voice-mode .app-header { visibility: hidden; }

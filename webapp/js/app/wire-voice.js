@@ -1,10 +1,10 @@
-import { VOICE_STATE_LABELS, renderVoiceDraft, sendFromVoice, stopActiveStream, sttAvailable } from '../app.js?v=71';
-import { voiceBargeChk, voiceChk, voiceSilenceInput, voiceState } from './dom.js?v=71';
-import { hideFaceBubble } from './face-bubble.js?v=71';
-import { logAction } from './logging.js?v=71';
-import { syncVoiceDeps, updateVoiceSilenceLabel } from './settings.js?v=71';
+import { VOICE_STATE_LABELS, renderVoiceDraft, sendFromVoice, stopActiveStream, sttAvailable } from '../app.js?v=72';
+import { voiceBargeChk, voiceChk, voiceSilenceInput, voiceState } from './dom.js?v=72';
+import { hideFaceBubble } from './face-bubble.js?v=72';
+import { logAction } from './logging.js?v=72';
+import { syncVoiceDeps, updateVoiceSilenceLabel } from './settings.js?v=72';
 
-// Same as wire-tts: optional subsystem, self-contained wiring.
+// Same deal as wire-tts. optional piece, wiring that keeps to itself.
 export async function wireVoice() {
   if (window.Voice && voiceChk) {
     Voice.setLogger(logAction);
@@ -54,7 +54,7 @@ export async function wireVoice() {
       if (voiceSilenceInput) voiceSilenceInput.value = String(savedSilence);
       updateVoiceSilenceLabel();
 
-      // A hot mic is an explicit per-session choice, never a synced preference.
+      // A live mic is something you pick per session, Never a synced setting.
       voiceChk.checked = false;
       voiceChk.addEventListener('change', async () => {
         if (voiceChk.checked) {

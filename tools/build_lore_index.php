@@ -1,12 +1,13 @@
 <?php
-// Rebuilds the lore corpus that chat.php's keyword retrieval (webapp/api/lore.php)
-// reads at request time. Flattens the curated game-lore Q&A
-// (tools/lore_dataset.jsonl) into {question, answer} pairs and writes
-// lore_corpus.txt (answers, one per row). Retrieval is keyword/IDF-based, so no
-// Ollama or embeddings are needed. Pass --dry-run to just count the pairs.
+// Rebuilds the lore file that webapp/api/lore.php reads on every message. it
+// takes the hand written game lore Q&A in tools/lore_dataset.jsonl, flattens it
+// into {question, answer} pairs, and writes lore_corpus.txt with one answer per
+// row. lookup is plain keyword matching so there is no Ollama and no embeddings
+// involved. --dry-run just counts the pairs.
 
 define('DATASET_PATH', __DIR__ . '/lore_dataset.jsonl');
-// webapp/* is copied to /var/www/omega/ in Docker, sits beside us bare-metal
+// under Docker webapp/* gets copied to /var/www/omega/, on bare metal it is
+// right next to us
 $webappDir = is_dir(__DIR__ . '/../webapp') ? __DIR__ . '/../webapp' : __DIR__ . '/..';
 define('CORPUS_OUT', $webappDir . '/lore_corpus.txt');
 
@@ -19,8 +20,8 @@ if (!is_readable(DATASET_PATH)) {
     exit(1);
 }
 
-// Flatten every (user -> assistant) turn into a {question, answer} pair. The
-// question is the retrieval key; the answer is what we inject. Multi-turn rows
+// Turn every user then assistant turn into a {question, answer} pair. we search
+// on the question, the answer is what actually gets handed to her. Multi-turn rows
 // become several pairs. Dedup identical questions, keep first-seen order.
 $pairs = [];
 $seen = [];

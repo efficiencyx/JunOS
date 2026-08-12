@@ -1,30 +1,30 @@
-import { chatInput, sendBtn } from './dom.js?v=71';
-import { replayFaceBubbleIntro, scheduleFaceBubbleHide, showFaceBubble } from './face-bubble.js?v=71';
-import { loadMood } from './mood.js?v=71';
-import { escapeHtml } from './util.js?v=71';
+import { chatInput, sendBtn } from './dom.js?v=72';
+import { replayFaceBubbleIntro, scheduleFaceBubbleHide, showFaceBubble } from './face-bubble.js?v=72';
+import { loadMood } from './mood.js?v=72';
+import { escapeHtml } from './util.js?v=72';
 
 const CAMERA_MS = 450;
 const SCENE_TAIL_MS = 1800;
 const LINE_GAP_MS = 420; // beat between spoken lines, so they do not run together
 let pending = null;
 
-// Only the fallback pace, for a run with TTS off or a job that never reports
-// back. When the voice is working, it decides when a line is finished.
+// Only the backup pace, for a run with TTS off or a job that never comes
+// back. when the voice works, it says when a line is done.
 function lineDuration(text) {
   const words = (text.match(/\S+/g) || []).length;
   return Math.max(2600, Math.min(7500, 1100 + words * 280));
 }
 
-// Tints the vignette, the sweep and the dialogue box rule. Left unset for the
-// warm tiers, where the mood accent app/mood.js already paints is the right
-// colour and tracks the gauges for free.
+// Colors the vignette, the sweep and the line under the dialogue box. left
+// empty for the warm tiers, where the mood accent app/mood.js already paints
+// is the right color and follows the gauges for free.
 const TIER_TINT = {
   panicked: 'hsl(8 85% 62%)',
   unravelled: 'hsl(280 45% 58%)',
   hollow: 'hsl(215 18% 52%)',
 };
 
-// Ambient motion held for the whole scene, under the keyframed sequence.
+// Small movement that runs the Whole scene, under the keyframed sequence.
 // [param, amplitude, period_ms]
 const TIER_LOOPS = {
   none: [['ParamTailWiggle', 0.35, 1100]],
@@ -35,9 +35,9 @@ const TIER_LOOPS = {
   hollow: [['ParamBodyY', 0.06, 7000]],
 };
 
-// One per absence tier. The reaction is the point of the zoom, so each is built
-// around what the face does rather than what the body does - the body is mostly
-// out of frame at the 'face' preset.
+// One per absence tier. the reaction is the point of the zoom, so each one is
+// built around what the face does and not the body, the body is mostly out of
+// frame at the 'face' preset anyway.
 const SCENES = {
   none: [
     { params: { ParamEyeOpen: 1.2, ParamIrisZoom: 0.2, ParamHeadZ: -4 }, dt_ms: 0 },
@@ -71,8 +71,8 @@ const SCENES = {
     { params: { ParamHeadY: 0, ParamEyeballLY: 0, ParamEyeballRY: 0, ParamPupilWiggle: 0.5 }, dt_ms: 900 },
     { params: { ParamBrowLY: -0.3, ParamBrowRY: -0.3, ParamMouthForm: -0.3, ParamPupilWiggle: 0 }, dt_ms: 1600 },
   ],
-  // Deliberately almost nothing. The flatness is the reaction, and the one
-  // slow blink is the only thing that reads as her registering him at all.
+  // Almost nothing, on purpose. the flatness IS the reaction, and the one
+  // slow blink is the only sign she noticed him at all.
   hollow: [
     { params: { ParamEyeOpen: 0.75, ParamIrisZoom: -0.5, ParamEarL: -1, ParamEarR: -1 }, dt_ms: 0 },
     { params: { ParamEyeOpen: 0, ParamHeadX: 0.1 }, dt_ms: 1800 },
@@ -81,19 +81,19 @@ const SCENES = {
   ],
 };
 
-// A plausible absence per tier, so previewing one shows a duration that matches
-// the line beside it. Override by passing seconds as the second argument.
+// A believable absence per tier, so a preview shows a time that fits the line
+// next to it. pass seconds as the second argument to set your own.
 const TIER_AWAY = {
   none: 120, missed: 12600, ached: 41827,
   panicked: 108061, unravelled: 302449, hollow: 1600000,
 };
 export const WELCOME_TIERS = Object.keys(TIER_AWAY);
 
-// Debug entry point: replays the scene against a forced tier without draining
-// the queue or moving the gauges, so previewing never spends a real greeting.
+// Debug way in. replays the scene on a tier you pick without emptying the
+// queue or touching the gauges, so a preview never spends a real greeting.
 export async function previewWelcome(tier = 'unravelled', away = TIER_AWAY[tier] ?? 90061) {
-  // Always sent, including 'none': an absent tier makes the server derive one
-  // from the duration, which is the opposite of forcing it.
+  // Always sent, 'none' included. if we leave the tier out the server works
+  // one out from the duration, which is the opposite of forcing it.
   const query = new URLSearchParams({ preview: '1', away: String(away), tier, hour: String(new Date().getHours()) });
   try {
     const response = await fetch('api/consolidate.php?action=welcome&' + query, { credentials: 'same-origin' });
@@ -105,11 +105,11 @@ export async function previewWelcome(tier = 'unravelled', away = TIER_AWAY[tier]
   }
 }
 
-// Fetched at boot before the session's first activity report, because the
-// server measures the absence from last_activity and that report resets it.
+// Fetched at boot BEFORE the first activity report of the session, the server
+// measures the absence from last_activity and that report wipes it.
 export async function fetchWelcome() {
   try {
-    // The server runs in UTC and the greeting is keyed off his wall clock.
+    // The server runs in UTC, the greeting goes off the clock on his wall.
     const response = await fetch('api/consolidate.php?action=welcome&hour=' + new Date().getHours(), { credentials: 'same-origin' });
     if (!response.ok) return;
     const payload = await response.json();
@@ -137,8 +137,8 @@ function enterScene(tier) {
   if (tint) sceneFx.style.setProperty('--scene-tint', tint);
   else sceneFx.style.removeProperty('--scene-tint');
   sceneFx.hidden = false;
-  // Two frames: the element has to be laid out unhidden before the class flips,
-  // or the opacity and letterbox transitions have nothing to animate from.
+  // Two frames. the element has to be laid out and not hidden before the
+  // class changes, or the opacity and letterbox have nothing to move from.
   requestAnimationFrame(() => requestAnimationFrame(() => {
     document.body.classList.add('welcome-scene');
   }));
@@ -151,8 +151,8 @@ function exitScene() {
   }, 600);
 }
 
-// A long absence stages six lines, and holding the face zoom for twenty-five
-// seconds with no way out would be worse than showing no scene at all.
+// A long absence lines up six of them, and sitting in the face zoom for
+// twenty five seconds with no way out is worse than showing no scene.
 function abortOnInteraction() {
   const stop = () => { if (endScene) endScene(); };
   chatInput.addEventListener('focus', stop, { once: true });
@@ -170,8 +170,9 @@ export function playWelcome() {
   const { lines, tier, mood_changed: moodChanged } = pending;
   pending = null;
   const player = window.Names ? Names.getPlayer() : 'Anon';
-  // Wrapped in a span so welcome.css can fade the words in after the panel has
-  // finished opening; .fb-text otherwise holds a bare text node with no target.
+  // Wrapped in a span so welcome.css can fade the words in after the panel
+  // has opened. without it .fb-text is a plain text node with nothing to aim
+  // at.
   const resolved = lines.map(line => '<span>' + escapeHtml(line.replaceAll('{f_playerName}', player)) + '</span>');
   const live2d = window.Live2D;
   const at = (ms, fn) => sceneTimers.push(setTimeout(fn, ms));
@@ -189,8 +190,8 @@ export function playWelcome() {
     if (speaks) TTS.stop();
     if (!live2d) return;
     for (const [param] of loops) live2d.stopLoop(param);
-    // Voice mode owns the same 'face' preset; if it took over mid-scene, handing
-    // the camera back would drop it out of a zoom it still wants.
+    // Voice mode uses the same 'face' preset. if it took over mid scene then
+    // giving the camera back would pull it out of a zoom it still wants.
     if (!(window.VoiceMode && VoiceMode.isActive())) live2d.setCameraPreset('default');
     live2d.resetIdle();
     live2d.startIdle();
@@ -201,7 +202,7 @@ export function playWelcome() {
   if (live2d) {
     live2d.setFidgetsEnabled(false);
     live2d.setCameraPreset('face');
-    // Let the camera arrive before she reacts, or the expression plays offscreen.
+    // Let the camera get there before she reacts, or it happens off screen.
     at(CAMERA_MS, () => {
       live2d.scheduleSequence(SCENES[tier] || SCENES.none);
       for (const [param, amp, period] of loops) live2d.startLoop(param, amp, period);
@@ -210,9 +211,9 @@ export function playWelcome() {
 
   const plains = lines.map(line => line.replaceAll('{f_playerName}', player));
 
-  // Lines advance when the voice finishes them, not on a timer: a fixed cadence
-  // pulled the text away mid-sentence on anything longer than a few words.
-  // Without TTS the word-count estimate is the pace.
+  // Lines move on when the voice finishes them, not on a timer. a fixed pace
+  // took the text away mid sentence on anything longer than a few words.
+  // with no TTS we guess from the word count instead.
   function showLine(i) {
     if (!endScene) return; // aborted
     if (i >= plains.length) {
@@ -230,20 +231,21 @@ export function playWelcome() {
       showLine(i + 1);
     };
 
-    // speak() stops whatever is already playing, which is exactly right here:
-    // nothing else should be in flight, and one job at a time is what gives us
-    // a per-line onDone to wait on.
+    // speak() stops whatever is playing, which is what we want here. nothing
+    // else should be running, and one job at a time is what gives us an
+    // onDone per line to wait for.
     const spoken = speaks && TTS.speak(plains[i], {
       onDone: () => at(LINE_GAP_MS, next),
       onError: next,
     });
-    // scheduleFaceBubbleHide defers itself while TTS is speaking, so the last
-    // card must be armed after the job exists or it starts its read timer now.
+    // scheduleFaceBubbleHide puts itself off while TTS is talking, so the
+    // last card has to be set up after the job exists or its read timer
+    // starts right NOW.
     if (last) scheduleFaceBubbleHide(resolved[i], 'ephemeral');
 
     if (spoken) {
-      // Synthesis can fail silently or the tab can be throttled; never strand
-      // the scene waiting on a callback that is not coming.
+      // Synthesis can die without a word, or the tab gets throttled. Never
+      // leave the scene waiting on a callback that isn't coming.
       at(lineDuration(plains[i]) * 3 + 5000, next);
     } else {
       at(lineDuration(plains[i]), next);

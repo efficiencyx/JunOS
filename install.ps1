@@ -11,7 +11,6 @@ $repo = if ($env:JUN_REPO) { $env:JUN_REPO } else { 'https://github.com/efficien
 $dir  = if ($env:JUN_DIR)  { $env:JUN_DIR }  else { 'Jun' }
 $ref  = if ($env:JUN_REF)  { $env:JUN_REF }  else { 'main' }
 
-# ── ANSI / VT escape setup ───────────────────────────────────────────────────
 # Windows Terminal, VS Code, and modern conhost all handle VT sequences.
 # Detect support and fall back to unstyled text gracefully.
 $VTSupported = $false
@@ -48,10 +47,10 @@ function Show-Banner {
     Write-Host ''
     Write-Host "  ${FRAME}╔${bar}╗${R}"
     Write-Host "  ${FRAME}║${R}${blank}${FRAME}║${R}"
-    # "    Ω  JUN OS" = 13 visible chars
+    # the omega + JUN OS line = 13 visible chars
     Write-Host "  ${FRAME}║${R}    ${B}${BLUE}Ω${R}  ${B}${ACCENT}JUN OS${R}$(' ' * ($UI_W - 13))${FRAME}║${R}"
     Write-Host "  ${FRAME}║${R}${blank}${FRAME}║${R}"
-    # "    Welcome to Jun OS · omega build" = 35 visible chars
+    # the welcome + omega build line = 35 visible chars
     Write-Host "  ${FRAME}║${R}    ${MUTED}Welcome to Jun OS${R} ${DIM}·${R} ${DIM}omega build${R}$(' ' * ($UI_W - 35))${FRAME}║${R}"
     # "    Windows installer" = 21 visible chars
     Write-Host "  ${FRAME}║${R}    ${DIM}Windows installer${R}$(' ' * ($UI_W - 21))${FRAME}║${R}"
@@ -66,14 +65,12 @@ function Note([string]$msg)    { Write-Host "    ${DIM}ℹ ${msg}${R}" }
 function Warn_([string]$msg)   { Write-Host "    ${WARN}⚠${R} ${WARN}${msg}${R}" }
 function Fail_([string]$msg)   { Write-Host "    ${DANGER}✗${R} ${DANGER}${msg}${R}" }
 
-# Read a line of input after a styled prompt (avoids the ': ' suffix of Read-Host).
+# Read a line after our own prompt. Read-Host would stick a ': ' on the end.
 function Read-Styled([string]$prompt) {
     Write-Host -NoNewline $prompt
     try { return [Console]::ReadLine() }
     catch { return (Read-Host) }
 }
-
-# ── end UI helpers ────────────────────────────────────────────────────────────
 
 $wingetIds = @{ git = 'Git.Git'; ollama = 'Ollama.Ollama'; python = 'Python.Python.3.11'; llamacpp = 'ggml.llamacpp' }
 $manualUrls = @{
@@ -137,9 +134,9 @@ function Set-EnvKey([string]$key, [string]$val) {
 
 $interactive = [Environment]::UserInteractive -and ($env:JUN_YES -ne '1')
 
-# First choice a non-technical user sees: Express installs everything with
-# detected defaults and asks nothing further (same effect as JUN_YES=1); Custom
-# walks the prompts. JUN_EXPRESS=1 selects Express up front.
+# The first thing someone non technical sees. Express installs the lot with what
+# we detected and asks nothing else, same as JUN_YES=1. Custom walks the prompts.
+# JUN_EXPRESS=1 picks Express before we even ask.
 function Choose-InstallMode {
     if ($env:JUN_YES -eq '1') { return }
     if ($env:JUN_EXPRESS -match '^(1|on|yes|true)$') {
@@ -229,8 +226,8 @@ function Configure-Jun {
 
     Step 'configure'
 
-    # Asked before the model prompt: splitting across cards changes how much
-    # VRAM the recommendation gets to assume.
+    # We ask this BEFORE the model question, splitting across cards changes how
+    # much VRAM we get to assume when recommending one.
     $script:tensorParallel = if ($provider -eq 'openrouter') { 'off' } else { Ask-TensorParallel }
 
     $needsOllama = ($provider -eq 'ollama')
@@ -245,8 +242,8 @@ function Configure-Jun {
         'openrouter' {
             $key = $env:OPENROUTER_API_KEY
             if (-not $key -and $interactive) {
-                # Masked input, PS 5.1-compatible; the key is never echoed and
-                # never printed in the config summary.
+                # Hidden input that works on PS 5.1. the key is NEVER shown
+                # back and never printed in the summary at the end.
                 Write-Host "     ${OK}▸${R} OpenRouter API key ${DIM}(hidden; from openrouter.ai/keys)${R}"
                 $sec = Read-Host '       key' -AsSecureString
                 $key = [Runtime.InteropServices.Marshal]::PtrToStringAuto(
@@ -278,7 +275,7 @@ function Configure-Jun {
                 Ok "llama-server $url"
             } else {
                 $modelRef = Ask-ModelRef
-                # llama-server -hf syntax has no hf.co/ prefix.
+                # llama-server -hf wants the name without the hf.co/ in front.
                 $hfRef = $modelRef -replace '^hf\.co/', ''
                 Set-EnvKey 'LLAMACPP_MODEL_HF' $hfRef
                 Set-EnvKey 'LLAMACPP_URL' 'http://127.0.0.1:8081'
@@ -306,9 +303,9 @@ function Configure-Jun {
     Set-EnvKey 'VOICE' $voice
     Ok "voice $voice"
 
-    # Bare metal runs one sidecar process for both roles, so karaoke here is just
-    # a second pip install into the same venv rather than a separate service.
-    # It stays on CPU: the Windows venv is built against the CPU torch wheel.
+    # On bare metal one process does both jobs, so karaoke is just a second pip
+    # install into the same venv and not a service of its own. it stays on the
+    # CPU, the Windows venv is built against the CPU torch wheel.
     $karaoke = $env:KARAOKE
     if ($karaoke) {
         $karaoke = if ($karaoke.ToLower() -match '^(off|0|false|no)$') { 'off' } else { 'on' }

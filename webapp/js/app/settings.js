@@ -1,9 +1,9 @@
-import { abortFn, currentConversationId, sendMessage } from '../app.js?v=71';
-import { cancelIdleNudge } from './consolidation.js?v=71';
-import { closeSettingsBtn, devNoIdleChk, drawerBackdrop, modelSelect, openSettingsBtn, reasoningSelect, sendBtn, siteVolumeInput, thinkChk, ttsChk, ttsSpeedInput, voiceChk, voiceSilenceInput } from './dom.js?v=71';
-import { logAction } from './logging.js?v=71';
-import { loadMood } from './mood.js?v=71';
-import { loadConversation, setSidebarOpen } from './sidebar.js?v=71';
+import { abortFn, currentConversationId, sendMessage } from '../app.js?v=72';
+import { cancelIdleNudge } from './consolidation.js?v=72';
+import { closeSettingsBtn, devNoIdleChk, drawerBackdrop, modelSelect, openSettingsBtn, reasoningSelect, sendBtn, siteVolumeInput, thinkChk, ttsChk, ttsSpeedInput, voiceChk, voiceSilenceInput } from './dom.js?v=72';
+import { logAction } from './logging.js?v=72';
+import { loadMood } from './mood.js?v=72';
+import { loadConversation, setSidebarOpen } from './sidebar.js?v=72';
 
 export function syncThinkToggle() {
   thinkChk.disabled = reasoningSelect.value === 'auto';
@@ -70,7 +70,7 @@ settingsNavItems.forEach((item, idx) => {
     settingsPanels.forEach((p) => { p.hidden = p.dataset.panel !== key; });
     const label = item.querySelector('span');
     if (settingsPanelTitle && label) settingsPanelTitle.textContent = label.textContent;
-    if (key === 'developer') loadMood(); // pull fresh scores when the panel opens
+    if (key === 'developer') loadMood();
     if (window.MemoryGraph) MemoryGraph.setActive(key === 'memory');
     if (key === 'memory') loadMemories();
   });

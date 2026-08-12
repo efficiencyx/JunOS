@@ -36,7 +36,6 @@ export const moodPhrases = {
 export const moodRefreshBtn = document.getElementById('moodRefreshBtn');
 export const stageEl = document.getElementById('stage');
 export const stageStatus = document.getElementById('stageStatus');
-export const stageSkeleton = document.getElementById('stageSkeleton');
 export const resetLive2DBtn = document.getElementById('resetLive2DBtn');
 export const ttsChk = document.getElementById('ttsChk');
 export const ttsEngineSelect = document.getElementById('ttsEngineSelect');

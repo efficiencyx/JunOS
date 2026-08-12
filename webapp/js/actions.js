@@ -1,4 +1,4 @@
-// Supports compact and legacy action-tag syntax.
+// Takes both the compact and the old action-tag syntax.
 
 window.Actions = (function () {
   let actionMap = null;
@@ -15,8 +15,8 @@ window.Actions = (function () {
 
   const ACTION_RE = /\[\s*A(?:CTIONS?)?\s*:\s*([a-zA-Z_][\w]*)\s*((?:\|[^\]|]*)*)\s*\]/gi;
 
-  // Physical touch on Jun is something only Anon can initiate; these actions
-  // are driven by touch.js, never by model-emitted tags.
+  // Touching Jun is something ONLY Anon starts. these actions come from
+  // touch.js, never from a tag the model wrote.
   const USER_ONLY = new Set(['receive_headpat', 'nuzzle', 'handhold']);
 
   const POS_KEYS = {

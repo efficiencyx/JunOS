@@ -10,7 +10,7 @@ window.Outfit = (function () {
       colorPatterns: ['hoodie'], colorExcludes: ['logo'] },
     { key: 'dress', label: 'Dress', param: 'ParamDress2Enabled', defaultOn: false, excludes: ['shirt','hoodie','skirt','pants','dress1'],
       colorPatterns: ['dress'] },
-    // Dress1 has no rig parameter, so visibility overrides control it.
+    // Dress1 has no rig parameter, so we turn it on and off by hand.
     { key: 'dress1', label: 'Dress (alt)', defaultOn: false,
       excludes: ['shirt','hoodie','skirt','pants','dress'],
       colorPatterns: ['dress1'], visibilityPatterns: ['dress1'], visOn: 1, visOff: null },
@@ -22,12 +22,12 @@ window.Outfit = (function () {
       colorPatterns: ['bra'], colorExcludes: ['skin','braid'] },
     { key: 'panties', label: 'Panties', param: 'ParamPantiesEnabled', defaultOn: true, excludes: ['bikini_bot'],
       colorPatterns: ['panties'], colorExcludes: ['logo'] },
-    // v0.97.5 swimwear: no rig parameters, so visibility overrides only.
+    // v0.97.5 swimwear. no rig parameters either, so visibility only.
     { key: 'bikini_top', label: 'Bikini top', defaultOn: false, excludes: ['bra'],
       colorPatterns: ['bikinitop'], visibilityPatterns: ['bikinitop'], visOn: 1, visOff: 0 },
     { key: 'bikini_bot', label: 'Bikini bottom', defaultOn: false, excludes: ['panties'],
       colorPatterns: ['bikinibot'], visibilityPatterns: ['bikinibot'], visOn: 1, visOff: 0 },
-    // The shoe parameters do not control drawable opacity in this moc3.
+    // In this moc3 the shoe parameters don't touch opacity at all.
     { key: 'shoe_l', label: 'Left shoe', param: 'ParamShoeLOn', defaultOn: true,
       colorPatterns: ['shoe_l'], visibilityPatterns: ['shoe_l'], visOn: 1, visOff: 0 },
     { key: 'shoe_r', label: 'Right shoe', param: 'ParamShoeROn', defaultOn: true,
@@ -53,7 +53,7 @@ window.Outfit = (function () {
     { key: 'hair_hologram', label: 'Hair hologram', section: 'body', defaultOn: true,
       visibilityPatterns: ['hairhologram'] },
 
-    // The rig exposes only H3; other hair styles need explicit visibility.
+    // The rig only gives us H3, every other hair style we show by hand.
     { key: 'hair_h0', label: 'Default Hair', section: 'hair', defaultOn: true,
       visibilityPatterns: ['h0_'], visOn: 1, visOff: 0 },
     { key: 'hair_h1', label: 'Side Swept Hair', section: 'hair', defaultOn: false,
@@ -67,8 +67,8 @@ window.Outfit = (function () {
       textures: { H3_Front: { url: 'assets/variants/hair/hime/H3_Front.png', overlay: true } } },
     { key: 'hair_h4', label: 'Ponytail', section: 'hair', defaultOn: false,
       visibilityPatterns: ['h4_'], visOn: 1, visOff: 0 },
-    // v0.97.5 clip for the default hair: swaps H0's front bang for the pinned
-    // one. Must stay after hair_h0 - its 'h0_' sweep would otherwise show both.
+    // v0.97.5 clip for the default hair, swaps H0's front bang for the pinned
+    // one. has to stay AFTER hair_h0, its 'h0_' sweep would show both.
     { key: 'hair_clip', label: 'Hair clip', section: 'hair', defaultOn: false,
       requires: 'hair_h0', hideWhenOn: ['h0_front_bang'],
       colorPatterns: ['hairclip'],
@@ -87,7 +87,7 @@ window.Outfit = (function () {
       includes: ['h0_','h1_','h2_','h3_','h4_','hair'],
       excludes: ['hairband','hairpin','hairtie','hairclip','hairbow','hairhologram'] },
 
-    // This narrow group must follow main hair to override its tint.
+    // This small group has to come after the main hair to beat its tint.
     { key: 'hair_h1_strand', label: 'Strand', includes: ['h1_front_bang'], excludes: [] },
     { key: 'hair_h2_strand', label: 'Strand', includes: ['h2_front_bang'], excludes: [] },
     { key: 'hair_h3_strand', label: 'Strand', includes: ['h3_front'], excludes: [] },
@@ -111,8 +111,8 @@ window.Outfit = (function () {
     { key: 'mouth_interior', label: 'Mouth interior',
       includes: ['innermouth','tounge','tongue','teeth','saliva'], excludes: [] },
 
-    // Baked into the ModdableFace texture by applyGlassesTexture, not
-    // drawable tints - hence no include patterns.
+    // applyGlassesTexture paints these into the ModdableFace texture itself,
+    // they are not drawable tints, so there is nothing to include here.
     { key: 'glasses_frame', label: 'Glasses frame', includes: [], excludes: [] },
     { key: 'glasses_lens', label: 'Glasses lens', includes: [], excludes: [] },
 
@@ -160,11 +160,11 @@ window.Outfit = (function () {
     }
   }
 
-  // Decal catalog from the game (variants/logos/, see DECALS in
-  // tools/recover_assets.py). The garment tags mirror the game's own item
-  // definitions (BedabotsShirt, MilfHunterHoodie, USBPanties, ...) recovered
-  // from its Il2Cpp metadata, so each picker only offers what the game sells
-  // for that clothing piece.
+  // The decal catalog out of the game, variants/logos/, see DECALS in
+  // tools/recover_assets.py. the garment tags copy the game's own item names,
+  // BedabotsShirt and MilfHunterHoodie and USBPanties and so on, pulled from its
+  // Il2Cpp metadata, so each picker only offers what the game really sells for
+  // that piece of clothing.
   const LOGO_CATALOG = [
     ['aguiLogo', 'A-GUI', 'sh'],
     ['avocado', 'Avocado', 'p'],
@@ -243,9 +243,9 @@ window.Outfit = (function () {
     ];
   }
 
-  // Limb variants use packed-game crops placed through their drawable UVs.
+  // Limb variants are crops from the game atlas, placed through drawable UVs.
   const LIMB_DIR = 'assets/variants/limbs';
-  // Overlapping atlas regions require alphaClip.
+  // These atlas regions overlap, so they need alphaClip.
   const limbTex = (v, ids) => Object.fromEntries(
     ids.map(d => [d, { url: `${LIMB_DIR}/${v}/${d}.png`, alphaClip: true }]));
   const ARM_EXP_IDS = ['AttachArmL', 'AttachArmLHandCuddle', 'AttachArmLHandDown1',
@@ -258,7 +258,7 @@ window.Outfit = (function () {
     'AttachLegRFeet', 'AttachLegRKnee', 'AttachLegRLower', 'AttachLegRThigh'];
   const HT_SKIN_IDS = ['SkinArmL', 'SkinArmR', 'SkinPelvis', 'SkinThighL', 'SkinThighR',
     'barcode', 'lines'];
-  // Mech knees need calf/thigh draw-order overrides.
+  // Mech knees have to be told to draw over the calf and thigh.
   const LEG_ORDER = [
     ['AttachLegLLower', 'AttachLegLThigh'], ['AttachLegRLower', 'AttachLegRThigh'],
   ];
@@ -401,7 +401,7 @@ window.Outfit = (function () {
     if (window.Prefs) Prefs.pushToServer();
   }
 
-  // This rig lacks the game-side opacity control for these overlay meshes.
+  // This rig has no opacity control for these overlay meshes, the game does.
   const ALWAYS_HIDDEN = [
     'cumoutside', 'shadowboob', 'fondle',
     'nippiercing', 'navelpiercing',
@@ -418,8 +418,8 @@ window.Outfit = (function () {
         Live2D.opacityByPattern(it.visibilityPatterns, it.visibilityExcludes,
           on ? visOn : visOff);
       }
-      // Only stamped while worn; the owning item re-asserts these every pass,
-      // so clearing the override here would fight it.
+      // Only set while it is worn. the item that owns them writes these again
+      // every pass, so clearing the override here just fights it.
       if (on && it.hideWhenOn && Live2D.opacityByPattern) {
         Live2D.opacityByPattern(it.hideWhenOn, [], 0);
       }
@@ -438,7 +438,7 @@ window.Outfit = (function () {
     if (window.Mods) Mods.applyAll();
   }
 
-  // Recompose only the changed variant slot; atlas uploads are expensive.
+  // Only redraw the slot that changed, sending an atlas to the GPU is slow.
   function applyVariants(onlyKey) {
     if (!Live2D.setDrawableTextures) return;
     if (Live2D.setDrawableOrderBelow) {
@@ -495,7 +495,7 @@ window.Outfit = (function () {
 
   function applyColors() {
     if (!Live2D.tintByPattern || !Live2D.findDrawables || !Live2D.setDrawableTint) return;
-    // Clear before repainting so narrow tints cannot erase broad-group colors.
+    // Clear first, or a small tint wipes out the colors of a bigger group.
     const touched = new Set();
     for (const g of COLOR_GROUPS) {
       for (const id of Live2D.findDrawables(g.includes, g.excludes)) touched.add(id);
@@ -513,8 +513,8 @@ window.Outfit = (function () {
         Live2D.tintByPattern(g.includes, g.excludes, rgb);
       }
     }
-    // The face-mod slot follows skin color only while it holds face art;
-    // glasses live there too and must not be skin-tinted.
+    // The face-mod slot only follows skin color while it holds face art.
+    // glasses sit in the same slot and must NOT get tinted like skin.
     if ((variantState.glasses_style || 0) > 0) Live2D.setDrawableTint('ModdableFace', null);
     applyGlassesTexture();
   }

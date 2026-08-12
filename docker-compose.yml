@@ -48,17 +48,17 @@ services:
       OPENROUTER_MODEL: "${OPENROUTER_MODEL:-}"
       LLAMACPP_URL: "${LLAMACPP_URL:-http://llamacpp:8080}"
       OMEGA_NUM_CTX: "${OMEGA_NUM_CTX:-}"
-# start.sh probes this on the host; php has no GPU device node of its own.
+# start.sh reads this on the host, php has no GPU device of its own.
       OMEGA_GPU_VRAM_MB: "${OMEGA_GPU_VRAM_MB:-}"
       LLAMACPP_TOOLS: "${LLAMACPP_TOOLS:-}"
-# Keep the legacy KOKORO_URL fallback for existing .env files.
+# KOKORO_URL is the old name, kept so existing .env files still work.
       TTS_URL: "${TTS_URL:-}"
       KOKORO_URL: "${KOKORO_URL:-http://tts:8001}"
       KARAOKE_URL: "${KARAOKE_URL:-http://karaoke:8001}"
     volumes:
       - omega_state:/var/lib/omega
       - ./tools:/var/www/omega/tools
-# Model-server and TTS dependencies remain soft because their profiles vary.
+# Soft dependencies, the model server and TTS come and go with their profiles.
     healthcheck:
       test: ["CMD", "cgi-fcgi", "-bind", "-connect", "127.0.0.1:9000"]
       interval: 10s
@@ -80,11 +80,12 @@ services:
     environment:
       OLLAMA_MODELS_TO_PULL: "${OLLAMA_MODELS_TO_PULL:-hf.co/efficiencyx/Jun-LoRA-v4-E2B-GGUF:Q4_K_M}"
       TITLE_MODEL: "${TITLE_MODEL-hf.co/efficiencyx/Titlewen-GGUF:F16}"
-# Limit Ollama's parallel slots and loaded models to avoid multiplying KV-cache memory.
+# Cap how many requests and models Ollama holds at once. each one keeps its own
+# KV cache, the memory of the prompt it already read, so they add up fast.
       OLLAMA_NUM_PARALLEL: "${OLLAMA_NUM_PARALLEL:-1}"
       OLLAMA_MAX_LOADED_MODELS: "${OLLAMA_MAX_LOADED_MODELS:-3}"
       OLLAMA_KEEP_ALIVE: "${OLLAMA_KEEP_ALIVE:-5m}"
-# q8_0 lowers KV-cache memory; it requires flash attention and otherwise falls back to f16.
+# q8_0 stores that cache smaller. it needs flash attention, without it we get f16.
       OLLAMA_FLASH_ATTENTION: "${OLLAMA_FLASH_ATTENTION:-1}"
       OLLAMA_KV_CACHE_TYPE: "${OLLAMA_KV_CACHE_TYPE:-q8_0}"
     volumes:
@@ -150,10 +151,10 @@ services:
       - "no-new-privileges:true"
     networks: [omega]
 
-# Same server.py as `tts`, built with demucs and (on the GPU overlays) a CUDA /
-# ROCm torch. Profile-gated because that image is multi-GB and only karaoke needs
-# it; with the profile off, api/karaoke.php simply can't reach the host and the
-# webapp greys the karaoke button out.
+# The same server.py as `tts`, built with demucs and, on the GPU overlays, a CUDA
+# or ROCm torch. it sits behind a profile because the image is several GB and only
+# karaoke wants it. with the profile off api/karaoke.php just can't reach the
+# host, and the webapp greys the karaoke button out.
   karaoke:
     build:
       context: .
@@ -201,8 +202,8 @@ volumes:
   ollama_data:
   llamacpp_cache:
   tts_cache:
-    # Pinned to the pre-rename volume name so existing installs keep their
-    # already-downloaded model weights (~300MB+) instead of re-fetching.
+    # Pinned to the old volume name so an install that already exists keeps the
+    # weights it downloaded, 300MB and up, instead of fetching them again.
     name: omega_kokoro_cache
   karaoke_cache:
   omega_state:

@@ -223,10 +223,10 @@ ask_karaoke() {
     fi
 }
 
-# "run karaoke separation on the GPU? [Y/n]". Only asked when a card is actually
-# present; defaults to yes because splitting a song is minutes on CPU and seconds
-# on a GPU, and it only holds VRAM while a song is being prepared. Sets
-# $SEP_DEVICE (cuda|cpu). Non-interactive knob: JUN_KARAOKE_GPU=on|off (default on).
+# "run karaoke separation on the GPU? [Y/n]". we only ask when there is really a
+# card. yes by default, splitting a song takes minutes on a CPU and seconds on a
+# GPU, and it only holds the VRAM while a song is being prepared. sets
+# $SEP_DEVICE, cuda or cpu. without a prompt: JUN_KARAOKE_GPU=on|off, default on.
 ask_karaoke_gpu() {
     local v gpus
     gpus="$(detect_gpu_count)"
@@ -246,10 +246,10 @@ ask_karaoke_gpu() {
     fi
 }
 
-# "split one model across every GPU? [y/N]". Defaults off even on multi-GPU
-# boxes: on a mismatched pair, spreading is usually slower per token than
-# fitting the model on the big card alone. Sets $TENSOR_PARALLEL (on|off).
-# Non-interactive knob: JUN_TENSOR_PARALLEL=on|off (default off).
+# "split one model across every GPU? [y/N]". off by default even with several
+# cards. when the cards don't match, spreading her out is usually SLOWER per word
+# than just fitting her on the big one. sets $TENSOR_PARALLEL, on or off.
+# without a prompt: JUN_TENSOR_PARALLEL=on|off, default off.
 ask_tensor_parallel() {
     local v gpus
     gpus="$(detect_gpu_count)"
@@ -269,10 +269,10 @@ ask_tensor_parallel() {
     fi
 }
 
-# Whether the sharing feature is available at all, not whether anyone consents to
-# it: chat transcripts are personal data, so each account is asked in the app and
-# the answer is recorded per user. An installer prompt cannot consent on behalf of
-# users who do not exist yet. JUN_TELEMETRY=off removes the option entirely.
+# This only says whether the sharing feature EXISTS, not that anyone agreed to
+# it. chat transcripts are personal data, so every account gets asked inside the
+# app and the answer is stored per user. an installer can't agree on behalf of
+# people who don't have accounts yet. JUN_TELEMETRY=off drops the option.
 ask_telemetry() {
     if [ -n "${JUN_TELEMETRY:-}" ]; then
         case "$(printf '%s' "$JUN_TELEMETRY" | tr '[:upper:]' '[:lower:]')" in
@@ -374,7 +374,7 @@ configure() {
             ok "llama-server $url"
         else
             ask_model_ref
-            # llama-server -hf syntax has no hf.co/ prefix.
+            # llama-server -hf wants the name without the hf.co/ in front.
             set_env LLAMACPP_MODEL_HF "${MODEL_REF#hf.co/}"
             set_env LLAMACPP_URL "http://llamacpp:8080"
             profiles=llamacpp
@@ -402,8 +402,8 @@ configure() {
     set_env VOICE "$voice"
     ok "voice $voice"
 
-    # The voice sidecar is CPU-only on purpose: both engines are real-time there,
-    # and a GPU copy would sit on VRAM the LLM wants for layer offload.
+    # The voice sidecar stays on the CPU on purpose. both engines keep up in real
+    # time there, and a GPU copy would sit on VRAM she wants for her own layers.
     if [ "$voice" = on ]; then
         set_env TTS_DEVICE cpu
     fi
@@ -444,8 +444,8 @@ pkg_manager() {
         command -v brew >/dev/null 2>&1 && echo brew || echo none
         return
     fi
-    # rpm-ostree hosts (including Bazzite) are immutable: layer packages into
-    # the next deployment instead of trying to use a mutable package manager.
+    # rpm-ostree systems like Bazzite can't be changed in place, so we add
+    # packages to the NEXT boot instead of installing them now.
     for pm in rpm-ostree apt-get dnf yum pacman zypper; do
         if command -v "$pm" >/dev/null 2>&1; then echo "$pm"; return; fi
     done

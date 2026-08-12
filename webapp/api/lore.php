@@ -7,9 +7,10 @@ const LORE_FUZZY_MIN_IDF  = 2.0;  // only fuzzy-match distinctive (rare) names
 const LORE_MAX_INJECT     = 5;    // up to this many *distinct* facts injected
 const LORE_DEDUP_JACCARD  = 0.5;  // candidates sharing this much vocab collapse
 
-// Ordinary English + conversational filler. IDF can't drop these on its own:
-// words like "morning" or "look" are rare *in the lore* even though they're
-// common in chat, so they'd otherwise score high. Listed explicitly instead.
+// Plain English and chat filler. IDF scores a word by how rare it is, and it
+// can't get rid of these by itself, a word
+// like "morning" or "look" is rare *in the lore* even though you say it all
+// day, so it would score high. we list them out instead.
 const LORE_STOP = [
     'a','an','and','are','as','at','be','been','being','but','by','can','could','did','do','does',
     'doing','done','for','from','had','has','have','having','he','her','hers','him','his','how','i',
@@ -65,9 +66,10 @@ function lore_index(): ?array {
         $tf = [];
         foreach (lore_tokens($a) as [$stem, $orig, $off]) {
             $tf[$stem] = ($tf[$stem] ?? 0) + 1;
-            // Count capitalization only mid-sentence: a name like "Annalie" turns
-            // up capitalized after another word, whereas "However"/"Coming" only
-            // lead sentences. Sentence-initial caps carry no proper-noun signal.
+            // Only count a capital in the middle of a sentence. a name like
+            // "Annalie" shows up capitalised after another word, while
+            // "However" and "Coming" only ever Start one, so a capital at
+            // the start tells us nothing about a name.
             $j = $off - 1;
             while ($j >= 0 && $a[$j] === ' ') $j--;
             $initial = ($j < 0) || strpos('.!?:"', $a[$j]) !== false;
@@ -85,9 +87,9 @@ function lore_index(): ?array {
     foreach ($cap as $stem => $c) {
         if ($c >= 2 && $c >= ($low[$stem] ?? 0)) $proper[$stem] = true;
     }
-    // Fuzzy only against distinctive proper nouns (real names), so typos resolve
-    // to "Annalie"/"Shanice" but an ordinary word can't be dragged onto a
-    // capitalized common word.
+    // Fuzzy match ONLY against the distinctive proper nouns, the real names,
+    // so a typo lands on "Annalie" or "Shanice" and an ordinary word can't
+    // get dragged onto a common word that happens to be capitalised.
     $fuzzy = [];
     foreach ($proper as $stem => $_) {
         if (($idfMap[$stem] ?? 0) >= LORE_FUZZY_MIN_IDF) $fuzzy[] = $stem;
@@ -125,8 +127,9 @@ function lore_resolve(array $idx, string $query): array {
     return $res;
 }
 
-// Jaccard overlap of two term-count maps' key sets - used to fold near-duplicate
-// answers (the corpus has many rephrasings of the same fact) into one.
+// Jaccard overlap of the keys in two term count maps. we use it to fold
+// answers that are nearly the same into one, the corpus says the same fact
+// many different ways.
 function lore_jaccard(array $a, array $b): float {
     $inter = 0;
     foreach ($a as $k => $_) if (isset($b[$k])) $inter++;

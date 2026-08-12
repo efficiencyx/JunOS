@@ -1,9 +1,9 @@
 services:
-# Serve a GGUF sitting on disk instead of pulling one from Hugging Face.
-# Layered in by start.sh when LLAMACPP_MODEL_FILE is set. It lives in its own
-# overlay because llama.cpp prefers --hf-repo whenever both are given, and its
-# file arguments reject an empty value - so the local ones have to be absent
-# rather than blank, which a single compose file cannot express.
+# Serve a GGUF already on disk instead of pulling one from Hugging Face.
+# start.sh layers this in when LLAMACPP_MODEL_FILE is set. it needs its own
+# overlay because llama.cpp picks --hf-repo whenever it gets both, and its file
+# arguments refuse an empty value, so the local ones have to be MISSING and not
+# blank. one compose file can't say that.
   llamacpp:
     environment:
       LLAMA_ARG_HF_REPO: ""

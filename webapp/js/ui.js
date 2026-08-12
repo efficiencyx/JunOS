@@ -136,7 +136,8 @@ window.ui = (function () {
       document.addEventListener('keydown', onKey);
 
       document.body.appendChild(backdrop);
-      backdrop.getBoundingClientRect(); // reflow → transition in
+      backdrop.getBoundingClientRect(); // force layout first, or the fade has
+                                        // nothing to animate from
       backdrop.classList.add('open');
       (opts.danger ? cancelBtn : okBtn).focus();
     });

@@ -1,7 +1,7 @@
 #!/bin/sh
-# Runs inside /docker-entrypoint.d/ before nginx loads templates.
-# Removes the template that does NOT match TLS_MODE so that only one
-# omega.conf is generated after envsubst expansion.
+# Runs from /docker-entrypoint.d/ before nginx reads any template.
+# deletes whichever template does NOT match TLS_MODE, so only one omega.conf
+# comes out the other side.
 set -e
 
 TLS_MODE="${TLS_MODE:-off}"

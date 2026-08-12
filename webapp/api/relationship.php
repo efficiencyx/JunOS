@@ -22,7 +22,7 @@ if ($method === 'PUT') {
         if (!isset($body[$k]) || !is_numeric($body[$k])) fail(400, 'invalid_request');
         $values[$k] = (int)$body[$k];
     }
-    relationship_set((int)$user['id'], $values); // clamps to 0-100
+    relationship_set((int)$user['id'], $values);
     echo json_encode(relationship_get((int)$user['id']));
     exit;
 }

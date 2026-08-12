@@ -14,7 +14,6 @@ try {
     $OutputEncoding = [Text.Encoding]::UTF8
 } catch {}
 
-# ── ANSI / VT escape setup ───────────────────────────────────────────────────
 $VTSupported = $false
 if ($Host.UI.SupportsVirtualTerminal -or $env:WT_SESSION -or
     $env:TERM_PROGRAM -eq 'vscode' -or $PSVersionTable.PSVersion.Major -ge 7) {
@@ -43,8 +42,6 @@ function Ok([string]$msg)      { Write-Host "    ${OK}✓${R} ${MUTED}${msg}${R}
 function Note([string]$msg)    { Write-Host "    ${DIM}ℹ ${msg}${R}" }
 function Warn_([string]$msg)   { Write-Host "    ${WARN}⚠${R} ${WARN}${msg}${R}" }
 function Fail_([string]$msg)   { Write-Host "    ${DANGER}✗${R} ${DANGER}${msg}${R}" }
-# ── end UI helpers ────────────────────────────────────────────────────────────
-
 # UUIDs, not indices: nvidia-smi enumerates by PCI bus order while CUDA sorts
 # by speed, so the same index means different cards to the two of them.
 function Get-GpuOrder {
@@ -63,14 +60,14 @@ $LogDir   = Join-Path $Runtime 'logs'
 $PidFile  = Join-Path $Runtime 'pids.json'
 $StateDir = Join-Path $Runtime 'state'
 
-# Load KEY=VALUE pairs as process env vars unless already set (so the shell
-# can still override per-run).
+# Read KEY=VALUE pairs in as env vars, but only when they aren't set already, so
+# you can still override one for a single run.
 if (Test-Path .env) {
     foreach ($line in Get-Content .env) {
         if ($line -match '^\s*([A-Za-z_][A-Za-z0-9_]*)\s*=\s*(.*)$') {
             $k = $Matches[1]; $v = $Matches[2].Trim()
-            # Docker-internal hostnames from .env.example don't resolve on bare
-            # metal; ignore them and use our localhost defaults instead.
+            # The docker hostnames in .env.example mean nothing on bare metal,
+            # so skip them and use our own localhost defaults.
             if ($v -match '://(ollama|tts|kokoro|karaoke|nginx|php|llamacpp)\b') { continue }
             if (-not (Get-Item "env:$k" -ErrorAction SilentlyContinue)) {
                 Set-Item "env:$k" $v
@@ -94,8 +91,8 @@ if (-not $GpuDevices -or $GpuDevices -eq 'auto') {
 } elseif ($GpuDevices -eq 'all') {
     $GpuDevices = ''
 }
-# An empty CUDA_VISIBLE_DEVICES means zero GPUs, not all of them, so only set
-# it when we actually have a list. The model servers inherit it.
+# An empty CUDA_VISIBLE_DEVICES means NO GPUs, not all of them, so only set it
+# when we really have a list. the model servers pick it up from here.
 if ($GpuDevices) { $env:CUDA_VISIBLE_DEVICES = $GpuDevices }
 $TensorParallel = $env:TENSOR_PARALLEL -match '^(on|1|true|yes)$'
 

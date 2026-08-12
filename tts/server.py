@@ -49,17 +49,18 @@ log = logging.getLogger("tts")
 KOKORO_SAMPLE_RATE = 24000
 KOKORO_DEFAULT = "af_heart"
 
-# Kokoro-82M's EN voices. Not all are equally trained but all of them load.
+# Kokoro-82M's EN voices. some are trained better than others but they all load.
 KOKORO_VOICES = [
     "af_heart", "af_bella", "af_aoede", "af_kore", "af_nicole",
     "af_nova", "af_river", "af_sarah", "af_sky", "af_alloy", "af_jessica",
     "bf_alice", "bf_emma", "bf_isabella", "bf_lily",
 ]
 
-# pocket-tts predefined voice prompts (bare names). These are timbres only - the
-# spoken language is a separate axis (POCKET_LANGUAGES below): every voice has a
-# per-language embedding, so any voice pairs with any language. giovanni/lola/
-# juergen/rafael/estelle were recorded by non-English speakers and keep that accent.
+# The voice prompts pocket-tts ships, bare names. these are the timbre ONLY, the
+# language is a separate thing, see POCKET_LANGUAGES below. every voice has an
+# embedding per language so any voice goes with any language. giovanni, lola,
+# juergen, rafael and estelle were recorded by people who don't speak English
+# and they keep that accent.
 POCKET_DEFAULT = "eve"
 POCKET_VOICES = [
     "alba", "anna", "azelma", "bill_boerst", "caro_davy", "charles", "cosette",
@@ -68,11 +69,12 @@ POCKET_VOICES = [
     "giovanni", "lola", "juergen", "rafael", "estelle",
 ]
 
-# pocket-tts bakes the language into the model weights: load_model(language=...) is
-# a different checkpoint that actually pronounces that language, and it resolves
-# predefined voices to that language's embeddings. We expose only the configs pocket
-# blessed upstream - French and Spanish/German ship as larger 24-layer builds, hence
-# the _24l ids. `id` is the load_model() argument; `label` is what the UI shows.
+# pocket-tts bakes the language into the weights. load_model(language=...) is a
+# different checkpoint that really says that language, and it points the ready
+# made voices at that language's embeddings. we only offer the configs pocket
+# blessed upstream. French and Spanish and German come as bigger 24 layer
+# builds, that is what the _24l ids are. `id` goes to load_model(), `label` is
+# what you see in the UI.
 POCKET_DEFAULT_LANG = "english"
 POCKET_LANGUAGES = [
     {"id": "english", "label": "English"},
@@ -87,37 +89,37 @@ POCKET_LANG_IDS = frozenset(lang["id"] for lang in POCKET_LANGUAGES)
 DEFAULT_ENGINE = "kokoro"
 TTS_ENGINES = ("kokoro", "pockettts")
 
-# tts | karaoke. Only affects the startup pre-warm and what /health advertises -
-# every route stays mounted in both roles and answers 503 when its dep is absent.
+# tts | karaoke. this only changes the pre-warm at startup and what /health
+# says. every route is mounted in both roles and answers 503 when the thing it
+# needs isn't there.
 SIDECAR_ROLE = os.environ.get("SIDECAR_ROLE", "tts").strip().lower()
 
-# "demucs" is a pseudo-engine: it isn't a TTS voice, but registering it in the
-# same lifecycle lets a separation job evict the TTS engines while it runs (and
-# vice-versa) and holds _inflight so the reaper can't yank a model mid-job.
+# "demucs" is a fake engine. it is not a TTS voice, but putting it in the same
+# lifecycle lets a separation job throw the TTS engines out while it runs, and
+# the other way round, and it holds _inflight so the reaper can't pull a model
+# out from under a job.
 _ALL_ENGINES = TTS_ENGINES + ("demucs",)
 
-# Only one TTS engine is ever selected at a time, so keeping several resident just
-# strands VRAM/RAM. We drop the others the instant a request picks a different one,
-# and a reaper frees everything after this many idle seconds (0 disables idle
-# unload). Reloading costs a few seconds off cold weights cached in HF_HOME.
+# ONLY one TTS engine is ever picked at a time, so keeping more than one loaded
+# just sits on VRAM and RAM for nothing. we drop the others the moment a request
+# asks for a different one, and a reaper frees the lot after this many idle
+# seconds, 0 turns that off. loading again costs a few seconds off the cold
+# weights in HF_HOME.
 TTS_IDLE_UNLOAD_S = float(os.environ.get("TTS_IDLE_UNLOAD_S", "180"))
 _REAP_INTERVAL_S = 20.0
 
-# Cap on the /stt request body. 16kHz mono PCM16 is ~32KB/s, so 4MB is ~2min of
-# audio - far past js/voice.js's 30s max-utterance guard. Kept in step with
-# nginx's `client_max_body_size 4m` and PHP's post_max_size on /api/stt.php.
+# Cap on the /stt request body. 16kHz mono PCM16 is ~32KB/s so 4MB is about
+# 2min of audio. one of a chain of caps, api/stt.php lists them all.
 STT_MAX_BYTES = 4 * 1024 * 1024
 
-# STT language. Must match STT_MODEL: the ".en" whisper builds are English-only,
-# so a non-"en" value here needs a multilingual model too (base / small / etc,
-# no ".en" suffix). Empty string = auto-detect per utterance, which costs an
-# extra decode pass and is unreliable on utterances under ~2s - prefer naming the
-# language when you know it. See docker/tts.Dockerfile for the pairing.
+# An empty string means work it out per utterance, which costs another decode
+# pass and is shaky under ~2s of audio, so name the language when you know it.
+# has to agree with STT_MODEL, docker/tts.Dockerfile explains the pairing.
 STT_LANG = (os.environ.get("STT_LANG", "").strip().lower() or None)
 
-# Karaoke separation posts whole songs, not utterances, so it gets its own far
-# larger body cap. Separated stems live in per-token temp dirs that are dropped
-# once both are fetched, or swept after this TTL if a client never comes back.
+# Karaoke sends whole songs and not utterances, so it gets its own much bigger
+# cap. the stems we split out sit in a temp dir per token, and go away once both
+# have been fetched, or after this TTL when a client never comes back.
 SEP_MAX_BYTES = 50 * 1024 * 1024
 SEP_TTL_S = 15 * 60
 
@@ -125,14 +127,14 @@ _pipeline = None       # Kokoro KPipeline
 _pocket_model = None   # pocket-tts TTSModel (one language resident at a time)
 _pocket_lang = None    # language the resident pocket model was loaded for
 _pocket_states = {}    # voice name -> precomputed voice state for _pocket_lang
-# Serializes the pocket load/reload so a /warm preload and a concurrent synth can't
-# both load a checkpoint at once. Held during the multi-second load, so the second
-# caller waits and reuses the result instead of doubling the work.
+# Puts the pocket loads in a line so a /warm preload and a synth at the same
+# time can't both pull a checkpoint. held for the whole multi second load, so
+# the second caller waits and uses the result instead of doing it all again.
 _pocket_load_lock = threading.Lock()
 
-# Model-lifecycle state. _lock guards all of it plus the model globals above; the
-# reaper only unloads when _inflight is 0 so it can't pull a model out from under
-# an in-progress synth.
+# Model lifecycle state. _lock covers all of this and the model globals above.
+# the reaper only unloads when _inflight is 0, so it can't take a model away
+# from a synth that is still running.
 _lock = threading.RLock()
 _inflight = 0
 _active_engine = DEFAULT_ENGINE
@@ -146,22 +148,23 @@ _sep_tokens = {}       # token -> {dir, created_at, fetched}
 
 
 def get_device():
-    # TTS_DEVICE picks where torch runs: cpu | cuda | auto (default). "auto" uses
-    # CUDA when the wheel exposes it - this also covers ROCm builds, whose HIP
-    # backend masquerades as torch.cuda. The image ships a CPU-only torch unless
-    # the nvidia/amd compose overlay rebuilds it against a GPU wheel, so on a
-    # plain build "auto" always resolves to cpu.
+    # TTS_DEVICE says where torch runs: cpu | cuda | auto, auto is the default.
+    # "auto" takes CUDA when the wheel has it, and that covers ROCm too, its
+    # HIP backend pretends to be torch.cuda. the image ships a CPU only torch
+    # unless the nvidia or amd compose overlay builds it against a GPU wheel,
+    # so on a plain build "auto" always comes out cpu.
     global _device
     if _device is None:
         choice = os.environ.get("TTS_DEVICE", "auto").strip().lower()
         if choice in ("cpu", "cuda"):
             _device = choice
         else:
-            # torch.cuda.is_available() is not enough on ROCm: it returns True on
-            # cards whose gfx arch has no shipped kernels (most consumer RDNA
-            # without HSA_OVERRIDE_GFX_VERSION), and the first real kernel then
-            # dies with "HIP error: invalid device function". Run a tiny matmul
-            # so "auto" degrades to cpu instead of breaking every request.
+            # torch.cuda.is_available() is not enough on ROCm. it says True on
+            # cards whose gfx arch has no kernels shipped, which is most
+            # consumer RDNA without HSA_OVERRIDE_GFX_VERSION, and then the
+            # first real kernel dies with "HIP error: invalid device
+            # function". so we run a tiny matmul and let "auto" fall back to
+            # cpu instead of breaking every request.
             try:
                 import torch
                 if torch.cuda.is_available():
@@ -180,9 +183,9 @@ def get_device():
 
 
 def get_sep_device():
-    # SEP_DEVICE: cpu | cuda | auto. Unlike get_device() this stays simple - a
-    # separation job is one big call, so a bad GPU just falls back per-job in
-    # _apply_demucs rather than needing a probe here.
+    # SEP_DEVICE: cpu | cuda | auto. this one stays simple, unlike get_device().
+    # a separation job is one big call, so a bad GPU just falls back per job in
+    # _apply_demucs and we don't need to test anything here.
     choice = os.environ.get("SEP_DEVICE", "auto").strip().lower()
     if choice in ("cpu", "cuda"):
         return choice
@@ -194,7 +197,7 @@ def get_sep_device():
 
 
 def get_pipeline():
-    # Loaded lazily so import-time failures (missing espeak-ng etc.) surface clearly.
+    # Loaded late so a failure at import, missing espeak-ng and so on, is clear.
     global _pipeline
     if _pipeline is None:
         from kokoro import KPipeline
@@ -206,11 +209,11 @@ def get_pipeline():
 
 
 def get_pocket_model(language=POCKET_DEFAULT_LANG):
-    # load_model() is relatively slow and downloads weights into HF_HOME on first
-    # call, so we keep it lazy - the engine is only paid for if actually selected.
-    # The language is baked into the weights, so a language switch is a full reload;
-    # we keep only one resident (matching the one-engine-at-a-time policy) and drop
-    # its per-language voice states along with it.
+    # load_model() is slow and pulls weights into HF_HOME the first time, so we
+    # leave it late and only pay for the engine if somebody picks it. the
+    # language is baked into the weights so changing it is a full reload. we
+    # keep ONE loaded, same as the one engine at a time rule, and drop its per
+    # language voice states with it.
     global _pocket_model, _pocket_lang, _pocket_states
     with _pocket_load_lock:
         if _pocket_model is not None and _pocket_lang != language:
@@ -221,8 +224,9 @@ def get_pocket_model(language=POCKET_DEFAULT_LANG):
             import inspect
             from pocket_tts import TTSModel
             device = get_device()
-            # Not every pocket-tts release exposes a `device` kwarg; pass it only when
-            # the signature accepts it, otherwise fall back to a post-load .to(device).
+            # Not every pocket-tts release takes a `device` kwarg, so only
+            # pass it when the signature has one, otherwise load first and
+            # then .to(device).
             device_via_kwarg = "device" in inspect.signature(TTSModel.load_model).parameters
             kwargs = {"language": language}
             if device_via_kwarg:
@@ -252,32 +256,25 @@ def _stt_available():
 
 
 def get_whisper():
-    # Lazy like the TTS engines: the model downloads into HF_HOME on first call,
-    # and keeping it out of prewarm() means it can't push first boot past the
-    # healthcheck. First transcription pays ~1-2s of load; every later one is warm.
+    # Late, like the TTS engines. the model comes into HF_HOME on the first
+    # call, and keeping it out of prewarm() means it can't push first boot past
+    # the healthcheck. the first transcription pays ~1-2s, every one after that
+    # is warm.
     #
-    # cpu_threads is pinned deliberately. CTranslate2 and torch each default to
-    # spawning one intra-op thread per core, so an unpinned whisper transcribing
-    # while Kokoro synthesizes oversubscribes every core on the box. OMP_NUM_THREADS
-    # (set in tts.Dockerfile) bounds torch; this bounds CTranslate2.
+    # cpu_threads is pinned on purpose. CTranslate2, the engine whisper actually
+    # runs on, and torch both want one thread per core by default, so a whisper with no pin transcribing while
+    # Kokoro talks asks for more threads than the box has cores.
+    # OMP_NUM_THREADS, set in tts.Dockerfile, holds torch down, this holds
+    # CTranslate2 down.
     global _whisper
     if _whisper is None:
         from faster_whisper import WhisperModel
         model = os.environ.get("STT_MODEL", "base")
         compute = os.environ.get("STT_COMPUTE", "int8")
         threads = int(os.environ.get("OMP_NUM_THREADS", "4"))
-        # STT_DEVICE, NOT TTS_DEVICE - and defaulting to cpu rather than auto.
-        # Whisper runs on CTranslate2, a different runtime from torch, so the
-        # device that's right for Kokoro isn't automatically right here:
-        #   - CUDA CTranslate2 needs cuBLAS + cuDNN. The CUDA torch wheel the
-        #     nvidia overlay installs doesn't reliably provide cuDNN, so
-        #     inheriting TTS_DEVICE=cuda would fail at load with a missing-.so
-        #     error on a stack that was working a moment ago.
-        #   - CTranslate2 has no ROCm backend at all, so on the AMD overlay
-        #     (where torch reports "cuda" via HIP) it can only run on CPU.
-        # base.en on CPU is ~350-700ms for a short utterance, which is not the
-        # bottleneck - Kokoro is. Opt in with STT_DEVICE=cuda if you have the
-        # CUDA libs and want the ~250ms.
+        # STT_DEVICE, NOT TTS_DEVICE: whisper runs on CTranslate2, so the device
+        # that suits Kokoro does not carry over. docker/tts.Dockerfile has the
+        # cuDNN/ROCm reasons it defaults to cpu.
         device = os.environ.get("STT_DEVICE", "cpu").strip().lower()
         if device not in ("cpu", "cuda"):
             device = "cpu"
@@ -285,8 +282,8 @@ def get_whisper():
             log.info("STT: compute_type=%s unsupported on CPU, using int8", compute)
             compute = "int8"
         if model.endswith(".en") and STT_LANG not in (None, "en"):
-            # Silent-garbage guard: an English-only model asked for another
-            # language doesn't error, it just transcribes nonsense.
+            # Guard against quiet rubbish. an English only model asked for
+            # another language does not error, it just writes nonsense.
             log.warning("STT: model %s is English-only but STT_LANG=%s; "
                         "use a multilingual model (e.g. %s) or set STT_LANG=en",
                         model, STT_LANG, model[:-3])
@@ -311,8 +308,9 @@ def _sep_available():
 
 
 def get_separator():
-    # Lazy like the TTS engines: htdemucs weights (~80MB) download into HF_HOME on
-    # first call. The model is moved onto the device _apply_demucs picks per-job.
+    # Late, like the TTS engines. the htdemucs weights, about 80MB, come into
+    # HF_HOME on the first call. the model then moves onto whatever device
+    # _apply_demucs picks for that job.
     global _separator
     if _separator is None:
         from demucs.pretrained import get_model
@@ -352,7 +350,8 @@ def _free_torch():
 
 
 def _unload(names):
-    # Caller holds _lock. Drops the model refs; gc + empty_cache reclaim the VRAM.
+    # The caller holds _lock. drops the model refs, then gc and empty_cache
+    # give the VRAM back.
     global _pipeline, _pocket_model, _pocket_lang, _pocket_states, _separator
     freed = []
     for name in names:
@@ -370,8 +369,8 @@ def _unload(names):
 def _begin_use(engine):
     global _active_engine, _last_used, _inflight
     with _lock:
-        # Only reclaim on a real switch with nothing in flight; mid-reply chunks
-        # for the same engine must not trigger an unload.
+        # Only take it back on a real switch with nothing running. chunks in
+        # the middle of a reply on the same engine must not set off an unload.
         if _inflight == 0 and engine != _active_engine:
             _unload([e for e in _ALL_ENGINES if e != engine])
         _active_engine = engine
@@ -418,7 +417,7 @@ app.add_middleware(
 
 @app.exception_handler(Exception)
 async def on_unhandled(request: Request, exc: Exception) -> JSONResponse:
-    # Anything that slips through becomes a generic 500 - no tracebacks to clients.
+    # Anything that gets past turns into a plain 500. NEVER a traceback to a client.
     log.exception("unhandled exception on %s %s", request.method, request.url.path)
     path = request.url.path
     if path in ("/stt", "/transcribe_timed"):
@@ -433,10 +432,10 @@ async def on_unhandled(request: Request, exc: Exception) -> JSONResponse:
 class TTSReq(BaseModel):
     text: Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=2000)]
     voice: str = KOKORO_DEFAULT
-    # speed only affects Kokoro; pocket-tts generate_audio has no rate control.
+    # speed only does something on Kokoro, pocket-tts generate_audio has no rate.
     speed: float = Field(default=1.0, ge=0.5, le=2.0)
     engine: str = DEFAULT_ENGINE
-    # pocket-tts only; ignored by Kokoro (which is American English).
+    # pocket-tts only. Kokoro ignores it, it speaks American English.
     lang: str = POCKET_DEFAULT_LANG
 
 
@@ -448,9 +447,9 @@ class WarmReq(BaseModel):
 
 @app.on_event("startup")
 def prewarm():
-    # Synthesize one tiny Kokoro utterance up front so the first real request
-    # doesn't eat the pipeline + default-voice cold start. pocket-tts warms
-    # lazily on its first request instead.
+    # Say one tiny thing with Kokoro up front so the first real request doesn't
+    # pay for the pipeline and the default voice starting cold. pocket-tts warms
+    # up on its own first request instead.
     global _last_used
     if SIDECAR_ROLE != "karaoke":
         try:
@@ -460,10 +459,10 @@ def prewarm():
         except Exception:
             log.exception("pre-warm failed (non-fatal)")
 
-    # Start the idle clock only now, so prewarm's duration isn't counted against it.
+    # Start the idle clock NOW, so the time prewarm took doesn't count against it.
     _last_used = time.monotonic()
-    # Unconditional: the reaper also sweeps expired separation tokens, which have
-    # to be cleaned up even where idle unloading is switched off.
+    # Always, no condition. the reaper also clears out separation tokens that
+    # expired, and those need cleaning even when idle unloading is off.
     threading.Thread(target=_reaper, name="tts-reaper", daemon=True).start()
     log.info("sidecar role: %s", SIDECAR_ROLE)
     if TTS_IDLE_UNLOAD_S > 0:
@@ -473,8 +472,8 @@ def prewarm():
 @app.get("/health")
 def health():
     # `stt` lets the webapp hide the mic button when this build has no whisper,
-    # rather than failing on the first utterance. Reports whether the dep is
-    # importable, not whether the model is loaded (it loads lazily).
+    # instead of dying on the first thing you say. it says whether we can import
+    # it, NOT whether the model is loaded, that happens late.
     return {"ok": True, "role": SIDECAR_ROLE, "stt": _stt_available(),
             "sep": _sep_available(), "device": get_sep_device()}
 
@@ -496,8 +495,8 @@ def voices():
 
 
 def to_wav(audio, sample_rate):
-    # Some engines occasionally return samples above 1.0; pull the peak back down
-    # so the WAV doesn't clip. Then encode 16-bit PCM WAV into a byte buffer.
+    # Some engines hand back samples over 1.0 now and then, so pull the peak
+    # back down or the WAV clips. then write a 16-bit PCM WAV into a buffer.
     peak = float(np.max(np.abs(audio))) if audio.size else 0.0
     if peak > 1.0:
         audio = audio / peak
@@ -572,11 +571,12 @@ def tts(req: TTSReq):
 
 @app.post("/warm")
 def warm(req: WarmReq):
-    # Preload a pocket-tts language checkpoint (and its voice state) so a later
-    # /tts request in that language skips the multi-second load. The client fires
-    # this while the LLM is still generating, hiding the swap behind it. Kokoro has
-    # no per-language weights, so warming it is a no-op. A language switch here is a
-    # full reload, same as synth - it just happens off the reply's critical path.
+    # Load a pocket-tts language checkpoint early, and its voice state, so a
+    # later /tts request in that language skips the multi second wait. the
+    # client sends this while the LLM is still writing, so the swap hides behind
+    # that. Kokoro has no per language weights so warming it does nothing. a
+    # language change here is a full reload, same as a synth, it just happens
+    # somewhere that nobody is waiting.
     if req.engine != "pockettts":
         return {"ok": True, "warmed": None}
     language = req.lang if req.lang in POCKET_LANG_IDS else POCKET_DEFAULT_LANG
@@ -592,8 +592,9 @@ def warm(req: WarmReq):
 
 @app.post("/stt")
 async def stt(request: Request):
-    # Body is a raw WAV (16kHz mono PCM16 from js/voice.js), not multipart - it's
-    # one file with no metadata, so a raw body skips python-multipart entirely.
+    # The body is a raw WAV, 16kHz mono PCM16 out of js/voice.js, not multipart.
+    # it is one file with nothing else attached, so a raw body means we don't
+    # need python-multipart at all.
     #
     # faster-whisper decodes via PyAV, whose wheel bundles ffmpeg's libraries, so
     # no ffmpeg binary is needed in the image and any container PyAV can open

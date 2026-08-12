@@ -31,9 +31,10 @@
     if (reduced) videoEl.pause();
     document.body.appendChild(root);
 
-    // Fake progress: constant walk 0→99 over ~4s (CSS transition), park at 99
-    // until loading finishes. The transition must be running before Live2D.init
-    // blocks the main thread, hence the forced reflow between the two values.
+    // Fake progress. a steady walk from 0 to 99 over ~4s with a CSS
+    // transition, then it sits at 99 until loading is done. the transition
+    // has to be running BEFORE Live2D.init blocks the main thread, that is
+    // what the forced reflow between the two values is for.
     if (reduced) { setP(50); }
     else {
       setP(0);

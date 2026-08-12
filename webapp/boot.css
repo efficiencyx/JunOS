@@ -1,4 +1,5 @@
-/* Critical CSS: everything the pre-app screens need (age gate, auth terminal,
+/* Critical CSS. everything the screens before the app need (age gate, auth
+   terminal,
    boot overlay) plus the custom properties and resets the whole app builds on.
    This file is never served - tools/build-critical-css.php inlines it into the
    <style id="critical"> block of index.html, so styles.css can load async
@@ -14,7 +15,7 @@
   --fg:         #e3e3e3;
   --muted:      #c4c7c5;
   --dim:        #8e9295;
-  /* Accent is Jun's mood colour: js/app.js overrides --accent/--accent-2 on
+  /* The accent IS her mood colour. js/app.js overwrites --accent/--accent-2 on
      the root from her affection/trust/tension once she's loaded. These are the
      resting values used before login and as a fallback. --grad is derived from
      them, so the whole palette shifts from one place. */
@@ -147,7 +148,7 @@ html, body {
   background: var(--term-bar);
   border-bottom: 1px solid rgba(0,0,0,.45);
 }
-/* Window chrome (.term-lights / .term-title / .term-winctl) + the per-OS
+/* The window frame (.term-lights, .term-title, .term-winctl) and the per-OS
    themes are shared with the auth terminal - defined in the auth block below. */
 .boot-term-body {
   position: relative;
@@ -277,11 +278,11 @@ html, body {
 }
 @keyframes bootZoom {
   0%   { transform: scale(1);    opacity: 1; }
-  28%  { transform: scale(.965); opacity: 1; }   /* slight pull-back */
+  28%  { transform: scale(.965); opacity: 1; }   /* pulls back a little */
   100% { transform: scale(2.4);  opacity: 0; }
 }
 
-/* Shared with the age gate + auth panels below - keep defined. */
+/* The age gate and the auth panels below use this too, so keep it. */
 @keyframes bootCardIn {
   from { opacity: 0; transform: translateY(12px) scale(.98); }
   to   { opacity: 1; transform: none; }
@@ -387,7 +388,7 @@ html[data-pre-auth] #app { visibility: hidden; }
 #authScreen[hidden] { display: none; }
 
 /* Auth terminal - base theme (mac-like); per-OS overrides further down.
-   --term-* vars are swapped by .auth-term[data-os=…]. */
+   --term-* vars are swapped by .auth-term[data-os=...]. */
 .auth-term {
   --term-bg:     #0c0c0d;
   --term-bar:    #232427;

@@ -1,4 +1,5 @@
-// Keep capture separate from TTS playback so microphone audio cannot drive lipsync.
+// Capture stays seperate from TTS playback, or your own mic ends up
+// Driving her mouth.
 
 window.Voice = (function () {
   const STT_URL = '/api/stt.php';
@@ -8,12 +9,12 @@ window.Voice = (function () {
   const MAX_UTTERANCE_MS = 30000;
   const EMA_ALPHA = 0.2;
 
-  const CALIBRATE_MS = 1500;   // must not overlap TTS; AEC needs ~200-500ms to converge
-  const FLOOR_MIN = 0.003;     // guards a dead/muted mic (floor→0 → threshold→0 → always "speech")
-  const FLOOR_MAX = 0.05;      // guards a loud room from making Jun undetectable-quiet
-  const OPEN_MULT = 3.5;       // ≈ +11dB over the noise floor
+  const CALIBRATE_MS = 1500;   // must not overlap TTS, AEC needs ~200-500ms to settle
+  const FLOOR_MIN = 0.003;     // a dead or muted mic gives floor 0, threshold 0, all reads as "speech"
+  const FLOOR_MAX = 0.05;      // caps the floor so a loud room can't lift the open threshold above speech
+  const OPEN_MULT = 3.5;       // ~ +11dB over the noise floor
   const OPEN_MIN = 0.015;
-  const CLOSE_RATIO = 0.55;    // hysteresis: prevents chatter mid-word
+  const CLOSE_RATIO = 0.55;    // close lower than we open, or it Flaps mid-word
 
   const START_FRAMES = 3;      // ~96ms at the worklet's 32ms cadence
   const START_FRAMES_TTS = 6;  // ~200ms while Jun talks - see NOTES ON ECHO
@@ -64,10 +65,11 @@ window.Voice = (function () {
     onState(s);
   }
 
-  // getUserMedia only exists in a secure context. http://localhost qualifies, so
-  // a dev box is fine - but the stack defaults to TLS_MODE=off on :80, so over a
-  // LAN IP `navigator.mediaDevices` is simply *undefined* rather than throwing.
-  // Report that as its own case; "click allow" is useless advice there.
+  // getUserMedia only works in a secure context. localhost is ok so your
+  // dev box is fine, but we ship TLS_MODE=off on :80, and over a LAN IP
+  // `navigator.mediaDevices` is just *undefined*, it doesn't even throw.
+  // so it gets its own case. telling someone to "click allow" when no
+  // prompt ever shows up helps Nobody.
   function support() {
     if (!window.isSecureContext) return { ok: false, reason: 'insecure_context' };
     if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
@@ -84,17 +86,20 @@ window.Voice = (function () {
       audio: {
         echoCancellation: { ideal: true },
         noiseSuppression: { ideal: true },
-        // Deliberately OFF. AGC continuously rescales input, so the noise floor
-        // we calibrate decays out from under us as AGC ramps gain during silence
-        // - absolute thresholds stop meaning anything. Whisper handles level
-        // variation fine; a drifting VAD is much worse.
+        // Deliberately off. AGC is the mic's automatic volume, it turns
+        // the gain up when the room is silent, so the same noise gets a
+        // different level minute to minute. the floor we measure at
+        // startup doesn't match what the mic sends NOW, so all the
+        // thresholds we build from it are Wrong. Whisper is fine with
+        // level changes, the VAD is not.
         autoGainControl: { ideal: false },
         channelCount: 1,
       },
     });
 
-    // `ideal` constraints fail silently, so check what we actually got rather
-    // than what we asked for. Without AEC, barge-in on speakers will self-trigger.
+    // `ideal` constraints fail without saying anything, so check what we
+    // got, don't trust what we asked for. with no AEC and speakers on
+    // she Interrupts herself.
     const settings = (stream.getAudioTracks()[0] || {}).getSettings
       ? stream.getAudioTracks()[0].getSettings() : {};
     if (settings.echoCancellation !== true) {
@@ -115,8 +120,9 @@ window.Voice = (function () {
       else if (m.type === 'pcm') onPcm(m.pcm);
       else if (m.type === 'overflow') onLog('warn', 'Voice: 30s cap hit, sending what I have.');
     };
-    // No connect() to destination - that would play your own mic back at you.
-    // A worklet with numberOfOutputs:0 still runs from the source connection.
+    // No connect() to destination, that would play your own mic back
+    // at you. a worklet with numberOfOutputs:0 still runs from the
+    // source connection.
     srcNode.connect(node);
   }
 
@@ -141,8 +147,9 @@ window.Voice = (function () {
   }
 
   function startCalibration() {
-    // Never calibrate over Jun's voice: we'd measure her as the room's noise
-    // floor and end up deaf for the rest of the session.
+    // Never calibrate over Jun's voice. we would take her voice as the
+    // room noise, put the threshold above her, and stay Deaf for the
+    // rest of the session.
     if (window.TTS && TTS.isSpeaking()) { setTimeout(startCalibration, 200); return; }
     calibSamples = [];
     calibUntil = performance.now() + CALIBRATE_MS;
@@ -151,8 +158,9 @@ window.Voice = (function () {
 
   function finishCalibration() {
     if (calibSamples.length) {
-      // p95, not mean: sparse noise (a fan tick, distant traffic) barely moves a
-      // mean, then trips the threshold in use. p95 sits just under the real peaks.
+      // p95, the level 95% of samples stay under, not the mean. a fan
+      // tick or a car outside barely move a mean, so the threshold we
+      // get from it is too low and those same blips cross it.
       const sorted = calibSamples.slice().sort((a, b) => a - b);
       const p95 = sorted[Math.min(sorted.length - 1, Math.floor(sorted.length * 0.95))];
       noiseFloor = Math.max(FLOOR_MIN, Math.min(FLOOR_MAX, p95));
@@ -175,26 +183,27 @@ window.Voice = (function () {
 
     const speakingNow = !!(window.TTS && TTS.isSpeaking());
 
-    // Jun just stopped: her echo tail is still in the room and our thresholds
-    // were elevated for it. Drop any half-formed detection rather than let the
-    // tail read as the start of your turn.
+    // She just stopped talking, but her echo is still in the room and
+    // the thresholds are still up for it. drop any half started
+    // detection, or her own tail counts as the Start of your turn.
     if (ttsWasSpeaking && !speakingNow) { aboveCount = 0; if (state === 'maybe') setState('listening'); }
     ttsWasSpeaking = speakingNow;
 
-    // Half-duplex: the mic is off while she talks, full stop. Abandon anything
-    // in progress rather than just refusing to start - a turn caught mid-speech
-    // when she began would otherwise skip the silence check below and hang until
-    // she finished (or the worklet's 30s cap fired).
+    // Half-duplex: the mic is off while she talks, full stop.
+    // drop what is in progress, don't just refuse to start. a turn that
+    // was already mid speech when she began would skip the silence
+    // check below and hang until she stops, or until the worklet's 30s
+    // cap fires.
     if (speakingNow && !bargeIn) {
       if (state === 'speech') node.port.postMessage({ type: 'stop', discard: true });
       if (state !== 'listening') { aboveCount = 0; setState('listening'); }
       return;
     }
 
-    // While she's talking, everything gets stricter: the threshold rises with
-    // her current level (residual echo scales with output), and the debounce
-    // doubles. A false barge-in guillotines her mid-sentence, which is far more
-    // jarring than a 200ms-late interrupt.
+    // While she's talking everything Tightens. the threshold goes up
+    // with her current level, the louder she is the more echo comes
+    // back, and the debounce doubles. a false barge-in cuts her off mid
+    // sentence, much worse than an interrupt that is 200ms late.
     let open = openThresh;
     let needFrames = START_FRAMES;
     if (speakingNow) {
@@ -215,8 +224,9 @@ window.Voice = (function () {
             confirmed = false;
             node.port.postMessage({ type: 'start' });
             setState('speech');
-            // Tentative: duck rather than cut. If this turns out to be a false
-            // positive we restore in ~150ms and she's only dipped, not stopped.
+            // Tentative, so duck instead of cutting. if it turns
+            // out to be nothing we are back up in ~150ms and she
+            // only got quiet.
             if (speakingNow) TTS.duck(0.35);
           }
         } else {
@@ -230,9 +240,10 @@ window.Voice = (function () {
         if (!confirmed && now - speechStartedAt >= CONFIRM_MS) {
           confirmed = true;
           if (window.TTS && TTS.isSpeaking()) TTS.stop();
-          // Fires even when she isn't speaking: the reply may be streaming
-          // silently (thinking, or a tool call), and you talking over that still
-          // means "stop, listen to me". app.js aborts the stream from here.
+          // Fires even when she isn't speaking. the reply can still
+          // be streaming while she thinks or runs a tool, and talking
+          // over that still means "stop, listen to me".
+          // app.js kills the stream from here.
           onBargeIn();
         }
         if (now - lastLoudAt >= silenceMs) finalize(now);
@@ -249,7 +260,7 @@ window.Voice = (function () {
       setState('listening');
       return;
     }
-    node.port.postMessage({ type: 'stop', discard: false });  // → onPcm
+    node.port.postMessage({ type: 'stop', discard: false });  // goes to onPcm
   }
 
   async function onPcm(pcm) {
@@ -264,31 +275,34 @@ window.Voice = (function () {
       if (!res.ok) throw new Error(`STT http ${res.status}`);
       const data = await res.json();
       const text = (data.text || '').trim();
-      // Silently drop empties. Whisper returns "" for breath, keyboard noise, a
-      // door - and sending those would have Jun answer nothing, repeatedly.
+      // Drop empties quietly. whisper gives back "" for a breath, a
+      // key press, a door closing. if we send those she Answers nothing,
+      // over and over.
       if (text) onTranscript(text);
     } catch (e) {
       onLog('warn', `Voice: ${e.message}`);
     } finally {
-      // Always, on every path. We deliberately go deaf for the ~500ms of the STT
-      // fetch (you've only just stopped talking, and it stops one turn racing the
-      // next), but staying that way would mean never hearing you again.
+      // Always, on every path. we go deaf for the ~500ms of the STT
+      // fetch on purpose, you just stopped talking and it keeps one
+      // turn from racing the next. but if we stay that way we never
+      // hear you again.
       resume();
     }
   }
 
-  // Back to listening. Note this happens while Jun is still generating and
-  // speaking - that's required, not incidental: barge-in only exists because the
-  // mic stays live through her whole reply.
+  // Back to listening, and this happens while she is still writing and
+  // talking. that is on purpose, not an accident. barge-in only works
+  // because the mic stays on through her Whole reply.
   function resume() {
     if (!enabled) return;
     aboveCount = 0;
     setState('listening');
   }
 
-  // 16kHz mono PCM16 WAV. ~20 lines beats pulling in a library, and beats
-  // MediaRecorder: webm/opus can't carry the pre-roll without splicing an EBML
-  // header onto non-contiguous clusters. 32KB/s over loopback is free.
+  // 16kHz mono PCM16 WAV. ~20 lines is less work than a library, and
+  // less work than MediaRecorder, webm/opus can't carry the pre-roll
+  // unless we glue an EBML header onto clusters that aren't next to
+  // each other. 32KB/s over loopback costs nothing.
   function encodeWav(samples, rate) {
     const buf = new ArrayBuffer(44 + samples.length * 2);
     const v = new DataView(buf);

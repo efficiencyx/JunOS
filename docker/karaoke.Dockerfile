@@ -1,8 +1,9 @@
-# Karaoke sidecar: htdemucs stem separation + whisper word timestamps. Same
-# server.py as the voice sidecar, different deps - no kokoro/pocket-tts and no
-# espeak-ng, but a GPU torch by default. Separation is the one audio job worth
-# real VRAM (a 4-minute song is minutes on CPU, seconds on a GPU), and keeping it
-# in its own container means the voice sidecar stays CPU-only next to the LLM.
+# The karaoke sidecar. htdemucs splits a song into vocals and backing, whisper
+# then times every word. same server.py as the voice sidecar with different deps,
+# no kokoro or pocket-tts, no espeak-ng, but a GPU torch by default. splitting a
+# song is the one audio job worth real VRAM, a 4 minute track takes minutes on a
+# CPU and seconds on a GPU. it gets its own container so the voice sidecar can
+# stay CPU only next to the LLM.
 FROM python:3.11-slim
 
 COPY --from=ghcr.io/astral-sh/uv:latest /uv /uvx /bin/
@@ -16,15 +17,15 @@ RUN apt-get update \
 
 WORKDIR /app
 
-# The nvidia/amd compose overlays override this with a CUDA / ROCm index; the CPU
-# default is what a GPU-less host (or KARAOKE_GPU=off) builds against.
+# The nvidia and amd overlays swap this for a CUDA or ROCm index. the CPU default
+# is what a machine with no GPU, or KARAOKE_GPU=off, builds against.
 ARG TORCH_INDEX=https://download.pytorch.org/whl/cpu
 
-# torch first from TORCH_INDEX so the resolver can't pull a different build in as
-# a transitive dep, and in its own layer so editing requirements doesn't re-run a
-# multi-GB install. torchaudio comes from the same index to keep its wheel build
-# matched to torch's - demucs imports it for audio I/O. UV_HTTP_TIMEOUT is raised
-# for the slow ROCm CDN so a large wheel doesn't trip uv's default stall timeout.
+# torch first from TORCH_INDEX, or something else pulls a different build in
+# behind it, and in its own layer so editing requirements doesn't redo a multi-GB
+# install. torchaudio comes from the same place so its build matches torch's,
+# demucs uses it to read audio. UV_HTTP_TIMEOUT goes up for the slow ROCm CDN, or
+# a big wheel trips uv's stall timeout.
 RUN UV_HTTP_TIMEOUT=300 uv pip install --system torch torchaudio --index-url ${TORCH_INDEX}
 
 COPY tts/requirements-karaoke.txt /app/requirements.txt
@@ -38,10 +39,9 @@ COPY tts/server.py /app/server.py
 #   torch exposes one, else CPU; a per-job CUDA failure falls back to CPU rather
 #   than failing the song. Weights (~80MB) download into HF_HOME at runtime.
 # STT_MODEL / STT_LANG / STT_DEVICE: whisper transcribes the separated vocal into
-#   timed words for the lyric track. Same pairing rules as the voice sidecar - the
-#   ".en" builds are English-only, and STT_DEVICE stays cpu because CTranslate2
-#   needs cuDNN the torch wheel doesn't reliably ship (and has no ROCm backend).
-#   Songs are long, so sizing the model up here costs less than it does on chat.
+#   timed words for the lyric track. Pairing rules and the reason STT_DEVICE stays
+#   cpu are documented once in docker/tts.Dockerfile. Songs are long, so sizing the
+#   model up here costs less than it does on chat.
 # TTS_IDLE_UNLOAD_S drops demucs after an idle spell, handing the VRAM back to
 #   the LLM between songs.
 ENV SIDECAR_ROLE=karaoke \

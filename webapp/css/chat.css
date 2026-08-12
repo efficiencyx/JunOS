@@ -7,7 +7,7 @@
 .messages-empty.hidden { display: none; }
 .messages-empty.hidden ~ .composer-area .prompt-chips { display: none; }
 
-/* When empty state is active, group [title + composer + chips] in vertical center */
+/* With nothing in the chat yet, stack title, composer and chips in the middle */
 .messages-empty:not(.hidden) { margin-top: auto; }
 .messages-empty:not(.hidden) ~ .composer-area { margin-bottom: auto; }
 
@@ -149,7 +149,7 @@
   from { transform: scaleY(0); }
   to   { transform: scaleY(1); }
 }
-/* Sits above every gate and drawer: while Jun is gone the app is not usable. */
+/* Over every gate and drawer. while she has walked out you can't use the app. */
 #fleeOverlay {
   position: fixed;
   inset: 0;
