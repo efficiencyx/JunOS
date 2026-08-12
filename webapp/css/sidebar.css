@@ -73,7 +73,7 @@
 }
 .sidebar-toggle:hover { background: var(--bg-3); color: var(--fg); filter: none; }
 
-/* Collapsed state - only icons visible, sidebar 56px wide.
+/* Collapsed. icons only, 56px wide.
    Uses ONLY animatable properties (gap, padding, opacity) - never justify-content,
    which is discrete and snaps mid-transition. */
 .app-main.sidebar-collapsed .sidebar-toolbar { position: relative; min-height: 36px; padding: 4px 2px 0; justify-content: flex-start; }

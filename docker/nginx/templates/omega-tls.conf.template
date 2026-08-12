@@ -16,7 +16,7 @@ server {
         root /var/www/certbot;
     }
 
-    # Everything else → HTTPS
+    # Everything else goes to HTTPS
     location / {
         return 301 https://${DOMAIN}$request_uri;
     }

@@ -1,4 +1,3 @@
-/* App shell header */
 #app {
   position: relative;
   display: flex;
@@ -81,7 +80,7 @@
 
 /* Mic state, next to the hands-free toggle. Borrows .status-pill's shape but
    sits inline in a settings row, so it's smaller and not uppercased - the labels
-   are sentences ("listening to the room…"), not status codes.
+   are sentences ("listening to the room..."), not status codes.
    Hands-free gives no other feedback that it heard you; this is it. */
 .voice-pill {
   display: inline-flex;

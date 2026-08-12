@@ -37,7 +37,7 @@ window.Names = (function () {
       key.toLowerCase() === 'playername' ? player : bot);
   }
 
-  // Keep incomplete streaming placeholders out of the rendered reply.
+  // Keep half written streaming placeholders out of the reply we show.
   const TOKENS = ['{f_playername}', '{f_botname}'];
   function pendingPartial(buf) {
     const open = buf.lastIndexOf('{');

@@ -1,7 +1,8 @@
 FROM php:8.2-fpm-alpine
 
-# Runtime deps: curl (health probe), fcgi (cgi-fcgi healthcheck binary).
-# Build deps (autoconf, build-base) needed for `pecl install apcu`; removed after.
+# What we need at runtime: curl for the health probe, fcgi for the cgi-fcgi
+# healthcheck binary. autoconf and build-base are only for `pecl install apcu`
+# and come back off after.
 RUN apk add --no-cache curl fcgi sqlite-libs su-exec \
  && apk add --no-cache --virtual .build-deps autoconf build-base sqlite-dev \
  && pecl install apcu \
@@ -10,10 +11,10 @@ RUN apk add --no-cache curl fcgi sqlite-libs su-exec \
  && apk del .build-deps \
  && rm -rf /tmp/pear
 
-# PHP tuning: security + performance
-# post_max_size covers the largest upload (/api/karaoke.php's audio body); the
-# STT WAV upload fits well under it. It's global, but nginx caps every other
-# location at 16k/256k, so those never reach this limit.
+# PHP settings, security and speed
+# post_max_size has to cover the biggest upload we take, the audio body on
+# /api/karaoke.php. the STT WAV sits well under it. this is global, but nginx
+# caps every other location at 16k/256k so they never get near it.
 RUN { \
       echo 'post_max_size=30M'; \
       echo 'upload_max_filesize=30M'; \
@@ -32,7 +33,7 @@ WORKDIR /var/www/omega
 COPY webapp/ /var/www/omega/
 COPY docker/php-entrypoint.sh /usr/local/bin/omega-php-entrypoint
 
-# State dir for rate-limiter flat files and SQLite DB (mounted as volume omega_state)
+# Where the rate limiter files and the SQLite DB live, mounted as omega_state
 RUN mkdir -p /var/lib/omega/rl \
  && chown -R www-data:www-data /var/lib/omega /var/www/omega \
  && chmod +x /usr/local/bin/omega-php-entrypoint

@@ -39,8 +39,6 @@ body.privacy-page {
 }
 .privacy-back:hover { color: var(--fg); background: var(--bg-3); border-color: var(--border-2); }
 
-/* ---- hero ---- */
-
 .privacy-hero { margin-bottom: var(--space-6); }
 
 .privacy-eyebrow {
@@ -85,8 +83,6 @@ body.privacy-page {
   font-size: 12px;
 }
 
-/* ---- the short version ---- */
-
 .privacy-summary {
   padding: var(--space-5);
   margin-bottom: var(--space-6);
@@ -127,8 +123,6 @@ body.privacy-page {
   font-weight: 700;
 }
 
-/* ---- layout: toc + prose ---- */
-
 .privacy-body {
   display: grid;
   grid-template-columns: 200px minmax(0, 1fr);
@@ -165,8 +159,6 @@ body.privacy-page {
   color: var(--fg);
 }
 
-/* ---- prose ---- */
-
 .privacy-prose { min-width: 0; font-size: 15px; line-height: 1.75; }
 .privacy-prose section { scroll-margin-top: var(--space-5); }
 .privacy-prose section + section { margin-top: var(--space-6); }
@@ -201,8 +193,6 @@ body.privacy-page {
   font-family: ui-monospace, 'SFMono-Regular', Menlo, Consolas, monospace;
   font-size: 12.5px;
 }
-
-/* ---- footer ---- */
 
 .privacy-footer {
   display: flex;
