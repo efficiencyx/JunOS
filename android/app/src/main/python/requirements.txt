@@ -1,0 +1,14 @@
+Pillow==11.0.0
+lz4==4.3.2
+Brotli==1.1.0
+attrs==26.1.0
+fsspec==2026.7.0
+
+# pip runs with --no-deps (UnityPy's compiled dependencies have no Android wheels and are
+# stubbed in this source set), so Pillow's native support libraries have to be requested by
+# hand - without them PIL/_imaging.so has no libjpeg_chaquopy.so to dlopen.
+chaquopy-libjpeg==1.5.3
+chaquopy-freetype==2.9.1
+
+# UnityPy itself is not installed here: unpackUnityPy in build.gradle.kts drops the
+# pure-Python tree into the source set instead.

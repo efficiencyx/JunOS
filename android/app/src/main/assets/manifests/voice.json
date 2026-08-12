@@ -1,0 +1,14 @@
+{
+  "kokoro": {
+    "id": "kokoro-en-v0_19",
+    "archive_url": "https://github.com/k2-fsa/sherpa-onnx/releases/download/tts-models/kokoro-en-v0_19.tar.bz2",
+    "size": 319625534,
+    "sha256": "912804855a04745fa77a30be545b3f9a5d15c4d66db00b88cbcd4921df605ac7"
+  },
+  "asr": {
+    "id": "sherpa-onnx-whisper-tiny.en",
+    "archive_url": "https://github.com/k2-fsa/sherpa-onnx/releases/download/asr-models/sherpa-onnx-whisper-tiny.en.tar.bz2",
+    "size": 118071777,
+    "sha256": "2bd6cf965c8bb3e068ef9fa2191387ee63a9dfa2a4e37582a8109641c20005dd"
+  }
+}
