@@ -816,9 +816,9 @@ function showBoot() {
     'hf.co/efficiencyx/Jun-LoRA-v4-E4B-GGUF:Q8_0',
     'hf.co/efficiencyx/Jun-LoRA-v4-E4B-GGUF:Q6_K',
     'hf.co/efficiencyx/Jun-LoRA-v4-E4B-GGUF:Q4_K_M',
-    'hf.co/efficiencyx/Jun-LoRA-v4-E2B-GGUF:Q8_0',
-    'hf.co/efficiencyx/Jun-LoRA-v4-E2B-GGUF:Q6_K',
-    'hf.co/efficiencyx/Jun-LoRA-v4-E2B-GGUF:Q4_K_M',
+    'hf.co/efficiencyx/Jun-LoRA-E2B-GGUF:Q8_0',
+    'hf.co/efficiencyx/Jun-LoRA-E2B-GGUF:Q6_K',
+    'hf.co/efficiencyx/Jun-LoRA-E2B-GGUF:Q4_K_M',
     'llama3.1:8b', 'llama3.1:latest',
   ];
   const isChat = (n) => !/embed/i.test(n);

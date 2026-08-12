@@ -38,7 +38,7 @@ function default_chat_model(): string {
         case 'openrouter':
             return env_str('OPENROUTER_MODEL', 'openrouter/auto');
         case 'llamacpp':
-            return env_str('LLAMACPP_MODEL_HF', 'efficiencyx/Jun-LoRA-v4-E2B-GGUF:Q4_K_M');
+            return env_str('LLAMACPP_MODEL_HF', 'efficiencyx/Jun-LoRA-E2B-GGUF:Q4_K_M');
         default:
             $configured = array_map('trim', explode(',', env_str('OLLAMA_MODELS_TO_PULL')));
             foreach ($configured as $model) {
@@ -59,7 +59,7 @@ function default_chat_model(): string {
                 if ($model !== '' && !preg_match('/embed/i', $model)) return $model;
             }
 
-            return 'hf.co/efficiencyx/Jun-LoRA-v4-E2B-GGUF:Q4_K_M';
+            return 'hf.co/efficiencyx/Jun-LoRA-E2B-GGUF:Q4_K_M';
     }
 }
 

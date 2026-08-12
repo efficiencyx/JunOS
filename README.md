@@ -99,7 +99,7 @@ cp .env.example .env
 
 `start.sh` sniffs out your GPU, layers the right compose overlay and brings the stack up. It's also the control panel: `./start.sh stop | status | restart | logs [service]`. On Windows, `start.ps1` starts native processes instead (Ollama, a portable PHP, the optional voice sidecar) and needs `install.ps1` to have run once.
 
-First boot pulls whatever's in `OLLAMA_MODELS_TO_PULL` - by default the CPU-friendly `hf.co/efficiencyx/Jun-LoRA-v4-E2B-GGUF:Q4_K_M`. Watch it crawl in with `./start.sh logs ollama`. She's ready when everything reports healthy, usually 30–90 seconds once the weights are cached.
+First boot pulls whatever's in `OLLAMA_MODELS_TO_PULL` - by default the CPU-friendly `hf.co/efficiencyx/Jun-LoRA-E2B-GGUF:Q4_K_M`. Watch it crawl in with `./start.sh logs ollama`. She's ready when everything reports healthy, usually 30–90 seconds once the weights are cached.
 
 > ### Her body isn't in this repo
 >
@@ -194,8 +194,8 @@ Everything is environment variables in `.env` - the full reference is [`docs/con
 |---|---|---|
 | `DOMAIN` / `EMAIL` / `TLS_MODE` | Hostname, Let's Encrypt contact, HTTPS on/off | `localhost` · `admin@localhost` · `off` |
 | `AI_PROVIDER` | `ollama` \| `llamacpp` \| `openrouter` | `ollama` |
-| `OLLAMA_MODELS_TO_PULL` | Pulled on first boot; the **first** one is pre-warmed | `hf.co/efficiencyx/Jun-LoRA-v4-E2B-GGUF:Q4_K_M` |
-| `LLAMACPP_MODEL_HF` / `LLAMACPP_MODEL_FILE` | Model for the managed llama-server: pull from HF, or serve one off disk | `efficiencyx/Jun-LoRA-v4-E2B-GGUF:Q4_K_M` |
+| `OLLAMA_MODELS_TO_PULL` | Pulled on first boot; the **first** one is pre-warmed | `hf.co/efficiencyx/Jun-LoRA-E2B-GGUF:Q4_K_M` |
+| `LLAMACPP_MODEL_HF` / `LLAMACPP_MODEL_FILE` | Model for the managed llama-server: pull from HF, or serve one off disk | `efficiencyx/Jun-LoRA-E2B-GGUF:Q4_K_M` |
 | `COMPOSE_PROFILES` | Optional containers: `ollama`, `llamacpp`, `karaoke`, `prod` | `ollama` |
 | `VOICE` | Bare-metal Windows only - under Docker the voice sidecar always runs | `on` |
 | `TTS_DEVICE` | Voice synthesis device. Keep it on CPU: both engines are real-time there, and a GPU copy parks ~2 GB your LLM wants more | `cpu` |

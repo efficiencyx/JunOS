@@ -41,12 +41,12 @@ conditional requirement is `OPENROUTER_API_KEY`, needed only when
 |---|---|---|---|
 | `AI_PROVIDER` | `ollama` | `webapp/api/providers.php` (`ai_provider()`) | Selects the chat backend: `ollama` (native NDJSON API) \| `openrouter` \| `llamacpp` (both OpenAI-compatible). Invalid values fall back to `ollama`. |
 | `OLLAMA_URL` | `http://ollama:11434` (Docker) / `http://localhost:11434` (PHP fallback) | `providers.php`, `models.php` | Base URL of the Ollama instance backing chat (when `AI_PROVIDER=ollama`). |
-| `OLLAMA_MODELS_TO_PULL` | `hf.co/efficiencyx/Jun-LoRA-v4-E2B-GGUF:Q4_K_M` | `ollama` and `php` services | Comma-separated models pulled on first boot; the first one is the backend default for background completions. |
+| `OLLAMA_MODELS_TO_PULL` | `hf.co/efficiencyx/Jun-LoRA-E2B-GGUF:Q4_K_M` | `ollama` and `php` services | Comma-separated models pulled on first boot; the first one is the backend default for background completions. |
 | `TITLE_MODEL` | `hf.co/efficiencyx/Titlewen-GGUF:F16` | `ollama` and `php` services, `providers.php` (`generate_chat_title()`) | Small dedicated model used to auto-title new conversations from the first user message. Pinned to CPU (`num_gpu: 0`) and kept resident (`keep_alive: -1`) so it never competes with the chat model for VRAM; the entrypoint pulls and pins it on boot. Set empty to disable and fall back to truncating that message; only used when `AI_PROVIDER=ollama`. |
 | `OPENROUTER_API_KEY` | *(empty)* | `providers.php` (`chat_request_headers()`) | Bearer key for OpenRouter. **Required when `AI_PROVIDER=openrouter`.** |
 | `OPENROUTER_MODEL` | `openrouter/auto` | `providers.php` (`default_chat_model()`) | Default chat model id sent to OpenRouter. |
 | `LLAMACPP_URL` | `http://llamacpp:8080` (Docker) / `http://127.0.0.1:8081` (PHP fallback) | `providers.php` (`chat_api_base()`) | Base URL of the llama.cpp `llama-server`. Point it at your own server to skip the managed `llamacpp` container. |
-| `LLAMACPP_MODEL_HF` | `efficiencyx/Jun-LoRA-v4-E2B-GGUF:Q4_K_M` | `llamacpp` service (`LLAMA_ARG_HF_REPO`), `providers.php` (cosmetic default model id) | HF `repo:quant` the managed `llama-server` downloads and loads (`llama-server -hf` syntax, no `hf.co/` prefix). |
+| `LLAMACPP_MODEL_HF` | `efficiencyx/Jun-LoRA-E2B-GGUF:Q4_K_M` | `llamacpp` service (`LLAMA_ARG_HF_REPO`), `providers.php` (cosmetic default model id) | HF `repo:quant` the managed `llama-server` downloads and loads (`llama-server -hf` syntax, no `hf.co/` prefix). |
 | `LLAMACPP_TOOLS` | `on` | `providers.php` (`provider_tools_enabled()`) | Set `off` when the loaded chat template cannot do native tool calling. Chat stops offering tools, while memory consolidation falls back to model-produced JSON operation arrays executed by the same guarded tool loop. |
 
 ## 3. Audio sidecars

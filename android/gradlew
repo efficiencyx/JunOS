@@ -1,0 +1,30 @@
+#!/usr/bin/env sh
+set -eu
+
+version=8.13
+expected=20f1b1176237254a6fc204d8434196fa11a4cfb387567519c61556e8710aed78
+cache_root="${GRADLE_USER_HOME:-$HOME/.gradle}/junos-bootstrap"
+archive="$cache_root/gradle-$version-bin.zip"
+install="$cache_root/gradle-$version"
+marker="$install/.junos-verified"
+
+if [ ! -f "$marker" ]; then
+    mkdir -p "$cache_root"
+    actual=""
+    [ ! -f "$archive" ] || actual=$(sha256sum "$archive" | cut -d ' ' -f 1)
+    if [ "$actual" != "$expected" ]; then
+        rm -f "$archive"
+        if command -v curl >/dev/null 2>&1; then
+            curl -fL "https://services.gradle.org/distributions/gradle-$version-bin.zip" -o "$archive"
+        else
+            wget -O "$archive" "https://services.gradle.org/distributions/gradle-$version-bin.zip"
+        fi
+    fi
+    actual=$(sha256sum "$archive" | cut -d ' ' -f 1)
+    [ "$actual" = "$expected" ] || { rm -f "$archive"; echo "Gradle distribution checksum mismatch" >&2; exit 1; }
+    rm -rf "$install"
+    unzip -q -o "$archive" -d "$cache_root"
+    touch "$marker"
+fi
+
+exec "$install/bin/gradle" "$@"

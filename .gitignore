@@ -60,8 +60,11 @@ webapp/lore_meta.json
 
 
 # deploy state (created at runtime)
-data/
+/data/
 letsencrypt/
 
 # local .env snapshots kept while switching backends
 .env.bak-*
+
+# game archive (never republish - see LICENSE NOTICE)
+factorial-omega-win-64.zip

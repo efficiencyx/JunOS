@@ -119,7 +119,7 @@ fetch() {
 
 MODEL_12B="hf.co/efficiencyx/Jun-LoRA-12B-GGUF:Q4_K_M"
 MODEL_E4B="hf.co/efficiencyx/Jun-LoRA-v4-E4B-GGUF:Q4_K_M"
-MODEL_E2B="hf.co/efficiencyx/Jun-LoRA-v4-E2B-GGUF:Q4_K_M"
+MODEL_E2B="hf.co/efficiencyx/Jun-LoRA-E2B-GGUF:Q4_K_M"
 
 resolve_model() {  # alias|full-ref -> full-ref
     case "$(printf '%s' "$1" | tr '[:upper:]' '[:lower:]')" in
@@ -168,7 +168,7 @@ recommend_model() {
     elif [ "$mb" -ge 11500 ]; then echo "$MODEL_12B"
     elif [ "$mb" -ge 9500 ]; then echo "hf.co/efficiencyx/Jun-LoRA-v4-E4B-GGUF:Q8_0"
     elif [ "$mb" -ge 7500 ]; then echo "$MODEL_E4B"
-    elif [ "$mb" -ge 5500 ]; then echo "hf.co/efficiencyx/Jun-LoRA-v4-E2B-GGUF:Q6_K"
+    elif [ "$mb" -ge 5500 ]; then echo "hf.co/efficiencyx/Jun-LoRA-E2B-GGUF:Q6_K"
     else                               echo "$MODEL_E2B"
     fi
 }

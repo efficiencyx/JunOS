@@ -1,0 +1,10 @@
+{
+  "id": "jun-lora-e2b-litertlm",
+  "display_name": "Jun LoRA E2B (LiteRT)",
+  "repository": "efficiencyx/Jun-LoRA-E2B-LiteRT",
+  "quant": "int4",
+  "filename": "model.litertlm",
+  "download_url": "https://huggingface.co/efficiencyx/Jun-LoRA-E2B-LiteRT/resolve/7cacdf5c5f85c86efdc920ed5228c7ea6e0543eb/model.litertlm?download=true",
+  "size": 2576996304,
+  "sha256": "1df91882f365087ff39950efc54080a0676fcd99dd80b70c49e4b1fb8346d40d"
+}

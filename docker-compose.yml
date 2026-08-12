@@ -46,7 +46,7 @@ services:
     environment:
       AI_PROVIDER: "${AI_PROVIDER:-ollama}"
       OLLAMA_URL: "${OLLAMA_URL:-http://ollama:11434}"
-      OLLAMA_MODELS_TO_PULL: "${OLLAMA_MODELS_TO_PULL:-hf.co/efficiencyx/Jun-LoRA-v4-E2B-GGUF:Q4_K_M}"
+      OLLAMA_MODELS_TO_PULL: "${OLLAMA_MODELS_TO_PULL:-hf.co/efficiencyx/Jun-LoRA-E2B-GGUF:Q4_K_M}"
       TITLE_MODEL: "${TITLE_MODEL-hf.co/efficiencyx/Titlewen-GGUF:F16}"
       OPENROUTER_API_KEY: "${OPENROUTER_API_KEY:-}"
       OPENROUTER_MODEL: "${OPENROUTER_MODEL:-}"
@@ -82,7 +82,7 @@ services:
     profiles: [ollama]
     restart: unless-stopped
     environment:
-      OLLAMA_MODELS_TO_PULL: "${OLLAMA_MODELS_TO_PULL:-hf.co/efficiencyx/Jun-LoRA-v4-E2B-GGUF:Q4_K_M}"
+      OLLAMA_MODELS_TO_PULL: "${OLLAMA_MODELS_TO_PULL:-hf.co/efficiencyx/Jun-LoRA-E2B-GGUF:Q4_K_M}"
       TITLE_MODEL: "${TITLE_MODEL-hf.co/efficiencyx/Titlewen-GGUF:F16}"
 # Cap how many requests and models Ollama holds at once. each one keeps its own
 # KV cache, the memory of the prompt it already read, so they add up fast.
@@ -110,7 +110,7 @@ services:
     profiles: [llamacpp]
     restart: unless-stopped
     environment:
-      LLAMA_ARG_HF_REPO: "${LLAMACPP_MODEL_HF:-efficiencyx/Jun-LoRA-v4-E2B-GGUF:Q4_K_M}"
+      LLAMA_ARG_HF_REPO: "${LLAMACPP_MODEL_HF:-efficiencyx/Jun-LoRA-E2B-GGUF:Q4_K_M}"
       LLAMA_ARG_CTX_SIZE: "16384"
       LLAMA_ARG_JINJA: "1"           # chat-template tool calling
       LLAMA_ARG_HOST: "0.0.0.0"
