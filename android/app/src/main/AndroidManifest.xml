@@ -18,6 +18,8 @@
         android:icon="@drawable/ic_launcher_foreground"
         android:label="Jun OS"
         android:theme="@style/Theme.JunOS">
+        <uses-native-library android:name="libOpenCL.so" android:required="false" />
+        <uses-native-library android:name="libvndksupport.so" android:required="false" />
         <activity
             android:name=".MainActivity"
             android:configChanges="keyboard|keyboardHidden|orientation|screenLayout|screenSize|smallestScreenSize|uiMode"

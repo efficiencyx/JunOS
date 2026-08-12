@@ -5,11 +5,14 @@ data class DeviceStatus(
     val totalRamBytes: Long,
     val freeStorageBytes: Long,
 ) {
+    val hasRequiredRam: Boolean
+        get() = totalRamBytes >= MIN_REPORTED_RAM
+
     val supported: Boolean
-        get() = supportedAbi && totalRamBytes >= MIN_RAM && freeStorageBytes >= MIN_FREE_STORAGE
+        get() = supportedAbi && freeStorageBytes >= MIN_FREE_STORAGE
 
     companion object {
-        const val MIN_RAM = 8L * 1024 * 1024 * 1024
+        const val MIN_REPORTED_RAM = 7L * 1024 * 1024 * 1024
         const val MIN_FREE_STORAGE = 5L * 1024 * 1024 * 1024
     }
 }

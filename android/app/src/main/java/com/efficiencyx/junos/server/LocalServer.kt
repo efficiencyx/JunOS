@@ -2,6 +2,7 @@ package com.efficiencyx.junos.server
 
 import android.app.ActivityManager
 import android.content.Context
+import android.util.Log
 import com.efficiencyx.junos.data.ConsolidationEntity
 import com.efficiencyx.junos.data.ConversationEntity
 import com.efficiencyx.junos.data.JunDatabase
@@ -78,7 +79,7 @@ class LocalServer(
         currentUrl?.let { return@withLock it }
         val server = embeddedServer(CIO, host = LOOPBACK, port = 0) { module() }
         server.start(wait = false)
-        val port = server.resolvedConnectors().single().port
+        val port = server.engine.resolvedConnectors().single().port
         stopServer = { server.stop(500, 2_000) }
         "http://$LOOPBACK:$port/__bootstrap?token=$bootstrap".also { currentUrl = it }
     }
@@ -121,7 +122,7 @@ class LocalServer(
                 if (!call.authorized()) return@get
                 call.json(buildJsonObject {
                     put("models", buildJsonArray { add(JsonPrimitive(MODEL_ID)) })
-                    put("provider", "llamacpp-android")
+                    put("provider", "litertlm-android")
                     put("default_model", MODEL_ID)
                 })
             }
@@ -142,6 +143,7 @@ class LocalServer(
                         event("[DONE]")
                         finished.set(true)
                     } catch (error: Throwable) {
+                        Log.e(TAG, "chat stream failed", error)
                         val code = error.message?.take(120)?.replace(Regex("[^a-zA-Z0-9_. -]"), "_") ?: "generation_failed"
                         event(buildJsonObject { put("error", code) }.toString())
                         event("[DONE]")
@@ -245,7 +247,7 @@ class LocalServer(
                             .getOrElse { return@post call.error(HttpStatusCode.BadRequest, "invalid_request") }
                         val wav = runCatching { voice.synthesize(request) }
                             .getOrElse { return@post call.error(HttpStatusCode.ServiceUnavailable, it.message ?: "tts_unavailable") }
-                        call.respondBytes(wav, ContentType.Audio.WAV)
+                        call.respondBytes(wav, ContentType.parse("audio/wav"))
                     }
                     else -> call.error(HttpStatusCode.BadRequest, "unknown_action")
                 }
@@ -375,7 +377,8 @@ class LocalServer(
     }
 
     private suspend fun io.ktor.server.application.ApplicationCall.authorized(): Boolean {
-        if (request.local.localHost != LOOPBACK || request.cookies[SESSION_COOKIE] != session) {
+        // localHost reverse-resolves to "localhost" on Android; localAddress is the literal bound IP.
+        if (request.local.localAddress != LOOPBACK || request.cookies[SESSION_COOKIE] != session) {
             error(HttpStatusCode.Forbidden, "forbidden")
             return false
         }
@@ -425,9 +428,9 @@ class LocalServer(
         "jpg", "jpeg" -> ContentType.Image.JPEG
         "svg" -> ContentType.Image.SVG
         "webp" -> ContentType.parse("image/webp")
-        "wav" -> ContentType.Audio.WAV
+        "wav" -> ContentType.parse("audio/wav")
         "mp3" -> ContentType.Audio.MPEG
-        "webm" -> ContentType.Video.WebM
+        "webm" -> ContentType.parse("video/webm")
         "wasm" -> ContentType.Application.Wasm
         else -> ContentType.Application.OctetStream
     }
@@ -436,10 +439,11 @@ class LocalServer(
     private fun now() = System.currentTimeMillis() / 1000
 
     companion object {
+        private const val TAG = "JunServer"
         private const val LOOPBACK = "127.0.0.1"
         private const val SESSION_COOKIE = "omega_session"
-        private const val MODEL_ID = "jun-v4-e2b-q4_k_m"
+        private const val MODEL_ID = "jun-e2b-q4_k_m"
         private const val CHAT_BODY_LIMIT = 1024 * 1024
-        private const val CSP = "default-src 'self' data: blob:; script-src 'self' 'unsafe-inline' 'unsafe-eval' blob:; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; media-src 'self' data: blob:; connect-src 'self'; worker-src 'self' blob:; frame-ancestors 'none'; base-uri 'self'; form-action 'none'"
+        private const val CSP = "default-src 'self' data: blob:; script-src 'self' 'unsafe-inline' 'unsafe-eval' blob:; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; media-src 'self' data: blob:; connect-src 'self' data:; worker-src 'self' blob:; frame-ancestors 'none'; base-uri 'self'; form-action 'none'"
     }
 }

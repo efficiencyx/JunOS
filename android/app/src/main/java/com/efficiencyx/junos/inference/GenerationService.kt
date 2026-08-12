@@ -14,9 +14,15 @@ class GenerationService : Service() {
         getSystemService(NotificationManager::class.java).createNotificationChannel(
             NotificationChannel(CHANNEL, "Local generation", NotificationManager.IMPORTANCE_LOW),
         )
+        enterForeground()
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
+        enterForeground()
+        return START_NOT_STICKY
+    }
+
+    private fun enterForeground() {
         val notification = NotificationCompat.Builder(this, CHANNEL)
             .setSmallIcon(R.drawable.ic_launcher_foreground)
             .setContentTitle("Jun is thinking")
@@ -24,7 +30,6 @@ class GenerationService : Service() {
             .setOngoing(true)
             .build()
         startForeground(NOTIFICATION_ID, notification)
-        return START_NOT_STICKY
     }
 
     override fun onBind(intent: Intent?): IBinder? = null

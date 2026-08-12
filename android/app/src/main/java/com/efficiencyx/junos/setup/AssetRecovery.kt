@@ -2,6 +2,8 @@ package com.efficiencyx.junos.setup
 
 import android.content.Context
 import android.net.Uri
+import android.os.ParcelFileDescriptor
+import android.util.Log
 import com.chaquo.python.Python
 import com.chaquo.python.android.AndroidPlatform
 import kotlinx.coroutines.Dispatchers
@@ -10,11 +12,13 @@ import kotlinx.coroutines.withContext
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
+import org.apache.commons.compress.archivers.zip.ZipArchiveEntry
+import org.apache.commons.compress.archivers.zip.ZipFile
 import java.io.File
 import java.io.FileOutputStream
+import java.io.IOException
 import java.security.MessageDigest
 import java.util.UUID
-import java.util.zip.ZipInputStream
 import kotlin.coroutines.coroutineContext
 
 @Serializable
@@ -46,6 +50,7 @@ class AssetRecovery(private val context: Context) {
         val workRoot = File(context.cacheDir, "asset-recovery/$jobId")
         val gameRoot = File(workRoot, "game")
         val output = File(workRoot, "output")
+        Log.i(TAG, "Asset recovery started")
         try {
             gameRoot.mkdirs()
             output.mkdirs()
@@ -60,6 +65,7 @@ class AssetRecovery(private val context: Context) {
             validateOutput(output)
             writeManifest(output, sourceLabel)
             installAtomically(output)
+            Log.i(TAG, "Asset recovery completed")
         } finally {
             deleteInside(workRoot, context.cacheDir)
         }
@@ -70,16 +76,29 @@ class AssetRecovery(private val context: Context) {
         gameRoot: File,
         progress: (Long, Long) -> Unit,
     ): String {
-        val selected = linkedMapOf<String, String>()
-        val critical = mutableSetOf<String>()
+        val descriptor = context.contentResolver.openFileDescriptor(uri, "r")
+            ?: error("Could not open selected ZIP")
         var prefix: String? = null
-        var expanded = 0L
-        var count = 0
-        context.contentResolver.openInputStream(uri)?.buffered()?.use { stream ->
-            ZipInputStream(stream).use { zip ->
-                while (true) {
+        ParcelFileDescriptor.AutoCloseInputStream(descriptor).use { input ->
+            // The game ZIP keeps every entry size in a trailing data descriptor, which makes
+            // ZipInputStream give up at the first stored entry. Only the central directory has
+            // the sizes, so the archive has to be read by random access instead of streamed.
+            val archive = try {
+                ZipFile.builder().setSeekableByteChannel(input.channel).get()
+            } catch (error: IOException) {
+                throw IllegalStateException(
+                    "Could not read the selected ZIP - copy it onto this device's storage and pick it again",
+                    error,
+                )
+            }
+            archive.use { zip ->
+                val critical = mutableSetOf<String>()
+                val selected = mutableListOf<Pair<ZipArchiveEntry, String>>()
+                var entries = 0
+                var total = 0L
+                for (entry in zip.entriesInPhysicalOrder) {
                     coroutineContext.ensureActive()
-                    val entry = zip.nextEntry ?: break
+                    entries++
                     if (entry.isDirectory) continue
                     val normalized = normalizeZipPath(entry.name)
                     if (normalized == "AndroidManifest.xml") error("Select the Windows or Linux game ZIP, not an Android APK")
@@ -96,29 +115,39 @@ class AssetRecovery(private val context: Context) {
                     check(prefix == currentPrefix) { "ZIP contains more than one game data directory" }
                     val base = relative.substringAfterLast('/')
                     if (base in CRITICAL) check(critical.add(base)) { "ZIP contains duplicate $base" }
+                    selected += entry to relative
+                    total += entry.size
+                }
+                Log.i(TAG, "ZIP scan completed: $entries entries, ${selected.size} selected, $total bytes")
+                val missing = CRITICAL - critical
+                check(missing.isEmpty()) {
+                    "Unsupported game ZIP: missing ${missing.sorted().joinToString(", ")}"
+                }
+                check(selected.size <= MAX_FILES) { "Too many Unity resource files in ZIP" }
+                check(total <= MAX_EXPANDED) { "Unity data exceeds the 3 GB recovery limit" }
+                var expanded = 0L
+                for ((entry, relative) in selected) {
                     val target = File(gameRoot, "$GAME_DATA/$relative").canonicalFile
                     check(target.path.startsWith(gameRoot.canonicalPath + File.separator)) { "Unsafe ZIP path" }
                     target.parentFile?.mkdirs()
-                    FileOutputStream(target).use { output ->
-                        val buffer = ByteArray(256 * 1024)
-                        while (true) {
-                            coroutineContext.ensureActive()
-                            val read = zip.read(buffer)
-                            if (read < 0) break
-                            expanded += read
-                            check(expanded <= MAX_EXPANDED) { "Unity data exceeds the 3 GB recovery limit" }
-                            output.write(buffer, 0, read)
+                    zip.getInputStream(entry).use { source ->
+                        FileOutputStream(target).use { output ->
+                            val buffer = ByteArray(1024 * 1024)
+                            while (true) {
+                                coroutineContext.ensureActive()
+                                val read = source.read(buffer)
+                                if (read < 0) break
+                                output.write(buffer, 0, read)
+                                expanded += read
+                                check(expanded <= MAX_EXPANDED) { "Unity data exceeds the 3 GB recovery limit" }
+                                progress(expanded, total)
+                            }
+                            output.fd.sync()
                         }
-                        output.fd.sync()
                     }
-                    selected[relative] = target.absolutePath
-                    count++
-                    check(count <= MAX_FILES) { "Too many Unity resource files in ZIP" }
-                    progress(expanded, MAX_EXPANDED)
                 }
             }
-        } ?: error("Could not open selected ZIP")
-        check(critical.containsAll(CRITICAL)) { "Unsupported game ZIP: required Unity files were not found" }
+        }
         return prefix?.substringBeforeLast("/$GAME_DATA")?.substringAfterLast('/')?.ifBlank { "official-game-zip" }
             ?: "official-game-zip"
     }
@@ -202,6 +231,7 @@ class AssetRecovery(private val context: Context) {
     }
 
     companion object {
+        private const val TAG = "JunOS"
         private const val GAME_DATA = "My Dystopian Robot Girlfriend_Data"
         private const val MAX_EXPANDED = 3L * 1024 * 1024 * 1024
         private const val MAX_FILES = 512

@@ -108,6 +108,13 @@ fun SetupScreen(
                 Text("RAM", style = MaterialTheme.typography.bodySmall)
                 Text(formatBytes(device.totalRamBytes), style = MaterialTheme.typography.bodySmall)
             }
+            if (!device.hasRequiredRam) {
+                Text(
+                    "Warning: less than 8 GB-class RAM may make responses slow or cause the model to stop.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.error,
+                )
+            }
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
                 Text("Free storage", style = MaterialTheme.typography.bodySmall)
                 Text(formatBytes(device.freeStorageBytes), style = MaterialTheme.typography.bodySmall)

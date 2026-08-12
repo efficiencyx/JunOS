@@ -2,6 +2,7 @@ package com.efficiencyx.junos.setup
 
 import android.content.Context
 import android.net.Uri
+import android.util.Log
 import com.efficiencyx.junos.JunApplication
 import com.efficiencyx.junos.server.LocalServer
 import kotlinx.coroutines.CancellationException
@@ -105,6 +106,7 @@ class SetupCoordinator(
                 }
                 refresh()
             } catch (error: Throwable) {
+                Log.e(TAG, "Asset recovery failed", error)
                 mutableState.value = mutableState.value.copy(
                     phase = SetupPhase.ERROR,
                     error = error.message ?: "Asset recovery failed",
@@ -142,6 +144,10 @@ class SetupCoordinator(
 
     fun close() { scope.cancel() }
 
+    companion object {
+        private const val TAG = "JunOS"
+    }
+
     private fun phaseMessage(phase: SetupPhase) = when (phase) {
         SetupPhase.CHECKING -> "Checking this phone…"
         SetupPhase.CONSENT -> "Before Jun wakes up"
@@ -155,7 +161,6 @@ class SetupCoordinator(
 
     private fun unsupportedReason(device: DeviceStatus): String = when {
         !device.supportedAbi -> "This build requires a 64-bit ARM phone."
-        device.totalRamBytes < DeviceStatus.MIN_RAM -> "At least 8 GB of RAM is required."
         else -> "At least 5 GB of free storage is required during setup."
     }
 }
