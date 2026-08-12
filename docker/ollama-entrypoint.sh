@@ -1,18 +1,18 @@
 #!/usr/bin/env bash
-# Boot ollama serve, wait until the HTTP API answers, then `ollama pull`
-# whatever is listed in OLLAMA_MODELS_TO_PULL (comma-separated). Models
-# already present locally are skipped - `ollama pull` is idempotent and
-# cheap when the manifest is already cached.
+# Start ollama serve, wait for the HTTP API to answer, then `ollama pull`
+# whatever OLLAMA_MODELS_TO_PULL lists, seperated by commas. anything already
+# here is skipped, `ollama pull` does nothing twice and is cheap once the
+# manifest is cached.
 
 set -e
 
-# Bind to all interfaces so the `php` service can reach us over the docker net.
+# Listen on everything so the `php` service can reach us over the docker net.
 export OLLAMA_HOST="${OLLAMA_HOST:-0.0.0.0:11434}"
 
 ollama serve &
 SERVE_PID=$!
 
-# Wait for /api/tags (= server up + model store readable) before pulling.
+# Wait for /api/tags, that means the server is up and can read the model store.
 echo "[ollama-entrypoint] waiting for ollama to come up..."
 for i in $(seq 1 60); do
   if curl -fsS "http://127.0.0.1:11434/api/tags" >/dev/null 2>&1; then
@@ -36,7 +36,8 @@ fi
 if [ -n "${TITLE_MODEL:-}" ]; then
   echo "[ollama-entrypoint] pulling $TITLE_MODEL"
   ollama pull "$TITLE_MODEL" || echo "[ollama-entrypoint] pull failed: $TITLE_MODEL (will continue)"
-  # Load it CPU-only and pin it (keep_alive -1): titling must never take VRAM from the chat model.
+  # CPU only and pinned with keep_alive -1. titling must NEVER take VRAM off
+  # the chat model.
   echo "[ollama-entrypoint] pinning $TITLE_MODEL to CPU..."
   curl -s -X POST "http://127.0.0.1:11434/api/generate" \
     -H 'Content-Type: application/json' \
@@ -45,8 +46,8 @@ if [ -n "${TITLE_MODEL:-}" ]; then
     || echo "[ollama-entrypoint] title model pin failed (non-fatal)"
 fi
 
-# Pre-warm: load the chat model into VRAM now so the first user message
-# doesn't pay the ~2 min cold-load cost.
+# Warm it up. get the chat model into VRAM NOW so the first message you send
+# doesn't sit through the ~2 min cold load.
 if [ -n "$CHAT_MODEL" ]; then
   echo "[ollama-entrypoint] pre-warming $CHAT_MODEL..."
   curl -s -X POST "http://127.0.0.1:11434/api/generate" \
@@ -56,5 +57,5 @@ if [ -n "$CHAT_MODEL" ]; then
     || echo "[ollama-entrypoint] pre-warm failed (non-fatal)"
 fi
 
-# Hand the foreground to ollama so signals (SIGTERM from `docker stop`) reach it.
+# Give the foreground to ollama so a SIGTERM from `docker stop` gets to it.
 wait "$SERVE_PID"

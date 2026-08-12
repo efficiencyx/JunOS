@@ -1,14 +1,14 @@
-# Voice sidecar (Kokoro-82M + pocket-tts for TTS, faster-whisper for STT). CPU
-# build: the models are small enough to hit comfortable real-time on CPU, and a
-# GPU copy holds ~2GB of VRAM the LLM wants for layer offload. Karaoke stem
-# separation - the one audio job that genuinely wants a GPU - runs in its own
-# sidecar (docker/karaoke.Dockerfile), which is why nothing here is GPU-built.
+# The voice sidecar. Kokoro-82M and pocket-tts do the talking, faster-whisper
+# does the listening. this is a CPU build, the models are small enough to keep up
+# in real time there, and a GPU copy would sit on ~2GB of VRAM that the LLM wants
+# for its own layers. the one audio job that really does want a GPU lives in
+# docker/karaoke.Dockerfile.
 FROM python:3.11-slim
 
-# uv installs the Python deps much faster than pip - it resolves and downloads
-# packages in parallel and unzips them natively, overlapping fetch with extract.
-# That's the bulk of the build on the GPU overlays, where torch is a multi-GB
-# ROCm/CUDA wheel. Otherwise identical to pip: same wheels, same TORCH_INDEX.
+# uv installs the Python deps much faster than pip. it works out versions and
+# downloads several at once, and unzips while it is still fetching. that is most
+# of the build time on the GPU overlays where torch is a multi-GB wheel. apart
+# from speed it is the same as pip, same wheels, same TORCH_INDEX.
 COPY --from=ghcr.io/astral-sh/uv:latest /uv /uvx /bin/
 
 RUN apt-get update \
@@ -21,13 +21,13 @@ RUN apt-get update \
 
 WORKDIR /app
 
-# Torch wheel source. CPU-only, so kokoro/pocket-tts can't drag a multi-GB GPU
-# build in as a transitive dependency. Overridable (TTS_TORCH_INDEX) for the rare
-# bare-metal case that wants GPU voice; no compose overlay touches it.
+# Where we get torch from. CPU only, so kokoro or pocket-tts can't quietly pull
+# a multi-GB GPU build in behind them. TTS_TORCH_INDEX overrides it for the rare
+# bare metal setup that wants GPU voice, no compose overlay touches it.
 ARG TORCH_INDEX=https://download.pytorch.org/whl/cpu
 
-# Install torch first (from TORCH_INDEX) so the resolver doesn't later pull a
-# different build in as a transitive dependency, and keep it in its own layer
+# Install torch FIRST, from TORCH_INDEX, or something later drags a different
+# build in behind it. keep it in its own layer
 # ahead of the requirements COPY so editing requirements.txt doesn't re-run this
 # install. No BuildKit cache mount here on purpose - `docker compose build` on
 # the legacy builder errors on --mount, so we rely on uv's speed instead.

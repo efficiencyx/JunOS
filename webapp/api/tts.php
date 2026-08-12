@@ -4,7 +4,7 @@ require_once __DIR__ . '/_lib.php';
 
 require_user();
 
-// KOKORO_URL is the pre-rename name of TTS_URL, honored for existing .env files.
+// KOKORO_URL is what TTS_URL was called before, we still take it for old .env files.
 $ttsUrl = rtrim(env_str('TTS_URL', env_str('KOKORO_URL', 'http://localhost:8001')), '/');
 $action = $_GET['action'] ?? '';
 
@@ -90,8 +90,9 @@ if ($action === 'tts') {
         fail(400, 'invalid_request');
     }
 
-    // pocket-tts language id (e.g. english, french_24l). The sidecar clamps unknown
-    // values to its default; we only enforce the shape here.
+    // pocket-tts language id, english or french_24l and so on. the sidecar
+    // puts anything it doesn't know back to its default, here we only check
+    // the shape.
     $lang = $body['lang'] ?? null;
     if ($lang !== null && (!is_string($lang) || !preg_match('/^[a-z][a-z0-9_]*$/', $lang))) {
         fail(400, 'invalid_request');
@@ -156,8 +157,8 @@ if ($action === 'warm') {
     curl_setopt($ch, CURLOPT_POSTFIELDS, $rawBody);
     curl_setopt($ch, CURLOPT_HTTPHEADER, ['Content-Type: application/json']);
     curl_setopt($ch, CURLOPT_CONNECTTIMEOUT, 5);
-    // A cold language checkpoint load can run several seconds; the client doesn't
-    // block on this, so give the sidecar room to finish the preload.
+    // Loading a cold language checkpoint can take several seconds. the client
+    // is not waiting on this, so give the sidecar room to finish.
     curl_setopt($ch, CURLOPT_TIMEOUT, 120);
     $res = curl_exec($ch);
     $code = curl_getinfo($ch, CURLINFO_HTTP_CODE);

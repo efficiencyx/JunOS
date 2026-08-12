@@ -1,31 +1,34 @@
-// The worklet keeps VAD metering and PCM capture active in background tabs.
+// The worklet keeps VAD metering and PCM capture going in background tabs.
 
 class MicProcessor extends AudioWorkletProcessor {
   constructor(opts) {
     super();
     const o = (opts && opts.processorOptions) || {};
 
-    // Pre-roll ring. voice.js only declares "speech" after a ~96ms debounce, by
-    // which point the word's onset is already gone - whisper transcribes
-    // "y Jun" for "Hey Jun". So we always keep the last N ms and prepend it when
-    // recording starts. This is the whole reason capture lives in a worklet
-    // instead of a MediaRecorder started on demand.
+    // Pre-roll ring. voice.js won't call it "speech" until a ~96ms debounce
+    // is done, and by then the start of the word is gone, whisper hears
+    // "y Jun" when you said "Hey Jun". so we always keep the last N ms and
+    // stick it on the front when recording starts. this is the whole reason
+    // capture lives in a worklet and not in a MediaRecorder we start when
+    // we need it.
     const preRollLen = Math.ceil(((o.preRollMs || 300) / 1000) * sampleRate);
     this.ring = new Float32Array(preRollLen);
     this.ringPos = 0;
     this.ringFilled = 0;
 
-    // Utterance buffer, allocated once. Allocating megabytes on the audio thread
-    // mid-utterance risks a GC pause and a dropped frame, so it's sized for the
-    // hard cap up front and reused. 30s @ 16kHz float32 = ~1.9MB.
+    // Utterance buffer, made once. asking for megabytes on the audio thread
+    // in the middle of a word can give us a GC pause and a dropped frame, so
+    // we take the full size up front and reuse it. 30s @ 16kHz float32 is
+    // ~1.9MB.
     this.maxLen = Math.ceil(((o.maxMs || 30000) / 1000) * sampleRate);
     this.buf = new Float32Array(this.maxLen);
     this.len = 0;
     this.recording = false;
 
-    // EMA over frame RMS. Raw per-frame RMS is spiky enough at 8ms that plosives
-    // and clicks cross any useful threshold; ~40ms of smoothing kills that
-    // without blurring real speech onsets.
+    // EMA over frame RMS. raw per frame RMS jumps around so much at 8ms that
+    // a hard p or a click goes over any threshold worth having. ~40ms of
+    // smoothing takes that out and still keeps the Start of real speech
+    // sharp.
     this.alpha = o.alpha || 0.2;
     this.ema = 0;
     this.tick = 0;
@@ -71,8 +74,8 @@ class MicProcessor extends AudioWorkletProcessor {
         this.buf.set(ch, this.len);
         this.len += ch.length;
       } else {
-        // Hit the hard cap - a stuck-open VAD (constant noise never crossing the
-        // close threshold) would otherwise record forever. Finalize what we have.
+        // Hit the hard cap. a VAD stuck open, noise that never drops under
+        // the close threshold, would record for Ever. send what we have.
         this.port.postMessage({ type: 'overflow' });
         this.stop(false);
       }

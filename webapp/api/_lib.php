@@ -9,7 +9,8 @@ function request_id(): string {
 }
 
 function client_ip(): string {
-    // X-Forwarded-For is attacker-controlled behind the single nginx edge proxy; only trust it when an operator opts in with TRUST_PROXY=1.
+    // X-Forwarded-For is whatever the caller says behind our one nginx, so only
+    // trust it when the operator asks for it with TRUST_PROXY=1.
     if (env_str('TRUST_PROXY') === '1') {
         $xff = $_SERVER['HTTP_X_FORWARDED_FOR'] ?? '';
         if ($xff !== '') {
@@ -25,9 +26,9 @@ function env_str(string $key, string $default = ''): string {
     return ($v !== false && $v !== '') ? $v : $default;
 }
 
-// Writable dir for the SQLite DB and rate-limit files. Docker keeps the
-// default; bare-metal installs (Windows) point OMEGA_STATE_DIR into the
-// install folder so everything stays uninstallable in one place.
+// A dir we can write, for the SQLite DB and the rate limit files. docker keeps
+// the default. a bare metal install on Windows points OMEGA_STATE_DIR at the
+// install folder so the whole thing still comes off in one go.
 function state_dir(): string {
     return rtrim(env_str('OMEGA_STATE_DIR', '/var/lib/omega'), '/\\');
 }
@@ -41,7 +42,8 @@ function log_event(array $ctx): void {
     error_log(json_encode($ctx, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES));
 }
 
-// Send a JSON error and stop. $key is a stable machine-readable string, never internals.
+// Send a JSON error and stop. $key is a fixed string for machines, Never our
+// internals.
 function fail(int $code, string $key, array $extra = []): never {
     http_response_code($code);
     header('Content-Type: application/json');
@@ -51,6 +53,66 @@ function fail(int $code, string $key, array $extra = []): never {
 
 function require_post(): void {
     if ($_SERVER['REQUEST_METHOD'] !== 'POST') fail(405, 'method_not_allowed');
+}
+
+function url_origin(string $url): string {
+    $parts = parse_url($url);
+    if (!$parts || empty($parts['scheme']) || empty($parts['host'])) return '';
+    $origin = strtolower($parts['scheme'] . '://' . $parts['host']);
+    return empty($parts['port']) ? $origin : $origin . ':' . $parts['port'];
+}
+
+// What a browser is allowed to say a write came from. Host is the name the
+// browser was pointed at, so scheme://Host is us by definition and a page on
+// someone else's domain can't forge either half. OMEGA_ALLOWED_ORIGINS is for a
+// reverse proxy that rewrites Host, comma seperated, no trailing slash.
+function allowed_origins(): array {
+    $out = [];
+    $host = strtolower($_SERVER['HTTP_HOST'] ?? '');
+    if ($host !== '') {
+        $https = !empty($_SERVER['HTTPS']) || (($_SERVER['HTTP_X_FORWARDED_PROTO'] ?? '') === 'https');
+        $out[] = ($https ? 'https://' : 'http://') . $host;
+        // A proxy that terminates TLS and forwards plain http without telling
+        // us leaves the browser saying https while we'd have guessed http.
+        $out[] = 'https://' . $host;
+    }
+    foreach (explode(',', env_str('OMEGA_ALLOWED_ORIGINS')) as $extra) {
+        $extra = strtolower(trim($extra, " \t\n\r\0\x0B/"));
+        if ($extra !== '') $out[] = $extra;
+    }
+    return $out;
+}
+
+// CSRF. Two things already stop the plain cross-site form post: the session
+// cookie is SameSite=Strict, and the writes want a JSON content type a form
+// can't send. This is the hole neither of them covers. To a browser localhost
+// is ONE site whatever the port, so any other app serving a page on 127.0.0.1
+// is same-site with us and the cookie rides along on the request it forges. so
+// we make the browser say where the request came from, and it has to be us.
+function require_same_origin(): void {
+    $method = strtoupper($_SERVER['REQUEST_METHOD'] ?? 'GET');
+    if ($method === 'GET' || $method === 'HEAD' || $method === 'OPTIONS') return;
+
+    // Sec-Fetch-Site is the browser's own verdict, decided before any proxy
+    // touched a header, so it goes first. same-site is NOT good enough here,
+    // that IS the neighbour on the other port.
+    $site = $_SERVER['HTTP_SEC_FETCH_SITE'] ?? '';
+    if ($site !== '') {
+        if ($site === 'same-origin') return;
+        log_event(['msg' => 'cross_origin_blocked', 'sec_fetch_site' => $site]);
+        fail(403, 'cross_origin_blocked');
+    }
+
+    $origin = strtolower(rtrim($_SERVER['HTTP_ORIGIN'] ?? '', '/'));
+    if ($origin === '' && isset($_SERVER['HTTP_REFERER'])) {
+        $origin = url_origin($_SERVER['HTTP_REFERER']);
+    }
+    // No Origin, no Referer, no Sec-Fetch-Site and a session cookie anyway is
+    // not a browser we know. curl and friends can set Origin themselves.
+    if ($origin === '' || !in_array($origin, allowed_origins(), true)) {
+        log_event(['msg' => 'cross_origin_blocked', 'origin' => $origin]);
+        fail(403, 'cross_origin_blocked');
+    }
 }
 
 function require_content_type(string $expected): void {
@@ -71,8 +133,8 @@ function read_body(int $maxBytes): string {
     return $body;
 }
 
-// Per-IP token bucket backed by a flat file. Best-effort: if we can't get a
-// writable dir we just let the request through rather than 500.
+// A token bucket per IP kept in a flat file. we try our best, if we can't get
+// a dir we can write we let the request through instead of a 500.
 function rate_limit(string $bucket, int $maxPerWindow, int $windowSec): void {
     $key = sha1($bucket . '|' . client_ip());
 
@@ -129,20 +191,20 @@ function db(): PDO {
         PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION,
         PDO::ATTR_DEFAULT_FETCH_MODE => PDO::FETCH_ASSOC,
     ]);
-    // busy_timeout is not optional here: the consolidation worker writes to the
-    // same file as php-fpm, and the default of 0 turns any overlap into an
-    // immediate "database is locked" instead of a short wait.
+    // busy_timeout is not optional here. the consolidation worker writes the
+    // same file as php-fpm, and the default of 0 turns any overlap into
+    // "database is locked" right away instead of a short wait.
     $pdo->exec('PRAGMA journal_mode=WAL; PRAGMA foreign_keys=ON; PRAGMA busy_timeout=5000;');
 
-    // Apply any migrations/NNN_*.sql newer than the current schema version. A
-    // fresh DB reads 0 (no schema_version table yet) and gets every file in
-    // order; each migration owns its own INSERT INTO schema_version.
+    // Run any migrations/NNN_*.sql newer than the schema version we are on. a
+    // new DB reads 0, there is no schema_version table yet, so it gets every
+    // file in order. each migration does its own INSERT INTO schema_version.
     $current = 0;
     try {
         $v = $pdo->query('SELECT MAX(v) FROM schema_version')->fetchColumn();
         if ($v !== false && $v !== null) $current = (int)$v;
     } catch (PDOException $e) {
-        // table doesn't exist -> treat as version 0 and run everything
+        // no table, so call it version 0 and run the lot
     }
     $files = glob(__DIR__ . '/migrations/*.sql');
     sort($files);
@@ -156,7 +218,7 @@ function db(): PDO {
 }
 
 function current_user(): ?array {
-    // false until we've looked; null once we know there's no valid session.
+    // false until we have looked, null once we know there is no session.
     static $user = false;
     if ($user !== false) return $user;
 
@@ -172,9 +234,10 @@ function current_user(): ?array {
 }
 
 function memory_dir(): string {
-    // Defaults under state_dir() so memories land in the persisted omega_state
-    // volume. Builds before 2026-07 wrote to /var/lib/jun/memory (unmounted in
-    // Docker, so lost on container recreation); set MEMORY_DIR to override.
+    // Sits under state_dir() by default so memories land in the omega_state
+    // volume that survives. builds before 2026-07 wrote /var/lib/jun/memory,
+    // which docker never mounted, so they died with the container. set
+    // MEMORY_DIR if you want it somewhere else.
     $dir = rtrim(env_str('MEMORY_DIR', state_dir() . '/memory'), '/');
     if (!is_dir($dir)) @mkdir($dir, 0700, true);
     if (!is_dir($dir) || !is_writable($dir)) {
@@ -187,9 +250,9 @@ function memory_file_path(int $userId): string {
     return memory_dir() . '/user-' . $userId . '.jsonl';
 }
 
-// A note saying "tomorrow" is only readable next to the day it was written, but
-// stamping every note costs a category off the tail of the context budget - so
-// only the ones whose wording is anchored to their own writing date get a date.
+// A note that says "tomorrow" only makes sense next to the day it was written,
+// but stamping every note costs us a whole category off the end of the context
+// budget. so ONLY the notes whose wording leans on their own date get one.
 const MEMORY_RELATIVE_TIME_RE = '/\b(today|tonight|tomorrow|yesterday|this (?:morning|afternoon|evening|week|month|weekend)|last (?:night|week|month|weekend)|next (?:week|month|weekend|monday|tuesday|wednesday|thursday|friday|saturday|sunday)|in (?:a few|a couple of|\d{1,2}) (?:days?|weeks?|months?)|days? from now|weeks? from now)\b/i';
 
 function memory_note_stamp(array $note): string {
@@ -727,9 +790,9 @@ function consolidation_lock_path(int $userId): string {
     return $dir . '/user-' . $userId . '.lock';
 }
 
-// Older builds wrote a bare expiry timestamp here. That still decodes to an int,
-// so a lock file left behind by one of them reads as an expiry with no phase
-// rather than as a corrupt lock nobody can clear.
+// Older builds wrote just an expiry timestamp here. that still comes back as
+// an int, so a lock file one of them left behind reads as an expiry with no
+// phase, and not as a broken lock nobody can get rid of.
 function consolidation_lock_read(int $userId): ?array {
     $raw = @file_get_contents(consolidation_lock_path($userId));
     if ($raw === false) return null;
@@ -755,8 +818,9 @@ function consolidation_locked(int $userId): bool {
     $path = consolidation_lock_path($userId);
     if (!is_file($path)) return false;
     $lock = consolidation_lock_read($userId);
-    // An unreadable lock is cleared too, or a truncated write would block every
-    // later run: consolidation_run only retries fopen(x) once this returns false.
+    // We clear a lock we can't read as well, or one half written file would
+    // block every later run. consolidation_run only tries fopen(x) again once
+    // this comes back false.
     if ($lock !== null && $lock['expiry'] > time()) return true;
     @unlink($path);
     return false;
@@ -787,8 +851,9 @@ function consolidation_touch(int $userId, ?bool $enabled = null): void {
     )->execute([$userId, $enabled ? time() : 0, $enabled ? 1 : 0]);
 }
 
-// Lines consolidation decided Jun wants to say the next time Anon appears. The
-// queue is drained on read: a refresh two minutes later must not replay it.
+// Lines consolidation decided Jun wants to say next time Anon shows up. the
+// queue empties when you read it, a refresh two minutes later must not play
+// the same thing again.
 const WELCOME_MAX_MESSAGES = 3;
 const WELCOME_MAX_CHARS = 240;
 
@@ -838,18 +903,22 @@ function start_session(int $userId): string {
         ->execute([$token, $userId, $now, $expires]);
 
     $secure = !empty($_SERVER['HTTPS']) || (($_SERVER['HTTP_X_FORWARDED_PROTO'] ?? '') === 'https');
+    // Strict, not Lax. Nothing links into this app from outside, so there is no
+    // cross-site navigation that needs the cookie, and Lax would still send it
+    // on a top level GET some other page pushed us into.
     setcookie('omega_session', $token, [
         'expires' => $expires,
         'path' => '/',
         'httponly' => true,
-        'samesite' => 'Lax',
+        'samesite' => 'Strict',
         'secure' => $secure,
     ]);
     return $token;
 }
 
-// Lockout applied when Jun walks out of a conversation via the flee tool. Only
-// chat.php honours it - history and settings stay reachable while she is gone.
+// The lockout we put on when Jun walks out of a conversation with the flee
+// tool. ONLY chat.php cares about it, history and settings still work while
+// she is gone.
 function flee_bans_enabled(): bool {
     return strtolower(env_str('FLEE_BANS', 'on')) !== 'off';
 }
@@ -879,7 +948,7 @@ function ban_apply(int $userId, string $reason): array {
         $st->execute([$userId]);
         $row = $st->fetch();
         $st->closeCursor();
-        // A day without walking out wipes the escalation.
+        // One day without walking out and the escalation is gone.
         if ($row && $now - (int)$row['last_ban'] < 86400) $strikes = (int)$row['strikes'];
         $strikes++;
         $minutes = (int)min(30, 5 * (2 ** ($strikes - 1)));
@@ -896,10 +965,9 @@ function ban_apply(int $userId, string $reason): array {
     }
 }
 
-// Hidden per-user relationship state (one row per user; persists across all of
-// that user's conversations). Scores are 0-100. chat.php injects behavioral
-// directives from these and nudges them via Jun's [A:mood_shift|...] tag;
-// relationship.php reads/sets them for the developer panel.
+// Hidden relationship state per user, migrations/002_relationship.sql explains
+// the model. chat.php turns these scores into directives for how she behaves,
+// and her [A:mood_shift|...] tag moves them.
 const RELATIONSHIP_DEFAULTS = ['affection' => 50, 'trust' => 50, 'tension' => 30];
 
 function relationship_get(int $userId): array {
@@ -938,9 +1006,10 @@ function relationship_set(int $userId, array $values): void {
     }
 }
 
-// Apply per-turn deltas on top of $cur, then persist. Capped at ±50/turn: normal
-// turns are 0-5, but the prompt lets Jun swing 30-50 on big events (sold, cheated
-// on, abandoned), so the cap has to allow that while still blocking absurd jumps.
+// Put this turn's deltas on top of $cur and save. capped at +/-50 a turn.
+// a normal turn moves 0-5, but the prompt lets Jun swing 30-50 on the big ones,
+// sold, cheated on, abandoned, so the cap has to leave room for that and still
+// stop anything silly.
 function relationship_apply(int $userId, array $cur, array $deltas): void {
     $clampDelta = fn($d) => max(-50, min(50, (int)$d));
     $next = [];
@@ -949,3 +1018,8 @@ function relationship_apply(int $userId, array $cur, array $deltas): void {
     }
     relationship_set($userId, $next);
 }
+
+// Every endpoint pulls in this file, so the CSRF check happens here instead of
+// in each one, where the next endpoint somebody writes would forget it. The
+// consolidation worker runs on the CLI, there is no request to check there.
+if (PHP_SAPI !== 'cli') require_same_origin();

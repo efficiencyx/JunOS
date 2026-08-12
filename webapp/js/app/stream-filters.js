@@ -1,5 +1,5 @@
-import { logAction } from './logging.js?v=71';
-import { noteEmotionTint } from './mood.js?v=71';
+import { logAction } from './logging.js?v=72';
+import { noteEmotionTint } from './mood.js?v=72';
 
 const MARK_RE = /\[\s*A(?:CTIONS?)?\s*:/i;
 const PARTIAL_RE = /\[\s*(?:A(?:C(?:T(?:I(?:O(?:N(?:S)?)?)?)?)?)?\s*)?$/i;
@@ -34,7 +34,7 @@ export function makeStreamBuffer(onCleanText) {
           buf = buf.slice(start);
         }
         const end = buf.indexOf(']');
-        if (end < 0) break; // wait for more
+        if (end < 0) break; // tag isn't finished yet, wait for the next chunk
         const blob = buf.slice(0, end + 1);
         buf = buf.slice(end + 1);
         const acts = Actions.parseActions(blob);

@@ -18,7 +18,7 @@ tts/.venv/
 node_modules/
 *.log
 
-# bare-metal Windows install (portable PHP, TTS venv, models, chat state, logs)
+# the bare metal Windows install, portable PHP, the TTS venv, models, chat, logs
 runtime/
 
 # project-specific
