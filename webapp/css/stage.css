@@ -1,5 +1,4 @@
-/* Live2D stage */
-/* Full-screen, click-through layer. The character floats over the whole page
+/* A full screen layer you can click straight through. she floats over the page
    and is repositioned by dragging (hit-tested in live2d.js). Sits above the
    chat content but below the header chrome, drawer, and overlays. */
 #stage {
@@ -14,32 +13,6 @@
 
 body.l2d-dragging { cursor: grabbing; user-select: none; }
 body.l2d-touching { cursor: grabbing; user-select: none; }
-
-/* Skeleton shimmer while model loads (disabled: stage is now a full-screen
-   click-through layer, so a viewport-wide shimmer would flash the whole page). */
-.stage-skeleton {
-  display: none;
-  position: absolute;
-  inset: 0;
-  background: linear-gradient(
-    90deg,
-    transparent 0%,
-    rgba(124, 158, 255, .07) 40%,
-    rgba(124, 158, 255, .14) 50%,
-    rgba(124, 158, 255, .07) 60%,
-    transparent 100%
-  );
-  background-size: 200% 100%;
-  animation: shimmer 1.6s infinite linear;
-  z-index: 5;
-  pointer-events: none;
-}
-.stage-skeleton.hidden { display: none; }
-
-@keyframes shimmer {
-  0%   { background-position: 200% 0; }
-  100% { background-position: -200% 0; }
-}
 
 .stage-toolbar {
   position: absolute;

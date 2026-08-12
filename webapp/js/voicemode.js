@@ -20,12 +20,12 @@ window.VoiceMode = (function () {
       return;
     }
     try {
-      await Voice.enable(); // no-op if the settings hands-free toggle already has it on
+      await Voice.enable(); // does nothing if hands-free is already on in settings
     } catch (e) {
       ui.toast('⚠ Mic blocked - check the browser permission', 'error');
       return;
     }
-    if (window.TTS) TTS.setEnabled(true); // spoken replies are the whole point
+    if (window.TTS) TTS.setEnabled(true); // her talking back IS the point here
     muted = false;
     active = true;
     const ov = overlay();
@@ -33,7 +33,7 @@ window.VoiceMode = (function () {
       ov.hidden = false;
       ov.classList.remove('muted');
       updateMuteIcon();
-      void ov.offsetHeight; // flush so the opacity transition runs
+      void ov.offsetHeight; // forces layout NOW so the fade has something to run from
     }
     document.body.classList.add('voice-mode');
     if (hooks.onEnter) hooks.onEnter();

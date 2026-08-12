@@ -361,7 +361,7 @@ body.karaoke-mode .karaoke-overlay {
   gap: 20px;
   width: min(720px, 92vw);
   max-height: 82vh;
-  /* The score card only appears after a take, and with a full lyric line per
+  /* The score card only shows up after you sing, and with a whole lyric line per
      section it can outgrow what the lyrics already claim - scroll rather than
      push the controls off the bottom. */
   overflow-y: auto;

@@ -1,4 +1,4 @@
-// Microphone activation is intentionally not synced across sessions.
+// Turning the mic on is Never synced across sessions, on purpose.
 
 window.Prefs = (function () {
   const TRACKED = [
