@@ -26,7 +26,10 @@ data class ModelSpec(
     @SerialName("download_url") val downloadUrl: String,
     val size: Long,
     val sha256: String,
-)
+) {
+    fun pinned(): Boolean =
+        downloadUrl.startsWith("https://") && sha256.matches(Regex("[a-fA-F0-9]{64}")) && size > 0
+}
 
 @Serializable
 data class VoicePackSpec(
@@ -43,26 +46,27 @@ class ModelStore(private val context: Context) {
     private val json = Json { ignoreUnknownKeys = true }
     private val client = OkHttpClient.Builder().followRedirects(true).followSslRedirects(true).build()
     private val root = File(context.filesDir, "models").also { it.mkdirs() }
-    val modelFile: File get() = File(root, "jun.gguf")
+    val litertModelFile: File get() = File(root, "jun.litertlm")
+    val litertCacheDir: File get() = File(root, "litert-cache").also { it.mkdirs() }
     val voiceRoot: File get() = File(root, "voice").also { it.mkdirs() }
 
-    fun modelReady(): Boolean = modelFile.isFile && modelFile.length() > 64L * 1024 * 1024
+    fun modelReady(): Boolean = litertReady()
+    fun litertReady(): Boolean = litertModelFile.isFile && litertModelFile.length() > 64L * 1024 * 1024
     fun voiceReady(): Boolean = File(voiceRoot, ".ready").isFile
 
-    fun modelSpec(): ModelSpec = context.assets.open("manifests/model.json").bufferedReader().use {
-        json.decodeFromString(it.readText())
-    }
+    fun litertSpec(): ModelSpec? = runCatching {
+        context.assets.open("manifests/litert_model.json").bufferedReader().use {
+            json.decodeFromString<ModelSpec>(it.readText())
+        }
+    }.getOrNull()?.takeIf { it.pinned() }
 
     fun voiceManifest(): VoiceManifest = context.assets.open("manifests/voice.json").bufferedReader().use {
         json.decodeFromString(it.readText())
     }
 
     suspend fun downloadModel(progress: (Long, Long) -> Unit) = withContext(Dispatchers.IO) {
-        val spec = modelSpec()
-        check(spec.downloadUrl.startsWith("https://") && spec.sha256.matches(Regex("[a-fA-F0-9]{64}")) && spec.size > 0) {
-            "The Jun E2B model has not been published with a pinned URL and checksum yet."
-        }
-        download(spec.downloadUrl, modelFile, spec.size, spec.sha256, progress)
+        val spec = litertSpec() ?: error("The Jun LiteRT bundle has not been pinned with a URL and checksum yet.")
+        download(spec.downloadUrl, litertModelFile, spec.size, spec.sha256, progress)
     }
 
     suspend fun downloadVoice(progress: (Long, Long) -> Unit) = withContext(Dispatchers.IO) {
@@ -86,8 +90,10 @@ class ModelStore(private val context: Context) {
             deleteInside(incoming, voiceRoot.parentFile!!)
             incoming.mkdirs()
             if (!Python.isStarted()) Python.start(AndroidPlatform(context.applicationContext))
-            Python.getInstance().getModule("jun_recovery")
-                .callAttr("extract_voice", archives.map { it.absolutePath }, incoming.absolutePath)
+            // jun_voice is deliberately separate from jun_recovery: importing that module would drag
+            // UnityPy and Pillow into a code path that only needs tarfile.
+            Python.getInstance().getModule("jun_voice")
+                .callAttr("extract_voice", archives.map { it.absolutePath }.toTypedArray(), incoming.absolutePath)
             check(File(incoming, "kokoro-en-v0_19/model.onnx").isFile)
             check(File(incoming, "sherpa-onnx-whisper-tiny.en/tiny.en-encoder.int8.onnx").isFile)
             File(incoming, ".ready").writeText("voice-manifest-v1\n")

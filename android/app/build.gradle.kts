@@ -14,7 +14,6 @@ plugins {
 android {
     namespace = "com.efficiencyx.junos"
     compileSdk = 35
-    ndkVersion = "28.0.13004108"
 
     defaultConfig {
         applicationId = "com.efficiencyx.junos"
@@ -25,18 +24,6 @@ android {
 
         ndk { abiFilters += "arm64-v8a" }
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
-
-        externalNativeBuild {
-            cmake {
-                cppFlags += listOf("-std=c++17", "-O3")
-                arguments += listOf(
-                    "-DANDROID_STL=c++_shared",
-                    "-DGGML_OPENMP=OFF",
-                    "-DGGML_LLAMAFILE=OFF",
-                    "-DGGML_NATIVE=OFF",
-                )
-            }
-        }
     }
 
     buildTypes {
@@ -62,14 +49,6 @@ android {
         sourceCompatibility = JavaVersion.VERSION_17
         targetCompatibility = JavaVersion.VERSION_17
     }
-    kotlinOptions { jvmTarget = "17" }
-
-    externalNativeBuild {
-        cmake {
-            path = file("src/main/cpp/CMakeLists.txt")
-            version = "3.31.6"
-        }
-    }
 
     packaging {
         jniLibs.useLegacyPackaging = false
@@ -79,6 +58,10 @@ android {
     sourceSets.named("main") {
         assets.srcDir(layout.buildDirectory.dir("generated/junWeb"))
     }
+}
+
+kotlin {
+    compilerOptions { jvmTarget = org.jetbrains.kotlin.gradle.dsl.JvmTarget.JVM_17 }
 }
 
 ksp { arg("room.schemaLocation", "$projectDir/schemas") }
@@ -97,9 +80,44 @@ chaquopy {
     sourceSets {
         getByName("main") {
             srcDir(layout.buildDirectory.dir("generated/recoveryPython"))
+            srcDir(layout.buildDirectory.dir("generated/unityPyPython"))
         }
     }
     productFlavors { }
+}
+
+val unityPyVersion = "1.25.0"
+val unityPySdist by configurations.creating
+
+val verifyUnityPySdist by tasks.registering {
+    doLast {
+        val digest = MessageDigest.getInstance("SHA-256").digest(unityPySdist.singleFile.readBytes())
+            .joinToString("") { "%02x".format(it) }
+        check(digest == "4267195aba76fff95975a9687e2d04b8f16e5909a92ac8d4020241284d9082fb") {
+            "UnityPy sdist checksum mismatch"
+        }
+    }
+}
+
+// UnityPy's wheels bundle a compiled UnityPyBoost that has no Android build, but every call
+// site falls back to pure Python, so the package tree is unpacked out of the sdist straight
+// into the Chaquopy source set. The C++ sits in a sibling directory and never comes along.
+// The version has to match the desktop installers, which pull UnityPy unpinned - anything
+// older than 1.10 misparses this game's Unity 6 Texture2D headers.
+val unpackUnityPy by tasks.registering(Copy::class) {
+    dependsOn(verifyUnityPySdist)
+    from(provider { tarTree(resources.gzip(unityPySdist.singleFile)) }) {
+        include("unitypy-$unityPyVersion/UnityPy/**")
+        exclude("**/*.pyi")
+        eachFile { path = path.substringAfter("unitypy-$unityPyVersion/") }
+    }
+    includeEmptyDirs = false
+    into(layout.buildDirectory.dir("generated/unityPyPython"))
+}
+
+tasks.named("preBuild").configure { dependsOn(unpackUnityPy) }
+tasks.matching { it.name.matches(Regex("merge(.*)PythonSources")) }.configureEach {
+    dependsOn(unpackUnityPy)
 }
 
 val generateJunWebAssets by tasks.registering(Copy::class) {
@@ -142,11 +160,12 @@ tasks.named("preBuild").configure { dependsOn(verifySherpaAar) }
 
 val verifyPinnedManifests by tasks.registering {
     doLast {
-        val manifest = JsonSlurper().parse(file("src/main/assets/manifests/model.json")) as Map<*, *>
+        val file = file("src/main/assets/manifests/litert_model.json")
+        val manifest = JsonSlurper().parse(file) as Map<*, *>
         check((manifest["download_url"] as? String)?.startsWith("https://") == true)
         check((manifest["sha256"] as? String)?.matches(Regex("[a-fA-F0-9]{64}")) == true)
         check((manifest["size"] as? Number)?.toLong()?.let { it > 0 } == true) {
-            "The Jun E2B model release URL, size, and SHA-256 must be pinned before a release build."
+            "litert_model.json needs a pinned release URL, size, and SHA-256 before a release build."
         }
     }
 }
@@ -154,7 +173,7 @@ val verifyPinnedManifests by tasks.registering {
 tasks.matching { it.name == "preReleaseBuild" }.configureEach { dependsOn(verifyPinnedManifests) }
 
 val forbiddenReleaseEntries = listOf(
-    Regex("(?i).*\\.gguf$"), Regex("(?i).*\\.(zip|apk)$"),
+    Regex("(?i).*\\.gguf$"), Regex("(?i).*\\.litertlm$"), Regex("(?i).*\\.(zip|apk)$"),
     Regex("(?i).*webapp/assets/.*"), Regex("(?i).*(omega\\.sqlite|meta\\.json)$"),
 )
 
@@ -177,6 +196,7 @@ tasks.register("verifyReleaseContents") {
 
 dependencies {
     sherpaAar("k2-fsa:sherpa-onnx:1.13.4@aar")
+    unityPySdist("u:unitypy:$unityPyVersion@tar.gz")
     val composeBom = platform("androidx.compose:compose-bom:2025.03.01")
     implementation(composeBom)
     androidTestImplementation(composeBom)
@@ -201,7 +221,9 @@ dependencies {
     implementation("io.ktor:ktor-server-status-pages:3.1.2")
     implementation("org.jetbrains.kotlinx:kotlinx-serialization-json:1.8.1")
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.10.1")
+    implementation("com.google.ai.edge.litertlm:litertlm-android:0.16.0")
     implementation("com.squareup.okhttp3:okhttp:4.12.0")
+    implementation("org.apache.commons:commons-compress:1.27.1")
 
     testImplementation("junit:junit:4.13.2")
     testImplementation("org.jetbrains.kotlinx:kotlinx-coroutines-test:1.10.1")

@@ -9,7 +9,13 @@ import com.efficiencyx.junos.data.MessageEntity
 import com.efficiencyx.junos.data.RelationshipEntity
 import com.efficiencyx.junos.lore.LoreIndex
 import com.efficiencyx.junos.memory.MemoryStore
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.cancelAndJoin
+import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.flow.collect
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.encodeToString
@@ -20,6 +26,7 @@ import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.intOrNull
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
+import kotlinx.serialization.json.longOrNull
 import kotlinx.serialization.json.put
 
 @Serializable
@@ -43,7 +50,7 @@ class ChatEngine(
     private val database: JunDatabase,
     private val memory: MemoryStore,
     private val lore: LoreIndex,
-    private val llama: LlamaEngine,
+    private val engine: InferenceEngine,
 ) {
     private val dao get() = database.dao()
     private val json = Json { ignoreUnknownKeys = true }
@@ -80,23 +87,53 @@ class ChatEngine(
         } else messages += ChatMessage("user", liveContext)
 
         emit(buildJsonObject { put("debug", buildJsonObject { put("live_context", liveContext); put("reasoning", request.reasoning) }) })
+        val statusJob = if (engine.state.value !is EngineState.Ready) {
+            emit(statusEvent("loading", 0f))
+            CoroutineScope(currentCoroutineContext()).launch {
+                var lastStep = -1
+                engine.state.collect { state ->
+                    if (state !is EngineState.Loading) return@collect
+                    val step = (state.progress * 20f).toInt()
+                    if (step != lastStep) {
+                        lastStep = step
+                        emit(statusEvent("loading", step / 20f))
+                    }
+                }
+            }
+        } else null
+        // Loading the model pins gigabytes and stalls the main looper, so it has to finish before the
+        // foreground service starts - Android kills the process if startForeground() is more than 5s late.
+        try {
+            withContext(Dispatchers.Default) { engine.ensureLoaded() }
+        } finally {
+            statusJob?.cancelAndJoin()
+        }
+        emit(statusEvent("generating", 1f))
         ContextCompat.startForegroundService(context, Intent(context, GenerationService::class.java))
         val started = System.nanoTime()
         var visible = StringBuilder()
         var silenced = false
         var fled: JsonObject? = null
         var tokenCount = 0
+        var nativeEvalCount = 0
+        var nativeEvalMs = 0L
+        var nativePromptEvalCount = 0
         try {
             for (round in 0 until 3) {
                 val filter = ToolStreamFilter()
                 val roundText = StringBuilder()
-                llama.generate(messages).collect { token ->
+                engine.generate(messages).collect { token ->
                     tokenCount++
                     roundText.append(token)
                     filter.push(token).forEach { clean ->
                         visible.append(clean)
                         emit(buildJsonObject { put("token", clean) })
                     }
+                }
+                engine.lastStats.value?.let { stats ->
+                    nativeEvalCount += stats["eval_count"]?.jsonPrimitive?.intOrNull ?: 0
+                    nativeEvalMs += stats["eval_ms"]?.jsonPrimitive?.longOrNull ?: 0
+                    nativePromptEvalCount += stats["prompt_eval_count"]?.jsonPrimitive?.intOrNull ?: 0
                 }
                 filter.finish().forEach { clean ->
                     visible.append(clean)
@@ -138,11 +175,12 @@ class ChatEngine(
         val duration = System.nanoTime() - started
         emit(buildJsonObject {
             put("stats", buildJsonObject {
-                put("eval_count", tokenCount)
-                put("eval_duration", duration)
+                put("eval_count", if (nativeEvalCount > 0) nativeEvalCount else tokenCount)
+                put("eval_duration", if (nativeEvalMs > 0) nativeEvalMs * 1_000_000 else duration)
+                put("prompt_eval_count", nativePromptEvalCount)
                 put("total_duration", duration)
                 put("num_ctx", 4096)
-                put("model", "jun-v4-e2b-q4_k_m")
+                put("model", "jun-e2b-q4_k_m")
             })
         })
         if (assistant.isBlank()) error("empty_reply")
@@ -156,7 +194,7 @@ class ChatEngine(
         }
     }
 
-    fun cancel() = llama.cancel()
+    fun cancel() = engine.cancel()
 
     suspend fun summarize(oldSummary: String, messages: List<MessageEntity>): String {
         val lines = messages.mapNotNull { message ->
@@ -176,7 +214,7 @@ class ChatEngine(
             ),
             ChatMessage("user", request),
         )
-        return buildString { llama.generate(prompt, maxTokens = 512).collect(::append) }.trim().ifBlank { oldSummary }
+        return buildString { engine.generate(prompt, maxTokens = 512).collect(::append) }.trim().ifBlank { oldSummary }
     }
 
     private suspend fun buildLiveContext(
@@ -224,6 +262,10 @@ class ChatEngine(
         "stay_silent" -> json.encodeToString(mapOf("silent" to true))
         "flee" -> json.encodeToString(mapOf("fled" to true))
         else -> json.encodeToString(mapOf("error" to "unknown_tool"))
+    }
+
+    private fun statusEvent(phase: String, progress: Float) = buildJsonObject {
+        put("status", buildJsonObject { put("phase", phase); put("progress", progress) })
     }
 
     private fun toolStatus(name: String, state: String, result: String? = null) = buildJsonObject {
@@ -324,6 +366,7 @@ private class ToolStreamFilter {
     }
 
     companion object {
-        private val TOOL = Regex("\\[TOOL:([a-z_]+)\\|(\\{.*})]", setOf(RegexOption.IGNORE_CASE, RegexOption.DOT_MATCHES_ALL))
+        // Android's ICU engine rejects a bare '}' that desktop Java tolerates.
+        private val TOOL = Regex("\\[TOOL:([a-z_]+)\\|(\\{.*\\})]", setOf(RegexOption.IGNORE_CASE, RegexOption.DOT_MATCHES_ALL))
     }
 }

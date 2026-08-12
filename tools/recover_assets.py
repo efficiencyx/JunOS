@@ -267,6 +267,23 @@ def parse_container(raw):
     return name, sections
 
 
+def obj_name(obj):
+    """UnityPy renamed NamedObject.name to m_Name in 1.10. The Android build is pinned to
+    1.7.43, the last release without a compiled UnityPyBoost, so both spellings occur."""
+    name = getattr(obj, "m_Name", None)
+    return name if name is not None else getattr(obj, "name", None)
+
+
+def component_ptrs(game_object):
+    """<1.10 calls this m_Components and stores bare PPtrs; later versions renamed it to
+    m_Component and wrap each entry. This cannot be duck-typed - the old PPtr forwards
+    every unknown attribute to the object it points at."""
+    entries = getattr(game_object, "m_Component", None)
+    if entries is None:
+        return list(game_object.m_Components)
+    return [entry.component for entry in entries]
+
+
 def safe_component(value):
     """Stable, filesystem-safe key for a Unity object name."""
     clean = re.sub(r"[^a-z0-9]+", "_", value.lower()).strip("_") or "item"
@@ -293,7 +310,10 @@ class Recovery:
         self.respath = {}
         for o in ggm.objects:
             if o.type.name == "ResourceManager":
-                for k, v in o.read().m_Container:
+                # <1.10 hands back a dict here instead of key/PPtr pairs.
+                container = o.read().m_Container
+                pairs = container.items() if isinstance(container, dict) else container
+                for k, v in pairs:
                     self.respath[k] = v.path_id
 
         # Every PackedTexturesContainer. The script itself lives in another
@@ -327,7 +347,7 @@ class Recovery:
 
     def tex_by_name(self, name):
         hits = [o.read() for o in self.res.objects
-                if o.type.name == "Texture2D" and o.read().m_Name == name]
+                if o.type.name == "Texture2D" and obj_name(o.read()) == name]
         if not hits:
             raise LookupError(f"no Texture2D named {name!r}")
         return max(hits, key=lambda t: t.m_Width * t.m_Height).image
@@ -400,11 +420,11 @@ class Recovery:
         n_slots = max(drawables.values()) + 1
         model_go = next(
             o for o in self.res.objects
-            if o.type.name == "GameObject" and o.read().m_Name == "interaction_model")
+            if o.type.name == "GameObject" and obj_name(o.read()) == "interaction_model")
 
         def transform(go):
-            for c in go.m_Component:
-                o = self.res_objs[c.component.path_id]
+            for c in component_ptrs(go):
+                o = self.res_objs[c.path_id]
                 if o.type.name == "Transform":
                     return o.read()
 
@@ -415,10 +435,11 @@ class Recovery:
             t = stack.pop()
             go = self.res_objs[t.m_GameObject.path_id].read()
             stack += [self.res_objs[c.path_id].read() for c in t.m_Children]
-            if go.m_Name not in drawables or drawables[go.m_Name] in atlas:
+            go_name = obj_name(go)
+            if go_name not in drawables or drawables[go_name] in atlas:
                 continue
-            for c in go.m_Component:
-                o = self.res_objs[c.component.path_id]
+            for c in component_ptrs(go):
+                o = self.res_objs[c.path_id]
                 if o.type.name != "MonoBehaviour":
                     continue
                 raw = bytes(o.get_raw_data())
@@ -426,7 +447,7 @@ class Recovery:
                     continue
                 pid = struct.unpack_from("<q", raw, 96)[0]
                 if pid in tex_ids:
-                    atlas[drawables[go.m_Name]] = pid
+                    atlas[drawables[go_name]] = pid
         if len(atlas) != n_slots:
             sys.exit(f"only resolved atlas slots {sorted(atlas)} of {n_slots}")
         for tn, pid in sorted(atlas.items()):
@@ -472,7 +493,7 @@ class Recovery:
         for tname in ("Sprite", "Texture2D"):
             hits = [o.read() for env in (self.res, self.shared)
                     for o in env.objects
-                    if o.type.name == tname and o.read().m_Name == name]
+                    if o.type.name == tname and obj_name(o.read()) == name]
             if hits:
                 return max(hits, key=lambda d: d.image.width * d.image.height).image
         raise LookupError(f"no Sprite or Texture2D named {name!r}")
