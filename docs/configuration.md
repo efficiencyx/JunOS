@@ -29,6 +29,7 @@ conditional requirement is `OPENROUTER_API_KEY`, needed only when
 
 | Variable | Default | Consumed by | What it does |
 |---|---|---|---|
+| `BIND_ADDR` | `127.0.0.1` | `docker compose` port mapping (`docker-compose.yml`), echoed by `start.sh` | Address nginx publishes `:80`/`:443` on. Loopback means this machine only; `0.0.0.0` exposes it to everything that can reach the host, and is required before Let's Encrypt can answer the HTTP-01 challenge. |
 | `DOMAIN` | `localhost` | `nginx`, `certbot` services (`docker-compose.yml`) | Public hostname nginx serves and certbot requests a cert for. |
 | `EMAIL` | `admin@localhost` | `certbot` service | Contact address for Let's Encrypt issuance. Only meaningful when `TLS_MODE=on`. |
 | `TLS_MODE` | `off` | `nginx` service, nginx config templates | `on` enables HTTPS via certbot (requires a public `DOMAIN`) and adds HSTS; `off` serves plain HTTP on `:80`. |
@@ -87,6 +88,13 @@ route stays mounted in both roles.
 | `OLLAMA_NUM_PARALLEL` | `1` | `ollama` service | Concurrent request slots. Left at the default, RAM stays bounded; raising it multiplies KV cache usage per slot. |
 | `OLLAMA_MAX_LOADED_MODELS` | `3` | `ollama` service | Cap on simultaneously loaded models. One slot is permanently held by the pinned `TITLE_MODEL`, leaving headroom to switch chat models without evicting on every swap. |
 | `OLLAMA_KEEP_ALIVE` | `5m` | `ollama` service | How long an idle model stays loaded before unloading. |
+
+## 4b. Request origin & proxies
+
+| Variable | Default | Consumed by | What it does |
+|---|---|---|---|
+| `OMEGA_ALLOWED_ORIGINS` | *(empty)* | `webapp/api/_lib.php` (`allowed_origins()`) | Extra origins accepted on writes, comma-separated, scheme included, no trailing slash (`https://jun.example.com`). Only needed behind a proxy that rewrites `Host` so the browser's `Origin` no longer matches it. Requests whose `Sec-Fetch-Site` is `same-origin` pass without this. |
+| `TRUST_PROXY` | *(unset)* | `webapp/api/_lib.php` (`client_ip()`) | `1` makes rate limiting read the first entry of `X-Forwarded-For` instead of the socket address. Set it **only** behind a proxy you control that overwrites the header - otherwise any caller can pick their own rate-limit bucket. |
 
 ## 5. State & persistence
 

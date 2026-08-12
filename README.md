@@ -57,31 +57,38 @@ bout the game's world and she stays in canon.
 - **She'll sing with you.** 🎤 Load a song, get timed lyrics, and see how close you got.
 - **Dress her up.** A whole wardrobe to toggle and recolor - she'll tell you what she thinks of it.
 - **Bring your mods.** Game-mod zips load straight into the browser.
-- **It's yours.** Runs entirely on your machine, no cloud, no telemetry, nothing phones home.
+- **It's yours.** She runs on your machine. No account, no cloud inference, no analytics, nothing reporting back to us - the only things that leave your box are the ones you ask for: a model download, a lyrics lookup, a web search she runs for you, and OpenRouter if you *choose* that provider. [The full list](SECURITY.md#what-talks-to-the-internet).
 
 Curious how any of it works? [Under the hood](#under-the-hood).
 
 ## Meet her in five minutes
 
-**Linux / macOS / WSL** - you need Docker (with Compose) and git. That's it.
+Clone it, look at what you just downloaded, then run it. **Linux / macOS / WSL** needs Docker (with Compose) and git; **Windows** needs neither, she runs bare metal out of one folder.
 
 ```sh
-curl -fsSL https://raw.githubusercontent.com/efficiencyx/Jun/main/install.sh | bash
-```
-
-**Windows (PowerShell)** - no Docker at all; she runs bare metal out of one folder.
-
-```powershell
-powershell -NoProfile -ExecutionPolicy Bypass -Command "irm https://raw.githubusercontent.com/efficiencyx/Jun/main/install.ps1 | iex"
+git clone https://github.com/efficiencyx/Jun.git
+cd Jun
+less install.sh           # it installs Docker and pulls a few GB. worth a look
+./install.sh              # Windows: .\install.ps1
 ```
 
 The installer's first question is how you want to install: **Express** (press Enter) auto-detects everything and asks nothing else; **Custom** walks you through provider, model and voice. `JUN_YES=1` (or `$env:JUN_YES='1'`) skips the question entirely for unattended installs.
 
 Then open **<http://localhost>** (Windows: **<http://127.0.0.1:8080>**) and say hi. 🎉
 
-> Piping a script into your shell runs remote code. Normal for installers, but if that makes you twitch, read [`install.sh`](install.sh) / [`install.ps1`](install.ps1) - the manual steps below are the same thing, by hand.
+### The one-liner, if you insist
 
-### The careful way
+```sh
+curl -fsSL https://raw.githubusercontent.com/efficiencyx/Jun/main/install.sh | bash
+```
+
+```powershell
+powershell -NoProfile -ExecutionPolicy Bypass -Command "irm https://raw.githubusercontent.com/efficiencyx/Jun/main/install.ps1 | iex"
+```
+
+This runs whatever `main` says right now, unread, and `main` moves. `JUN_REF` will hold it to a branch or tag you picked. Two more knobs in the same spirit: `JUN_REPO` needs `JUN_ALLOW_FORK=1` before it will clone from anywhere but here, and `JUN_DOCKER_SCRIPT_SHA256` pins Docker's own install script (the installer prints its digest either way, and never pipes it into a root shell). More in [SECURITY.md](SECURITY.md).
+
+### Skipping the installer entirely
 
 ```sh
 git clone https://github.com/efficiencyx/Jun.git
@@ -130,8 +137,10 @@ Then you're ready to configure the reverse proxy.
 
 
 ```sh
-DOMAIN=yourdomain.com EMAIL=you@yourdomain.com TLS_MODE=on COMPOSE_PROFILES=prod ./start.sh
+BIND_ADDR=0.0.0.0 DOMAIN=yourdomain.com EMAIL=you@yourdomain.com TLS_MODE=on COMPOSE_PROFILES=prod ./start.sh
 ```
+
+`BIND_ADDR` is the deliberate step: out of the box nginx publishes on `127.0.0.1` only, so a fresh install isn't reachable from the next machine on the wifi. Opening it up is a thing you type, not a default you inherit. Let's Encrypt also can't reach the challenge until you do.
 
 The `prod` profile adds the certbot sidecar: `certbot certonly --webroot` on start, then `certbot renew` every 12 hours, certs in the `letsencrypt` volume, nginx serving 443 with HSTS. Mind Let's Encrypt's 5-duplicate-issuances-per-week limit while testing.
 

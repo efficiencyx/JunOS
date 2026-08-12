@@ -1,9 +1,12 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-REPO="${JUN_REPO:-https://github.com/efficiencyx/Jun.git}"
+REPO_UPSTREAM="https://github.com/efficiencyx/Jun.git"
+REPO="${JUN_REPO:-$REPO_UPSTREAM}"
 DIR="${JUN_DIR:-Jun}"
 REF="${JUN_REF:-main}"
+DOCKER_SCRIPT_URL="https://get.docker.com"
+DOCKER_SCRIPT=""
 OS="$(uname -s)"
 NEED_SG=0
 DOCKER_JUST_INSTALLED=0
@@ -99,6 +102,19 @@ run_live() {
         fail_ "$msg"
         exit "$rc"
     fi
+}
+
+sha256_of() {
+    if command -v sha256sum >/dev/null 2>&1; then sha256sum "$1" | cut -d' ' -f1
+    elif command -v shasum >/dev/null 2>&1; then shasum -a 256 "$1" | cut -d' ' -f1
+    elif command -v openssl >/dev/null 2>&1; then openssl dgst -sha256 "$1" | awk '{ print $NF }'
+    fi
+}
+
+# --proto '=https' so a redirect can't walk us down to plain http on the way,
+# --tlsv1.2 so we never negotiate something older with whoever answers.
+fetch() {
+    curl --proto '=https' --tlsv1.2 -fsSL --retry 3 --retry-delay 2 -o "$2" "$1"
 }
 
 MODEL_12B="hf.co/efficiencyx/Jun-LoRA-12B-GGUF:Q4_K_M"
@@ -207,10 +223,13 @@ ask_model_ref() {
 # one - it carries demucs and, on a GPU box, a multi-GB CUDA/ROCm torch - so
 # saying no here keeps that whole image out of the install. Sets $KARAOKE (on|off).
 # Non-interactive knob: JUN_KARAOKE=on|off (default on).
+# JUN_KARAOKE first, then KARAOKE, same order install.ps1 takes. keep both
+# spellings working, people copy install lines between the two scripts.
 ask_karaoke() {
-    local v
-    if [ -n "${JUN_KARAOKE:-}" ]; then
-        case "$(printf '%s' "$JUN_KARAOKE" | tr '[:upper:]' '[:lower:]')" in
+    local v preset
+    preset="${JUN_KARAOKE:-${KARAOKE:-}}"
+    if [ -n "$preset" ]; then
+        case "$(printf '%s' "$preset" | tr '[:upper:]' '[:lower:]')" in
             off|0|false|no|n) KARAOKE=off ;; *) KARAOKE=on ;;
         esac
     elif [ "${JUN_YES:-}" = "1" ] || [ ! -r /dev/tty ]; then
@@ -269,19 +288,9 @@ ask_tensor_parallel() {
     fi
 }
 
-# This only says whether the sharing feature EXISTS, not that anyone agreed to
-# it. chat transcripts are personal data, so every account gets asked inside the
-# app and the answer is stored per user. an installer can't agree on behalf of
-# people who don't have accounts yet. JUN_TELEMETRY=off drops the option.
-ask_telemetry() {
-    if [ -n "${JUN_TELEMETRY:-}" ]; then
-        case "$(printf '%s' "$JUN_TELEMETRY" | tr '[:upper:]' '[:lower:]')" in
-            off|0|false|no|n) TELEMETRY=off ;; *) TELEMETRY=on ;;
-        esac
-    else
-        TELEMETRY=on
-    fi
-}
+# There was a TELEMETRY knob here once, for a chat sharing feature that never
+# shipped. Not planned anymore, nothing in the app ever read it. If you find
+# TELEMETRY or TELEMETRY_INSTALL_ID in an old .env, they do nothing, delete them.
 
 configure() {
     local provider voice ans profiles
@@ -426,17 +435,6 @@ configure() {
     if [ "$TENSOR_PARALLEL" = on ]; then
         ok "tensor parallelism on"
     fi
-
-    ask_telemetry
-    set_env TELEMETRY "$TELEMETRY"
-    if [ "$TELEMETRY" = on ] && ! grep -qE '^TELEMETRY_INSTALL_ID=[0-9a-f]+' .env 2>/dev/null; then
-        set_env TELEMETRY_INSTALL_ID "$(od -An -tx1 -N8 /dev/urandom | tr -d ' \n')"
-    fi
-    if [ "$TELEMETRY" = on ]; then
-        ok "telemetry available (each account is asked in-app; nothing is sent until someone opts in)"
-    else
-        ok "telemetry off"
-    fi
 }
 
 pkg_manager() {
@@ -474,6 +472,50 @@ install_git() {
     esac
 }
 
+# Docker's own cross-distro install script, but it does NOT go straight into a
+# root shell. we put it in a file first, check it really is a shell script, and
+# print its SHA-256 so you can compare it against what anyone else got. set
+# JUN_DOCKER_SCRIPT_SHA256=<digest> and a mismatch aborts instead of running.
+# Homebrew doesn't need any of this, it has a real package.
+stage_docker_script() {
+    [ "$PM" = brew ] && return 0
+
+    DOCKER_SCRIPT="$(mktemp)"
+    if ! fetch "$DOCKER_SCRIPT_URL" "$DOCKER_SCRIPT"; then
+        fail_ "couldn't download $DOCKER_SCRIPT_URL"
+        exit 1
+    fi
+    if ! head -n1 "$DOCKER_SCRIPT" | grep -q '^#!'; then
+        fail_ "$DOCKER_SCRIPT_URL didn't return a shell script - refusing to run it."
+        exit 1
+    fi
+
+    local digest
+    digest="$(sha256_of "$DOCKER_SCRIPT")"
+    if [ -n "${JUN_DOCKER_SCRIPT_SHA256:-}" ]; then
+        if [ "$digest" != "$JUN_DOCKER_SCRIPT_SHA256" ]; then
+            fail_ "get-docker.sh doesn't match the digest you pinned:"
+            note "expected $JUN_DOCKER_SCRIPT_SHA256"
+            note "got      ${digest:-<no sha256 tool on this box>}"
+            exit 1
+        fi
+        ok "get-docker.sh matches the pinned digest"
+        return 0
+    fi
+
+    note "get-docker.sh sha256: ${digest:-<no sha256 tool on this box>}"
+    note "it runs as root. the copy we will run is $DOCKER_SCRIPT"
+    [ "${JUN_YES:-}" = "1" ] && return 0
+    [ -r /dev/tty ] || return 0
+    local a
+    printf '     %s$%s run it? %s[Y/n]%s %s→%s ' \
+        "$OK" "$R" "$DIM" "$R" "$ACCENT" "$R" > /dev/tty
+    read -r a < /dev/tty || a=""
+    case "$a" in
+        n|N|no|NO) note "okay - install Docker yourself ($(manual_url docker)) and re-run."; exit 1 ;;
+    esac
+}
+
 install_docker() {
     case "$PM" in
         brew)
@@ -483,7 +525,7 @@ install_docker() {
                 brew install docker docker-compose docker-engine rootlesskit slirp4netns
             fi
             ;;
-        *)    curl -fsSL https://get.docker.com | $SUDO sh ;; # official cross-distro script
+        *)    $SUDO sh "$DOCKER_SCRIPT" ;;
     esac
 }
 
@@ -600,7 +642,8 @@ install_asset_recovery() {
             return 1
         }
     fi
-    run "install UnityPy + Pillow" "$recovery_python" -m pip install --disable-pip-version-check --quiet UnityPy Pillow
+    run "install UnityPy + Pillow" "$recovery_python" -m pip install \
+        --disable-pip-version-check --quiet -r tools/requirements-recovery.txt
     [ -n "${JUN_GAME_DIR:-}" ] && args+=(--game "$JUN_GAME_DIR")
     if "$recovery_python" "${args[@]}"; then
         ok "assets extracted to webapp/assets (local use only)"
@@ -793,7 +836,10 @@ confirm_deps() {
     for c in "${missing[@]}"; do
         case "$c" in
             git)    run "install git" install_git ;;
-            docker) run "install docker" install_docker; DOCKER_JUST_INSTALLED=1 ;;
+            docker) stage_docker_script
+                    run "install docker" install_docker
+                    [ -n "$DOCKER_SCRIPT" ] && rm -f "$DOCKER_SCRIPT"
+                    DOCKER_JUST_INSTALLED=1 ;;
             compose) run "install Docker Compose" install_compose ;;
         esac
     done
@@ -837,8 +883,39 @@ choose_install_mode() {
     esac
 }
 
+# JUN_REPO exists so a fork can install itself, but it also means one edited
+# character in a copy-pasted install line points the clone at somebody else's
+# code. https only, and anything that isn't upstream has to be said out loud.
+# JUN_ALLOW_FORK=1 is the non-interactive way to say it, JUN_YES does NOT cover
+# this one, "install with defaults" is not "install from a stranger".
+check_repo_source() {
+    case "$REPO" in
+        https://*) ;;
+        *) fail_ "JUN_REPO must be an https:// URL - refusing to clone $REPO"; exit 1 ;;
+    esac
+    [ "$REPO" = "$REPO_UPSTREAM" ] && return 0
+
+    warn_ "JUN_REPO points somewhere other than upstream:"
+    note "  yours:    $REPO"
+    note "  upstream: $REPO_UPSTREAM"
+    if [ "${JUN_ALLOW_FORK:-}" = "1" ]; then
+        ok "JUN_ALLOW_FORK=1 - installing from the fork"
+        return 0
+    fi
+    if [ ! -r /dev/tty ]; then
+        fail_ "set JUN_ALLOW_FORK=1 to install from a fork non-interactively."
+        exit 1
+    fi
+    local a
+    printf '     %s$%s clone from it anyway? %s[y/N]%s %s→%s ' \
+        "$OK" "$R" "$DIM" "$R" "$ACCENT" "$R" > /dev/tty
+    read -r a < /dev/tty || a=""
+    case "$a" in y|Y|yes|YES) ;; *) fail_ "aborted."; exit 1 ;; esac
+}
+
 banner
 choose_install_mode
+check_repo_source
 confirm_deps
 
 if [ -d "$DIR/.git" ]; then
@@ -850,7 +927,11 @@ else
 fi
 
 cd "$DIR"
+# .env holds the OpenRouter key once someone types one in, so it is the owner's
+# business and nobody else's. every run, not just the first, an .env from an
+# older install is exactly the one still sitting there world-readable.
 [ -f .env ] || cp .env.example .env
+chmod 600 .env 2>/dev/null || true
 
 configure
 

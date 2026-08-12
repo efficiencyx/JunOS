@@ -110,6 +110,26 @@ case ",${profiles}," in
   *) echo "karaoke: off (set KARAOKE=on in .env to build its sidecar)" ;;
 esac
 
+# Compose publishes on BIND_ADDR, loopback unless somebody changed it. Say which
+# it is, out loud, every start. "it's only on my machine" is the kind of thing
+# people believe long after it stopped being true.
+bind_addr="${BIND_ADDR:-$(env_get BIND_ADDR)}"
+bind_addr="${bind_addr:-127.0.0.1}"
+export BIND_ADDR="$bind_addr"
+case "$bind_addr" in
+  127.0.0.1|localhost|::1) echo "listening on: $bind_addr (this machine only)" ;;
+  *) echo "listening on: $bind_addr - anything that can reach this box can open Jun" ;;
+esac
+
+tls_mode="${TLS_MODE:-$(env_get TLS_MODE)}"
+case "$(printf '%s' "${tls_mode:-off}" | tr '[:upper:]' '[:lower:]')" in
+  off|"") ;;
+  *) case "$bind_addr" in
+       127.0.0.1|localhost|::1)
+         echo "note: TLS_MODE=$tls_mode but we only listen on $bind_addr, so Let's Encrypt can't reach the challenge. set BIND_ADDR=0.0.0.0 in .env." ;;
+     esac ;;
+esac
+
 tts_device="${TTS_DEVICE:-$(env_get TTS_DEVICE)}"
 export TTS_DEVICE="${tts_device:-cpu}"
 

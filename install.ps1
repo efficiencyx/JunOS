@@ -7,7 +7,18 @@ try {
     $OutputEncoding = [Text.Encoding]::UTF8
 } catch {}
 
-$repo = if ($env:JUN_REPO) { $env:JUN_REPO } else { 'https://github.com/efficiencyx/Jun.git' }
+# Windows PowerShell 5.1 still opens with TLS 1.0/1.1 enabled on plenty of
+# boxes. Everything this script downloads (PHP, the CA bundle, PSGallery) is
+# https, so ask for 1.2 and up and nothing older.
+try {
+    [Net.ServicePointManager]::SecurityProtocol =
+        [Net.SecurityProtocolType]::Tls12 -bor [Net.SecurityProtocolType]::Tls13
+} catch {
+    [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
+}
+
+$repoUpstream = 'https://github.com/efficiencyx/Jun.git'
+$repo = if ($env:JUN_REPO) { $env:JUN_REPO } else { $repoUpstream }
 $dir  = if ($env:JUN_DIR)  { $env:JUN_DIR }  else { 'Jun' }
 $ref  = if ($env:JUN_REF)  { $env:JUN_REF }  else { 'main' }
 
@@ -134,6 +145,58 @@ function Set-EnvKey([string]$key, [string]$val) {
 
 $interactive = [Environment]::UserInteractive -and ($env:JUN_YES -ne '1')
 
+function Test-Sha256([string]$path, [string]$expected) {
+    if (-not $expected) { return $false }
+    return (Get-FileHash -Algorithm SHA256 -LiteralPath $path).Hash -ieq $expected.Trim()
+}
+
+# JUN_REPO exists so a fork can install itself, but it also means one edited
+# character in a copy-pasted install line points the clone at somebody else's
+# code. https only, and anything that isn't upstream has to be said out loud.
+# $env:JUN_ALLOW_FORK='1' is the non-interactive way to say it. JUN_YES does NOT
+# cover this one, "install with defaults" is not "install from a stranger".
+function Confirm-RepoSource {
+    if ($repo -notmatch '^https://') {
+        Fail_ "JUN_REPO must be an https:// URL - refusing to clone $repo"
+        exit 1
+    }
+    if ($repo -eq $repoUpstream) { return }
+
+    Warn_ 'JUN_REPO points somewhere other than upstream:'
+    Note "  yours:    $repo"
+    Note "  upstream: $repoUpstream"
+    if ($env:JUN_ALLOW_FORK -eq '1') {
+        Ok 'JUN_ALLOW_FORK=1 - installing from the fork'
+        return
+    }
+    if (-not [Environment]::UserInteractive) {
+        Fail_ "set `$env:JUN_ALLOW_FORK='1' to install from a fork non-interactively."
+        exit 1
+    }
+    $a = Read-Styled "     ${OK}▸${R} clone from it anyway? ${DIM}[y/N]${R} ${ACCENT}›${R} "
+    if ($a -notmatch '^(y|yes)$') { Fail_ 'aborted.'; exit 1 }
+}
+
+# .env holds the OpenRouter key once someone types one in. Windows hands new
+# files the folder's inherited ACL, which on a shared box can mean every local
+# account reads it. Break inheritance, then owner + SYSTEM only.
+function Protect-EnvFile {
+    if (-not (Test-Path .env)) { return }
+    $failed = $false
+    try {
+        $me = [Security.Principal.WindowsIdentity]::GetCurrent().Name
+        icacls .env /inheritance:r /grant:r "${me}:(F)" "SYSTEM:(F)" | Out-Null
+        # icacls is a native exe, a failure here is an exit code and not an
+        # exception, so the catch below would never see it.
+        $failed = $LASTEXITCODE -ne 0
+    } catch {
+        $failed = $true
+    }
+    if ($failed) {
+        Warn_ 'could not lock down .env permissions - check who can read it if you put an API key in.'
+    }
+}
+
 # The first thing someone non technical sees. Express installs the lot with what
 # we detected and asks nothing else, same as JUN_YES=1. Custom walks the prompts.
 # JUN_EXPRESS=1 picks Express before we even ask.
@@ -198,6 +261,19 @@ function Ask-TensorParallel {
     if (-not $interactive -or (Get-GpuCount) -lt 2) { return 'off' }
     $v = Read-Styled "     ${OK}▸${R} use all GPUs for one model? ${DIM}(fits bigger models, but slower per token)${R} ${DIM}[y/N]${R} ${ACCENT}›${R} "
     return $(if ($v -match '^(y|yes)$') { 'on' } else { 'off' })
+}
+
+# JUN_KARAOKE first, then KARAOKE, same order install.sh takes. keep both
+# spellings working, people copy install lines between the two scripts.
+function Ask-Karaoke([string]$voice) {
+    $preset = if ($env:JUN_KARAOKE) { $env:JUN_KARAOKE } else { $env:KARAOKE }
+    if ($preset) {
+        return $(if ($preset.ToLower() -match '^(off|0|false|no|n)$') { 'off' } else { 'on' })
+    }
+    if ($voice -ne 'on') { return 'off' }
+    if (-not $interactive) { return 'on' }
+    $v = Read-Styled "     ${OK}▸${R} enable karaoke ${DIM}(sing along - adds a few GB)${R} ${DIM}[Y/n]${R} ${ACCENT}›${R} "
+    return $(if ($v -match '^(n|no)$') { 'off' } else { 'on' })
 }
 
 function Configure-Jun {
@@ -303,21 +379,22 @@ function Configure-Jun {
     Set-EnvKey 'VOICE' $voice
     Ok "voice $voice"
 
+    # The voice sidecar stays on the CPU on purpose. both engines keep up in real
+    # time there, and a GPU copy would sit on VRAM she wants for her own layers.
+    if ($voice -eq 'on') {
+        Set-EnvKey 'TTS_DEVICE' 'cpu'
+    }
+
     # On bare metal one process does both jobs, so karaoke is just a second pip
     # install into the same venv and not a service of its own. it stays on the
     # CPU, the Windows venv is built against the CPU torch wheel.
-    $karaoke = $env:KARAOKE
-    if ($karaoke) {
-        $karaoke = if ($karaoke.ToLower() -match '^(off|0|false|no)$') { 'off' } else { 'on' }
-    } elseif ($interactive -and $voice -eq 'on') {
-        $v = Read-Styled "     ${OK}▸${R} enable karaoke ${DIM}(sing along - adds a few GB)${R} ${DIM}[Y/n]${R} ${ACCENT}›${R} "
-        $karaoke = if ($v -match '^(n|no)$') { 'off' } else { 'on' }
-    } elseif ($voice -eq 'on') {
-        $karaoke = 'on'
-    } else {
-        $karaoke = 'off'
-    }
+    $karaoke = Ask-Karaoke $voice
     Set-EnvKey 'KARAOKE' $karaoke
+    if ($karaoke -eq 'on') {
+        # No JUN_KARAOKE_GPU question here, unlike install.sh. SEP_DEVICE=auto
+        # would go looking for cuda and there is none in a CPU torch venv.
+        Set-EnvKey 'SEP_DEVICE' 'cpu'
+    }
     Ok "karaoke $karaoke"
 
     return @{ provider = $provider; voice = $voice; karaoke = $karaoke
@@ -330,12 +407,32 @@ function Refresh-Path {
     $env:Path = (($machine, $user, $env:Path) | Where-Object { $_ }) -join ';'
 }
 
-# winget (App Installer) is missing on some clean/LTSC/Server images. Bootstrap
-# it via the WinGet PowerShell module, which pulls in the real client. Returns
-# $true if winget is available afterwards.
+# winget (App Installer) is missing on some clean/LTSC/Server images. We can
+# bootstrap it, but that means pulling a module off PSGallery and letting it
+# install a machine-wide package manager, so we ask first instead of doing it
+# behind your back. $env:JUN_BOOTSTRAP_WINGET='1' answers yes ahead of time,
+# '0' answers no and you install App Installer yourself.
 function Ensure-Winget {
     if (Get-Command winget -ErrorAction SilentlyContinue) { return $true }
-    Note 'winget not found, attempting to bootstrap via WinGet PowerShell module'
+
+    if ($env:JUN_BOOTSTRAP_WINGET -match '^(0|off|no|false)$') {
+        Note 'winget is missing and JUN_BOOTSTRAP_WINGET is off.'
+        return $false
+    }
+    if ($env:JUN_BOOTSTRAP_WINGET -notmatch '^(1|on|yes|true)$') {
+        Warn_ 'winget (App Installer) is not on this machine.'
+        Note 'bootstrapping it installs the Microsoft.WinGet.Client module from'
+        Note 'PSGallery, which then installs the winget client machine-wide.'
+        Note 'the other option is App Installer from the Store, by hand.'
+        if (-not [Environment]::UserInteractive) {
+            Note "set `$env:JUN_BOOTSTRAP_WINGET='1' to allow it non-interactively."
+            return $false
+        }
+        $a = Read-Styled "     ${OK}▸${R} bootstrap winget now? ${DIM}[y/N]${R} ${ACCENT}›${R} "
+        if ($a -notmatch '^(y|yes)$') { return $false }
+    }
+
+    Note 'bootstrapping winget via the WinGet PowerShell module'
     try {
         Install-PackageProvider -Name NuGet -Force | Out-Null
         Install-Module -Name Microsoft.WinGet.Client -Force -Repository PSGallery | Out-Null
@@ -379,8 +476,16 @@ function Install-MachineTools([string[]]$missing, [switch]$Optional) {
 
     foreach ($c in $missing) {
         Step ("install {0}" -f $c)
-        winget install -e --id $wingetIds[$c] --accept-source-agreements --accept-package-agreements
-        Ok ("{0} installed" -f $c)
+        # --source winget on purpose. without it the id can resolve out of
+        # msstore or any private source somebody added to this machine, and we
+        # would install whatever answers to that name there.
+        winget install -e --id $wingetIds[$c] --source winget `
+            --accept-source-agreements --accept-package-agreements
+        if ($LASTEXITCODE -ne 0) {
+            Warn_ ("winget returned {0} for {1} - carrying on, the PATH check below decides." -f $LASTEXITCODE, $c)
+        } else {
+            Ok ("{0} installed" -f $c)
+        }
     }
     Refresh-Path
 }
@@ -415,28 +520,56 @@ function Install-Php {
             throw 'The Microsoft Visual C++ 2015-2022 Redistributable (x64) is required for PHP, but winget could not be installed.'
         }
         Step 'install Visual C++ runtime (needed by PHP)'
-        winget install -e --id Microsoft.VCRedist.2015+.x64 --accept-source-agreements --accept-package-agreements
+        winget install -e --id Microsoft.VCRedist.2015+.x64 --source winget `
+            --accept-source-agreements --accept-package-agreements
     }
 
     if (Test-Path $phpExe) { return }
 
     Step 'download portable PHP'
-    $releases = Invoke-RestMethod 'https://windows.php.net/downloads/releases/releases.json'
+    $releases = Invoke-RestMethod 'https://windows.php.net/downloads/releases/releases.json' -UseBasicParsing
     $branch = ($releases.PSObject.Properties.Name | Sort-Object { [version]$_ } | Select-Object -Last 1)
     $build = $releases.$branch.PSObject.Properties |
         Where-Object { $_.Name -match '^nts-.*-x64$' } | Select-Object -First 1
     if (-not $build) { throw "Couldn't find a 64-bit NTS PHP build in releases.json" }
     $zipUrl = 'https://windows.php.net/downloads/releases/' + $build.Value.zip.path
+    $zipSha = $build.Value.zip.sha256
+    if (-not $zipSha) {
+        throw "releases.json lists no sha256 for $($build.Name) - not unpacking an unverified PHP."
+    }
 
-    $zip = Join-Path $env:TEMP 'jun-php.zip'
-    Invoke-WebRequest -Uri $zipUrl -OutFile $zip
-    New-Item -ItemType Directory -Force -Path $phpDir | Out-Null
-    Expand-Archive -Path $zip -DestinationPath $phpDir -Force
-    Remove-Item $zip -ErrorAction SilentlyContinue
+    $tmpDir = Join-Path $env:TEMP ('jun-php-' + [guid]::NewGuid().ToString('N'))
+    New-Item -ItemType Directory -Force -Path $tmpDir | Out-Null
+    try {
+        $zip = Join-Path $tmpDir 'php.zip'
+        Invoke-WebRequest -Uri $zipUrl -OutFile $zip -UseBasicParsing
+        # The digest and the zip come from the same host, so this catches a
+        # mangled CDN copy or a half finished download, NOT a windows.php.net
+        # that is itself owned. it is the strongest check php.net offers.
+        if (-not (Test-Sha256 $zip $zipSha)) {
+            throw ("PHP download doesn't match the sha256 in releases.json (wanted {0}, got {1})." -f
+                $zipSha, (Get-FileHash -Algorithm SHA256 -LiteralPath $zip).Hash)
+        }
+        Ok 'PHP zip matches the sha256 in releases.json'
+        New-Item -ItemType Directory -Force -Path $phpDir | Out-Null
+        Expand-Archive -Path $zip -DestinationPath $phpDir -Force
 
-    $cacert = Join-Path $phpDir 'cacert.pem'
-    try { Invoke-WebRequest -Uri 'https://curl.se/ca/cacert.pem' -OutFile $cacert } catch {
-        Warn_ 'could not download cacert.pem; HTTPS from PHP (web fetch tool) may not work'
+        # curl.se publishes the digest next to the bundle. A tampered CA bundle
+        # is worse than none at all, it would make PHP trust a CA you didn't
+        # choose, so on a mismatch we install nothing and PHP falls back to the
+        # OS store.
+        $cacert = Join-Path $phpDir 'cacert.pem'
+        try {
+            $caTmp = Join-Path $tmpDir 'cacert.pem'
+            Invoke-WebRequest -Uri 'https://curl.se/ca/cacert.pem' -OutFile $caTmp -UseBasicParsing
+            $caWant = ((Invoke-WebRequest -Uri 'https://curl.se/ca/cacert.pem.sha256' -UseBasicParsing).Content -split '\s+')[0]
+            if (-not (Test-Sha256 $caTmp $caWant)) { throw 'cacert.pem does not match its published sha256' }
+            Move-Item -LiteralPath $caTmp -Destination $cacert -Force
+        } catch {
+            Warn_ ("skipping cacert.pem ({0}); HTTPS from PHP (web fetch tool) may not work" -f $_.Exception.Message)
+        }
+    } finally {
+        Remove-Item -LiteralPath $tmpDir -Recurse -Force -ErrorAction SilentlyContinue
     }
     $ini = @(
         "extension_dir=`"$phpDir\ext`""
@@ -546,7 +679,8 @@ function Install-AssetRecovery {
     }
 
     Step 'install UnityPy + Pillow'
-    & $recoveryPython -m pip install --disable-pip-version-check --quiet UnityPy Pillow
+    & $recoveryPython -m pip install --disable-pip-version-check --quiet `
+        -r (Join-Path (Get-Location) 'tools\requirements-recovery.txt')
     if ($LASTEXITCODE -ne 0) { throw 'Could not install UnityPy and Pillow for asset recovery.' }
 
     $recoveryArgs = @('tools/recover_assets.py')
@@ -602,6 +736,7 @@ function Install-AssetRecovery {
 
 Show-Banner
 Choose-InstallMode
+Confirm-RepoSource
 
 Step 'check dependencies'
 
@@ -628,6 +763,9 @@ if (Test-Path (Join-Path $dir '.git')) {
 
 Set-Location -LiteralPath $dir
 if (-not (Test-Path .env)) { Copy-Item .env.example .env }
+# Every run, not just the first. an .env from an older install is exactly the
+# one still sitting there with the folder's inherited ACL on it.
+Protect-EnvFile
 
 $cfg = Configure-Jun
 $voice = $cfg.voice
