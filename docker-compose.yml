@@ -8,9 +8,13 @@ services:
       dockerfile: docker/nginx.Dockerfile
     container_name: omega-nginx
     restart: unless-stopped
+    # Loopback by default. A bare "80:80" is reachable from every machine on the
+    # coffee shop wifi, and there is no login wall in front of Jun worth that.
+    # BIND_ADDR=0.0.0.0 opens it up, which is also what a public TLS_MODE needs
+    # so Let's Encrypt can reach the challenge.
     ports:
-      - "80:80"
-      - "443:443"
+      - "${BIND_ADDR:-127.0.0.1}:80:80"
+      - "${BIND_ADDR:-127.0.0.1}:443:443"
     environment:
       DOMAIN:    "${DOMAIN:-localhost}"
       TLS_MODE:  "${TLS_MODE:-off}"
@@ -196,6 +200,8 @@ services:
     volumes:
       - letsencrypt:/etc/letsencrypt
       - certbot_webroot:/var/www/certbot
+    security_opt:
+      - "no-new-privileges:true"
     networks: [omega]
 
 volumes:

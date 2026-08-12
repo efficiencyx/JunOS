@@ -5,10 +5,14 @@
 #
 # demucs needs torch>=2.1 and does not pull torchaudio - that comes from the
 # torch index in docker/karaoke.Dockerfile so its wheel build matches torch's.
-demucs>=4.0,<4.2
-faster-whisper>=1.0
-torch>=2.5
-fastapi>=0.110
-uvicorn[standard]>=0.27
-soundfile>=0.12
-numpy>=1.24
+#
+# Pinned exactly for the same reason requirements.txt is, see the note there.
+# torch keeps a range because TORCH_INDEX points at cpu, cu124 or rocm and they
+# don't carry the same versions.
+demucs==4.1.0
+faster-whisper==1.2.1
+torch>=2.5,<2.14
+fastapi==0.141.1
+uvicorn[standard]==0.52.1
+soundfile==0.14.0
+numpy==2.2.6
