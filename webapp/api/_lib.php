@@ -55,6 +55,66 @@ function require_post(): void {
     if ($_SERVER['REQUEST_METHOD'] !== 'POST') fail(405, 'method_not_allowed');
 }
 
+function url_origin(string $url): string {
+    $parts = parse_url($url);
+    if (!$parts || empty($parts['scheme']) || empty($parts['host'])) return '';
+    $origin = strtolower($parts['scheme'] . '://' . $parts['host']);
+    return empty($parts['port']) ? $origin : $origin . ':' . $parts['port'];
+}
+
+// What a browser is allowed to say a write came from. Host is the name the
+// browser was pointed at, so scheme://Host is us by definition and a page on
+// someone else's domain can't forge either half. OMEGA_ALLOWED_ORIGINS is for a
+// reverse proxy that rewrites Host, comma seperated, no trailing slash.
+function allowed_origins(): array {
+    $out = [];
+    $host = strtolower($_SERVER['HTTP_HOST'] ?? '');
+    if ($host !== '') {
+        $https = !empty($_SERVER['HTTPS']) || (($_SERVER['HTTP_X_FORWARDED_PROTO'] ?? '') === 'https');
+        $out[] = ($https ? 'https://' : 'http://') . $host;
+        // A proxy that terminates TLS and forwards plain http without telling
+        // us leaves the browser saying https while we'd have guessed http.
+        $out[] = 'https://' . $host;
+    }
+    foreach (explode(',', env_str('OMEGA_ALLOWED_ORIGINS')) as $extra) {
+        $extra = strtolower(trim($extra, " \t\n\r\0\x0B/"));
+        if ($extra !== '') $out[] = $extra;
+    }
+    return $out;
+}
+
+// CSRF. Two things already stop the plain cross-site form post: the session
+// cookie is SameSite=Strict, and the writes want a JSON content type a form
+// can't send. This is the hole neither of them covers. To a browser localhost
+// is ONE site whatever the port, so any other app serving a page on 127.0.0.1
+// is same-site with us and the cookie rides along on the request it forges. so
+// we make the browser say where the request came from, and it has to be us.
+function require_same_origin(): void {
+    $method = strtoupper($_SERVER['REQUEST_METHOD'] ?? 'GET');
+    if ($method === 'GET' || $method === 'HEAD' || $method === 'OPTIONS') return;
+
+    // Sec-Fetch-Site is the browser's own verdict, decided before any proxy
+    // touched a header, so it goes first. same-site is NOT good enough here,
+    // that IS the neighbour on the other port.
+    $site = $_SERVER['HTTP_SEC_FETCH_SITE'] ?? '';
+    if ($site !== '') {
+        if ($site === 'same-origin') return;
+        log_event(['msg' => 'cross_origin_blocked', 'sec_fetch_site' => $site]);
+        fail(403, 'cross_origin_blocked');
+    }
+
+    $origin = strtolower(rtrim($_SERVER['HTTP_ORIGIN'] ?? '', '/'));
+    if ($origin === '' && isset($_SERVER['HTTP_REFERER'])) {
+        $origin = url_origin($_SERVER['HTTP_REFERER']);
+    }
+    // No Origin, no Referer, no Sec-Fetch-Site and a session cookie anyway is
+    // not a browser we know. curl and friends can set Origin themselves.
+    if ($origin === '' || !in_array($origin, allowed_origins(), true)) {
+        log_event(['msg' => 'cross_origin_blocked', 'origin' => $origin]);
+        fail(403, 'cross_origin_blocked');
+    }
+}
+
 function require_content_type(string $expected): void {
     $ct = $_SERVER['CONTENT_TYPE'] ?? $_SERVER['HTTP_CONTENT_TYPE'] ?? '';
     $ct = trim(explode(';', $ct)[0]); // drop "; charset=..."
@@ -843,11 +903,14 @@ function start_session(int $userId): string {
         ->execute([$token, $userId, $now, $expires]);
 
     $secure = !empty($_SERVER['HTTPS']) || (($_SERVER['HTTP_X_FORWARDED_PROTO'] ?? '') === 'https');
+    // Strict, not Lax. Nothing links into this app from outside, so there is no
+    // cross-site navigation that needs the cookie, and Lax would still send it
+    // on a top level GET some other page pushed us into.
     setcookie('omega_session', $token, [
         'expires' => $expires,
         'path' => '/',
         'httponly' => true,
-        'samesite' => 'Lax',
+        'samesite' => 'Strict',
         'secure' => $secure,
     ]);
     return $token;
@@ -955,3 +1018,8 @@ function relationship_apply(int $userId, array $cur, array $deltas): void {
     }
     relationship_set($userId, $next);
 }
+
+// Every endpoint pulls in this file, so the CSRF check happens here instead of
+// in each one, where the next endpoint somebody writes would forget it. The
+// consolidation worker runs on the CLI, there is no request to check there.
+if (PHP_SAPI !== 'cli') require_same_origin();

@@ -1,0 +1,8 @@
+# Asset recovery only. Kept apart from the voice stack so the extractor venv
+# stays small, both installers build it from this file.
+#
+# Pinned exactly, not ranges. "latest" means every fresh install pulls whatever
+# went up on PyPI that morning, and nobody has looked at that. bump these by
+# hand when you have read the release.
+UnityPy==1.25.3
+Pillow==12.3.0
