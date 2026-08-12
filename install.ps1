@@ -1,5 +1,4 @@
-﻿#!/usr/bin/env pwsh
-$ErrorActionPreference = 'Stop'
+﻿$ErrorActionPreference = 'Stop'
 $ProgressPreference = 'SilentlyContinue'
 
 # Ensure Unicode glyphs render correctly on all console hosts.
