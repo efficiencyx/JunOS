@@ -33,9 +33,9 @@ $provider = ai_provider();
 $models = null;
 
 if ($provider === 'openrouter') {
-    // The boot screen polls this endpoint every 1-3s and OpenRouter's catalog
-    // is ~1-2 MB, so cache the extracted id list on disk and serve stale on
-    // upstream errors rather than hammering their public API.
+    // The boot screen hits this every 1-3s and OpenRouter's catalog is about
+    // 1-2 MB, so keep the id list we pulled out on disk and give back an old
+    // one when they error, instead of hammering their public API.
     header('Cache-Control: public, max-age=300');
     $cacheFile = state_dir() . '/openrouter_models.json';
     $ttl = 3600;
@@ -53,7 +53,7 @@ if ($provider === 'openrouter') {
             sort($models, SORT_STRING | SORT_FLAG_CASE);
             @file_put_contents($cacheFile, json_encode($models), LOCK_EX);
         } elseif (is_readable($cacheFile)) {
-            // Upstream hiccup: a stale list beats an error page.
+            // Upstream hiccup. an old list is better than an error page.
             $models = json_decode((string)file_get_contents($cacheFile), true);
         }
     }

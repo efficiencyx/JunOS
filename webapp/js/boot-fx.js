@@ -24,7 +24,7 @@
   let logStarted = false;
   let logDone = false;
   let pendingStatus = null;
-  const afterLog = [];   // callbacks deferred until the log finishes
+  const afterLog = [];
 
   function whenLogDone(fn) {
     if (logDone) fn();
@@ -33,7 +33,7 @@
 
   function finishLog(term) {
     logDone = true;
-    if (term) term.classList.add('log-done');   // reveal the live status + hint
+    if (term) term.classList.add('log-done');
     if (pendingStatus != null) {
       const text = pendingStatus;
       pendingStatus = null;
@@ -48,10 +48,10 @@
       const consoleEl = document.querySelector('.boot-console');
       if (!term || reduceMotion) { if (done) done(); return; }
       setTimeout(() => {
-        if (consoleEl) consoleEl.classList.add('finishing');   // fade the chrome
-        term.classList.add('zoom');                        // dive into the screen
+        if (consoleEl) consoleEl.classList.add('finishing');
+        term.classList.add('zoom');
         term.addEventListener('animationend', () => { if (done) done(); }, { once: true });
-      }, 520);   // a beat so "Ready" is readable
+      }, 520);   // a beat so you can actually read "Ready"
     });
   }
 
@@ -61,15 +61,16 @@
     if (!term || !lines.length || logStarted) return;
     logStarted = true;
 
-    if (reduceMotion) { finishLog(term); return; }   // no typing; reveal at once
+    if (reduceMotion) { finishLog(term); return; }
 
-    term.classList.add('typing');   // hides upcoming lines, OK badges, live status
+    term.classList.add('typing');   // this class HIDES the coming lines, the OK
+                                    // badges and the live status
     for (const li of lines) {
-      li.classList.add('live');     // reveal this line, then type its command
+      li.classList.add('live');
       const cmd = li.querySelector('.boot-cmd');
       const text = cmd.getAttribute('data-text') || cmd.textContent;
       await type(cmd, text, 20);
-      li.classList.add('done');     // pop the OK badge
+      li.classList.add('done');
       await wait(110);
     }
     finishLog(term);
@@ -84,13 +85,13 @@
   }
 
   function typeStatus(text) {
-    if (!logDone) { pendingStatus = text; return; }   // defer until the log finishes
+    if (!logDone) { pendingStatus = text; return; }
     doTypeStatus(text);
   }
 
   function start() {
     const el = document.querySelector('#bootStatus .boot-status-label');
-    if (el) typeStatus(el.textContent.trim());   // seed the initial label (deferred)
+    if (el) typeStatus(el.textContent.trim());
     runLog();
   }
 

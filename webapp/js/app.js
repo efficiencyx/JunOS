@@ -1,41 +1,42 @@
-// The ?v= on an import is part of the module's identity, not just a cache key.
-// Load this file from index.html at one version while a child imports ../app.js
-// at any other, and the browser instantiates it twice, which turns the import
-// cycles into "can't access lexical declaration before initialization". Every
-// URL in this graph - the <script> tag, the imports below, and every ?v= inside
-// js/app/ and js/live2d/ - carries one number, bumped together. (Deliberately
-// no example numbers in this comment: a bulk renumber would rewrite them and
-// destroy the mismatch being described.)
+// The ?v= on an import is part of what the module IS, not just a cache key.
+// load this file from index.html at one version while a child asks for
+// ../app.js at another, and the browser builds it twice, which turns the
+// import cycles into "can't access lexical declaration before
+// initialization". every URL in this graph carries one number and they all
+// move together: the <script> tag, the imports below, and every ?v= inside
+// js/app/ and js/live2d/. no example numbers in here on purpose, a bulk
+// renumber would rewrite them and kill the very mismatch we are describing.
 //
-// Bumping only the files you edited is not enough, and the way it fails is
-// delayed: js is served immutable for a year, so a module whose *body* changed
-// while its own ?v= stayed put is never refetched, and the stale copy keeps
-// importing the version number it was written against. Change anything in the
-// graph, renumber the whole graph.
+// bumping only the files you edited is not enough, and it fails late. js is
+// served immutable for a year, so a module whose *body* changed while its own
+// ?v= stayed put is Never fetched again, and that stale copy keeps asking for
+// the version number it was written against. change anything in the graph,
+// renumber the Whole graph.
 
-import { showAuthScreen } from './app/auth-screen.js?v=71';
-import { IDLE_AFTER_REPLY_MS, TYPING_POLL_MS, armIdleAfterReply, cancelActiveIdleNudge, cancelAutoReset, cancelIdleNudge, composerPlaceholder, consolidating, fleeActive, reportActivity, resetIdleNudge, scheduleAutoReset, scheduleIdleNudge, setCancelActiveIdleNudge, setConsolidating, showConsolidatingBubble, startFleeLock, syncConsolidationStatus } from './app/consolidation.js?v=71';
-import { chatInput, debugSystemPromptEl, devNoIdleChk, messagesEl, messagesEmpty, missingParamsEl, mobileConversationTitle, modelSelect, narrowSidebarQuery, reasoningSelect, sendBtn, sendButtonIdleMarkup, sendButtonStopMarkup, siteVolumeInput, stageEl, stageSkeleton, thinkChk } from './app/dom.js?v=71';
-import { announceMobileReply, faceBubble, hideFaceBubble, latestAssistantReply, restartFaceBubbleHide, scheduleFaceBubbleHide, scheduleFaceBubblePosition, setLatestAssistantReply, showFaceBubble } from './app/face-bubble.js?v=71';
-import { appendRaw, logAction, logMissing, logToolStatus, setStageStatus } from './app/logging.js?v=71';
-import { loadMood } from './app/mood.js?v=71';
-import { setSiteVolume, syncThinkToggle, updateSiteVolumeLabel, wireNameSettings } from './app/settings.js?v=71';
-import { loadConversation, refreshSidebar, setSidebarOpen } from './app/sidebar.js?v=71';
-import { makeNameFilter, makeStreamBuffer } from './app/stream-filters.js?v=71';
-import { escapeHtml, localTimeString, phoneMode } from './app/util.js?v=71';
-import { wireTts } from './app/wire-tts.js?v=71';
-import { wireVoice } from './app/wire-voice.js?v=71';
-import { WELCOME_TIERS, fetchWelcome, playWelcome, previewWelcome } from './app/welcome.js?v=71';
+import { showAuthScreen } from './app/auth-screen.js?v=72';
+import { IDLE_AFTER_REPLY_MS, TYPING_POLL_MS, armIdleAfterReply, cancelActiveIdleNudge, cancelAutoReset, cancelIdleNudge, composerPlaceholder, consolidating, fleeActive, reportActivity, resetIdleNudge, scheduleAutoReset, scheduleIdleNudge, setCancelActiveIdleNudge, setConsolidating, showConsolidatingBubble, startFleeLock, syncConsolidationStatus } from './app/consolidation.js?v=72';
+import { chatInput, debugSystemPromptEl, devNoIdleChk, messagesEl, messagesEmpty, missingParamsEl, mobileConversationTitle, modelSelect, narrowSidebarQuery, reasoningSelect, sendBtn, sendButtonIdleMarkup, sendButtonStopMarkup, siteVolumeInput, stageEl, thinkChk } from './app/dom.js?v=72';
+import { announceMobileReply, faceBubble, hideFaceBubble, latestAssistantReply, restartFaceBubbleHide, scheduleFaceBubbleHide, scheduleFaceBubblePosition, setLatestAssistantReply, showFaceBubble } from './app/face-bubble.js?v=72';
+import { appendRaw, logAction, logMissing, logToolStatus, setStageStatus } from './app/logging.js?v=72';
+import { loadMood } from './app/mood.js?v=72';
+import { setSiteVolume, syncThinkToggle, updateSiteVolumeLabel, wireNameSettings } from './app/settings.js?v=72';
+import { loadConversation, refreshSidebar, setSidebarOpen } from './app/sidebar.js?v=72';
+import { makeNameFilter, makeStreamBuffer } from './app/stream-filters.js?v=72';
+import { escapeHtml, localTimeString, phoneMode } from './app/util.js?v=72';
+import { wireTts } from './app/wire-tts.js?v=72';
+import { wireVoice } from './app/wire-voice.js?v=72';
+import { WELCOME_TIERS, fetchWelcome, playWelcome, previewWelcome } from './app/welcome.js?v=72';
 
 export const messages = []; // {role:'user'|'assistant', content:string}
 export let abortFn = null;
 export let currentConversationId = null;
 
-// The sidebar switches conversations but the id is read all over app.js, so it
-// stays owned here and is handed over rather than exported as a writable binding.
+// The sidebar changes conversations but the id gets read all over app.js, so
+// it stays owned here and we hand it over instead of exporting something you
+// can write to.
 export function setCurrentConversationId(id) { currentConversationId = id; }
 
-// Console handle for replaying the welcome scene: Welcome.preview('panicked').
+// Console handle for replaying the welcome scene, Welcome.preview('panicked').
 window.Welcome = { preview: previewWelcome, tiers: WELCOME_TIERS };
 let chatGeneration = 0;
 
@@ -331,9 +332,9 @@ export function runChat({ idle, ephemeral }) {
   if (window.DevHud) DevHud.beginGen();
   appendRaw('--- ' + new Date().toLocaleTimeString() + (idle ? ' (idle nudge)' : '') + ' ---\n');
 
-  // Predict the reply's language from Anon's message so the pocket-tts model can
-  // warm during generation. This only routes the voice - the prediction never
-  // reaches the model, which mirrors Anon's language from the conversation itself.
+  // Guess the reply's language from Anon's message so the pocket-tts model can
+  // warm up while she writes. this ONLY picks the voice, the guess never gets
+  // to the model, she takes Anon's language from the conversation herself.
   if (window.TTS && TTS.predictLang) {
     const lastUser = [...messages].reverse().find(m => m.role === 'user');
     const predicted = TTS.predictLang(lastUser ? lastUser.content : '');
@@ -370,8 +371,8 @@ export function runChat({ idle, ephemeral }) {
       },
       onSilence: () => {
         if (!isCurrent()) return;
-        // She chose to say nothing, so whatever leaked into the bubble first
-        // never happened - drop it and mark the turn instead.
+        // She decided to say nothing, so whatever leaked into the bubble
+        // first never happened. drop it and mark the turn instead.
         silenced = true;
         if (window.TTS) TTS.stop();
         hideFaceBubble();
@@ -406,7 +407,7 @@ export function runChat({ idle, ephemeral }) {
         if (window.TTS) TTS.flush();
         typing.remove();
         if (silenced) {
-          // The flushes above can still push held-back bytes; none of it exists.
+          // The flushes above can still push held back bytes. none of it exists.
           visible = '';
           shown = '';
           if (window.TTS) TTS.stop();
@@ -568,24 +569,24 @@ function showBoot() {
     return;
   }
 
-  // The avatar stack and the per-feature scripts are worthless to a visitor
-  // who never gets past the auth screen, so they are fetched only now.
+  // The avatar stack and the per feature scripts are no use to someone who
+  // never gets past the auth screen, so we only fetch them NOW.
   await loadScripts([
     ['vendor/pixi.min.js', 'vendor/live2dcubismcore.min.js',
      'vendor/marked.min.js', 'vendor/purify.min.js',
-     'js/actions.js?v=71', 'js/outfit.js?v=71', 'js/touch.js?v=71',
-     'js/mods.js?v=71', 'js/tts.js?v=71', 'js/voice.js?v=71',
-     'js/voicemode.js?v=71', 'js/devhud.js?v=71', 'js/trip-loader.js?v=71',
-     'js/wardrobe-open-lines.js?v=71', 'js/wardrobe-reactions.js?v=71',
-     'js/wardrobe-return-lines.js?v=71'],
+     'js/actions.js?v=72', 'js/outfit.js?v=72', 'js/touch.js?v=72',
+     'js/mods.js?v=72', 'js/tts.js?v=72', 'js/voice.js?v=72',
+     'js/voicemode.js?v=72', 'js/devhud.js?v=72', 'js/trip-loader.js?v=72',
+     'js/wardrobe-open-lines.js?v=72', 'js/wardrobe-reactions.js?v=72',
+     'js/wardrobe-return-lines.js?v=72'],
     ['vendor/cubism4.min.js'],
   ]);
-  // live2d.js is an ES module now, so it cannot ride in a loadScripts group -
-  // and it destructures PIXI.live2d at eval time, hence the await above first.
-  await import('./live2d.js?v=71');
+  // live2d.js is an ES module, so it can't go in a loadScripts group, and it
+  // pulls PIXI.live2d apart as soon as it runs, that is what the await is for.
+  await import('./live2d.js?v=72');
 
-  // Both of these configure a lazily-loaded global, so they cannot run at
-  // module scope any more - they would silently no-op before the load.
+  // Both of these set up a global that loads late, so they can't run at module
+  // scope any more, they would quietly do nothing before the load.
   marked.setOptions({ gfm: true, breaks: true });
   ModelTouch.init({
     sendEvent: sendTouchEvent,
@@ -597,8 +598,9 @@ function showBoot() {
     },
   });
 
-  // Coming back from the wardrobe, the return cutscene replaces the boot
-  // terminal: skipping BootFX.start also makes BootFX.finish a no-op later.
+  // Coming back from the wardrobe the return cutscene takes the place of the
+  // boot terminal. skipping BootFX.start also makes BootFX.finish do nothing
+  // later on.
   const fromWardrobe = new URLSearchParams(location.search).get('from') === 'wardrobe';
   if (fromWardrobe) {
     history.replaceState(null, '', location.pathname);
@@ -609,14 +611,14 @@ function showBoot() {
       bo.setAttribute('aria-hidden', 'true');
     }
   } else {
-    // Keep the shell hidden until the authenticated boot overlay fades out.
+    // Keep the shell hidden until the logged in boot overlay fades away.
     showBoot();
   }
 
   const emailEl = document.getElementById('userEmail');
   if (me.user && emailEl) emailEl.textContent = me.user.email || '';
 
-  // Hydrate synced preferences before modules read their local keys.
+  // Fill in the synced preferences before any module reads its local keys.
   if (window.Prefs) await Prefs.pullFromServer();
   if (window.Names) Names.load();
   wireNameSettings();
@@ -648,13 +650,14 @@ function showBoot() {
     devNoIdleChk.checked = localStorage.getItem('no_idle_nudges') === '1';
   }
   syncThinkToggle();
-  // Pre-lock the composer until the first status check answers, but leave the
-  // banner alone: it only ever speaks for a state the server confirmed, so a
-  // normal load never flashes a consolidation notice it is about to retract.
+  // Lock the composer up front until the first status check answers, but
+  // leave the banner alone. it only ever speaks for something the server said
+  // is true, so a normal load never flashes a consolidation notice and then
+  // takes it back.
   chatInput.disabled = true;
   sendBtn.disabled = true;
   await syncConsolidationStatus();
-  // The wardrobe is the same session, so the time spent in it is not an absence.
+  // The wardrobe is the same session, time spent in there is not an absence.
   if (!fromWardrobe) await fetchWelcome();
   reportActivity(true);
 
@@ -667,10 +670,7 @@ function showBoot() {
       setStageStatus(m);
       if (fromWardrobe) TripLoader.setStage(m);
     } });
-    setTimeout(() => {
-      setStageStatus(null);
-      if (stageSkeleton) stageSkeleton.classList.add('hidden');
-    }, 1500);
+    setTimeout(() => setStageStatus(null), 1500);
     if (fromWardrobe) {
       TripLoader.setStage('Home again');
       TripLoader.finish();
@@ -713,7 +713,6 @@ function showBoot() {
     });
   } catch (e) {
     console.error(e);
-    if (stageSkeleton) stageSkeleton.classList.add('hidden');
     if (fromWardrobe) TripLoader.fail('Live2D load error: ' + e.message);
     setStageStatus('Live2D load error: ' + e.message, true);
     ui.toast('Live2D load error: ' + e.message, 'error');

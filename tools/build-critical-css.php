@@ -1,11 +1,11 @@
 <?php
 // Inlines webapp/boot.css into the <style id="critical"> block of index.html.
 //
-// The pre-app screens have to be styled by the document itself: styles.css is
-// loaded async (see js/boot-gate.js), so anything it holds is unavailable at
-// first paint. boot.css is the single source of truth for those rules and this
-// script is what copies them in - the <style> block is generated, never edited
-// by hand. sync-webapp.sh runs this before pushing files to the containers.
+// The screens before the app have to carry their own styling. styles.css loads
+// in the background, see js/boot-gate.js, so nothing in it exists yet when the
+// first pixels go up. boot.css is where those rules live and this script copies
+// them across. the <style> block is generated, NEVER edit it by hand.
+// sync-webapp.sh runs this before it pushes anything to the containers.
 //
 // Pass --check to verify the block is current without writing (exit 1 if stale).
 

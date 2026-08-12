@@ -33,12 +33,12 @@ REPO = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 GAME_MARKER = "My Dystopian Robot Girlfriend_Data"
 DEFAULT_OUT = os.path.join(REPO, "tools", "dataset_v5")
 
-# Localization English source assets worth dumping (I2 per-language tables).
+# The English source assets worth pulling out, the I2 per language tables.
 LOCALIZATION = ("Story", "Dialogue", "Comments", "Blog", "Emails",
                 "Common", "Other", "Polyglot")
 LOC_RE = re.compile(r"^(%s)_en$" % "|".join(LOCALIZATION))
 
-# Standalone Jun/NPC TextAssets that are plain text, not ASCII art.
+# Jun and NPC TextAssets that are real text on their own, not ASCII art.
 TEXT_ASSETS = ("PositiveComments", "NegativeComments", "MainNews", "SideNews",
                "OpinionNews", "Donations")
 
@@ -161,11 +161,11 @@ def main():
             f.write("\n".join(lines))
     print("dumped %d raw tables -> %s" % (len(tables), raw_out))
 
-    # Speaker-tagged dialogue across all tables.
+    # Every line of dialogue that says who is speaking, across all the tables.
     dialogue, jun, speakers = [], [], {}
     for name, lines in tables.items():
-        # A serialized string may bundle several speaker lines, separated by
-        # newlines or the game's inline '|' delimiter.
+        # One stored string can hold several speaker lines at once, split by a
+        # newline or by the game's own '|' marker.
         idx = 0
         for element in lines:
             for line in re.split(r"[\n|]", element):
@@ -188,7 +188,7 @@ def main():
         for row in dialogue:
             f.write(json.dumps(row, ensure_ascii=False) + "\n")
 
-    # Jun style corpus, deduped, order preserved.
+    # Everything Jun says, duplicates dropped, original order kept.
     seen, uniq = set(), []
     for row in jun:
         if row["text"] in seen:

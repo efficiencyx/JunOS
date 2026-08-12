@@ -92,15 +92,17 @@ function ollama_model_weights_mb(string $model): int {
     return $cache[$model] = 0;
 }
 
-// MiB the KV cache costs per token at q8_0 on the models this ships with,
-// measured off llama.cpp's own kv_cache size line. Deliberately rounded up:
-// overestimating costs context, underestimating costs a partial offload.
+// How many MiB the KV cache, the model's memory of the prompt it already read,
+// takes per token at q8_0 on the models we ship,
+// read off llama.cpp's own kv_cache size line. rounded UP on purpose, guessing
+// too high costs us some context, guessing too low costs a partial offload.
 const KV_MIB_PER_TOKEN = 0.2;
 const VRAM_RESERVE_MB = 2048;
 const CTX_TIERS = [6144, 8192, 12288, 16384];
 
-// Headroom left on the card once the weights and a working reserve are taken
-// out. Zero when the GPU size is unknown - see OMEGA_GPU_VRAM_MB in start.sh.
+// What is left on the card once the weights and a bit of working room are
+// gone. zero when we don't know the GPU size, see OMEGA_GPU_VRAM_MB in
+// start.sh.
 function gpu_ctx_headroom_mb(): int {
     $vram = (int)env_str('OMEGA_GPU_VRAM_MB', '0');
     if ($vram <= 0) return 0;
@@ -115,10 +117,10 @@ function default_num_ctx(): int {
     $override = (int)env_str('OMEGA_NUM_CTX', '0');
     if ($override > 0) return $ctx = $override;
 
-    // VRAM is what actually bounds the KV cache, so prefer it when the card size
-    // made it through from start.sh. Under 4 GiB of headroom the answer would be
-    // a context too small to hold a conversation anyway, so fall through to the
-    // RAM tiers and let Ollama spill rather than crippling the window.
+    // VRAM is what really limits the KV cache, so use it when the card size
+    // made it here from start.sh. under 4 GiB of room the answer would be a
+    // context too small to hold a conversation anyway, so drop down to the RAM
+    // tiers and let Ollama spill instead of cutting the window to nothing.
     $headroom = gpu_ctx_headroom_mb();
     if ($headroom >= 4096) {
         $fits = (int)($headroom / KV_MIB_PER_TOKEN);
@@ -135,27 +137,29 @@ function default_num_ctx(): int {
         $gib = (int)$m[1] / (1024 * 1024);
     }
     if ($gib <= 0) return $ctx = 16384;
-    // MemTotal reports slightly under the nominal size, so tiers sit just above it.
-    // System RAM is only a proxy: VRAM is what actually bounds the KV cache, so set
-    // OMEGA_NUM_CTX by hand on machines where the two diverge.
+    // MemTotal comes in a bit under the number on the box, so the tiers sit
+    // just above it. system RAM is only a stand in, VRAM is the real limit on
+    // the KV cache, so set OMEGA_NUM_CTX yourself on a machine where the two
+    // don't line up.
     if ($gib <= 17) return $ctx = 6144;
     if ($gib <= 25) return $ctx = 8192;
     if ($gib <= 33) return $ctx = 12288;
     return $ctx = 16384;
 }
 
-// Ollama decides its layer split once, against the VRAM free at load time, and
-// the keep_alive=-1 pin below then holds that decision forever - so a model that
-// loaded while something else owned the GPU serves every later message from the
-// CPU. Evicting it lets the next call re-fit against a now-idle card.
+// Ollama decides its layer split, how much of the model sits on the GPU and how
+// much stays on the CPU, once, against whatever VRAM is free when it loads, and the keep_alive=-1 pin below then holds that choice for Ever. so a
+// model that loaded while something else had the GPU answers every later
+// message off the CPU. throwing it out lets the next call fit itself again
+// against a card that is now idle.
 function ollama_evict_if_partially_offloaded(string $model): void {
     static $done = false;
     if ($done || ai_provider() !== 'ollama') return;
     $done = true;
 
-    // Only worth refitting when the weights plus a working reserve actually fit
-    // the card. Where they don't, a partial offload is the best it can do and
-    // evicting would just reload it badly once per message.
+    // Only worth doing when the weights plus a bit of working room really fit
+    // on the card. when they don't, a partial offload is the best it can do
+    // and throwing it out just reloads it badly once per message.
     if (gpu_ctx_headroom_mb() <= 0) return;
 
     $loaded = null;
@@ -168,8 +172,9 @@ function ollama_evict_if_partially_offloaded(string $model): void {
     $vram = (float)($loaded['size_vram'] ?? 0);
     if ($size <= 0 || $vram / $size >= 0.9) return;
 
-    // One eviction per cooldown: if it re-fits just as badly, something outside
-    // our control holds the VRAM and reloading every turn is worse than slow.
+    // One eviction per cooldown. if it fits back just as badly then something
+    // we don't control has the VRAM, and reloading every turn is worse than
+    // being slow.
     $stamp = state_dir() . '/ollama-refit.stamp';
     $last = is_file($stamp) ? (int)@file_get_contents($stamp) : 0;
     if (time() - $last < 600) return;
@@ -196,8 +201,9 @@ function provider_chat_payload(
             'model' => $model,
             'messages' => $messages,
             'stream' => true,
-            // Without a pin the chat model is the one Ollama evicts under VRAM pressure,
-            // since the embedder holds its own; every eviction also wipes the KV prompt cache.
+            // Unpinned, she is the first thing Ollama drops when VRAM gets
+            // tight, the embedder holds its own, and every eviction takes the
+            // KV prompt cache with it.
             'keep_alive' => -1,
             'options' => [
                 'reasoning_effort' => $reasoning,
@@ -241,19 +247,22 @@ function generate_chat_title(string $userMessage): ?string {
     if ($msg === '') return null;
     $msg = substr($msg, 0, 500);
 
-    // num_gpu=0 pins it to CPU and keep_alive=-1 keeps it resident: it must never take VRAM
-    // or a GPU slot from the unpinned chat model (see OLLAMA_MAX_LOADED_MODELS in compose).
+    // num_gpu=0 keeps it on the CPU and keep_alive=-1 keeps it loaded. it must
+    // NEVER take VRAM or a GPU slot off the chat model, which has no pin, see
+    // OLLAMA_MAX_LOADED_MODELS in compose.
     $result = ollama_api_json('/api/chat', [
         'model' => $model,
         'messages' => [
-            // No system prompt on purpose: the fine-tune maps a bare user turn to a title, and
-            // any instruction in a system turn becomes the strongest thing in a short context -
-            // "hi" then titles the chat "Title Generation" instead of greeting it.
+            // No system prompt, on purpose. the fine-tune turns a plain user
+            // turn into a title, and any instruction in a system turn becomes
+            // the loudest thing in a short context, so "hi" gets you a chat
+            // called "Title Generation" instead of a greeting.
             ['role' => 'user', 'content' => $msg],
-            // Qwen3 base: left alone it spends the whole budget reasoning and returns an empty
-            // content. Its template drops the <|im_end|> after a trailing assistant turn, so this
-            // prefills a closed, empty think block and the model starts straight on the title.
-            // Neither `think: false` nor a /no_think system suffix works here.
+            // Qwen3 base. left alone it burns the whole budget thinking and
+            // gives back empty content. its template drops the <|im_end|>
+            // after a trailing assistant turn, so this fills in a closed empty
+            // think block and the model goes straight to the title. neither
+            // `think: false` nor a /no_think system suffix does anything.
             ['role' => 'assistant', 'content' => "<think>\n\n</think>\n\n"],
         ],
         'stream' => false,
@@ -292,9 +301,10 @@ function provider_complete_once(string $provider, string $model, array $messages
                     'keep_alive' => -1,
                     'options' => ['reasoning_effort' => $reasoning, 'temperature' => 0.3,
                                   'num_ctx' => default_num_ctx(), 'num_predict' => $maxTokens]];
-        // Same shape as provider_chat_payload(): thinking is requested by *omitting*
-        // `think` and letting reasoning_effort drive the template. Sending think:true
-        // makes Ollama run a capability check the Jun GGUFs fail, and it 400s.
+        // Same shape as provider_chat_payload(). you ask for thinking by
+        // LEAVING `think` out and letting reasoning_effort drive the template.
+        // send think:true and Ollama runs a capability check the Jun GGUFs
+        // fail, then 400s.
         if (!$think) $payload['think'] = false;
     }
 
@@ -437,7 +447,7 @@ function provider_route_think_token(string $token, array &$state, callable $emit
 
     if ($buf === '') return;
 
-    // A tag can straddle two stream chunks: hold back any trailing prefix of one.
+    // A tag can sit across two stream chunks, so hold back the start of one.
     $tag = $state['think_open'] ? '</think>' : '<think>';
     $hold = 0;
     for ($n = min(strlen($tag) - 1, strlen($buf)); $n > 0; $n--) {
@@ -661,8 +671,8 @@ function provider_context_size(string $provider, array $payload): int {
 
 function provider_tools_enabled(): bool {
     if (ai_provider() === 'llamacpp') {
-        // Needs the server running with --jinja and a tool-capable chat
-        // template; LLAMACPP_TOOLS=off is the escape hatch when it isn't.
+        // Wants the server up with --jinja and a chat template that can do
+        // tools. LLAMACPP_TOOLS=off is the way out when it can't.
         return strtolower(env_str('LLAMACPP_TOOLS', 'on')) !== 'off';
     }
     return true;

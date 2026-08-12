@@ -1,6 +1,7 @@
 services:
-# `count: all` resolves through the host's CDI spec, which is generated once and
-# goes stale when cards are added - it then hands over a subset. start.sh counts
+# `count: all` goes through the host's CDI spec, which is written once and goes
+# stale when you add a card, and then it only hands over some of them. start.sh
+# counts
 # the GPUs itself and asks for that many, which takes the legacy path instead.
   ollama:
     deploy:
@@ -29,9 +30,8 @@ services:
       - LLAMA_ARG_SPLIT_MODE
       - LLAMA_ARG_TENSOR_SPLIT
       - LLAMA_ARG_MAIN_GPU
-# Only the karaoke sidecar gets a GPU. The voice sidecar stays CPU-only by
-# design - Kokoro is real-time there, and its GPU copy would sit on ~2GB of VRAM
-# the LLM wants for layer offload.
+# Only the karaoke sidecar gets a GPU; the voice sidecar stays CPU-only by
+# design (see docker/tts.Dockerfile).
   karaoke:
     build:
       args:

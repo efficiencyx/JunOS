@@ -1,5 +1,6 @@
-// Renderer state that more than one module writes. An imported binding cannot be
-// assigned, but its properties can, so the shared ones live on one object.
+// Renderer state that more than one module writes to. you can't assign to an
+// imported binding but you can set its properties, so the shared ones all sit
+// on one object.
 export const S = {
   cameraMode: 'desktop',
   cameraPersistenceEnabled: true,

@@ -1,9 +1,9 @@
 window.Karaoke = (function () {
   const API = '/api/karaoke.php';
   const DB_NAME = 'omega-karaoke', DB_STORE = 'tracks';
-  const START_LEAD = 0.1;        // schedule both stems this far ahead so they start sample-aligned
-  const TOLERANCE = 1.25;        // s a sung word may drift from its reference timestamp and still count
-  const GAIN_RAMP = 0.05;        // s ramp on guide-vocal gain changes so section handoffs don't click
+  const START_LEAD = 0.1;        // queue both stems this far ahead so they start on the same sample
+  const TOLERANCE = 1.25;        // seconds a sung word can be off its timestamp and still count
+  const GAIN_RAMP = 0.05;        // seconds to slide the guide vocal volume, or the handoff clicks
 
   let active = false;
   let hooks = {};
@@ -115,9 +115,10 @@ window.Karaoke = (function () {
     return Math.floor(whole / 60) + ':' + String(whole % 60).padStart(2, '0');
   }
 
-  // Deliberately a wide range rather than a countdown: htdemucs runs slower than
-  // realtime on CPU and far faster on a GPU, whisper then reads the vocal stem
-  // back, and a first-ever run also pays for downloading the model.
+  // A wide range on purpose, not a countdown. htdemucs, the thing that splits a
+  // song into vocals and backing, is slower than realtime on a CPU and much
+  // faster on a GPU. whisper then reads the vocal track back, and the very first
+  // run also has to download the model.
   function estimateSeparation(duration, device) {
     if (!duration || (device !== 'cpu' && device !== 'cuda')) return null;
     return device === 'cpu' ? [duration * 1.2, duration * 2.6] : [duration * 0.15, duration * 0.5];

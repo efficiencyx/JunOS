@@ -1,10 +1,10 @@
-// Mod archives are parsed and composited in-browser; Lua is never executed.
+// Mod archives are read and drawn in the browser. we Never run the Lua.
 
 window.Mods = (function () {
   const STATE_KEY = 'omega.mods.state.v1';   // { [guid]: { items: {i: bool}, colors: [hex|null] } }
   const DB_NAME = 'omega-mods', DB_STORE = 'zips';
 
-  // Supports stored and deflated ZIP entries.
+  // Handles stored and deflated ZIP entries.
   async function unzip(buf) {
     const dv = new DataView(buf), u8 = new Uint8Array(buf);
     let eocd = -1;
@@ -25,7 +25,7 @@ window.Mods = (function () {
       const cmtLen = dv.getUint16(off + 32, true);
       const lho = dv.getUint32(off + 42, true);
       const name = td.decode(u8.subarray(off + 46, off + 46 + nameLen));
-      // Local header repeats name/extra lengths; data starts after them.
+      // The local header repeats the name and extra lengths, data comes after.
       const lnl = dv.getUint16(lho + 26, true), lel = dv.getUint16(lho + 28, true);
       const data = u8.subarray(lho + 30 + lnl + lel, lho + 30 + lnl + lel + csize);
       if (!name.endsWith('/')) entries[name] = { method, data };
@@ -79,9 +79,10 @@ window.Mods = (function () {
   const luaStr = `'((?:\\\\'|[^'])*)'|"((?:\\\\"|[^"])*)"`;
   const unesc = (s) => (s || '').replace(/\\(['"\\n])/g, (m, c) => c === 'n' ? '\n' : c);
 
-  // Static prefab info from the generated script (never executed). The lua
-  // explicitly ties each prefab to its texture folders via GetPackedTexture
-  // paths - folder order is NOT prefab order, so we must use that mapping.
+  // Prefab info read out of the generated script, which we never run. the
+  // lua ties each prefab to its texture folders through GetPackedTexture
+  // paths, and folder order is NOT prefab order, so we have to use that
+  // mapping.
   function parseLua(src) {
     const prefabs = new Map();   // prefabVar -> { name, slots[], equip, folders:Set }
     const pf = (v) => {
@@ -102,7 +103,7 @@ window.Mods = (function () {
       pf(m[1]).equip = m[2];
     }
     // local X = ModUtilities.GetPackedTexture(guid, '/Folder/file.json') then
-    // prefab.AddTexture(X): first path segment names the item's folder.
+    // prefab.AddTexture(X). the first bit of the path is the item's folder.
     const texVarFolder = new Map();
     for (const m of src.matchAll(/(\w+)\s*=\s*ModUtilities\.GetPackedTexture\([^,]+,\s*'\/?([^/']+)\//g)) {
       texVarFolder.set(m[1], m[2]);
@@ -114,8 +115,8 @@ window.Mods = (function () {
     return [...prefabs.values()].filter(p => p.name);
   }
 
-  // A RectInt as serialized by the game. Field names vary by serializer, so
-  // accept x/y/width/height and the xMin/yMin/xMax/yMax form.
+  // A RectInt the way the game writes it. field names change with the
+  // serializer, so take x/y/width/height and the xMin/yMin/xMax/yMax form.
   function rect(r) {
     if (!r) return null;
     const g = (...keys) => { for (const k of keys) if (typeof r[k] === 'number') return r[k]; return null; };
@@ -126,8 +127,9 @@ window.Mods = (function () {
     return (x === null || y === null || !w || !h) ? null : { x, y, w, h };
   }
 
-  // Find the drawable name inside a PackedDrawable object: prefer a field that
-  // matches a real drawable in the loaded model, fall back to Name-ish fields.
+  // Find the drawable name inside a PackedDrawable. take a field that
+  // matches a real drawable in the loaded model first, otherwise fall back
+  // to whatever looks like a Name.
   function drawableName(pd, validIds) {
     for (const v of Object.values(pd)) {
       if (typeof v === 'string' && validIds.has(v)) return v;
@@ -135,9 +137,9 @@ window.Mods = (function () {
     return pd.Name || pd.name || pd.DrawableName || null;
   }
 
-  // Parse one mod's file map into displayable/equippable items. Only the
-  // "interaction" scene containers apply to this model; everything else in the
-  // zip is carried along in IndexedDB but ignored at render time.
+  // Turn one mod's file map into items you can see and wear. only the
+  // "interaction" scene containers work on this model, the rest of the zip
+  // stays in IndexedDB but we skip it when drawing.
   function parseMod(guid, files) {
     let meta = {};
     let lua = [];
@@ -209,16 +211,16 @@ window.Mods = (function () {
     return null;
   }
 
-  // Multiply a canvas by an #rrggbb color, preserving alpha. Same math the game
-  // uses to colorize grayscale item textures.
+  // Multiply a canvas by an #rrggbb color and keep the alpha. same math the
+  // game uses to color its grey item textures.
   function tintCanvas(c, hex) {
     const ctx = c.getContext('2d');
     ctx.globalCompositeOperation = 'multiply';
     ctx.fillStyle = hex;
     ctx.fillRect(0, 0, c.width, c.height);
     ctx.globalCompositeOperation = 'destination-in';
-    // Re-draw alpha from the pre-multiply pixels: multiply filled the whole
-    // rect, so clip back to the art's own coverage.
+    // Draw the alpha back from the pixels we had before the multiply. the
+    // multiply filled the whole rect, so cut it back to where the art is.
     ctx.drawImage(c._alphaSrc, 0, 0, c.width, c.height);
     ctx.globalCompositeOperation = 'source-over';
   }
@@ -239,13 +241,13 @@ window.Mods = (function () {
           if (!id || !r || !valid.has(id)) continue;
           out.push({
             id, tex: texPath, r,
-            // Layer lives on the PackedTexture in real exports; older/edited
-            // mods may put it on the drawable.
+            // Layer sits on the PackedTexture in real exports. older or
+            // hand edited mods can put it on the drawable.
             layer: pd.Layer ?? pd.layer ?? pt.Layer ?? pt.layer ?? 0,
             colorIndex: pd.ColorIndex ?? pd.colorIndex ?? -1,
-            // Game rule (PackedTextureJson.DontIncludeVanillaLayers): when set,
-            // the default ("vanilla") art is NOT drawn underneath the mod layers
-            // even if the mod ships no layer-0 texture.
+            // Game rule, PackedTextureJson.DontIncludeVanillaLayers. when
+            // it is set the default "vanilla" art is NOT drawn under the mod
+            // layers, even if the mod has no layer-0 texture at all.
             dontIncludeVanilla: !!(pt.DontIncludeVanillaLayers ?? pt.dontIncludeVanillaLayers),
           });
         }
@@ -254,12 +256,14 @@ window.Mods = (function () {
     return out;
   }
 
-  // Bake all equipped mod entries for one drawable into a single canvas crop
-  // (the compositor supports one override per drawable, so layers merge here).
+  // Bake every worn mod entry for one drawable into a single canvas crop.
+  // the compositor only takes one override per drawable, so the layers get
+  // merged here.
   async function bakeDrawable(entries, colorsFor) {
     entries.sort((a, b) => a.layer - b.layer);
-    // Vanilla art stays underneath unless a layer-0 texture replaces it or the
-    // container opts out of vanilla layers (mirrors Part.AddVanilla in-game).
+    // Vanilla art stays underneath unless a layer-0 texture takes its place,
+    // or the container says no vanilla layers. same as Part.AddVanilla in
+    // the game.
     const hasBase = entries.some(e => e.layer === 0) || entries.some(e => e.dontIncludeVanilla);
     let W = 0, H = 0;
     const imgs = [];
@@ -273,9 +277,10 @@ window.Mods = (function () {
     const ctx = c.getContext('2d');
     entries.forEach((e, i) => {
       const img = imgs[i];
-      // RectInt is bottom-left origin (Unity texture space) - verified against
-      // both the tutorial cat-ears mod and Seamless Components by comparing
-      // crops with the vanilla atlas art. Canvas crops from the top, so flip.
+      // RectInt starts from the bottom left, that is Unity texture space.
+      // checked against both the tutorial cat-ears mod and Seamless
+      // Components by holding the crops next to the vanilla atlas art.
+      // canvas crops from the top, so flip it.
       const sy = img.naturalHeight - e.r.y - e.r.h;
       const hex = e.colorIndex >= 0 ? colorsFor(e) : null;
       if (!hex) {
@@ -292,10 +297,11 @@ window.Mods = (function () {
       tintCanvas(t, hex);
       ctx.drawImage(t, 0, 0);
     });
-    // The atlas is uploaded as PREMULTIPLIED alpha (the extracted vanilla art
-    // is baked that way), but mod PNGs are straight-alpha: without this every
-    // soft edge in the mod art renders too bright - glowing rims around lips,
-    // nose shading, etc.
+    // The atlas goes up as PREMULTIPLIED alpha, colour already faded by its own
+    // transparency, because the vanilla art we extracted is baked that way. mod
+    // PNGs are straight alpha, colour and transparency kept apart. without this
+    // every soft edge in the mod art comes out too bright, you get glowing
+    // rims around the lips and the nose shading.
     const px = ctx.getImageData(0, 0, W, H);
     const d = px.data;
     for (let i = 0; i < d.length; i += 4) {
@@ -306,10 +312,10 @@ window.Mods = (function () {
       d[i + 2] = (d[i + 2] * a + 127) / 255 | 0;
     }
     ctx.putImageData(px, 0, 0);
-    // Replacements must fully clear the drawable (mesh-clipped in the
-    // compositor, so neighbors are safe): mods delete decals by shipping a
-    // 1x1 transparent layer-0 texture (e.g. Seamless Components' barcode),
-    // which an art-coverage erase would leave untouched.
+    // A replacement has to clear the whole drawable. the compositor clips to
+    // the mesh so the neighbours are safe, and mods delete decals by shipping
+    // a 1x1 transparent layer-0 texture, like Seamless Components' barcode.
+    // an erase that only covers the art would leave that one alone.
     return { url: c.toDataURL(), overlay: !hasBase };
   }
 

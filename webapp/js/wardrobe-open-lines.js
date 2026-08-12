@@ -1,4 +1,5 @@
-// Keyed by affection/trust/tension tiers (0: <34, 1: 34-66, 2: 67+), e.g. "210".
+// Keyed by her affection, trust and tension tiers. 0 is under 34, 1 is 34-66,
+// 2 is 67 and up, so "210" is high affection, mid trust, low tension.
 window.WardrobeOpenLines = {
   "000": [
     "Annalie's. Again. My enthusiasm is overwhelming.",

@@ -1,9 +1,9 @@
-// Not inline: the nginx CSP has no 'unsafe-inline' for script-src, so this is a
-// blocking <script> in <head> instead.
+// Not inline. the nginx CSP has no 'unsafe-inline' for script-src, so this is
+// a blocking <script> in <head> instead.
 
 document.documentElement.setAttribute('data-pre-auth', '1');
 
-// Applied here rather than as <link> tags so they don't block the parser - the
+// Done here and not with <link> tags so they don't block the parser. the
 // pre-app screens are covered by the inlined critical CSS until these land.
 for (const href of ['styles.css?v=54', 'trip-loader.css?v=4']) {
   const link = document.createElement('link');
@@ -12,7 +12,7 @@ for (const href of ['styles.css?v=54', 'trip-loader.css?v=4']) {
   document.head.appendChild(link);
 }
 
-// The 18+ gate comes before everything, login included.
+// The 18+ gate comes before Everything, login included.
 if (localStorage.getItem('omega.adultConsent.v1') !== '1') {
   document.documentElement.setAttribute('data-age-gated', '1');
   document.addEventListener('DOMContentLoaded', () => {
