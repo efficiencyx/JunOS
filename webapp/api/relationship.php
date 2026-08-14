@@ -13,6 +13,7 @@ if ($method === 'GET') {
 }
 
 if ($method === 'PUT') {
+    if (($user['role'] ?? '') !== 'admin') fail(403, 'forbidden');
     require_content_type('application/json');
     $body = json_decode(read_body(1024), true);
     if (!is_array($body)) fail(400, 'invalid_request');
