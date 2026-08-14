@@ -603,24 +603,24 @@ html[data-pre-auth] #app { visibility: hidden; }
 <!-- Fetched during parse but applied by boot-gate.js: the CSP forbids the
      usual media="print" onload= trick, and blocking on the full sheet would
      cost a round trip the auth screen does not need. -->
-<link rel="preload" as="style" href="styles.css?v=54">
-<link rel="preload" as="style" href="trip-loader.css?v=4">
-<noscript><link rel="stylesheet" href="styles.css?v=54"></noscript>
+<link rel="preload" as="style" href="styles.css?v=1">
+<link rel="preload" as="style" href="trip-loader.css?v=1">
+<noscript><link rel="stylesheet" href="styles.css?v=1"></noscript>
 
-<script defer src="js/viewport.js?v=3"></script>
+<script defer src="js/viewport.js?v=1"></script>
 <script defer src="js/pwa.js?v=1"></script>
-<script src="js/boot-gate.js?v=7"></script>
+<script src="js/boot-gate.js?v=1"></script>
 
-<script defer src="js/loader.js?v=2"></script>
-<script defer src="js/auth.js?v=8"></script>
-<script defer src="js/prefs.js?v=5"></script>
-<script defer src="js/names.js?v=2"></script>
-<script defer src="js/chat-api.js?v=5"></script>
-<script defer src="js/ui.js?v=7"></script>
-<script defer src="js/history.js?v=7"></script>
-<script defer src="js/boot-fx.js?v=5"></script>
-<script defer src="js/memory-graph.js?v=2"></script>
-<script type="module" src="js/app.js?v=77"></script>
+<script defer src="js/loader.js?v=1"></script>
+<script defer src="js/auth.js?v=1"></script>
+<script defer src="js/prefs.js?v=1"></script>
+<script defer src="js/names.js?v=1"></script>
+<script defer src="js/chat-api.js?v=1"></script>
+<script defer src="js/ui.js?v=1"></script>
+<script defer src="js/history.js?v=1"></script>
+<script defer src="js/boot-fx.js?v=1"></script>
+<script defer src="js/memory-graph.js?v=1"></script>
+<script type="module" src="js/app.js?v=1"></script>
 </head>
 <body>
 
@@ -977,7 +977,7 @@ html[data-pre-auth] #app { visibility: hidden; }
                 <div class="mood-meter" aria-hidden="true"></div>
                 <div class="mood-clip"><span class="mood-phrase" id="moodAffectionPhrase" aria-hidden="true"></span></div>
               </div>
-              <span class="mood-val" id="moodAffectionVal">50</span>
+              <span class="mood-val" id="moodAffectionVal">60</span>
             </div>
             <div class="mood-row mood-row--trust">
               <span class="mood-label">Trust</span>
@@ -993,7 +993,7 @@ html[data-pre-auth] #app { visibility: hidden; }
                 <div class="mood-meter" aria-hidden="true"></div>
                 <div class="mood-clip"><span class="mood-phrase" id="moodTensionPhrase" aria-hidden="true"></span></div>
               </div>
-              <span class="mood-val" id="moodTensionVal">30</span>
+              <span class="mood-val" id="moodTensionVal">20</span>
             </div>
           </div>
         </div>

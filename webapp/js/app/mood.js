@@ -1,5 +1,5 @@
-import { moodPhrases, moodVals } from './dom.js?v=74';
-import { setSidebarOpen } from './sidebar.js?v=75';
+import { moodPhrases, moodVals } from './dom.js?v=1';
+import { setSidebarOpen } from './sidebar.js?v=1';
 
 const MOOD_PHRASES = {
   affection: [
@@ -37,7 +37,7 @@ const EMOTION_TINTS = {
 const TINT_EASE_MS = window.matchMedia('(prefers-reduced-motion: reduce)').matches ? 0 : 200;
 const tint = { hue: 0, sat: 0, light: 0, w: 0 };
 const tintGoal = { hue: 0, sat: 0, light: 0, w: 0 };
-const moodBaseline = { affection: 50, trust: 50, tension: 30 };
+const moodBaseline = { affection: 60, trust: 50, tension: 20 };
 let tintFrame = 0;
 let lastTintTs = 0;
 
@@ -125,9 +125,9 @@ function paintAccent() {
   root.setProperty('--accent-soft', c.soft);
 }
 function applyMoodAccent(vals) {
-  moodBaseline.affection = vals.affection ?? 50;
+  moodBaseline.affection = vals.affection ?? 60;
   moodBaseline.trust = vals.trust ?? 50;
-  moodBaseline.tension = vals.tension ?? 30;
+  moodBaseline.tension = vals.tension ?? 20;
   paintAccent();
 }
 function setMoodFill(k, value) {

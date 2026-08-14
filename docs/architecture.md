@@ -432,9 +432,9 @@ Jun keeps a hidden, per-user relationship that colours her mood and drifts with 
 
 | Score | Default | Meaning |
 |---|---|---|
-| `affection` | 50 | warmth ↔ coldness |
+| `affection` | 60 | warmth ↔ coldness |
 | `trust` | 50 | openness ↔ guardedness |
-| `tension` | 30 | tension/fear in the room |
+| `tension` | 20 | tension/fear in the room |
 
 Helpers live in `webapp/api/_lib.php` (`relationship_get` / `relationship_set` / `relationship_apply`, shared with `relationship.php`). It's a closed loop across a chat turn:
 

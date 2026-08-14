@@ -1043,7 +1043,7 @@ function ban_apply(int $userId, string $reason): array {
 // Hidden relationship state per user, migrations/002_relationship.sql explains
 // the model. chat.php turns these scores into directives for how she behaves,
 // and her [A:mood_shift|...] tag moves them.
-const RELATIONSHIP_DEFAULTS = ['affection' => 50, 'trust' => 50, 'tension' => 30];
+const RELATIONSHIP_DEFAULTS = ['affection' => 60, 'trust' => 50, 'tension' => 20];
 
 function relationship_get(int $userId): array {
     try {
