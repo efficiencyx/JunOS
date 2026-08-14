@@ -54,9 +54,9 @@ data class PreferenceEntity(
 @Entity(tableName = "relationship")
 data class RelationshipEntity(
     @PrimaryKey val id: Int = 1,
-    val affection: Int = 50,
+    val affection: Int = 60,
     val trust: Int = 50,
-    val tension: Int = 30,
+    val tension: Int = 20,
     val updatedAt: Long = 0,
 )
 
