@@ -1,0 +1,142 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  linux:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.3'
+          coverage: none
+
+      - name: PHP syntax
+        # php -l reports parse errors on stdout next to the "No syntax errors"
+        # noise, so keep the output in a log and print only the failures.
+        run: |
+          git ls-files '*.php' | xargs -r -n1 -P4 php -l > "$RUNNER_TEMP/php-lint.log" || {
+            grep -v 'No syntax errors detected' "$RUNNER_TEMP/php-lint.log"
+            exit 1
+          }
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: JS syntax
+        # node --check parses a .js file as CommonJS and rejects import/export.
+        # Node 22.7+ detects module syntax on its own, 20 does not, so copy each
+        # file to .mjs and let the extension pick the ES module parser.
+        run: |
+          fail=0
+          for f in $(git ls-files 'webapp/js/**/*.js' 'webapp/*.js' ':!webapp/vendor'); do
+            cp "$f" "$RUNNER_TEMP/check.mjs"
+            node --check "$RUNNER_TEMP/check.mjs" || { echo "syntax error: $f"; fail=1; }
+          done
+          exit $fail
+
+      - name: Cache busters
+        run: sh .github/scripts/check-cache-busters.sh
+
+      - name: Compose config
+        run: |
+          cp .env.example .env
+          docker compose -f docker-compose.yml config -q
+          docker compose -f docker-compose.yml -f docker-compose.nvidia.yml config -q
+          docker compose -f docker-compose.yml -f docker-compose.amd.yml config -q
+          # LLAMACPP_MODELS_DIR and LLAMACPP_MODEL_FILE are commented out in
+          # .env.example because start.sh only layers this overlay when they are
+          # set. Unset, the volume renders as ":/models:ro" and compose rejects
+          # it, so pass throwaway values to get the file parsed.
+          LLAMACPP_MODELS_DIR=/tmp/models LLAMACPP_MODEL_FILE=model.gguf \
+            docker compose -f docker-compose.yml -f docker-compose.llamacpp-local.yml config -q
+          docker compose -f docker-compose.yml -f docker-compose.llamacpp-mtp.yml config -q
+
+      - name: Shell scripts
+        # -S error, not warning: the tracked scripts currently trip 5
+        # warning-level findings (unused loop vars in ollama-entrypoint.sh,
+        # start.sh and install.sh, a unicode quote in install.sh, a stray space
+        # after = in sync-webapp.sh). Move this to -S warning once they are fixed.
+        run: git ls-files '*.sh' | xargs -r shellcheck -S error
+
+      - name: JSON
+        run: git ls-files '*.json' | xargs -r -n1 python3 -m json.tool > /dev/null
+
+  windows:
+    runs-on: windows-latest
+    defaults:
+      run:
+        shell: pwsh
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: PowerShell parse
+        run: |
+          $failed = $false
+          foreach ($f in (git ls-files '*.ps1')) {
+            $tokens = $null
+            $errors = $null
+            [void][System.Management.Automation.Language.Parser]::ParseFile(
+              (Resolve-Path $f).Path, [ref]$tokens, [ref]$errors)
+            if ($errors) {
+              $failed = $true
+              foreach ($e in $errors) { Write-Host "${f}: $($e.Message)" }
+            }
+          }
+          if ($failed) { exit 1 }
+
+      - name: PSScriptAnalyzer
+        run: |
+          Install-Module PSScriptAnalyzer -Force -Scope CurrentUser
+          foreach ($f in (git ls-files '*.ps1')) {
+            Invoke-ScriptAnalyzer -Path $f -Severity Error -EnableExit
+          }
+
+  android:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - uses: actions/setup-python@v5
+        id: python312
+        with:
+          python-version: '3.12'
+
+      - name: Point Chaquopy at python 3.12
+        run: echo "JUN_PYTHON_312=${{ steps.python312.outputs.python-path }}" >> "$GITHUB_ENV"
+
+      - name: Cache gradle bootstrap
+        # android/gradlew downloads gradle itself and checks it against a SHA
+        # pinned in the script, so the version in the key is the whole identity.
+        uses: actions/cache@v4
+        with:
+          path: ~/.gradle/junos-bootstrap
+          key: gradle-bootstrap-8.13
+
+      - name: Cache gradle deps
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.gradle/caches
+            ~/.gradle/wrapper
+          key: android-gradle-${{ hashFiles('android/**/*.gradle.kts', 'android/gradle/wrapper/gradle-wrapper.properties') }}
+
+      - name: Unit tests
+        # gradlew is tracked without the executable bit, so run it through sh.
+        working-directory: android
+        run: sh ./gradlew :app:testDebugUnitTest --no-daemon
