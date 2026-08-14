@@ -1,8 +1,8 @@
-import { IDLE_AFTER_REPLY_MS, scheduleIdleNudge } from './consolidation.js?v=74';
+import { IDLE_AFTER_REPLY_MS, scheduleIdleNudge } from './consolidation.js?v=75';
 import { ttsChk, ttsEngineSelect, ttsLangRow, ttsLangSelect, ttsSpeedInput, ttsVoiceSelect } from './dom.js?v=74';
-import { finishPendingFaceBubbleHide } from './face-bubble.js?v=74';
+import { finishPendingFaceBubbleHide } from './face-bubble.js?v=75';
 import { logAction } from './logging.js?v=74';
-import { syncVoiceDeps, updateTtsSpeedLabel } from './settings.js?v=74';
+import { syncVoiceDeps, updateTtsSpeedLabel } from './settings.js?v=75';
 import { escapeHtml } from './util.js?v=74';
 
 // Taken out of bootstrap(). TTS is optional and its wiring is one long block

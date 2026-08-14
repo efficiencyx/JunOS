@@ -1,5 +1,5 @@
-import { moodInputs, moodPhrases, moodRefreshBtn, moodVals } from './dom.js?v=74';
-import { setSidebarOpen } from './sidebar.js?v=74';
+import { moodPhrases, moodVals } from './dom.js?v=74';
+import { setSidebarOpen } from './sidebar.js?v=75';
 
 const MOOD_PHRASES = {
   affection: [
@@ -130,28 +130,17 @@ function applyMoodAccent(vals) {
   moodBaseline.tension = vals.tension ?? 30;
   paintAccent();
 }
-function currentMood() {
-  const dflt = { affection: 50, trust: 50, tension: 30 };
-  const v = {};
-  for (const k of ['affection', 'trust', 'tension']) {
-    v[k] = moodInputs[k] ? (parseInt(moodInputs[k].value, 10) || 0) : dflt[k];
-  }
-  return v;
-}
-function setMoodFill(k) {
-  const input = moodInputs[k];
-  if (!input) return;
-  const min = Number(input.min);
-  const max = Number(input.max);
-  const t = (Number(input.value) - min) / (max - min);
-  const row = input.closest('.mood-row') || input;
+function setMoodFill(k, value) {
+  const row = moodVals[k] && moodVals[k].closest('.mood-row');
+  if (!row) return;
+  const t = Math.max(0, Math.min(1, value / 100));
   const gauge = getComputedStyle(row).getPropertyValue('--gauge').trim();
   row.style.setProperty('--fill', t * 100 + '%');
   row.style.setProperty('--fill-color',
     `color-mix(in srgb, ${gauge} ${Math.round((0.25 + 0.75 * t) * 100)}%, var(--track-empty))`);
   row.style.setProperty('--glow',
     `color-mix(in srgb, ${gauge} ${Math.round(Math.max(0, t - 0.35) / 0.65 * 100)}%, transparent)`);
-  setMoodPhrase(k, Number(input.value));
+  setMoodPhrase(k, value);
 }
 function setMoodPhrase(k, value) {
   const el = moodPhrases[k];
@@ -163,60 +152,24 @@ function setMoodPhrase(k, value) {
   el.textContent = next;
 }
 function renderMood(state) {
+  const shown = { ...moodBaseline };
   for (const k of ['affection', 'trust', 'tension']) {
-    if (state && typeof state[k] === 'number') {
-      if (moodInputs[k]) {
-        moodInputs[k].value = state[k];
-        setMoodFill(k);
-      }
-      if (moodVals[k]) moodVals[k].textContent = state[k];
-    }
+    if (!state || typeof state[k] !== 'number') continue;
+    shown[k] = state[k];
+    if (moodVals[k]) moodVals[k].textContent = state[k];
+    setMoodFill(k, state[k]);
   }
-  applyMoodAccent(currentMood());
+  applyMoodAccent(shown);
   if (window.Live2D && Live2D.setMood) Live2D.setMood(state);
 }
 export async function loadMood() {
   try {
     const r = await fetch('/api/relationship.php', { credentials: 'same-origin' });
     if (r.ok) renderMood(await r.json());
-  } catch (e) { /* offline: leave sliders as-is */ }
+  } catch (e) { /* offline: leave the gauges as-is */ }
 }
-let moodPushTimer = null;
-function pushMood() {
-  const body = {};
-  for (const k of ['affection', 'trust', 'tension']) {
-    body[k] = moodInputs[k] ? parseInt(moodInputs[k].value, 10) || 0 : 0;
-  }
-  if (moodPushTimer) clearTimeout(moodPushTimer);
-  moodPushTimer = setTimeout(async () => {
-    try {
-      const r = await fetch('/api/relationship.php', {
-        method: 'PUT',
-        credentials: 'same-origin',
-        headers: { 'content-type': 'application/json' },
-        body: JSON.stringify(body),
-      });
-      if (r.ok) renderMood(await r.json()); // reflect server-side clamping
-    } catch (e) { /* drop; next drag retries */ }
-  }, 300);
-}
-for (const k of ['affection', 'trust', 'tension']) {
-  if (!moodInputs[k]) continue;
-  setMoodFill(k);
-  moodInputs[k].addEventListener('input', () => {
-    if (moodVals[k]) moodVals[k].textContent = moodInputs[k].value;
-    setMoodFill(k);
-    const live = {};
-    for (const j of ['affection', 'trust', 'tension']) {
-      if (moodInputs[j]) live[j] = parseInt(moodInputs[j].value, 10) || 0;
-    }
-    applyMoodAccent(live);
-    if (window.Live2D && Live2D.setMood) Live2D.setMood(live);
-  });
-  moodInputs[k].addEventListener('change', pushMood);
-}
-applyMoodAccent(currentMood());
-if (moodRefreshBtn) moodRefreshBtn.addEventListener('click', loadMood);
+for (const k of ['affection', 'trust', 'tension']) setMoodFill(k, moodBaseline[k]);
+applyMoodAccent(moodBaseline);
 
 document.addEventListener('keydown', (e) => {
   if (e.key !== 'Escape') return;
