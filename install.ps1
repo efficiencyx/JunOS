@@ -106,6 +106,46 @@ function Resolve-Model([string]$a) {
     }
 }
 
+# A drafter has to come off the SAME Gemma 4 the model was fine-tuned from, QAT
+# branch included. Mismatched, it still loads and still drafts, it just guesses
+# wrong far more often - 2.10 accepted tokens per pass against 2.74 for the
+# matching one - and nothing anywhere says why. So this map is by size, and the
+# QAT repos are not interchangeable with the plain ones.
+$mtpDrafters = @{
+    '12b' = 'hf.co/Janvitos/gemma-4-12B-it-qat-assistant-MTP-Q8_0-GGUF:Q8_0'
+    'e4b' = 'hf.co/amaranus/Gemma-4-E4B-it-qat-assistant-MTP-Q8_0-GGUF:Q8_0'
+    'e2b' = 'hf.co/amaranus/Gemma-4-E2B-it-qat-assistant-MTP-Q8_0-GGUF:Q8_0'
+}
+
+# Live2D is drawn by the browser on the same card Jun sits on, and it wants
+# about this much while a chat is open. Left out of the budget the install looks
+# fine and then she spills onto the CPU the moment somebody opens the tab.
+$LIVE2D_VRAM_MB = 1500
+
+function Get-MtpDrafter([string]$modelRef) {
+    switch -Regex ($modelRef) {
+        'Jun-LoRA-12B' { return $mtpDrafters['12b'] }
+        'E4B'          { return $mtpDrafters['e4b'] }
+        'E2B'          { return $mtpDrafters['e2b'] }
+        default        { return '' }
+    }
+}
+
+# Roughly what each model weighs once it is resident, drafter included. Close
+# enough to tell "fits" from "does not", which is all it is used for.
+function Get-MtpBudgetMb([string]$modelRef) {
+    switch -Regex ($modelRef) {
+        'Jun-LoRA-12B.*Q8_0' { return 13500 }
+        'Jun-LoRA-12B.*Q6_K' { return 10800 }
+        'Jun-LoRA-12B'       { return 8100 }
+        'E4B.*Q8_0'          { return 9000 }
+        'E4B'                { return 5000 }
+        'E2B.*Q6_K'          { return 4500 }
+        'E2B'                { return 3400 }
+        default              { return 0 }
+    }
+}
+
 function Get-GpuMemoryMb {
     if (-not (Get-Command nvidia-smi -ErrorAction SilentlyContinue)) { return @() }
     $out = & nvidia-smi --query-gpu=memory.total --format=csv,noheader,nounits 2>$null
@@ -276,6 +316,86 @@ function Ask-Karaoke([string]$voice) {
     return $(if ($v -match '^(n|no)$') { 'off' } else { 'on' })
 }
 
+# A small drafter model guesses a few tokens ahead and Jun checks the guesses in
+# one pass, so the ones she agrees with came cheap. Nothing gets said that she
+# wouldn't have said anyway. Experimental because whether it is faster at all
+# depends on the card, hence the depth question right after. Off under Express,
+# this is not a setting to hand somebody who asked for defaults.
+# Without a prompt: JUN_MTP=on|off, JUN_MTP_DEPTH=auto|1|2|3|4.
+function Ask-Mtp {
+    if ($env:JUN_MTP) {
+        return $(if ($env:JUN_MTP.ToLower() -match '^(on|1|true|yes|y)$') { 'on' } else { 'off' })
+    }
+    if (-not $interactive) { return 'off' }
+    $v = Read-Styled "     ${OK}▸${R} enable experimental multi-token prediction? ${DIM}(speculative decoding - faster on some cards, slower on others)${R} ${DIM}[y/N]${R} ${ACCENT}›${R} "
+    return $(if ($v -match '^(y|yes)$') { 'on' } else { 'off' })
+}
+
+# auto measures instead of guessing, and it is the right answer for almost
+# everybody - the best depth swings with the card. On a 3060 the gain is gone by
+# 3 and depth 4 is slower than not drafting at all.
+function Ask-MtpDepth {
+    if ($env:JUN_MTP_DEPTH) {
+        return $(if ($env:JUN_MTP_DEPTH -match '^[1-4]$') { $env:JUN_MTP_DEPTH } else { 'auto' })
+    }
+    if (-not $interactive) { return 'auto' }
+    Write-Host ''
+    Write-Host "     ${B}how many tokens should it guess ahead?${R}"
+    Write-Host "       ${ACCENT}auto${R}  ${DIM}- try each one on your hardware and keep the fastest (recommended)${R}"
+    Write-Host "       ${ACCENT}1-4${R}   ${DIM}- fix it yourself; deeper guesses cost more to check${R}"
+    $v = Read-Styled "     ${OK}▸${R} choice ${DIM}[Enter = auto]${R} ${ACCENT}›${R} "
+    if ($v -match '^[1-4]$') { return $v }
+    if ($v -and $v -notmatch '^(a|auto)$') { Warn_ 'unrecognized choice, measuring instead' }
+    return 'auto'
+}
+
+# Ask, then write whichever pair of keys this provider reads. Returns $true when
+# the depth still has to be measured, which can only happen once the stack is up
+# and the models are pulled.
+function Configure-Mtp([string]$provider, [string]$modelRef) {
+    $drafter = Get-MtpDrafter $modelRef
+    # Only Gemma 4 ships an MTP head, and only for the sizes mapped above. On
+    # anything else there is no drafter to pair, so there is no question to ask.
+    if (-not $drafter) { return $false }
+
+    if ((Ask-Mtp) -ne 'on') { Ok 'multi-token prediction off'; return $false }
+    $depth = Ask-MtpDepth
+
+    $vram = if ($script:tensorParallel -eq 'on') { Get-VramTotalMb } else { Get-VramMb }
+    $budget = Get-MtpBudgetMb $modelRef
+    if ($null -ne $vram -and $budget -gt 0) {
+        if (($vram - $budget - $LIVE2D_VRAM_MB) -lt 0) {
+            Warn_ "with Live2D drawing (~${LIVE2D_VRAM_MB}MB) she won't fit on the card - some layers"
+            Note "  run on the CPU. Drafting helps MORE there, +31% measured against +21%"
+            Note "  fully on the GPU, so this stays worth having. Everything is just slower."
+        }
+    }
+
+    $autotune = ($depth -eq 'auto')
+    # .env only ever holds a number. The entrypoint bakes this straight into a
+    # Modelfile as draft_num_predict, and "auto" there would be a broken model
+    # rather than a default. 1 is the provisional pick, the autotune overwrites
+    # it with whatever actually won.
+    $written = if ($autotune) { '1' } else { $depth }
+
+    if ($provider -eq 'ollama') {
+        Set-EnvKey 'OLLAMA_MTP' $drafter
+        Set-EnvKey 'OLLAMA_MTP_N_MAX' $written
+    } else {
+        # llama-server's -hfd takes a bare repo, no hf.co in front and no quant
+        # tag - these drafter repos hold a single gguf each.
+        Set-EnvKey 'LLAMACPP_MTP' (($drafter -replace '^hf\.co/', '') -replace ':.*$', '')
+        Set-EnvKey 'LLAMACPP_MTP_N_MAX' $written
+    }
+
+    if ($autotune) {
+        Ok 'multi-token prediction on, depth measured after the models are pulled'
+    } else {
+        Ok "multi-token prediction on, drafting $depth token(s) ahead"
+    }
+    return $autotune
+}
+
 function Configure-Jun {
     $provider = if ($env:JUN_PROVIDER) { $env:JUN_PROVIDER.ToLower() } else { '' }
     if (-not $provider) {
@@ -314,6 +434,7 @@ function Configure-Jun {
             $modelRef = Ask-ModelRef
             Set-EnvKey 'OLLAMA_MODELS_TO_PULL' $modelRef
             Ok "model $modelRef"
+            $script:mtpAutotune = Configure-Mtp 'ollama' $modelRef
         }
         'openrouter' {
             $key = $env:OPENROUTER_API_KEY
@@ -358,6 +479,7 @@ function Configure-Jun {
                 Set-EnvKey 'LLAMACPP_PORT' '8081'
                 $needsLlamacpp = $true
                 Ok "model $hfRef"
+                $script:mtpAutotune = Configure-Mtp 'llamacpp' $modelRef
             }
         }
     }
@@ -831,4 +953,15 @@ Write-Host "  ${OK}▸${R} ${B}${OK}starting${R} ${DIM}-${R} launching start.ps1
 # policy can't block start.ps1 (this script may have arrived through `iex`).
 $psExe = (Get-Process -Id $PID).MainModule.FileName
 & $psExe -NoProfile -ExecutionPolicy Bypass -File (Resolve-Path './start.ps1').Path
-exit $LASTEXITCODE
+$startCode = $LASTEXITCODE
+
+# Has to run here and not in Configure-Jun: every row of it is a real
+# generation, so the models have to be pulled and the stack has to be up.
+if ($script:mtpAutotune -and $startCode -eq 0) {
+    Step 'tune multi-token prediction'
+    & $psExe -NoProfile -ExecutionPolicy Bypass -File (Resolve-Path './mtp-autotune.ps1').Path
+    if ($LASTEXITCODE -ne 0) {
+        Warn_ 'autotune failed - drafting 1 token ahead, re-run .\mtp-autotune.ps1 anytime'
+    }
+}
+exit $startCode

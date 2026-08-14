@@ -619,7 +619,7 @@ html[data-pre-auth] #app { visibility: hidden; }
 <script defer src="js/history.js?v=7"></script>
 <script defer src="js/boot-fx.js?v=5"></script>
 <script defer src="js/memory-graph.js?v=2"></script>
-<script type="module" src="js/app.js?v=72"></script>
+<script type="module" src="js/app.js?v=76"></script>
 </head>
 <body>
 
@@ -809,7 +809,7 @@ html[data-pre-auth] #app { visibility: hidden; }
           </div>
           <div class="set-row-control"><select id="modelSelect" aria-label="Chat model"></select></div>
         </div>
-        <div class="set-row">
+        <div class="set-row" id="reasoningRow">
           <div class="set-row-text">
             <div class="set-row-title">Reasoning</div>
             <div class="set-row-desc">How much effort the model spends thinking. Auto decides per message - thinking only on the hard ones.</div>
@@ -823,7 +823,7 @@ html[data-pre-auth] #app { visibility: hidden; }
             </select>
           </div>
         </div>
-        <div class="set-row">
+        <div class="set-row" id="thinkRow">
           <div class="set-row-text">
             <div class="set-row-title">Think</div>
             <div class="set-row-desc">Show the model's chain-of-thought as it streams. Ignored when Reasoning is auto.</div>

@@ -44,9 +44,11 @@ Browser
   chat.php (php-fpm)
        │  injects system_prompt.txt (static, byte-identical every turn)
        │  strips client system role
-       │  appends a trailing "live context" system message AFTER the history
-       │  (clock, lore facts, story so far, memory notes, wardrobe, gauges) so the
-       │  static prefix + history stay in Ollama's KV prompt cache between turns
+       │  appends the "live context" inside the LAST user turn, after the
+       │  question itself (clock, lore facts, story so far, memory notes,
+       │  wardrobe, gauges) so the static prefix + history stay in Ollama's KV
+       │  prompt cache between turns. tools/build_dataset_v6.py trains this exact
+       │  order, question first then the block, so it is not free to swap
        │
        │  curl CURLOPT_WRITEFUNCTION ──────── NDJSON stream ──────▶ ollama /api/chat
        │  (per-chunk callback)                                       (HTTP/1.1, streaming)

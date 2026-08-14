@@ -55,6 +55,30 @@ function Get-GpuOrder {
     return ($uuids -join ',')
 }
 
+# The card the MTP tune was measured on, as one string: the vendor,
+# then every GPU's name and how much VRAM it has. Sorted biggest
+# card first, so moving cards between slots is not a change, only
+# a real swap is.
+#
+# Keep this in step with the copy in mtp-autotune.ps1. we compare
+# what it prints against MTP_TUNED_GPU, so the day the two print a
+# different string for the same card we read every boot as a GPU
+# change and re-run the whole sweep, forever.
+#
+# There is no rocm-smi branch on Windows bare metal, so an AMD box
+# gets '' here: no stamp, and no automatic re-tune either.
+function Get-GpuSignature {
+    if (-not (Get-Command nvidia-smi -ErrorAction SilentlyContinue)) { return '' }
+    $rows = @(& nvidia-smi --query-gpu=name,memory.total --format=csv,noheader,nounits 2>$null |
+        ForEach-Object { $_.Trim() } | Where-Object { $_ -match ',' })
+    if ($rows.Count -eq 0) { return '' }
+    $cards = @($rows | ForEach-Object {
+        $f = $_ -split ',', 2
+        [pscustomobject]@{ Mb = [int]($f[1].Trim()); Text = ($f[0].Trim() + ':' + $f[1].Trim()) }
+    } | Sort-Object Mb -Descending | ForEach-Object { $_.Text })
+    return 'nvidia:' + ($cards -join ',')
+}
+
 $Runtime  = Join-Path $PSScriptRoot 'runtime'
 $LogDir   = Join-Path $Runtime 'logs'
 $PidFile  = Join-Path $Runtime 'pids.json'
@@ -122,6 +146,86 @@ function Test-Http([string]$url, [int]$timeoutSec = 2) {
         Invoke-WebRequest -Uri $url -UseBasicParsing -TimeoutSec $timeoutSec | Out-Null
         return $true
     } catch { return $false }
+}
+
+# The draft depth in .env is a measurement, and it only describes
+# the card it was measured on. Swap the GPU and the number in
+# there is about hardware that left the building, so hold the
+# stamp the tuner wrote against what is in the box now and measure
+# again when the two don't match.
+function Invoke-MtpRecheck {
+    # On the llamacpp side the tuner restarts the stack through
+    # start.ps1, and that is us. without this we start a tune
+    # inside a tune, forever.
+    if ($env:MTP_AUTOTUNE_RUNNING) { return }
+    if ($env:MTP_AUTOTUNE -and $env:MTP_AUTOTUNE.ToLower() -match '^(off|0|false|no)$') { return }
+
+    # No stamp means no tune ever finished on this box, so there is
+    # nothing to compare and nothing to nag about.
+    $tuned = $env:MTP_TUNED_GPU
+    if (-not $tuned) { return }
+    $sig = Get-GpuSignature
+    if (-not $sig -or $sig -eq $tuned) { return }
+
+    $drafter = ''
+    switch ($Provider) {
+        'llamacpp' { $drafter = $env:LLAMACPP_MTP }
+        'ollama'   { $drafter = $env:OLLAMA_MTP }
+        default    { return }
+    }
+    # MTP is off, so there is no depth to measure. the tuner would
+    # only die on it and we would come back here every single boot.
+    if (-not $drafter) { return }
+
+    Step 'the GPU changed since MTP was tuned'
+    Note "tuned on: $tuned"
+    Note "here now: $sig"
+    Note 'the draft depth in .env was measured on a card that is not in this box any more, so we are measuring it again'
+    Note 'a few minutes on ollama, considerably longer on llamacpp where every depth needs a llama-server restart'
+    Note 'set MTP_AUTOTUNE=off in .env to skip this'
+
+    # /api/tags answers the moment ollama is up, which says nothing
+    # about whether the drafter is pulled yet. The tuner needs that
+    # blob on disk or it dies with "could not find the drafter
+    # blob", so wait until ollama show admits it has one.
+    $deadline = (Get-Date).AddMinutes(5)
+    $ready = $false
+    while ((Get-Date) -lt $deadline) {
+        if ($Provider -eq 'llamacpp') {
+            if (Test-Http "$LlamacppUrl/health") { $ready = $true; break }
+        } elseif (Test-Http "$OllamaUrl/api/tags") {
+            # PS 7.4 turns a non-zero exit from a native command into a
+            # throw under ErrorActionPreference Stop, and "not pulled
+            # yet" is the normal answer in here, not an error.
+            try {
+                & ollama show --modelfile $drafter 2>$null | Out-Null
+                if ($LASTEXITCODE -eq 0) { $ready = $true; break }
+            } catch {}
+        }
+        Start-Sleep -Seconds 5
+    }
+
+    # Leave the stamp stale on purpose. it is the only thing that
+    # makes the next boot try again, and a pull that is still
+    # running now is probably done by then.
+    if (-not $ready) {
+        Warn_ 'the drafter is not here yet, so the re-tune is skipped. run .\mtp-autotune.ps1 by hand once it has finished pulling.'
+        return
+    }
+
+    try {
+        $env:MTP_AUTOTUNE_RUNNING = '1'
+        & "$PSScriptRoot\mtp-autotune.ps1"
+    } catch {
+        Warn_ "autotune did not finish, run .\mtp-autotune.ps1 by hand ($_)"
+    } finally {
+        Remove-Item env:MTP_AUTOTUNE_RUNNING -ErrorAction SilentlyContinue
+        # The tuner just wrote .env and the copy we read at startup
+        # is older than that. drop it, so a second start.ps1 in the
+        # same session picks the new stamp up off disk instead of
+        # re-running the whole sweep against a value from before.
+        Remove-Item env:MTP_TUNED_GPU -ErrorAction SilentlyContinue
+    }
 }
 
 if ($Action -eq 'stop') {
@@ -263,6 +367,14 @@ if ($Provider -eq 'llamacpp' -and $LlamacppUrl -match '://(127\.0\.0\.1|localhos
         $env:LLAMA_CACHE = Join-Path $Runtime 'llama-cache'
         $llamaArgs = @('-hf', $hfRef, '--host', '127.0.0.1', '--port', $LlamaPort, '-c', '16384', '--jinja')
         if ($TensorParallel) { $llamaArgs += @('-sm', 'row') }
+        # Gemma 4's multi-token prediction. the assistant model guesses the next
+        # few tokens, the real model checks them in one pass, the ones it got
+        # right came almost free. LLAMACPP_MTP holds the drafter's HF repo, the
+        # first run downloads that one too.
+        if ($env:LLAMACPP_MTP) {
+            $nMax = if ($env:LLAMACPP_MTP_N_MAX) { $env:LLAMACPP_MTP_N_MAX } else { '4' }
+            $llamaArgs += @('--spec-type', 'draft-mtp', '-hfd', $env:LLAMACPP_MTP, '--spec-draft-n-max', $nMax)
+        }
         $llamaProc = Start-Tracked 'llamacpp' 'llama-server' $llamaArgs
 
         # Generous deadline: the first boot downloads the GGUF before /health
@@ -354,6 +466,11 @@ while (-not (Test-Http $SiteUrl)) {
     }
     Start-Sleep -Seconds 1
 }
+
+# Before the ready banner, not after. on llamacpp the sweep bounces
+# llama-server five times, so she is not usable till it finishes and
+# opening the browser first would only show a broken chat.
+Invoke-MtpRecheck
 
 Write-Host ''
 Write-Host "  ${OK}▸${R} ${B}${OK}ready${R} ${DIM}-${R} open ${B}${ACCENT}${SiteUrl}${R}"
