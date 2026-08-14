@@ -95,9 +95,13 @@ class MemoryStore(context: Context) {
             .entries.sortedByDescending { (_, notes) -> notes.maxOfOrNull { it.updated } ?: 0 }
         val blocks = grouped.map { (category, notes) ->
             "### ${category.replaceFirstChar { it.uppercase() }}\n" +
-                notes.sortedByDescending { it.updated }.joinToString("\n") { "- ${it.text.replace(WIKI_LINK, "$1")}" }
+                notes.sortedByDescending { it.updated }.joinToString("\n") { note ->
+                    val created = MemoryDates.day(note.created)
+                    "- " + MemoryDates.stamp(note.text, created) +
+                        MemoryDates.render(note.text, created).replace(WIKI_LINK, "$1")
+                }
         }
-        val out = StringBuilder("## Things Jun remembers\n")
+        val out = StringBuilder(CONTEXT_HEADER)
         for (block in blocks) {
             if (out.length + block.length + 2 > maxChars) continue
             out.append('\n').append(block).append('\n')
@@ -202,5 +206,12 @@ class MemoryStore(context: Context) {
         private val NOTE_LINE = Regex("^-\\s+(.+?)\\s+\\^([a-z0-9]{5})$")
         private val WIKI_LINK = Regex("\\[\\[([^]\\n]+)]]")
         private val JOURNAL_HEADING = Regex("^##\\s+(\\d{4}-\\d{2}-\\d{2})$")
+
+        // Word for word what memory_recent_context() in webapp/api/chat.php puts
+        // in front of the notes, she reads the same block on both sides.
+        private const val CONTEXT_HEADER = "## Durable memory notes\n" +
+            "Words like \"tomorrow\" or \"next friday\" in a note mean the day you wrote it, not now. " +
+            "Where a note already spells the real day out in brackets, use that day and trust it - " +
+            "do not work the date out again yourself."
     }
 }

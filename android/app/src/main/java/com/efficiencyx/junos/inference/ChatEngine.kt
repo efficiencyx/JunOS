@@ -44,7 +44,18 @@ data class ChatRequest(
     val idle: Boolean = false,
     val ephemeral: Boolean = false,
     @SerialName("client_time") val clientTime: String? = null,
+    val audio: String? = null,
 )
+
+internal fun ChatRequest.validate() {
+    // The webapp hands the turn over as a base64 wav whenever it thinks she can
+    // hear it. LiteRT has no audio input here, so we refuse before anything is
+    // written down and the client redoes the turn through whisper.
+    if (audio != null) error("audio_unsupported")
+    require(messages.size <= 160 && messages.all {
+        it.role in setOf("user", "assistant", "system") && it.content.length <= 16 * 1024
+    }) { "invalid_request" }
+}
 
 class ChatEngine(
     private val context: Context,
@@ -56,13 +67,15 @@ class ChatEngine(
     private val dao get() = database.dao()
     private val json = Json { ignoreUnknownKeys = true }
     private val systemPrompt by lazy {
-        context.assets.open("system_prompt.txt").bufferedReader().use { it.readText().trimEnd() }
+        // The php side cuts the <!--tools--> block out when a provider has no
+        // tools. She always has them here, so only the marker lines go.
+        context.assets.open("system_prompt.txt").bufferedReader()
+            .use { it.readText().trimEnd() }
+            .replace(TOOL_MARKER_LINE, "")
     }
 
     suspend fun stream(request: ChatRequest, emit: suspend (JsonElement) -> Unit) {
-        require(request.messages.size <= 160 && request.messages.all {
-            it.role in setOf("user", "assistant", "system") && it.content.length <= 16 * 1024
-        }) { "invalid_request" }
+        request.validate()
         val conversation = dao.conversation(request.conversationId) ?: error("forbidden")
         dao.ensureDefaults(now())
         val lastUser = request.messages.lastOrNull { it.role == "user" }?.content.orEmpty()
@@ -354,6 +367,7 @@ class ChatEngine(
         private val MEMORY_TAG = Regex("\\[\\s*A(?:CTIONS?)?\\s*:\\s*memory_write\\b([^]]*)]", RegexOption.IGNORE_CASE)
         private val MOOD_TAG = Regex("\\[\\s*A(?:CTIONS?)?\\s*:\\s*mood_shift\\b([^]]*)]", RegexOption.IGNORE_CASE)
         private val EXIT_TAG = Regex("\\[\\s*A(?:CTIONS?)?\\s*:\\s*(?:flee|stay_silent)\\b[^]]*]", RegexOption.IGNORE_CASE)
+        private val TOOL_MARKER_LINE = Regex("(?m)^<!--/?tools-->\\R")
         private const val PROMPT_TOKEN_BUDGET = 3300
         private const val TOOL_PROTOCOL = """
 
