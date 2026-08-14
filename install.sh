@@ -222,6 +222,28 @@ set_env() {
     fi
 }
 
+# The || true is load bearing: pipefail plus set -e turns a grep that simply
+# found nothing into an aborted install.
+env_value() {
+    grep -E "^$1=" .env 2>/dev/null | tail -1 | cut -d= -f2- || true
+}
+
+gen_key() {
+    if command -v openssl >/dev/null 2>&1; then
+        openssl rand -hex 16
+    else
+        head -c16 /dev/urandom | od -An -tx1 | tr -d ' \n'
+    fi
+}
+
+# Only when the line is missing altogether. an empty OMEGA_ADMIN_KEY= is the
+# operator saying "off", and every upgrade run comes back through here, so
+# filling that in would silently turn the gate back on behind their back.
+ensure_key() {
+    grep -qE "^$1=" .env 2>/dev/null && return 0
+    set_env "$1" "$(gen_key)"
+}
+
 ask_model_ref() {
     local vram rec alias ans label gpus
     if [ "${TENSOR_PARALLEL:-off}" = on ]; then
@@ -599,6 +621,10 @@ configure() {
     if [ "$TENSOR_PARALLEL" = on ]; then
         ok "tensor parallelism on"
     fi
+
+    ensure_key OMEGA_REGISTRATION_KEY
+    ensure_key OMEGA_ADMIN_KEY
+    ok "access keys ready"
 }
 
 pkg_manager() {
@@ -1147,6 +1173,23 @@ if docker_run docker info >/dev/null 2>&1; then
         step "tune multi-token prediction"
         docker_run ./mtp-autotune.sh || warn_ "autotune failed - drafting 1 token ahead, re-run ./mtp-autotune.sh anytime"
     fi
+    reg_key="$(env_value OMEGA_REGISTRATION_KEY)"
+    admin_key="$(env_value OMEGA_ADMIN_KEY)"
+    printf '\n'
+    step "access keys"
+    if [ -n "$reg_key" ]; then
+        ok "registration  $reg_key"
+        note "give this to the people you invite - empty OMEGA_REGISTRATION_KEY in .env to open signup to anyone."
+    else
+        note "registration key is empty, anyone who reaches the page can sign up."
+    fi
+    if [ -n "$admin_key" ]; then
+        ok "admin         $admin_key"
+        note "type this one in the app to unlock the developer tools."
+    else
+        note "admin key is empty, the developer tools stay locked for everyone."
+    fi
+
     printf '\n   %s$%s %s%sready%s %s-%s open %shttp://localhost%s\n' \
         "$OK" "$R" "$B" "$OK" "$R" "$DIM" "$R" "$B$ACCENT" "$R"
     printf '   %sstop:%s ./start.sh stop   %s·%s   %sstatus:%s ./start.sh status\n\n' \

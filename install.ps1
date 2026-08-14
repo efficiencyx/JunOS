@@ -183,6 +183,33 @@ function Set-EnvKey([string]$key, [string]$val) {
     Set-Content -Path .env -Value $lines
 }
 
+function Get-EnvValue([string]$key) {
+    if (-not (Test-Path .env)) { return '' }
+    $line = Get-Content .env | Where-Object { $_ -match "^$key=" } | Select-Object -Last 1
+    if (-not $line) { return '' }
+    return $line.Substring($line.IndexOf('=') + 1)
+}
+
+function New-AccessKey {
+    $bytes = [byte[]]::new(16)
+    if ($PSVersionTable.PSVersion.Major -ge 7) {
+        [Security.Cryptography.RandomNumberGenerator]::Fill($bytes)
+    } else {
+        # Windows PowerShell 5.1 runs on .NET Framework and has no static Fill,
+        # calling it there throws and takes the whole install down with it.
+        [Security.Cryptography.RandomNumberGenerator]::Create().GetBytes($bytes)
+    }
+    return (($bytes | ForEach-Object { $_.ToString('x2') }) -join '')
+}
+
+# Only when the line is missing altogether. an empty OMEGA_ADMIN_KEY= is the
+# operator saying "off", and every upgrade run comes back through here, so
+# filling that in would silently turn the gate back on behind their back.
+function Add-EnvKeyIfMissing([string]$key) {
+    if ((Test-Path .env) -and (Get-Content .env | Where-Object { $_ -match "^$key=" })) { return }
+    Set-EnvKey $key (New-AccessKey)
+}
+
 $interactive = [Environment]::UserInteractive -and ($env:JUN_YES -ne '1')
 
 function Test-Sha256([string]$path, [string]$expected) {
@@ -518,6 +545,10 @@ function Configure-Jun {
         Set-EnvKey 'SEP_DEVICE' 'cpu'
     }
     Ok "karaoke $karaoke"
+
+    Add-EnvKeyIfMissing 'OMEGA_REGISTRATION_KEY'
+    Add-EnvKeyIfMissing 'OMEGA_ADMIN_KEY'
+    Ok 'access keys ready'
 
     return @{ provider = $provider; voice = $voice; karaoke = $karaoke
               needsOllama = $needsOllama; needsLlamacpp = $needsLlamacpp }
@@ -946,6 +977,23 @@ if ($cfg.needsLlamacpp) { $machineWide += ', llama.cpp' }
 if ($voice -eq 'on' -or $extract) { $machineWide += ', possibly Python' }
 Note "machine-wide (Settings > Apps): ${machineWide}"
 Note 'to remove everything later: ./uninstall.ps1'
+
+$regKey = Get-EnvValue 'OMEGA_REGISTRATION_KEY'
+$adminKey = Get-EnvValue 'OMEGA_ADMIN_KEY'
+Write-Host ''
+Step 'access keys'
+if ($regKey) {
+    Ok "registration  $regKey"
+    Note 'give this to the people you invite - empty OMEGA_REGISTRATION_KEY in .env to open signup to anyone.'
+} else {
+    Note 'registration key is empty, anyone who reaches the page can sign up.'
+}
+if ($adminKey) {
+    Ok "admin         $adminKey"
+    Note 'type this one in the app to unlock the developer tools.'
+} else {
+    Note 'admin key is empty, the developer tools stay locked for everyone.'
+}
 
 Write-Host ''
 Write-Host "  ${OK}▸${R} ${B}${OK}starting${R} ${DIM}-${R} launching start.ps1"

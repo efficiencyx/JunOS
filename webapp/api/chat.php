@@ -1075,7 +1075,11 @@ if ($reasoning === 'auto') {
     [$reasoning, $think, $route] = route_reasoning($lastUserMsg, $idle);
 }
 
-sse_send(['debug' => ['system_prompt' => $systemContent, 'live_context' => $liveContext, 'reasoning' => $reasoning, 'think' => $think, 'route' => $route]]);
+// The frame carries the whole assembled system prompt, so it stays behind the
+// admin role, the dev HUD is the only thing that reads it.
+if (($user['role'] ?? '') === 'admin') {
+    sse_send(['debug' => ['system_prompt' => $systemContent, 'live_context' => $liveContext, 'reasoning' => $reasoning, 'think' => $think, 'route' => $route]]);
+}
 
 $now = time();
 $db = db();
