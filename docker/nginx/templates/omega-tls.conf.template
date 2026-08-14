@@ -65,7 +65,11 @@ server {
     # collects the response into its own buffer, which stalls the token stream.
     location = /api/chat.php {
         limit_req zone=api burst=20 nodelay;
-        client_max_body_size 256k;
+        # A spoken turn ships the wav base64'd in the JSON body: 30s of 16kHz
+        # mono PCM16 is ~960KB, ~1.3MB once encoded, and the history rides
+        # along with it. PHP's post_max_size is already 30M, so this is the
+        # limit that decides.
+        client_max_body_size 4m;
 
         gzip                off;
         proxy_buffering     off;
@@ -91,7 +95,9 @@ server {
         fastcgi_pass  $php_upstream;
     }
 
-    # Accept the larger WAV upload body.
+    # Accept the larger WAV upload body. keep it in step with PHP's
+    # post_max_size, STT_MAX_BYTES in tts/server.py, and the chat.php limit
+    # above, an utterance goes to one or the other.
     location = /api/stt.php {
         limit_req zone=api burst=5 nodelay;
         client_max_body_size 4m;

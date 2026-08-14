@@ -33,6 +33,38 @@ function chat_request_headers(?string $provider = null): array {
     return $h;
 }
 
+// The MTP model when speculative decoding is on, empty when it is off.
+function ollama_mtp_model(): string {
+    if (env_str('OLLAMA_MTP') === '') return '';
+    return env_str('OLLAMA_MTP_MODEL', 'jun-mtp');
+}
+
+function ollama_base_chat_model(): string {
+    foreach (array_map('trim', explode(',', env_str('OLLAMA_MODELS_TO_PULL'))) as $model) {
+        if ($model !== '' && !preg_match('/embed/i', $model)) return $model;
+    }
+    return '';
+}
+
+// What the picker offers. jun-mtp is plumbing - it's the model below it with a
+// drafter bolted on - so people choose the model they pulled and the swap
+// happens down here where they don't have to think about it.
+function display_chat_model(): string {
+    $base = ollama_base_chat_model();
+    if (ai_provider() === 'ollama' && ollama_mtp_model() !== '' && $base !== '') return $base;
+    return default_chat_model();
+}
+
+// So the name that comes back from the browser is the plain one. Swap it right
+// before we talk to ollama, otherwise she answers from the twin with no drafter
+// attached and the speedup goes missing without saying anything.
+function ollama_resolve_chat_model(string $model): string {
+    if (ai_provider() !== 'ollama') return $model;
+    $mtp = ollama_mtp_model();
+    if ($mtp === '') return $model;
+    return $model === ollama_base_chat_model() ? $mtp : $model;
+}
+
 function default_chat_model(): string {
     switch (ai_provider()) {
         case 'openrouter':
@@ -40,10 +72,15 @@ function default_chat_model(): string {
         case 'llamacpp':
             return env_str('LLAMACPP_MODEL_HF', 'efficiencyx/Jun-LoRA-E2B-GGUF:Q4_K_M');
         default:
-            $configured = array_map('trim', explode(',', env_str('OLLAMA_MODELS_TO_PULL')));
-            foreach ($configured as $model) {
-                if ($model !== '' && !preg_match('/embed/i', $model)) return $model;
-            }
+            // With MTP on, the ollama entrypoint derives a model that carries
+            // the drafter as a DRAFT layer and chat has to ask for THAT one -
+            // the model named in OLLAMA_MODELS_TO_PULL is the same weights with
+            // no drafter attached, so talking to it just quietly loses the
+            // speedup. Same default name on both sides.
+            $mtp = ollama_mtp_model();
+            if ($mtp !== '') return $mtp;
+            $configured = ollama_base_chat_model();
+            if ($configured !== '') return $configured;
 
             $ch = curl_init(chat_api_base('ollama') . '/api/tags');
             curl_setopt_array($ch, [
@@ -187,6 +224,16 @@ function ollama_evict_if_partially_offloaded(string $model): void {
         'size' => (int)$size,
     ]);
     ollama_api_json('/api/generate', ['model' => $model, 'keep_alive' => 0], 10);
+}
+
+// Fails closed. no answer from Ollama, a timeout, an old build with no
+// capabilities list, all of it means no audio and the turn goes through
+// whisper instead.
+function ollama_model_supports_audio(string $model): bool {
+    static $cache = [];
+    if (isset($cache[$model])) return $cache[$model];
+    $caps = ollama_api_json('/api/show', ['model' => $model])['capabilities'] ?? null;
+    return $cache[$model] = is_array($caps) && in_array('audio', $caps, true);
 }
 
 function provider_chat_payload(

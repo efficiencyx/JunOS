@@ -1,5 +1,5 @@
-import { moodInputs, moodPhrases, moodRefreshBtn, moodVals } from './dom.js?v=72';
-import { setSidebarOpen } from './sidebar.js?v=72';
+import { moodInputs, moodPhrases, moodRefreshBtn, moodVals } from './dom.js?v=74';
+import { setSidebarOpen } from './sidebar.js?v=74';
 
 const MOOD_PHRASES = {
   affection: [

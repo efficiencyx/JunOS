@@ -45,12 +45,16 @@ window.Voice = (function () {
   let lastLoudAt = 0;
 
   let onTranscript = () => {};
+  let onAudio = null;
   let onState = () => {};
   let onBargeIn = () => {};
   let onLog = () => {};
   let ttsWasSpeaking = false;
 
   function setOnTranscript(fn) { onTranscript = fn || (() => {}); }
+  // Set this and the wav goes straight to the chat model. return false from it
+  // and the turn falls back to whisper, one turn at a time.
+  function setOnAudio(fn) { onAudio = fn || null; }
   function setOnState(fn) { onState = fn || (() => {}); }
   function setOnBargeIn(fn) { onBargeIn = fn || (() => {}); }
   function setLogger(fn) { onLog = fn || (() => {}); }
@@ -265,11 +269,13 @@ window.Voice = (function () {
 
   async function onPcm(pcm) {
     if (!pcm || !pcm.length) { resume(); return; }
+    const wav = encodeWav(pcm, SAMPLE_RATE);
     try {
+      if (onAudio && onAudio(base64Of(wav)) !== false) return;
       const res = await fetch(`${STT_URL}?action=stt`, {
         method: 'POST',
         headers: { 'Content-Type': 'audio/wav' },
-        body: encodeWav(pcm, SAMPLE_RATE),
+        body: wav,
         credentials: 'same-origin',
       });
       if (!res.ok) throw new Error(`STT http ${res.status}`);
@@ -282,10 +288,12 @@ window.Voice = (function () {
     } catch (e) {
       onLog('warn', `Voice: ${e.message}`);
     } finally {
-      // Always, on every path. we go deaf for the ~500ms of the STT
-      // fetch on purpose, you just stopped talking and it keeps one
-      // turn from racing the next. but if we stay that way we never
-      // hear you again.
+      // Always, on every path. on the whisper path we go deaf for the
+      // ~500ms of the STT fetch on purpose, you just stopped talking
+      // and it keeps one turn from racing the next. but if we stay
+      // that way we never hear you again. the audio path returns
+      // before the fetch, so there the mic comes back right away and
+      // half-duplex is the ONLY thing keeping her out of it.
       resume();
     }
   }
@@ -327,9 +335,20 @@ window.Voice = (function () {
     return buf;
   }
 
+  // In 32KB chunks. one spread of a 1MB byte array blows the argument limit
+  // and String.fromCharCode throws.
+  function base64Of(buf) {
+    const bytes = new Uint8Array(buf);
+    let s = '';
+    for (let i = 0; i < bytes.length; i += 0x8000) {
+      s += String.fromCharCode.apply(null, bytes.subarray(i, i + 0x8000));
+    }
+    return btoa(s);
+  }
+
   return {
     support, enable, disable, isEnabled, getState, resume,
     setBargeIn, setSilenceMs,
-    setOnTranscript, setOnState, setOnBargeIn, setLogger,
+    setOnTranscript, setOnAudio, setOnState, setOnBargeIn, setLogger,
   };
 })();

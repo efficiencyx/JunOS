@@ -1,5 +1,5 @@
-import { actionLogCount, actionLogEl, clearRawBtn, clearToolLogBtn, missingParamsEl, rawStreamEl, stageStatus, toolLogCount, toolLogEl } from './dom.js?v=72';
-import { escapeHtml } from './util.js?v=72';
+import { actionLogCount, actionLogEl, clearRawBtn, clearToolLogBtn, missingParamsEl, rawStreamEl, stageStatus, toolLogCount, toolLogEl } from './dom.js?v=74';
+import { escapeHtml } from './util.js?v=74';
 
 let logCount = 0;
 export function logAction(level, text) {

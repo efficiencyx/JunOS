@@ -35,7 +35,11 @@ services:
   karaoke:
     build:
       args:
-        TORCH_INDEX: "${KARAOKE_TORCH_INDEX:-https://download.pytorch.org/whl/cu124}"
+        # cu124 is gone. every +cu124 torch pins nvidia-cudnn-cu12==9.1.0.70
+        # and that wheel is off the index now, so the build dies with a wall of
+        # resolver output that reads like torch itself is missing. Override
+        # with KARAOKE_TORCH_INDEX if your driver is too old for cu128.
+        TORCH_INDEX: "${KARAOKE_TORCH_INDEX:-https://download.pytorch.org/whl/cu128}"
     deploy:
       resources:
         reservations:

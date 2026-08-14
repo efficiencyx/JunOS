@@ -121,6 +121,43 @@ MODEL_12B="hf.co/efficiencyx/Jun-LoRA-12B-GGUF:Q4_K_M"
 MODEL_E4B="hf.co/efficiencyx/Jun-LoRA-v4-E4B-GGUF:Q4_K_M"
 MODEL_E2B="hf.co/efficiencyx/Jun-LoRA-E2B-GGUF:Q4_K_M"
 
+# A drafter has to come off the SAME Gemma 4 the model was fine-tuned from, QAT
+# branch included. Mismatched, it still loads and still drafts, it just guesses
+# wrong far more often - 2.10 accepted tokens per pass against 2.74 for the
+# matching one - and nothing anywhere says why. So this map is by size, and the
+# QAT repos are not interchangeable with the plain ones.
+MTP_DRAFTER_12B="hf.co/Janvitos/gemma-4-12B-it-qat-assistant-MTP-Q8_0-GGUF:Q8_0"
+MTP_DRAFTER_E4B="hf.co/amaranus/Gemma-4-E4B-it-qat-assistant-MTP-Q8_0-GGUF:Q8_0"
+MTP_DRAFTER_E2B="hf.co/amaranus/Gemma-4-E2B-it-qat-assistant-MTP-Q8_0-GGUF:Q8_0"
+
+# Live2D is drawn by the browser on the same card Jun sits on, and it wants
+# about this much while a chat is open. Left out of the budget the install
+# looks fine and then she spills onto the CPU the moment somebody opens the tab.
+LIVE2D_VRAM_MB=1500
+
+mtp_drafter_for() {
+    case "$1" in
+        *Jun-LoRA-12B*)  echo "$MTP_DRAFTER_12B" ;;
+        *E4B*)           echo "$MTP_DRAFTER_E4B" ;;
+        *E2B*)           echo "$MTP_DRAFTER_E2B" ;;
+    esac
+}
+
+# Roughly what each model weighs once it is resident, drafter included. Close
+# enough to tell "fits" from "does not", which is all it is used for.
+mtp_budget_mb() {
+    case "$1" in
+        *Jun-LoRA-12B*Q8_0) echo 13500 ;;
+        *Jun-LoRA-12B*Q6_K) echo 10800 ;;
+        *Jun-LoRA-12B*)     echo 8100 ;;
+        *E4B*Q8_0)          echo 9000 ;;
+        *E4B*)              echo 5000 ;;
+        *E2B*Q6_K)          echo 4500 ;;
+        *E2B*)              echo 3400 ;;
+        *)                  echo 0 ;;
+    esac
+}
+
 resolve_model() {  # alias|full-ref -> full-ref
     case "$(printf '%s' "$1" | tr '[:upper:]' '[:lower:]')" in
         12b|jun|best|"") echo "$MODEL_12B" ;;
@@ -288,6 +325,131 @@ ask_tensor_parallel() {
     fi
 }
 
+# "enable experimental multi-token prediction? [y/N]". A small drafter model
+# guesses a few tokens ahead and Jun checks the guesses in one pass, so the ones
+# she agrees with came cheap. Nothing gets said that she wouldn't have said
+# anyway. Experimental because whether it is faster at all depends on the card,
+# hence the depth question right after. Sets $MTP (on|off) and $MTP_DRAFTER.
+# Off under Express, this is not a setting to hand somebody who asked for
+# defaults. Without a prompt: JUN_MTP=on|off.
+ask_mtp() {
+    local v preset
+    MTP=off
+    MTP_DRAFTER="$(mtp_drafter_for "$MODEL_REF")"
+    # Only Gemma 4 ships an MTP head, and only for the sizes we map above. On
+    # anything else there is no drafter to pair, so there is no question to ask.
+    [ -n "$MTP_DRAFTER" ] || return 0
+
+    preset="${JUN_MTP:-}"
+    if [ -n "$preset" ]; then
+        case "$(printf '%s' "$preset" | tr '[:upper:]' '[:lower:]')" in
+            on|1|true|yes|y) MTP=on ;; *) MTP=off ;;
+        esac
+        return 0
+    fi
+    if [ "${JUN_YES:-}" = "1" ] || [ ! -r /dev/tty ]; then
+        return 0
+    fi
+
+    printf '     %s$%s enable experimental multi-token prediction? %s(speculative decoding - faster on some cards, slower on others)%s %s[y/N]%s %s→%s ' \
+        "$OK" "$R" "$DIM" "$R" "$DIM" "$R" "$ACCENT" "$R" > /dev/tty
+    read -r v < /dev/tty || v=""
+    case "$v" in y|Y|yes|YES) MTP=on ;; *) MTP=off ;; esac
+}
+
+# "how many tokens ahead?" auto measures instead of guessing, and it is the
+# right answer for almost everybody - the best depth swings with the card. On a
+# 3060 the gain is gone by 3 and depth 4 is slower than not drafting at all,
+# a bigger card can afford to guess deeper. Sets $MTP_DEPTH
+# to auto or 1-4. Without a prompt: JUN_MTP_DEPTH=auto|1|2|3|4.
+ask_mtp_depth() {
+    local v
+    MTP_DEPTH=auto
+    if [ -n "${JUN_MTP_DEPTH:-}" ]; then
+        case "$(printf '%s' "$JUN_MTP_DEPTH" | tr '[:upper:]' '[:lower:]')" in
+            1|2|3|4) MTP_DEPTH="$JUN_MTP_DEPTH" ;; *) MTP_DEPTH=auto ;;
+        esac
+        return 0
+    fi
+    if [ "${JUN_YES:-}" = "1" ] || [ ! -r /dev/tty ]; then
+        return 0
+    fi
+
+    {
+        printf '\n     %show many tokens should it guess ahead?%s\n' "$B" "$R"
+        printf '       %sauto%s  %s-%s try each one on your hardware and keep the fastest %s(recommended)%s\n' "$ACCENT" "$R" "$DIM" "$R" "$DIM" "$R"
+        printf '       %s1-4%s   %s-%s fix it yourself; deeper guesses cost more to check\n' "$ACCENT" "$R" "$DIM" "$R"
+        printf '     %s$%s choice %s[enter = auto]%s %s→%s ' "$OK" "$R" "$DIM" "$R" "$ACCENT" "$R"
+    } > /dev/tty
+    read -r v < /dev/tty || v=""
+    case "$v" in
+        1|2|3|4) MTP_DEPTH="$v" ;;
+        ""|a|auto|AUTO) MTP_DEPTH=auto ;;
+        *) printf '     %s✗%s unrecognized choice, measuring instead\n' "$DANGER" "$R" > /dev/tty; MTP_DEPTH=auto ;;
+    esac
+}
+
+# Ask, then write whichever pair of keys this provider reads. Sets
+# $MTP_AUTOTUNE=1 when the depth still has to be measured, which only the boot
+# step at the bottom of this script can do - the stack has to be up first.
+configure_mtp() {
+    local provider="$1" vram budget headroom drafter_ref
+    MTP_AUTOTUNE=0
+
+    ask_mtp
+    [ "$MTP" = on ] || { ok "multi-token prediction off"; return 0; }
+    ask_mtp_depth
+
+    if [ "$TENSOR_PARALLEL" = on ]; then
+        vram="$(detect_vram_total_mb)"
+    else
+        vram="$(detect_vram_mb)"
+    fi
+    budget="$(mtp_budget_mb "$MODEL_REF")"
+    if [ -n "$vram" ] && [ "$budget" -gt 0 ]; then
+        headroom=$((vram - budget - LIVE2D_VRAM_MB))
+        if [ "$headroom" -lt 0 ]; then
+            warn_ "with Live2D drawing (~${LIVE2D_VRAM_MB}MB) she won't fit on the card - some layers"
+            note "  run on the CPU. Drafting helps MORE there, +31% measured against +21%"
+            note "  fully on the GPU, so this stays worth having. Everything is just slower."
+        fi
+    fi
+
+    case "$provider" in
+        ollama)
+            set_env OLLAMA_MTP "$MTP_DRAFTER"
+            # .env only ever holds a number. The entrypoint bakes this straight
+            # into a Modelfile as draft_num_predict, and "auto" there would be a
+            # broken model rather than a default. 1 is the provisional pick,
+            # the autotune below overwrites it with whatever actually won.
+            if [ "$MTP_DEPTH" = auto ]; then
+                set_env OLLAMA_MTP_N_MAX 1
+                MTP_AUTOTUNE=1
+            else
+                set_env OLLAMA_MTP_N_MAX "$MTP_DEPTH"
+            fi
+            ;;
+        llamacpp)
+            # llama-server's -hfd takes a bare repo, no hf.co in front and no
+            # quant tag - these drafter repos hold a single gguf each.
+            drafter_ref="${MTP_DRAFTER#hf.co/}"
+            set_env LLAMACPP_MTP "${drafter_ref%%:*}"
+            if [ "$MTP_DEPTH" = auto ]; then
+                set_env LLAMACPP_MTP_N_MAX 1
+                MTP_AUTOTUNE=1
+            else
+                set_env LLAMACPP_MTP_N_MAX "$MTP_DEPTH"
+            fi
+            ;;
+    esac
+
+    if [ "$MTP_AUTOTUNE" = 1 ]; then
+        ok "multi-token prediction on, depth measured after the models are pulled"
+    else
+        ok "multi-token prediction on, drafting $MTP_DEPTH token(s) ahead"
+    fi
+}
+
 # There was a TELEMETRY knob here once, for a chat sharing feature that never
 # shipped. Not planned anymore, nothing in the app ever read it. If you find
 # TELEMETRY or TELEMETRY_INSTALL_ID in an old .env, they do nothing, delete them.
@@ -334,6 +496,7 @@ configure() {
         set_env OLLAMA_MODELS_TO_PULL "$MODEL_REF"
         profiles=ollama
         ok "model $MODEL_REF"
+        configure_mtp ollama
         ;;
 
     openrouter)
@@ -388,6 +551,7 @@ configure() {
             set_env LLAMACPP_URL "http://llamacpp:8080"
             profiles=llamacpp
             ok "model ${MODEL_REF#hf.co/}"
+            configure_mtp llamacpp
         fi
         ;;
     esac
@@ -976,6 +1140,12 @@ if docker_run docker info >/dev/null 2>&1; then
         docker_run docker logs -f omega-ollama 2>&1 \
             | awk '{ print "       " $0; fflush() } /pre-warm (done|failed)|pull failed/ { exit }' || true
         ok "models ready"
+    fi
+    # Has to run here and not in configure(): every row of it is a real
+    # generation, so the models have to be pulled and the stack has to be up.
+    if [ "${MTP_AUTOTUNE:-0}" = 1 ]; then
+        step "tune multi-token prediction"
+        docker_run ./mtp-autotune.sh || warn_ "autotune failed - drafting 1 token ahead, re-run ./mtp-autotune.sh anytime"
     fi
     printf '\n   %s$%s %s%sready%s %s-%s open %shttp://localhost%s\n' \
         "$OK" "$R" "$B" "$OK" "$R" "$DIM" "$R" "$B$ACCENT" "$R"

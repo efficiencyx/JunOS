@@ -255,13 +255,52 @@ function memory_file_path(int $userId): string {
 // budget. so ONLY the notes whose wording leans on their own date get one.
 const MEMORY_RELATIVE_TIME_RE = '/\b(today|tonight|tomorrow|yesterday|this (?:morning|afternoon|evening|week|month|weekend)|last (?:night|week|month|weekend)|next (?:week|month|weekend|monday|tuesday|wednesday|thursday|friday|saturday|sunday)|in (?:a few|a couple of|\d{1,2}) (?:days?|weeks?|months?)|days? from now|weeks? from now)\b/i';
 
+// Phrases we can pin to one exact day, given the day the note was written.
+// everything else in the regex above ("next week", "in a few days") stays
+// fuzzy and only gets the anchor stamp.
+const MEMORY_RELATIVE_TIME_OFFSETS = [
+    'today' => 0, 'tonight' => 0, 'this morning' => 0, 'this afternoon' => 0,
+    'this evening' => 0, 'tomorrow' => 1, 'yesterday' => -1, 'last night' => -1,
+];
+
 function memory_note_stamp(array $note): string {
     if (!preg_match(MEMORY_RELATIVE_TIME_RE, (string)$note['text'])) return '';
     $created = (int)($note['created'] ?? 0);
     if ($created <= 0) return '';
-    $days = (int)floor((time() - $created) / 86400);
-    $ago = $days <= 0 ? 'today' : ($days === 1 ? '1 day ago' : $days . ' days ago');
-    return '(noted ' . date('l j F Y', $created) . ', ' . $ago . ') ';
+    return '(noted ' . date('l j F Y', $created) . ', ' . memory_days_phrase($created) . ') ';
+}
+
+function memory_days_phrase(int $when): string {
+    $days = (int)floor((strtotime('today', $when) - strtotime('today')) / 86400);
+    if ($days === 0) return 'that is today';
+    if ($days === 1) return 'that is tomorrow';
+    if ($days === -1) return 'that was yesterday, already past';
+    if ($days > 1) return 'that is in ' . $days . ' days';
+    return 'that was ' . abs($days) . ' days ago, already past';
+}
+
+// Jun runs on a small local model and it will NOT do the arithmetic itself: give
+// it "(noted Monday 10 August)" next to the word "tomorrow" and it just repeats
+// "tomorrow", four days late. so we do the sum here and paste the real day right
+// after the phrase, leaving nothing to work out.
+function memory_note_render(array $note): string {
+    $text = (string)$note['text'];
+    $created = (int)($note['created'] ?? 0);
+    if ($created <= 0) return $text;
+
+    return preg_replace_callback(MEMORY_RELATIVE_TIME_RE, function (array $m) use ($created): string {
+        $phrase = strtolower($m[0]);
+        $day = null;
+        if (isset(MEMORY_RELATIVE_TIME_OFFSETS[$phrase])) {
+            $day = strtotime(MEMORY_RELATIVE_TIME_OFFSETS[$phrase] . ' days', $created);
+        } elseif (preg_match('/^next (monday|tuesday|wednesday|thursday|friday|saturday|sunday)$/', $phrase, $d)) {
+            $day = strtotime('next ' . $d[1], $created);
+        } elseif (preg_match('/^(?:in (\d{1,2})|(\d{1,2})) (day|week|month)s? ?(?:from now)?$/', $phrase, $d)) {
+            $day = strtotime('+' . ($d[1] !== '' ? $d[1] : $d[2]) . ' ' . $d[3] . 's', $created);
+        }
+        if (!$day) return $m[0];
+        return $m[0] . ' (= ' . date('l j F Y', $day) . ', ' . memory_days_phrase($day) . ')';
+    }, $text) ?? $text;
 }
 
 function memory_normalize_entry(string $memory, string $category): array {

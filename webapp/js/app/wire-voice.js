@@ -1,14 +1,25 @@
-import { VOICE_STATE_LABELS, renderVoiceDraft, sendFromVoice, stopActiveStream, sttAvailable } from '../app.js?v=72';
-import { voiceBargeChk, voiceChk, voiceSilenceInput, voiceState } from './dom.js?v=72';
-import { hideFaceBubble } from './face-bubble.js?v=72';
-import { logAction } from './logging.js?v=72';
-import { syncVoiceDeps, updateVoiceSilenceLabel } from './settings.js?v=72';
+import { VOICE_STATE_LABELS, renderVoiceDraft, sendAudioFromVoice, sendFromVoice, stopActiveStream, sttAvailable } from '../app.js?v=76';
+import { voiceBargeChk, voiceChk, voiceSilenceInput, voiceState } from './dom.js?v=74';
+import { hideFaceBubble } from './face-bubble.js?v=74';
+import { logAction } from './logging.js?v=74';
+import { syncVoiceDeps, updateVoiceSilenceLabel } from './settings.js?v=74';
 
 // Same deal as wire-tts. optional piece, wiring that keeps to itself.
 export async function wireVoice() {
   if (window.Voice && voiceChk) {
     Voice.setLogger(logAction);
     Voice.setOnTranscript(sendFromVoice);
+
+    // She hears the wav herself when the backend can take it. the first
+    // refusal turns this off for the rest of the page, we never ask the
+    // server up front.
+    let audioTurns = true;
+    Voice.setOnAudio((b64) => {
+      if (!audioTurns) return false;
+      sendAudioFromVoice(b64, () => { audioTurns = false; });
+      return true;
+    });
+
     Voice.setOnBargeIn(() => { if (stopActiveStream) stopActiveStream(); });
     const voiceOverlayStatus = document.getElementById('voiceOverlayStatus');
     Voice.setOnState((s) => {

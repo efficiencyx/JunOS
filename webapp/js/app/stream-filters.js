@@ -1,12 +1,34 @@
-import { logAction } from './logging.js?v=72';
-import { noteEmotionTint } from './mood.js?v=72';
+import { logAction } from './logging.js?v=74';
+import { noteEmotionTint } from './mood.js?v=74';
 
-const MARK_RE = /\[\s*A(?:CTIONS?)?\s*:/i;
-const PARTIAL_RE = /\[\s*(?:A(?:C(?:T(?:I(?:O(?:N(?:S)?)?)?)?)?)?\s*)?$/i;
+const MARK_RE = /\[\s*(?:A(?:CTIONS?)?|TOOL)\s*:/i;
+const PARTIAL_RE = /\[\s*(?:A(?:C(?:T(?:I(?:O(?:N(?:S)?)?)?)?)?)?|T(?:O(?:O(?:L)?)?)?)?\s*$/i;
+const TOOL_RE = /^\[\s*TOOL\s*:/i;
 
 function findMark(s, from = 0) {
   const m = s.slice(from).match(MARK_RE);
   return m ? from + m.index : -1;
+}
+
+// The tool markers carry a JSON argument, and a ']' can sit inside one of its
+// strings. Closing on the first ']' cuts the blob in half and the rest of it
+// streams into the bubble, so only a ']' outside any brace or string counts.
+function findClose(s) {
+  let depth = 0, inStr = false, esc = false;
+  for (let i = 0; i < s.length; i++) {
+    const c = s[i];
+    if (inStr) {
+      if (esc) esc = false;
+      else if (c === '\\') esc = true;
+      else if (c === '"') inStr = false;
+      continue;
+    }
+    if (c === '"') inStr = true;
+    else if (c === '{') depth++;
+    else if (c === '}') { if (depth > 0) depth--; }
+    else if (c === ']' && depth === 0) return i;
+  }
+  return -1;
 }
 
 function pendingMarkerSuffix(s) {
@@ -33,10 +55,17 @@ export function makeStreamBuffer(onCleanText) {
           onCleanText(buf.slice(0, start));
           buf = buf.slice(start);
         }
-        const end = buf.indexOf(']');
+        const end = findClose(buf);
         if (end < 0) break; // tag isn't finished yet, wait for the next chunk
         const blob = buf.slice(0, end + 1);
         buf = buf.slice(end + 1);
+        if (TOOL_RE.test(blob)) {
+          // Android's tool protocol, never an action and never something Anon
+          // should see. Swallow it here too, the stored history of the early
+          // testers still has these blobs in it and replays through us.
+          logAction('info', 'tool marker scartato: ' + blob);
+          continue;
+        }
         const acts = Actions.parseActions(blob);
         if (acts.length === 0) {
           logAction('warn', 'block non parsabile: ' + blob);

@@ -28,7 +28,10 @@ for a in "$@"; do
   esac
 done
 
-running() { [ "$(docker inspect -f '{{.State.Running}}' "$1" 2>/dev/null)" = true ]; }
+# --type container is not optional. the containers and their images share a
+# name, and some docker builds resolve the image first, so without it this
+# asks an image whether it is running and decides the stack is down.
+running() { [ "$(docker inspect --type container -f '{{.State.Running}}' "$1" 2>/dev/null)" = true ]; }
 
 if ! running "$NGINX"; then
   echo "✗ $NGINX is not running - start the stack first (./start.sh)." >&2

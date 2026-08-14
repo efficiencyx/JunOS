@@ -208,7 +208,7 @@ function consolidation_notes(int $userId, array $lines): array {
     foreach ($categories as $category => $data) {
         $rendered[] = '## ' . $category;
         foreach ($data['notes'] as $note) {
-            $rendered[] = $note['id'] . ' ' . memory_note_stamp($note) . $note['text'];
+            $rendered[] = $note['id'] . ' ' . memory_note_stamp($note) . memory_note_render($note);
             $startingCount++;
         }
     }

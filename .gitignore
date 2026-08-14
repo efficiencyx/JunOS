@@ -68,3 +68,9 @@ letsencrypt/
 
 # game archive (never republish - see LICENSE NOTICE)
 factorial-omega-win-64.zip
+
+# dataset dev tooling - training data curation stays on the maintainer's
+# machine, webapp users don't need it
+tools/dataset_*/
+tools/build_dataset_v6.py
+tools/__pycache__/

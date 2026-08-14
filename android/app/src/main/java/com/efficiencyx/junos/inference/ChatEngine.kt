@@ -2,6 +2,7 @@ package com.efficiencyx.junos.inference
 
 import android.content.Context
 import android.content.Intent
+import android.util.Log
 import androidx.core.content.ContextCompat
 import com.efficiencyx.junos.data.ConsolidationEntity
 import com.efficiencyx.junos.data.JunDatabase
@@ -81,10 +82,15 @@ class ChatEngine(
                 "(OOC stage direction: Anon has gone quiet. React naturally, or use only an avatar action if he asked for silence.)",
             )
         }
+        // Context first, her question LAST. A 2B int4 model answers whatever it read
+        // most recently, and with the context glued after the question it kept
+        // replying to the memories instead of to Anon.
         val tail = messages.lastIndex
         if (tail >= 0 && messages[tail].role == "user") {
-            messages[tail] = messages[tail].copy(content = messages[tail].content + "\n\n" + liveContext)
+            messages[tail] = messages[tail].copy(content = liveContext + "\n\n" + messages[tail].content)
         } else messages += ChatMessage("user", liveContext)
+        trimToBudget(messages)
+        val baseMessages = messages.toList()
 
         emit(buildJsonObject { put("debug", buildJsonObject { put("live_context", liveContext); put("reasoning", request.reasoning) }) })
         val statusJob = if (engine.state.value !is EngineState.Ready) {
@@ -121,27 +127,30 @@ class ChatEngine(
         try {
             for (round in 0 until 3) {
                 val filter = ToolStreamFilter()
+                val think = ThinkStreamFilter()
                 val roundText = StringBuilder()
                 engine.generate(messages).collect { token ->
                     tokenCount++
                     roundText.append(token)
-                    filter.push(token).forEach { clean ->
+                    filter.push(think.push(token)).forEach { clean ->
                         visible.append(clean)
                         emit(buildJsonObject { put("token", clean) })
                     }
+                }
+                filter.push(think.finish()).forEach { clean ->
+                    visible.append(clean)
+                    emit(buildJsonObject { put("token", clean) })
                 }
                 engine.lastStats.value?.let { stats ->
                     nativeEvalCount += stats["eval_count"]?.jsonPrimitive?.intOrNull ?: 0
                     nativeEvalMs += stats["eval_ms"]?.jsonPrimitive?.longOrNull ?: 0
                     nativePromptEvalCount += stats["prompt_eval_count"]?.jsonPrimitive?.intOrNull ?: 0
                 }
-                filter.finish().forEach { clean ->
-                    visible.append(clean)
-                    emit(buildJsonObject { put("token", clean) })
-                }
+                filter.finish()
                 val calls = filter.calls
                 if (calls.isEmpty()) break
-                messages += ChatMessage("assistant", filter.visibleText.toString())
+                val lead = filter.visibleText.toString()
+                if (lead.isNotBlank()) messages += ChatMessage("assistant", lead)
                 for (call in calls.take(4)) {
                     emit(toolStatus(call.name, "running"))
                     val result = executeTool(call, request.conversationId)
@@ -150,13 +159,37 @@ class ChatEngine(
                     if (call.name == "flee") fled = buildJsonObject {
                         put("until", 0); put("minutes", 0); put("reason", call.args["reason"]?.jsonPrimitive?.content.orEmpty())
                     }
-                    messages += ChatMessage("tool", "${call.name}: $result")
+                    // Not a "tool" turn. This fine-tune never saw that role in training,
+                    // and handing it one is what made her come back with nothing at all,
+                    // so the result goes in as something she DID see, a user turn.
+                    messages += ChatMessage("user", "(Tool result, ${call.name}: $result)")
                 }
                 if (silenced || fled != null) break
                 if (round < 2) {
                     visible.append("\n\n")
                     emit(buildJsonObject { put("token", "\n\n") })
                 }
+            }
+            if (visible.isBlank() && !silenced && fled == null) {
+                // Every round went on tools and none of them came back with prose.
+                // Run it once more with the protocol taken out and the tool
+                // round-trip gone, so there is nothing for her to reach for but words.
+                val plain = baseMessages.toMutableList()
+                plain[0] = ChatMessage("system", systemPrompt)
+                val filter = ToolStreamFilter()
+                val think = ThinkStreamFilter()
+                engine.generate(plain).collect { token ->
+                    tokenCount++
+                    filter.push(think.push(token)).forEach { clean ->
+                        visible.append(clean)
+                        emit(buildJsonObject { put("token", clean) })
+                    }
+                }
+                filter.push(think.finish()).forEach { clean ->
+                    visible.append(clean)
+                    emit(buildJsonObject { put("token", clean) })
+                }
+                filter.finish()
             }
         } finally {
             context.stopService(Intent(context, GenerationService::class.java))
@@ -172,6 +205,8 @@ class ChatEngine(
         }
         assistant = salvageMemoryTags(assistant, emit)
         assistant = applyRelationshipTag(assistant, relationship)
+        assistant = EXIT_TAG.replace(assistant, "").trim()
+        if ((silenced || fled != null) && assistant.isBlank()) assistant = "..."
         val duration = System.nanoTime() - started
         emit(buildJsonObject {
             put("stats", buildJsonObject {
@@ -225,7 +260,7 @@ class ChatEngine(
     ): String {
         val blocks = mutableListOf<String>()
         blocks += "## Current date and time\nIt is currently ${request.clientTime?.take(80) ?: java.time.ZonedDateTime.now()}."
-        memory.recentContext().takeIf { it.isNotBlank() }?.let(blocks::add)
+        memory.recentContext(1200).takeIf { it.isNotBlank() }?.let(blocks::add)
         if (summary.isNotBlank()) blocks += "## Story so far (earlier in THIS conversation)\n$summary"
         val facts = lore.search(lastUser, 5)
         if (facts.isNotEmpty()) blocks += "## World facts (canon)\n" + facts.joinToString("\n") { "- ${it.text}" }
@@ -301,7 +336,16 @@ class ChatEngine(
                 updatedAt = now(),
             ),
         )
-        return text.replace(match.value, "").trim()
+        return MOOD_TAG.replace(text, "").trim()
+    }
+
+    // 4096 total context, 768 of it reserved for her reply. The system prompt and the
+    // live context alone can fill most of what's left, and past that the runtime just
+    // cuts the front of the prompt off, so we drop whole old turns instead. System
+    // message and the turn she has to answer both stay, always.
+    private fun trimToBudget(messages: MutableList<ChatMessage>) {
+        fun estimate() = messages.sumOf { it.content.length } / 4
+        while (estimate() > PROMPT_TOKEN_BUDGET && messages.size > 2) messages.removeAt(1)
     }
 
     private fun now() = System.currentTimeMillis() / 1000
@@ -309,6 +353,8 @@ class ChatEngine(
     companion object {
         private val MEMORY_TAG = Regex("\\[\\s*A(?:CTIONS?)?\\s*:\\s*memory_write\\b([^]]*)]", RegexOption.IGNORE_CASE)
         private val MOOD_TAG = Regex("\\[\\s*A(?:CTIONS?)?\\s*:\\s*mood_shift\\b([^]]*)]", RegexOption.IGNORE_CASE)
+        private val EXIT_TAG = Regex("\\[\\s*A(?:CTIONS?)?\\s*:\\s*(?:flee|stay_silent)\\b[^]]*]", RegexOption.IGNORE_CASE)
+        private const val PROMPT_TOKEN_BUDGET = 3300
         private const val TOOL_PROTOCOL = """
 
 ## Local tool-call protocol
@@ -317,21 +363,43 @@ When a tool is necessary, write exactly `[TOOL:name|{"argument":"value"}]` after
     }
 }
 
-private data class ParsedToolCall(val name: String, val args: JsonObject)
+internal data class ParsedToolCall(val name: String, val args: JsonObject)
 
-private class ToolStreamFilter {
+internal class ToolStreamFilter {
     val calls = mutableListOf<ParsedToolCall>()
     val visibleText = StringBuilder()
     private val held = StringBuilder()
     private var marker = false
+    private var depth = 0
+    private var inString = false
+    private var escaped = false
+    private var discarding = false
 
     fun push(chunk: String): List<String> {
         val emitted = mutableListOf<String>()
         for (char in chunk) {
-            if (marker) {
+            if (discarding) {
+                scanArgument(char)
+                if (char == ']' && depth == 0 && !inString) reset()
+            } else if (marker) {
                 held.append(char)
-                if (char == ']') finishMarker(emitted)
-                else if (held.length > 8192) flushHeld(emitted)
+                // Hold ONLY while the text can still turn into "[TOOL:". Anything else,
+                // her own [A:emote|happy] tags most of all, goes straight back out, so
+                // roleplay tags reach the JS filter without stalling the stream.
+                if (!pastPrefix()) {
+                    if (!stillCouldBeTool()) flushHeld(emitted)
+                } else {
+                    scanArgument(char)
+                    if (char == ']' && depth == 0 && !inString) finishMarker()
+                    else if (held.length > MAX_HELD) {
+                        // Too long to be a real call. Keep swallowing to the closing
+                        // bracket anyway, otherwise the tail of the blob prints.
+                        Log.w("ToolStreamFilter", "dropped overflow marker: ${held.take(200)}")
+                        held.clear()
+                        marker = false
+                        discarding = true
+                    }
+                }
             } else if (char == '[') {
                 marker = true
                 held.append(char)
@@ -340,24 +408,70 @@ private class ToolStreamFilter {
         return emitted
     }
 
-    fun finish(): List<String> = buildList { if (held.isNotEmpty()) flushHeld(this) }
+    fun finish(): List<String> {
+        if (held.isNotEmpty()) dropHeld("truncated")
+        discarding = false
+        return emptyList()
+    }
 
-    private fun finishMarker(emitted: MutableList<String>) {
+    private fun squashed() = held.filterNot { it.isWhitespace() }
+
+    private fun stillCouldBeTool(): Boolean {
+        val seen = squashed()
+        return PREFIX.regionMatches(0, seen, 0, seen.length, ignoreCase = true)
+    }
+
+    private fun pastPrefix() = squashed().length > PREFIX.length
+
+    private fun scanArgument(char: Char) {
+        if (inString) {
+            when {
+                escaped -> escaped = false
+                char == '\\' -> escaped = true
+                char == '"' -> inString = false
+            }
+        } else when (char) {
+            '"' -> inString = true
+            '{' -> depth++
+            '}' -> depth--
+        }
+    }
+
+    private fun finishMarker() {
         val raw = held.toString()
         val parsed = TOOL.matchEntire(raw)?.let { match ->
             runCatching {
                 ParsedToolCall(match.groupValues[1], Json.parseToJsonElement(match.groupValues[2]).jsonObject)
             }.getOrNull()
         }
-        if (parsed != null) calls += parsed else append(raw, emitted)
-        held.clear()
-        marker = false
+        if (parsed == null) {
+            dropHeld("unparsable")
+            return
+        }
+        calls += parsed
+        reset()
+    }
+
+    // Fails closed on purpose. A marker we can't read costs a tool call, which is
+    // annoying, printing it costs Jun a line of JSON in her mouth and it gets saved
+    // to Room and replayed on every history load after that.
+    private fun dropHeld(why: String) {
+        Log.w("ToolStreamFilter", "dropped $why marker: ${held.take(200)}")
+        reset()
     }
 
     private fun flushHeld(emitted: MutableList<String>) {
         append(held.toString(), emitted)
+        reset()
+    }
+
+    private fun reset() {
         held.clear()
         marker = false
+        depth = 0
+        inString = false
+        escaped = false
+        discarding = false
     }
 
     private fun append(value: String, emitted: MutableList<String>) {
@@ -366,7 +480,58 @@ private class ToolStreamFilter {
     }
 
     companion object {
+        private const val PREFIX = "[TOOL:"
+        private const val MAX_HELD = 8192
+
         // Android's ICU engine rejects a bare '}' that desktop Java tolerates.
-        private val TOOL = Regex("\\[TOOL:([a-z_]+)\\|(\\{.*\\})]", setOf(RegexOption.IGNORE_CASE, RegexOption.DOT_MATCHES_ALL))
+        private val TOOL = Regex(
+            "\\[\\s*TOOL\\s*:\\s*([a-z_]+)\\s*\\|\\s*(\\{.*\\})\\s*]",
+            setOf(RegexOption.IGNORE_CASE, RegexOption.DOT_MATCHES_ALL),
+        )
+    }
+}
+
+// Some builds wrap reasoning in <think>...</think>. The tags arrive split across
+// tokens, so we hold anything that can still become one and drop the block whole.
+internal class ThinkStreamFilter {
+    private val held = StringBuilder()
+    private var inside = false
+
+    fun push(chunk: String): String {
+        val out = StringBuilder()
+        for (char in chunk) {
+            if (held.isEmpty() && char != '<') {
+                if (!inside) out.append(char)
+                continue
+            }
+            held.append(char)
+            val tag = if (inside) CLOSE else OPEN
+            if (tag.regionMatches(0, held.toString(), 0, held.length, ignoreCase = true)) {
+                if (held.length == tag.length) {
+                    inside = !inside
+                    held.clear()
+                }
+            } else {
+                val restart = char == '<'
+                if (!inside) {
+                    out.append(held, 0, held.length - 1)
+                    if (!restart) out.append(char)
+                }
+                held.clear()
+                if (restart) held.append(char)
+            }
+        }
+        return out.toString()
+    }
+
+    fun finish(): String {
+        val tail = if (inside) "" else held.toString()
+        held.clear()
+        return tail
+    }
+
+    private companion object {
+        const val OPEN = "<think>"
+        const val CLOSE = "</think>"
     }
 }
