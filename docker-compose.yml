@@ -48,6 +48,8 @@ services:
       OLLAMA_URL: "${OLLAMA_URL:-http://ollama:11434}"
       OLLAMA_MODELS_TO_PULL: "${OLLAMA_MODELS_TO_PULL:-hf.co/efficiencyx/Jun-LoRA-E2B-GGUF:Q4_K_M}"
       TITLE_MODEL: "${TITLE_MODEL-hf.co/efficiencyx/Titlewen-GGUF:F16}"
+      OLLAMA_MTP: "${OLLAMA_MTP:-}"
+      OLLAMA_MTP_MODEL: "${OLLAMA_MTP_MODEL:-jun-mtp}"
       OPENROUTER_API_KEY: "${OPENROUTER_API_KEY:-}"
       OPENROUTER_MODEL: "${OPENROUTER_MODEL:-}"
       LLAMACPP_URL: "${LLAMACPP_URL:-http://llamacpp:8080}"
@@ -84,6 +86,9 @@ services:
     environment:
       OLLAMA_MODELS_TO_PULL: "${OLLAMA_MODELS_TO_PULL:-hf.co/efficiencyx/Jun-LoRA-E2B-GGUF:Q4_K_M}"
       TITLE_MODEL: "${TITLE_MODEL-hf.co/efficiencyx/Titlewen-GGUF:F16}"
+      OLLAMA_MTP: "${OLLAMA_MTP:-}"
+      OLLAMA_MTP_N_MAX: "${OLLAMA_MTP_N_MAX:-4}"
+      OLLAMA_MTP_MODEL: "${OLLAMA_MTP_MODEL:-jun-mtp}"
 # Cap how many requests and models Ollama holds at once. each one keeps its own
 # KV cache, the memory of the prompt it already read, so they add up fast.
       OLLAMA_NUM_PARALLEL: "${OLLAMA_NUM_PARALLEL:-1}"

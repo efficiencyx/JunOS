@@ -71,10 +71,25 @@ if ($provider === 'openrouter') {
     $data = http_get_json(rtrim(env_str('OLLAMA_URL', 'http://localhost:11434'), '/') . '/api/tags');
     if (is_array($data['models'] ?? null)) {
         $titleModel = env_str('TITLE_MODEL', 'hf.co/efficiencyx/Titlewen-GGUF:F16');
+        // Neither of these is something you can chat with. The drafter can't
+        // hold a conversation at all - ask for it and ollama loads it on its
+        // own, llama.cpp says "Gemma4Assistant requires ctx_other to be set"
+        // and the server exits, which reaches you as an empty reply. jun-mtp
+        // can, but it's the model below it with a drafter bolted on, so
+        // offering both is offering the same Jun twice.
+        //
+        // /api/tags always writes the tag out, .env usually doesn't, so fill
+        // in :latest before comparing or `jun-mtp` never matches.
+        $withTag = fn(string $n): string => strpos($n, ':') === false ? "$n:latest" : $n;
+        $hidden = [];
+        foreach ([env_str('OLLAMA_MTP'), ollama_mtp_model()] as $name) {
+            if ($name !== '') $hidden[] = $withTag($name);
+        }
         $models = [];
         foreach ($data['models'] as $m) {
             if (!isset($m['name'])) continue;
             if ($m['name'] === $titleModel || stripos($m['name'], 'title') !== false) continue;
+            if (in_array($withTag($m['name']), $hidden, true)) continue;
             $models[] = $m['name'];
         }
     }
@@ -85,5 +100,5 @@ if (!is_array($models)) fail(502, 'upstream_unavailable');
 echo json_encode([
     'models' => $models,
     'provider' => $provider,
-    'default_model' => default_chat_model(),
+    'default_model' => display_chat_model(),
 ]);

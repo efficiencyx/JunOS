@@ -47,6 +47,13 @@ conditional requirement is `OPENROUTER_API_KEY`, needed only when
 | `OPENROUTER_MODEL` | `openrouter/auto` | `providers.php` (`default_chat_model()`) | Default chat model id sent to OpenRouter. |
 | `LLAMACPP_URL` | `http://llamacpp:8080` (Docker) / `http://127.0.0.1:8081` (PHP fallback) | `providers.php` (`chat_api_base()`) | Base URL of the llama.cpp `llama-server`. Point it at your own server to skip the managed `llamacpp` container. |
 | `LLAMACPP_MODEL_HF` | `efficiencyx/Jun-LoRA-E2B-GGUF:Q4_K_M` | `llamacpp` service (`LLAMA_ARG_HF_REPO`), `providers.php` (cosmetic default model id) | HF `repo:quant` the managed `llama-server` downloads and loads (`llama-server -hf` syntax, no `hf.co/` prefix). |
+| `OLLAMA_MTP` | *(empty)* | `docker/ollama-entrypoint.sh`, `providers.php` (`default_chat_model()`) | HF repo of the Gemma 4 MTP assistant model matching the Gemma 4 size Jun was fine-tuned from. Set it and the entrypoint pulls the drafter, then derives a model (`OLLAMA_MTP_MODEL`) whose Modelfile carries it as a `DRAFT` layer; `default_chat_model()` switches to that name. Empty leaves speculative decoding off, which is still the shipped default because the payoff is hardware-dependent. The installer offers it as an experimental option and, on `auto`, runs `./mtp-autotune.sh` to pick the depth by measurement. Measured on a 3060 with the 12B Q4_K_M and the matching QAT drafter, in-character prose with the real system prompt: 36.1 tok/s with no drafter, **45.3 at depth 1 (+25%)**, 42.0 at depth 2, 38.2 at depth 3, 35.4 at depth 4 — i.e. below baseline by depth 4. The earlier "nothing on prose" figure in this table was measured at depth 4 only. |
+| `OLLAMA_MTP_N_MAX` | `4` (installer writes `1`) | `docker/ollama-entrypoint.sh` (`PARAMETER draft_num_predict`) | Tokens the drafter proposes per pass. Baked into the derived model because Ollama zeroes `draft_num_predict` — silently disabling MTP — for any model that does not name it explicitly. Must be a number — the entrypoint falls back to `1` for anything else, so `auto` here is not a value, it is a question `./mtp-autotune.sh` answers. Depth costs: each extra token in the verify batch adds roughly 10ms on a 3060, near-linearly, which is why deeper is not better. |
+| `OLLAMA_MTP_MODEL` | `jun-mtp` | `docker/ollama-entrypoint.sh`, `providers.php` | Name of the derived MTP model. Both sides default to the same literal; change it in one place only and chat talks to a model that does not exist. |
+| `LLAMACPP_MTP` | *(empty)* | `start.sh` (layers `docker-compose.llamacpp-mtp.yml`), `start.ps1` (`--spec-type draft-mtp -hfd`) | HF repo of the Gemma 4 MTP assistant model for the same Gemma 4 size `LLAMACPP_MODEL_HF` was fine-tuned from (e.g. `amaranus/Gemma-4-E2B-it-qat-assistant-MTP-Q8_0-GGUF` for the default E2B build). Set it and llama.cpp drafts tokens ahead with the small model and verifies them against the real one in a single pass; empty leaves speculative decoding off entirely. Gemma 4 only, and the drafter needs its own VRAM. |
+| `LLAMACPP_MTP_N_MAX` | `4` (installer writes `1`) | `docker-compose.llamacpp-mtp.yml` (`LLAMA_ARG_SPEC_DRAFT_N_MAX`), `start.ps1` | How many tokens the drafter proposes per pass. Ignored unless `LLAMACPP_MTP` is set. Shallower usually wins: on a 3060 depth 1 beat depth 4 by 28%. `./mtp-autotune.sh` measures it, restarting `llama-server` once per depth because llama.cpp takes this as a startup flag. |
+| `MTP_TUNED_GPU` | *(empty)* | `mtp-autotune.sh`/`.ps1` (writes it), `start.sh`/`start.ps1` (compares it) | The GPU the current draft depth was measured on, written only by a tune that completed: vendor, then each card's name and VRAM, biggest first (`nvidia:NVIDIA GeForce RTX 3060:12288`). Not a hand-edited value. The start scripts recompute the same string at boot and re-run the tuner when it no longer matches, because a depth measured on a card that has left the machine describes nothing. Empty on AMD under Windows bare metal, where there is no `rocm-smi` to ask. |
+| `MTP_AUTOTUNE` | `on` | `start.sh`, `start.ps1` | `off` stops the start scripts re-measuring the draft depth after a GPU change; the stale depth in `.env` then stays as it is until you run the tuner yourself. Worth setting when boot time matters more than throughput: the llama.cpp sweep restarts `llama-server` once per depth. |
 | `LLAMACPP_TOOLS` | `on` | `providers.php` (`provider_tools_enabled()`) | Set `off` when the loaded chat template cannot do native tool calling. Chat stops offering tools, while memory consolidation falls back to model-produced JSON operation arrays executed by the same guarded tool loop. |
 
 ## 3. Audio sidecars
@@ -117,6 +124,67 @@ route stays mounted in both roles.
 | `VIDEO_GID` | the literal group name `video` (compose fallback) | `docker-compose.amd.yml` | GID the `tts`/`ollama`/`llamacpp` containers join so they can access `/dev/dri` render nodes. `start.sh` fills in the host's numeric gid on AMD detection. |
 | `RENDER_GID` | the literal group name `render` (compose fallback) | `docker-compose.amd.yml` | Same, for the `render` group; `start.sh` reads it off `/dev/dri/renderD128`. |
 | `HSA_OVERRIDE_GFX_VERSION` | unset | `docker-compose.amd.yml` (passed through to ROCm) | Consumer-card ROCm override, e.g. `11.0.0` for RDNA3, `10.3.0` for RDNA2. |
+
+## 7b. Multi-token prediction (experimental)
+
+A small drafter model guesses the next few tokens and Jun checks the whole batch
+in one pass; the guesses she agrees with came almost free. Nothing is said that
+she would not have said anyway — rejected guesses are discarded, so output is
+unchanged, only the timing moves.
+
+Both installers offer it (`JUN_MTP=on|off` non-interactively, off under Express)
+and then ask how many tokens to draft ahead: `auto`, or a fixed `1`–`4`
+(`JUN_MTP_DEPTH`). The drafter repo is chosen from the model you picked, keyed
+by Gemma 4 size **and** QAT branch — `Janvitos/gemma-4-12B-it-qat-assistant-MTP-Q8_0-GGUF`
+for the 12B, `amaranus/Gemma-4-E4B…` / `…E2B-it-qat-assistant-MTP-Q8_0-GGUF` for
+the small ones. A drafter off the wrong branch loads and drafts perfectly happily
+and simply guesses wrong far more often (2.10 accepted tokens per pass against
+2.74), with nothing in any log to say so.
+
+`auto` writes a provisional depth of `1` and then runs `./mtp-autotune.sh`
+(`mtp-autotune.ps1` on Windows) once the stack is up and the models are pulled,
+because every row of it is a real generation. The tuner measures no-drafter plus
+depths 1–4 on in-character prose **with the real `webapp/system_prompt.txt` in
+front**, then writes the winner into `.env` and, for Ollama, rebuilds
+`OLLAMA_MTP_MODEL` at that depth.
+
+Left empty, the drafter is derived from the chat model instead of being asked
+for: same repo with `-MTP` in the name, so `Jun-LoRA-12B-GGUF:Q4_K_M` drafts off
+`Jun-LoRA-12B-MTP-GGUF:Q4_K_M`. The tuner pulls it, and writes it into
+`OLLAMA_MTP` / `LLAMACPP_MTP` once it is there. A drafter that lives somewhere
+else still goes in `.env` by hand, an explicit value is never overwritten.
+
+Two details it depends on:
+
+* The system prompt is not decoration. Measured bare, depth 2 came out on top by
+  1%; with the prompt in place depth 1 won by 6% — same box, same drafter, same
+  afternoon. Tuning without it optimizes for a regime the app never runs in.
+* A deeper draft has to beat the incumbent by 2% to take the slot. Below that it
+  is noise, and the shallower depth holds up better once VRAM gets tight.
+
+If nothing beats plain decoding the tuner turns MTP back off and says so rather
+than shipping a slower default.
+
+**After a GPU change the start scripts re-run it for you.** A tune that finishes
+stamps `MTP_TUNED_GPU` with the card it measured on — vendor, then every GPU's
+name and VRAM, sorted biggest first so re-seating cards in different slots is not
+a change. `start.sh` and `start.ps1` recompute that string at boot, and when it
+differs from the stamp they wait for the model server and the drafter to be
+ready, then run the tuner before handing you the app. Only a completed tune
+writes the stamp, so a run that died measured nothing and claims nothing. A
+machine that never tuned has no stamp at all and is never nagged, and neither is
+one with MTP switched off — there is no depth to re-measure. Pointing
+`OLLAMA_URL` / `LLAMACPP_URL` at a model server of your own skips it as well:
+the tuner drives our container, and there is none of ours to wait for or
+restart. Set `MTP_AUTOTUNE=off` in `.env` to skip the check entirely; the
+llama.cpp sweep in particular restarts `llama-server` once per depth, so it is
+not a quick boot.
+
+VRAM: budget the model, the drafter, **and about 1.5GB for the browser drawing
+Live2D on the same card**. The installer warns when those three do not fit. That
+is not a reason to skip MTP — when layers spill to the CPU each target pass gets
+more expensive, so avoiding one is worth more: +31% measured at 80% GPU / 20% CPU
+against +21% with everything resident.
 
 ## 8. Multi-GPU
 

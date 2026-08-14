@@ -47,7 +47,10 @@ if ($ban !== null) {
 
 require_post();
 
-$body = json_decode(read_body(256 * 1024), true);
+// Big enough for a base64 wav plus the history. nginx caps /api/chat.php at
+// 4m and that is the limit that really bites, this one just has to sit above
+// it, see the audio field below.
+$body = json_decode(read_body(6 * 1024 * 1024), true);
 if (!is_array($body) || !isset($body['messages']) || !is_array($body['messages'])) {
     sse_fail('invalid_request');
 }
@@ -60,10 +63,28 @@ foreach ($body['messages'] as $m) {
     if (!is_string($content) || strlen($content) > 16 * 1024) sse_fail('invalid_request');
 }
 
+$audioB64 = '';
+if (isset($body['audio'])) {
+    if (!is_string($body['audio'])) sse_fail('invalid_request');
+    $wav = base64_decode($body['audio'], true);
+    if ($wav === false || strlen($wav) > 4 * 1024 * 1024 || substr($wav, 0, 4) !== 'RIFF') {
+        sse_fail('invalid_request');
+    }
+    $audioB64 = $body['audio'];
+    unset($wav);
+}
+
 $model = default_chat_model();
 if (isset($body['model']) && is_string($body['model']) && $body['model'] !== '') {
     if (!preg_match('/^[a-z0-9._:\\/\-]{1,64}$/i', $body['model'])) sse_fail('invalid_request');
     $model = $body['model'];
+}
+$model = ollama_resolve_chat_model($model);
+
+// llama.cpp runs without an mmproj here, OpenRouter and the Android build
+// can't take audio at all. the client hears this and goes back to stt.php.
+if ($audioB64 !== '' && ($PROVIDER !== 'ollama' || !ollama_model_supports_audio($model))) {
+    sse_fail('audio_unsupported');
 }
 
 $reasoning = 'low';
@@ -107,6 +128,23 @@ rate_limit('chat', 30, 60);
 // live context instead.
 $promptPath = __DIR__ . '/../system_prompt.txt';
 $systemPrompt = is_readable($promptPath) ? rtrim(file_get_contents($promptPath)) : '';
+
+// The `<!--tools-->` block tells her to reach for search_lore and
+// search_recent_chats. On a provider with no tools, or with LLAMACPP_TOOLS=off,
+// that is telling her to call something that isn't there, and she does it
+// anyway, about one turn in five comes back with a raw <|tool_call> blob in
+// the text where a reply should be. Nothing strips it, the HF pull carries no
+// parser, so Anon reads it.
+//
+// The markers come out either way. with tools ON what's left is byte for byte
+// the prompt that shipped, which is the point, the system message has to stay
+// identical between turns or Ollama throws away the KV cache and TTFT goes
+// through the floor.
+function prompt_apply_tool_gate(string $prompt, bool $toolsOffered): string {
+    if ($toolsOffered) return preg_replace('/^<!--\/?tools-->\R/m', '', $prompt);
+    $prompt = preg_replace('/^<!--tools-->\R.*?^<!--\/tools-->\R/ms', '', $prompt);
+    return preg_replace('/\R{3,}/', "\n\n", $prompt);
+}
 
 
 
@@ -546,7 +584,7 @@ function memory_recent_context(int $userId): string {
             $bullets = [];
             foreach ($data['notes'] as $note) {
                 $updated = max($updated, $note['updated']);
-                $text = preg_replace('/\[\[([^\]|#]+)(?:[|#][^\]]*)?\]\]/u', '$1', $note['text']);
+                $text = preg_replace('/\[\[([^\]|#]+)(?:[|#][^\]]*)?\]\]/u', '$1', memory_note_render($note));
                 $bullets[] = '- ' . memory_note_stamp($note) . trim(preg_replace('/\s+/', ' ', $text));
             }
             $sections[] = [
@@ -557,8 +595,9 @@ function memory_recent_context(int $userId): string {
         if (!$sections) return '';
         usort($sections, fn($a, $b) => $b['updated'] <=> $a['updated']);
         $prefix = "## Durable memory notes\n"
-            . "Where a note carries the day you wrote it, anything said in relative terms - "
-            . "\"tomorrow\", \"next week\" - is relative to that day, not to now.\n";
+            . "Words like \"tomorrow\" or \"next friday\" in a note mean the day you wrote it, not now. "
+            . "Where a note already spells the real day out in brackets, use that day and trust it - "
+            . "do not work the date out again yourself.\n";
         $render = function () use (&$sections, $prefix): string {
             return $prefix . implode("\n\n", array_column($sections, 'text'));
         };
@@ -864,6 +903,10 @@ for ($i = count($body['messages']) - 1; $i >= 0; $i--) {
         break;
     }
 }
+// A spoken turn has no text at all, so anything that reads the last message
+// gets nothing. keyword lore lookup goes away with it, she has search_lore
+// and can ask for what she needs.
+if ($audioB64 !== '') $lastUserMsg = '';
 $toolsOffered = provider_tools_enabled();
 
 $contextParts = [];
@@ -944,7 +987,7 @@ $liveContext = "# Live context for THIS reply (from the system, not spoken by An
 
 // She learns how to read the blocks and when to use a tool from training and
 // not from here, so the prompt stays thin. has to match tools/dataset_v5.
-$systemContent = $systemPrompt;
+$systemContent = prompt_apply_tool_gate($systemPrompt, $toolsOffered);
 $journalContext = journal_context((int)$user['id']);
 if ($journalContext !== '') $systemContent .= "\n\n" . $journalContext;
 
@@ -971,9 +1014,25 @@ if ($idle) {
 // a system role at the front, and a prefix that doesn't move keeps Ollama's KV
 // cache working. ONLY things that change go here, how to read them lives in the
 // cached system message.
+// What he SAID comes first and the context goes after it. that is the shape
+// she was trained on, tools/build_dataset_v6.py writes every row as
+// user_text + "\n\n# Live context ..." and splits his words back off on that
+// same marker. Put the block in front instead and his message turns into a
+// loose line hanging off the end of a system dump, she stops being able to
+// tell it apart and answers the wardrobe and the gauges instead of him.
 $lastIdx = count($messages) - 1;
 if ($lastIdx >= 0 && $messages[$lastIdx]['role'] === 'user') {
-    $messages[$lastIdx]['content'] .= "\n\n" . $liveContext;
+    if ($audioB64 !== '') {
+        // Ollama only reads media out of `images`, whatever is in it. send the
+        // wav under `audio` or `audios` and it drops the field without a word
+        // and she answers a turn with nothing in it.
+        $messages[$lastIdx]['content'] =
+            "## How Anon is talking\nHe is saying this out loud, the recording is attached. He is not typing."
+            . "\n\n" . $liveContext;
+        $messages[$lastIdx]['images'] = [$audioB64];
+    } else {
+        $messages[$lastIdx]['content'] .= "\n\n" . $liveContext;
+    }
 } else {
     $messages[] = ['role' => 'user', 'content' => $liveContext];
 }
@@ -1023,7 +1082,7 @@ $db = db();
 
 if (!$idle && !$ephemeral) {
     $db->prepare('INSERT INTO messages (conversation_id, role, content, created_at) VALUES (?, ?, ?, ?)')
-       ->execute([$convId, 'user', $lastUserMsg, $now]);
+       ->execute([$convId, 'user', $audioB64 !== '' ? '<audio>' : $lastUserMsg, $now]);
 }
 
 ollama_evict_if_partially_offloaded($model);
@@ -1034,6 +1093,7 @@ if ($toolsOffered) $upstreamPayload['tools'] = tool_catalog();
 
 $sawError = false;
 $assistantBuffer = '';
+$usedTools = false;
 $stats = null;
 $doneReason = '';
 $silenced = false;
@@ -1175,7 +1235,32 @@ for ($round = 0; $round < 3; $round++) {
         );
     }
     if ($silenced || $fledInfo !== null) break;
+    $usedTools = true;
     $upstreamPayload['messages'] = $messages;
+}
+
+// She sometimes calls a tool and then just stops, no answer at all, and the
+// user gets an error where a reply should be. Same hole at the other end,
+// if the third round is still tool calls we run them and never let her
+// speak. Both leave the buffer empty. one more round with the tools taken
+// away, so the only thing left to do is talk.
+if ($usedTools && !$sawError && !$silenced && $fledInfo === null && trim($assistantBuffer) === '') {
+    log_event(['msg' => 'tool_round_silent_retry', 'model' => $model]);
+    unset($upstreamPayload['tools']);
+    $upstreamPayload['messages'] = $messages;
+    $result = provider_stream_round($PROVIDER, $upstreamPayload, 'sse_send', 3);
+    $assistantBuffer .= $result['content'];
+    if ($result['done_reason'] !== '') $doneReason = $result['done_reason'];
+    if ($result['stream_error']) $sawError = true;
+    if ($result['stats'] !== null) {
+        $prev = $stats;
+        $stats = $result['stats'];
+        if ($prev !== null) {
+            $stats['eval_count'] += $prev['eval_count'];
+            $stats['eval_duration'] += $prev['eval_duration'];
+            $stats['total_duration'] += $prev['total_duration'];
+        }
+    }
 }
 
 // Same fine-tune quirk as memory_write below: she sometimes writes these as her own
@@ -1272,7 +1357,9 @@ if (!$sawError && $assistantBuffer !== '') {
         $titleRow->execute([$convId]);
         $conversationTitle = $titleRow->fetchColumn();
         $titleRow->closeCursor();
-        if (!$conversationTitle) {
+        // A spoken turn leaves $lastUserMsg empty, so there is nothing to name
+        // the chat after. leave it untitled and let the next typed turn do it.
+        if (!$conversationTitle && $lastUserMsg !== '') {
             $newTitle = generate_chat_title($lastUserMsg) ?: substr($lastUserMsg, 0, 60);
             db()->prepare('UPDATE conversations SET title=? WHERE id=?')
                 ->execute([$newTitle, $convId]);

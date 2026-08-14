@@ -50,6 +50,10 @@ android {
         targetCompatibility = JavaVersion.VERSION_17
     }
 
+    // The JVM tests touch classes that log through android.util.Log, and the stub jar
+    // throws on every method unless we ask for defaults back.
+    testOptions.unitTests.isReturnDefaultValues = true
+
     packaging {
         jniLibs.useLegacyPackaging = false
         resources.excludes += setOf("META-INF/DEPENDENCIES", "META-INF/LICENSE*", "META-INF/NOTICE*")

@@ -7,7 +7,7 @@
 # torch index in docker/karaoke.Dockerfile so its wheel build matches torch's.
 #
 # Pinned exactly for the same reason requirements.txt is, see the note there.
-# torch keeps a range because TORCH_INDEX points at cpu, cu124 or rocm and they
+# torch keeps a range because TORCH_INDEX points at cpu, cu128 or rocm and they
 # don't carry the same versions.
 demucs==4.1.0
 faster-whisper==1.2.1

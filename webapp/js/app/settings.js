@@ -1,12 +1,23 @@
-import { abortFn, currentConversationId, sendMessage } from '../app.js?v=72';
-import { cancelIdleNudge } from './consolidation.js?v=72';
-import { closeSettingsBtn, devNoIdleChk, drawerBackdrop, modelSelect, openSettingsBtn, reasoningSelect, sendBtn, siteVolumeInput, thinkChk, ttsChk, ttsSpeedInput, voiceChk, voiceSilenceInput } from './dom.js?v=72';
-import { logAction } from './logging.js?v=72';
-import { loadMood } from './mood.js?v=72';
-import { loadConversation, setSidebarOpen } from './sidebar.js?v=72';
+import { abortFn, currentConversationId, sendMessage } from '../app.js?v=76';
+import { cancelIdleNudge } from './consolidation.js?v=74';
+import { closeSettingsBtn, devNoIdleChk, drawerBackdrop, modelSelect, openSettingsBtn, reasoningSelect, sendBtn, siteVolumeInput, thinkChk, ttsChk, ttsSpeedInput, voiceChk, voiceSilenceInput } from './dom.js?v=74';
+import { logAction } from './logging.js?v=74';
+import { loadMood } from './mood.js?v=74';
+import { loadConversation, setSidebarOpen } from './sidebar.js?v=74';
 
 export function syncThinkToggle() {
   thinkChk.disabled = reasoningSelect.value === 'auto';
+}
+
+// On device LiteRT-LM takes neither of these, it always generates the same way.
+// Showing them cost a tester a whole round of "auto answers, hard doesn't" when
+// the setting had never done anything.
+export function applyProviderCapabilities(provider) {
+  if (provider !== 'litertlm-android') return;
+  for (const id of ['reasoningRow', 'thinkRow']) {
+    const row = document.getElementById(id);
+    if (row) row.style.display = 'none';
+  }
 }
 reasoningSelect.addEventListener('change', syncThinkToggle);
 syncThinkToggle();

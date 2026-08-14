@@ -47,6 +47,31 @@ amd_visible() {
     | sort -t, -k1 -nr | cut -d, -f2 | paste -sd, - || true
 }
 
+# The card the MTP tune was measured on, as one string: the vendor,
+# then every GPU's name and how much VRAM it has. Sorted biggest
+# card first, so moving cards between slots is not a change, only
+# a real swap is.
+#
+# The AMD half takes VRAM and nothing else. rocm-smi moves its
+# product-name columns around between versions and a name read out
+# of the wrong column would make every boot look like a new card.
+# missing a swap between two cards of the same size is the cheaper
+# mistake. Prints NOTHING when neither tool is here, an empty
+# string is how the callers know we could not tell.
+gpu_signature() {
+  if command -v nvidia-smi >/dev/null 2>&1; then
+    nvidia-smi --query-gpu=name,memory.total --format=csv,noheader,nounits 2>/dev/null \
+      | sed -e 's/\r//' -e 's/[[:space:]]*,[[:space:]]*/:/' \
+      | sort -t: -k2 -nr \
+      | awk 'NF { s = s (s ? "," : "") $0 } END { if (s) print "nvidia:" s }'
+  elif command -v rocm-smi >/dev/null 2>&1; then
+    rocm-smi --showmeminfo vram --csv 2>/dev/null \
+      | awk -F, 'NR>1 { gsub(/[^0-9]/,"",$2); if ($2 != "") print int($2/1048576) }' \
+      | sort -nr \
+      | awk 'NF { s = s (s ? "," : "") $0 } END { if (s) print "amd:" s }'
+  fi
+}
+
 
 # The model servers sit behind compose profiles, `ollama` runs the Ollama one
 # and `llamacpp` the llama.cpp one. we MERGE with whatever is already set in the
@@ -81,6 +106,12 @@ case "$provider" in
       fi
       llamacpp_alias="$(env_get LLAMACPP_MODEL_ALIAS)"
       [ -z "$llamacpp_alias" ] || export LLAMACPP_MODEL_ALIAS="$llamacpp_alias"
+    fi
+    llamacpp_mtp="$(env_get LLAMACPP_MTP)"
+    if [ -n "$llamacpp_mtp" ]; then
+      export LLAMACPP_MTP="$llamacpp_mtp"
+      llamacpp_mtp_n_max="$(env_get LLAMACPP_MTP_N_MAX)"
+      [ -z "$llamacpp_mtp_n_max" ] || export LLAMACPP_MTP_N_MAX="$llamacpp_mtp_n_max"
     fi
     ;;
   openrouter) : ;;
@@ -149,6 +180,7 @@ export SEP_DEVICE="$sep_device"
 gpu="$(detect_gpu)"
 files=(-f docker-compose.yml)
 [ -z "${LLAMACPP_MODEL_FILE:-}" ] || files+=(-f docker-compose.llamacpp-local.yml)
+[ -z "${LLAMACPP_MTP:-}" ] || files+=(-f docker-compose.llamacpp-mtp.yml)
 
 case "$gpu" in
   nvidia)
@@ -240,6 +272,94 @@ wait_for_ollama() {
   echo "warning: omega-ollama did not report healthy; starting karaoke anyway" >&2
 }
 
+# The draft depth in .env is a measurement, and it only describes
+# the card it was measured on. Swap the GPU and the number in
+# there is about hardware that left the building, so hold the
+# stamp the tuner wrote against what is in the box now and measure
+# again when the two don't match.
+mtp_recheck() {
+  local want tuned sig drafter server ready i
+  # On the llamacpp side the tuner restarts the stack through
+  # ./start.sh, and that is us. without this we start a tune inside
+  # a tune, forever.
+  [ -z "${MTP_AUTOTUNE_RUNNING:-}" ] || return 0
+
+  want="${MTP_AUTOTUNE:-$(env_get MTP_AUTOTUNE)}"
+  case "$(printf '%s' "$want" | tr '[:upper:]' '[:lower:]')" in
+    off|0|false|no) return 0 ;;
+  esac
+
+  # No stamp means no tune ever finished on this box, so there is
+  # nothing to compare and nothing to nag about.
+  tuned="$(env_get MTP_TUNED_GPU)"
+  [ -n "$tuned" ] || return 0
+  sig="$(gpu_signature)"
+  [ -n "$sig" ] || return 0
+  [ "$sig" != "$tuned" ] || return 0
+
+  case "$provider" in
+    llamacpp)  drafter="$(env_get LLAMACPP_MTP)"; server=llamacpp ;;
+    ollama|'') drafter="$(env_get OLLAMA_MTP)"; server=ollama ;;
+    *) return 0 ;;
+  esac
+  # MTP is off, so there is no depth to measure. the tuner would
+  # only die on it and we would come back here every single boot.
+  [ -n "$drafter" ] || return 0
+  # Point us at your own model server and none of this is ours to
+  # tune, there is no omega- container to wait on and the tuner
+  # wants one anyway. Both waits below would just run out their
+  # clocks, every boot, and tell you nothing.
+  case ",${profiles}," in *,"$server",*) ;; *) return 0 ;; esac
+
+  echo ""
+  echo "the GPU changed since MTP was tuned:"
+  echo "  tuned on: $tuned"
+  echo "  here now: $sig"
+  echo "the draft depth in .env was measured on a card that is not in this box any"
+  echo "more, so we are measuring it again. a few minutes on ollama, considerably"
+  echo "longer on llamacpp where every depth needs a llama-server restart."
+  echo "set MTP_AUTOTUNE=off in .env to skip this."
+
+  # ollama's healthcheck is /api/tags, and that answers the moment
+  # the server is up, long before ollama-entrypoint.sh has finished
+  # pulling the chat model and the drafter. The tuner needs the
+  # drafter blob on disk or it dies with "could not find the
+  # drafter blob", so wait untill ollama admits it has one.
+  ready=
+  case "$provider" in
+    llamacpp)
+      for i in $(seq 1 60); do
+        if [ "$(docker inspect -f '{{.State.Health.Status}}' omega-llamacpp 2>/dev/null || true)" = healthy ]; then
+          ready=1; break
+        fi
+        sleep 5
+      done
+      ;;
+    *)
+      wait_for_ollama
+      for i in $(seq 1 60); do
+        if docker exec omega-ollama ollama show --modelfile "$drafter" >/dev/null 2>&1; then
+          ready=1; break
+        fi
+        sleep 5
+      done
+      ;;
+  esac
+
+  # Leave the stamp stale on purpose. it is the only thing that
+  # makes the next boot try again, and a pull that is still running
+  # now is probably done by then.
+  if [ -z "$ready" ]; then
+    echo "warning: the drafter is not here yet, so the re-tune is skipped." >&2
+    echo "         run ./mtp-autotune.sh by hand once it has finished pulling." >&2
+    return 0
+  fi
+
+  if ! MTP_AUTOTUNE_RUNNING=1 ./mtp-autotune.sh; then
+    echo "warning: autotune did not finish, run ./mtp-autotune.sh by hand" >&2
+  fi
+}
+
 staged_up() {
   case ",${profiles}," in
     *,karaoke,*) ;;
@@ -257,7 +377,9 @@ staged_up() {
 case "${1:-up}" in
   stop|down)  shift; set -x; exec docker compose "${files[@]}" down "$@" ;;
   restart)    shift; docker compose "${files[@]}" down
-              set -x; exec docker compose "${files[@]}" up -d --build "$@" ;;
+              set -x; docker compose "${files[@]}" up -d --build "$@"
+              { set +x; } 2>/dev/null
+              mtp_recheck ;;
   status|ps)  shift; set -x; exec docker compose "${files[@]}" ps "$@" ;;
   logs)       shift; set -x; exec docker compose "${files[@]}" logs -f "$@" ;;
   *)          if staged_up "$@"; then
@@ -267,5 +389,11 @@ case "${1:-up}" in
                 wait_for_ollama
                 set -x
               fi
-              set -x; exec docker compose "${files[@]}" up -d --build "$@" ;;
+              # No exec here. it replaces the shell, so nothing after
+              # the compose call gets to run, mtp_recheck included.
+              # set -e still takes a compose failure out on the spot,
+              # with compose's own exit code.
+              set -x; docker compose "${files[@]}" up -d --build "$@"
+              { set +x; } 2>/dev/null
+              mtp_recheck ;;
 esac
