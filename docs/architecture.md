@@ -292,6 +292,23 @@ Endpoint-specific caps:
 - `tts.php`: body ≤ 8 KB, text ≤ 2000 chars, rate limit 60/min
 - `models.php`: rate limit 30/min, `Cache-Control: public, max-age=10`
 
+### Accounts and roles
+
+`users.role` has existed since `001_init.sql` but nothing read it until now. `require_admin()` in `_lib.php` sits next to `require_user()`: same session lookup, plus a 403 `forbidden` when the row's role is not `admin`. What it gates:
+
+- `stats.php` - the whole endpoint (model list, VRAM, host readings).
+- `relationship.php` `PUT` - the absolute-value override. `GET` stays open to the session owner; see [Relationship state](#relationship-state).
+- `memory.php` `DELETE` - both the single-note and `{"all":true}` forms.
+- `chat.php`'s debug SSE frame - it carries the fully assembled system prompt and live context, so it is only emitted to an admin session. The dev HUD is its only consumer.
+- `consolidate.php?action=welcome` preview parameters (`preview`, `away`, `tier`, `hour`); the plain welcome read stays open to everyone.
+- `api/review.php`, the local dataset triage UI (untracked, dev boxes only).
+
+Promotion is a POST to `auth.php?action=promote` with `{"key": …}`, compared against `OMEGA_ADMIN_KEY` with `hash_equals` and rate-limited to 5 attempts an hour; success and failure both log an event. An empty key disables promotion entirely. `auth.php`'s `me`, `signup` and `login` responses all carry `role`, and the frontend uses it only to decide what to draw - `applyRoleGates()` in `js/app/settings.js` hides the Developer tab, the delete-all-memories button and the DEV badge, and `app.js` leaves `js/devhud.js` out of the lazy script list entirely for a non-admin, which is what stops `Ctrl+Shift+D` from doing anything. None of that is a security boundary: every gate above is enforced server-side, and the role must never be sourced from preferences or local storage.
+
+Signup takes a `registration_key` matched against `OMEGA_REGISTRATION_KEY`, unless the `users` table is empty (the first account is always let in) or the variable is empty/absent (public signup). `auth.php?action=signup_info` is the one unauthenticated read: it returns `{registration_key_required}` so the signup form can show the field only where the server wants one.
+
+`auth.php?action=factory_reset` (POST, 3/hour) is the user's own wipe, and needs no role: inside one transaction it deletes the caller's rows from `messages` (via their conversations), `conversations`, `preferences`, `relationship`, `memory_consolidation`, `user_bans`, `wardrobe_presets` and `welcome_queue`, plus every session but the current one; then `memory_wipe_user()` in `_lib.php` removes the per-user memory directory, the legacy flat files and their `.migrated` copies. The `users` row, its role and the live session survive, so the account comes back empty rather than gone. A failure on either half returns `factory_reset_incomplete`.
+
 ### Sidecar/Ollama isolation
 
 Neither service publishes a port to the host. The audio sidecar additionally enforces `CORS_ORIGIN` via FastAPI `CORSMiddleware`; the browser never talks to the sidecar directly; all requests go through `webapp/api/tts.php` / `stt.php`.
@@ -423,6 +440,22 @@ Helpers live in `webapp/api/_lib.php` (`relationship_get` / `relationship_set` /
 
 1. **Inject.** On each `/api/chat.php` request, `relationship_directives()` turns the three scores into plain-language behavior guidance (e.g. affection toward 0 → cold, irritated, withhold warmth, skip affectionate actions; ~50 → normal warm-girlfriend; toward 100 → deeply smitten, initiates closeness). This is appended to the **trailing live-context message**, not the static system prefix, so the KV prompt cache still holds across turns. The prompt tells her to interpolate her own warmth/trust/fear from the numbers, never to recite them, and never to reveal her feelings are scored.
 2. **Update.** Jun's reply carries a hidden relationship bookkeeping tag with per-score *deltas*. After the stream completes, `chat.php` parses it, `relationship_apply` adds the deltas onto the current row and clamps to 0–100, and the tag is stripped so it never reaches the browser (nor TTS).
-3. **Dev override.** `webapp/api/relationship.php` exposes `GET` (current scores) and `PUT` (set absolute values, clamped): the developer "mood switcher" wired to the debug HUD (`webapp/js/devhud.js`), so a state can be forced without playing through the conversation.
+3. **Dev override.** `webapp/api/relationship.php` exposes `GET` (current scores) and `PUT` (set absolute values, clamped), so a state can be forced without playing through the conversation.
 
-Because the state is the user's own, `relationship.php` needs only a valid session (rate-limited 60/min), no extra role gate.
+`GET` needs only a valid session (rate-limited 60/min) - the state is the user's own. `PUT` is admin-only and has no UI left: the mood switcher's sliders are gone. What the Settings → Memory panel shows now is three read-only meters (value, phrase and fill, no input), loaded by `loadMood()` when that panel opens, because the gauges are hers to move. Forcing a value is an admin doing it by hand against the endpoint.
+
+---
+
+## Android app
+
+`android/` is a second implementation of the same app, not a client for this one: a Ktor server inside the phone (`server/LocalServer.kt`) answers the same `/api/*` shapes the webapp already speaks, `inference/ChatEngine.kt` replaces `chat.php`, and inference runs on-device through LiteRT-LM. The browser assets are the same `webapp/` files, so anything the frontend expects from an endpoint has to exist on both sides.
+
+Three parity decisions are worth carrying, because each of them looks like a bug from the other side:
+
+- **The tool markers.** `system_prompt.txt` wraps its tool paragraph in `<!--tools-->` / `<!--/tools-->`, and php strips either the markers or the whole block per request depending on whether the provider offers tools. Android always offers them, so `ChatEngine` only ever removes the marker lines.
+- **Audio turns are refused.** `ChatRequest` carries `audio`, and `validate()` fails it with `audio_unsupported` before anything is written down. LiteRT has no audio input here, and the webapp reads that refusal as "record it again through whisper" rather than answering an empty turn.
+- **Memory dates.** `memory/MemoryDates.kt` is `memory_note_render()` / `memory_note_stamp()` from `_lib.php` ported to Kotlin, used by `MemoryStore.recentContext()` under the same `## Durable memory notes` header, word for word. The two prompts have to say the same thing, so they change together.
+
+**The context ordering is deliberately the opposite of the webapp's, and must not be "fixed".** php puts Anon's question first and the live-context block after it, because `tools/build_dataset_v6.py` trains every row that way. `ChatEngine` puts the block *before* the question: the phone runs a 2B int4 model that answers whatever it read most recently, and with the context glued after the question it kept replying to the memories instead of to Anon. Both orders are load-bearing where they are.
+
+`LocalServer`'s `me` reports `role: admin`. There is one account and whoever holds the phone owns the install, so the Developer tab, the HUD and the memory tools stay unlocked - the role gates in [Accounts and roles](#accounts-and-roles) exist to separate accounts on a shared server, and there are none here.
