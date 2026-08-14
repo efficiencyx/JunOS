@@ -236,8 +236,8 @@ gen_key() {
     fi
 }
 
-# Only when the line is missing altogether. an empty OMEGA_ADMIN_KEY= is the
-# operator saying "off", and every upgrade run comes back through here, so
+# Only when the line is missing altogether. an empty OMEGA_REGISTRATION_KEY= is
+# the operator saying "off", and every upgrade run comes back through here, so
 # filling that in would silently turn the gate back on behind their back.
 ensure_key() {
     grep -qE "^$1=" .env 2>/dev/null && return 0
@@ -622,9 +622,11 @@ configure() {
         ok "tensor parallelism on"
     fi
 
+    # Only the registration key is generated. OMEGA_ADMIN_KEY stays whatever
+    # the operator typed in by hand, a box nobody deliberately unlocked has no
+    # way into the developer tools at all. The README says how to set one.
     ensure_key OMEGA_REGISTRATION_KEY
-    ensure_key OMEGA_ADMIN_KEY
-    ok "access keys ready"
+    ok "registration key ready"
 }
 
 pkg_manager() {
@@ -1187,7 +1189,8 @@ if docker_run docker info >/dev/null 2>&1; then
         ok "admin         $admin_key"
         note "type this one in the app to unlock the developer tools."
     else
-        note "admin key is empty, the developer tools stay locked for everyone."
+        note "no admin key, the developer tools stay locked for everyone. set"
+        note "OMEGA_ADMIN_KEY in .env yourself to get in - see the README."
     fi
 
     printf '\n   %s$%s %s%sready%s %s-%s open %shttp://localhost%s\n' \
