@@ -202,8 +202,8 @@ function New-AccessKey {
     return (($bytes | ForEach-Object { $_.ToString('x2') }) -join '')
 }
 
-# Only when the line is missing altogether. an empty OMEGA_ADMIN_KEY= is the
-# operator saying "off", and every upgrade run comes back through here, so
+# Only when the line is missing altogether. an empty OMEGA_REGISTRATION_KEY= is
+# the operator saying "off", and every upgrade run comes back through here, so
 # filling that in would silently turn the gate back on behind their back.
 function Add-EnvKeyIfMissing([string]$key) {
     if ((Test-Path .env) -and (Get-Content .env | Where-Object { $_ -match "^$key=" })) { return }
@@ -546,9 +546,11 @@ function Configure-Jun {
     }
     Ok "karaoke $karaoke"
 
+    # Only the registration key is generated. OMEGA_ADMIN_KEY stays whatever
+    # the operator typed in by hand, a box nobody deliberately unlocked has no
+    # way into the developer tools at all. The README says how to set one.
     Add-EnvKeyIfMissing 'OMEGA_REGISTRATION_KEY'
-    Add-EnvKeyIfMissing 'OMEGA_ADMIN_KEY'
-    Ok 'access keys ready'
+    Ok 'registration key ready'
 
     return @{ provider = $provider; voice = $voice; karaoke = $karaoke
               needsOllama = $needsOllama; needsLlamacpp = $needsLlamacpp }
@@ -992,7 +994,8 @@ if ($adminKey) {
     Ok "admin         $adminKey"
     Note 'type this one in the app to unlock the developer tools.'
 } else {
-    Note 'admin key is empty, the developer tools stay locked for everyone.'
+    Note 'no admin key, the developer tools stay locked for everyone. set'
+    Note 'OMEGA_ADMIN_KEY in .env yourself to get in - see the README.'
 }
 
 Write-Host ''

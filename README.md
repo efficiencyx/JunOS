@@ -203,6 +203,24 @@ Everything is environment variables in `.env` - the full reference is [`docs/con
 | `STT_MODEL` / `STT_LANG` | Whisper size and language; blank lang = per-utterance auto-detect | `base` · *(auto)* |
 | `OMEGA_NUM_CTX` | Context window. Auto-sized from leftover VRAM (falling back to RAM) - pin it if she's crowding your card | *(auto)* |
 | `OMEGA_STATE_DIR` / `MEMORY_DIR` | Where the database, rate-limit state and memory notes live | `/var/lib/omega` |
+| `OMEGA_REGISTRATION_KEY` | Sign-ups need this key. The installer generates one for you; empty it to let anyone in | *(generated)* |
+| `OMEGA_ADMIN_KEY` | Unlocks the developer tools. **You** set this one, nothing generates it | *(unset)* |
+
+### Who gets in 🔑
+
+Two different locks, and they behave differently on purpose.
+
+**The registration key** is written into `.env` by the installer and printed when it finishes. Anyone signing up has to type it, which is what stops the open internet from making accounts on your box. The very first account never needs it - otherwise a fresh install would lock out its own owner before they ever logged in. Don't want the lock? Empty the value (`OMEGA_REGISTRATION_KEY=`) and sign-ups are open to whoever can reach the page.
+
+**The admin key is yours to invent.** Nothing generates it and there's no default, so out of the box *nobody* - not even you - can reach the developer tools. Put a line in `.env` when you want them:
+
+```sh
+OMEGA_ADMIN_KEY=whatever-long-thing-you-like
+```
+
+then restart php so it picks the value up (`docker compose up -d php`). To use it: **Settings → Account → click "About" seven times**, and a Developer access row appears asking for the key. That gets you the Developer tab, the metrics HUD (`Ctrl+Shift+D`), her raw system prompt on the chat stream, the mood override and the memory-delete button. Five wrong guesses an hour and you're rate-limited.
+
+It's tucked behind seven clicks because the tools are a footgun for someone who just wants to talk to her, not because it's a secret. Normal accounts get **Factory Reset** in the same panel instead - one button that erases every conversation, memory and setting and hands the account back the way it came.
 
 ## Under the hood
 
