@@ -28,6 +28,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'GET' && $action === 'status') {
 // Has to be read BEFORE the client reports activity for this session, or the
 // absence it is measuring is already written over with "just now".
 if ($_SERVER['REQUEST_METHOD'] === 'GET' && $action === 'welcome') {
+    if (($user['role'] ?? '') !== 'admin') {
+        foreach (['preview', 'away', 'tier', 'hour'] as $param) {
+            if (isset($_GET[$param])) fail(403, 'forbidden');
+        }
+    }
     $preview = isset($_GET['preview']) ? [
         'away' => max(0, (int)($_GET['away'] ?? 0)),
         'tier' => trim((string)($_GET['tier'] ?? '')),

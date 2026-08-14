@@ -495,6 +495,7 @@ html[data-pre-auth] #app { visibility: hidden; }
 .auth-form { display: flex; flex-direction: column; gap: 14px; }
 .auth-form[hidden] { display: none; }
 .auth-field { display: flex; flex-direction: column; gap: 6px; }
+.auth-field[hidden] { display: none; }
 .auth-flabel { font-size: 12px; color: var(--term-dim); }
 .auth-flabel small { opacity: .7; }
 .auth-ps::before { content: "$"; color: var(--term-prompt); font-weight: 700; margin-right: 3px; }
@@ -611,7 +612,7 @@ html[data-pre-auth] #app { visibility: hidden; }
 <script src="js/boot-gate.js?v=7"></script>
 
 <script defer src="js/loader.js?v=2"></script>
-<script defer src="js/auth.js?v=7"></script>
+<script defer src="js/auth.js?v=8"></script>
 <script defer src="js/prefs.js?v=5"></script>
 <script defer src="js/names.js?v=2"></script>
 <script defer src="js/chat-api.js?v=5"></script>
@@ -619,7 +620,7 @@ html[data-pre-auth] #app { visibility: hidden; }
 <script defer src="js/history.js?v=7"></script>
 <script defer src="js/boot-fx.js?v=5"></script>
 <script defer src="js/memory-graph.js?v=2"></script>
-<script type="module" src="js/app.js?v=76"></script>
+<script type="module" src="js/app.js?v=77"></script>
 </head>
 <body>
 
@@ -687,6 +688,10 @@ html[data-pre-auth] #app { visibility: hidden; }
         <label class="auth-field">
           <span class="auth-flabel"><span class="auth-ps" aria-hidden="true"></span> password <small>(min 8 chars)</small></span>
           <input type="password" id="signupPassword" autocomplete="new-password" required minlength="8">
+        </label>
+        <label class="auth-field" id="signupRegKeyField" hidden>
+          <span class="auth-flabel"><span class="auth-ps" aria-hidden="true"></span> registration key</span>
+          <input type="password" id="signupRegKey" autocomplete="off">
         </label>
         <label class="auth-check">
           <input type="checkbox" id="signupAdult" required>
@@ -960,6 +965,38 @@ html[data-pre-auth] #app { visibility: hidden; }
           </div>
           <button class="secondary danger" id="memoryClearBtn" title="Delete every saved memory">Delete all memories</button>
         </div>
+        <div class="set-block">
+          <div class="set-block-head">
+            <div class="set-row-title">Relationship</div>
+          </div>
+          <div class="set-row-desc">Where Jun stands with you right now. She moves these herself, one reply at a time.</div>
+          <div class="mood-controls">
+            <div class="mood-row mood-row--affection">
+              <span class="mood-label">Affection</span>
+              <div class="mood-track">
+                <div class="mood-meter" aria-hidden="true"></div>
+                <div class="mood-clip"><span class="mood-phrase" id="moodAffectionPhrase" aria-hidden="true"></span></div>
+              </div>
+              <span class="mood-val" id="moodAffectionVal">50</span>
+            </div>
+            <div class="mood-row mood-row--trust">
+              <span class="mood-label">Trust</span>
+              <div class="mood-track">
+                <div class="mood-meter" aria-hidden="true"></div>
+                <div class="mood-clip"><span class="mood-phrase" id="moodTrustPhrase" aria-hidden="true"></span></div>
+              </div>
+              <span class="mood-val" id="moodTrustVal">50</span>
+            </div>
+            <div class="mood-row mood-row--tension">
+              <span class="mood-label">Tension</span>
+              <div class="mood-track">
+                <div class="mood-meter" aria-hidden="true"></div>
+                <div class="mood-clip"><span class="mood-phrase" id="moodTensionPhrase" aria-hidden="true"></span></div>
+              </div>
+              <span class="mood-val" id="moodTensionVal">30</span>
+            </div>
+          </div>
+        </div>
       </section>
 
       <section class="settings-panel" data-panel="developer" hidden>
@@ -976,39 +1013,6 @@ html[data-pre-auth] #app { visibility: hidden; }
             <div class="set-row-desc">Stops Jun from speaking up on her own after a lull. She only replies when you write to her.</div>
           </div>
           <label class="set-row-control"><input type="checkbox" id="devNoIdleChk" class="toggle" aria-label="Silence idle nudges"></label>
-        </div>
-        <div class="set-block">
-          <div class="set-block-head">
-            <div class="set-row-title">Relationship (mood switcher)</div>
-            <button class="ghost" id="moodRefreshBtn" title="Reload current values">refresh</button>
-          </div>
-          <div class="set-row-desc">Live affection / trust / tension. Drag to override temporarily; Jun reacts on her next reply.</div>
-          <div class="mood-controls">
-            <label class="mood-row mood-row--affection">
-              <span class="mood-label">Affection</span>
-              <div class="mood-track">
-                <div class="mood-clip"><span class="mood-phrase" id="moodAffectionPhrase" aria-hidden="true"></span></div>
-                <input type="range" id="moodAffection" min="0" max="100" step="1" value="50">
-              </div>
-              <span class="mood-val" id="moodAffectionVal">50</span>
-            </label>
-            <label class="mood-row mood-row--trust">
-              <span class="mood-label">Trust</span>
-              <div class="mood-track">
-                <div class="mood-clip"><span class="mood-phrase" id="moodTrustPhrase" aria-hidden="true"></span></div>
-                <input type="range" id="moodTrust" min="0" max="100" step="1" value="50">
-              </div>
-              <span class="mood-val" id="moodTrustVal">50</span>
-            </label>
-            <label class="mood-row mood-row--tension">
-              <span class="mood-label">Tension</span>
-              <div class="mood-track">
-                <div class="mood-clip"><span class="mood-phrase" id="moodTensionPhrase" aria-hidden="true"></span></div>
-                <input type="range" id="moodTension" min="0" max="100" step="1" value="30">
-              </div>
-              <span class="mood-val" id="moodTensionVal">30</span>
-            </label>
-          </div>
         </div>
         <div class="set-block">
           <div class="set-block-head">
@@ -1056,6 +1060,29 @@ html[data-pre-auth] #app { visibility: hidden; }
       </section>
 
       <section class="settings-panel" data-panel="account" hidden>
+        <div class="set-row" id="aboutRow">
+          <div class="set-row-text">
+            <div class="set-row-title">About</div>
+            <div class="set-row-desc">Jun OS - a fan-made local companion. Runs entirely on this machine.</div>
+          </div>
+        </div>
+        <div class="set-row" id="devAccessRow" hidden>
+          <div class="set-row-text">
+            <div class="set-row-title">Developer access</div>
+            <div class="set-row-desc" id="devAccessDesc">Enter this server's admin key to unlock developer tools.</div>
+          </div>
+          <div class="set-row-control">
+            <input type="password" id="adminKeyInput" autocomplete="off" aria-label="Admin key">
+            <button class="secondary" id="promoteBtn">Unlock</button>
+          </div>
+        </div>
+        <div class="set-row">
+          <div class="set-row-text">
+            <div class="set-row-title">Factory Reset</div>
+            <div class="set-row-desc">Erase every conversation, memory, and setting. The account survives, nothing else does.</div>
+          </div>
+          <div class="set-row-control"><button class="secondary danger" id="factoryResetBtn" title="Erase everything on this account">Reset</button></div>
+        </div>
         <div class="set-row">
           <div class="set-row-text">
             <div class="set-row-title">Sign out</div>
@@ -1080,6 +1107,7 @@ html[data-pre-auth] #app { visibility: hidden; }
     </div>
     <div class="header-right">
       <a class="ai-badge" href="privacy.html#ai-system" target="_blank" rel="noopener" title="Jun is an AI system - her replies and voice are generated">AI<span class="sr-only">: you are interacting with an AI system, not a person</span></a>
+      <span class="dev-badge" id="devBadge" hidden title="Developer account">DEV</span>
       <span id="statusPill" class="status-pill status-idle">idle</span>
       <button class="ghost" id="resetLive2DBtn" title="Reset to idle pose" aria-label="Reset pose">reset pose</button>
       <button class="ghost icon-btn" id="openSettingsBtn" title="Open settings" aria-label="Open settings">

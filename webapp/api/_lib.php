@@ -806,6 +806,36 @@ function memory_note_move(int $userId, string $id, string $category): array {
     );
 }
 
+// Migrate first, then delete. an un-migrated account still has its notes in the
+// old flat files, and wiping only the directory would leave those to be picked
+// up and restored the next time anything reads her memory.
+function memory_wipe_user(int $userId): array {
+    return memory_with_user_lock($userId, function () use ($userId): array {
+        memory_migrate_legacy($userId);
+        $dir = memory_dir() . '/user-' . $userId;
+        if (is_dir($dir)) {
+            foreach (new DirectoryIterator($dir) as $item) {
+                if ($item->isDot()) continue;
+                if ((!$item->isFile() && !$item->isLink()) || !@unlink($item->getPathname())) {
+                    return ['error' => 'memory_delete_failed'];
+                }
+            }
+            if (!@rmdir($dir)) return ['error' => 'memory_delete_failed'];
+        }
+        $legacy = [
+            memory_file_path($userId),
+            memory_dir() . '/user-' . $userId . '.journal.md',
+        ];
+        foreach ($legacy as $path) {
+            if (is_file($path) && !@unlink($path)) return ['error' => 'memory_delete_failed'];
+            if (is_file($path . '.migrated') && !@unlink($path . '.migrated')) {
+                return ['error' => 'memory_delete_failed'];
+            }
+        }
+        return ['ok' => true];
+    });
+}
+
 function memory_list(int $userId): array {
     $out = [];
     foreach (memory_notes_load($userId) as $category => $data) {
@@ -931,6 +961,12 @@ function welcome_queue_read(int $userId, bool $drain = true): array {
 function require_user(): array {
     $user = current_user();
     if ($user === null) fail(401, 'unauthorized');
+    return $user;
+}
+
+function require_admin(): array {
+    $user = require_user();
+    if (($user['role'] ?? '') !== 'admin') fail(403, 'forbidden');
     return $user;
 }
 

@@ -13,23 +13,24 @@
 // the version number it was written against. change anything in the graph,
 // renumber the Whole graph.
 
-import { showAuthScreen } from './app/auth-screen.js?v=74';
-import { IDLE_AFTER_REPLY_MS, TYPING_POLL_MS, armIdleAfterReply, cancelActiveIdleNudge, cancelAutoReset, cancelIdleNudge, composerPlaceholder, consolidating, fleeActive, reportActivity, resetIdleNudge, scheduleAutoReset, scheduleIdleNudge, setCancelActiveIdleNudge, setConsolidating, showConsolidatingBubble, startFleeLock, syncConsolidationStatus } from './app/consolidation.js?v=74';
+import { showAuthScreen } from './app/auth-screen.js?v=75';
+import { IDLE_AFTER_REPLY_MS, TYPING_POLL_MS, armIdleAfterReply, cancelActiveIdleNudge, cancelAutoReset, cancelIdleNudge, composerPlaceholder, consolidating, fleeActive, reportActivity, resetIdleNudge, scheduleAutoReset, scheduleIdleNudge, setCancelActiveIdleNudge, setConsolidating, showConsolidatingBubble, startFleeLock, syncConsolidationStatus } from './app/consolidation.js?v=75';
 import { chatInput, debugSystemPromptEl, devNoIdleChk, messagesEl, messagesEmpty, missingParamsEl, mobileConversationTitle, modelSelect, narrowSidebarQuery, reasoningSelect, sendBtn, sendButtonIdleMarkup, sendButtonStopMarkup, siteVolumeInput, stageEl, thinkChk } from './app/dom.js?v=74';
-import { announceMobileReply, faceBubble, hideFaceBubble, latestAssistantReply, restartFaceBubbleHide, scheduleFaceBubbleHide, scheduleFaceBubblePosition, setLatestAssistantReply, showFaceBubble } from './app/face-bubble.js?v=74';
+import { announceMobileReply, faceBubble, hideFaceBubble, latestAssistantReply, restartFaceBubbleHide, scheduleFaceBubbleHide, scheduleFaceBubblePosition, setLatestAssistantReply, showFaceBubble } from './app/face-bubble.js?v=75';
 import { appendRaw, logAction, logMissing, logToolStatus, setStageStatus } from './app/logging.js?v=74';
-import { loadMood } from './app/mood.js?v=74';
-import { applyProviderCapabilities, setSiteVolume, syncThinkToggle, updateSiteVolumeLabel, wireNameSettings } from './app/settings.js?v=74';
-import { loadConversation, refreshSidebar, setSidebarOpen } from './app/sidebar.js?v=74';
-import { makeNameFilter, makeStreamBuffer } from './app/stream-filters.js?v=74';
+import { loadMood } from './app/mood.js?v=75';
+import { applyProviderCapabilities, applyRoleGates, setSiteVolume, syncThinkToggle, updateSiteVolumeLabel, wireNameSettings } from './app/settings.js?v=75';
+import { loadConversation, refreshSidebar, setSidebarOpen } from './app/sidebar.js?v=75';
+import { makeNameFilter, makeStreamBuffer } from './app/stream-filters.js?v=75';
 import { escapeHtml, localTimeString, phoneMode } from './app/util.js?v=74';
-import { wireTts } from './app/wire-tts.js?v=74';
-import { wireVoice } from './app/wire-voice.js?v=74';
-import { WELCOME_TIERS, fetchWelcome, playWelcome, previewWelcome } from './app/welcome.js?v=74';
+import { wireTts } from './app/wire-tts.js?v=75';
+import { wireVoice } from './app/wire-voice.js?v=75';
+import { WELCOME_TIERS, fetchWelcome, playWelcome, previewWelcome } from './app/welcome.js?v=75';
 
 export const messages = []; // {role:'user'|'assistant', content:string}
 export let abortFn = null;
 export let currentConversationId = null;
+export let currentUser = null;
 
 // The sidebar changes conversations but the id gets read all over app.js, so
 // it stays owned here and we hand it over instead of exporting something you
@@ -596,15 +597,20 @@ function showBoot() {
     showAuthScreen();
     return;
   }
+  currentUser = me.user || null;
+  applyRoleGates(currentUser);
 
   // The avatar stack and the per feature scripts are no use to someone who
   // never gets past the auth screen, so we only fetch them NOW.
+  // devhud.js owns the Ctrl+Shift+D handler, so keeping it out of the list is
+  // what stops a normal account from opening the HUD at all.
   await loadScripts([
     ['vendor/pixi.min.js', 'vendor/live2dcubismcore.min.js',
      'vendor/marked.min.js', 'vendor/purify.min.js',
      'js/actions.js?v=74', 'js/outfit.js?v=74', 'js/touch.js?v=74',
      'js/mods.js?v=74', 'js/tts.js?v=74', 'js/voice.js?v=74',
-     'js/voicemode.js?v=74', 'js/devhud.js?v=74', 'js/trip-loader.js?v=74',
+     'js/voicemode.js?v=74', 'js/trip-loader.js?v=74',
+     ...(currentUser?.role === 'admin' ? ['js/devhud.js?v=74'] : []),
      'js/wardrobe-open-lines.js?v=74', 'js/wardrobe-reactions.js?v=74',
      'js/wardrobe-return-lines.js?v=74'],
     ['vendor/cubism4.min.js'],

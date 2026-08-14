@@ -45,6 +45,21 @@ export function showAuthScreen() {
     bo.setAttribute('data-ready', '1');
     bo.setAttribute('aria-hidden', 'true');
   }
+  revealRegKeyField();
+}
+
+// A server with no key set never mentions one, so the field only appears
+// where it is actually needed. if the probe fails we leave it hidden and
+// let the signup call come back with registration_closed.
+async function revealRegKeyField() {
+  const field = document.getElementById('signupRegKeyField');
+  if (!field) return;
+  try {
+    const r = await fetch('/api/auth.php?action=signup_info', { credentials: 'same-origin' });
+    if (!r.ok) return;
+    const info = await r.json();
+    if (info && info.registration_key_required) field.hidden = false;
+  } catch { /* offline: the field stays hidden */ }
 }
 
 function hideAuthScreen() {
@@ -103,13 +118,18 @@ if (authFormSignup) {
     const email = document.getElementById('signupEmail').value.trim();
     const password = document.getElementById('signupPassword').value;
     const adultConsent = document.getElementById('signupAdult').checked;
+    const regKey = (document.getElementById('signupRegKey')?.value || '').trim();
     const btn = document.getElementById('signupBtn');
     btn.disabled = true;
     try {
-      const r = await Auth.signup(email, password, adultConsent);
+      const r = await Auth.signup(email, password, adultConsent, regKey);
       if (r.ok) { location.reload(); return; }
       const j = await r.json().catch(() => ({}));
-      const msgs = { email_taken: 'That email is already registered.', invalid_email: 'Invalid email address.', password_too_short: 'Password must be at least 8 characters.', adult_consent_required: 'You must confirm you are 18 or older.', rate_limit_exceeded: 'Too many attempts - wait a minute.' };
+      const msgs = { email_taken: 'That email is already registered.', invalid_email: 'Invalid email address.', password_too_short: 'Password must be at least 8 characters.', adult_consent_required: 'You must confirm you are 18 or older.', registration_closed: 'Sign-ups on this server need a registration key.', invalid_registration_key: 'Wrong registration key.', rate_limit_exceeded: 'Too many attempts - wait a minute.' };
+      if (j.error === 'registration_closed') {
+        const field = document.getElementById('signupRegKeyField');
+        if (field) field.hidden = false;
+      }
       setAuthError('signupError', msgs[j.error] || 'Sign up failed.');
     } catch { setAuthError('signupError', 'Network error.'); }
     btn.disabled = false;

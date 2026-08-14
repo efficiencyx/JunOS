@@ -108,7 +108,9 @@ class LocalServer(
                 if (!call.authorized()) return@get
                 when (call.request.queryParameters["action"]) {
                     "me" -> call.json(buildJsonObject {
-                        put("user", buildJsonObject { put("id", 1); put("email", "local@jun.os") })
+                        // Whoever holds the phone owns the install, so the dev
+                        // panel and the memory tools stay unlocked here.
+                        put("user", buildJsonObject { put("id", 1); put("email", "local@jun.os"); put("role", "admin") })
                     })
                     else -> call.error(HttpStatusCode.BadRequest, "unknown_action")
                 }

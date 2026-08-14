@@ -478,6 +478,7 @@ html[data-pre-auth] #app { visibility: hidden; }
 .auth-form { display: flex; flex-direction: column; gap: 14px; }
 .auth-form[hidden] { display: none; }
 .auth-field { display: flex; flex-direction: column; gap: 6px; }
+.auth-field[hidden] { display: none; }
 .auth-flabel { font-size: 12px; color: var(--term-dim); }
 .auth-flabel small { opacity: .7; }
 .auth-ps::before { content: "$"; color: var(--term-prompt); font-weight: 700; margin-right: 3px; }

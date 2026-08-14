@@ -8,7 +8,7 @@ require_once __DIR__ . '/_lib.php';
 header('Content-Type: application/json');
 header('Cache-Control: no-store');
 
-require_user();
+require_admin();
 rate_limit('stats', 60, 60);
 
 $out = ['models' => [], 'vram_bytes' => 0, 'ram_model_bytes' => 0, 'host' => null];
