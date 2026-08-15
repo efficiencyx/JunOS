@@ -1,16 +1,15 @@
 <?php
 
-const LORE_PROPER_BOOST   = 2.0;  // a term that's a proper noun in the corpus
-const LORE_FLOOR          = 3.0;  // min score to inject
-const LORE_FUZZY_PENALTY  = 0.6;  // discount on a typo-corrected (fuzzy) term
-const LORE_FUZZY_MIN_IDF  = 2.0;  // only fuzzy-match distinctive (rare) names
-const LORE_MAX_INJECT     = 5;    // up to this many *distinct* facts injected
-const LORE_DEDUP_JACCARD  = 0.5;  // candidates sharing this much vocab collapse
+const LORE_PROPER_BOOST   = 2.0;
+const LORE_FLOOR          = 3.0;
+const LORE_FUZZY_PENALTY  = 0.6;
+const LORE_FUZZY_MIN_IDF  = 2.0;
+const LORE_MAX_INJECT     = 5;
+const LORE_DEDUP_JACCARD  = 0.5;
 
-// Plain English and chat filler. IDF scores a word by how rare it is, and it
-// can't get rid of these by itself, a word
-// like "morning" or "look" is rare *in the lore* even though you say it all
-// day, so it would score high. we list them out instead.
+// IDF (how rare a word is in the lore) has no clue that ordinary
+// chat words are common OUTSIDE the corpus. "morning" is rare in
+// the lore so it scores high. cool. so we list them out by hand.
 const LORE_STOP = [
     'a','an','and','are','as','at','be','been','being','but','by','can','could','did','do','does',
     'doing','done','for','from','had','has','have','having','he','her','hers','him','his','how','i',
@@ -47,7 +46,8 @@ function lore_tokens(string $s): array {
 }
 
 function lore_index(): ?array {
-    static $idx = false; // false = not built yet; array|null afterwards
+    // false = not built yet. null = there is no corpus. different things
+    static $idx = false;
     if ($idx !== false) return $idx;
 
     if (function_exists('apcu_fetch')) {
@@ -66,10 +66,10 @@ function lore_index(): ?array {
         $tf = [];
         foreach (lore_tokens($a) as [$stem, $orig, $off]) {
             $tf[$stem] = ($tf[$stem] ?? 0) + 1;
-            // Only count a capital in the middle of a sentence. a name like
-            // "Annalie" shows up capitalised after another word, while
-            // "However" and "Coming" only ever Start one, so a capital at
-            // the start tells us nothing about a name.
+            // count capitals ONLY mid-sentence. "Annalie" turns up
+            // after another word. "However" and "Coming" only ever
+            // Start sentences, so that capital tells us exactly
+            // nothing about whether it's a name.
             $j = $off - 1;
             while ($j >= 0 && $a[$j] === ' ') $j--;
             $initial = ($j < 0) || strpos('.!?:"', $a[$j]) !== false;
@@ -87,9 +87,9 @@ function lore_index(): ?array {
     foreach ($cap as $stem => $c) {
         if ($c >= 2 && $c >= ($low[$stem] ?? 0)) $proper[$stem] = true;
     }
-    // Fuzzy match ONLY against the distinctive proper nouns, the real names,
-    // so a typo lands on "Annalie" or "Shanice" and an ordinary word can't
-    // get dragged onto a common word that happens to be capitalised.
+    // fuzzy match ONLY distinctive proper nouns. a typo can land
+    // on "Annalie" or "Shanice", but an ordinary word must never
+    // get "corrected" into some common capitalised word.
     $fuzzy = [];
     foreach ($proper as $stem => $_) {
         if (($idfMap[$stem] ?? 0) >= LORE_FUZZY_MIN_IDF) $fuzzy[] = $stem;
@@ -103,7 +103,8 @@ function lore_index(): ?array {
 
 function lore_fuzzy(string $tok, array $vocab): ?string {
     $len = strlen($tok);
-    if ($len < 4) return null;                  // too short to correct safely
+    // under four letters there's just not enough there to correct safely
+    if ($len < 4) return null;
     $max = $len <= 7 ? 1 : 2;
     $best = null; $bestD = $max + 1;
     foreach ($vocab as $v) {
@@ -127,9 +128,8 @@ function lore_resolve(array $idx, string $query): array {
     return $res;
 }
 
-// Jaccard overlap of the keys in two term count maps. we use it to fold
-// answers that are nearly the same into one, the corpus says the same fact
-// many different ways.
+// jaccard (shared terms over all terms) folds together answers
+// that say the same fact in different words
 function lore_jaccard(array $a, array $b): float {
     $inter = 0;
     foreach ($a as $k => $_) if (isset($b[$k])) $inter++;
@@ -141,7 +141,7 @@ function lore_search(string $query, int $topK = 1, bool $dedup = false): array {
     $idx = lore_index();
     if ($idx === null) return [];
 
-    $terms = []; // stem => weight factor (1.0 exact, LORE_FUZZY_PENALTY fuzzy)
+    $terms = [];
     foreach (lore_resolve($idx, $query) as $r) {
         if ($r['term'] === null) continue;
         $f = $r['fuzzy'] ? LORE_FUZZY_PENALTY : 1.0;
@@ -163,7 +163,7 @@ function lore_search(string $query, int $topK = 1, bool $dedup = false): array {
 
     arsort($scores);
     $out = [];
-    $kept = []; // token sets already chosen, for dedup
+    $kept = [];
     foreach ($scores as $i => $score) {
         if ($dedup) {
             $ts = $idx['docTf'][$i];

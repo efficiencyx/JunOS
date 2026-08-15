@@ -38,7 +38,7 @@ from PIL import Image
 import UnityPy
 
 REPO = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-# Linux and Windows builds ship identical Unity data; the folder is named
+# linux and windows builds ship identical unity data. the folder is named
 # factorial-omega-<platform>-64 either way and holds this marker directory.
 GAME_GLOB = "factorial-omega-*-64"
 GAME_MARKER = "My Dystopian Robot Girlfriend_Data"
@@ -71,7 +71,6 @@ def find_game_dir():
                     return cand
     sys.exit("no game install found; pass --game DIR (searched for %r)" % GAME_GLOB)
 
-# Container name -> output PNG for the clothing variant swaps in outfit.js.
 VARIANTS = {
     "sneakerL": "leftSneaker_interaction",
     "sneakerR": "rightSneaker_interaction",
@@ -94,14 +93,13 @@ VARIANTS = {
     "miniskirt": "miniskirt_interaction",
 }
 
-# Glasses draw on the ModdableFace slot; their sections are stored out of
-# layer order, so they get composited layer-sorted.
+# glasses share ModdableFace. their sections come out of layer
+# order, so sort them before compositing.
 GLASSES = {
     "glasses": "glasse_common",
     "heartGlasses": "heartGlasses_common",
 }
 
-# Output PNG -> Texture2D name for the standalone logo decals.
 LOGOS = {
     "logoGamerTshirt": "GamerTshirt",
     "logoPriestbot": "priestbot_tshirt",
@@ -109,10 +107,11 @@ LOGOS = {
     "logoShcPanties": "shcPanties",
 }
 
-# variants/logos/<key>.png -> Texture2D name. The full decal catalog from the
-# game's Sprites/Logos/{OtherLogos,PartnerLogos} registry
-# (SpriteTextureDataGenerated); any of these can go on the Moddable*Logo
-# drawables. Kept in sync with LOGO_CATALOG in webapp/js/outfit.js.
+# DECALS maps variants/logos/<key>.png to Texture2D names in
+# SpriteTextureDataGenerated, the Sprites/Logos registry for
+# OtherLogos and PartnerLogos. every entry can go on
+# Moddable*Logo. keep this in sync with LOGO_CATALOG in
+# webapp/js/outfit.js.
 DECALS = {
     "aguiLogo": "AGUI_Logo",
     "avocado": "Avocado",
@@ -184,7 +183,8 @@ DECALS = {
     "yaranaika": "yaranaika",
 }
 
-# PackedTexturesContainer sources for the limb crops, in mapping.json order.
+# PackedTexturesContainer sources for the limb crops, in
+# mapping.json order
 LIMB_CONTAINERS = {
     "experimental": [
         "experimentalLeftArm_interaction",
@@ -196,10 +196,9 @@ LIMB_CONTAINERS = {
 }
 LIMB_DIRS = {"experimental": "experimental", "hightech_skin": "hightech"}
 
-# These are layer-1 additions to existing hair drawables. Their ColorIndex is
-# 1 in the game data (the base hair is slot 0), which is why a hairstyle can
-# expose a separate strand color even though both layers end up on one Cubism
-# drawable.
+# these add layer 1 to existing hair drawables. base hair is
+# slot 0, so ColorIndex 1 gets the strand a seperate colour
+# even though both layers end up on one Cubism drawable.
 HAIR_STRAND_CONTAINERS = {
     "clothier": "clothierHairStrand_interaction",
     "eye_covering_bang": "eyecoveringbangStrand_interaction",
@@ -213,21 +212,19 @@ def aligned_str(raw, off):
     return s, (off + 4 + n + 3) & ~3
 
 
+# a MonoBehaviour (unity's serialized component) puts m_Name
+# after its 28-byte header
 def mb_name(raw):
-    """m_Name of a MonoBehaviour from its raw bytes (header is
-    GameObject PPtr + enabled + script PPtr = 28 bytes)."""
     return aligned_str(raw, 28)[0]
 
 
 def parse_container(raw):
-    """Parse a PackedTexturesContainer MonoBehaviour.
-
-    Layout (reverse engineered): after the MB header and m_Name comes a
-    packed-texture array; each element is the source art name, a layer
-    index, the entry list (drawable name + x/y/w/h rect from the
-    bottom-left + 3 ints), the model-name list, and the Resources path,
-    content hash and size of the packed Texture2D.
-    """
+    # reverse engineered PackedTexturesContainer layout. after the
+    # header and m_Name, each packed texture has a source name,
+    # layer index and entry list. each entry is a drawable name,
+    # bottom-left x/y/w/h and 3 more ints. then model names, the
+    # Resources path, content hash and Texture2D size. source:
+    # staring at hexdumps until it made sense.
     off = 28
     name, off = aligned_str(raw, off)
     ntex = struct.unpack_from("<I", raw, off)[0]
@@ -247,10 +244,10 @@ def parse_container(raw):
             off += 28
             entries[en] = {
                 "rect": (x, y, w, h),
-                # PackedDrawable.ColorIndex. -1 means the layer is not tinted.
+                # PackedDrawable.ColorIndex -1 means this layer isn't tinted
                 "color_index": color_index,
-                # Preserve the two still-unidentified serialized fields in the
-                # catalog so no game metadata is silently discarded.
+                # keep the two still-unidentified serialized fields in the
+                # catalog so no game metadata gets silently thrown away
                 "unknown": unknown,
                 "flag": flag,
             }
@@ -261,23 +258,26 @@ def parse_container(raw):
         off += 4
         path, off = aligned_str(raw, off)
         _hash, off = aligned_str(raw, off)
-        off += 20  # byte size + 2 zeros + 2 ones
+        # the tail is byte size, 2 zeros and 2 ones
+        off += 20
         sections.append({"source": _src, "layer": layer,
                          "entries": entries, "path": path})
     return name, sections
 
 
+# UnityPy 1.10 renamed NamedObject.name to m_Name. android is
+# pinned to 1.7.43, the last build without UnityPyBoost, so this
+# file has to handle BOTH.
 def obj_name(obj):
-    """UnityPy renamed NamedObject.name to m_Name in 1.10. The Android build is pinned to
-    1.7.43, the last release without a compiled UnityPyBoost, so both spellings occur."""
     name = getattr(obj, "m_Name", None)
     return name if name is not None else getattr(obj, "name", None)
 
 
+# before 1.10 these are bare PPtrs (unity object references) in
+# m_Components. later builds wrap them under m_Component. do NOT
+# duck type here, old PPtrs forward unknown attributes straight
+# to the object they point at, so every check comes back true.
 def component_ptrs(game_object):
-    """<1.10 calls this m_Components and stores bare PPtrs; later versions renamed it to
-    m_Component and wrap each entry. This cannot be duck-typed - the old PPtr forwards
-    every unknown attribute to the object it points at."""
     entries = getattr(game_object, "m_Component", None)
     if entries is None:
         return list(game_object.m_Components)
@@ -285,7 +285,6 @@ def component_ptrs(game_object):
 
 
 def safe_component(value):
-    """Stable, filesystem-safe key for a Unity object name."""
     clean = re.sub(r"[^a-z0-9]+", "_", value.lower()).strip("_") or "item"
     digest = hashlib.sha1(value.encode()).hexdigest()[:8]
     return f"{clean[:72]}_{digest}"
@@ -306,19 +305,18 @@ class Recovery:
         ggm = UnityPy.load(os.path.join(data, "globalgamemanagers"))
         self.res_objs = {o.path_id: o for o in self.res.objects}
 
-        # Resources path (lowercase) -> path_id, from the ResourceManager.
         self.respath = {}
         for o in ggm.objects:
             if o.type.name == "ResourceManager":
-                # <1.10 hands back a dict here instead of key/PPtr pairs.
+                # before 1.10 this hands back a dict instead of key/PPtr pairs
                 container = o.read().m_Container
                 pairs = container.items() if isinstance(container, dict) else container
                 for k, v in pairs:
                     self.respath[k] = v.path_id
 
-        # Every PackedTexturesContainer. The script itself lives in another
-        # file, so identify the script reference (int64 at raw offset 20)
-        # from a container we know by name, then collect its siblings.
+        # the script lives in another file. grab its reference from a
+        # container we already know, int64 at raw offset 20, then
+        # collect every sibling with the same script.
         mbs = []
         script_id = None
         for o in shared.objects:
@@ -356,8 +354,8 @@ class Recovery:
         pid = self.respath.get(p.lower())
         if pid is not None and self.res_objs[pid].type.name == "Texture2D":
             return self.res_objs[pid].read().image
-        # A few container paths point at the prefab instead of the texture;
-        # fall back to the equally-named Texture2D.
+        # some paths point at the prefab instead of its texture.
+        # fall back to the Texture2D with the same name.
         return self.tex_by_name(p.rsplit("/", 1)[-1])
 
     def attempt(self, what, fn):
@@ -399,9 +397,8 @@ class Recovery:
         print("  wrote interaction_model.model3.json")
 
     def drawable_texture_slots(self):
-        """drawable name -> atlas slot, parsed from the moc3 (v5 layout;
-        section pointer table at 0x40, art-mesh ids at slot 33 and
-        texture numbers at slot 41)."""
+        # moc3 v5 keeps the section pointer table at 0x40, art-mesh
+        # IDs at slot 33 and texture numbers at slot 41
         moc = self.moc3
         u32 = lambda o: struct.unpack_from("<I", moc, o)[0]
         slot = lambda i: u32(0x40 + 4 * i)
@@ -414,8 +411,8 @@ class Recovery:
         return out
 
     def recover_atlases(self):
-        """Walk the interaction_model prefab; each drawable child's
-        CubismRenderer holds the Texture2D for that drawable's atlas slot."""
+        # walk the interaction_model prefab. each drawable child's
+        # CubismRenderer points at the Texture2D for its atlas slot.
         drawables = self.drawable_texture_slots()
         n_slots = max(drawables.values()) + 1
         model_go = next(
@@ -443,7 +440,9 @@ class Recovery:
                 if o.type.name != "MonoBehaviour":
                     continue
                 raw = bytes(o.get_raw_data())
-                if len(raw) != 124:  # CubismRenderer: _mainTexture path_id at 96
+                # CubismRenderer has 124 bytes here, with _mainTexture
+                # path_id at offset 96
+                if len(raw) != 124:
                     continue
                 pid = struct.unpack_from("<q", raw, 96)[0]
                 if pid in tex_ids:
@@ -453,9 +452,10 @@ class Recovery:
         for tn, pid in sorted(atlas.items()):
             img = self.res_objs[pid].read().image
             if self.atlas_size and self.atlas_size < img.width:
-                # The atlases are the webapp's whole GPU budget: each 4096 one
-                # costs 64 MB of VRAM uncompressed, and nothing in the renderer
-                # assumes a size (UVs are normalized, mipmaps are off).
+                # the atlases ARE the webapp's entire GPU budget. each
+                # 4096 one costs 64 MB of VRAM uncompressed. UVs are
+                # normalized and mipmaps are off, so the renderer
+                # doesn't depend on this size.
                 img = img.resize((self.atlas_size, self.atlas_size), Image.LANCZOS)
             self.save(img, f"texture_{tn:02d}.png")
 
@@ -471,7 +471,8 @@ class Recovery:
             base = None
             for sec in sorted(self.containers[cname], key=lambda s: s["layer"]):
                 img = self.tex_by_path(sec["path"]).convert("RGBA")
-                # Per-part layers so the webapp can tint lens/frame separately.
+                # keep lens and frame apart, the webapp tints them
+                # seperately
                 role = next(r for r in ("lens", "frame", "highlight", "heart")
                             if r in sec["path"].lower())
                 self.save(img, f"variants/glasses/{out}_{role}.png")
@@ -487,9 +488,10 @@ class Recovery:
             self.attempt(f"variants/{out}", lambda o=out, c=cname: glasses(o, c))
 
     def decal_by_name(self, name):
-        # The registry stores decals as Sprites (the fruit ones are sub-rects
-        # of the Fruit+ atlas), so prefer those; a few names collide with
-        # unrelated small sprites, and the actual decal is always the biggest.
+        # the registry stores decals as Sprites, so try those first.
+        # fruit decals are rectangles in the Fruit+ atlas, and some
+        # names collide with small unrelated sprites. the real decal
+        # is ALWAYS the biggest one.
         for tname in ("Sprite", "Texture2D"):
             hits = [o.read() for env in (self.res, self.shared)
                     for o in env.objects
@@ -514,7 +516,7 @@ class Recovery:
                     _, H = img.size
                     for en, entry in sec["entries"].items():
                         x, y, w, h = entry["rect"]
-                        # rects are stored from the bottom-left
+                        # unity rectangles start at the BOTTOM left
                         crop = img.crop((x, H - y - h, x + w, H - y))
                         self.save(crop, f"variants/limbs/{d}/{en}.png")
                         mapping[group][en] = f"assets/variants/limbs/{d}/{en}.png"
@@ -524,7 +526,6 @@ class Recovery:
         print("  wrote variants/limbs/mapping.json")
 
     def recover_hair_strands(self):
-        """Recover the game's separately colorable hair-strand layers."""
         mapping = {}
         for key, cname in HAIR_STRAND_CONTAINERS.items():
             mapping[key] = []
@@ -549,13 +550,11 @@ class Recovery:
         print("  wrote variants/hair/mapping.json")
 
     def recover_item_catalog(self):
-        """Write every packed game item layer and its ColorIndex metadata.
-
-        The catalog covers every scene, not only the interaction model used by
-        the webapp. Texture resource paths remain in the output so future
-        wardrobe work can select and crop any native item without repeating
-        the binary reverse engineering performed here.
-        """
+        # keep every packed game item layer and its ColorIndex from
+        # EVERY scene, not just the interaction model. texture
+        # resource paths stay too, so later wardrobe work can crop
+        # any native item without reverse engineering the binary all
+        # over again.
         catalog = []
         for name, sections in sorted(self.containers.items()):
             color_indices = sorted({

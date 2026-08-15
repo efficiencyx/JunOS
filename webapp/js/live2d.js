@@ -1,7 +1,7 @@
-// Same version rule as app.js. this file's <script type="module"> tags in
+// same version rule as app.js. this file's <script type="module"> tags in
 // wardrobe.html and karaoke.html, app.js's await import(), and every ?v=
-// inside js/live2d/ all have to match, or the browser builds a second copy
-// of the graph.
+// inside js/live2d/ ALL have to match, or the browser builds a second copy
+// of the graph and everything goes sideways.
 
 import { renderIfDirty, resetIdle, setFidgetsEnabled, setMood, setMouthOverride, startIdle, stopIdle, tick } from './live2d/anim.js?v=1';
 import { cameraPreset, cameraStates, captureCameraState, currentCameraMode, fitModel, loadPos, measureStage, rendererResolution, savePos, setCameraPreset, watchStageSize, writeCameraStates } from './live2d/camera.js?v=1';
@@ -11,32 +11,34 @@ import { installVariantCompositor, listDrawables, opacityByPattern, screenByPatt
 
 const { Live2DModel, Cubism4ModelSettings } = PIXI.live2d;
 
-export const LERP_TAU_MS = 150; // exponential smoothing time constant
+// tau is the exponential smoothing time constant
+export const LERP_TAU_MS = 150;
 
-// Motion, physics, breath and pose are all off on the internal model, so
-// between a blink and a fidget the frame is the same as the one before. rAF
-// with no cap draws it again at the screen's refresh rate anyway, these put
-// a stop to that.
+// motion, physics, breath and pose are ALL off on the internal model, so
+// between a blink and a fidget the frame is identical to the one before. rAF
+// with no cap happily redraws it at the screen's refresh rate anyway. these
+// put a stop to that.
 export let app = null;
 export let model = null;
-export let raw = null;            // raw Cubism core model (parts, parameters, drawables)
-export let paramIndex = null;     // Map<paramId, idx>
+// the Cubism core model, its parts, parameters and drawables
+export let raw = null;
+export let paramIndex = null;
 export let paramMin = null;
 export let paramMax = null;
 export let paramDefault = null;
 
-export const targetParams = new Map();   // paramId -> target value
-export const currentValues = new Map();  // paramId -> current (lerped) value
-export const loops = new Map();          // paramId -> { amplitude, period_ms, phase_start_ms, base }
-export const pendingSequences = [];      // [{ param, value, fire_at_ms }]
-export const forcedPartOpacity = new Map(); // partId -> opacity (re-stamped each tick)
-export const forcedDrawableOpacity = new Map(); // drawableId -> opacity override
-const drawableHighlights = new Map();    // drawableId -> screen RGB
+export const targetParams = new Map();
+export const currentValues = new Map();
+export const loops = new Map();
+export const pendingSequences = [];
+export const forcedPartOpacity = new Map();
+export const forcedDrawableOpacity = new Map();
+const drawableHighlights = new Map();
 
 export function markDirty() { S.needsRender = true; }
-let onMissingParam = null;        // callback(name)
+let onMissingParam = null;
 const reportedMissing = new Set();
-export let publicTint = null;            // tinting API object, built in init()
+export let publicTint = null;
 
 function getRaw(m) {
   const cm = m.internalModel.coreModel;
@@ -61,7 +63,8 @@ function patchCubismFrag(src) {
     /(uniform\s+vec4\s+u_baseColor\s*;)/,
     '$1\nuniform vec4 u_multiplyColor;\nuniform vec4 u_screenColor;'
   );
-  // Scale screen colors by alpha or we end up coloring see through texels.
+  // scale screen colors by alpha. without it transparent
+  // texels get colored too.
   const helper = '\nvec4 omegaTint(vec4 c) {\n'
     + '  c.rgb = min(c.rgb, vec3(c.a));\n'
     + '  c.rgb = c.rgb * u_multiplyColor.rgb;\n'
@@ -110,21 +113,21 @@ async function init({ stageEl, onStatus, ignoreSavedPos }) {
   S.cameraPersistenceEnabled = !ignoreSavedPos;
   const initialSize = measureStage();
 
-  // Drawing above 1x is already supersampling, which is what the soft edged
-  // art wants. MSAA on top of it buys a multisampled backbuffer for nothing.
+  // drawing above 1x is already supersampling, which is what the soft edged
+  // art wants. MSAA on top of that buys a multisampled backbuffer for nothing.
   const resolution = rendererResolution();
 
   app = new PIXI.Application({
     width: initialSize.width,
     height: initialSize.height,
-    backgroundAlpha: 0,          // transparent canvas: model floats on the page background
+    backgroundAlpha: 0,
     antialias: resolution < 2,
     autoDensity: true,
     resolution,
   });
   stageEl.appendChild(app.view);
 
-  // pixi-live2d-display 0.4 ignores drawable colors, so we push in uniforms.
+  // pixi-live2d-display 0.4 just ignores drawable colors, so we push uniforms
   installColorShaderPatch(app.renderer.gl);
 
   onStatus('Loading Live2D assets...');
@@ -138,10 +141,10 @@ async function init({ stageEl, onStatus, ignoreSavedPos }) {
   const textures = [t0, t1, t2];
   while (textures.length < 8) textures.push(TRANSPARENT);
 
-  // The atlas we pulled out mixes two ways of storing transparency. in
-  // premultiplied alpha the colour is already faded by it, in straight alpha it
-  // is not, and this art has both along its edges. send it up as PMA, then fix up each sampled pixel in the
-  // shader so neither kind can leave a bright or a dark fringe.
+  // the atlas mixes premultiplied alpha (transparency already
+  // baked into the colours) with straight alpha where it isn't.
+  // send it as PMA and fix each sample in the shader, otherwise
+  // one kind gets a bright fringe and the other gets a dark one.
   for (const url of textures) {
     PIXI.BaseTexture.from(url, {
       alphaMode: PIXI.ALPHA_MODES.PMA,
@@ -158,9 +161,9 @@ async function init({ stageEl, onStatus, ignoreSavedPos }) {
   });
 
   onStatus('Building model...');
-  // autoUpdate would hang the model's delta accumulator off
-  // PIXI.Ticker.shared, a second rAF loop we can't set the pace for, so
-  // tick() feeds it instead.
+  // autoUpdate hangs the model's delta accumulator off PIXI.Ticker.shared,
+  // a second rAF loop we can't set the pace for. no thanks. tick() feeds it
+  // instead.
   model = await Live2DModel.from(settings, { autoInteract: false, autoUpdate: false });
   for (const texture of model.textures) {
     const baseTexture = texture.baseTexture;
@@ -269,29 +272,31 @@ async function init({ stageEl, onStatus, ignoreSavedPos }) {
   window.addEventListener('pointerup', endDrag);
   window.addEventListener('pointercancel', endDrag);
 
-  // Application puts its own render in at UPDATE_PRIORITY.LOW, so swap it for
-  // one that works out whether the frame is worth drawing at all. same
+  // Application shoves its own render in at UPDATE_PRIORITY.LOW, so swap it
+  // for one that works out whether the frame is worth drawing at all. SAME
   // priority, so the camera tween still lands before the draw and not a frame
   // after it.
   app.ticker.remove(app.render, app);
   app.ticker.add(tick);
   app.ticker.add(renderIfDirty, null, PIXI.UPDATE_PRIORITY.LOW);
 
-  let forcedOrderBelow = [];               // [belowId, aboveId] pairs, re-applied each frame
-  const forcedMultiplyColor = new Map();   // drawableId -> [r,g,b,a]
-  const forcedScreenColor = new Map();     // drawableId -> [r,g,b,a]
+  let forcedOrderBelow = [];
+  const forcedMultiplyColor = new Map();
+  const forcedScreenColor = new Map();
   const r = model.internalModel.renderer;
   const gl = app.renderer.gl;
   const ONE = [1, 1, 1, 1];
   const ZERO = [0, 0, 0, 1];
-  const uniformLocCache = new WeakMap(); // glProgram -> { mloc, sloc }
+  const uniformLocCache = new WeakMap();
 
   if (r && r.doDrawModel && r.drawMesh && !r.__omegaPatched) {
     r.__omegaPatched = true;
 
     const visibleOrder = [];
     let drawCursor = 0;
-    let currentDrawableId = null;   // set in drawMesh, read in drawElements hook
+    // drawElements doesn't say which drawable it belongs to.
+    // drawMesh sets this first, then the hook reads it.
+    let currentDrawableId = null;
 
     const origDoDrawModel = r.doDrawModel.bind(r);
     r.doDrawModel = function () {
@@ -301,11 +306,11 @@ async function init({ stageEl, onStatus, ignoreSavedPos }) {
           const i = d.ids.indexOf(id);
           if (i < 0) continue;
           d.opacities[i] = op;
-          // Put back the visibility Cubism clears on zero opacity outfits.
+          // put back the visibility Cubism clears on zero opacity outfits
           if (op > 0.0001) d.dynamicFlags[i] |= 0x01;
         }
       }
-      // Do the overrides before our sort and Cubism's sort both run.
+      // do the overrides BEFORE our sort and Cubism's sort both run
       if (d && forcedOrderBelow.length) {
         const ro = d.renderOrders;
         for (const [below, above] of forcedOrderBelow) {
@@ -319,7 +324,7 @@ async function init({ stageEl, onStatus, ignoreSavedPos }) {
       if (d) {
         const tmp = [];
         for (let i = 0; i < d.count; i++) {
-          // Cubism goes by visibility, not opacity. match it or tints slip.
+          // Cubism goes by visibility, NOT opacity. match it or tints slip.
           const visible = (d.dynamicFlags[i] & 0x01) !== 0;
           if (visible) tmp.push(i);
         }
@@ -346,7 +351,7 @@ async function init({ stageEl, onStatus, ignoreSavedPos }) {
       }
     };
 
-    // Cubism binds its shader inside drawMesh, so set the uniforms then.
+    // Cubism binds its shader inside drawMesh, so set the uniforms there
     const origDrawElements = gl.drawElements;
     gl.drawElements = function (mode, count, type, offset) {
       const prog = gl.getParameter(gl.CURRENT_PROGRAM);
@@ -506,7 +511,7 @@ function debugParam(param) {
   };
 }
 
-// The classic scripts loader.js pulls in get to the renderer through this.
+// the classic scripts loader.js pulls in reach the renderer through this
 window.Live2D = {
   init,
   setTarget,

@@ -1,6 +1,6 @@
-/* A full screen layer you can click straight through. she floats over the page
-   and is repositioned by dragging (hit-tested in live2d.js). Sits above the
-   chat content but below the header chrome, drawer, and overlays. */
+/* a full screen layer you can click straight through. she floats over the
+   page and gets repositioned by dragging (hit-tested in live2d.js). sits above
+   the chat content but below the header chrome, drawer and overlays. */
 #stage {
   position: fixed;
   inset: 0;

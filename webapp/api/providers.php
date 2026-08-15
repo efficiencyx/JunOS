@@ -33,7 +33,7 @@ function chat_request_headers(?string $provider = null): array {
     return $h;
 }
 
-// The MTP model when speculative decoding is on, empty when it is off.
+// the MTP model when speculative decoding is on, empty when it's off
 function ollama_mtp_model(): string {
     if (env_str('OLLAMA_MTP') === '') return '';
     return env_str('OLLAMA_MTP_MODEL', 'jun-mtp');
@@ -46,18 +46,18 @@ function ollama_base_chat_model(): string {
     return '';
 }
 
-// What the picker offers. jun-mtp is plumbing - it's the model below it with a
-// drafter bolted on - so people choose the model they pulled and the swap
-// happens down here where they don't have to think about it.
+// what the picker offers. jun-mtp is plumbing, it's the model below it with a
+// drafter bolted on, so people pick the model they actually pulled and the
+// swap happens down here where nobody has to think about it.
 function display_chat_model(): string {
     $base = ollama_base_chat_model();
     if (ai_provider() === 'ollama' && ollama_mtp_model() !== '' && $base !== '') return $base;
     return default_chat_model();
 }
 
-// So the name that comes back from the browser is the plain one. Swap it right
-// before we talk to ollama, otherwise she answers from the twin with no drafter
-// attached and the speedup goes missing without saying anything.
+// so the name coming back from the browser is the plain one. swap it RIGHT
+// before we talk to ollama, otherwise she answers from the twin with no
+// drafter attached and the speedup just quietly evaporates.
 function ollama_resolve_chat_model(string $model): string {
     if (ai_provider() !== 'ollama') return $model;
     $mtp = ollama_mtp_model();
@@ -72,11 +72,11 @@ function default_chat_model(): string {
         case 'llamacpp':
             return env_str('LLAMACPP_MODEL_HF', 'efficiencyx/Jun-LoRA-E2B-GGUF:Q4_K_M');
         default:
-            // With MTP on, the ollama entrypoint derives a model that carries
-            // the drafter as a DRAFT layer and chat has to ask for THAT one -
-            // the model named in OLLAMA_MODELS_TO_PULL is the same weights with
-            // no drafter attached, so talking to it just quietly loses the
-            // speedup. Same default name on both sides.
+            // with MTP on, the ollama entrypoint derives a model carrying the
+            // drafter as a DRAFT layer and chat has to ask for THAT one. the
+            // model named in OLLAMA_MODELS_TO_PULL is the same weights with no
+            // drafter attached, so talking to it silently loses the speedup.
+            // same default name on both sides.
             $mtp = ollama_mtp_model();
             if ($mtp !== '') return $mtp;
             $configured = ollama_base_chat_model();
@@ -129,15 +129,15 @@ function ollama_model_weights_mb(string $model): int {
     return $cache[$model] = 0;
 }
 
-// How many MiB the KV cache, the model's memory of the prompt it already read,
-// takes per token at q8_0 on the models we ship,
-// read off llama.cpp's own kv_cache size line. rounded UP on purpose, guessing
-// too high costs us some context, guessing too low costs a partial offload.
+// how many MiB the KV cache (the model's memory of the prompt it already
+// read) takes per token at q8_0 on the models we ship. read straight off
+// llama.cpp's own kv_cache size line. rounded UP on purpose, guessing high
+// costs us some context, guessing low costs a partial offload.
 const KV_MIB_PER_TOKEN = 0.2;
 const VRAM_RESERVE_MB = 2048;
 const CTX_TIERS = [6144, 8192, 12288, 16384];
 
-// What is left on the card once the weights and a bit of working room are
+// what's left on the card once the weights and a bit of working room are
 // gone. zero when we don't know the GPU size, see OMEGA_GPU_VRAM_MB in
 // start.sh.
 function gpu_ctx_headroom_mb(): int {
@@ -154,9 +154,9 @@ function default_num_ctx(): int {
     $override = (int)env_str('OMEGA_NUM_CTX', '0');
     if ($override > 0) return $ctx = $override;
 
-    // VRAM is what really limits the KV cache, so use it when the card size
+    // VRAM is what ACTUALLY limits the KV cache, so use it when the card size
     // made it here from start.sh. under 4 GiB of room the answer would be a
-    // context too small to hold a conversation anyway, so drop down to the RAM
+    // context too small to hold a conversation anyway, so fall back to the RAM
     // tiers and let Ollama spill instead of cutting the window to nothing.
     $headroom = gpu_ctx_headroom_mb();
     if ($headroom >= 4096) {
@@ -174,29 +174,29 @@ function default_num_ctx(): int {
         $gib = (int)$m[1] / (1024 * 1024);
     }
     if ($gib <= 0) return $ctx = 16384;
-    // MemTotal comes in a bit under the number on the box, so the tiers sit
-    // just above it. system RAM is only a stand in, VRAM is the real limit on
-    // the KV cache, so set OMEGA_NUM_CTX yourself on a machine where the two
-    // don't line up.
+    // MemTotal always comes in a bit under the number on the box, so the tiers
+    // sit just above it. system RAM is only a stand in, VRAM is the real limit
+    // on the KV cache, so just set OMEGA_NUM_CTX yourself on a machine where
+    // the two don't line up.
     if ($gib <= 17) return $ctx = 6144;
     if ($gib <= 25) return $ctx = 8192;
     if ($gib <= 33) return $ctx = 12288;
     return $ctx = 16384;
 }
 
-// Ollama decides its layer split, how much of the model sits on the GPU and how
-// much stays on the CPU, once, against whatever VRAM is free when it loads, and the keep_alive=-1 pin below then holds that choice for Ever. so a
-// model that loaded while something else had the GPU answers every later
-// message off the CPU. throwing it out lets the next call fit itself again
-// against a card that is now idle.
+// Ollama picks its layer split ONCE, off whatever VRAM was free
+// when the model loaded. keep_alive=-1 then pins that split for
+// Ever. so if something else had the GPU at load time, every
+// later reply drags along the layers it dumped on CPU. evicting
+// her lets the next load fit an idle card again.
 function ollama_evict_if_partially_offloaded(string $model): void {
     static $done = false;
     if ($done || ai_provider() !== 'ollama') return;
     $done = true;
 
-    // Only worth doing when the weights plus a bit of working room really fit
-    // on the card. when they don't, a partial offload is the best it can do
-    // and throwing it out just reloads it badly once per message.
+    // only worth doing when the weights plus a bit of working room ACTUALLY
+    // fit on the card. when they don't, a partial offload is the best it can
+    // do and evicting just reloads it badly once per message.
     if (gpu_ctx_headroom_mb() <= 0) return;
 
     $loaded = null;
@@ -209,9 +209,9 @@ function ollama_evict_if_partially_offloaded(string $model): void {
     $vram = (float)($loaded['size_vram'] ?? 0);
     if ($size <= 0 || $vram / $size >= 0.9) return;
 
-    // One eviction per cooldown. if it fits back just as badly then something
-    // we don't control has the VRAM, and reloading every turn is worse than
-    // being slow.
+    // one eviction per cooldown. if it comes back just as badly then
+    // something we don't control has the VRAM, and reloading every single
+    // turn is worse than just being slow.
     $stamp = state_dir() . '/ollama-refit.stamp';
     $last = is_file($stamp) ? (int)@file_get_contents($stamp) : 0;
     if (time() - $last < 600) return;
@@ -226,7 +226,7 @@ function ollama_evict_if_partially_offloaded(string $model): void {
     ollama_api_json('/api/generate', ['model' => $model, 'keep_alive' => 0], 10);
 }
 
-// Fails closed. no answer from Ollama, a timeout, an old build with no
+// fails closed. no answer from Ollama, a timeout, an old build with no
 // capabilities list, all of it means no audio and the turn goes through
 // whisper instead.
 function ollama_model_supports_audio(string $model): bool {
@@ -248,9 +248,9 @@ function provider_chat_payload(
             'model' => $model,
             'messages' => $messages,
             'stream' => true,
-            // Unpinned, she is the first thing Ollama drops when VRAM gets
-            // tight, the embedder holds its own, and every eviction takes the
-            // KV prompt cache with it.
+            // unpinned, she's the first thing Ollama Drops when VRAM gets
+            // tight while the embedder just sits there, and every eviction
+            // takes the KV prompt cache with it.
             'keep_alive' => -1,
             'options' => [
                 'reasoning_effort' => $reasoning,
@@ -294,22 +294,23 @@ function generate_chat_title(string $userMessage): ?string {
     if ($msg === '') return null;
     $msg = substr($msg, 0, 500);
 
-    // num_gpu=0 keeps it on the CPU and keep_alive=-1 keeps it loaded. it must
-    // NEVER take VRAM or a GPU slot off the chat model, which has no pin, see
+    // num_gpu=0 keeps it on the CPU, keep_alive=-1 keeps it loaded. it must
+    // NEVER take VRAM or a GPU slot off the chat model, which has no pin. see
     // OLLAMA_MAX_LOADED_MODELS in compose.
     $result = ollama_api_json('/api/chat', [
         'model' => $model,
         'messages' => [
-            // No system prompt, on purpose. the fine-tune turns a plain user
+            // no system prompt, ON PURPOSE. the fine-tune turns a plain user
             // turn into a title, and any instruction in a system turn becomes
             // the loudest thing in a short context, so "hi" gets you a chat
-            // called "Title Generation" instead of a greeting.
+            // called "Title Generation". amazing.
             ['role' => 'user', 'content' => $msg],
-            // Qwen3 base. left alone it burns the whole budget thinking and
-            // gives back empty content. its template drops the <|im_end|>
+            // Qwen3 base. left alone it burns the ENTIRE budget thinking and
+            // hands back empty content. its template drops the <|im_end|>
             // after a trailing assistant turn, so this fills in a closed empty
             // think block and the model goes straight to the title. neither
-            // `think: false` nor a /no_think system suffix does anything.
+            // `think: false` nor a /no_think system suffix does anything. tried
+            // both.
             ['role' => 'assistant', 'content' => "<think>\n\n</think>\n\n"],
         ],
         'stream' => false,
@@ -348,10 +349,10 @@ function provider_complete_once(string $provider, string $model, array $messages
                     'keep_alive' => -1,
                     'options' => ['reasoning_effort' => $reasoning, 'temperature' => 0.3,
                                   'num_ctx' => default_num_ctx(), 'num_predict' => $maxTokens]];
-        // Same shape as provider_chat_payload(). you ask for thinking by
+        // same shape as provider_chat_payload(). you ask for thinking by
         // LEAVING `think` out and letting reasoning_effort drive the template.
         // send think:true and Ollama runs a capability check the Jun GGUFs
-        // fail, then 400s.
+        // fail, then 400s in your face.
         if (!$think) $payload['think'] = false;
     }
 
@@ -494,7 +495,7 @@ function provider_route_think_token(string $token, array &$state, callable $emit
 
     if ($buf === '') return;
 
-    // A tag can sit across two stream chunks, so hold back the start of one.
+    // a tag can straddle two stream chunks, so hold back the start of one
     $tag = $state['think_open'] ? '</think>' : '<think>';
     $hold = 0;
     for ($n = min(strlen($tag) - 1, strlen($buf)); $n > 0; $n--) {
@@ -718,8 +719,8 @@ function provider_context_size(string $provider, array $payload): int {
 
 function provider_tools_enabled(): bool {
     if (ai_provider() === 'llamacpp') {
-        // Wants the server up with --jinja and a chat template that can do
-        // tools. LLAMACPP_TOOLS=off is the way out when it can't.
+        // wants the server up with --jinja and a chat template that can
+        // actually do tools. LLAMACPP_TOOLS=off is the escape hatch.
         return strtolower(env_str('LLAMACPP_TOOLS', 'on')) !== 'off';
     }
     return true;

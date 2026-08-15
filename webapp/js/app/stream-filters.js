@@ -10,9 +10,10 @@ function findMark(s, from = 0) {
   return m ? from + m.index : -1;
 }
 
-// The tool markers carry a JSON argument, and a ']' can sit inside one of its
-// strings. Closing on the first ']' cuts the blob in half and the rest of it
-// streams into the bubble, so only a ']' outside any brace or string counts.
+// the tool markers carry a JSON argument, and a ']' can absolutely sit inside
+// one of its strings. close on the FIRST ']' and you cut the blob in half and
+// the rest streams straight into the bubble. so only a ']' outside any brace
+// or string counts.
 function findClose(s) {
   let depth = 0, inStr = false, esc = false;
   for (let i = 0; i < s.length; i++) {
@@ -56,12 +57,12 @@ export function makeStreamBuffer(onCleanText) {
           buf = buf.slice(start);
         }
         const end = findClose(buf);
-        if (end < 0) break; // tag isn't finished yet, wait for the next chunk
+        if (end < 0) break;
         const blob = buf.slice(0, end + 1);
         buf = buf.slice(end + 1);
         if (TOOL_RE.test(blob)) {
-          // Android's tool protocol, never an action and never something Anon
-          // should see. Swallow it here too, the stored history of the early
+          // android's tool protocol. never an action, never something Anon
+          // should see. swallow it here too, the stored history of the early
           // testers still has these blobs in it and replays through us.
           logAction('info', 'tool marker scartato: ' + blob);
           continue;

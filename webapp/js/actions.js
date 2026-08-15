@@ -1,8 +1,9 @@
-// Takes both the compact and the old action-tag syntax.
+// Jun still fires off old [ACTION:...] tags sometimes,
+// so both forms stay. forever probably.
 
 window.Actions = (function () {
   let actionMap = null;
-  let onLog = null; // (level, text), level is 'ok' | 'warn' | 'err'
+  let onLog = null;
   const NAV_KEYS = ['target','dir','type','shape','emotion','side','state','speed','style','item','enable','gesture','duration'];
 
   async function load(url) {
@@ -15,7 +16,7 @@ window.Actions = (function () {
 
   const ACTION_RE = /\[\s*A(?:CTIONS?)?\s*:\s*([a-zA-Z_][\w]*)\s*((?:\|[^\]|]*)*)\s*\]/gi;
 
-  // Touching Jun is something ONLY Anon starts. these actions come from
+  // touching Jun is something ONLY Anon starts. these actions come from
   // touch.js, never from a tag the model wrote.
   const USER_ONLY = new Set(['receive_headpat', 'nuzzle', 'handhold']);
 
@@ -77,9 +78,10 @@ window.Actions = (function () {
           kwargs[posKeys[pos++]] = p.replace(/^["']|["']$/g, '');
         }
       }
-      // The model fuses item and state about half the time ("skirt_off",
-      // "dress_on") which matches no _resolve key and silently no-ops. Split
-      // it back apart; real pose items end in _up/_aside, never _on/_off.
+      // the model fuses item and state about HALF the time ("skirt_off",
+      // "dress_on") which matches no _resolve key and silently no-ops. so we
+      // split it back apart. real pose items end in _up/_aside, never
+      // _on/_off.
       if (name === 'outfit' && kwargs.item) {
         const fused = /^(.+)_(on|off)$/.exec(kwargs.item);
         if (fused) { kwargs.item = fused[1]; kwargs.state = fused[2]; }
@@ -150,7 +152,8 @@ window.Actions = (function () {
   const FALLBACK_CONTAINERS = ['mouth', 'emote', 'brow', 'look', 'lean', 'tail_wiggle', 'breath'];
 
   function resolveAction(name, kwargs) {
-    if (name === 'mood_shift') return null; // bookkeeping tag, gestito da chat.php
+    // chat.php owns mood_shift. it never reaches Live2D.
+    if (name === 'mood_shift') return null;
     if (!actionMap) {
       if (name !== 'outfit') log('warn', `azione sconosciuta: ${name}`);
       return null;
@@ -220,9 +223,9 @@ window.Actions = (function () {
       }
     }
 
-    // _param sets a single named parameter to the scale value. The _relative
-    // flag is currently a no-op: without param read-back there's nothing to add
-    // a delta to, so relative and absolute behave the same here.
+    // _param sets one named parameter to the scale value. _relative is a
+    // no-op right now, without param read-back there's nothing to add a delta
+    // to, so relative and absolute do the exact same thing here.
     if (node._param) {
       Live2D.setTarget(node._param, scale);
     }
@@ -244,7 +247,7 @@ window.Actions = (function () {
       Live2D.scheduleSequence(steps);
     }
 
-    // _loop + _repeats: expand the loop body into one long sequence (e.g. mouth speak).
+    // _loop + _repeats: expand the loop body into one long sequence (mouth speak etc)
     if (Array.isArray(node._loop)) {
       const repeats = node._repeats || 3;
       const steps = [];

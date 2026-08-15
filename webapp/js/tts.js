@@ -4,8 +4,10 @@ window.TTS = (function () {
   let enabled = false;
   let engine = 'kokoro';
   let voice = 'af_heart';
-  let lang = 'english';     // pocket-tts only; Kokoro ignores it
-  let autoLang = false;     // when true, route pocket-tts language from the reply text
+  // lang is a pocket-tts thing. Kokoro ignores it completely, and
+  // autoLang just lets the reply text pick one.
+  let lang = 'english';
+  let autoLang = false;
   let speed = 1.0;
   let volume = 1.0;
   let duckLevel = 1.0;
@@ -19,12 +21,11 @@ window.TTS = (function () {
   let jobs = [];
   let nextId = 1;
   let playingJobId = 0;
-  let currentSource = null; // AudioBufferSourceNode in flight
+  let currentSource = null;
   let rafId = 0;
-  let sentenceBuf = '';     // text accumulated but not yet split into a chunk
-  let chunkIndex = 0;       // chunks emitted this reply 0 gets the fast split
+  let sentenceBuf = '';
+  let chunkIndex = 0;
 
-  // Used for Idle clock
   let speaking = false;
   let onAllDone = () => {};
   function setOnAllDone(fn) { onAllDone = fn || (() => {}); }
@@ -60,7 +61,7 @@ window.TTS = (function () {
   function setEngine(e) { if (e) engine = e; }
   function setVoice(v) { if (v) voice = v; }
   // 'auto' turns detection on per reply, a real id pins that language. the
-  // detector only ever gives back ids the sidecar knows, so 'auto' never
+  // detector only ever hands back ids the sidecar knows, so 'auto' NEVER
   // leaves this file.
   function setLang(l) {
     if (!l) return;
@@ -91,17 +92,20 @@ window.TTS = (function () {
     }
   }
 
-  // Only the first chunk gets split early. that gets audio out sooner and
-  // doesn't make every sentence sound like it is ending. Jun's playful "~"
-  // is always a break, so each bit between tildes becomes its own utterance
-  // and the voice can fall at the end instead of running into the next one.
+  // only the FIRST chunk gets split early. audio comes out sooner and we
+  // don't make every sentence sound like it's ending. Jun's playful "~" is
+  // always a break, so each bit between tildes becomes its own utterance
+  // and the voice can fall at the end instead of running into the next one
   const HARD_BREAK_RE = /[.!?~\n]/;
-  // Only real punctuation breaks a chunk, keep the dashes out, an ASCII hyphen
-  // lands mid-word ("co-op", Jun's "H-hey" stutters) and putting it in the class
-  // between the colon and an en dash made a range over every letter, which cut
-  // the first chunk at whatever character followed the third word
+  // only real punctuation breaks a chunk. keep dashes OUT, an ASCII hyphen
+  // lands mid-word ("co-op", Jun's "H-hey" stutters) and putting it in the
+  // class between the colon and an en dash silently made a range over every
+  // letter, which cut the first chunk at whatever character followed the
+  // third word. took a while to find that one
   const SOFT_BREAK_RE = /[,;:]/g;
-  const MIN_FIRST_WORDS = 3;   // "Oh," alone reads as a whole falling utterance
+  // "Oh," on its own reads as a whole falling utterance. wait for
+  // three words before the first soft split.
+  const MIN_FIRST_WORDS = 3;
 
   function wordCount(s) {
     const m = s.match(/\S+/g);
@@ -112,10 +116,10 @@ window.TTS = (function () {
     return { chunk: buf.slice(0, i + 1), rest: buf.slice(i + 1) };
   }
 
-  // A run of dots is her trailing off, not the end of a sentence. if we break
-  // inside it we get lone "." chunks, cleanForSpeech throws those away, and
-  // the pause the engines give "..." is gone. a single dot at the end waits
-  // for the next token, it might turn out to be the first of three.
+  // a run of dots is her trailing off, not the end of a sentence. break
+  // inside it and we get lone "." chunks, cleanForSpeech throws those away,
+  // and the pause the engines give "..." is just gone. so a single dot at
+  // the end waits for the next token, it might be the first of three.
   function hardBreak(buf) {
     for (let i = 0; i < buf.length; i++) {
       if (!HARD_BREAK_RE.test(buf[i])) continue;
@@ -147,14 +151,13 @@ window.TTS = (function () {
     return null;
   }
 
-  // Take out anything Kokoro can't say safely.
   const ACTION_RE = /\[\s*A(?:CTIONS?)?\s*:[^\]]*\]?/gi;
   const MARKDOWN_NOISE_RE = /[*_~`#>]+/g;
   const EMOJI_RE = /[\p{Extended_Pictographic}️‍]/gu;
-  // pocket-tts reads a stutter start as the name of the letter, "H-hey"
-  // comes out "aitch hey", so we drop them. the same letter on both sides of
-  // the hyphen is a stutter, different letters like T-shirt, x-ray or co-op
-  // we leave alone.
+  // pocket-tts reads a stutter start as the NAME of the letter, so "H-hey"
+  // comes out "aitch hey". amazing. so we drop them. same letter both sides
+  // of the hyphen is a stutter, different letters like T-shirt, x-ray or
+  // co-op we leave alone.
   const STUTTER_RE = /([a-z])-(?=\1)/gi;
 
   function cleanForSpeech(s) {
@@ -167,12 +170,12 @@ window.TTS = (function () {
     return s;
   }
 
-  // Pick the pocket-tts language from the reply itself. a small stopword
-  // check is enough to tell the six pocket languages apart on a sentence or
-  // two and it needs no library. the keys are the sidecar's language ids. we
-  // take the accents off before matching so "tres" hits the accented spelling
-  // too, those forms are folded into the ASCII lists, and a few characters
-  // that give a strong hint get their own score.
+  // pick the pocket-tts language off the reply itself. a dumb stopword
+  // check is genuinely enough to tell the six pocket languages apart on a
+  // sentence or two, and it needs zero libraries. keys are the sidecar's
+  // language ids. we strip accents before matching so "tres" hits the
+  // accented spelling too (those forms are folded into the ASCII lists),
+  // and a few characters that give a strong hint get their own score.
   const STOPWORDS = {
     english: 'the and you that is are was were this with have not but what your they for can will here there about just like know really yeah',
     french_24l: 'je tu vous nous est sont les une des pas ne que qui pour dans avec mais tres oui bonjour merci moi toi etre fait comme cette suis',
@@ -183,7 +186,7 @@ window.TTS = (function () {
   };
   const STOP = Object.fromEntries(
     Object.entries(STOPWORDS).map(([k, v]) => [k, new Set(v.split(' '))]));
-  const DETECT_LOCK_CHARS = 40;   // stop re-detecting once this much text agrees
+  const DETECT_LOCK_CHARS = 40;
 
   function detectLang(text) {
     const raw = text.toLowerCase();
@@ -196,29 +199,30 @@ window.TTS = (function () {
     if (/[ãõ]/.test(raw)) score.portuguese += 2;
     const ranked = Object.entries(score).sort((a, b) => b[1] - a[1]);
     const [bestLang, bestScore] = ranked[0];
-    // null means we have no idea yet, so the caller can keep the language it
-    // already had instead of jumping to English off one "no" or "la" or "ok".
+    // null means we genuinely have no idea yet, so the caller keeps the
+    // language it already had instead of yeeting to English off one "no"
+    // or "la" or "ok"
     if (bestScore < 2 || bestScore <= ranked[1][1]) return null;
     if (bestLang === 'english') return 'english';
     if (bestScore - score.english >= 2) return bestLang;
     return null;
   }
 
-  let lastLang = 'english';   // language of the conversation so far - the sticky
-                              // fallback, so an Italian chat doesn't reset to English
-  let detectBuf = '';         // cleaned reply text accumulated for verification
-  let replyLang = null;       // language locked in for the reply being synthesized
+  // conversation's language is the fallback. one short reply must
+  // NEVER reset an Italian chat to English.
+  let lastLang = 'english';
+  let detectBuf = '';
+  let replyLang = null;
   let replyLangLocked = false;
 
-  // Guess the reply's language from your message so the caller can load the
-  // right pocket-tts model while the LLM is still writing. if we can't tell,
-  // we take the language the conversation is already in, not English.
+  // guess off your message so the caller can start loading the right
+  // pocket-tts model while Jun is still writing. can't tell? keep the
+  // language the conversation is already in. not English.
   function predictLang(text) {
     if (!enabled || !autoLang || engine !== 'pockettts') return null;
     return detectLang(text || '') || lastLang;
   }
 
-  // Send and forget. asks the sidecar to load a language checkpoint early.
   function warmLang(l) {
     if (!enabled || !autoLang || engine !== 'pockettts' || !l) return;
     fetch(`${TTS_URL}?action=warm`, {
@@ -234,9 +238,10 @@ window.TTS = (function () {
     replyLangLocked = false;
   }
 
-  // Check the guess against the reply we got. only a clear disagreement in
-  // the first words changes the language, and once it is locked it Never
-  // moves again, so one foreign word in the middle can't set off a reload.
+  // check the guess against the reply we actually got. only a clear
+  // disagreement in the first words changes the language, and once locked
+  // it Never moves again, so one foreign word mid-reply can't trigger a
+  // model reload.
   function updateDetect(text) {
     if (!autoLang || engine !== 'pockettts' || replyLangLocked) return;
     detectBuf += ' ' + text;
@@ -278,26 +283,28 @@ window.TTS = (function () {
   function resetReply() {
     chunkIndex = 0;
     firstChunkSynthed = false;
-    if (replyLang) lastLang = replyLang;   // carry this reply's language forward
+    if (replyLang) lastLang = replyLang;
     detectBuf = '';
     replyLangLocked = false;
   }
 
-  // Give the first chunk the machine to itself, the later ones can overlap.
+  // first chunk gets the machine to itself. later ones can overlap
   const MAX_IN_FLIGHT = 3;
   let inFlight = 0;
-  let firstChunkSynthed = false;   // has any chunk of this reply finished?
+  let firstChunkSynthed = false;
 
   function enqueue(text, hooks) {
     ensureCtx();
-    // Chrome's autoplay rules keep the context asleep until you click something.
+    // chrome's autoplay rules keep the context asleep until you click something
     if (audioCtx.state === 'suspended') audioCtx.resume().catch(() => {});
 
     updateDetect(text);
     const id = nextId++;
     const job = {
       id, text,
-      lang: effectiveLang(),   // snapshot per chunk so later refinement doesn't rewrite earlier ones
+      // each chunk keeps the language it started with. a later guess
+      // must not rewrite one already in flight
+      lang: effectiveLang(),
       abort: new AbortController(),
       status: 'queued',
       audioBuffer: null,
@@ -328,7 +335,7 @@ window.TTS = (function () {
           body: JSON.stringify({ text: job.text, voice, speed, engine, lang: job.lang }),
           signal: job.abort.signal,
         });
-        // 204, nothing to say, is still a 2xx so !res.ok will not catch it.
+        // 204 (nothing to say) is still a 2xx, so !res.ok won't catch it
         if (res.status === 204) { job.status = 'done'; return; }
         if (!res.ok) throw new Error(`TTS http ${res.status}`);
         const arr = await res.arrayBuffer();
@@ -343,10 +350,10 @@ window.TTS = (function () {
         onLog('warn', `TTS error: ${e.message}`);
       } finally {
         inFlight = Math.max(0, inFlight - 1);
-        // Open the window even when chunk 0 failed, or one error keeps the
-        // whole reply stuck at cap 1. but NOT when it was cancelled. that job
+        // open the window even when chunk 0 failed, or one error pins the
+        // whole reply at cap 1. but NOT when it was cancelled. that job
         // belongs to a reply stop() already killed, and letting it through
-        // would uncap the *next* reply's chunk 0 and undo the whole thing.
+        // uncaps the *next* reply's chunk 0 and undoes the entire point.
         if (job.status !== 'cancelled') firstChunkSynthed = true;
         kick();
         pump();
@@ -361,7 +368,7 @@ window.TTS = (function () {
     }
     if (!jobs.length) { checkDrain(); return; }
     const head = jobs[0];
-    if (head.status !== 'ready') return;  // still synthesizing
+    if (head.status !== 'ready') return;
     playJob(head);
   }
 
@@ -400,18 +407,18 @@ window.TTS = (function () {
     return true;
   }
 
-  // The mic hears whatever Jun is saying. browser AEC takes most of it out,
-  // but what is left goes up with how loud she is right NOW, so voice.js
-  // raises its speech threshold by that much instead of a fixed step.
+  // the mic hears whatever Jun is saying. browser AEC eats most of it, but
+  // what's left scales with how loud she is right NOW, so voice.js raises
+  // its speech threshold by that much instead of some fixed step.
   //
-  // a ring and not one value. the echo reaching the mic is behind what the
-  // analyser sees by the output buffer plus the trip through the air, about
-  // 30-150ms and worse on Bluetooth. callers take the max over a window so
-  // they don't need to know the real delay. old entries drop out by
-  // themselves, so once playback stops this is 0 again inside the window,
-  // which also covers the AEC tail after stop().
+  // a ring buffer, not one value. the echo reaching the mic lags what the
+  // analyser sees by the output buffer plus the trip through the air, call
+  // it 30-150ms and worse on bluetooth. callers take the max over a window
+  // so they never have to know the real delay. old entries fall out on
+  // their own, so once playback stops this is 0 again inside the window,
+  // which conveniently also covers the AEC tail after stop().
   const RMS_HISTORY_MS = 400;
-  let rmsHistory = [];  // [{ t, rms }], oldest first
+  let rmsHistory = [];
 
   function computeRms() {
     if (!analyser) return 0;
@@ -432,12 +439,12 @@ window.TTS = (function () {
   }
 
   function outputRms(windowMs) {
-    // Take the sample here instead of trusting the lipsync loop to have done
-    // it. that loop runs on rAF and stops dead in a hidden tab, but playback
-    // does not, and neither does voice.js's worklet. without this a tab in
-    // the background says 0 while Jun is clearly talking, the echo threshold
-    // drops to nothing, and she cuts herself off. voice.js asks about every
-    // ~32ms so the history stays thick enough for the max below.
+    // take the sample HERE instead of trusting the lipsync loop to have done
+    // it. that loop runs on rAF and stops dead in a hidden tab. playback does
+    // not. neither does voice.js's worklet. so without this a backgrounded
+    // tab reports 0 while Jun is obviously talking, the echo threshold falls
+    // to nothing, and she cuts herself off. voice.js asks every ~32ms so the
+    // history stays thick enough for the max below.
     pushRms(computeRms());
     const cutoff = performance.now() - (windowMs || 200);
     let max = 0;
@@ -448,10 +455,10 @@ window.TTS = (function () {
     return max * volume * duckLevel;
   }
 
-  // Duck instead of cutting while barge-in is still a maybe. taking ~9dB off
-  // gives the VAD a clean look at the mic to work out if you really are
+  // duck instead of cutting while barge-in is still a maybe. dropping ~9dB
+  // gives the VAD a clean look at the mic to figure out if you're actually
   // talking, and if you aren't, Jun just goes quiet for 150ms instead of
-  // being cut off mid word. voice.js calls stop() only once it is sure.
+  // getting chopped mid word. voice.js only calls stop() once it's sure.
   function duck(gain) {
     duckLevel = Math.max(0, Math.min(1, gain));
     applyOutputGain();
@@ -489,8 +496,9 @@ window.TTS = (function () {
       }
     }
     jobs = [];
-    // Don't zero inFlight here. the aborts above come back through startJob's
-    // finally and that takes one off, zeroing would send it negative.
+    // do NOT zero inFlight here. the aborts above come back through
+    // startJob's finally which already takes one off. zeroing sends it
+    // negative. don't ask.
     resetReply();
     playingJobId = 0;
     if (currentSource) {
