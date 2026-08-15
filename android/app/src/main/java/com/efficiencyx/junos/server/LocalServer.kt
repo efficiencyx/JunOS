@@ -108,8 +108,8 @@ class LocalServer(
                 if (!call.authorized()) return@get
                 when (call.request.queryParameters["action"]) {
                     "me" -> call.json(buildJsonObject {
-                        // Whoever holds the phone owns the install, so the dev
-                        // panel and the memory tools stay unlocked here.
+                        // whoever's holding the phone owns the install, so the
+                        // dev panel and the memory tools stay unlocked here
                         put("user", buildJsonObject { put("id", 1); put("email", "local@jun.os"); put("role", "admin") })
                     })
                     else -> call.error(HttpStatusCode.BadRequest, "unknown_action")
@@ -379,7 +379,8 @@ class LocalServer(
     }
 
     private suspend fun io.ktor.server.application.ApplicationCall.authorized(): Boolean {
-        // localHost reverse-resolves to "localhost" on Android; localAddress is the literal bound IP.
+        // localHost turns into "localhost" on android. localAddress
+        // keeps the literal IP the server actually bound.
         if (request.local.localAddress != LOOPBACK || request.cookies[SESSION_COOKIE] != session) {
             error(HttpStatusCode.Forbidden, "forbidden")
             return false

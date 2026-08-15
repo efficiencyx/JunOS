@@ -90,8 +90,9 @@ class ModelStore(private val context: Context) {
             deleteInside(incoming, voiceRoot.parentFile!!)
             incoming.mkdirs()
             if (!Python.isStarted()) Python.start(AndroidPlatform(context.applicationContext))
-            // jun_voice is deliberately separate from jun_recovery: importing that module would drag
-            // UnityPy and Pillow into a code path that only needs tarfile.
+            // keep jun_voice seperate from jun_recovery. importing the
+            // latter drags UnityPy and Pillow into a path that only needs
+            // tarfile.
             Python.getInstance().getModule("jun_voice")
                 .callAttr("extract_voice", archives.map { it.absolutePath }.toTypedArray(), incoming.absolutePath)
             check(File(incoming, "kokoro-en-v0_19/model.onnx").isFile)

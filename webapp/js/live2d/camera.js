@@ -23,8 +23,8 @@ export function currentCameraMode() {
   }
 }
 
-// Fill rate goes up with the square of this, and every clipping mask is drawn
-// at it as well. phone was already capped here, desktop had no cap at all.
+// fill rate goes up with the SQUARE of this, and every clipping mask gets
+// drawn at it too. phone was already capped here, desktop had no cap at all.
 const MAX_RESOLUTION = 2;
 
 export function rendererResolution() {
@@ -300,8 +300,8 @@ export function watchStageSize() {
 }
 
 export let cameraPreset = 'default';
-let savedCamera = null;   // snapshot of user camera while 'face' is active
-export let cameraTween = null;   // active ticker fn
+let savedCamera = null;
+export let cameraTween = null;
 
 const FACE_CENTER_FRAC = 0.12;
 const FACE_SCREEN_Y = 0.42;
@@ -334,7 +334,7 @@ function tweenCameraTo(target, ms, onDone) {
   const t0 = performance.now();
   cameraTween = () => {
     const t = Math.min(1, (performance.now() - t0) / ms);
-    const e = 1 - Math.pow(1 - t, 3); // ease-out cubic
+    const e = 1 - Math.pow(1 - t, 3);
     S.userZoom = from.zoom + (target.zoom - from.zoom) * e;
     S.userOffsetX = from.offsetX + (target.offsetX - from.offsetX) * e;
     S.userOffsetY = from.offsetY + (target.offsetY - from.offsetY) * e;
@@ -349,7 +349,8 @@ export function setCameraPreset(preset) {
   if (preset === 'face') {
     savedCamera = currentCameraSnapshot();
     cameraPreset = 'face';
-    S.hasUserPos = true; // suppress the default rest offset in fitModel
+    // fitModel must NOT stack its resting offset on top of this
+    S.hasUserPos = true;
     tweenCameraTo(computeFaceCamera(), 450);
   } else {
     cameraPreset = 'default';

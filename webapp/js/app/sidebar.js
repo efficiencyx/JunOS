@@ -160,7 +160,7 @@ export async function loadConversation(id) {
   hideFaceBubble();
   setLatestAssistantReply('');
   setConversationTitle(conversationTitles.get(id));
-  resetIdleNudge(); // new conversation, so let Jun speak up on her own again
+  resetIdleNudge();
   reportActivity();
   if (window.TTS) TTS.stop();
   messages.length = 0;

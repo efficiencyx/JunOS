@@ -1,7 +1,6 @@
-/* The welcome back scene. we blur the chat frame with a filter on the
-   elements themselves rather than a backdrop-filter overlay: the Live2D canvas
-   sits at z-index 40 between the chrome and any overlay we could add, so a
-   backdrop blur would take the model down with the background. */
+/* blur the chrome ITSELF, not a backdrop-filter overlay. the
+   Live2D canvas sits between the chrome and that overlay, so a
+   backdrop blur would blur Jun along with the background. */
 
 body.welcome-scene .app-header,
 body.welcome-scene .conv-sidebar,
@@ -18,7 +17,8 @@ body.welcome-scene .chat-panel {
 .welcome-scene-fx {
   position: fixed;
   inset: 0;
-  z-index: 45; /* above the stage at 40, below the dialogue box at 55 */
+  /* above the stage at 40, below the dialogue box at 55. */
+  z-index: 45;
   pointer-events: none;
   opacity: 0;
   transition: opacity .55s ease;
@@ -26,9 +26,8 @@ body.welcome-scene .chat-panel {
 body.welcome-scene .welcome-scene-fx { opacity: 1; }
 .welcome-scene-fx[hidden] { display: none; }
 
-/* A vignette and a glow in her accent colour, which app/mood.js already paints
-   painted by app/mood.js - so the scene is tinted by the relationship without
-   this file knowing anything about tiers. */
+/* app/mood.js paints --scene-tint off the relationship, so
+   this file doesn't need to know a thing about its tiers. */
 .welcome-scene-fx::before {
   content: "";
   position: absolute;
@@ -42,7 +41,6 @@ body.welcome-scene .welcome-scene-fx { opacity: 1; }
       transparent 70%);
 }
 
-/* Black bars. cheap, and nothing else says "this is a scene" as fast. */
 .welcome-scene-fx::after {
   content: "";
   position: absolute;
@@ -61,8 +59,6 @@ body.welcome-scene .welcome-scene-fx::after { --bar: 7vh; }
   initial-value: 0px;
 }
 
-/* A single accent hairline that sweeps down once as she appears - the same
-   scanline vocabulary as the boot terminal. */
 .welcome-scene-sweep {
   position: absolute;
   left: 0;
@@ -81,7 +77,7 @@ body.welcome-scene .welcome-scene-sweep { animation: welcomeSweep 1.15s ease-out
   100% { opacity: 0; transform: translateY(100vh); }
 }
 
-/* The dialogue box is the ONE thing that has to stay readable over the vignette. */
+/* keep the dialogue readable over the vignette. */
 body.welcome-scene .face-bubble {
   filter: drop-shadow(0 10px 28px rgb(0 0 0 / .75));
 }
@@ -89,8 +85,8 @@ body.welcome-scene .fb-name {
   border-left-color: color-mix(in srgb, var(--scene-tint, var(--accent)) 80%, #ec0054);
 }
 
-/* Every line re-plays this, not just the first: welcome.js replays .intro per
-   line so each one physically opens instead of the text swapping in place. */
+/* welcome.js replays .intro for every line. without that only
+   the first box opens and the rest just swap their text. */
 body.welcome-scene .face-bubble.intro .fb-name {
   animation: welcomeNameIn .26s cubic-bezier(.16, 1.1, .3, 1) both;
 }
@@ -106,7 +102,7 @@ body.welcome-scene .face-bubble.intro .fb-text > * {
   from { opacity: 0; transform: translateX(-14px); clip-path: inset(0 100% 0 0); }
   to   { opacity: 1; transform: none; clip-path: inset(0 0 0 0); }
 }
-/* Overshoots on the way open so the panel snaps rather than eases. */
+/* 1.07 overshoots so the panel SNAPS open instead of easing. */
 @keyframes welcomeBoxOpen {
   0%   { transform: scaleY(0);    opacity: .35; }
   70%  { transform: scaleY(1.07); opacity: 1; }

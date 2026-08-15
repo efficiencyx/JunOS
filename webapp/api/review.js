@@ -1,9 +1,9 @@
-// Loaded as a file and not inlined, the stack's CSP is `script-src 'self'` so
-// an inline <script> here is blocked without a word, and then every message
-// body is invisible, a see through textarea over a layer nothing painted.
+// loaded as a FILE, not inlined. the stack's CSP is `script-src 'self'` so an
+// inline <script> here gets blocked silently, and then every message body is
+// invisible, a see through textarea over a layer nothing ever painted.
 
-// The markers stay in the output, just dimmed, so the highlight layer lines up
-// character for character with the textarea under it.
+// the markers stay in the output, just dimmed, so the highlight layer lines up
+// character for character with the textarea under it
 const paint = t => {
   let s = t.replace(/[&<>]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;' }[c]));
   const wrap = (cls, open, body, close) =>
@@ -16,7 +16,8 @@ const paint = t => {
   s = s.replace(/^(\s*)(#{1,6} )(.*)$/gm, '$1<span class="mk">$2</span><span class="hd">$3</span>');
   s = s.replace(/^(\s*)([-*+] |\d+[.)] )/gm, '$1<span class="mk">$2</span>');
   s = s.replace(/^(\s*&gt;.*)$/gm, '<span class="quote">$1</span>');
-  return s + '\n';   // trailing newline keeps the layer as tall as the caret can go
+  // the trailing newline keeps the layer as tall as the caret
+  return s + '\n';
 };
 
 document.querySelectorAll('.msg').forEach(msg => {

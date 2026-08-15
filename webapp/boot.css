@@ -1,9 +1,7 @@
-/* Critical CSS. everything the screens before the app need (age gate, auth
-   terminal,
-   boot overlay) plus the custom properties and resets the whole app builds on.
-   This file is never served - tools/build-critical-css.php inlines it into the
-   <style id="critical"> block of index.html, so styles.css can load async
-   without the first screen flashing unstyled. Edit here, then ./sync-webapp.sh. */
+/* this file is never served. tools/build-critical-css.php drops
+   it into index.html so the age gate, auth screen and boot overlay
+   have CSS before styles.css finishes loading. edit THIS file,
+   then run ./sync-webapp.sh. */
 
 :root {
   --bg:         #131314;
@@ -15,10 +13,10 @@
   --fg:         #e3e3e3;
   --muted:      #c4c7c5;
   --dim:        #8e9295;
-  /* The accent IS her mood colour. js/app.js overwrites --accent/--accent-2 on
-     the root from her affection/trust/tension once she's loaded. These are the
-     resting values used before login and as a fallback. --grad is derived from
-     them, so the whole palette shifts from one place. */
+  /* the accent IS her mood colour. js/app.js sets these off
+     affection, trust and tension once she's loaded. these are the
+     resting values before login, and the fallback. --grad comes
+     from them, so one change moves the whole palette. */
   --accent:     hsl(262 66% 71%);
   --accent-2:   hsl(278 72% 78%);
   --accent-soft:hsl(262 66% 71% / .12);
@@ -148,8 +146,9 @@ html, body {
   background: var(--term-bar);
   border-bottom: 1px solid rgba(0,0,0,.45);
 }
-/* The window frame (.term-lights, .term-title, .term-winctl) and the per-OS
-   themes are shared with the auth terminal - defined in the auth block below. */
+/* .term-lights, .term-title and .term-winctl are shared by
+   the boot and auth terminals. their per-OS rules live down with
+   the auth terminal below. */
 .boot-term-body {
   position: relative;
   overflow: hidden;
@@ -278,11 +277,11 @@ html, body {
 }
 @keyframes bootZoom {
   0%   { transform: scale(1);    opacity: 1; }
-  28%  { transform: scale(.965); opacity: 1; }   /* pulls back a little */
+  28%  { transform: scale(.965); opacity: 1; }
   100% { transform: scale(2.4);  opacity: 0; }
 }
 
-/* The age gate and the auth panels below use this too, so keep it. */
+/* boot, age gate and auth panels all use this animation. */
 @keyframes bootCardIn {
   from { opacity: 0; transform: translateY(12px) scale(.98); }
   to   { opacity: 1; transform: none; }
@@ -387,8 +386,6 @@ html[data-pre-auth] #app { visibility: hidden; }
 }
 #authScreen[hidden] { display: none; }
 
-/* Auth terminal - base theme (mac-like); per-OS overrides further down.
-   --term-* vars are swapped by .auth-term[data-os=...]. */
 .auth-term {
   --term-bg:     #0c0c0d;
   --term-bar:    #232427;
@@ -409,7 +406,6 @@ html[data-pre-auth] #app { visibility: hidden; }
   animation: bootCardIn 500ms cubic-bezier(.2,.7,.2,1) both;
 }
 
-/* Title bar. Default: traffic lights left, centered title (macOS Terminal). */
 .auth-term-bar {
   position: relative;
   display: flex; align-items: center; gap: 8px;

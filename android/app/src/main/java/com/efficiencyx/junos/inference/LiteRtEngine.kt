@@ -44,8 +44,8 @@ class LiteRtEngine(
         check(models.litertReady()) { "Jun LiteRT model is not installed" }
         _state.value = EngineState.Loading(0f)
         try {
-            // initialize() compiles GPU kernels on first run; cacheDir is what keeps later
-            // launches from paying that cost again.
+            // initialize() compiles GPU kernels the first time.
+            // cacheDir stops later launches redoing all of it.
             val created = Engine(
                 EngineConfig(
                     models.litertModelFile.absolutePath,
@@ -70,10 +70,10 @@ class LiteRtEngine(
         ensureLoaded()
         val engine = engine ?: error("LiteRT engine is not loaded")
 
-        // ChatEngine rebuilds the whole transcript every turn and parks the volatile live context
-        // in a trailing message, so history cannot be carried inside a long-lived Conversation
-        // without duplicating it. A fresh Conversation per turn keeps the two models of history
-        // from fighting; the prompt template comes from the .litertlm bundle either way.
+        // ChatEngine rebuilds the transcript every turn and puts the
+        // live context in the last message. a long-lived Conversation
+        // would carry the history TWICE, so every turn gets a fresh
+        // one. the prompt template still comes from .litertlm.
         val system = messages.firstOrNull { it.role == "system" }?.content
         val rest = messages.drop(if (system != null) 1 else 0)
         val last = rest.lastOrNull() ?: error("no message to send")
@@ -92,10 +92,11 @@ class LiteRtEngine(
         val started = System.nanoTime()
         var emitted = 0
 
-        // Deliberately not litertlm's own Flow overload: it was built against coroutines 1.9.0 and
-        // its internal callbackFlow calls SendChannel.close$default, which this app's 1.10.1
-        // resolves to a different ABI - the result is a NoSuchMethodError on the first onDone.
-        // Wrapping the plain callback keeps the channel on our side of that version boundary.
+        // deliberately NOT litertlm's Flow overload. it was built
+        // against coroutines 1.9.0, where SendChannel.close$default
+        // has a different ABI from this app's 1.10.1. mix them and
+        // you get NoSuchMethodError on the first onDone. the plain
+        // callback keeps the channel on our side of that boundary.
         conversation.sendMessageAsync(
             last.toLiteRtMessage(),
             object : MessageCallback {

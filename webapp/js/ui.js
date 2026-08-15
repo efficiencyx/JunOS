@@ -136,8 +136,8 @@ window.ui = (function () {
       document.addEventListener('keydown', onKey);
 
       document.body.appendChild(backdrop);
-      backdrop.getBoundingClientRect(); // force layout first, or the fade has
-                                        // nothing to animate from
+      // force layout NOW, or the fade has nothing to start from
+      backdrop.getBoundingClientRect();
       backdrop.classList.add('open');
       (opts.danger ? cancelBtn : okBtn).focus();
     });

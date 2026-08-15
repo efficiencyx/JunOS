@@ -19,13 +19,13 @@ export function listDrawables() {
   return publicTint ? publicTint.listDrawables() : [];
 }
 
-// A variant only replaces its own UV region, the patch of the shared atlas
-// this drawable reads from.
-const _texOverride = new Map();   // drawableId -> { img, overlay } | null
-export const _uvRect = new Map();        // drawableId -> {tex,u0,v0,w,h}
-const _baseCanvas = [];           // texIndex -> canvas of the pristine atlas
-const _imgCache = new Map();      // url -> Promise<HTMLImageElement>
-const _originalSource = [];       // texIndex -> original HTMLImageElement source
+// a variant only replaces its own UV region, the patch of the shared atlas
+// this drawable reads from
+const _texOverride = new Map();
+export const _uvRect = new Map();
+const _baseCanvas = [];
+const _imgCache = new Map();
+const _originalSource = [];
 
 export function installVariantCompositor() {
   _uvRect.clear();
@@ -42,8 +42,8 @@ export function installVariantCompositor() {
   }
 }
 
-// Clip to the cached mesh triangles, the atlas UV boxes overlap.
-const _meshPath = new Map();     // drawableId -> Path2D
+// clip to the cached mesh triangles, the atlas UV boxes overlap
+const _meshPath = new Map();
 function meshPath(id, W, H) {
   if (_meshPath.has(id)) return _meshPath.get(id);
   const r = _uvRect.get(id);
@@ -69,13 +69,13 @@ function _loadImg(url) {
     im.onerror = rej;
     im.src = url;
   });
-  // Never cache a failure. a bad load at startup has to stay retryable.
+  // NEVER cache a failure. a bad load at startup has to stay retryable.
   p.catch(() => _imgCache.delete(url));
   _imgCache.set(url, p);
   return p;
 }
 
-// alphaClip variants want a hard on/off erase mask.
+// alphaClip variants want a hard on/off erase mask
 function _alphaMask(img) {
   const c = document.createElement('canvas');
   c.width = img.naturalWidth || img.width;
@@ -92,7 +92,7 @@ function _alphaMask(img) {
 export function _baseAtlas(texIndex) {
   if (_baseCanvas[texIndex]) return _baseCanvas[texIndex];
   const bt = model.textures[texIndex].baseTexture;
-  const src = bt.resource.source;               // HTMLImageElement or canvas
+  const src = bt.resource.source;
   _originalSource[texIndex] = src;
   const c = document.createElement('canvas');
   c.width = src.naturalWidth || src.width;
@@ -102,17 +102,17 @@ export function _baseAtlas(texIndex) {
   return c;
 }
 
-// One drawing canvas per texture, reused, so we don't keep making new ones.
+// one drawing canvas per texture, reused, so we're not spawning new ones
 const _liveCanvas = [];
 
 function _uploadTexture(texIndex, canvas) {
-  // Tell Pixi its cached GL texture is stale once we swap the source canvas.
+  // tell pixi its cached GL texture is stale once we swap the source canvas
   const bt = model.textures[texIndex].baseTexture;
   bt.alphaMode = PIXI.ALPHA_MODES.PMA;
   const res = bt.resource;
-  // We only swap the source. resource width and height are read only, setting
+  // we only swap the source. resource width and height are read only, setting
   // them throws in a module, and the canvas we draw into is already made at
-  // the atlas's own size.
+  // the atlas's own size anyway.
   res.source = canvas;
   const uid = model.glContextID;
   if (uid >= 0 && bt._glTextures[uid]) {
@@ -165,22 +165,23 @@ function recompositeTexture(texIndex) {
   for (const [id, entry] of _texOverride) {
     const r = _uvRect.get(id);
     if (!r || r.tex !== texIndex || !entry) continue;
-    // Cubism counts v from the bottom, so the canvas origin has to flip.
+    // Cubism counts v from the BOTTOM, so the canvas origin has to flip
     active.push({ id, entry, x: r.u0 * W, yTop: (1 - (r.v0 + r.h)) * H, w: r.w * W, h: r.h * H });
   }
-  // Erase before painting or atlas regions that overlap wipe each other out.
+  // erase before painting or overlapping atlas regions wipe each other out
   for (const a of active) {
     if (a.entry.fullClear) {
-      // Placeholder art and bilinear bleed need the whole rect erased, padded.
+      // placeholder art and bilinear bleed need the whole rect erased, padded
       const p = 8;
       ctx.clearRect(a.x - p, a.yTop - p, a.w + 2 * p, a.h + 2 * p);
       continue;
     }
-    if (a.entry.overlay) continue;   // decorations paint on top of the base
+    // decorations paint after the base
+    if (a.entry.overlay) continue;
     ctx.save();
     ctx.clip(meshPath(a.id, W, H));
     if (a.entry.alphaClip) {
-      // Shared texels want a hard alpha erase or you get holes and dark edges.
+      // shared texels want a hard alpha erase or you get holes and dark edges
       if (!a.entry.mask) a.entry.mask = _alphaMask(a.entry.img);
       ctx.globalCompositeOperation = 'destination-out';
       ctx.drawImage(a.entry.mask, a.x, a.yTop, a.w, a.h);
@@ -193,7 +194,7 @@ function recompositeTexture(texIndex) {
   for (const a of active) {
     ctx.save();
     ctx.clip(meshPath(a.id, W, H));
-    // The tiny decals are pixel art, the fruit panty logos, so keep them sharp.
+    // the tiny decals are pixel art (the fruit panty logos) so keep them sharp
     if (a.entry.img.width < 64) ctx.imageSmoothingEnabled = false;
     ctx.drawImage(a.entry.img, a.x, a.yTop, a.w, a.h);
     ctx.restore();
@@ -219,13 +220,13 @@ export async function setDrawableTextures(map) {
     const overlay = val && typeof val === 'object' ? !!val.overlay : false;
     const alphaClip = val && typeof val === 'object' ? !!val.alphaClip : false;
     const fullClear = val && typeof val === 'object' ? !!val.fullClear : false;
-    // Don't send a 4k atlas up again when the outfit update changed nothing.
+    // don't ship a 4k atlas up again when the outfit update changed nothing
     const prev = _texOverride.get(id);
     if (url) {
       if (prev && prev.url === url && prev.overlay === overlay &&
           prev.alphaClip === alphaClip && prev.fullClear === fullClear) return;
-      // One bad image must not kill the whole batch, the other overrides
-      // still have to land and get drawn.
+      // one bad image must NOT kill the whole batch, the other overrides
+      // still have to land and get drawn
       let img;
       try { img = await _loadImg(url); }
       catch (e) { console.warn('texture load failed', id, url, e); return; }

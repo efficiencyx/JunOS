@@ -51,7 +51,8 @@
         if (consoleEl) consoleEl.classList.add('finishing');
         term.classList.add('zoom');
         term.addEventListener('animationend', () => { if (done) done(); }, { once: true });
-      }, 520);   // a beat so you can actually read "Ready"
+      // leave "Ready" up long enough to actually read
+      }, 520);
     });
   }
 
@@ -63,8 +64,8 @@
 
     if (reduceMotion) { finishLog(term); return; }
 
-    term.classList.add('typing');   // this class HIDES the coming lines, the OK
-                                    // badges and the live status
+    // typing HIDES the coming lines, OK badges and live status.
+    term.classList.add('typing');
     for (const li of lines) {
       li.classList.add('live');
       const cmd = li.querySelector('.boot-cmd');

@@ -1,17 +1,17 @@
-// The ?v= on an import is part of what the module IS, not just a cache key.
-// load this file from index.html at one version while a child asks for
-// ../app.js at another, and the browser builds it twice, which turns the
+// the ?v= on an import is part of what the module IS. not a cache key. an
+// identity. load this file from index.html at one version while a child asks
+// for ../app.js at another and the browser builds it TWICE, which turns the
 // import cycles into "can't access lexical declaration before
 // initialization". every URL in this graph carries one number and they all
 // move together: the <script> tag, the imports below, and every ?v= inside
 // js/app/ and js/live2d/. no example numbers in here on purpose, a bulk
-// renumber would rewrite them and kill the very mismatch we are describing.
+// renumber would rewrite them and kill the exact mismatch we're describing.
 //
-// bumping only the files you edited is not enough, and it fails late. js is
+// bumping only the files you edited is NOT enough, and it fails late. js is
 // served immutable for a year, so a module whose *body* changed while its own
 // ?v= stayed put is Never fetched again, and that stale copy keeps asking for
 // the version number it was written against. change anything in the graph,
-// renumber the Whole graph.
+// renumber the Whole graph. no exceptions.
 
 import { showAuthScreen } from './app/auth-screen.js?v=1';
 import { IDLE_AFTER_REPLY_MS, TYPING_POLL_MS, armIdleAfterReply, cancelActiveIdleNudge, cancelAutoReset, cancelIdleNudge, composerPlaceholder, consolidating, fleeActive, reportActivity, resetIdleNudge, scheduleAutoReset, scheduleIdleNudge, setCancelActiveIdleNudge, setConsolidating, showConsolidatingBubble, startFleeLock, syncConsolidationStatus } from './app/consolidation.js?v=1';
@@ -27,17 +27,17 @@ import { wireTts } from './app/wire-tts.js?v=1';
 import { wireVoice } from './app/wire-voice.js?v=1';
 import { WELCOME_TIERS, fetchWelcome, playWelcome, previewWelcome } from './app/welcome.js?v=1';
 
-export const messages = []; // {role:'user'|'assistant', content:string}
+export const messages = [];
 export let abortFn = null;
 export let currentConversationId = null;
 export let currentUser = null;
 
-// The sidebar changes conversations but the id gets read all over app.js, so
-// it stays owned here and we hand it over instead of exporting something you
-// can write to.
+// the sidebar changes conversations but the id gets read all over app.js, so
+// ownership stays here and we hand it over instead of exporting something
+// you can write to.
 export function setCurrentConversationId(id) { currentConversationId = id; }
 
-// Console handle for replaying the welcome scene, Welcome.preview('panicked').
+// console handle for replaying the welcome scene, Welcome.preview('panicked')
 window.Welcome = { preview: previewWelcome, tiers: WELCOME_TIERS };
 let chatGeneration = 0;
 
@@ -178,7 +178,7 @@ export function sendMessage() {
     if (!cancelActiveIdleNudge) return;
     cancelActiveIdleNudge();
   }
-  resetIdleNudge(); // Anon spoke - Jun is allowed to nudge again later
+  resetIdleNudge();
   reportActivity();
   chatInput.value = '';
   appendMsg('user', text);
@@ -198,7 +198,8 @@ export const VOICE_STATE_LABELS = {
   idle: 'off',
   calibrating: 'listening to the room…',
   listening: 'listening',
-  maybe: 'listening',      // too brief (~96ms) to be worth flickering the label
+  // maybe lasts ~96ms. way too short to flicker another label
+  maybe: 'listening',
   speech: 'hearing you',
   thinking: 'transcribing…',
 };
@@ -220,8 +221,8 @@ export function sendFromVoice(text) {
   sendMessage();
 }
 
-// The bubble says "spoken", the history says <audio>. that string is what the
-// server stores for the turn too, both sides have to match or the next request
+// bubble says "spoken", history says <audio>. that string is ALSO what the
+// server stores for the turn, both sides have to match or the next request
 // replays a different conversation than the one on disk.
 export function sendAudioFromVoice(b64, onUnsupported) {
   if (stopActiveStream) stopActiveStream();
@@ -355,9 +356,10 @@ export function runChat({ idle, ephemeral, audio, onAudioUnsupported }) {
   if (window.DevHud) DevHud.beginGen();
   appendRaw('--- ' + new Date().toLocaleTimeString() + (idle ? ' (idle nudge)' : '') + ' ---\n');
 
-  // Guess the reply's language from Anon's message so the pocket-tts model can
-  // warm up while she writes. this ONLY picks the voice, the guess never gets
-  // to the model, she takes Anon's language from the conversation herself.
+  // guess the reply's language off Anon's message so the pocket-tts model can
+  // warm up while she writes. this ONLY picks the voice, the guess never
+  // reaches the model, she works out Anon's language from the conversation
+  // herself.
   if (window.TTS && TTS.predictLang) {
     const lastUser = [...messages].reverse().find(m => m.role === 'user');
     const predicted = TTS.predictLang(lastUser ? lastUser.content : '');
@@ -395,7 +397,7 @@ export function runChat({ idle, ephemeral, audio, onAudioUnsupported }) {
       },
       onSilence: () => {
         if (!isCurrent()) return;
-        // She decided to say nothing, so whatever leaked into the bubble
+        // she decided to say nothing, so whatever leaked into the bubble
         // first never happened. drop it and mark the turn instead.
         silenced = true;
         if (window.TTS) TTS.stop();
@@ -431,7 +433,7 @@ export function runChat({ idle, ephemeral, audio, onAudioUnsupported }) {
         if (window.TTS) TTS.flush();
         typing.remove();
         if (silenced) {
-          // The flushes above can still push held back bytes. none of it exists.
+          // the flushes above can still push held back bytes. none of it exists
           visible = '';
           shown = '';
           if (window.TTS) TTS.stop();
@@ -462,8 +464,8 @@ export function runChat({ idle, ephemeral, audio, onAudioUnsupported }) {
           const info = err.data || {};
           startFleeLock((info.until || 0) * 1000, info.reason);
         } else if (err.message === 'audio_unsupported') {
-          // Refused before anything was written, so the turn leaves no trace
-          // here either and the next one goes through whisper.
+          // refused before anything was written, so the turn leaves no trace
+          // here either and the next one goes through whisper
           if (onAudioUnsupported) onAudioUnsupported();
           ui.toast('⚠ This model can\'t hear - falling back to transcription', 'error');
         } else if (err.status === 418) {
@@ -600,10 +602,10 @@ function showBoot() {
   currentUser = me.user || null;
   applyRoleGates(currentUser);
 
-  // The avatar stack and the per feature scripts are no use to someone who
+  // the avatar stack and the per feature scripts are useless to somebody who
   // never gets past the auth screen, so we only fetch them NOW.
   // devhud.js owns the Ctrl+Shift+D handler, so keeping it out of the list is
-  // what stops a normal account from opening the HUD at all.
+  // literally what stops a normal account from opening the HUD at all.
   await loadScripts([
     ['vendor/pixi.min.js', 'vendor/live2dcubismcore.min.js',
      'vendor/marked.min.js', 'vendor/purify.min.js',
@@ -615,12 +617,12 @@ function showBoot() {
      'js/wardrobe-return-lines.js?v=1'],
     ['vendor/cubism4.min.js'],
   ]);
-  // live2d.js is an ES module, so it can't go in a loadScripts group, and it
-  // pulls PIXI.live2d apart as soon as it runs, that is what the await is for.
+  // live2d.js is an ES module so it can't go in a loadScripts group, and it
+  // rips PIXI.live2d apart the moment it runs. that's what the await is for.
   await import('./live2d.js?v=1');
 
-  // Both of these set up a global that loads late, so they can't run at module
-  // scope any more, they would quietly do nothing before the load.
+  // both of these set up a global that loads late, so they can't run at module
+  // scope anymore. they'd just silently do nothing before the load.
   marked.setOptions({ gfm: true, breaks: true });
   ModelTouch.init({
     sendEvent: sendTouchEvent,
@@ -632,9 +634,8 @@ function showBoot() {
     },
   });
 
-  // Coming back from the wardrobe the return cutscene takes the place of the
-  // boot terminal. skipping BootFX.start also makes BootFX.finish do nothing
-  // later on.
+  // coming back from the wardrobe, the return cutscene REPLACES the boot
+  // terminal. skipping BootFX.start also makes BootFX.finish a no-op later.
   const fromWardrobe = new URLSearchParams(location.search).get('from') === 'wardrobe';
   if (fromWardrobe) {
     history.replaceState(null, '', location.pathname);
@@ -645,14 +646,14 @@ function showBoot() {
       bo.setAttribute('aria-hidden', 'true');
     }
   } else {
-    // Keep the shell hidden until the logged in boot overlay fades away.
+    // keep the shell hidden until the logged in boot overlay fades out
     showBoot();
   }
 
   const emailEl = document.getElementById('userEmail');
   if (me.user && emailEl) emailEl.textContent = me.user.email || '';
 
-  // Fill in the synced preferences before any module reads its local keys.
+  // fill in the synced preferences BEFORE any module reads its local keys
   if (window.Prefs) await Prefs.pullFromServer();
   if (window.Names) Names.load();
   wireNameSettings();
@@ -684,14 +685,14 @@ function showBoot() {
     devNoIdleChk.checked = localStorage.getItem('no_idle_nudges') === '1';
   }
   syncThinkToggle();
-  // Lock the composer up front until the first status check answers, but
-  // leave the banner alone. it only ever speaks for something the server said
-  // is true, so a normal load never flashes a consolidation notice and then
-  // takes it back.
+  // lock the composer up front until the first status check answers, but
+  // leave the banner alone. it only ever speaks for something the server
+  // actually said is true, so a normal load never flashes a consolidation
+  // notice and then takes it back.
   chatInput.disabled = true;
   sendBtn.disabled = true;
   await syncConsolidationStatus();
-  // The wardrobe is the same session, time spent in there is not an absence.
+  // the wardrobe is the same session. time in there is NOT an absence.
   if (!fromWardrobe) await fetchWelcome();
   reportActivity(true);
 
@@ -842,9 +843,9 @@ function showBoot() {
 
   const m = await waitForProvider();
   applyProviderCapabilities(m.provider);
-  // Every Jun in the list starts with the same `hf.co/efficiencyx/`, so it
-  // tells you nothing and pushes the part that does off the end of the box.
-  // The value keeps the full name, that is what we send back.
+  // every Jun in the list starts with the same `hf.co/efficiencyx/`, so it
+  // tells you nothing and shoves the part that does off the end of the box.
+  // the value keeps the full name, that's what we send back.
   const shortName = (n) => n.replace(/^hf\.co\/[^/]+\//, '');
   modelSelect.innerHTML = m.models.map(n =>
     `<option value="${escapeHtml(n)}">${escapeHtml(shortName(n))}</option>`).join('');

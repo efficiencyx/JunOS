@@ -11,7 +11,7 @@ export function clamp(id, v) {
 const MOUTH_DRAWABLES = ['HitAreaOpenMouth', 'HitAreaCloseMouth', 'InnerMouth', 'SkinLipUpper'];
 const FACE_DRAWABLES = ['HitAreaFaceStroke', 'SkinFace', 'ModdableFace'];
 
-// Inverse of toModelPoint: Cubism units (y up) -> client px.
+// inverse of toModelPoint. Cubism units (y up) -> client px.
 function fromModelPoint(x, y) {
   const ci = raw.canvasinfo;
   const p = new PIXI.Point(x * ci.PixelsPerUnit + ci.CanvasOriginX, ci.CanvasOriginY - y * ci.PixelsPerUnit);
@@ -104,7 +104,7 @@ export function findDrawables(includes, excludes) {
 function toModelPoint(clientX, clientY) {
   const rect = app.view.getBoundingClientRect();
   const p = model.toModelPosition(new PIXI.Point(clientX - rect.left, clientY - rect.top));
-  // Convert model-canvas pixels (y down) to Cubism coordinates (y up).
+  // model-canvas pixels (y down) to Cubism coordinates (y up)
   const ci = raw.canvasinfo;
   p.x = (p.x - ci.CanvasOriginX) / ci.PixelsPerUnit;
   p.y = (ci.CanvasOriginY - p.y) / ci.PixelsPerUnit;
@@ -123,8 +123,8 @@ function pointInMesh(D, i, p) {
   return false;
 }
 
-// Checks a point against certain drawables even when they are hidden, for the
-// model's invisible HitArea* meshes.
+// checks a point against certain drawables even when they're hidden, for the
+// model's invisible HitArea* meshes
 export function hitTest(clientX, clientY, ids) {
   if (!model || !raw || !app) return null;
   const p = toModelPoint(clientX, clientY);
@@ -148,7 +148,7 @@ export function drawableAt(clientX, clientY, onlyIds, tolerancePx) {
     if (only && !only.has(D.ids[i])) continue;
     const forcedOpacity = forcedDrawableOpacity.get(D.ids[i]);
     const opacity = forcedOpacity == null ? D.opacities[i] : forcedOpacity;
-    // Take in layers the renderer is holding visible.
+    // a forced opacity can wake a drawable Cubism marked hidden
     const visible = (D.dynamicFlags[i] & 0x01) || (forcedOpacity != null && forcedOpacity > 0.0001);
     if (!visible || opacity < 0.01) continue;
     candidates.push(i);
@@ -156,8 +156,8 @@ export function drawableAt(clientX, clientY, onlyIds, tolerancePx) {
     if (pointInMesh(D, i, p)) { best = D.ids[i]; bestOrder = D.renderOrders[i]; }
   }
   if (best || !tolerancePx) return best;
-  // Nothing exactly under the cursor, so fall back to padded boxes. the
-  // smallest box wins, or a big garment would swallow a thin accessory.
+  // nothing exactly under the cursor, so fall back to padded boxes. SMALLEST
+  // box wins, otherwise a big garment swallows a thin accessory whole.
   const q = model.toModelPosition(new PIXI.Point(clientX - rect.left + tolerancePx, clientY - rect.top));
   const tol = Math.abs((q.x - ci.CanvasOriginX) / ci.PixelsPerUnit - p.x);
   let bestArea = Infinity;

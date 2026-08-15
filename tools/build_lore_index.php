@@ -1,13 +1,12 @@
 <?php
-// Rebuilds the lore file that webapp/api/lore.php reads on every message. it
-// takes the hand written game lore Q&A in tools/lore_dataset.jsonl, flattens it
-// into {question, answer} pairs, and writes lore_corpus.txt with one answer per
-// row. lookup is plain keyword matching so there is no Ollama and no embeddings
-// involved. --dry-run just counts the pairs.
+// webapp/api/lore.php does plain keyword lookup over
+// lore_corpus.txt. this flattens every user -> assistant pair in
+// tools/lore_dataset.jsonl into one answer row. no Ollama, no
+// embeddings, none of that. --dry-run counts without writing.
 
 define('DATASET_PATH', __DIR__ . '/lore_dataset.jsonl');
-// under Docker webapp/* gets copied to /var/www/omega/, on bare metal it is
-// right next to us
+// in the repo it's ../webapp. deployed copies keep the files
+// one level above tools/ in /var/www/omega/.
 $webappDir = is_dir(__DIR__ . '/../webapp') ? __DIR__ . '/../webapp' : __DIR__ . '/..';
 define('CORPUS_OUT', $webappDir . '/lore_corpus.txt');
 
@@ -20,9 +19,9 @@ if (!is_readable(DATASET_PATH)) {
     exit(1);
 }
 
-// Turn every user then assistant turn into a {question, answer} pair. we search
-// on the question, the answer is what actually gets handed to her. Multi-turn rows
-// become several pairs. Dedup identical questions, keep first-seen order.
+// each user -> assistant turn becomes a searchable pair.
+// multi-turn rows make several. duplicate questions keep the
+// first answer and their first-seen order.
 $pairs = [];
 $seen = [];
 $rawLines = 0;

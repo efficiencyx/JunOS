@@ -99,10 +99,9 @@ function moodAccent(affection, trust, tension) {
   const a = clamp(affection / 100, 0, 1);
   const t = clamp(trust / 100, 0, 1);
   const x = clamp(tension / 100, 0, 1);
-  const calm = 214 + a * 96;                   // distant blue to loving rose
-  // tension drags the whole accent toward the tension gauge color, #ff7a55
-  // in styles.css. at 100 it sits exactly on it whatever affection and trust
-  // have to say.
+  const calm = 214 + a * 96;
+  // tension drags the accent toward #ff7a55. at 100 it
+  // wins outright, whatever affection and trust think.
   let hue = (calm + shortestArc(calm, 13) * x + 360) % 360;
   let sat = clamp((60 + t * 28) * (1 - x) + 100 * x, 42, 100);
   let light = clamp(74 * (1 - x) + 67 * x, 62, 78);

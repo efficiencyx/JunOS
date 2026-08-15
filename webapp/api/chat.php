@@ -26,8 +26,8 @@ function sse_done(): void {
     echo "data: [DONE]\n\n";
     @flush();
 }
-// Get out mid stream. errors go as SSE events and not HTTP codes, the browser
-// is already reading an event-stream by the time we check anything.
+// bail out mid stream. errors go over SSE, the event stream that's
+// already open in the browser, NOT through HTTP status codes.
 function sse_fail(string $err): never {
     sse_send(['error' => $err]);
     sse_done();
@@ -47,9 +47,9 @@ if ($ban !== null) {
 
 require_post();
 
-// Big enough for a base64 wav plus the history. nginx caps /api/chat.php at
-// 4m and that is the limit that really bites, this one just has to sit above
-// it, see the audio field below.
+// big enough for a base64 wav plus the history. nginx caps /api/chat.php at
+// 4m and THAT's the limit that actually bites, this one just has to sit
+// above it. see the audio field below.
 $body = json_decode(read_body(6 * 1024 * 1024), true);
 if (!is_array($body) || !isset($body['messages']) || !is_array($body['messages'])) {
     sse_fail('invalid_request');
@@ -81,8 +81,8 @@ if (isset($body['model']) && is_string($body['model']) && $body['model'] !== '')
 }
 $model = ollama_resolve_chat_model($model);
 
-// llama.cpp runs without an mmproj here, OpenRouter and the Android build
-// can't take audio at all. the client hears this and goes back to stt.php.
+// llama.cpp runs with no mmproj here, and OpenRouter + the Android build
+// can't take audio at all. client hears this and falls back to stt.php
 if ($audioB64 !== '' && ($PROVIDER !== 'ollama' || !ollama_model_supports_audio($model))) {
     sse_fail('audio_unsupported');
 }
@@ -120,25 +120,24 @@ if (!$ownsConversation) sse_fail('forbidden');
 
 rate_limit('chat', 30, 60);
 
-// Keep the whole system message the same byte for byte between turns so Ollama
-// can reuse its KV-cache prefix, the work it already did on the text in front. persona file, fixed rubrics and tool prose
-// only, Never a value. the journal on the end is the one exception, it only
-// changes when idle consolidation rewrites it, so the one reprocess it costs
-// happens while Anon is away anyway. anything that moves per turn goes in the
-// live context instead.
+// keep this byte-identical between turns or Ollama throws away
+// the KV cache, the work it already did on the prefix. persona,
+// fixed rubrics and tool prose live here. NEVER a per-turn value.
+// the journal is the one exception, only idle consolidation
+// rewrites it and only while Anon is away. everything else that
+// moves goes in the live context.
 $promptPath = __DIR__ . '/../system_prompt.txt';
 $systemPrompt = is_readable($promptPath) ? rtrim(file_get_contents($promptPath)) : '';
 
-// The `<!--tools-->` block tells her to reach for search_lore and
-// search_recent_chats. On a provider with no tools, or with LLAMACPP_TOOLS=off,
-// that is telling her to call something that isn't there, and she does it
-// anyway, about one turn in five comes back with a raw <|tool_call> blob in
-// the text where a reply should be. Nothing strips it, the HF pull carries no
-// parser, so Anon reads it.
+// the `<!--tools-->` block tells her to use search_lore and
+// search_recent_chats. with no tools, or LLAMACPP_TOOLS=off,
+// those calls don't exist. she tries anyway. about one turn in
+// five comes back as a raw <|tool_call> blob where her reply
+// should be, and the HF pull has no parser, so Anon reads it. lol
 //
-// The markers come out either way. with tools ON what's left is byte for byte
-// the prompt that shipped, which is the point, the system message has to stay
-// identical between turns or Ollama throws away the KV cache and TTFT goes
+// markers get stripped either way. with tools ON what's left is
+// byte-identical to the shipped prompt. touch that prefix and
+// Ollama dumps the KV cache and TTFT (time to first token) goes
 // through the floor.
 function prompt_apply_tool_gate(string $prompt, bool $toolsOffered): string {
     if ($toolsOffered) return preg_replace('/^<!--\/?tools-->\R/m', '', $prompt);
@@ -459,10 +458,10 @@ Do not use conversation-recall tools to answer questions about current external 
 TXT;
 }
 
-// The standing instructions for the live context blocks. this sits in the
-// cached system prefix so it has to stay a compile time constant. ONLY the
-// values it talks about may change per turn, or Ollama's KV cache misses on the
-// whole prompt.
+// standing instructions for the live context blocks. this lives in the
+// cached system prefix so it stays a compile time constant. ONLY the values
+// it talks about may change per turn, otherwise Ollama's KV cache misses on
+// the entire prompt.
 function static_context_rubrics(): string {
     return <<<TXT
 # How to Read the Live Context
@@ -675,7 +674,7 @@ function web_search_public(string $query): array {
         preg_match_all('#<a[^>]+class="result__snippet"[^>]*>(.*?)</a>#si', $html, $snips);
         foreach ($links as $i => $m) {
             $href = html_entity_decode($m[1], ENT_QUOTES | ENT_HTML5);
-            // DuckDuckGo hides result URLs inside /l/?uddg=<encoded>.
+            // duckduckgo buries the real URL inside /l/?uddg=<encoded>
             if (preg_match('#[?&]uddg=([^&]+)#', $href, $u)) $href = urldecode($u[1]);
             $title = trim(html_entity_decode(strip_tags($m[2]), ENT_QUOTES | ENT_HTML5));
             $snippet = trim(html_entity_decode(strip_tags($snips[1][$i] ?? ''), ENT_QUOTES | ENT_HTML5));
@@ -750,9 +749,10 @@ function flee_scene_excerpt(array $msgs): string {
     return implode("\n", $lines);
 }
 
-// A second opinion before a walkout really bans Anon. a pass over the same
-// scene with no persona on, which she can't talk her way past from inside the
-// roleplay. it fails closed, anything short of a clear yes keeps her here.
+// second opinion before a walkout actually bans Anon. a pass over the same
+// scene with the persona off, which she can't sweet-talk her way past from
+// inside the roleplay. fails closed. anything short of a clear yes and she
+// stays.
 function flee_adjudicate(string $provider, string $model, array $msgs, string $reason, string $destination): array {
     $system = <<<TXT
 You are a neutral referee for the physics of a roleplay scene. You have no persona and no stake in the story.
@@ -822,8 +822,8 @@ function run_tool_call(string $name, array $args, array $user, int $convId): str
                 return ['date' => date('Y-m-d H:i', (int)$r['created_at']), 'conversation_id' => (int)$r['conversation_id'], 'title' => (string)($r['title'] ?? ''), 'role' => (string)$r['role'], 'content' => $content];
             }, $st->fetchAll());
             if (!$rows) {
-                // The fine-tune only ever saw this tool name, so a lore
-                // question comes here first. give it the right tool instead
+                // the fine-tune only ever saw THIS tool name, so a lore
+                // question lands here first. hand it the right tool instead
                 // of an empty result.
                 $note = lore_search($query, 1, true)
                     ? 'No earlier conversation mentions this, but it is something from your world, not something Anon told you. Call search_lore with the same query before answering.'
@@ -903,9 +903,9 @@ for ($i = count($body['messages']) - 1; $i >= 0; $i--) {
         break;
     }
 }
-// A spoken turn has no text at all, so anything that reads the last message
-// gets nothing. keyword lore lookup goes away with it, she has search_lore
-// and can ask for what she needs.
+// a spoken turn has no text AT ALL, so anything reading the last message
+// gets nothing. keyword lore lookup dies with it, which is fine, she's got
+// search_lore and can just ask for what she needs.
 if ($audioB64 !== '') $lastUserMsg = '';
 $toolsOffered = provider_tools_enabled();
 
@@ -930,7 +930,7 @@ if ($convId > 0) {
 }
 
 $nowStr = $clientTime !== '' ? $clientTime : date('l, F j, Y \a\t g:i A T');
-// Sits right above the notes, a dated note only means something next to it.
+// sits right above the notes. a dated note means nothing without it
 $contextParts[] = "## Current date and time\nIt is currently " . $nowStr . ".";
 
 $memoryBlock = memory_recent_context((int)$user['id']);
@@ -973,8 +973,8 @@ if ($outfitContext !== '') {
 $contextParts[] = "## YOUR FEELINGS TOWARD ANON RIGHT NOW - highest priority for this reply\n"
     . relationship_directives($rel);
 
-// The same thing the other way round. with the notes already listed above, she
-// treats saving as done and answers without ever calling memory_write.
+// same trap, other direction. with the notes already listed above she
+// decides saving is Done and answers without ever calling memory_write
 if ($toolsOffered) {
     $contextParts[] = "## Save check\n"
         . "If Anon's latest message contains something durable (a preference, personal fact, plan, "
@@ -985,8 +985,9 @@ if ($toolsOffered) {
 $liveContext = "# Live context for THIS reply (from the system, not spoken by Anon)\n\n"
     . implode("\n\n", $contextParts);
 
-// She learns how to read the blocks and when to use a tool from training and
-// not from here, so the prompt stays thin. has to match tools/dataset_v5.
+// she learns how to read the blocks and when to reach for a tool from
+// TRAINING, not from here, so the prompt stays thin. must match
+// tools/dataset_v5.
 $systemContent = prompt_apply_tool_gate($systemPrompt, $toolsOffered);
 $journalContext = journal_context((int)$user['id']);
 if ($journalContext !== '') $systemContent .= "\n\n" . $journalContext;
@@ -996,8 +997,11 @@ $messages[] = ['role' => 'system', 'content' => $systemContent];
 $skipCovered = $summaryCoveredCount;
 foreach ($body['messages'] as $m) {
     if (!is_array($m) || !isset($m['role'], $m['content'])) continue;
-    if ($m['role'] === 'system') continue; // the system turn is ours, not the client's
-    if ($skipCovered > 0) { $skipCovered--; continue; } // folded into the summary already
+    // the system turn is ours. Never the client's.
+    if ($m['role'] === 'system') continue;
+    // these turns already live in the summary. don't send them
+    // twice.
+    if ($skipCovered > 0) { $skipCovered--; continue; }
     $messages[] = ['role' => $m['role'], 'content' => (string)$m['content']];
 }
 
@@ -1010,22 +1014,23 @@ if ($idle) {
         . 'If asked to be quiet Break the silence with ONLY an action. such as a wave or a smile. No chat or text!)'];
 }
 
-// Put the per turn context into the last user turn. strict templates only take
-// a system role at the front, and a prefix that doesn't move keeps Ollama's KV
-// cache working. ONLY things that change go here, how to read them lives in the
-// cached system message.
-// What he SAID comes first and the context goes after it. that is the shape
-// she was trained on, tools/build_dataset_v6.py writes every row as
+// per turn context goes into the LAST user turn. strict templates only take
+// a system role at the front, and a prefix that never moves keeps Ollama's
+// KV cache alive. only things that change go here, how to read them lives in
+// the cached system message.
+//
+// and what he SAID comes first, context after. that's the shape she was
+// trained on, tools/build_dataset_v6.py writes every row as
 // user_text + "\n\n# Live context ..." and splits his words back off on that
-// same marker. Put the block in front instead and his message turns into a
-// loose line hanging off the end of a system dump, she stops being able to
-// tell it apart and answers the wardrobe and the gauges instead of him.
+// same marker. put the block in front instead and his message becomes a
+// loose line dangling off the end of a system dump, she can't tell it apart
+// anymore, and she answers the wardrobe and the gauges instead of him.
 $lastIdx = count($messages) - 1;
 if ($lastIdx >= 0 && $messages[$lastIdx]['role'] === 'user') {
     if ($audioB64 !== '') {
-        // Ollama only reads media out of `images`, whatever is in it. send the
-        // wav under `audio` or `audios` and it drops the field without a word
-        // and she answers a turn with nothing in it.
+        // Ollama ONLY reads media out of `images`, whatever's in it. send the
+        // wav under `audio` or `audios` and it drops the field silently, then
+        // she answers a turn with nothing in it. no error. nothing.
         $messages[$lastIdx]['content'] =
             "## How Anon is talking\nHe is saying this out loud, the recording is attached. He is not typing."
             . "\n\n" . $liveContext;
@@ -1037,7 +1042,7 @@ if ($lastIdx >= 0 && $messages[$lastIdx]['role'] === 'user') {
     $messages[] = ['role' => 'user', 'content' => $liveContext];
 }
 
-/** @return array{0:string,1:bool,2:string} [effort, think, reason] */
+// tuple order is effort, think, reason
 function route_reasoning(string $msg, bool $idle): array {
     if ($idle || trim($msg) === '') return ['low', false, 'idle/empty'];
 
@@ -1075,8 +1080,8 @@ if ($reasoning === 'auto') {
     [$reasoning, $think, $route] = route_reasoning($lastUserMsg, $idle);
 }
 
-// The frame carries the whole assembled system prompt, so it stays behind the
-// admin role, the dev HUD is the only thing that reads it.
+// this frame carries the WHOLE assembled system prompt, so it stays behind
+// the admin role. the dev HUD is the only thing that reads it.
 if (($user['role'] ?? '') === 'admin') {
     sse_send(['debug' => ['system_prompt' => $systemContent, 'live_context' => $liveContext, 'reasoning' => $reasoning, 'think' => $think, 'route' => $route]]);
 }
@@ -1116,10 +1121,10 @@ for ($round = 0; $round < 3; $round++) {
         $roundContent = $result['content'];
         $toolCalls = $result['tool_calls'];
         if ($result['stats'] !== null) {
-            // Generation is spread over every tool round so those counters
-            // add up. the prompt ones don't. each round sends the whole
-            // transcript again, last round's output included, so the number
-            // from the last round is the real one.
+            // generation is spread over every tool round so those counters
+            // add up. the prompt ones do NOT. each round resends the whole
+            // transcript, last round's output included, so only the number
+            // from the last round is real.
             $prev = $stats;
             $stats = $result['stats'];
             if ($prev !== null) {
@@ -1139,11 +1144,11 @@ for ($round = 0; $round < 3; $round++) {
 
         if (provider_uses_openai_protocol($PROVIDER)) {
             if ($result['http_status'] >= 400 && !$sawError) {
-                // NEVER log request headers, the API key is in there.
+                // NEVER log request headers. the API key is in there.
                 log_event(['msg' => 'upstream_http_error', 'provider' => $PROVIDER,
                            'status' => $result['http_status'], 'body' => mb_substr($result['error_body'], 0, 500)]);
                 if ($round === 0 && !$retriedWithoutTools && isset($upstreamPayload['tools'])) {
-                    // One more go, for llama.cpp templates that refuse tools.
+                    // one more go, for llama.cpp templates that refuse tools
                     unset($upstreamPayload['tools']);
                     $toolsOffered = false;
                     $retriedWithoutTools = true;
@@ -1189,7 +1194,7 @@ for ($round = 0; $round < 3; $round++) {
         sse_send(['tool_status' => ['name' => $name, 'state' => 'running', 'args' => $args]]);
         $t0 = microtime(true);
         if ($name === 'stay_silent') {
-            // An idle turn is unprompted anyway, so staying quiet does nothing.
+            // an idle turn is unprompted anyway, so staying quiet does nothing
             if ($idle) {
                 $toolResult = json_encode(['error' => 'not_available_on_idle']);
             } else {
@@ -1243,11 +1248,11 @@ for ($round = 0; $round < 3; $round++) {
     $upstreamPayload['messages'] = $messages;
 }
 
-// She sometimes calls a tool and then just stops, no answer at all, and the
-// user gets an error where a reply should be. Same hole at the other end,
-// if the third round is still tool calls we run them and never let her
-// speak. Both leave the buffer empty. one more round with the tools taken
-// away, so the only thing left to do is talk.
+// she sometimes calls a tool and then just. stops. no answer at all, and the
+// user gets an error where a reply should be. same hole at the other end, if
+// the third round is STILL tool calls we run them and never let her speak.
+// both leave the buffer empty. so: one more round with the tools taken away,
+// leaving her nothing to do except talk.
 if ($usedTools && !$sawError && !$silenced && $fledInfo === null && trim($assistantBuffer) === '') {
     log_event(['msg' => 'tool_round_silent_retry', 'model' => $model]);
     unset($upstreamPayload['tools']);
@@ -1267,9 +1272,10 @@ if ($usedTools && !$sawError && !$silenced && $fledInfo === null && trim($assist
     }
 }
 
-// Same fine-tune quirk as memory_write below: she sometimes writes these as her own
-// [A:...] tags instead of calling the tool. Route them through the identical path -
-// a flee tag still has to clear the referee, since the tag itself proves nothing.
+// same training quirk as memory_write below. Jun sometimes just
+// writes these as her own [A:...] tags instead of calling the
+// tool, so send them down the same path. flee_adjudicate() still
+// has to approve a flee tag, the tag itself proves nothing.
 if (!$sawError && $assistantBuffer !== '') {
     if (!$silenced && !$idle && preg_match('/\[\s*A(?:CTIONS?)?\s*:\s*stay_silent\b([^\]]*)\]/i', $assistantBuffer, $sm)) {
         $silenced = true;
@@ -1295,8 +1301,9 @@ if (!$sawError && $assistantBuffer !== '') {
 }
 
 if ($silenced) {
-    // Any lead-in she streamed defeats the point, but the transcript still needs an
-    // assistant turn: strict templates reject a dangling user turn on the next request.
+    // any lead-in at all and stay_silent is pointless, but the
+    // transcript still needs an assistant turn. strict templates
+    // reject a dangling user turn on the next request.
     $assistantBuffer = '...';
     sse_send(['silence' => ['reason' => $silenceReason]]);
 } elseif ($fledInfo !== null) {
@@ -1322,7 +1329,7 @@ if (!$sawError && $assistantBuffer === '') {
 $rawAssistant = $assistantBuffer;
 
 if (!$sawError && $assistantBuffer !== '') {
-    // Relationship tags are state, not dialogue, so never persist them.
+    // relationship tags are state, not dialogue. never persist them.
     if (preg_match('/\[\s*A(?:CTIONS?)?\s*:\s*mood_shift\b([^\]]*)\]/i', $assistantBuffer, $mm)) {
         $deltas = [];
         foreach (['affection', 'trust', 'tension'] as $k) {
@@ -1332,12 +1339,13 @@ if (!$sawError && $assistantBuffer !== '') {
         $assistantBuffer = trim(preg_replace('/\[\s*A(?:CTIONS?)?\s*:\s*mood_shift\b[^\]]*\]/i', '', $assistantBuffer));
     }
 
-    // The fine-tune sometimes writes memory_write as one of its own [A:...] action
-    // tags instead of calling the tool - it is write-only, so the tag carries
-    // everything needed. Honour it here rather than dropping the save on the floor.
+    // Jun sometimes writes memory_write as one of her [A:...]
+    // tags instead of calling the tool. it's write-only though, so
+    // the tag already has everything we need. save it here instead
+    // of throwing the note away.
     if (preg_match_all('/\[\s*A(?:CTIONS?)?\s*:\s*memory_write\b([^\]]*)\]/i', $assistantBuffer, $mws, PREG_SET_ORDER)) {
         foreach ($mws as $mw) {
-            // memory= runs to the end of the tag: the note itself may contain commas.
+            // memory= runs to the end of the tag, the note can have commas
             if (!preg_match('/\bmemory\s*=\s*(.+)$/is', $mw[1], $mem)) continue;
             $category = preg_match('/\bcategory\s*=\s*([^,\]]+)/i', $mw[1], $cat) ? trim($cat[1]) : 'general';
             $res = memory_note_add((int)$user['id'], $category, trim($mem[1]));
@@ -1361,8 +1369,8 @@ if (!$sawError && $assistantBuffer !== '') {
         $titleRow->execute([$convId]);
         $conversationTitle = $titleRow->fetchColumn();
         $titleRow->closeCursor();
-        // A spoken turn leaves $lastUserMsg empty, so there is nothing to name
-        // the chat after. leave it untitled and let the next typed turn do it.
+        // a spoken turn leaves $lastUserMsg empty, so there's nothing
+        // to name the chat after. next typed turn handles it.
         if (!$conversationTitle && $lastUserMsg !== '') {
             $newTitle = generate_chat_title($lastUserMsg) ?: substr($lastUserMsg, 0, 60);
             db()->prepare('UPDATE conversations SET title=? WHERE id=?')

@@ -37,13 +37,13 @@ window.Names = (function () {
       key.toLowerCase() === 'playername' ? player : bot);
   }
 
-  // Keep half written streaming placeholders out of the reply we show.
+  // keep half written streaming placeholders out of the reply we show
   const TOKENS = ['{f_playername}', '{f_botname}'];
   function pendingPartial(buf) {
     const open = buf.lastIndexOf('{');
     if (open < 0) return 0;
     const tail = buf.slice(open).toLowerCase();
-    if (tail.indexOf('}') !== -1) return 0; // already closed - nothing pending
+    if (tail.indexOf('}') !== -1) return 0;
     for (const tok of TOKENS) {
       if (tok.startsWith(tail)) return buf.length - open;
     }

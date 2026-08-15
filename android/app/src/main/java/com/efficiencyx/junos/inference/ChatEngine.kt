@@ -48,9 +48,9 @@ data class ChatRequest(
 )
 
 internal fun ChatRequest.validate() {
-    // The webapp hands the turn over as a base64 wav whenever it thinks she can
-    // hear it. LiteRT has no audio input here, so we refuse before anything is
-    // written down and the client redoes the turn through whisper.
+    // the webapp sends a base64 WAV when it thinks she can hear it.
+    // LiteRT has no audio input here, so refuse BEFORE writing
+    // anything down and let the client retry through whisper.
     if (audio != null) error("audio_unsupported")
     require(messages.size <= 160 && messages.all {
         it.role in setOf("user", "assistant", "system") && it.content.length <= 16 * 1024
@@ -67,8 +67,8 @@ class ChatEngine(
     private val dao get() = database.dao()
     private val json = Json { ignoreUnknownKeys = true }
     private val systemPrompt by lazy {
-        // The php side cuts the <!--tools--> block out when a provider has no
-        // tools. She always has them here, so only the marker lines go.
+        // the php side cuts the <!--tools--> block out when a provider has no
+        // tools. she always has them here, so only the marker lines go.
         context.assets.open("system_prompt.txt").bufferedReader()
             .use { it.readText().trimEnd() }
             .replace(TOOL_MARKER_LINE, "")
@@ -95,9 +95,10 @@ class ChatEngine(
                 "(OOC stage direction: Anon has gone quiet. React naturally, or use only an avatar action if he asked for silence.)",
             )
         }
-        // Context first, her question LAST. A 2B int4 model answers whatever it read
-        // most recently, and with the context glued after the question it kept
-        // replying to the memories instead of to Anon.
+        // context first, his question LAST. Jun is 2B int4, her
+        // weights have FOUR bits. she answers whatever she read most
+        // recently, so context after the question gets you an answer
+        // to the memories instead of to Anon.
         val tail = messages.lastIndex
         if (tail >= 0 && messages[tail].role == "user") {
             messages[tail] = messages[tail].copy(content = liveContext + "\n\n" + messages[tail].content)
@@ -120,8 +121,9 @@ class ChatEngine(
                 }
             }
         } else null
-        // Loading the model pins gigabytes and stalls the main looper, so it has to finish before the
-        // foreground service starts - Android kills the process if startForeground() is more than 5s late.
+        // loading pins gigabytes and stalls the main looper. it MUST
+        // finish before the foreground service starts, android kills
+        // the process if startForeground() is more than 5s late.
         try {
             withContext(Dispatchers.Default) { engine.ensureLoaded() }
         } finally {
@@ -172,9 +174,9 @@ class ChatEngine(
                     if (call.name == "flee") fled = buildJsonObject {
                         put("until", 0); put("minutes", 0); put("reason", call.args["reason"]?.jsonPrimitive?.content.orEmpty())
                     }
-                    // Not a "tool" turn. This fine-tune never saw that role in training,
-                    // and handing it one is what made her come back with nothing at all,
-                    // so the result goes in as something she DID see, a user turn.
+                    // NOT a "tool" turn. Jun never saw that role in training,
+                    // and given one she comes back with nothing at all. put
+                    // the result in a user turn, something she DID see.
                     messages += ChatMessage("user", "(Tool result, ${call.name}: $result)")
                 }
                 if (silenced || fled != null) break
@@ -184,9 +186,9 @@ class ChatEngine(
                 }
             }
             if (visible.isBlank() && !silenced && fled == null) {
-                // Every round went on tools and none of them came back with prose.
-                // Run it once more with the protocol taken out and the tool
-                // round-trip gone, so there is nothing for her to reach for but words.
+                // every round used tools and not one came back with prose.
+                // run once more with the protocol and tool round-trip
+                // ripped out, so there's nothing left to reach for but words.
                 val plain = baseMessages.toMutableList()
                 plain[0] = ChatMessage("system", systemPrompt)
                 val filter = ToolStreamFilter()
@@ -352,10 +354,10 @@ class ChatEngine(
         return MOOD_TAG.replace(text, "").trim()
     }
 
-    // 4096 total context, 768 of it reserved for her reply. The system prompt and the
-    // live context alone can fill most of what's left, and past that the runtime just
-    // cuts the front of the prompt off, so we drop whole old turns instead. System
-    // message and the turn she has to answer both stay, always.
+    // 4096 total context, 768 reserved for her reply. the system
+    // prompt and live context can eat most of the rest. past that the
+    // runtime just lops the front off, so we drop whole old turns
+    // instead. system message + the turn she must answer ALWAYS stay.
     private fun trimToBudget(messages: MutableList<ChatMessage>) {
         fun estimate() = messages.sumOf { it.content.length } / 4
         while (estimate() > PROMPT_TOKEN_BUDGET && messages.size > 2) messages.removeAt(1)
@@ -397,17 +399,17 @@ internal class ToolStreamFilter {
                 if (char == ']' && depth == 0 && !inString) reset()
             } else if (marker) {
                 held.append(char)
-                // Hold ONLY while the text can still turn into "[TOOL:". Anything else,
-                // her own [A:emote|happy] tags most of all, goes straight back out, so
-                // roleplay tags reach the JS filter without stalling the stream.
+                // hold ONLY while the text can still turn into "[TOOL:". her
+                // [A:emote|happy] tags go straight out, so the JS filter
+                // sees roleplay tags without stalling the stream.
                 if (!pastPrefix()) {
                     if (!stillCouldBeTool()) flushHeld(emitted)
                 } else {
                     scanArgument(char)
                     if (char == ']' && depth == 0 && !inString) finishMarker()
                     else if (held.length > MAX_HELD) {
-                        // Too long to be a real call. Keep swallowing to the closing
-                        // bracket anyway, otherwise the tail of the blob prints.
+                        // way too long to be a real call. keep swallowing
+                        // through the closing bracket or the tail prints.
                         Log.w("ToolStreamFilter", "dropped overflow marker: ${held.take(200)}")
                         held.clear()
                         marker = false
@@ -466,9 +468,9 @@ internal class ToolStreamFilter {
         reset()
     }
 
-    // Fails closed on purpose. A marker we can't read costs a tool call, which is
-    // annoying, printing it costs Jun a line of JSON in her mouth and it gets saved
-    // to Room and replayed on every history load after that.
+    // fails closed ON PURPOSE. a bad marker costs one tool call. if
+    // it prints, Jun gets JSON in her mouth, Room saves it, and then
+    // every single history load replays it. forever.
     private fun dropHeld(why: String) {
         Log.w("ToolStreamFilter", "dropped $why marker: ${held.take(200)}")
         reset()
@@ -497,7 +499,7 @@ internal class ToolStreamFilter {
         private const val PREFIX = "[TOOL:"
         private const val MAX_HELD = 8192
 
-        // Android's ICU engine rejects a bare '}' that desktop Java tolerates.
+        // android's ICU engine rejects a bare '}' that desktop java shrugs at
         private val TOOL = Regex(
             "\\[\\s*TOOL\\s*:\\s*([a-z_]+)\\s*\\|\\s*(\\{.*\\})\\s*]",
             setOf(RegexOption.IGNORE_CASE, RegexOption.DOT_MATCHES_ALL),
@@ -505,8 +507,9 @@ internal class ToolStreamFilter {
     }
 }
 
-// Some builds wrap reasoning in <think>...</think>. The tags arrive split across
-// tokens, so we hold anything that can still become one and drop the block whole.
+// some builds wrap reasoning in <think>...</think>. the tags
+// split across tokens, so hold any partial tag and drop the whole
+// block.
 internal class ThinkStreamFilter {
     private val held = StringBuilder()
     private var inside = false

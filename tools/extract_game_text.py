@@ -33,19 +33,21 @@ REPO = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 GAME_MARKER = "My Dystopian Robot Girlfriend_Data"
 DEFAULT_OUT = os.path.join(REPO, "tools", "dataset_v5")
 
-# The English source assets worth pulling out, the I2 per language tables.
+# the english source assets worth pulling out, the I2 per language tables
 LOCALIZATION = ("Story", "Dialogue", "Comments", "Blog", "Emails",
                 "Common", "Other", "Polyglot")
 LOC_RE = re.compile(r"^(%s)_en$" % "|".join(LOCALIZATION))
 
-# Jun and NPC TextAssets that are real text on their own, not ASCII art.
+# Jun and NPC TextAssets that are actual text, not ASCII art
 TEXT_ASSETS = ("PositiveComments", "NegativeComments", "MainNews", "SideNews",
                "OpinionNews", "Donations")
 
 SPEAKER_RE = re.compile(r"^([A-Z][A-Za-z0-9'. ]{0,24}): ?(.*)$")
-JUN_TAG = "Bot"          # the game's internal speaker id for Jun
+# yup. the game calls Jun "Bot" in its speaker IDs. sure.
+JUN_TAG = "Bot"
 ANON_TAG = "You"
-GAME_MARKUP = re.compile(r"\{\{[^}]*\}\}")   # {{wi}}, {{wc}}, {{punch=...}}, ...
+# authored text uses {{wi}}, {{wc}} and {{punch=...}}
+GAME_MARKUP = re.compile(r"\{\{[^}]*\}\}")
 
 
 def find_game_dir(explicit):
@@ -80,9 +82,9 @@ def containers(data_dir):
         yield p
 
 
+# m_Name sits after the 28-byte MonoBehaviour header. then a
+# length-prefixed string, because unity.
 def mb_name(raw):
-    """m_Name of a MonoBehaviour from raw bytes: the header (GameObject PPtr +
-    enabled + script PPtr) is 28 bytes, then a length-prefixed string."""
     if len(raw) < 32:
         return ""
     n = struct.unpack_from("<I", raw, 28)[0]
@@ -95,7 +97,7 @@ def mb_name(raw):
 
 
 def scan_strings(raw, minlen=1, maxlen=20000):
-    """Unity-serialized strings (int32 len + utf8, 4-aligned) in file order."""
+    # int32 length, UTF-8 bytes, 4-aligned. keep file order.
     out, i, n = [], 0, len(raw)
     while i + 4 <= n:
         ln = struct.unpack_from("<i", raw, i)[0]
@@ -132,7 +134,6 @@ def main():
     os.makedirs(raw_out, exist_ok=True)
     print("game:", game)
 
-    # asset name -> ordered list of strings
     tables = {}
     for p in containers(data):
         try:
@@ -161,11 +162,10 @@ def main():
             f.write("\n".join(lines))
     print("dumped %d raw tables -> %s" % (len(tables), raw_out))
 
-    # Every line of dialogue that says who is speaking, across all the tables.
     dialogue, jun, speakers = [], [], {}
     for name, lines in tables.items():
-        # One stored string can hold several speaker lines at once, split by a
-        # newline or by the game's own '|' marker.
+        # one stored string can hold several speaker lines at once, split by a
+        # newline or by the game's own '|' marker
         idx = 0
         for element in lines:
             for line in re.split(r"[\n|]", element):
@@ -188,7 +188,6 @@ def main():
         for row in dialogue:
             f.write(json.dumps(row, ensure_ascii=False) + "\n")
 
-    # Everything Jun says, duplicates dropped, original order kept.
     seen, uniq = set(), []
     for row in jun:
         if row["text"] in seen:

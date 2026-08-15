@@ -6,8 +6,8 @@
   overflow: hidden;
 }
 
-/* Floating top-right controls (Gemini-style). Taken out of flow so the sidebar
-   and chat run full-height and the brand sits at the very top. */
+/* Keep this out of flow so the sidebar and chat stay full
+   height, and the brand stays at the top. */
 .app-header {
   position: absolute;
   top: 0;
@@ -92,10 +92,9 @@
 .status-tts       { background: #1a2a1e; color: var(--ok); }
 .status-error     { background: #3a1f23; color: var(--danger); }
 
-/* Mic state, next to the hands-free toggle. Borrows .status-pill's shape but
-   sits inline in a settings row, so it's smaller and not uppercased - the labels
-   are sentences ("listening to the room..."), not status codes.
-   Hands-free gives no other feedback that it heard you; this is it. */
+/* Hands-free gives no other sign that it heard you, this is it.
+   it borrows .status-pill's shape, but its labels are sentences,
+   so they stay small and mixed case. */
 .voice-pill {
   display: inline-flex;
   align-items: center;

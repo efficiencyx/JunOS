@@ -56,7 +56,7 @@ window.ChatAPI = (function () {
                 if (obj.tool_status) { onToolStatus && onToolStatus(obj.tool_status); continue; }
                 if (typeof obj.thinking === 'string') { onThinking && onThinking(obj.thinking); continue; }
                 if (typeof obj.token === 'string') onToken && onToken(obj.token);
-              } catch (e) { /* ignore parse errors */ }
+              } catch (e) {}
             }
           }
         }

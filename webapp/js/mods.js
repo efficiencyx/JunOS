@@ -1,10 +1,12 @@
-// Mod archives are read and drawn in the browser. we Never run the Lua.
+// mod archives get read and drawn in the browser. we Never run the Lua.
 
 window.Mods = (function () {
-  const STATE_KEY = 'omega.mods.state.v1';   // { [guid]: { items: {i: bool}, colors: [hex|null] } }
+  // stored as { [guid]: { items: {i: bool},
+  // colors: [hex|null] } }
+  const STATE_KEY = 'omega.mods.state.v1';
   const DB_NAME = 'omega-mods', DB_STORE = 'zips';
 
-  // Handles stored and deflated ZIP entries.
+  // ONLY zip method 0 (stored) and 8 (deflate) work here
   async function unzip(buf) {
     const dv = new DataView(buf), u8 = new Uint8Array(buf);
     let eocd = -1;
@@ -25,7 +27,7 @@ window.Mods = (function () {
       const cmtLen = dv.getUint16(off + 32, true);
       const lho = dv.getUint32(off + 42, true);
       const name = td.decode(u8.subarray(off + 46, off + 46 + nameLen));
-      // The local header repeats the name and extra lengths, data comes after.
+      // the local header repeats the name and extra lengths, data comes after
       const lnl = dv.getUint16(lho + 26, true), lel = dv.getUint16(lho + 28, true);
       const data = u8.subarray(lho + 30 + lnl + lel, lho + 30 + lnl + lel + csize);
       if (!name.endsWith('/')) entries[name] = { method, data };
@@ -79,12 +81,12 @@ window.Mods = (function () {
   const luaStr = `'((?:\\\\'|[^'])*)'|"((?:\\\\"|[^"])*)"`;
   const unesc = (s) => (s || '').replace(/\\(['"\\n])/g, (m, c) => c === 'n' ? '\n' : c);
 
-  // Prefab info read out of the generated script, which we never run. the
+  // prefab info scraped out of the generated script, which we never run. the
   // lua ties each prefab to its texture folders through GetPackedTexture
-  // paths, and folder order is NOT prefab order, so we have to use that
+  // paths, and folder order is NOT prefab order, so we're stuck using that
   // mapping.
   function parseLua(src) {
-    const prefabs = new Map();   // prefabVar -> { name, slots[], equip, folders:Set }
+    const prefabs = new Map();
     const pf = (v) => {
       if (!prefabs.has(v)) prefabs.set(v, { name: null, slots: [], equip: null, folders: new Set() });
       return prefabs.get(v);
@@ -103,7 +105,7 @@ window.Mods = (function () {
       pf(m[1]).equip = m[2];
     }
     // local X = ModUtilities.GetPackedTexture(guid, '/Folder/file.json') then
-    // prefab.AddTexture(X). the first bit of the path is the item's folder.
+    // prefab.AddTexture(X). first bit of the path is the item's folder.
     const texVarFolder = new Map();
     for (const m of src.matchAll(/(\w+)\s*=\s*ModUtilities\.GetPackedTexture\([^,]+,\s*'\/?([^/']+)\//g)) {
       texVarFolder.set(m[1], m[2]);
@@ -115,8 +117,8 @@ window.Mods = (function () {
     return [...prefabs.values()].filter(p => p.name);
   }
 
-  // A RectInt the way the game writes it. field names change with the
-  // serializer, so take x/y/width/height and the xMin/yMin/xMax/yMax form.
+  // a RectInt the way the game writes it. field names change with the
+  // serializer, so take x/y/width/height AND the xMin/yMin/xMax/yMax form.
   function rect(r) {
     if (!r) return null;
     const g = (...keys) => { for (const k of keys) if (typeof r[k] === 'number') return r[k]; return null; };
@@ -127,9 +129,9 @@ window.Mods = (function () {
     return (x === null || y === null || !w || !h) ? null : { x, y, w, h };
   }
 
-  // Find the drawable name inside a PackedDrawable. take a field that
-  // matches a real drawable in the loaded model first, otherwise fall back
-  // to whatever looks like a Name.
+  // find the drawable name inside a PackedDrawable. take a field matching a
+  // real drawable in the loaded model first, otherwise fall back to whatever
+  // looks like a Name.
   function drawableName(pd, validIds) {
     for (const v of Object.values(pd)) {
       if (typeof v === 'string' && validIds.has(v)) return v;
@@ -137,13 +139,13 @@ window.Mods = (function () {
     return pd.Name || pd.name || pd.DrawableName || null;
   }
 
-  // Turn one mod's file map into items you can see and wear. only the
-  // "interaction" scene containers work on this model, the rest of the zip
-  // stays in IndexedDB but we skip it when drawing.
+  // turn one mod's file map into items you can actually see and wear. only
+  // the "interaction" scene containers work on this model, the rest of the
+  // zip stays in IndexedDB but we skip it when drawing.
   function parseMod(guid, files) {
     let meta = {};
     let lua = [];
-    const folders = new Map();   // folder -> { jsons: [], pngs: Map(lowerBasename -> path) }
+    const folders = new Map();
     for (const [path, data] of Object.entries(files)) {
       const low = path.toLowerCase();
       if (low === 'mod.json' || low.endsWith('/mod.json')) {
@@ -181,7 +183,7 @@ window.Mods = (function () {
     };
   }
 
-  const _blobUrls = new Map();   // guid + '/' + path -> object URL
+  const _blobUrls = new Map();
   function fileUrl(mod, path) {
     const key = mod.guid + '/' + path;
     if (!_blobUrls.has(key)) {
@@ -211,7 +213,7 @@ window.Mods = (function () {
     return null;
   }
 
-  // Multiply a canvas by an #rrggbb color and keep the alpha. same math the
+  // multiply a canvas by an #rrggbb color and keep the alpha. same math the
   // game uses to color its grey item textures.
   function tintCanvas(c, hex) {
     const ctx = c.getContext('2d');
@@ -219,8 +221,8 @@ window.Mods = (function () {
     ctx.fillStyle = hex;
     ctx.fillRect(0, 0, c.width, c.height);
     ctx.globalCompositeOperation = 'destination-in';
-    // Draw the alpha back from the pixels we had before the multiply. the
-    // multiply filled the whole rect, so cut it back to where the art is.
+    // draw the alpha back from the pixels we had before the multiply. the
+    // multiply filled the WHOLE rect, so cut it back to where the art is.
     ctx.drawImage(c._alphaSrc, 0, 0, c.width, c.height);
     ctx.globalCompositeOperation = 'source-over';
   }
@@ -242,11 +244,11 @@ window.Mods = (function () {
           out.push({
             id, tex: texPath, r,
             // Layer sits on the PackedTexture in real exports. older or
-            // hand edited mods can put it on the drawable.
+            // hand edited mods sometimes put it on the drawable instead.
             layer: pd.Layer ?? pd.layer ?? pt.Layer ?? pt.layer ?? 0,
             colorIndex: pd.ColorIndex ?? pd.colorIndex ?? -1,
-            // Game rule, PackedTextureJson.DontIncludeVanillaLayers. when
-            // it is set the default "vanilla" art is NOT drawn under the mod
+            // game rule, PackedTextureJson.DontIncludeVanillaLayers. when
+            // it's set the default "vanilla" art is NOT drawn under the mod
             // layers, even if the mod has no layer-0 texture at all.
             dontIncludeVanilla: !!(pt.DontIncludeVanillaLayers ?? pt.dontIncludeVanillaLayers),
           });
@@ -256,14 +258,14 @@ window.Mods = (function () {
     return out;
   }
 
-  // Bake every worn mod entry for one drawable into a single canvas crop.
-  // the compositor only takes one override per drawable, so the layers get
+  // bake every worn mod entry for one drawable into a single canvas crop.
+  // the compositor only takes ONE override per drawable, so the layers get
   // merged here.
   async function bakeDrawable(entries, colorsFor) {
     entries.sort((a, b) => a.layer - b.layer);
-    // Vanilla art stays underneath unless a layer-0 texture takes its place,
-    // or the container says no vanilla layers. same as Part.AddVanilla in
-    // the game.
+    // vanilla art stays underneath unless a layer-0 texture replaces it, or
+    // the container says no vanilla layers. same as Part.AddVanilla in the
+    // game.
     const hasBase = entries.some(e => e.layer === 0) || entries.some(e => e.dontIncludeVanilla);
     let W = 0, H = 0;
     const imgs = [];
@@ -277,10 +279,10 @@ window.Mods = (function () {
     const ctx = c.getContext('2d');
     entries.forEach((e, i) => {
       const img = imgs[i];
-      // RectInt starts from the bottom left, that is Unity texture space.
+      // RectInt starts from the BOTTOM left, that's unity texture space.
       // checked against both the tutorial cat-ears mod and Seamless
       // Components by holding the crops next to the vanilla atlas art.
-      // canvas crops from the top, so flip it.
+      // canvas crops from the top. so flip it.
       const sy = img.naturalHeight - e.r.y - e.r.h;
       const hex = e.colorIndex >= 0 ? colorsFor(e) : null;
       if (!hex) {
@@ -297,11 +299,11 @@ window.Mods = (function () {
       tintCanvas(t, hex);
       ctx.drawImage(t, 0, 0);
     });
-    // The atlas goes up as PREMULTIPLIED alpha, colour already faded by its own
-    // transparency, because the vanilla art we extracted is baked that way. mod
-    // PNGs are straight alpha, colour and transparency kept apart. without this
-    // every soft edge in the mod art comes out too bright, you get glowing
-    // rims around the lips and the nose shading.
+    // the atlas goes up as PREMULTIPLIED alpha (colour already faded by its
+    // own transparency) because the vanilla art we extracted is baked that
+    // way. mod PNGs are straight alpha, colour and transparency kept apart.
+    // without this every soft edge in the mod art comes out too bright and
+    // you get glowing rims around the lips and the nose shading. cursed.
     const px = ctx.getImageData(0, 0, W, H);
     const d = px.data;
     for (let i = 0; i < d.length; i += 4) {
@@ -312,17 +314,17 @@ window.Mods = (function () {
       d[i + 2] = (d[i + 2] * a + 127) / 255 | 0;
     }
     ctx.putImageData(px, 0, 0);
-    // A replacement has to clear the whole drawable. the compositor clips to
+    // a replacement has to clear the WHOLE drawable. the compositor clips to
     // the mesh so the neighbours are safe, and mods delete decals by shipping
     // a 1x1 transparent layer-0 texture, like Seamless Components' barcode.
-    // an erase that only covers the art would leave that one alone.
+    // an erase that only covers the art would leave that one sitting there.
     return { url: c.toDataURL(), overlay: !hasBase };
   }
 
-  let mods = [];                 // parsed mods
-  let state = {};                // guid -> { items: {index: bool}, colors: [hex|null] }
+  let mods = [];
+  let state = {};
   let readyPromise = null;
-  let appliedIds = new Set();    // drawables currently overridden by mods
+  let appliedIds = new Set();
 
   function loadState() {
     try { state = JSON.parse(localStorage.getItem(STATE_KEY)) || {}; } catch (e) { state = {}; }
@@ -350,7 +352,7 @@ window.Mods = (function () {
   async function applyAll() {
     if (!window.Live2D || !Live2D.setDrawableTextures) return;
     await ensureLoaded();
-    const byDrawable = new Map();   // id -> [{...entry, url, mod, itemIndex}]
+    const byDrawable = new Map();
     for (const mod of mods) {
       mod.items.forEach((item, i) => {
         if (!isEquipped(mod, i)) return;
@@ -361,9 +363,10 @@ window.Mods = (function () {
       });
     }
     const map = {};
-    for (const id of appliedIds) map[id] = null;   // clear stale overrides
+    // null clears overrides that vanished from this pass
+    for (const id of appliedIds) map[id] = null;
     for (const [id, entries] of byDrawable) {
-      // ColorIndex points into the owning ITEM's ColorSlots list.
+      // ColorIndex points into the owning ITEM's ColorSlots list
       try {
         map[id] = await bakeDrawable(entries,
           (e) => ((modState(e.mod.guid).colors || {})[e.itemIndex] || [])[e.colorIndex] || null);
@@ -382,7 +385,7 @@ window.Mods = (function () {
     let guid = null;
     try {
       const meta = JSON.parse(new TextDecoder().decode(metaRaw));
-      // Real exports nest it: doNotChangeVariablesBelowThis.guid.serializedGuid
+      // real exports nest it: doNotChangeVariablesBelowThis.guid.serializedGuid
       const nested = meta.doNotChangeVariablesBelowThis;
       guid = (nested && nested.guid && nested.guid.serializedGuid)
         || meta.Guid || meta.guid || meta.GUID;
@@ -390,13 +393,14 @@ window.Mods = (function () {
     if (!guid) throw new Error('mod.json with a guid not found - is this a mod zip?');
     const mod = parseMod(guid, files);
     if (!mod.items.length) throw new Error('No items usable in the interaction scene found in this mod.');
-    mods = mods.filter(m => m.guid !== guid);   // same guid replaces (game behavior)
+    // like the game, importing the same guid replaces its old copy
+    mods = mods.filter(m => m.guid !== guid);
     mods.push(mod);
     await idbPut({ guid, buf });
-    // Nothing is auto-equipped: like the game, items land in the "inventory"
-    // and the user equips them - mods often ship mutually exclusive variants
-    // (e.g. three alternative skins) that must not stack. Re-importing resets
-    // the equip state (item indices may have changed anyway).
+    // NOTHING is auto-equipped. like the game, items land in the "inventory"
+    // and the user equips them, because mods often ship mutually exclusive
+    // variants (three alternative skins, say) that must not stack.
+    // re-importing resets the equip state, item indices may have moved anyway.
     state[guid] = { items: {}, colors: {} };
     saveState();
     await applyAll();
@@ -414,8 +418,8 @@ window.Mods = (function () {
   function setEquipped(guid, index, on) {
     const st = modState(guid);
     st.items[index] = !!on;
-    // Items sharing an equipment slot are mutually exclusive (game behavior:
-    // equipping a Skin item replaces the currently equipped Skin item).
+    // items sharing an equipment slot are mutually exclusive. game behavior,
+    // equipping a Skin item replaces whatever Skin item is already on.
     const mod = mods.find(m => m.guid === guid);
     if (on && mod) {
       const slot = mod.items[index] && mod.items[index].equip;
@@ -438,8 +442,8 @@ window.Mods = (function () {
     applyAll();
   }
 
-  // Names of currently worn modded items - the ONLY mod data that ever leaves
-  // the browser (inside the outfit_context system-prompt string).
+  // names of currently worn modded items. the ONLY mod data that ever leaves
+  // the browser, inside the outfit_context system-prompt string.
   function describe() {
     const worn = [];
     for (const mod of mods) {

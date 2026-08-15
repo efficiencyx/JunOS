@@ -5,29 +5,19 @@ on:
     branches: [main]
   pull_request:
 
+permissions:
+  contents: read
+
 concurrency:
   group: ci-${{ github.ref }}
   cancel-in-progress: true
 
 jobs:
-  linux:
+  static:
+    name: static checks
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-
-      - uses: shivammathur/setup-php@v2
-        with:
-          php-version: '8.3'
-          coverage: none
-
-      - name: PHP syntax
-        # php -l reports parse errors on stdout next to the "No syntax errors"
-        # noise, so keep the output in a log and print only the failures.
-        run: |
-          git ls-files '*.php' | xargs -r -n1 -P4 php -l > "$RUNNER_TEMP/php-lint.log" || {
-            grep -v 'No syntax errors detected' "$RUNNER_TEMP/php-lint.log"
-            exit 1
-          }
 
       - uses: actions/setup-node@v4
         with:
@@ -48,6 +38,85 @@ jobs:
       - name: Cache busters
         run: sh .github/scripts/check-cache-busters.sh
 
+      - name: Webapp references
+        run: python3 .github/scripts/check-refs.py
+
+      - name: Repo invariants
+        run: sh .github/scripts/check-consistency.sh
+
+      - name: Shell scripts
+        # -S error, not warning: the tracked scripts currently trip 5
+        # warning-level findings (unused loop vars in ollama-entrypoint.sh,
+        # start.sh and install.sh, a unicode quote in install.sh, a stray space
+        # after = in sync-webapp.sh). Move this to -S warning once they are fixed.
+        run: git ls-files '*.sh' | xargs -r shellcheck -S error
+
+      - name: JSON
+        run: git ls-files '*.json' | xargs -r -n1 python3 -m json.tool > /dev/null
+
+  python:
+    name: python
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Compile
+        # the sidecar and the recovery tools import torch, demucs and UnityPy,
+        # none of which we install here (torch alone is a gigabyte). compileall
+        # is the syntax half; ruff below covers the errors an import would have
+        # caught.
+        run: python -m compileall -q tools tts android/app/src/main/python .github
+
+      - uses: astral-sh/ruff-action@v3
+        with:
+          # error-level rules only. this repo has no formatting policy and is
+          # not about to grow one from CI.
+          args: check --select E9,F63,F7,F82,F821,F811,F401 tools tts android/app/src/main/python
+
+  php:
+    name: php ${{ matrix.php }}
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        # 8.2 is what docker/php.Dockerfile ships. 8.4 is what a fresh bare
+        # metal install pulls down, and it is where the deprecations land first.
+        php: ['8.2', '8.4']
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: shivammathur/setup-php@v2
+        with:
+          php-version: ${{ matrix.php }}
+          extensions: pdo_sqlite, curl, mbstring
+          ini-values: error_reporting=E_ALL, display_errors=Off, log_errors=On
+          coverage: none
+
+      - name: Syntax
+        # php -l reports parse errors on stdout next to the "No syntax errors"
+        # noise, so keep the output in a log and print only the failures.
+        run: |
+          git ls-files '*.php' | xargs -r -n1 -P4 php -l > "$RUNNER_TEMP/php-lint.log" || {
+            grep -v 'No syntax errors detected' "$RUNNER_TEMP/php-lint.log"
+            exit 1
+          }
+
+      - name: API smoke test
+        # php -S + tools/php-router.php, which is the bare metal install. no
+        # docker, no ollama: everything under test here has to work with the
+        # model backend down.
+        run: sh .github/scripts/smoke-api.sh
+
+  docker:
+    name: docker stack
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
       - name: Compose config
         run: |
           cp .env.example .env
@@ -61,18 +130,33 @@ jobs:
           LLAMACPP_MODELS_DIR=/tmp/models LLAMACPP_MODEL_FILE=model.gguf \
             docker compose -f docker-compose.yml -f docker-compose.llamacpp-local.yml config -q
           docker compose -f docker-compose.yml -f docker-compose.llamacpp-mtp.yml config -q
+          # the karaoke container only exists under its profile, and start.sh is
+          # what turns KARAOKE=on into that profile.
+          KARAOKE=on docker compose -f docker-compose.yml --profile karaoke config -q
 
-      - name: Shell scripts
-        # -S error, not warning: the tracked scripts currently trip 5
-        # warning-level findings (unused loop vars in ollama-entrypoint.sh,
-        # start.sh and install.sh, a unicode quote in install.sh, a stray space
-        # after = in sync-webapp.sh). Move this to -S warning once they are fixed.
-        run: git ls-files '*.sh' | xargs -r shellcheck -S error
+      - name: Dockerfiles
+        # error threshold only. the warnings are all "pin your apt versions",
+        # which we deliberately don't.
+        run: |
+          fail=0
+          for f in docker/*.Dockerfile; do
+            docker run --rm -i hadolint/hadolint hadolint --failure-threshold error - < "$f" \
+              || { echo "hadolint: $f"; fail=1; }
+          done
+          exit $fail
 
-      - name: JSON
-        run: git ls-files '*.json' | xargs -r -n1 python3 -m json.tool > /dev/null
+      - name: Stack smoke test
+        # builds and runs nginx + php-fpm for real and drives the same API
+        # checks through FastCGI. ollama stays down (compose profile), so
+        # nothing that needs the model runs.
+        run: sh .github/scripts/smoke-stack.sh
+
+      - name: Stack logs on failure
+        if: failure()
+        run: docker compose -p omega-ci -f docker-compose.yml logs --no-color --tail 200 || true
 
   windows:
+    name: powershell
     runs-on: windows-latest
     defaults:
       run:
@@ -103,6 +187,7 @@ jobs:
           }
 
   android:
+    name: android
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
