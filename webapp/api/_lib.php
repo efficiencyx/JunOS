@@ -63,10 +63,39 @@ function url_origin(string $url): string {
     return empty($parts['port']) ? $origin : $origin . ':' . $parts['port'];
 }
 
-// what a browser is allowed to claim a write came from. Host is the name the
-// browser was pointed at, so scheme://Host is us by definition and a page on
-// somebody else's domain can't forge either half. OMEGA_ALLOWED_ORIGINS is
-// for a reverse proxy that rewrites Host. comma seperated, no trailing slash.
+function request_host(): string {
+    $raw = trim($_SERVER['HTTP_HOST'] ?? '');
+    if ($raw === '' || preg_match('/[\x00-\x20\/\\\\]/', $raw)) return '';
+    $parts = parse_url('http://' . $raw);
+    if (!$parts || empty($parts['host']) || isset($parts['user']) || isset($parts['pass'])
+        || isset($parts['path']) || isset($parts['query']) || isset($parts['fragment'])) {
+        return '';
+    }
+    return strtolower(trim($parts['host'], '[]'));
+}
+
+function allowed_request_hosts(): array {
+    $configured = env_str('OMEGA_ALLOWED_HOSTS', 'localhost,127.0.0.1,::1');
+    $hosts = [];
+    // commas OR spaces. the same list goes into nginx's server_name, which
+    // only takes spaces, so both have to parse whatever you typed.
+    foreach (preg_split('/[\s,]+/', $configured) as $host) {
+        $host = strtolower(trim($host, " \t\n\r\0\x0B[]"));
+        if ($host !== '') $hosts[] = $host;
+    }
+    return array_values(array_unique($hosts));
+}
+
+function require_allowed_host(): void {
+    $host = request_host();
+    if ($host === '' || !in_array($host, allowed_request_hosts(), true)) {
+        log_event(['msg' => 'invalid_host', 'host' => $host]);
+        fail(421, 'invalid_host');
+    }
+}
+
+// Host has already passed the explicit allowlist before this runs. Extra
+// origins cover a TLS-terminating reverse proxy whose public origin differs.
 function allowed_origins(): array {
     $out = [];
     $host = strtolower($_SERVER['HTTP_HOST'] ?? '');
@@ -188,15 +217,20 @@ function db(): PDO {
 
     $base = state_dir();
     if (!is_dir($base)) @mkdir($base, 0700, true);
+    if (is_dir($base)) @chmod($base, 0700);
     $path = is_writable($base) ? $base . '/omega.sqlite' : sys_get_temp_dir() . '/omega.sqlite';
     $pdo = new PDO('sqlite:' . $path, null, null, [
         PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION,
         PDO::ATTR_DEFAULT_FETCH_MODE => PDO::FETCH_ASSOC,
     ]);
+    @chmod($path, 0600);
     // busy_timeout is NOT optional here. the consolidation worker writes the
     // same file as php-fpm, and the default of 0 turns any overlap into an
     // instant "database is locked" instead of a short wait.
     $pdo->exec('PRAGMA journal_mode=WAL; PRAGMA foreign_keys=ON; PRAGMA busy_timeout=5000;');
+    foreach ([$path . '-wal', $path . '-shm'] as $sidecar) {
+        if (file_exists($sidecar)) @chmod($sidecar, 0600);
+    }
 
     // run any migrations/NNN_*.sql newer than the schema version we're on. a
     // fresh DB reads 0 (there's no schema_version table yet) so it gets every
@@ -227,11 +261,17 @@ function current_user(): ?array {
     $token = $_COOKIE['omega_session'] ?? '';
     if ($token === '') return $user = null;
 
+    // sessions.token holds sha256(cookie), never the cookie, so somebody who
+    // walks off with omega.sqlite still can't log in as you. do NOT add a
+    // "also try the raw cookie" branch for old rows: a session token is 64 hex
+    // chars and so is its sha256, nothing can tell the two apart, so that
+    // branch makes the stored hash itself a working cookie. migration 014
+    // wipes the pre-hash rows instead, everybody signs in again once.
     $stmt = db()->prepare(
         'SELECT u.* FROM sessions s JOIN users u ON u.id = s.user_id
          WHERE s.token = ? AND s.expires_at > ? LIMIT 1'
     );
-    $stmt->execute([$token, time()]);
+    $stmt->execute([session_token_hash($token), time()]);
     return $user = $stmt->fetch() ?: null;
 }
 
@@ -978,7 +1018,7 @@ function start_session(int $userId): string {
     $now = time();
     $expires = $now + 30 * 86400;
     db()->prepare('INSERT INTO sessions (token, user_id, created_at, expires_at) VALUES (?, ?, ?, ?)')
-        ->execute([$token, $userId, $now, $expires]);
+        ->execute([session_token_hash($token), $userId, $now, $expires]);
 
     $secure = !empty($_SERVER['HTTPS']) || (($_SERVER['HTTP_X_FORWARDED_PROTO'] ?? '') === 'https');
     // Strict, NOT Lax. nothing links into this app from outside so there's no
@@ -992,6 +1032,10 @@ function start_session(int $userId): string {
         'secure' => $secure,
     ]);
     return $token;
+}
+
+function session_token_hash(string $token): string {
+    return hash('sha256', $token);
 }
 
 // the lockout we slap on when Jun walks out of a conversation with the flee
@@ -1101,4 +1145,7 @@ function relationship_apply(int $userId, array $cur, array $deltas): void {
 // every endpoint pulls in this file, so the CSRF check lives HERE and not in
 // each one, where the next endpoint somebody writes would just forget it. the
 // consolidation worker runs on the CLI, there's no request to check there.
-if (PHP_SAPI !== 'cli') require_same_origin();
+if (PHP_SAPI !== 'cli') {
+    require_allowed_host();
+    require_same_origin();
+}

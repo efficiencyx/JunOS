@@ -243,8 +243,11 @@ window.Karaoke = (function () {
   }
 
   async function fetchStem(which, token) {
-    const r = await fetch(`${API}?action=stem&which=${which}&token=${encodeURIComponent(token)}`, {
+    const r = await fetch(`${API}?action=stem`, {
+      method: 'POST',
       credentials: 'same-origin',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ token, which }),
     });
     if (!r.ok) throw new Error(`stem ${which} http ${r.status}`);
     return r.arrayBuffer();

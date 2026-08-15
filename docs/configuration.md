@@ -29,17 +29,20 @@ conditional requirement is `OPENROUTER_API_KEY`, needed only when
 
 | Variable | Default | Consumed by | What it does |
 |---|---|---|---|
-| `BIND_ADDR` | `127.0.0.1` | `docker compose` port mapping (`docker-compose.yml`), echoed by `start.sh` | Address nginx publishes `:80`/`:443` on. Loopback means this machine only; `0.0.0.0` exposes it to everything that can reach the host, and is required before Let's Encrypt can answer the HTTP-01 challenge. |
+| `BIND_ADDR` | `127.0.0.1` | `docker compose` port mapping (`docker-compose.yml`), `start.sh`, `start.ps1` (`php -S`) | Address nginx publishes `:80`/`:443` on, and the address bare-metal Windows binds `php -S` to. Loopback means this machine only; `0.0.0.0` exposes it to everything that can reach the host, is required before Let's Encrypt can answer the HTTP-01 challenge, and is what LAN access from a phone needs. Public binding is refused while TLS is off unless `OMEGA_ALLOW_INSECURE_PUBLIC_HTTP=1`; bare metal has no TLS at all, so there the override is the only way. On Windows, `start.ps1` also adds a Private-profile inbound firewall rule `Jun OS (<port>)` when elevated, and prints the command when not. |
 | `DOMAIN` | `localhost` | `nginx`, `certbot` services (`docker-compose.yml`) | Public hostname nginx serves and certbot requests a cert for. |
 | `EMAIL` | `admin@localhost` | `certbot` service | Contact address for Let's Encrypt issuance. Only meaningful when `TLS_MODE=on`. |
 | `TLS_MODE` | `off` | `nginx` service, nginx config templates | `on` enables HTTPS via certbot (requires a public `DOMAIN`) and adds HSTS; `off` serves plain HTTP on `:80`. |
+| `OMEGA_EXTRA_HOSTS` | *(empty)* | `start.sh`, `start.ps1`, nginx `server_name` (both templates), `OMEGA_ALLOWED_HOSTS` for `php` | Extra `Host` values this install answers to, beyond `DOMAIN`, `localhost` and `127.0.0.1`. An unknown Host is a 444 at nginx and a 421 at `require_allowed_host()` in `webapp/api/_lib.php`. When `BIND_ADDR` is off loopback, `start.sh` appends the host's own RFC1918 IPv4 addresses (docker bridges excluded) and prints them as `reachable as:`, so a LAN client normally needs nothing here. `start.ps1` does the same with `Get-NetIPAddress`, skipping the Hyper-V/WSL/VirtualBox/VMware adapters. Space or comma separated; `start.sh` normalizes commas to spaces because `server_name` does not accept them. |
+| `OMEGA_ALLOWED_HOSTS` | `localhost,127.0.0.1,::1` | `webapp/api/_lib.php`, `tools/php-router.php` | The allowlist itself, assembled from `DOMAIN` and `OMEGA_EXTRA_HOSTS` by `docker-compose.yml`. Set it directly only for a bare-metal install with no compose. |
+| `OMEGA_ALLOW_INSECURE_PUBLIC_HTTP` | *(empty)* | `start.sh`, `start.ps1`, `nginx` startup | Set to `1` only to override the public-HTTP refusal. This deliberately allows unencrypted credentials, sessions and chats and should not be used on the internet. |
 | `COMPOSE_PROFILES` | `ollama` | `docker compose` itself (not forwarded into any container) | Picks which model-server containers run: `ollama`, `llamacpp`, `prod` (certbot). `start.sh` derives it from `AI_PROVIDER` when unset; `install.sh` writes it for you. |
 
 ## 1b. Accounts & access
 
 | Variable | Default | Consumed by | What it does |
 |---|---|---|---|
-| `OMEGA_REGISTRATION_KEY` | *(empty)* | `php` service, `webapp/api/auth.php` (`signup`, `signup_info`) | Key a new account must present to sign up (`hash_equals`, so a wrong one is just a 403 `invalid_registration_key`; a missing one is `registration_closed`). **The first account on an empty `users` table is exempt** - a fresh install with a key already in `.env` would otherwise lock out its own owner. Empty or unset means public signup, and `auth.php?action=signup_info` (unauthenticated) tells the login page whether to show the field at all. |
+| `OMEGA_REGISTRATION_KEY` | *(empty)* | `php` service, `webapp/api/auth.php` (`signup`, `signup_info`) | Key every new account, including the first one, must present (`hash_equals`, so a wrong one is a 403 `invalid_registration_key`; a missing one is `registration_closed`). Empty or unset means public signup, and `auth.php?action=signup_info` tells the login page whether to show the field. Both installers generate and print a key. |
 | `OMEGA_ADMIN_KEY` | *(empty)* | `php` service, `webapp/api/auth.php` (`promote`) | Key that flips the caller's `users.role` to `admin` (POST `{"key":...}` to `auth.php?action=promote`, `hash_equals`, rate-limited **5/hour** per client, both outcomes logged). Admin unlocks `stats.php`, `relationship.php` `PUT`, `memory.php` `DELETE`, the debug SSE frame carrying the assembled system prompt, the welcome-preview parameters on `consolidate.php`, and the dev HUD. Empty or unset disables promotion outright (`admin_promotion_disabled`), so the whole developer surface stays closed. |
 
 Both installers generate a random hex `OMEGA_REGISTRATION_KEY` when the line is
@@ -93,6 +96,8 @@ single process in both roles.
 | `STT_MODEL` | `base` | `tts/server.py` (both sidecars) | faster-whisper model. Karaoke uses the same model for the timed lyric track. Default `base` is multilingual; the `.en` builds (`tiny.en`, `base.en`, `small.en`) are English-only and slightly faster/sharper on English. Size up the multilingual model (`small`, `medium`, `large-v3`) for better non-English accuracy. Must agree with `STT_LANG`. |
 | `STT_LANG` | `""` (auto-detect) | `tts/server.py` (`STT_LANG` env) | Whisper language code. In `docker-compose.yml` this is wired as `STT_LANG: "${STT_LANG-}"` (bash-style *unset*-only default, note the missing `:`) - so an unset var and an explicitly empty `STT_LANG=` both pass through as `""`, and `server.py` treats an empty string as `None`, i.e. whisper auto-detects the language per utterance/song. Pin a code (`en`, `it`, `es`, ...) when you know the language to skip the detection pass. |
 | `STT_DEVICE` | `cpu` | `tts/server.py` | `cpu` \| `cuda`. Separate from `TTS_DEVICE` by design - whisper runs on CTranslate2, which needs different CUDA/cuDNN support than the torch wheel ships. |
+| `STT_MAX_DURATION_S` / `STT_MAX_CONCURRENT` | `120` / `1` | `tts/server.py` | Maximum decoded utterance duration and simultaneous STT jobs. The decoded limit applies regardless of compressed upload size. |
+| `SEP_MAX_DURATION_S` / `SEP_MAX_CONCURRENT` | `900` / `1` | `tts/server.py` | Maximum decoded song duration and simultaneous separation jobs. |
 | `CORS_ORIGIN` | `http://nginx` (Docker) | `tts/server.py` (FastAPI `CORSMiddleware`) | Allowed browser origin for the sidecar's own HTTP API. Should match wherever nginx serves the frontend from; `start.ps1` sets it to the bare-metal site URL. |
 
 `TTS_HOST`, `TTS_PORT`, `STT_COMPUTE`, and `SIDECAR_ROLE` also exist as `ENV`
@@ -118,7 +123,7 @@ route stays mounted in both roles.
 
 | Variable | Default | Consumed by | What it does |
 |---|---|---|---|
-| `OMEGA_ALLOWED_ORIGINS` | *(empty)* | `webapp/api/_lib.php` (`allowed_origins()`) | Extra origins accepted on writes, comma-separated, scheme included, no trailing slash (`https://jun.example.com`). Only needed behind a proxy that rewrites `Host` so the browser's `Origin` no longer matches it. Requests whose `Sec-Fetch-Site` is `same-origin` pass without this. |
+| `OMEGA_ALLOWED_ORIGINS` | *(empty)* | `webapp/api/_lib.php` (`allowed_origins()`) | Extra origins accepted on writes, comma-separated, scheme included, no trailing slash (`https://jun.example.com`). Only needed behind a proxy whose public origin differs from `DOMAIN`. Docker derives the allowed Host set from `DOMAIN` and rejects every other Host before PHP. |
 | `TRUST_PROXY` | *(unset)* | `webapp/api/_lib.php` (`client_ip()`) | `1` makes rate limiting read the first entry of `X-Forwarded-For` instead of the socket address. Set it **only** behind a proxy you control that overwrites the header - otherwise any caller can pick their own rate-limit bucket. |
 
 ## 5. State & persistence

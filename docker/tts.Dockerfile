@@ -3,13 +3,13 @@
 # in real time there, and a GPU copy would sit on ~2GB of VRAM that the LLM wants
 # for its own layers. the one audio job that really does want a GPU lives in
 # docker/karaoke.Dockerfile.
-FROM python:3.11-slim
+FROM python:3.11.13-slim
 
 # uv installs the Python deps much faster than pip. it works out versions and
 # downloads several at once, and unzips while it is still fetching. that is most
 # of the build time on the GPU overlays where torch is a multi-GB wheel. apart
 # from speed it is the same as pip, same wheels, same TORCH_INDEX.
-COPY --from=ghcr.io/astral-sh/uv:latest /uv /uvx /bin/
+COPY --from=ghcr.io/astral-sh/uv:0.11.29 /uv /uvx /bin/
 
 RUN apt-get update \
  && apt-get install -y --no-install-recommends \
@@ -17,7 +17,10 @@ RUN apt-get update \
       libsndfile1 \
       ca-certificates \
       curl \
+      util-linux \
  && rm -rf /var/lib/apt/lists/*
+
+RUN useradd --create-home --uid 10001 omega
 
 WORKDIR /app
 
@@ -36,7 +39,20 @@ RUN UV_HTTP_TIMEOUT=120 uv pip install --system torch --index-url ${TORCH_INDEX}
 COPY tts/requirements.txt /app/requirements.txt
 RUN uv pip install --system -r /app/requirements.txt
 
+ARG SPACY_MODEL_VERSION=3.8.0
+ARG SPACY_MODEL_SHA256=1932429db727d4bff3deed6b34cfc05df17794f4a52eeb26cf8928f7c1a0fb85
+RUN curl -fsSL \
+      "https://github.com/explosion/spacy-models/releases/download/en_core_web_sm-${SPACY_MODEL_VERSION}/en_core_web_sm-${SPACY_MODEL_VERSION}-py3-none-any.whl" \
+      -o "/tmp/en_core_web_sm-${SPACY_MODEL_VERSION}-py3-none-any.whl" \
+ && echo "${SPACY_MODEL_SHA256}  /tmp/en_core_web_sm-${SPACY_MODEL_VERSION}-py3-none-any.whl" | sha256sum -c - \
+ && uv pip install --system "/tmp/en_core_web_sm-${SPACY_MODEL_VERSION}-py3-none-any.whl" \
+ && rm "/tmp/en_core_web_sm-${SPACY_MODEL_VERSION}-py3-none-any.whl"
+
 COPY tts/server.py /app/server.py
+COPY docker/sidecar-entrypoint.sh /usr/local/bin/omega-sidecar-entrypoint
+RUN chmod +x /usr/local/bin/omega-sidecar-entrypoint \
+ && mkdir -p /home/omega/.cache \
+ && chown -R omega:omega /home/omega
 
 # TTS_DEVICE: cpu | cuda | auto. "auto" uses the GPU when the installed torch
 # exposes one, so it's a no-op on this CPU build and only bites when TORCH_INDEX
@@ -66,9 +82,12 @@ ENV SIDECAR_ROLE=tts \
     STT_COMPUTE=int8 \
     STT_DEVICE=cpu \
     OMP_NUM_THREADS=4 \
-    HF_HOME=/root/.cache/huggingface \
+    HOME=/home/omega \
+    HF_HOME=/home/omega/.cache/huggingface \
+    PYTHONDONTWRITEBYTECODE=1 \
     TTS_IDLE_UNLOAD_S=180
 
 EXPOSE 8001
 
+ENTRYPOINT ["/usr/local/bin/omega-sidecar-entrypoint"]
 CMD ["python", "server.py"]

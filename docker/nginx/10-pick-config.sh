@@ -5,6 +5,19 @@
 set -e
 
 TLS_MODE="${TLS_MODE:-off}"
+BIND_ADDR="${BIND_ADDR:-127.0.0.1}"
+
+if [ "$TLS_MODE" != "on" ]; then
+    case "$BIND_ADDR" in
+        127.0.0.1|127.*|localhost|::1) ;;
+        *)
+            if [ "${OMEGA_ALLOW_INSECURE_PUBLIC_HTTP:-}" != "1" ]; then
+                echo "[10-pick-config] Refusing public HTTP on $BIND_ADDR. Set TLS_MODE=on, or explicitly set OMEGA_ALLOW_INSECURE_PUBLIC_HTTP=1." >&2
+                exit 1
+            fi
+            ;;
+    esac
+fi
 
 if [ "$TLS_MODE" = "on" ]; then
     echo "[10-pick-config] TLS_MODE=on - using TLS template, removing plain template"

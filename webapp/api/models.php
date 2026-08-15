@@ -3,6 +3,7 @@ require_once __DIR__ . '/_lib.php';
 
 header('Content-Type: application/json');
 
+require_user();
 rate_limit('models', 30, 60);
 
 function http_get_json(string $url, array $headers = [], int $timeout = 10): ?array {
