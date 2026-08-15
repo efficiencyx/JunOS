@@ -1,9 +1,9 @@
-FROM php:8.2-fpm-alpine
+FROM php:8.2.33-fpm-alpine
 
 # what we need at runtime: curl for the health probe, fcgi for the cgi-fcgi
 # healthcheck binary. autoconf and build-base are ONLY for `pecl install apcu`
 # and get ripped back out after.
-RUN apk add --no-cache curl fcgi sqlite-libs su-exec \
+RUN apk add --no-cache curl fcgi sqlite-libs \
  && apk add --no-cache --virtual .build-deps autoconf build-base sqlite-dev \
  && pecl install apcu \
  && docker-php-ext-enable apcu \
@@ -40,6 +40,8 @@ EXPOSE 9000
 
 HEALTHCHECK --interval=10s --timeout=3s --retries=3 \
     CMD cgi-fcgi -bind -connect 127.0.0.1:9000 || exit 1
+
+USER www-data
 
 ENTRYPOINT ["/usr/local/bin/omega-php-entrypoint"]
 CMD ["php-fpm"]

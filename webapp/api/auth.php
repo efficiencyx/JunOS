@@ -13,8 +13,7 @@ case 'me':
 
 case 'signup_info':
     echo json_encode([
-        'registration_key_required' => env_str('OMEGA_REGISTRATION_KEY') !== ''
-            && (int)db()->query('SELECT COUNT(*) FROM users')->fetchColumn() > 0,
+        'registration_key_required' => env_str('OMEGA_REGISTRATION_KEY') !== '',
     ]);
     break;
 
@@ -35,11 +34,8 @@ case 'signup':
 
     $db = db();
 
-    // The very first account is always let in, otherwise a fresh install with a
-    // key already in .env locks its own owner out.
-    $firstUser = (int)$db->query('SELECT COUNT(*) FROM users')->fetchColumn() === 0;
     $regKey = env_str('OMEGA_REGISTRATION_KEY');
-    if (!$firstUser && $regKey !== '') {
+    if ($regKey !== '') {
         $given = (string)($body['registration_key'] ?? '');
         if ($given === '') fail(403, 'registration_closed');
         if (!hash_equals($regKey, $given)) fail(403, 'invalid_registration_key');
@@ -122,8 +118,9 @@ case 'factory_reset':
                   'user_bans', 'wardrobe_presets', 'welcome_queue'] as $table) {
             $db->prepare('DELETE FROM ' . $table . ' WHERE user_id = ?')->execute([$userId]);
         }
+        $token = (string)($_COOKIE['omega_session'] ?? '');
         $db->prepare('DELETE FROM sessions WHERE user_id = ? AND token != ?')
-           ->execute([$userId, $_COOKIE['omega_session'] ?? '']);
+           ->execute([$userId, session_token_hash($token)]);
         $db->commit();
     } catch (Throwable $e) {
         $db->rollBack();
@@ -148,7 +145,8 @@ case 'logout':
     require_post();
     $token = $_COOKIE['omega_session'] ?? '';
     if ($token !== '') {
-        db()->prepare('DELETE FROM sessions WHERE token = ?')->execute([$token]);
+        db()->prepare('DELETE FROM sessions WHERE token = ?')
+            ->execute([session_token_hash($token)]);
     }
     $secure = !empty($_SERVER['HTTPS']) || (($_SERVER['HTTP_X_FORWARDED_PROTO'] ?? '') === 'https');
     setcookie('omega_session', '', ['expires' => 1, 'path' => '/', 'httponly' => true, 'samesite' => 'Lax', 'secure' => $secure]);

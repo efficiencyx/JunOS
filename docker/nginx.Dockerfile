@@ -1,4 +1,4 @@
-FROM nginx:1.27-alpine
+FROM nginx:1.30.4-alpine
 
 # curl for the healthcheck, openssl for the self signed localhost cert
 RUN apk add --no-cache curl openssl
@@ -8,7 +8,7 @@ RUN rm -f /etc/nginx/conf.d/default.conf
 
 COPY webapp/ /var/www/omega/
 
-# nginx 1.27 has envsubst built in, it fills in *.template files at boot
+# nginx has envsubst built in, it fills in *.template files at boot
 COPY docker/nginx/templates/ /etc/nginx/templates/
 
 # these get included by both templates. keeping them out of a

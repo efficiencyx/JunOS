@@ -142,6 +142,19 @@ BIND_ADDR=0.0.0.0 DOMAIN=yourdomain.com EMAIL=you@yourdomain.com TLS_MODE=on COM
 
 `BIND_ADDR` is the deliberate step: out of the box nginx publishes on `127.0.0.1` only, so a fresh install isn't reachable from the next machine on the wifi. Opening it up is a thing you type, not a default you inherit. Let's Encrypt also can't reach the challenge until you do.
 
+### 📱 Just want her on your phone, on your own wifi?
+
+You don't need a domain or a certificate for that. Set two lines in `.env` and restart:
+
+```sh
+BIND_ADDR=0.0.0.0
+OMEGA_ALLOW_INSECURE_PUBLIC_HTTP=1
+```
+
+The launcher works out this machine's address on the network by itself and prints it - `reachable as: 192.168.1.42` on Linux, `on your phone: http://192.168.1.42:8080` on Windows - and that's the URL you type into the phone. On Windows it also adds a firewall rule for the port on **private** networks only (it needs an admin PowerShell to do it, otherwise it prints the one-liner for you to run). One request at a time on Windows, so the phone and the desktop take turns.
+
+The second line is not decoration: there's no TLS here, so your password and every word she says cross the wifi in the clear. Fine on your own network, **never** on one you don't control, and never port-forwarded to the internet - that's what the certbot setup above is for. 🔒 DHCP moves addresses around, so if she stops answering after a few days, restart the launcher and read the new one.
+
 The `prod` profile adds the certbot sidecar: `certbot certonly --webroot` on start, then `certbot renew` every 12 hours, certs in the `letsencrypt` volume, nginx serving 443 with HSTS. Mind Let's Encrypt's 5-duplicate-issuances-per-week limit while testing.
 
 > **Hosting her for other people?** Their chats now live on *your* box and *you're* responsible for them. Encrypt the machine and its backups, don't hand the database around, and edit [`webapp/privacy.html`](webapp/privacy.html) to say what you actually store. In the EU that also makes you a *deployer* under the AI Act (art. 50 transparency, in force since 2 August 2026) - Jun ships the disclosure side already (age gate, permanent `AI` badge, provenance metadata on generated speech), so please don't strip it out of your fork. 
@@ -193,6 +206,7 @@ Everything is environment variables in `.env` - the full reference is [`docs/con
 | Variable | What it does | Default |
 |---|---|---|
 | `DOMAIN` / `EMAIL` / `TLS_MODE` | Hostname, Let's Encrypt contact, HTTPS on/off | `localhost` · `admin@localhost` · `off` |
+| `BIND_ADDR` | Where nginx listens. Public addresses require TLS unless you explicitly accept insecure HTTP | `127.0.0.1` |
 | `AI_PROVIDER` | `ollama` \| `llamacpp` \| `openrouter` | `ollama` |
 | `OLLAMA_MODELS_TO_PULL` | Pulled on first boot; the **first** one is pre-warmed | `hf.co/efficiencyx/Jun-LoRA-E2B-GGUF:Q4_K_M` |
 | `LLAMACPP_MODEL_HF` / `LLAMACPP_MODEL_FILE` | Model for the managed llama-server: pull from HF, or serve one off disk | `efficiencyx/Jun-LoRA-E2B-GGUF:Q4_K_M` |
@@ -210,7 +224,7 @@ Everything is environment variables in `.env` - the full reference is [`docs/con
 
 Two different locks, and they behave differently on purpose.
 
-**The registration key** is written into `.env` by the installer and printed when it finishes. Anyone signing up has to type it, which is what stops the open internet from making accounts on your box. The very first account never needs it - otherwise a fresh install would lock out its own owner before they ever logged in. Don't want the lock? Empty the value (`OMEGA_REGISTRATION_KEY=`) and sign-ups are open to whoever can reach the page.
+**The registration key** is written into `.env` by the installer and printed when it finishes. Every account, including the first one, has to type it; that is what stops whoever reaches a fresh install first from claiming it. Don't want the lock? Empty the value (`OMEGA_REGISTRATION_KEY=`) and sign-ups are open to whoever can reach the page. 🔑 Lost it? It's sitting in plain text in your own `.env` - read it back, or change it to whatever you like and restart.
 
 **The admin key is yours to invent.** Nothing generates it and there's no default, so out of the box *nobody* - not even you - can reach the developer tools. Put a line in `.env` when you want them:
 

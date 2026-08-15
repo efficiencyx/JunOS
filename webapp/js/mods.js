@@ -5,9 +5,50 @@ window.Mods = (function () {
   // colors: [hex|null] } }
   const STATE_KEY = 'omega.mods.state.v1';
   const DB_NAME = 'omega-mods', DB_STORE = 'zips';
+  const ZIP_MAX_BYTES = 256 * 1024 * 1024;
+  const ZIP_MAX_ENTRIES = 2048;
+  const ZIP_MAX_ENTRY_BYTES = 128 * 1024 * 1024;
+  const ZIP_MAX_TOTAL_BYTES = 512 * 1024 * 1024;
+  const ZIP_MAX_RATIO = 200;
+
+  function zipPath(name) {
+    if (!name || name.length > 512 || name.includes('\\') || name.includes('\0') || name.startsWith('/')) {
+      throw new Error('Unsafe path in mod archive');
+    }
+    const parts = name.split('/');
+    if (parts.some(p => !p || p === '.' || p === '..')) throw new Error('Unsafe path in mod archive');
+    return parts.join('/');
+  }
+
+  async function inflateEntry(data, expectedSize) {
+    const reader = new Blob([data]).stream().pipeThrough(new DecompressionStream('deflate-raw')).getReader();
+    const chunks = [];
+    let size = 0;
+    while (true) {
+      const { value, done } = await reader.read();
+      if (done) break;
+      size += value.byteLength;
+      if (size > ZIP_MAX_ENTRY_BYTES || size > expectedSize) {
+        await reader.cancel();
+        throw new Error('Expanded mod file is too large');
+      }
+      chunks.push(value);
+    }
+    if (size !== expectedSize) throw new Error('Corrupt mod archive');
+    const output = new Uint8Array(size);
+    let offset = 0;
+    for (const chunk of chunks) {
+      output.set(chunk, offset);
+      offset += chunk.byteLength;
+    }
+    return output;
+  }
 
   // ONLY zip method 0 (stored) and 8 (deflate) work here
   async function unzip(buf) {
+    if (!(buf instanceof ArrayBuffer) || buf.byteLength < 22 || buf.byteLength > ZIP_MAX_BYTES) {
+      throw new Error('Mod archive is empty or too large');
+    }
     const dv = new DataView(buf), u8 = new Uint8Array(buf);
     let eocd = -1;
     for (let i = buf.byteLength - 22; i >= Math.max(0, buf.byteLength - 65558); i--) {
@@ -15,34 +56,65 @@ window.Mods = (function () {
     }
     if (eocd < 0) throw new Error('Not a zip file');
     const count = dv.getUint16(eocd + 10, true);
-    let off = dv.getUint32(eocd + 16, true);
-    const entries = {};
+    const centralSize = dv.getUint32(eocd + 12, true);
+    const centralOffset = dv.getUint32(eocd + 16, true);
+    if (dv.getUint16(eocd + 4, true) !== 0 || dv.getUint16(eocd + 6, true) !== 0 ||
+        count > ZIP_MAX_ENTRIES || centralOffset + centralSize > eocd) {
+      throw new Error('Unsupported or malformed mod archive');
+    }
+    let off = centralOffset;
+    const entries = [];
+    const names = new Set();
+    let totalSize = 0;
     const td = new TextDecoder();
     for (let n = 0; n < count; n++) {
-      if (dv.getUint32(off, true) !== 0x02014b50) break;
+      if (off + 46 > buf.byteLength || dv.getUint32(off, true) !== 0x02014b50) {
+        throw new Error('Corrupt mod archive');
+      }
+      const flags = dv.getUint16(off + 8, true);
       const method = dv.getUint16(off + 10, true);
       const csize = dv.getUint32(off + 20, true);
+      const usize = dv.getUint32(off + 24, true);
       const nameLen = dv.getUint16(off + 28, true);
       const extraLen = dv.getUint16(off + 30, true);
       const cmtLen = dv.getUint16(off + 32, true);
       const lho = dv.getUint32(off + 42, true);
-      const name = td.decode(u8.subarray(off + 46, off + 46 + nameLen));
+      const next = off + 46 + nameLen + extraLen + cmtLen;
+      if (next > buf.byteLength || flags & 1) throw new Error('Encrypted or corrupt mod archive');
+      const rawName = td.decode(u8.subarray(off + 46, off + 46 + nameLen));
+      if (rawName.endsWith('/')) { off = next; continue; }
+      const name = zipPath(rawName);
+      if (names.has(name)) throw new Error('Duplicate path in mod archive');
+      names.add(name);
+      if (method !== 0 && method !== 8) throw new Error('Unsupported compression in mod archive');
+      if (usize > ZIP_MAX_ENTRY_BYTES || (usize > 1024 * 1024 && usize > Math.max(1, csize) * ZIP_MAX_RATIO)) {
+        throw new Error('Expanded mod file is too large');
+      }
+      totalSize += usize;
+      if (totalSize > ZIP_MAX_TOTAL_BYTES) throw new Error('Expanded mod archive is too large');
+      if (lho + 30 > buf.byteLength || dv.getUint32(lho, true) !== 0x04034b50) {
+        throw new Error('Corrupt mod archive');
+      }
       // the local header repeats the name and extra lengths, data comes after
       const lnl = dv.getUint16(lho + 26, true), lel = dv.getUint16(lho + 28, true);
-      const data = u8.subarray(lho + 30 + lnl + lel, lho + 30 + lnl + lel + csize);
-      if (!name.endsWith('/')) entries[name] = { method, data };
-      off += 46 + nameLen + extraLen + cmtLen;
+      const dataOffset = lho + 30 + lnl + lel;
+      if (dataOffset > buf.byteLength || csize > buf.byteLength - dataOffset) throw new Error('Corrupt mod archive');
+      if (method === 0 && csize !== usize) throw new Error('Corrupt mod archive');
+      entries.push({ name, method, usize, data: u8.subarray(dataOffset, dataOffset + csize) });
+      off = next;
     }
-    const out = {};
-    for (const [name, e] of Object.entries(entries)) {
-      if (e.method === 0) out[name] = e.data;
-      else if (e.method === 8) {
-        const ds = new DecompressionStream('deflate-raw');
-        const blob = new Blob([e.data]);
-        out[name] = new Uint8Array(await new Response(blob.stream().pipeThrough(ds)).arrayBuffer());
-      }
+    if (off !== centralOffset + centralSize) throw new Error('Corrupt mod archive');
+    const out = Object.create(null);
+    for (const entry of entries) {
+      out[entry.name] = entry.method === 0 ? entry.data.slice() : await inflateEntry(entry.data, entry.usize);
     }
     return out;
+  }
+
+  function displayText(value, fallback, max = 120) {
+    const source = typeof value === 'string' ? value : fallback;
+    const clean = source.replace(/[\u0000-\u001f\u007f]/g, ' ').replace(/\s+/g, ' ').trim();
+    return (clean || fallback).slice(0, max);
   }
 
   function idb() {
@@ -170,14 +242,14 @@ window.Mods = (function () {
         const prefab = lua.find(p => p.folders.has(folder)) || lua[i] || {};
         return {
           folder, jsons: f.jsons, pngs: f.pngs,
-          label: prefab.name || folder,
-          slots: prefab.slots || [],
-          equip: prefab.equip || null,
+          label: displayText(prefab.name, folder),
+          slots: (prefab.slots || []).slice(0, 32).map(slot => displayText(slot, 'Color', 80)),
+          equip: typeof prefab.equip === 'string' ? prefab.equip.slice(0, 120) : null,
         };
       });
     return {
       guid,
-      name: meta.Name || meta.name || guid,
+      name: displayText(meta.Name || meta.name, guid),
       items,
       files,
     };
@@ -390,7 +462,9 @@ window.Mods = (function () {
       guid = (nested && nested.guid && nested.guid.serializedGuid)
         || meta.Guid || meta.guid || meta.GUID;
     } catch (e) { }
-    if (!guid) throw new Error('mod.json with a guid not found - is this a mod zip?');
+    if (typeof guid !== 'string' || !/^[a-zA-Z0-9._-]{1,128}$/.test(guid)) {
+      throw new Error('mod.json with a valid guid not found - is this a mod zip?');
+    }
     const mod = parseMod(guid, files);
     if (!mod.items.length) throw new Error('No items usable in the interaction scene found in this mod.');
     // like the game, importing the same guid replaces its old copy
@@ -502,8 +576,14 @@ window.Mods = (function () {
     for (const mod of mods) {
       const head = document.createElement('div');
       head.style.cssText = 'display:flex;gap:8px;align-items:center;margin:6px 0 4px;font-size:13px';
-      head.innerHTML = `<b>${mod.name}</b><button class="ghost" title="Remove mod">×</button>`;
-      head.querySelector('button').addEventListener('click', async () => {
+      const title = document.createElement('b');
+      title.textContent = mod.name;
+      const remove = document.createElement('button');
+      remove.className = 'ghost';
+      remove.title = 'Remove mod';
+      remove.textContent = '×';
+      head.append(title, remove);
+      remove.addEventListener('click', async () => {
         await removeMod(mod.guid);
         renderMods();
       });
@@ -513,9 +593,18 @@ window.Mods = (function () {
         const tile = document.createElement('div');
         tile.className = 'wd-tile';
         tile.classList.toggle('on', isEquipped(mod, i));
-        tile.innerHTML = `<div class="wd-noimg">…</div><span>${item.label}</span>`;
+        const placeholder = document.createElement('div');
+        placeholder.className = 'wd-noimg';
+        placeholder.textContent = '…';
+        const label = document.createElement('span');
+        label.textContent = item.label;
+        tile.append(placeholder, label);
         itemThumbUrl(mod, item).then(url => {
-          if (url) tile.firstChild.outerHTML = `<img draggable="false" src="${url}">`;
+          if (!url) return;
+          const image = document.createElement('img');
+          image.draggable = false;
+          image.src = url;
+          tile.firstChild.replaceWith(image);
         });
         if (item.slots.length && window.Outfit && Outfit.makeItemColorButton) {
           const values = ((modState(mod.guid).colors || {})[i] || []);

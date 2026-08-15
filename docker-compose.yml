@@ -8,6 +8,9 @@ services:
       dockerfile: docker/nginx.Dockerfile
     container_name: omega-nginx
     restart: unless-stopped
+    mem_limit: "${NGINX_MEMORY_LIMIT:-256m}"
+    cpus: "${NGINX_CPU_LIMIT:-1.0}"
+    pids_limit: 128
     # Loopback by default. A bare "80:80" is reachable from every machine on the
     # coffee shop wifi, and there is no login wall in front of Jun worth that.
     # BIND_ADDR=0.0.0.0 opens it up, which is also what a public TLS_MODE needs
@@ -18,6 +21,9 @@ services:
     environment:
       DOMAIN:    "${DOMAIN:-localhost}"
       TLS_MODE:  "${TLS_MODE:-off}"
+      BIND_ADDR: "${BIND_ADDR:-127.0.0.1}"
+      OMEGA_ALLOW_INSECURE_PUBLIC_HTTP: "${OMEGA_ALLOW_INSECURE_PUBLIC_HTTP:-}"
+      OMEGA_EXTRA_HOSTS: "${OMEGA_EXTRA_HOSTS:-}"
     volumes:
       - letsencrypt:/etc/letsencrypt:ro
       - certbot_webroot:/var/www/certbot:ro
@@ -33,6 +39,8 @@ services:
       start_period: 10s
     security_opt:
       - "no-new-privileges:true"
+    cap_drop: [ALL]
+    cap_add: [CHOWN, DAC_OVERRIDE, NET_BIND_SERVICE, SETGID, SETUID]
     networks: [omega]
 
   php:
@@ -41,6 +49,16 @@ services:
       dockerfile: docker/php.Dockerfile
     container_name: omega-php
     restart: unless-stopped
+    mem_limit: "${PHP_MEMORY_LIMIT:-1g}"
+    cpus: "${PHP_CPU_LIMIT:-2.0}"
+    pids_limit: 256
+    # NO read_only here, unlike ollama and llamacpp. sync-webapp.sh pushes
+    # webapp/ in with docker cp and the daemon refuses that against a
+    # read-only rootfs ("container rootfs is marked read-only"), which kills
+    # the entire dev loop. php still runs as www-data with cap_drop ALL and
+    # no-new-privileges.
+    tmpfs:
+      - /tmp:size=128m,mode=1777
     expose:
       - "9000"
     environment:
@@ -56,6 +74,8 @@ services:
       OMEGA_NUM_CTX: "${OMEGA_NUM_CTX:-}"
       OMEGA_ADMIN_KEY: "${OMEGA_ADMIN_KEY:-}"
       OMEGA_REGISTRATION_KEY: "${OMEGA_REGISTRATION_KEY:-}"
+      OMEGA_ALLOWED_HOSTS: "${DOMAIN:-localhost},localhost,127.0.0.1,::1,${OMEGA_EXTRA_HOSTS:-}"
+      OMEGA_ALLOWED_ORIGINS: "${OMEGA_ALLOWED_ORIGINS:-}"
 # start.sh reads this on the host, php has no GPU device of its own.
       OMEGA_GPU_VRAM_MB: "${OMEGA_GPU_VRAM_MB:-}"
       LLAMACPP_TOOLS: "${LLAMACPP_TOOLS:-}"
@@ -75,6 +95,7 @@ services:
       start_period: 15s
     security_opt:
       - "no-new-privileges:true"
+    cap_drop: [ALL]
     networks: [omega]
 
   ollama:
@@ -85,6 +106,12 @@ services:
     container_name: omega-ollama
     profiles: [ollama]
     restart: unless-stopped
+    mem_limit: "${OLLAMA_MEMORY_LIMIT:-16g}"
+    cpus: "${OLLAMA_CPU_LIMIT:-8.0}"
+    pids_limit: 512
+    read_only: true
+    tmpfs:
+      - /tmp:size=256m,mode=1777
     environment:
       OLLAMA_MODELS_TO_PULL: "${OLLAMA_MODELS_TO_PULL:-hf.co/efficiencyx/Jun-LoRA-E2B-GGUF:Q4_K_M}"
       TITLE_MODEL: "${TITLE_MODEL-hf.co/efficiencyx/Titlewen-GGUF:F16}"
@@ -109,13 +136,20 @@ services:
       start_period: 30s
     security_opt:
       - "no-new-privileges:true"
+    cap_drop: [ALL]
     networks: [omega]
 
   llamacpp:
-    image: ghcr.io/ggml-org/llama.cpp:server
+    image: ghcr.io/ggml-org/llama.cpp:server@sha256:190813e82f33a82f506e66826f367004a3159f8b8139b11d07566437aecdac93
     container_name: omega-llamacpp
     profiles: [llamacpp]
     restart: unless-stopped
+    mem_limit: "${LLAMACPP_MEMORY_LIMIT:-16g}"
+    cpus: "${LLAMACPP_CPU_LIMIT:-8.0}"
+    pids_limit: 512
+    read_only: true
+    tmpfs:
+      - /tmp:size=256m,mode=1777
     environment:
       LLAMA_ARG_HF_REPO: "${LLAMACPP_MODEL_HF:-efficiencyx/Jun-LoRA-E2B-GGUF:Q4_K_M}"
       LLAMA_ARG_CTX_SIZE: "16384"
@@ -132,6 +166,7 @@ services:
       start_period: 60s
     security_opt:
       - "no-new-privileges:true"
+    cap_drop: [ALL]
     networks: [omega]
 
   tts:
@@ -144,14 +179,22 @@ services:
     container_name: omega-tts
     restart: unless-stopped
     profiles: [voice]
+    mem_limit: "${TTS_MEMORY_LIMIT:-8g}"
+    cpus: "${TTS_CPU_LIMIT:-4.0}"
+    pids_limit: 256
+    read_only: true
+    tmpfs:
+      - /tmp:size=512m,mode=1777
     environment:
       CORS_ORIGIN: "${CORS_ORIGIN:-http://nginx}"
       TTS_DEVICE: "${TTS_DEVICE:-cpu}"
       STT_MODEL: "${STT_MODEL:-base}"
       STT_LANG: "${STT_LANG-}"
       STT_DEVICE: "${STT_DEVICE:-cpu}"
+      STT_MAX_DURATION_S: "${STT_MAX_DURATION_S:-120}"
+      STT_MAX_CONCURRENT: "${STT_MAX_CONCURRENT:-1}"
     volumes:
-      - tts_cache:/root/.cache
+      - tts_cache:/home/omega/.cache
     healthcheck:
       test: ["CMD", "curl", "-fsS", "http://127.0.0.1:8001/health"]
       interval: 10s
@@ -160,6 +203,8 @@ services:
       start_period: 300s
     security_opt:
       - "no-new-privileges:true"
+    cap_drop: [ALL]
+    cap_add: [CHOWN, DAC_OVERRIDE, SETGID, SETUID]
     networks: [omega]
 
 # The same server.py as `tts`, built with demucs and, on the GPU overlays, a CUDA
@@ -176,14 +221,23 @@ services:
     container_name: omega-karaoke
     profiles: [karaoke]
     restart: unless-stopped
+    mem_limit: "${KARAOKE_MEMORY_LIMIT:-12g}"
+    cpus: "${KARAOKE_CPU_LIMIT:-6.0}"
+    pids_limit: 384
+    read_only: true
+    tmpfs:
+      - /tmp:size=1g,mode=1777
     environment:
       CORS_ORIGIN: "${CORS_ORIGIN:-http://nginx}"
       SEP_DEVICE: "${SEP_DEVICE:-auto}"
       STT_MODEL: "${STT_MODEL:-base}"
       STT_LANG: "${STT_LANG-}"
       STT_DEVICE: "${STT_DEVICE:-cpu}"
+      SEP_MAX_DURATION_S: "${SEP_MAX_DURATION_S:-900}"
+      SEP_MAX_CONCURRENT: "${SEP_MAX_CONCURRENT:-1}"
+      STT_MAX_CONCURRENT: "${STT_MAX_CONCURRENT:-1}"
     volumes:
-      - karaoke_cache:/root/.cache
+      - karaoke_cache:/home/omega/.cache
     healthcheck:
       test: ["CMD", "curl", "-fsS", "http://127.0.0.1:8001/health"]
       interval: 10s
@@ -192,6 +246,8 @@ services:
       start_period: 300s
     security_opt:
       - "no-new-privileges:true"
+    cap_drop: [ALL]
+    cap_add: [CHOWN, DAC_OVERRIDE, SETGID, SETUID]
     networks: [omega]
 
   certbot:
@@ -201,6 +257,9 @@ services:
     container_name: omega-certbot
     profiles: [prod]
     restart: unless-stopped
+    mem_limit: "${CERTBOT_MEMORY_LIMIT:-512m}"
+    cpus: "${CERTBOT_CPU_LIMIT:-1.0}"
+    pids_limit: 128
     environment:
       DOMAIN: "${DOMAIN:-localhost}"
       EMAIL:  "${EMAIL:-admin@localhost}"
@@ -209,6 +268,7 @@ services:
       - certbot_webroot:/var/www/certbot
     security_opt:
       - "no-new-privileges:true"
+    cap_drop: [ALL]
     networks: [omega]
 
 volumes:

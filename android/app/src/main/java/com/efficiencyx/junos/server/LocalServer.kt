@@ -71,29 +71,44 @@ class LocalServer(
     private val json = Json { ignoreUnknownKeys = true; encodeDefaults = true }
     private val lifecycle = Mutex()
     private val session = randomToken()
-    private val bootstrap = randomToken()
+    private var bootstrap: String? = randomToken()
     private var stopServer: (() -> Unit)? = null
     private var currentUrl: String? = null
 
     suspend fun start(): String = lifecycle.withLock {
-        currentUrl?.let { return@withLock it }
+        synchronized(this@LocalServer) { currentUrl }?.let { return@withLock it }
         val server = embeddedServer(CIO, host = LOOPBACK, port = 0) { module() }
         server.start(wait = false)
         val port = server.engine.resolvedConnectors().single().port
         stopServer = { server.stop(500, 2_000) }
-        "http://$LOOPBACK:$port/__bootstrap?token=$bootstrap".also { currentUrl = it }
+        // bootstrap and currentUrl are also touched by the /__bootstrap
+        // handler, which runs on a ktor thread and knows nothing about this
+        // Mutex. same monitor on both sides or the token gets burned twice.
+        synchronized(this@LocalServer) {
+            val token = bootstrap ?: randomToken().also { bootstrap = it }
+            "http://$LOOPBACK:$port/__bootstrap?token=$token".also { currentUrl = it }
+        }
     }
 
     fun stop() {
         stopServer?.invoke()
         stopServer = null
-        currentUrl = null
+        synchronized(this) { currentUrl = null }
     }
 
     private fun Application.module() {
         routing {
             get("/__bootstrap") {
-                if (call.request.queryParameters["token"] != bootstrap) return@get call.error(HttpStatusCode.Forbidden, "forbidden")
+                val supplied = call.request.queryParameters["token"]
+                val accepted = synchronized(this@LocalServer) {
+                    if (supplied == null || supplied != bootstrap) false
+                    else {
+                        bootstrap = null
+                        currentUrl = currentUrl?.substringBefore("/__bootstrap")?.plus("/index.html")
+                        true
+                    }
+                }
+                if (!accepted) return@get call.error(HttpStatusCode.Forbidden, "forbidden")
                 call.response.cookies.append(
                     name = SESSION_COOKIE,
                     value = session,
@@ -447,6 +462,6 @@ class LocalServer(
         private const val SESSION_COOKIE = "omega_session"
         private const val MODEL_ID = "jun-e2b-q4_k_m"
         private const val CHAT_BODY_LIMIT = 1024 * 1024
-        private const val CSP = "default-src 'self' data: blob:; script-src 'self' 'unsafe-inline' 'unsafe-eval' blob:; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; media-src 'self' data: blob:; connect-src 'self' data:; worker-src 'self' blob:; frame-ancestors 'none'; base-uri 'self'; form-action 'none'"
+        private const val CSP = "default-src 'self' data: blob:; script-src 'self' 'unsafe-eval'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; media-src 'self' data: blob:; connect-src 'self' data:; worker-src 'self' blob:; frame-ancestors 'none'; base-uri 'self'; form-action 'none'; object-src 'none'"
     }
 }

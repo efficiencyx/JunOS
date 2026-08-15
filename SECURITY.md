@@ -85,8 +85,9 @@ from Meta's public file host. All of it is cached, so it happens once.
 
 **While you use her:**
 
-* `html.duckduckgo.com` - only when she runs the web search tool for something
-  you asked about. The query goes out, your chat does not.
+* `html.duckduckgo.com` - only when your latest message begins with `/search `.
+  The exact text after that prefix goes out once; the model cannot add chat or
+  memory context to the query.
 * `lrclib.net` - only when karaoke looks up lyrics for a song you loaded. Title,
   artist, album and duration go out.
 * `openrouter.ai` - **only** if you chose OpenRouter as the provider, and then
@@ -139,7 +140,9 @@ If you put her on the internet:
   not the first.
 * Do not expose an install that has the original game assets in it.
 * Use `TLS_MODE=on` with the `prod` profile. Serving accounts and chat logs over
-  plain http on a network you don't own is not worth it.
+  plain http on a network you don't own is not worth it. Startup refuses a
+  public bind without TLS unless `OMEGA_ALLOW_INSECURE_PUBLIC_HTTP=1` explicitly
+  accepts that risk.
 * Set `TRUST_PROXY=1` only when a proxy you control sets
   `X-Forwarded-For`. Without that, rate limiting counts every request as coming
   from the proxy.

@@ -3,6 +3,13 @@
 
 limit_req_zone  $binary_remote_addr zone=api:10m   rate=10r/s;
 limit_conn_zone $binary_remote_addr zone=conns:10m;
+limit_conn_status 429;
+
+server {
+    listen 80 default_server;
+    server_name "";
+    return 444;
+}
 
 # HTTP server for ACME challenges and HTTPS redirects.
 server {
@@ -23,6 +30,16 @@ server {
 }
 
 server {
+    listen 443 ssl default_server;
+    server_name "";
+    ssl_certificate     /etc/letsencrypt/live/${DOMAIN}/fullchain.pem;
+    ssl_certificate_key /etc/letsencrypt/live/${DOMAIN}/privkey.pem;
+    ssl_protocols       TLSv1.2 TLSv1.3;
+    ssl_ciphers         ECDHE-ECDSA-AES256-GCM-SHA384:ECDHE-RSA-AES256-GCM-SHA384:ECDHE-ECDSA-CHACHA20-POLY1305:ECDHE-RSA-CHACHA20-POLY1305:ECDHE-ECDSA-AES128-GCM-SHA256:ECDHE-RSA-AES128-GCM-SHA256;
+    return 444;
+}
+
+server {
     listen 443 ssl;
     http2  on;
     server_name ${DOMAIN};
@@ -38,7 +55,7 @@ server {
     ssl_certificate     /etc/letsencrypt/live/${DOMAIN}/fullchain.pem;
     ssl_certificate_key /etc/letsencrypt/live/${DOMAIN}/privkey.pem;
     ssl_protocols       TLSv1.2 TLSv1.3;
-    ssl_ciphers         HIGH:!aNULL:!MD5;
+    ssl_ciphers         ECDHE-ECDSA-AES256-GCM-SHA384:ECDHE-RSA-AES256-GCM-SHA384:ECDHE-ECDSA-CHACHA20-POLY1305:ECDHE-RSA-CHACHA20-POLY1305:ECDHE-ECDSA-AES128-GCM-SHA256:ECDHE-RSA-AES128-GCM-SHA256;
     ssl_session_cache   shared:SSL:10m;
 
     root  /var/www/omega;
@@ -57,14 +74,15 @@ server {
     include /etc/nginx/snippets/security-headers.conf;
 
     location = /health {
+        default_type text/plain;
         return 200 "ok";
-        add_header Content-Type text/plain;
     }
 
     # Buffering and compression must remain off for incremental SSE: gzip
     # collects the response into its own buffer, which stalls the token stream.
     location = /api/chat.php {
         limit_req zone=api burst=20 nodelay;
+        limit_conn conns 2;
         # A spoken turn ships the wav base64'd in the JSON body: 30s of 16kHz
         # mono PCM16 is ~960KB, ~1.3MB once encoded, and the history rides
         # along with it. PHP's post_max_size is already 30M, so this is the
@@ -78,6 +96,8 @@ server {
         fastcgi_keep_conn   on;
 
         add_header X-Accel-Buffering no always;
+        add_header Strict-Transport-Security "max-age=31536000; includeSubDomains" always;
+        include /etc/nginx/snippets/security-headers.conf;
 
         include fastcgi_params;
         fastcgi_param SCRIPT_FILENAME /var/www/omega/api/chat.php;
@@ -100,6 +120,7 @@ server {
     # above, an utterance goes to one or the other.
     location = /api/stt.php {
         limit_req zone=api burst=5 nodelay;
+        limit_conn conns 1;
         client_max_body_size 4m;
         fastcgi_read_timeout 60s;
 
@@ -113,6 +134,7 @@ server {
     # Karaoke: large audio upload for source separation + a long demucs runtime.
     location = /api/karaoke.php {
         limit_req zone=api burst=5 nodelay;
+        limit_conn conns 1;
         client_max_body_size 30m;
         fastcgi_read_timeout 300s;
 
@@ -125,6 +147,9 @@ server {
 
     # CLI-only long-running worker; it must never be reachable over HTTP.
     location = /api/consolidation-worker.php { return 404; }
+    location = /system_prompt.txt { return 404; }
+    location ^~ /api/migrations/ { return 404; }
+    location ~ (^|/)\. { return 404; }
 
     location ~ ^/api/.+\.php$ {
         limit_req zone=api burst=10;

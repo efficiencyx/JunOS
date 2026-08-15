@@ -16,7 +16,7 @@ services:
       - OLLAMA_SCHED_SPREAD
 
   llamacpp:
-    image: ghcr.io/ggml-org/llama.cpp:server-cuda
+    image: ghcr.io/ggml-org/llama.cpp:server-cuda@sha256:b5e13ddfaa3df76d239ee038075960a46f595201808728fd70bbf2c8b38f6530
     deploy:
       resources:
         reservations:

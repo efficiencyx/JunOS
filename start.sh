@@ -152,14 +152,59 @@ case "$bind_addr" in
   *) echo "listening on: $bind_addr - anything that can reach this box can open Jun" ;;
 esac
 
+# nginx and php both refuse a Host they don't know (444 and 421), so opening
+# the phone at http://192.168.1.42 needs that exact address in the allowlist.
+# the containers can't work it out themselves, all they see is the docker
+# bridge, so we read the host's own private v4 addresses here and hand them
+# down. only when BIND_ADDR is off loopback: on the default install nothing
+# outside this box can connect anyway, so widening the list buys nothing.
+# 10.*, 172.16-31.* and 192.168.* only, and never the docker bridges, or we'd
+# be naming addresses that aren't ours to answer for. DHCP moves these, so a
+# new lease means a restart. OMEGA_EXTRA_HOSTS stays for anything we can't
+# guess: an mDNS name, a tailscale address, whatever the proxy calls you.
+lan_hosts() {
+  command -v ip >/dev/null 2>&1 || return 0
+  ip -4 -o addr show scope global up 2>/dev/null | awk '
+    $2 ~ /^(docker|br-|veth|virbr)/ { next }
+    { split($4, a, "/")
+      if (a[1] ~ /^10\./ || a[1] ~ /^192\.168\./ || a[1] ~ /^172\.(1[6-9]|2[0-9]|3[01])\./) print a[1] }'
+}
+case "$bind_addr" in
+  127.0.0.1|127.*|localhost|::1) ;;
+  *)
+    extra_hosts="${OMEGA_EXTRA_HOSTS:-$(env_get OMEGA_EXTRA_HOSTS)}"
+    detected="$(lan_hosts | tr '\n' ' ')"
+    # commas out FIRST. php takes either, nginx's server_name only takes
+    # spaces and would happily register a host called "jun.local,".
+    extra_hosts="$(printf '%s %s' "$extra_hosts" "$detected" | tr ',' ' ' | tr -s ' ' | sed 's/^ //; s/ $//')"
+    export OMEGA_EXTRA_HOSTS="$extra_hosts"
+    [ -z "$detected" ] || echo "reachable as: $(printf '%s' "$detected" | sed 's/ $//')"
+    ;;
+esac
+
 tls_mode="${TLS_MODE:-$(env_get TLS_MODE)}"
-case "$(printf '%s' "${tls_mode:-off}" | tr '[:upper:]' '[:lower:]')" in
-  off|"") ;;
+tls_mode_normalized="$(printf '%s' "${tls_mode:-off}" | tr '[:upper:]' '[:lower:]')"
+case "$tls_mode_normalized" in
+  off|"")
+    case "$bind_addr" in
+      127.0.0.1|127.*|localhost|::1) ;;
+      *)
+        allow_insecure="${OMEGA_ALLOW_INSECURE_PUBLIC_HTTP:-$(env_get OMEGA_ALLOW_INSECURE_PUBLIC_HTTP)}"
+        if [ "$allow_insecure" != 1 ]; then
+          echo "error: refusing to expose login and chat over plain HTTP on $bind_addr." >&2
+          echo "       Set TLS_MODE=on, or explicitly set OMEGA_ALLOW_INSECURE_PUBLIC_HTTP=1." >&2
+          exit 1
+        fi
+        echo "warning: OMEGA_ALLOW_INSECURE_PUBLIC_HTTP=1 - credentials and sessions are not encrypted." >&2
+        ;;
+    esac
+    ;;
   *) case "$bind_addr" in
        127.0.0.1|localhost|::1)
          echo "note: TLS_MODE=$tls_mode but we only listen on $bind_addr, so Let's Encrypt can't reach the challenge. set BIND_ADDR=0.0.0.0 in .env." ;;
      esac ;;
 esac
+export TLS_MODE="${tls_mode:-off}"
 
 tts_device="${TTS_DEVICE:-$(env_get TTS_DEVICE)}"
 export TTS_DEVICE="${tts_device:-cpu}"

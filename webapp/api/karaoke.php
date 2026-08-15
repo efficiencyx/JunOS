@@ -2,7 +2,7 @@
 
 require_once __DIR__ . '/_lib.php';
 
-require_user();
+$user = require_user();
 
 // Separation gets its own sidecar so it can hold a GPU torch while the voice
 // one stays on the CPU. a bare metal install runs both roles in one process,
@@ -18,6 +18,11 @@ rate_limit('karaoke', 30, 60);
 // step with nginx client_max_body_size, PHP post_max_size and the sidecar's
 // own upload cap, all of them have to let it through.
 const KARAOKE_MAX_BYTES = 30 * 1024 * 1024;
+const KARAOKE_JOB_TTL = 15 * 60;
+
+function karaoke_purge_jobs(PDO $db): void {
+    $db->prepare('DELETE FROM karaoke_jobs WHERE expires_at <= ?')->execute([time()]);
+}
 
 // Give the LLM's VRAM back before demucs starts, so the two don't fight over
 // the GPU. we try and move on, and it is Ollama only, /api/ps and keep_alive:0
@@ -108,20 +113,59 @@ if ($action === 'separate') {
         fail(502, 'separate_failed');
     }
 
+    if ($code >= 400) {
+        http_response_code($code);
+        echo $res;
+        exit;
+    }
+
+    $payload = json_decode((string)$res, true);
+    $sidecarToken = is_array($payload) ? ($payload['token'] ?? null) : null;
+    if (!is_string($sidecarToken) || !preg_match('/^[0-9a-f]{32,128}$/', $sidecarToken)) {
+        log_event(['msg' => 'karaoke_separate_invalid_response']);
+        fail(502, 'separate_failed');
+    }
+
+    $token = bin2hex(random_bytes(32));
+    $db = db();
+    karaoke_purge_jobs($db);
+    $db->prepare(
+        'INSERT INTO karaoke_jobs (token_hash, user_id, sidecar_token, expires_at)
+         VALUES (?, ?, ?, ?)'
+    )->execute([hash('sha256', $token), $user['id'], $sidecarToken, time() + KARAOKE_JOB_TTL]);
+    $payload['token'] = $token;
+
     http_response_code($code);
-    echo $res;
+    echo json_encode($payload, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
     exit;
 }
 
 if ($action === 'stem') {
-    $which = $_GET['which'] ?? '';
-    $token = $_GET['token'] ?? '';
-    if (!in_array($which, ['instrumental', 'guide'], true)) fail(400, 'invalid_request');
-    if (!is_string($token) || !preg_match('/^[0-9a-f]+$/', $token)) fail(400, 'invalid_request');
+    require_post();
+    require_content_type('application/json');
 
-    $url = $sepUrl . '/separate/stem?token=' . urlencode($token) . '&which=' . urlencode($which);
-    $ch = curl_init($url);
+    $body = json_decode(read_body(1024), true);
+    $which = is_array($body) ? ($body['which'] ?? '') : '';
+    $token = is_array($body) ? ($body['token'] ?? '') : '';
+    if (!in_array($which, ['instrumental', 'guide'], true)) fail(400, 'invalid_request');
+    if (!is_string($token) || !preg_match('/^[0-9a-f]{64}$/', $token)) fail(400, 'invalid_request');
+
+    $db = db();
+    karaoke_purge_jobs($db);
+    $tokenHash = hash('sha256', $token);
+    $job = $db->prepare(
+        'SELECT sidecar_token FROM karaoke_jobs
+         WHERE token_hash = ? AND user_id = ? AND expires_at > ?'
+    );
+    $job->execute([$tokenHash, $user['id'], time()]);
+    $sidecarToken = $job->fetchColumn();
+    if (!is_string($sidecarToken) || $sidecarToken === '') fail(404, 'stem_failed');
+
+    $ch = curl_init($sepUrl . '/separate/stem');
     curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
+    curl_setopt($ch, CURLOPT_POST, true);
+    curl_setopt($ch, CURLOPT_POSTFIELDS, json_encode(['token' => $sidecarToken, 'which' => $which]));
+    curl_setopt($ch, CURLOPT_HTTPHEADER, ['Content-Type: application/json']);
     curl_setopt($ch, CURLOPT_CONNECTTIMEOUT, 5);
     curl_setopt($ch, CURLOPT_TIMEOUT, 60);
     $res = curl_exec($ch);
@@ -142,6 +186,14 @@ if ($action === 'stem') {
         echo json_encode(['error' => 'stem_failed']);
         exit;
     }
+
+    $column = $which === 'instrumental' ? 'instrumental_fetched' : 'guide_fetched';
+    $db->prepare("UPDATE karaoke_jobs SET $column = 1 WHERE token_hash = ? AND user_id = ?")
+       ->execute([$tokenHash, $user['id']]);
+    $db->prepare(
+        'DELETE FROM karaoke_jobs
+         WHERE token_hash = ? AND user_id = ? AND instrumental_fetched = 1 AND guide_fetched = 1'
+    )->execute([$tokenHash, $user['id']]);
 
     http_response_code($code);
     header('Content-Type: audio/wav');

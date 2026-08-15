@@ -111,6 +111,7 @@ _REAP_INTERVAL_S = 20.0
 # cap on the /stt request body. 16kHz mono PCM16 is ~32KB/s so 4MB is roughly
 # 2min of audio. one of a whole chain of caps, api/stt.php lists them all.
 STT_MAX_BYTES = 4 * 1024 * 1024
+STT_MAX_DURATION_S = float(os.environ.get("STT_MAX_DURATION_S", "120"))
 
 # empty string means detect it per utterance, which costs another decode pass
 # and is shaky under ~2s of audio. so just name the language when you know it.
@@ -122,6 +123,7 @@ STT_LANG = (os.environ.get("STT_LANG", "").strip().lower() or None)
 # have been fetched, or after this TTL when a client just never comes back.
 SEP_MAX_BYTES = 50 * 1024 * 1024
 SEP_TTL_S = 15 * 60
+SEP_MAX_DURATION_S = float(os.environ.get("SEP_MAX_DURATION_S", "900"))
 
 _pipeline = None
 _pocket_model = None
@@ -144,6 +146,12 @@ _device = None
 _separator = None
 _sep_ok = None
 _sep_tokens = {}
+_stt_slots = threading.BoundedSemaphore(max(1, int(os.environ.get("STT_MAX_CONCURRENT", "1"))))
+_sep_slots = threading.BoundedSemaphore(max(1, int(os.environ.get("SEP_MAX_CONCURRENT", "1"))))
+
+
+class AudioDurationExceeded(Exception):
+    pass
 
 
 def get_device():
@@ -607,26 +615,39 @@ async def stt(request: Request):
     if not body:
         return JSONResponse({"text": ""})
 
-    # beam_size=1 (greedy) is ~30% faster than the default beam search and the
-    # accuracy hit on short conversational utterances is basically nothing.
-    # condition_on_previous_text=False: each utterance is independent here, and
-    # leaving it on is EXACTLY what makes whisper spiral into repetition loops.
-    # vad_filter drops the leading/trailing silence that the client's 300ms
-    # pre-roll and 700ms end-of-turn hangover necessarily include.
-    segments, _info = get_whisper().transcribe(
-        io.BytesIO(body),
-        language=STT_LANG,
-        beam_size=1,
-        condition_on_previous_text=False,
-        vad_filter=True,
-    )
-    # transcribe() hands back a lazy generator, the work happens on iteration
-    text = " ".join(seg.text.strip() for seg in segments).strip()
+    if not _stt_slots.acquire(blocking=False):
+        return JSONResponse({"error": "stt_busy"}, status_code=429, headers={"Retry-After": "2"})
+    try:
+        try:
+            audio = _decode_audio(body, 16000, 1, STT_MAX_DURATION_S)[0]
+        except AudioDurationExceeded:
+            return JSONResponse({"error": "audio_too_long"}, status_code=413)
+        except Exception as e:
+            log.info("stt: invalid audio: %s", e)
+            return JSONResponse({"error": "invalid_audio"}, status_code=400)
+
+        # beam_size=1 (greedy) is ~30% faster than the default beam search and the
+        # accuracy hit on short conversational utterances is basically nothing.
+        # condition_on_previous_text=False: each utterance is independent here, and
+        # leaving it on is EXACTLY what makes whisper spiral into repetition loops.
+        # vad_filter drops the leading/trailing silence that the client's 300ms
+        # pre-roll and 700ms end-of-turn hangover necessarily include.
+        segments, _info = get_whisper().transcribe(
+            audio,
+            language=STT_LANG,
+            beam_size=1,
+            condition_on_previous_text=False,
+            vad_filter=True,
+        )
+        # transcribe() hands back a lazy generator, the work happens on iteration
+        text = " ".join(seg.text.strip() for seg in segments).strip()
+    finally:
+        _stt_slots.release()
     log.info("stt: %d bytes -> %r", len(body), text)
     return JSONResponse({"text": text})
 
 
-def _decode_audio(body, target_sr, target_channels):
+def _decode_audio(body, target_sr, target_channels, max_duration_s):
     # same PyAV /stt uses. its wheel bundles ffmpeg's libs so any container it
     # can open works and no ffmpeg binary is needed. planar float output lands
     # as (channels, samples), and the resampler up/down-mixes to
@@ -636,13 +657,21 @@ def _decode_audio(body, target_sr, target_channels):
     resampler = av.audio.resampler.AudioResampler(format="fltp", layout=layout, rate=target_sr)
     container = av.open(io.BytesIO(body))
     chunks = []
+    samples = 0
+    max_samples = int(target_sr * max_duration_s)
     try:
         for frame in container.decode(audio=0):
             for rf in _resample(resampler, frame):
+                samples += rf.samples
+                if samples > max_samples:
+                    raise AudioDurationExceeded
                 chunks.append(rf.to_ndarray())
     finally:
         container.close()
     for rf in _resample(resampler, None):
+        samples += rf.samples
+        if samples > max_samples:
+            raise AudioDurationExceeded
         chunks.append(rf.to_ndarray())
     if not chunks:
         return np.zeros((target_channels, 0), dtype=np.float32)
@@ -709,42 +738,64 @@ async def separate(request: Request):
     if not body:
         return JSONResponse({"error": "empty_audio"}, status_code=400)
 
-    import torch
-    _begin_use("demucs")
+    if not _sep_slots.acquire(blocking=False):
+        return JSONResponse({"error": "sep_busy"}, status_code=429, headers={"Retry-After": "5"})
+    # everything past the acquire lives in the try. one slot, so a throw
+    # between acquire and try (torch missing, _begin_use blowing up) leaks it
+    # and separation answers 429 until the container restarts.
     try:
-        model = get_separator()
-        sr = model.samplerate
-        wav = _decode_audio(body, sr, model.audio_channels)
-        if wav.shape[1] == 0:
-            return JSONResponse({"error": "empty_audio"}, status_code=400)
-        duration = wav.shape[1] / float(sr)
+        import torch
+        _begin_use("demucs")
+        try:
+            model = get_separator()
+            sr = model.samplerate
+            try:
+                wav = _decode_audio(body, sr, model.audio_channels, SEP_MAX_DURATION_S)
+            except AudioDurationExceeded:
+                return JSONResponse({"error": "audio_too_long"}, status_code=413)
+            except Exception as e:
+                log.info("separate: invalid audio: %s", e)
+                return JSONResponse({"error": "invalid_audio"}, status_code=400)
+            if wav.shape[1] == 0:
+                return JSONResponse({"error": "empty_audio"}, status_code=400)
+            duration = wav.shape[1] / float(sr)
 
-        sources = _apply_demucs(model, torch.from_numpy(wav))
-        vi = model.sources.index("vocals")
-        vocals = sources[vi]
-        # htdemucs has no 2-stem head, so the backing track is just the sum of
-        # every non-vocal source (drums + bass + other)
-        instrumental = sum(sources[i] for i in range(len(model.sources)) if i != vi)
+            sources = _apply_demucs(model, torch.from_numpy(wav))
+            vi = model.sources.index("vocals")
+            vocals = sources[vi]
+            # htdemucs has no 2-stem head, so the backing track is just the sum
+            # of every non-vocal source (drums + bass + other)
+            instrumental = sum(sources[i] for i in range(len(model.sources)) if i != vi)
 
-        token = secrets.token_hex(16)
-        d = tempfile.mkdtemp(prefix="sep-")
-        sf.write(os.path.join(d, "instrumental.wav"), instrumental.T.numpy(), sr, subtype="PCM_16")
-        sf.write(os.path.join(d, "vocals_guide.wav"), vocals.T.numpy(), sr, subtype="PCM_16")
-        with _lock:
-            _sep_tokens[token] = {"dir": d, "created_at": time.monotonic(), "fetched": set()}
+            token = secrets.token_hex(16)
+            d = tempfile.mkdtemp(prefix="sep-")
+            sf.write(os.path.join(d, "instrumental.wav"), instrumental.T.numpy(), sr, subtype="PCM_16")
+            sf.write(os.path.join(d, "vocals_guide.wav"), vocals.T.numpy(), sr, subtype="PCM_16")
+            with _lock:
+                _sep_tokens[token] = {"dir": d, "created_at": time.monotonic(), "fetched": set()}
 
-        lyrics = []
-        if _stt_available():
-            _, lyrics = _whisper_words(io.BytesIO(to_wav(vocals.mean(0).numpy(), sr)))
+            lyrics = []
+            if _stt_available():
+                _, lyrics = _whisper_words(io.BytesIO(to_wav(vocals.mean(0).numpy(), sr)))
+        finally:
+            _end_use()
     finally:
-        _end_use()
+        _sep_slots.release()
 
-    log.info("separate: %d bytes -> token=%s dur=%.1fs words=%d", len(body), token, duration, len(lyrics))
+    log.info("separate: %d bytes dur=%.1fs words=%d", len(body), duration, len(lyrics))
     return JSONResponse({"token": token, "duration": duration, "lyrics": lyrics})
 
 
-@app.get("/separate/stem")
-def separate_stem(token: str, which: str):
+@app.post("/separate/stem")
+async def separate_stem(request: Request):
+    try:
+        body = await request.json()
+    except Exception:
+        return JSONResponse({"error": "invalid_request"}, status_code=400)
+    token = body.get("token") if isinstance(body, dict) else None
+    which = body.get("which") if isinstance(body, dict) else None
+    if not isinstance(token, str) or not isinstance(which, str):
+        return JSONResponse({"error": "invalid_request"}, status_code=400)
     fname = {"instrumental": "instrumental.wav", "guide": "vocals_guide.wav"}.get(which)
     if fname is None:
         return JSONResponse({"error": "unknown_stem"}, status_code=404)
@@ -778,11 +829,23 @@ async def transcribe_timed(request: Request):
     if not body:
         return JSONResponse({"text": "", "words": []})
 
-    _begin_use("demucs")
+    if not _stt_slots.acquire(blocking=False):
+        return JSONResponse({"error": "stt_busy"}, status_code=429, headers={"Retry-After": "2"})
     try:
-        text, words = _whisper_words(io.BytesIO(body))
+        _begin_use("demucs")
+        try:
+            try:
+                audio = _decode_audio(body, 16000, 1, SEP_MAX_DURATION_S)[0]
+            except AudioDurationExceeded:
+                return JSONResponse({"error": "audio_too_long"}, status_code=413)
+            except Exception as e:
+                log.info("transcribe_timed: invalid audio: %s", e)
+                return JSONResponse({"error": "invalid_audio"}, status_code=400)
+            text, words = _whisper_words(audio)
+        finally:
+            _end_use()
     finally:
-        _end_use()
+        _stt_slots.release()
     log.info("transcribe_timed: %d bytes -> %d words", len(body), len(words))
     return JSONResponse({"text": text, "words": words})
 
