@@ -4,16 +4,19 @@
 # song is the one audio job worth real VRAM, a 4 minute track takes minutes on a
 # CPU and seconds on a GPU. it gets its own container so the voice sidecar can
 # stay CPU only next to the LLM.
-FROM python:3.11-slim
+FROM python:3.11.13-slim
 
-COPY --from=ghcr.io/astral-sh/uv:latest /uv /uvx /bin/
+COPY --from=ghcr.io/astral-sh/uv:0.11.29 /uv /uvx /bin/
 
 RUN apt-get update \
  && apt-get install -y --no-install-recommends \
       libsndfile1 \
       ca-certificates \
       curl \
+      util-linux \
  && rm -rf /var/lib/apt/lists/*
+
+RUN useradd --create-home --uid 10001 omega
 
 WORKDIR /app
 
@@ -32,6 +35,10 @@ COPY tts/requirements-karaoke.txt /app/requirements.txt
 RUN uv pip install --system -r /app/requirements.txt
 
 COPY tts/server.py /app/server.py
+COPY docker/sidecar-entrypoint.sh /usr/local/bin/omega-sidecar-entrypoint
+RUN chmod +x /usr/local/bin/omega-sidecar-entrypoint \
+ && mkdir -p /home/omega/.cache \
+ && chown -R omega:omega /home/omega
 
 # SIDECAR_ROLE=karaoke skips the Kokoro pre-warm (there is no Kokoro here) and is
 #   what /health reports back to the webapp.
@@ -53,9 +60,12 @@ ENV SIDECAR_ROLE=karaoke \
     STT_COMPUTE=int8 \
     STT_DEVICE=cpu \
     OMP_NUM_THREADS=4 \
-    HF_HOME=/root/.cache/huggingface \
+    HOME=/home/omega \
+    HF_HOME=/home/omega/.cache/huggingface \
+    PYTHONDONTWRITEBYTECODE=1 \
     TTS_IDLE_UNLOAD_S=180
 
 EXPOSE 8001
 
+ENTRYPOINT ["/usr/local/bin/omega-sidecar-entrypoint"]
 CMD ["python", "server.py"]

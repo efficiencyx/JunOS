@@ -75,7 +75,7 @@
         <p>Jun OS is an unofficial fan project meant to be installed and run by you, on your own
         machine. Your account, your conversations, Jun’s memory notes and journal, the
         relationship gauges, the wardrobe and every setting are written to a database and a state
-        directory on that machine and stay there. The app never uploads them.</p>
+        directory on that machine and stay there. The app does not upload that stored data on its own.</p>
         <p>Whoever controls the machine controls the data: if you run Jun for other people, their
         chats are on your box and it is on you to keep it, and its backups, to yourself.</p>
       </section>
@@ -86,7 +86,10 @@
         llama.cpp that is your own machine, and nothing leaves it. If you configure a hosted
         provider instead (<strong>OpenRouter</strong> is the one shipped today), your prompts are
         sent to that provider, and its terms and retention apply to them. Review those before
-        enabling it. Voice and karaoke run locally in sidecar containers.</p>
+        enabling it. Voice and karaoke run locally in sidecar containers. A message beginning with
+        <code>/search </code> sends the exact text after that prefix to DuckDuckGo once; Jun cannot
+        add conversation or memory text to it. Karaoke can send song title, artist, album and duration
+        to LRCLIB for a lyrics lookup.</p>
       </section>
 
       <section id="ai-system">

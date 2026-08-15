@@ -101,7 +101,86 @@ if (Test-Path .env) {
 
 $Port      = if ($env:JUN_PORT) { $env:JUN_PORT } else { '8080' }
 $OllamaUrl = if ($env:OLLAMA_URL) { $env:OLLAMA_URL } else { 'http://127.0.0.1:11434' }
+# SiteUrl stays loopback whatever we bind to. it is what the health probe
+# polls, what the browser opens and what CORS_ORIGIN gets, and all three of
+# those are this machine talking to itself.
 $SiteUrl   = "http://127.0.0.1:$Port"
+$BindAddr  = if ($env:BIND_ADDR) { $env:BIND_ADDR.Trim() } else { '127.0.0.1' }
+$LanHosts  = @()
+
+# this box's own addresses on the home network. skips the virtual adapters
+# Hyper-V, WSL and Docker Desktop leave lying around, those aren't reachable
+# from a phone and naming them just widens the Host allowlist for nothing.
+function Get-PrivateIPv4 {
+    try {
+        @(Get-NetIPAddress -AddressFamily IPv4 -ErrorAction Stop |
+            Where-Object {
+                $_.IPAddress -match '^(10\.|192\.168\.|172\.(1[6-9]|2[0-9]|3[01])\.)' -and
+                $_.InterfaceAlias -notmatch 'vEthernet|WSL|Loopback|Hyper-V|VirtualBox|VMware'
+            } | Select-Object -ExpandProperty IPAddress -Unique)
+    } catch { @() }
+}
+
+function Test-Elevated {
+    try {
+        $me = [Security.Principal.WindowsPrincipal][Security.Principal.WindowsIdentity]::GetCurrent()
+        return $me.IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)
+    } catch { return $false }
+}
+
+# binding to 0.0.0.0 is only half of it on windows. the firewall drops the
+# inbound connection before php ever sees it, so the phone just hangs with no
+# error anywhere. Private profile ONLY - this must not follow you onto cafe
+# wifi. delete it with:
+#   Remove-NetFirewallRule -DisplayName "Jun OS (<port>)"
+function Confirm-FirewallRule([string]$port) {
+    $ruleName = "Jun OS ($port)"
+    if (-not (Get-Command Get-NetFirewallRule -ErrorAction SilentlyContinue)) {
+        Warn_ "no NetSecurity module here, so open TCP $port on private networks yourself"
+        return
+    }
+    try {
+        if (Get-NetFirewallRule -DisplayName $ruleName -ErrorAction SilentlyContinue) {
+            Note "firewall rule '$ruleName' is already there"
+            return
+        }
+    } catch {
+        Warn_ "could not read the firewall rules: $($_.Exception.Message)"
+        return
+    }
+    if (Test-Elevated) {
+        try {
+            New-NetFirewallRule -DisplayName $ruleName -Direction Inbound -Action Allow `
+                -Protocol TCP -LocalPort $port -Profile Private -ErrorAction Stop | Out-Null
+            Ok "opened TCP $port on private networks (rule '$ruleName')"
+        } catch {
+            Warn_ "could not add the firewall rule: $($_.Exception.Message)"
+        }
+    } else {
+        Warn_ 'windows firewall will block the phone. run this once in an admin PowerShell:'
+        Note "New-NetFirewallRule -DisplayName '$ruleName' -Direction Inbound -Action Allow -Protocol TCP -LocalPort $port -Profile Private"
+    }
+}
+
+if ($Action -eq 'start' -and $BindAddr -notin @('127.0.0.1', 'localhost', '::1')) {
+    # bare metal has no TLS at all - no nginx, no certs, php -S speaks plain
+    # HTTP and nothing else. so this is the same refusal the docker path makes,
+    # except here there is no TLS_MODE=on to offer as the way out.
+    if ($env:OMEGA_ALLOW_INSECURE_PUBLIC_HTTP -ne '1') {
+        Fail_ "refusing to serve login and chat over plain HTTP on $BindAddr."
+        Note 'bare metal has no TLS. set OMEGA_ALLOW_INSECURE_PUBLIC_HTTP=1 in .env if your'
+        Note 'network is one you trust, and know that passwords and chats cross it in the clear.'
+        exit 1
+    }
+    Warn_ 'OMEGA_ALLOW_INSECURE_PUBLIC_HTTP=1 - passwords, sessions and chats are not encrypted.'
+    $LanHosts = @(Get-PrivateIPv4)
+    # php's built-in server is single-worker on windows (PHP_CLI_SERVER_WORKERS
+    # is a unix-only knob), so the phone and the desktop are not two users, they
+    # are one queue. whoever asks second waits out the first reply's whole
+    # stream. docker doesn't have this problem, php-fpm forks.
+    Note 'one request at a time on windows - a second device waits for the first reply to finish'
+    Confirm-FirewallRule $Port
+}
 
 $Provider  = if ($env:AI_PROVIDER) { $env:AI_PROVIDER.ToLower() } else { 'ollama' }
 if ($Provider -notin 'ollama', 'openrouter', 'llamacpp') { $Provider = 'ollama' }
@@ -429,7 +508,8 @@ if ($LASTEXITCODE -ne 0) {
     throw "php.exe failed its self-check (exit code $LASTEXITCODE). Try re-running install.ps1."
 }
 
-Step "start web server on $SiteUrl"
+$listenLabel = if ($BindAddr -eq '127.0.0.1') { $SiteUrl } else { "${BindAddr}:${Port}" }
+Step "start web server on $listenLabel"
 $env:AI_PROVIDER            = $Provider
 $env:OLLAMA_URL             = $OllamaUrl
 $env:LLAMACPP_URL           = $LlamacppUrl
@@ -438,6 +518,13 @@ $env:TTS_URL                = 'http://127.0.0.1:8001'
 # its own (GPU-capable) container.
 $env:KARAOKE_URL            = 'http://127.0.0.1:8001'
 $env:OMEGA_STATE_DIR        = $StateDir
+# php-router.php refuses any Host that isn't in here with a 421, so a phone
+# opening http://192.168.1.42:8080 needs that exact address listed. filled in
+# from this machine's own private addresses, plus OMEGA_EXTRA_HOSTS for what we
+# can't guess (an mDNS name, a tailscale address).
+$env:OMEGA_ALLOWED_HOSTS    = (@('127.0.0.1', 'localhost', '::1') + $LanHosts +
+    @($env:OMEGA_EXTRA_HOSTS -split '[,\s]+' | Where-Object { $_ })) -join ','
+$env:OMEGA_ALLOWED_ORIGINS  = $SiteUrl
 $libPath = (Join-Path $PSScriptRoot 'webapp\api\_lib.php').Replace('\', '/')
 & $phpExe -r "require '$libPath'; db();"
 if ($LASTEXITCODE -ne 0) { throw 'database migration failed' }
@@ -448,7 +535,11 @@ Start-Tracked 'memory' $phpExe @((Join-Path $PSScriptRoot 'webapp\api\consolidat
 # single-worker, so requests made while a chat reply is streaming (TTS, say)
 # just queue until it finishes. fine for a single local user.
 $env:PHP_CLI_SERVER_WORKERS = '8'
-$phpProc = Start-Tracked 'php' $phpExe @('-S', "127.0.0.1:$Port", '-t', (Join-Path $PSScriptRoot 'webapp'))
+$phpProc = Start-Tracked 'php' $phpExe @(
+    '-S', "${BindAddr}:$Port",
+    '-t', (Join-Path $PSScriptRoot 'webapp'),
+    (Join-Path $PSScriptRoot 'tools\php-router.php')
+)
 
 $newPids | ConvertTo-Json | Set-Content $PidFile
 
@@ -473,6 +564,9 @@ Invoke-MtpRecheck
 
 Write-Host ''
 Write-Host "  ${OK}▸${R} ${B}${OK}ready${R} ${DIM}-${R} open ${B}${ACCENT}${SiteUrl}${R}"
+foreach ($lan in $LanHosts) {
+    Write-Host "    ${DIM}on your phone:${R} ${ACCENT}http://${lan}:${Port}${R} ${DIM}(same wifi)${R}"
+}
 Note 'stop with: ./start.ps1 stop   |   logs: runtime\logs\'
 if (-not $NoBrowser) { Start-Process $SiteUrl }
 exit 0

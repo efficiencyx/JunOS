@@ -147,8 +147,8 @@ function prompt_apply_tool_gate(string $prompt, bool $toolsOffered): string {
 
 
 
-function tool_catalog(): array {
-    return [
+function tool_catalog(?string $approvedWebSearchQuery): array {
+    $tools = [
         [
             'type' => 'function',
             'function' => [
@@ -249,6 +249,13 @@ function tool_catalog(): array {
             ],
         ],
     ];
+    if ($approvedWebSearchQuery === null) {
+        $tools = array_values(array_filter(
+            $tools,
+            fn($tool) => ($tool['function']['name'] ?? '') !== 'web_search'
+        ));
+    }
+    return $tools;
 }
 
 function tool_context_block(): string {
@@ -392,10 +399,12 @@ A successful memory write produces no information that needs reporting. After th
 
 Searches the public web for current or external information and returns titles, URLs, and snippets.
 
+It is available only when Anon's latest message begins with `/search `. The text after `/search ` is the exact query he approved for transmission. Never add memories, chat details, names, secrets, or any other terms to it.
+
 Use it when:
 
 * The answer depends on recent or changing information.
-* Anon asks you to verify, search, check, or find a source.
+* Anon explicitly uses `/search ` and asks you to verify, search, check, or find a source.
 * You need information outside Jun and Anon’s shared conversations.
 * You are not confident that your existing knowledge is current.
 
@@ -798,7 +807,7 @@ TXT;
     return ['can_leave' => $verdict['can_leave'] === true, 'why' => mb_substr($why, 0, 300)];
 }
 
-function run_tool_call(string $name, array $args, array $user, int $convId): string {
+function run_tool_call(string $name, array $args, array $user, int $convId, ?string &$approvedWebSearchQuery): string {
     try {
         if ($name === 'search_recent_chats') {
             $query = trim((string)($args['query'] ?? ''));
@@ -886,7 +895,11 @@ function run_tool_call(string $name, array $args, array $user, int $convId): str
             return json_encode(memory_note_add((int)$user['id'], $category, $memory), JSON_UNESCAPED_UNICODE);
         }
         if ($name === 'web_search') {
-            $query = trim((string)($args['query'] ?? ''));
+            if ($approvedWebSearchQuery === null) {
+                return json_encode(['error' => 'user_confirmation_required']);
+            }
+            $query = $approvedWebSearchQuery;
+            $approvedWebSearchQuery = null;
             return json_encode(web_search_public($query), JSON_UNESCAPED_UNICODE);
         }
         return json_encode(['error' => 'unknown_tool']);
@@ -907,6 +920,14 @@ for ($i = count($body['messages']) - 1; $i >= 0; $i--) {
 // gets nothing. keyword lore lookup dies with it, which is fine, she's got
 // search_lore and can just ask for what she needs.
 if ($audioB64 !== '') $lastUserMsg = '';
+$approvedWebSearchQuery = null;
+if (preg_match('/^\/search\s+(.+)$/us', $lastUserMsg, $searchMatch)) {
+    $approvedWebSearchQuery = trim($searchMatch[1]);
+    if ($approvedWebSearchQuery === '') $approvedWebSearchQuery = null;
+    elseif (mb_strlen($approvedWebSearchQuery) > 400) {
+        $approvedWebSearchQuery = mb_substr($approvedWebSearchQuery, 0, 400);
+    }
+}
 $toolsOffered = provider_tools_enabled();
 
 $contextParts = [];
@@ -980,6 +1001,12 @@ if ($toolsOffered) {
         . "If Anon's latest message contains something durable (a preference, personal fact, plan, "
         . "boundary, health/safety matter, or something emotionally significant), call memory_write "
         . "before replying. Otherwise ignore this.";
+}
+if ($approvedWebSearchQuery !== null) {
+    $contextParts[] = "## Approved public web search\n"
+        . "Anon explicitly approved one outbound search for exactly this JSON string: "
+        . json_encode($approvedWebSearchQuery, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES) . "\n"
+        . "Call web_search with that exact query. Do not add private context, memory, or other terms.";
 }
 
 $liveContext = "# Live context for THIS reply (from the system, not spoken by Anon)\n\n"
@@ -1098,7 +1125,7 @@ ollama_evict_if_partially_offloaded($model);
 
 $upstreamPayload = provider_chat_payload($PROVIDER, $model, $messages, $reasoning, $think);
 
-if ($toolsOffered) $upstreamPayload['tools'] = tool_catalog();
+if ($toolsOffered) $upstreamPayload['tools'] = tool_catalog($approvedWebSearchQuery);
 
 $sawError = false;
 $assistantBuffer = '';
@@ -1228,7 +1255,7 @@ for ($round = 0; $round < 3; $round++) {
                 }
             }
         } else {
-            $toolResult = run_tool_call($name, $args, $user, $convId);
+            $toolResult = run_tool_call($name, $args, $user, $convId, $approvedWebSearchQuery);
         }
         sse_send(['tool_status' => [
             'name' => $name, 'state' => 'done',
