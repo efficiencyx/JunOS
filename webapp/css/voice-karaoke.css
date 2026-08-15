@@ -1,7 +1,8 @@
 .voice-overlay {
   position: fixed;
   inset: 0;
-  z-index: 50; /* above the stage (40), below drawers/toasts */
+  /* above the stage at 40, below drawers and toasts. */
+  z-index: 50;
   pointer-events: none;
   opacity: 0;
   transition: opacity .25s ease;
@@ -361,9 +362,9 @@ body.karaoke-mode .karaoke-overlay {
   gap: 20px;
   width: min(720px, 92vw);
   max-height: 82vh;
-  /* The score card only shows up after you sing, and with a whole lyric line per
-     section it can outgrow what the lyrics already claim - scroll rather than
-     push the controls off the bottom. */
+  /* the score card only shows up after you sing, and with a whole lyric line
+     per section it can outgrow what the lyrics already claim. so scroll,
+     instead of shoving the controls off the bottom. */
   overflow-y: auto;
 }
 .karaoke-turn {

@@ -80,9 +80,9 @@ class AssetRecovery(private val context: Context) {
             ?: error("Could not open selected ZIP")
         var prefix: String? = null
         ParcelFileDescriptor.AutoCloseInputStream(descriptor).use { input ->
-            // The game ZIP keeps every entry size in a trailing data descriptor, which makes
-            // ZipInputStream give up at the first stored entry. Only the central directory has
-            // the sizes, so the archive has to be read by random access instead of streamed.
+            // the game ZIP puts each size in a trailing data descriptor, and
+            // ZipInputStream just gives up at the first stored entry. only the
+            // central directory has the sizes, so read THAT by random access.
             val archive = try {
                 ZipFile.builder().setSeekableByteChannel(input.channel).get()
             } catch (error: IOException) {

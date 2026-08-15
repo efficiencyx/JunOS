@@ -10,7 +10,7 @@ window.Outfit = (function () {
       colorPatterns: ['hoodie'], colorExcludes: ['logo'] },
     { key: 'dress', label: 'Dress', param: 'ParamDress2Enabled', defaultOn: false, excludes: ['shirt','hoodie','skirt','pants','dress1'],
       colorPatterns: ['dress'] },
-    // Dress1 has no rig parameter, so we turn it on and off by hand.
+    // Dress1 has no rig parameter, so we flip it on and off by hand
     { key: 'dress1', label: 'Dress (alt)', defaultOn: false,
       excludes: ['shirt','hoodie','skirt','pants','dress'],
       colorPatterns: ['dress1'], visibilityPatterns: ['dress1'], visOn: 1, visOff: null },
@@ -22,12 +22,12 @@ window.Outfit = (function () {
       colorPatterns: ['bra'], colorExcludes: ['skin','braid'] },
     { key: 'panties', label: 'Panties', param: 'ParamPantiesEnabled', defaultOn: true, excludes: ['bikini_bot'],
       colorPatterns: ['panties'], colorExcludes: ['logo'] },
-    // v0.97.5 swimwear. no rig parameters either, so visibility only.
+    // v0.97.5 swimwear. no rig parameters either, so visibility only
     { key: 'bikini_top', label: 'Bikini top', defaultOn: false, excludes: ['bra'],
       colorPatterns: ['bikinitop'], visibilityPatterns: ['bikinitop'], visOn: 1, visOff: 0 },
     { key: 'bikini_bot', label: 'Bikini bottom', defaultOn: false, excludes: ['panties'],
       colorPatterns: ['bikinibot'], visibilityPatterns: ['bikinibot'], visOn: 1, visOff: 0 },
-    // In this moc3 the shoe parameters don't touch opacity at all.
+    // in this moc3 the shoe parameters don't touch opacity AT ALL
     { key: 'shoe_l', label: 'Left shoe', param: 'ParamShoeLOn', defaultOn: true,
       colorPatterns: ['shoe_l'], visibilityPatterns: ['shoe_l'], visOn: 1, visOff: 0 },
     { key: 'shoe_r', label: 'Right shoe', param: 'ParamShoeROn', defaultOn: true,
@@ -53,7 +53,7 @@ window.Outfit = (function () {
     { key: 'hair_hologram', label: 'Hair hologram', section: 'body', defaultOn: true,
       visibilityPatterns: ['hairhologram'] },
 
-    // The rig only gives us H3, every other hair style we show by hand.
+    // the rig only gives us H3. every other hair style we show by hand.
     { key: 'hair_h0', label: 'Default Hair', section: 'hair', defaultOn: true,
       visibilityPatterns: ['h0_'], visOn: 1, visOff: 0 },
     { key: 'hair_h1', label: 'Side Swept Hair', section: 'hair', defaultOn: false,
@@ -68,7 +68,7 @@ window.Outfit = (function () {
     { key: 'hair_h4', label: 'Ponytail', section: 'hair', defaultOn: false,
       visibilityPatterns: ['h4_'], visOn: 1, visOff: 0 },
     // v0.97.5 clip for the default hair, swaps H0's front bang for the pinned
-    // one. has to stay AFTER hair_h0, its 'h0_' sweep would show both.
+    // one. must stay AFTER hair_h0, its 'h0_' sweep would show both.
     { key: 'hair_clip', label: 'Hair clip', section: 'hair', defaultOn: false,
       requires: 'hair_h0', hideWhenOn: ['h0_front_bang'],
       colorPatterns: ['hairclip'],
@@ -87,7 +87,7 @@ window.Outfit = (function () {
       includes: ['h0_','h1_','h2_','h3_','h4_','hair'],
       excludes: ['hairband','hairpin','hairtie','hairclip','hairbow','hairhologram'] },
 
-    // This small group has to come after the main hair to beat its tint.
+    // this small group has to come after the main hair to beat its tint
     { key: 'hair_h1_strand', label: 'Strand', includes: ['h1_front_bang'], excludes: [] },
     { key: 'hair_h2_strand', label: 'Strand', includes: ['h2_front_bang'], excludes: [] },
     { key: 'hair_h3_strand', label: 'Strand', includes: ['h3_front'], excludes: [] },
@@ -112,7 +112,7 @@ window.Outfit = (function () {
       includes: ['innermouth','tounge','tongue','teeth','saliva'], excludes: [] },
 
     // applyGlassesTexture paints these into the ModdableFace texture itself,
-    // they are not drawable tints, so there is nothing to include here.
+    // they're not drawable tints, so there's nothing to include here
     { key: 'glasses_frame', label: 'Glasses frame', includes: [], excludes: [] },
     { key: 'glasses_lens', label: 'Glasses lens', includes: [], excludes: [] },
 
@@ -160,11 +160,11 @@ window.Outfit = (function () {
     }
   }
 
-  // The decal catalog out of the game, variants/logos/, see DECALS in
-  // tools/recover_assets.py. the garment tags copy the game's own item names,
-  // BedabotsShirt and MilfHunterHoodie and USBPanties and so on, pulled from its
-  // Il2Cpp metadata, so each picker only offers what the game really sells for
-  // that piece of clothing.
+  // the decal catalog straight out of the game, variants/logos/, see DECALS in
+  // tools/recover_assets.py. garment tags copy the game's own item names,
+  // BedabotsShirt and MilfHunterHoodie and USBPanties and friends, pulled from
+  // its Il2Cpp metadata, so each picker only offers what the game actually
+  // sells for that piece of clothing.
   const LOGO_CATALOG = [
     ['aguiLogo', 'A-GUI', 'sh'],
     ['avocado', 'Avocado', 'p'],
@@ -243,9 +243,9 @@ window.Outfit = (function () {
     ];
   }
 
-  // Limb variants are crops from the game atlas, placed through drawable UVs.
+  // limb variants are crops from the game atlas, placed through drawable UVs
   const LIMB_DIR = 'assets/variants/limbs';
-  // These atlas regions overlap, so they need alphaClip.
+  // these atlas regions overlap, so they need alphaClip
   const limbTex = (v, ids) => Object.fromEntries(
     ids.map(d => [d, { url: `${LIMB_DIR}/${v}/${d}.png`, alphaClip: true }]));
   const ARM_EXP_IDS = ['AttachArmL', 'AttachArmLHandCuddle', 'AttachArmLHandDown1',
@@ -258,7 +258,7 @@ window.Outfit = (function () {
     'AttachLegRFeet', 'AttachLegRKnee', 'AttachLegRLower', 'AttachLegRThigh'];
   const HT_SKIN_IDS = ['SkinArmL', 'SkinArmR', 'SkinPelvis', 'SkinThighL', 'SkinThighR',
     'barcode', 'lines'];
-  // Mech knees have to be told to draw over the calf and thigh.
+  // mech knees have to be TOLD to draw over the calf and thigh
   const LEG_ORDER = [
     ['AttachLegLLower', 'AttachLegLThigh'], ['AttachLegRLower', 'AttachLegRThigh'],
   ];
@@ -352,7 +352,7 @@ window.Outfit = (function () {
     },
   ];
   const variantState = {};
-  for (const v of VARIANTS) variantState[v.key] = 0;   // index into options
+  for (const v of VARIANTS) variantState[v.key] = 0;
 
   function load() {
     try {
@@ -363,7 +363,7 @@ window.Outfit = (function () {
           if (typeof saved[it.key] === 'boolean') state[it.key] = saved[it.key];
         }
       }
-    } catch (e) { /* ignore */ }
+    } catch (e) {}
     try {
       const raw = localStorage.getItem(COLOR_KEY);
       if (raw) {
@@ -374,7 +374,7 @@ window.Outfit = (function () {
           }
         }
       }
-    } catch (e) { /* ignore */ }
+    } catch (e) {}
     try {
       const raw = localStorage.getItem(VARIANT_KEY);
       if (raw) {
@@ -384,7 +384,7 @@ window.Outfit = (function () {
           if (Number.isInteger(i) && i >= 0 && i < v.options.length) variantState[v.key] = i;
         }
       }
-    } catch (e) { /* ignore */ }
+    } catch (e) {}
   }
 
   function saveVariants() {
@@ -401,7 +401,7 @@ window.Outfit = (function () {
     if (window.Prefs) Prefs.pushToServer();
   }
 
-  // This rig has no opacity control for these overlay meshes, the game does.
+  // this rig has no opacity control for these overlay meshes. the game does.
   const ALWAYS_HIDDEN = [
     'cumoutside', 'shadowboob', 'fondle',
     'nippiercing', 'navelpiercing',
@@ -418,7 +418,7 @@ window.Outfit = (function () {
         Live2D.opacityByPattern(it.visibilityPatterns, it.visibilityExcludes,
           on ? visOn : visOff);
       }
-      // Only set while it is worn. the item that owns them writes these again
+      // only set while it's worn. the item that owns them rewrites these
       // every pass, so clearing the override here just fights it.
       if (on && it.hideWhenOn && Live2D.opacityByPattern) {
         Live2D.opacityByPattern(it.hideWhenOn, [], 0);
@@ -438,7 +438,7 @@ window.Outfit = (function () {
     if (window.Mods) Mods.applyAll();
   }
 
-  // Only redraw the slot that changed, sending an atlas to the GPU is slow.
+  // only redraw the slot that changed. sending an atlas to the GPU is slow.
   function applyVariants(onlyKey) {
     if (!Live2D.setDrawableTextures) return;
     if (Live2D.setDrawableOrderBelow) {
@@ -495,7 +495,7 @@ window.Outfit = (function () {
 
   function applyColors() {
     if (!Live2D.tintByPattern || !Live2D.findDrawables || !Live2D.setDrawableTint) return;
-    // Clear first, or a small tint wipes out the colors of a bigger group.
+    // clear FIRST, or a small tint wipes out the colors of a bigger group
     const touched = new Set();
     for (const g of COLOR_GROUPS) {
       for (const id of Live2D.findDrawables(g.includes, g.excludes)) touched.add(id);
@@ -513,15 +513,15 @@ window.Outfit = (function () {
         Live2D.tintByPattern(g.includes, g.excludes, rgb);
       }
     }
-    // The face-mod slot only follows skin color while it holds face art.
+    // the face-mod slot only follows skin color while it holds face art.
     // glasses sit in the same slot and must NOT get tinted like skin.
     if ((variantState.glasses_style || 0) > 0) Live2D.setDrawableTint('ModdableFace', null);
     applyGlassesTexture();
   }
 
-  // Lens/frame colors cannot be drawable tints (the glasses composite into
-  // one drawable), so each part is multiplied client-side and the result
-  // baked into the ModdableFace texture.
+  // lens/frame colors can't be drawable tints, the glasses composite into one
+  // drawable, so each part gets multiplied client-side and the result baked
+  // into the ModdableFace texture.
   const GLASSES_STYLES = [
     null,
     { base: 'glasses', layers: [['lens', 'glasses_lens'], ['highlight', null], ['frame', 'glasses_frame']] },
@@ -559,8 +559,8 @@ window.Outfit = (function () {
       imgs = await Promise.all(style.layers.map(([part]) =>
         glassesImg(`assets/variants/glasses/${style.base}_${part}.png`)));
     } catch (e) {
-      // A dropped load would leave the raw ModdableFace atlas art on screen;
-      // retry instead of giving up for the rest of the session.
+      // a dropped load leaves the raw ModdableFace atlas art on screen, so
+      // retry instead of giving up for the rest of the session
       console.warn('glasses layer load failed, retrying', e);
       if (job === glassesJob) setTimeout(applyGlassesTexture, 1000);
       return;
@@ -583,7 +583,7 @@ window.Outfit = (function () {
       for (const ex of it.excludes) state[ex] = false;
     }
     save();
-    // Skip atlas recomposition on parameter-only item toggles.
+    // skip atlas recomposition on parameter-only item toggles
     const affected = new Set([key, ...(state[key] && it.excludes || [])]);
     applyItems();
     for (const k of affected) {
@@ -1005,7 +1005,8 @@ window.Outfit = (function () {
 
   let containerEl = null;
   function syncUI() {
-    syncWardrobe(); // wardrobe.html has no settings panel, only the wardrobe
+    // wardrobe.html has no settings panel, just the wardrobe
+    syncWardrobe();
     if (!containerEl) return;
     for (const it of ITEMS) {
       const cb = containerEl.querySelector(`input[type="checkbox"][data-key="${it.key}"]`);
@@ -1033,8 +1034,8 @@ window.Outfit = (function () {
     return { items: { ...state }, colors: { ...colors }, variants: { ...variantState } };
   }
 
-  // Returns the slots that actually moved, so callers can skip the expensive
-  // parts of applyAll() - a full applyVariants() recomposes every atlas.
+  // returns the slots that actually moved, so callers can skip the expensive
+  // parts of applyAll(). a full applyVariants() recomposes EVERY atlas.
   function loadPresetState(preset) {
     if (!preset || typeof preset !== 'object') return null;
     const { items = {}, colors: cols = {}, variants = {} } = preset;
@@ -1083,11 +1084,11 @@ window.Outfit = (function () {
     syncUI();
   }
 
-  // The preview is look-at-only: dressing gestures on the model are suspended
-  // while the modal is up.
+  // the preview is look-at-only, dressing gestures on the model are suspended
+  // while the modal is up
   const looksOpen = () => document.body.classList.contains('looks-open');
 
-  // Preview dresses the model without touching storage; previewBase holds the
+  // preview dresses the model without touching storage. previewBase holds the
   // look to fall back to until the user either commits or leaves the card.
   let previewBase = null;
   function previewPreset(preset) {
@@ -1095,8 +1096,8 @@ window.Outfit = (function () {
     if (!previewBase) previewBase = exportPreset();
     applyChanged(loadPresetState(preset));
   }
-  // Sliding the pointer down the list would otherwise queue one full
-  // re-dress per row it crosses.
+  // otherwise sliding the pointer down the list queues one full re-dress
+  // per row it crosses. no thank you.
   let previewTimer = null;
   function schedulePreview(preset) {
     clearTimeout(previewTimer);
@@ -1258,8 +1259,8 @@ window.Outfit = (function () {
       if (e.key === 'Escape' && !looksEl.hidden) toggleLooks(false);
     });
 
-    // The dialog's right pane is an empty hole; the real Live2D stage is moved
-    // under it so the preview is the live model, not a second renderer.
+    // the dialog's right pane is an empty hole. the real Live2D stage gets
+    // moved under it so the preview IS the live model, not a second renderer.
     const pane = looksEl.querySelector('.wd-looks-stage');
     if (window.ResizeObserver) new ResizeObserver(syncStageHole).observe(pane);
     window.addEventListener('resize', () => { if (!looksEl.hidden) syncStageHole(); });
@@ -1328,8 +1329,8 @@ window.Outfit = (function () {
     else setItem(key, true);
   }
 
-  // Small accessories (bow, choker, glasses) are hard to grab with an exact
-  // mesh test; the tolerance falls back to padded bounding boxes.
+  // small accessories (bow, choker, glasses) are a nightmare to grab with an
+  // exact mesh test, so the tolerance falls back to padded bounding boxes
   function wornHitAt(x, y, worn) {
     return Live2D.drawableAt(x, y, new Set(worn.keys()), 16);
   }
@@ -1340,7 +1341,8 @@ window.Outfit = (function () {
     for (const id of ids) {
       const img = Live2D.drawableThumb(id, 72);
       if (!img) continue;
-      const px = img.length; // data URL length ~ crop detail; good enough proxy
+      // data URL length is a rough proxy for crop detail. good enough tbh.
+      const px = img.length;
       if (px > bestPx) { bestPx = px; best = img; }
     }
     return best;
@@ -1352,7 +1354,8 @@ window.Outfit = (function () {
       const url = typeof val === 'object' ? val.url : val;
       if (url) return url;
     }
-    return Live2D.drawableThumb(v.drawables[0], 72); // baked default option
+    // the first drawable is the baked default when no variant exists
+    return Live2D.drawableThumb(v.drawables[0], 72);
   }
 
   function wdMoveGhost(x, y) {
@@ -1803,7 +1806,7 @@ window.Outfit = (function () {
       wdTooltip.style.display = 'none';
     };
 
-    let removeDrag = null; // { key, x, y, removed }
+    let removeDrag = null;
     const beginRemoveDrag = (key, x, y) => {
       removeDrag = { key, x, y, removed: false };
       wdTooltip.style.display = 'none';

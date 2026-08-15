@@ -48,9 +48,9 @@ export function showAuthScreen() {
   revealRegKeyField();
 }
 
-// A server with no key set never mentions one, so the field only appears
-// where it is actually needed. if the probe fails we leave it hidden and
-// let the signup call come back with registration_closed.
+// a server with no key set never mentions one, so the field only shows up
+// where it's actually needed. if the probe fails we leave it hidden and let
+// the signup call come back with registration_closed.
 async function revealRegKeyField() {
   const field = document.getElementById('signupRegKeyField');
   if (!field) return;
@@ -59,7 +59,7 @@ async function revealRegKeyField() {
     if (!r.ok) return;
     const info = await r.json();
     if (info && info.registration_key_required) field.hidden = false;
-  } catch { /* offline: the field stays hidden */ }
+  } catch {}
 }
 
 function hideAuthScreen() {

@@ -9,18 +9,18 @@ import java.time.temporal.ChronoUnit
 import java.time.temporal.TemporalAdjusters
 import java.util.Locale
 
-// A note that says "tomorrow" only means anything next to the day it was
-// written, and she will NOT do that sum herself: give a 2B model "(noted Monday
-// 10 August)" beside the word "tomorrow" and it just says "tomorrow" back, four
-// days late. so we work the day out here and paste it right after the phrase.
-// This is memory_note_render() from webapp/api/_lib.php in Kotlin, the two
-// prompts have to say the same thing, so change them together.
+// a note saying "tomorrow" means nothing without the day it was
+// written. Jun is 2B and will absolutely NOT do that sum. give
+// her "(noted Monday 10 August)" next to it and she hands back
+// "tomorrow", four days late. so we do the maths here and paste
+// the real day after the phrase. this is memory_note_render()
+// from webapp/api/_lib.php. keep the two prompts together.
 object MemoryDates {
     fun day(created: Long): LocalDate? =
         if (created <= 0) null else Instant.ofEpochSecond(created).atZone(ZoneId.systemDefault()).toLocalDate()
 
-    // Stamping every note costs a whole category off the end of the context
-    // budget, so ONLY the notes whose wording leans on their own date get one.
+    // stamping every note costs a whole category off the context
+    // budget, so ONLY notes that lean on their date get one
     fun stamp(text: String, created: LocalDate?, today: LocalDate = LocalDate.now()): String {
         if (created == null || !RELATIVE.containsMatchIn(text)) return ""
         return "(noted ${format(created)}, ${daysPhrase(created, today)}) "
@@ -34,8 +34,8 @@ object MemoryDates {
         }
     }
 
-    // "next week" and "in a few days" stay fuzzy on purpose, there is no one day
-    // to name, they keep the anchor stamp and nothing else.
+    // "next week" and "in a few days" have no single day to name.
+    // they stay fuzzy and keep only the anchor stamp.
     private fun resolve(phrase: String, created: LocalDate): LocalDate? {
         OFFSETS[phrase]?.let { return created.plusDays(it.toLong()) }
         NEXT_WEEKDAY.matchEntire(phrase)?.let { match ->

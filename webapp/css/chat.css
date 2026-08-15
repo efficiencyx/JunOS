@@ -7,7 +7,6 @@
 .messages-empty.hidden { display: none; }
 .messages-empty.hidden ~ .composer-area .prompt-chips { display: none; }
 
-/* With nothing in the chat yet, stack title, composer and chips in the middle */
 .messages-empty:not(.hidden) { margin-top: auto; }
 .messages-empty:not(.hidden) ~ .composer-area { margin-bottom: auto; }
 
@@ -98,9 +97,9 @@
   padding: 4px 0;
 }
 
-/* MDRG-style dialogue box, matching the wardrobe reaction card. --fb-w and
-   --fb-scale are written by positionFaceBubble() so the card tracks the
-   on-screen size of the Live2D model; scale 1 == the reference metrics below. */
+/* --fb-w and --fb-scale come from positionFaceBubble(), so
+   this card follows Jun's on-screen size. scale 1 uses the
+   reference sizes below. */
 .face-bubble {
   position: fixed;
   z-index: 55;
@@ -149,7 +148,8 @@
   from { transform: scaleY(0); }
   to   { transform: scaleY(1); }
 }
-/* Over every gate and drawer. while she has walked out you can't use the app. */
+/* this sits over EVERY gate and drawer. while she's gone,
+   nothing under it should work. */
 #fleeOverlay {
   position: fixed;
   inset: 0;

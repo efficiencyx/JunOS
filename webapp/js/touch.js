@@ -1,5 +1,3 @@
-// Touch you start on the model yourself: head pat, hand hold, face rub.
-
 window.ModelTouch = (function () {
   let sendEvent = null;
   let isBusy = () => false;
@@ -78,7 +76,7 @@ window.ModelTouch = (function () {
     } else if (kind === 'boob') {
       active.sq = 0;
       Live2D.setTarget(side === 'left' ? 'ParamEnableBoobFondleL' : 'ParamEnableBoobFondleR', 1);
-      // No param turns the MC hand meshes on, so set the drawable ourselves.
+      // no param turns the MC hand meshes on, so we set the drawable ourselves
       Live2D.setDrawableOpacity(side === 'left' ? 'MCRightHandFondle' : 'MCLeftHandFondle', 1);
     } else if (kind === 'skirt') {
       active.lift = Live2D.debugParam('ParamSkirtUp').current || 0;
@@ -109,7 +107,7 @@ window.ModelTouch = (function () {
     const { kind, side } = active;
     if (kind === 'head') {
       Live2D.cancelPending('ParamHeadpat');
-      // ParamHeadpat rests at -1. at 0 the hand is still half shown.
+      // ParamHeadpat rests at -1. at 0 the hand is still half visible.
       Live2D.setNow('ParamHeadpat', -1);
       Live2D.setNow('ParamHeadpatX', 0);
       Live2D.setNow('ParamHeadpatY', 0);

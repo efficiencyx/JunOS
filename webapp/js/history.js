@@ -11,13 +11,13 @@ window.History = (function () {
   async function create() {
     const r = await fetch(`${API}?action=create`, { method: 'POST' });
     if (!r.ok) throw new Error(`history create ${r.status}`);
-    return r.json(); // {id}
+    return r.json();
   }
 
   async function load(id) {
     const r = await fetch(`${API}?action=messages&id=${id}`);
     if (!r.ok) throw new Error(`history load ${r.status}`);
-    return r.json(); // [{role, content, created_at}]
+    return r.json();
   }
 
   async function del(id) {

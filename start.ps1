@@ -8,7 +8,6 @@ param(
 $ErrorActionPreference = 'Stop'
 Set-Location -LiteralPath $PSScriptRoot
 
-# Ensure Unicode glyphs render correctly on all console hosts.
 try {
     [Console]::OutputEncoding = [Text.Encoding]::UTF8
     $OutputEncoding = [Text.Encoding]::UTF8
@@ -42,8 +41,8 @@ function Ok([string]$msg)      { Write-Host "    ${OK}✓${R} ${MUTED}${msg}${R}
 function Note([string]$msg)    { Write-Host "    ${DIM}ℹ ${msg}${R}" }
 function Warn_([string]$msg)   { Write-Host "    ${WARN}⚠${R} ${WARN}${msg}${R}" }
 function Fail_([string]$msg)   { Write-Host "    ${DANGER}✗${R} ${DANGER}${msg}${R}" }
-# UUIDs, not indices: nvidia-smi enumerates by PCI bus order while CUDA sorts
-# by speed, so the same index means different cards to the two of them.
+# UUIDs, NOT indices. nvidia-smi enumerates by PCI bus order while CUDA sorts
+# by speed, so the same index means different cards to the two of them. great.
 function Get-GpuOrder {
     if (-not (Get-Command nvidia-smi -ErrorAction SilentlyContinue)) { return $null }
     $rows = & nvidia-smi --query-gpu=memory.total,uuid --format=csv,noheader,nounits 2>$null
@@ -55,18 +54,18 @@ function Get-GpuOrder {
     return ($uuids -join ',')
 }
 
-# The card the MTP tune was measured on, as one string: the vendor,
-# then every GPU's name and how much VRAM it has. Sorted biggest
-# card first, so moving cards between slots is not a change, only
+# the card the MTP tune was measured on, as one string: the vendor,
+# then every GPU's name and how much VRAM it has. sorted biggest
+# card first, so shuffling cards between slots isn't a change. only
 # a real swap is.
 #
-# Keep this in step with the copy in mtp-autotune.ps1. we compare
+# keep this in step with the copy in mtp-autotune.ps1. we compare
 # what it prints against MTP_TUNED_GPU, so the day the two print a
-# different string for the same card we read every boot as a GPU
-# change and re-run the whole sweep, forever.
+# different string for the same card, every boot reads as a GPU
+# change and re-runs the whole sweep. forever.
 #
-# There is no rocm-smi branch on Windows bare metal, so an AMD box
-# gets '' here: no stamp, and no automatic re-tune either.
+# there's no rocm-smi branch on windows bare metal, so an AMD box
+# gets '' here. no stamp, and no automatic re-tune either.
 function Get-GpuSignature {
     if (-not (Get-Command nvidia-smi -ErrorAction SilentlyContinue)) { return '' }
     $rows = @(& nvidia-smi --query-gpu=name,memory.total --format=csv,noheader,nounits 2>$null |
@@ -84,14 +83,14 @@ $LogDir   = Join-Path $Runtime 'logs'
 $PidFile  = Join-Path $Runtime 'pids.json'
 $StateDir = Join-Path $Runtime 'state'
 
-# Read KEY=VALUE pairs in as env vars, but only when they aren't set already, so
-# you can still override one for a single run.
+# read KEY=VALUE pairs in as env vars, but ONLY when they aren't set already,
+# so you can still override one for a single run.
 if (Test-Path .env) {
     foreach ($line in Get-Content .env) {
         if ($line -match '^\s*([A-Za-z_][A-Za-z0-9_]*)\s*=\s*(.*)$') {
             $k = $Matches[1]; $v = $Matches[2].Trim()
-            # The docker hostnames in .env.example mean nothing on bare metal,
-            # so skip them and use our own localhost defaults.
+            # the docker hostnames in .env.example mean nothing on bare
+            # metal, so skip them and use our own localhost defaults.
             if ($v -match '://(ollama|tts|kokoro|karaoke|nginx|php|llamacpp)\b') { continue }
             if (-not (Get-Item "env:$k" -ErrorAction SilentlyContinue)) {
                 Set-Item "env:$k" $v
@@ -115,8 +114,8 @@ if (-not $GpuDevices -or $GpuDevices -eq 'auto') {
 } elseif ($GpuDevices -eq 'all') {
     $GpuDevices = ''
 }
-# An empty CUDA_VISIBLE_DEVICES means NO GPUs, not all of them, so only set it
-# when we really have a list. the model servers pick it up from here.
+# an empty CUDA_VISIBLE_DEVICES means NO GPUs, not all of them, so only set it
+# when we actually have a list. the model servers pick it up from here.
 if ($GpuDevices) { $env:CUDA_VISIBLE_DEVICES = $GpuDevices }
 $TensorParallel = $env:TENSOR_PARALLEL -match '^(on|1|true|yes)$'
 
@@ -148,19 +147,19 @@ function Test-Http([string]$url, [int]$timeoutSec = 2) {
     } catch { return $false }
 }
 
-# The draft depth in .env is a measurement, and it only describes
-# the card it was measured on. Swap the GPU and the number in
-# there is about hardware that left the building, so hold the
-# stamp the tuner wrote against what is in the box now and measure
-# again when the two don't match.
+# the draft depth in .env is a measurement, and it only describes
+# the card it was measured on. swap the GPU and that number is
+# about hardware that left the building. so hold the stamp the
+# tuner wrote against what's in the box NOW and measure again when
+# the two don't match.
 function Invoke-MtpRecheck {
-    # On the llamacpp side the tuner restarts the stack through
-    # start.ps1, and that is us. without this we start a tune
-    # inside a tune, forever.
+    # on the llamacpp side the tuner restarts the stack through
+    # start.ps1, which is us. without this we start a tune inside
+    # a tune. forever.
     if ($env:MTP_AUTOTUNE_RUNNING) { return }
     if ($env:MTP_AUTOTUNE -and $env:MTP_AUTOTUNE.ToLower() -match '^(off|0|false|no)$') { return }
 
-    # No stamp means no tune ever finished on this box, so there is
+    # no stamp means no tune ever finished on this box, so there's
     # nothing to compare and nothing to nag about.
     $tuned = $env:MTP_TUNED_GPU
     if (-not $tuned) { return }
@@ -173,8 +172,8 @@ function Invoke-MtpRecheck {
         'ollama'   { $drafter = $env:OLLAMA_MTP }
         default    { return }
     }
-    # MTP is off, so there is no depth to measure. the tuner would
-    # only die on it and we would come back here every single boot.
+    # MTP is off so there's no depth to measure. the tuner would
+    # just die on it and we'd be back here every single boot.
     if (-not $drafter) { return }
 
     Step 'the GPU changed since MTP was tuned'
@@ -184,19 +183,19 @@ function Invoke-MtpRecheck {
     Note 'a few minutes on ollama, considerably longer on llamacpp where every depth needs a llama-server restart'
     Note 'set MTP_AUTOTUNE=off in .env to skip this'
 
-    # /api/tags answers the moment ollama is up, which says nothing
-    # about whether the drafter is pulled yet. The tuner needs that
-    # blob on disk or it dies with "could not find the drafter
-    # blob", so wait until ollama show admits it has one.
+    # /api/tags answers the moment ollama is up, which tells us
+    # NOTHING about whether the drafter is pulled yet. the tuner
+    # needs that blob on disk or it dies with "could not find the
+    # drafter blob", so wait until ollama show admits it has one.
     $deadline = (Get-Date).AddMinutes(5)
     $ready = $false
     while ((Get-Date) -lt $deadline) {
         if ($Provider -eq 'llamacpp') {
             if (Test-Http "$LlamacppUrl/health") { $ready = $true; break }
         } elseif (Test-Http "$OllamaUrl/api/tags") {
-            # PS 7.4 turns a non-zero exit from a native command into a
-            # throw under ErrorActionPreference Stop, and "not pulled
-            # yet" is the normal answer in here, not an error.
+            # PS 7.4 turns a non-zero exit from a native command into
+            # a throw under ErrorActionPreference Stop, and "not pulled
+            # yet" is the NORMAL answer in here, not an error.
             try {
                 & ollama show --modelfile $drafter 2>$null | Out-Null
                 if ($LASTEXITCODE -eq 0) { $ready = $true; break }
@@ -205,8 +204,8 @@ function Invoke-MtpRecheck {
         Start-Sleep -Seconds 5
     }
 
-    # Leave the stamp stale on purpose. it is the only thing that
-    # makes the next boot try again, and a pull that is still
+    # leave the stamp stale ON PURPOSE. it's the only thing that
+    # makes the next boot try again, and a pull that's still
     # running now is probably done by then.
     if (-not $ready) {
         Warn_ 'the drafter is not here yet, so the re-tune is skipped. run .\mtp-autotune.ps1 by hand once it has finished pulling.'
@@ -220,10 +219,10 @@ function Invoke-MtpRecheck {
         Warn_ "autotune did not finish, run .\mtp-autotune.ps1 by hand ($_)"
     } finally {
         Remove-Item env:MTP_AUTOTUNE_RUNNING -ErrorAction SilentlyContinue
-        # The tuner just wrote .env and the copy we read at startup
+        # the tuner just wrote .env and the copy we read at startup
         # is older than that. drop it, so a second start.ps1 in the
         # same session picks the new stamp up off disk instead of
-        # re-running the whole sweep against a value from before.
+        # re-running the whole sweep against a stale value.
         Remove-Item env:MTP_TUNED_GPU -ErrorAction SilentlyContinue
     }
 }
@@ -276,9 +275,9 @@ function Start-Tracked([string]$name, [string]$exe, [string[]]$exeArgs) {
     return $p
 }
 
-# If an Ollama server is already up (the desktop app autostarts one), use it.
-# Otherwise launch `ollama serve` ourselves, with the model store inside the
-# install folder so weights disappear with it on uninstall.
+# if an Ollama server is already up (the desktop app autostarts one) just use
+# it. otherwise launch `ollama serve` ourselves, with the model store inside
+# the install folder so the weights go away with it on uninstall.
 if ($Provider -eq 'ollama') {
 if (-not (Get-Command ollama -ErrorAction SilentlyContinue)) {
     throw 'ollama is not installed. Run install.ps1 first (it installs Ollama via winget).'
@@ -289,14 +288,14 @@ if (-not (Test-Http "$OllamaUrl/api/tags")) {
     Step 'start ollama serve'
     $env:OLLAMA_HOST   = '127.0.0.1:11434'
     $env:OLLAMA_MODELS = Join-Path $Runtime 'ollama-models'
-    # Memory caps, same rationale as the Docker setup: one slot, two models,
-    # 8-bit KV cache (needs flash attention; falls back to f16 elsewhere).
+    # memory caps, same reasoning as the docker setup. one slot, two models,
+    # 8-bit KV cache. needs flash attention, falls back to f16 elsewhere.
     if (-not $env:OLLAMA_NUM_PARALLEL)      { $env:OLLAMA_NUM_PARALLEL = '1' }
     if (-not $env:OLLAMA_MAX_LOADED_MODELS) { $env:OLLAMA_MAX_LOADED_MODELS = '2' }
     if (-not $env:OLLAMA_KEEP_ALIVE)        { $env:OLLAMA_KEEP_ALIVE = '5m' }
     if (-not $env:OLLAMA_FLASH_ATTENTION)   { $env:OLLAMA_FLASH_ATTENTION = '1' }
     if (-not $env:OLLAMA_KV_CACHE_TYPE)     { $env:OLLAMA_KV_CACHE_TYPE = 'q8_0' }
-    # Ollama has no real tensor parallelism; spreading the layers is as close
+    # Ollama has no real tensor parallelism. spreading the layers is as close
     # as it gets.
     if ($TensorParallel -and -not $env:OLLAMA_SCHED_SPREAD) { $env:OLLAMA_SCHED_SPREAD = '1' }
     Start-Tracked 'ollama' 'ollama' @('serve') | Out-Null
@@ -325,7 +324,7 @@ if ($env:OLLAMA_MODELS_TO_PULL) {
         Step "pull $m"
         & ollama pull $m
         if ($LASTEXITCODE -ne 0 -and $m -match '^hf\.co/') {
-            # Older Ollama builds reject the hf.co alias ("realm host
+            # older Ollama builds reject the hf.co alias ("realm host
             # huggingface.co does not match original host hf.co").
             $m = $m -replace '^hf\.co/', 'huggingface.co/'
             Note "retrying as $m"
@@ -336,9 +335,9 @@ if ($env:OLLAMA_MODELS_TO_PULL) {
     }
 }
 
-# Pre-warm: an empty-prompt generate makes ollama load the chat model now, so
-# the first real message doesn't pay the cold-load cost. Fire and forget - the
-# short timeout aborts our wait, not the server-side load.
+# pre-warm. an empty-prompt generate makes ollama load the chat model NOW, so
+# the first real message doesn't eat the cold-load cost. fire and forget, the
+# short timeout aborts OUR wait, not the server-side load.
 if ($chatModel -and $Provider -eq 'ollama') {
     Step "pre-warm $chatModel"
     Note 'loading model in the background'
@@ -349,9 +348,9 @@ if ($chatModel -and $Provider -eq 'ollama') {
 }
 }
 
-# Only when AI_PROVIDER=llamacpp and LLAMACPP_URL targets this machine; a
-# remote/custom URL means the user runs their own server. Weights cache under
-# runtime\llama-cache so they disappear with the folder on uninstall.
+# only when AI_PROVIDER=llamacpp and LLAMACPP_URL points at this machine. a
+# remote/custom URL means the user runs their own server. weights cache under
+# runtime\llama-cache so they go away with the folder on uninstall.
 if ($Provider -eq 'llamacpp' -and $LlamacppUrl -match '://(127\.0\.0\.1|localhost)\b') {
     if (Test-Http "$LlamacppUrl/health") {
         Ok "using already-running llama-server at $LlamacppUrl"
@@ -367,18 +366,18 @@ if ($Provider -eq 'llamacpp' -and $LlamacppUrl -match '://(127\.0\.0\.1|localhos
         $env:LLAMA_CACHE = Join-Path $Runtime 'llama-cache'
         $llamaArgs = @('-hf', $hfRef, '--host', '127.0.0.1', '--port', $LlamaPort, '-c', '16384', '--jinja')
         if ($TensorParallel) { $llamaArgs += @('-sm', 'row') }
-        # Gemma 4's multi-token prediction. the assistant model guesses the next
-        # few tokens, the real model checks them in one pass, the ones it got
-        # right came almost free. LLAMACPP_MTP holds the drafter's HF repo, the
-        # first run downloads that one too.
+        # Gemma 4's multi-token prediction. the assistant model guesses the
+        # next few tokens, the real model checks them all in one pass, and the
+        # ones it got right came almost free. LLAMACPP_MTP holds the drafter's
+        # HF repo, the first run downloads that one too.
         if ($env:LLAMACPP_MTP) {
             $nMax = if ($env:LLAMACPP_MTP_N_MAX) { $env:LLAMACPP_MTP_N_MAX } else { '4' }
             $llamaArgs += @('--spec-type', 'draft-mtp', '-hfd', $env:LLAMACPP_MTP, '--spec-draft-n-max', $nMax)
         }
         $llamaProc = Start-Tracked 'llamacpp' 'llama-server' $llamaArgs
 
-        # Generous deadline: the first boot downloads the GGUF before /health
-        # goes green. A dead process fails fast instead of waiting it out.
+        # generous deadline, the first boot downloads the GGUF before /health
+        # goes green. a dead process fails fast instead of waiting it out.
         $deadline = (Get-Date).AddMinutes(15)
         while (-not (Test-Http "$LlamacppUrl/health")) {
             if ($llamaProc.HasExited) { throw "llama-server exited (code $($llamaProc.ExitCode)) - see runtime\logs\llamacpp.err.log" }
@@ -419,9 +418,9 @@ if (-not (Test-Path $phpExe)) {
 $old = Get-TrackedProcess $oldPids 'php'
 if ($old) { Stop-Process -Id $old.Id -Force -ErrorAction SilentlyContinue }
 
-# Sanity-check php.exe before launching it hidden: a missing VC++ runtime
-# kills it with no visible error (NTSTATUS 0xC0000135 = missing DLL).
-# Run through cmd so PHP warnings on stderr can't trip ErrorActionPreference.
+# sanity-check php.exe before launching it hidden. a missing VC++ runtime
+# kills it with NO visible error (NTSTATUS 0xC0000135 = missing DLL).
+# run through cmd so PHP warnings on stderr can't trip ErrorActionPreference.
 cmd /c "`"$phpExe`" -v >nul 2>&1"
 if ($LASTEXITCODE -ne 0) {
     if ($LASTEXITCODE -eq -1073741515) {
@@ -435,8 +434,8 @@ $env:AI_PROVIDER            = $Provider
 $env:OLLAMA_URL             = $OllamaUrl
 $env:LLAMACPP_URL           = $LlamacppUrl
 $env:TTS_URL                = 'http://127.0.0.1:8001'
-# One sidecar process serves both roles here, unlike Docker where karaoke is its
-# own (GPU-capable) container.
+# one sidecar process serves both roles here, unlike docker where karaoke gets
+# its own (GPU-capable) container.
 $env:KARAOKE_URL            = 'http://127.0.0.1:8001'
 $env:OMEGA_STATE_DIR        = $StateDir
 $libPath = (Join-Path $PSScriptRoot 'webapp\api\_lib.php').Replace('\', '/')
@@ -445,9 +444,9 @@ if ($LASTEXITCODE -ne 0) { throw 'database migration failed' }
 $oldMemory = Get-TrackedProcess $oldPids 'memory'
 if ($oldMemory) { Stop-Process -Id $oldMemory.Id -Force -ErrorAction SilentlyContinue }
 Start-Tracked 'memory' $phpExe @((Join-Path $PSScriptRoot 'webapp\api\consolidation-worker.php')) | Out-Null
-# PHP honors this on Unix only; on Windows the built-in server stays
-# single-worker, so requests made while a chat reply is streaming (e.g. TTS)
-# queue until it finishes. Acceptable for a single local user.
+# PHP honors this on unix ONLY. on windows the built-in server stays
+# single-worker, so requests made while a chat reply is streaming (TTS, say)
+# just queue until it finishes. fine for a single local user.
 $env:PHP_CLI_SERVER_WORKERS = '8'
 $phpProc = Start-Tracked 'php' $phpExe @('-S', "127.0.0.1:$Port", '-t', (Join-Path $PSScriptRoot 'webapp'))
 
@@ -467,9 +466,9 @@ while (-not (Test-Http $SiteUrl)) {
     Start-Sleep -Seconds 1
 }
 
-# Before the ready banner, not after. on llamacpp the sweep bounces
-# llama-server five times, so she is not usable till it finishes and
-# opening the browser first would only show a broken chat.
+# BEFORE the ready banner, not after. on llamacpp the sweep bounces
+# llama-server five times, so she isn't usable till it finishes and
+# opening the browser first would just show a broken chat.
 Invoke-MtpRecheck
 
 Write-Host ''

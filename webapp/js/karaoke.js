@@ -1,9 +1,15 @@
 window.Karaoke = (function () {
   const API = '/api/karaoke.php';
   const DB_NAME = 'omega-karaoke', DB_STORE = 'tracks';
-  const START_LEAD = 0.1;        // queue both stems this far ahead so they start on the same sample
-  const TOLERANCE = 1.25;        // seconds a sung word can be off its timestamp and still count
-  const GAIN_RAMP = 0.05;        // seconds to slide the guide vocal volume, or the handoff clicks
+  // queue both stems 0.1 seconds ahead. they start on the exact
+  // same sample.
+  const START_LEAD = 0.1;
+  // a sung word can miss its timestamp by 1.25 seconds and
+  // still count. generous on purpose.
+  const TOLERANCE = 1.25;
+  // slide the guide vocal over 0.05 seconds, or the handoff
+  // clicks.
+  const GAIN_RAMP = 0.05;
 
   let active = false;
   let hooks = {};
@@ -12,7 +18,7 @@ window.Karaoke = (function () {
   let audioCtx = null, analyser = null, analyserBuf = null, masterGain = null;
   let instrSource = null, guideSource = null, guideGain = null;
   let startTime = 0, rafId = 0;
-  let track = null;              // { hash, duration, instrBuf, guideBuf, sections, lyricsSrc }
+  let track = null;
   let wordEls = [], lineEls = [];
   let activeLine = -1, activeWordLine = -1, activeWordIdx = -1;
   let lastOwnerKey = '';
@@ -23,9 +29,9 @@ window.Karaoke = (function () {
   let soloPhase = 'you';
   let volume = 1.0;
   let junVolume = 0.8;
-  let pendingLyrics = null;      // { text, kind:'lrc'|'txt', name } applied at next loadFile
+  let pendingLyrics = null;
   let pendingId3 = null;
-  let pendingLrclib = null;      // { text, kind:'lrc'|'txt' } fetched from LRCLIB per load
+  let pendingLrclib = null;
   let splitPicks = null;
   let setupStep = 0;
   let sepAbort = null;
@@ -115,10 +121,10 @@ window.Karaoke = (function () {
     return Math.floor(whole / 60) + ':' + String(whole % 60).padStart(2, '0');
   }
 
-  // A wide range on purpose, not a countdown. htdemucs, the thing that splits a
-  // song into vocals and backing, is slower than realtime on a CPU and much
-  // faster on a GPU. whisper then reads the vocal track back, and the very first
-  // run also has to download the model.
+  // a WIDE range on purpose, this is not a countdown. htdemucs (the thing that
+  // splits a song into vocals and backing) is slower than realtime on a CPU
+  // and way faster on a GPU. whisper then reads the vocal track back, and the
+  // very first run also has to download the model. so, you know. varies.
   function estimateSeparation(duration, device) {
     if (!duration || (device !== 'cpu' && device !== 'cuda')) return null;
     return device === 'cpu' ? [duration * 1.2, duration * 2.6] : [duration * 0.15, duration * 0.5];
@@ -230,8 +236,8 @@ window.Karaoke = (function () {
     });
   }
 
-  // decodeAudioData detaches the ArrayBuffer it is handed, so decode a copy and
-  // keep the original bytes for IndexedDB - AudioBuffer itself is not storable.
+  // decodeAudioData DETACHES the ArrayBuffer you hand it, so decode a copy and
+  // keep the original bytes for IndexedDB. AudioBuffer itself isn't storable.
   async function decodeCopy(raw) {
     return audioCtx.decodeAudioData(raw.slice(0));
   }
@@ -292,8 +298,10 @@ window.Karaoke = (function () {
     const enc = bytes[0];
     const dec = id3Decoder(enc);
     const wide = enc === 1 || enc === 2;
-    let p = 1 + 3 + 1 + 1;                 // encoding, language, timestamp format, content type
-    p = id3SkipTerm(bytes, p, wide);       // content descriptor
+    // encoding, language, timestamp format and content type take
+    // six bytes. then comes a terminated content descriptor.
+    let p = 1 + 3 + 1 + 1;
+    p = id3SkipTerm(bytes, p, wide);
     const frags = [];
     while (p + (wide ? 2 : 1) + 4 <= size) {
       const s = p;
@@ -601,14 +609,14 @@ window.Karaoke = (function () {
           setStatus('Reading the track…');
           sourceDuration = (await decodeCopy(raw)).duration;
         } catch (e) {
-          // Only needed for the estimate; separation reports a bad file properly.
+          // only needed for the estimate, separation reports a bad file properly
         }
         setStatus(h.device === 'cpu'
           ? 'Splitting the vocals off on CPU…'
           : 'Splitting the vocals off…');
         startClock(estimateSeparation(sourceDuration, h.device));
-        // Aborting only stops us waiting - the sidecar carries on to the end of
-        // the job it already started, there is no cancel on the demucs side.
+        // aborting only stops US waiting. the sidecar carries right on to the
+        // end of the job it started, there's no cancel on the demucs side.
         sepAbort = new AbortController();
         setCancellable(() => sepAbort && sepAbort.abort());
         let sepRes;
@@ -854,8 +862,8 @@ window.Karaoke = (function () {
         owner: sec.owner,
         matched: m,
         total: refN.length,
-        // Words that normalise to nothing are punctuation-only and were never
-        // scorable, so they render plain rather than as something you missed.
+        // words that normalise to nothing are punctuation-only and were never
+        // scorable, so they render plain instead of as something you missed
         words: sec.words.map((w, wi) => ({
           word: w.word,
           scorable: !!normWord(w.word),
@@ -1022,7 +1030,8 @@ window.Karaoke = (function () {
     guideSource.buffer = track.guideBuf;
     guideSource.connect(guideGain);
     guideGain.connect(masterGain);
-    guideGain.connect(analyser);     // tap after the gain so lipsync only reacts to audible vocal
+    // tap AFTER the gain, lipsync follows only the vocal you actually hear
+    guideGain.connect(analyser);
 
     startTime = audioCtx.currentTime + START_LEAD;
     scheduleGuideAutomation();

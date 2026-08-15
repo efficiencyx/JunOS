@@ -1,13 +1,8 @@
 <?php
-// Inlines webapp/boot.css into the <style id="critical"> block of index.html.
-//
-// The screens before the app have to carry their own styling. styles.css loads
-// in the background, see js/boot-gate.js, so nothing in it exists yet when the
-// first pixels go up. boot.css is where those rules live and this script copies
-// them across. the <style> block is generated, NEVER edit it by hand.
-// sync-webapp.sh runs this before it pushes anything to the containers.
-//
-// Pass --check to verify the block is current without writing (exit 1 if stale).
+// boot.css is the source. the <style id="critical"> copy in
+// index.html is GENERATED, never touch it by hand. pre-app
+// screens need it before async styles.css loads. sync-webapp.sh
+// updates it. --check just compares and exits 1 when stale.
 
 $webappDir = is_dir(__DIR__ . '/../webapp') ? __DIR__ . '/../webapp' : __DIR__ . '/..';
 $cssPath  = $webappDir . '/boot.css';
@@ -37,7 +32,7 @@ if ($end === false) {
     exit(1);
 }
 
-$banner  = "\n/* Generated from boot.css by tools/build-critical-css.php - do not edit. */\n";
+$banner  = "\n/* generated from boot.css by tools/build-critical-css.php. do NOT edit. */\n";
 $updated = substr($html, 0, $bodyAt) . $banner . $css . "\n" . substr($html, $end);
 
 if (in_array('--check', $argv, true)) {

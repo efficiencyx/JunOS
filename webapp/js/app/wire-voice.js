@@ -4,13 +4,12 @@ import { hideFaceBubble } from './face-bubble.js?v=1';
 import { logAction } from './logging.js?v=1';
 import { syncVoiceDeps, updateVoiceSilenceLabel } from './settings.js?v=1';
 
-// Same deal as wire-tts. optional piece, wiring that keeps to itself.
 export async function wireVoice() {
   if (window.Voice && voiceChk) {
     Voice.setLogger(logAction);
     Voice.setOnTranscript(sendFromVoice);
 
-    // She hears the wav herself when the backend can take it. the first
+    // she hears the wav herself when the backend can take it. the FIRST
     // refusal turns this off for the rest of the page, we never ask the
     // server up front.
     let audioTurns = true;
@@ -65,7 +64,7 @@ export async function wireVoice() {
       if (voiceSilenceInput) voiceSilenceInput.value = String(savedSilence);
       updateVoiceSilenceLabel();
 
-      // A live mic is something you pick per session, Never a synced setting.
+      // a live mic is a per session choice. Never a synced setting.
       voiceChk.checked = false;
       voiceChk.addEventListener('change', async () => {
         if (voiceChk.checked) {

@@ -50,8 +50,8 @@ android {
         targetCompatibility = JavaVersion.VERSION_17
     }
 
-    // The JVM tests touch classes that log through android.util.Log, and the stub jar
-    // throws on every method unless we ask for defaults back.
+    // the JVM tests touch android.util.Log. its stub jar throws
+    // on every single call unless we ask for defaults.
     testOptions.unitTests.isReturnDefaultValues = true
 
     packaging {
@@ -103,11 +103,11 @@ val verifyUnityPySdist by tasks.registering {
     }
 }
 
-// UnityPy's wheels bundle a compiled UnityPyBoost that has no Android build, but every call
-// site falls back to pure Python, so the package tree is unpacked out of the sdist straight
-// into the Chaquopy source set. The C++ sits in a sibling directory and never comes along.
-// The version has to match the desktop installers, which pull UnityPy unpinned - anything
-// older than 1.10 misparses this game's Unity 6 Texture2D headers.
+// UnityPy wheels ship UnityPyBoost, which has no android build.
+// every call falls back to pure python anyway, so we unpack the
+// package tree out of the sdist and leave its C++ sibling behind.
+// keep this version in step with the desktop installers. before
+// 1.10, UnityPy reads this game's Unity 6 Texture2D headers Wrong.
 val unpackUnityPy by tasks.registering(Copy::class) {
     dependsOn(verifyUnityPySdist)
     from(provider { tarTree(resources.gzip(unityPySdist.singleFile)) }) {

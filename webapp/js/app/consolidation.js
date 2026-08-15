@@ -76,8 +76,8 @@ let previousBusyLine = -1;
 let idleNudgeStreak = 0;
 export let cancelActiveIdleNudge = null;
 
-// app.js owns the per turn cancel hook but the idle timer is in here, so we
-// hand it over instead of exporting something you can write to.
+// app.js owns the per turn cancel hook but the idle timer lives in here, so
+// we hand it over instead of exporting something you can write to.
 export function setCancelActiveIdleNudge(fn) { cancelActiveIdleNudge = fn; }
 export function cancelIdleNudge() {
   if (idleTimer) { clearTimeout(idleTimer); idleTimer = null; }
@@ -154,8 +154,8 @@ export function startFleeLock(untilMs, reason) {
   syncComposerLock();
 }
 
-// The server owns the deadline. a lock the server drops has to go away here
-// on the next status poll, it does not get to sit out its own countdown.
+// the SERVER owns the deadline. a lock the server drops has to vanish here on
+// the next status poll, it doesn't get to sit out its own countdown.
 function syncFleeLock(status) {
   const ban = status && status.ban;
   if (ban && ban.until) startFleeLock(ban.until * 1000, ban.reason || '');
@@ -217,10 +217,10 @@ export function setConsolidating(locked, status) {
       consolidationOutcomeTimer = null;
     }
     if (status && status.phase) consolidationPhase = status.phase;
-    // Tie the ticker to the elapsed the server gives us, so a tab that only
-    // hears about the run from a 418, or joins half way, still counts from
-    // the real Start. we only re-tie it when it has really drifted, that
-    // keeps the display off the 1s rounding.
+    // tie the ticker to the elapsed the server hands us, so a tab that only
+    // hears about the run from a 418, or joins half way through, still counts
+    // from the real Start. we only re-tie when it's actually drifted, keeps
+    // the display off the 1s rounding.
     if (status && Number.isFinite(status.elapsed)) {
       const anchor = Date.now() - status.elapsed * 1000;
       if (!consolidationStartedAt || Math.abs(anchor - consolidationStartedAt) > 2000) {
@@ -270,7 +270,7 @@ export async function syncConsolidationStatus() {
   } catch (e) {
     setConsolidating(false);
   }
-  // Only keep asking while she is really busy. a tab with no lock finds out
+  // only keep asking while she's actually busy. a tab with no lock finds out
   // about a new one from the 418 on its next send.
   if (consolidating || fleeActive()) consolidationStatusTimer = setTimeout(syncConsolidationStatus, 3000);
 }
@@ -285,12 +285,12 @@ export function scheduleIdleNudge(delayMs) {
   if (devNoIdleChk.checked) return;
   if (consolidating) return;
   if (fleeActive()) return;
-  if (!currentConversationId) return;          // need a conversation to speak in
-  if (idleNudgeStreak >= MAX_IDLE_NUDGES) return; // gave up until Anon interacts
+  if (!currentConversationId) return;
+  if (idleNudgeStreak >= MAX_IDLE_NUDGES) return;
   idleTimer = setTimeout(() => {
     idleTimer = null;
-    if (abortFn) return;                 // a stream is running; it re-arms on done
-    if (document.hidden) { scheduleIdleNudge(delayMs); return; } // tab hidden, recheck later
+    if (abortFn) return;
+    if (document.hidden) { scheduleIdleNudge(delayMs); return; }
     if (chatInput.value.trim() !== '') { scheduleIdleNudge(delayMs); return; }
     if (window.Voice && Voice.isEnabled()) {
       const vs = Voice.getState();
@@ -301,7 +301,7 @@ export function scheduleIdleNudge(delayMs) {
   }, delayMs);
 }
 
-// Start the idle timer once TTS is done, not when the text stops streaming.
+// start the idle timer once TTS is DONE, not when the text stops streaming
 export function armIdleAfterReply() {
   if (window.TTS && TTS.isSpeaking && TTS.isSpeaking()) return;
   scheduleIdleNudge(IDLE_AFTER_REPLY_MS);
