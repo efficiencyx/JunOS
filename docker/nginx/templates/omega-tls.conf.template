@@ -171,6 +171,23 @@ server {
         include /etc/nginx/snippets/security-headers.conf;
     }
 
+    location ^~ /assets/ {
+        include fastcgi_params;
+        fastcgi_param SCRIPT_FILENAME /var/www/omega/api/assets.php;
+        fastcgi_param OMEGA_ASSET_PATH $uri;
+        fastcgi_param OMEGA_X_ACCEL 1;
+        fastcgi_pass $php_upstream;
+    }
+
+    location ^~ /_omega_assets/ {
+        internal;
+        alias /var/www/omega/assets/;
+        add_header Strict-Transport-Security "max-age=31536000; includeSubDomains" always;
+        add_header Cache-Control "private, max-age=31536000, immutable" always;
+        add_header Vary Cookie always;
+        include /etc/nginx/snippets/security-headers.conf;
+    }
+
     # Every asset reference carries a ?v=N, so a changed file is a changed URL.
     location ~* \.(js|css|png|jpe?g|gif|ico|svg|webp|webm|mp4|wasm|woff2?|ttf|otf)$ {
         add_header Strict-Transport-Security "max-age=31536000; includeSubDomains" always;
