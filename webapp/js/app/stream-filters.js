@@ -1,5 +1,5 @@
-import { logAction } from './logging.js?v=2';
-import { noteEmotionTint } from './mood.js?v=2';
+import { logAction } from './logging.js?v=4';
+import { noteEmotionTint } from './mood.js?v=4';
 
 const MARK_RE = /\[\s*(?:A(?:CTIONS?)?|TOOL)\s*:/i;
 const PARTIAL_RE = /\[\s*(?:A(?:C(?:T(?:I(?:O(?:N(?:S)?)?)?)?)?)?|T(?:O(?:O(?:L)?)?)?)?\s*$/i;

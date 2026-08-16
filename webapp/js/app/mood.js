@@ -1,5 +1,5 @@
-import { moodPhrases, moodVals } from './dom.js?v=2';
-import { setSidebarOpen } from './sidebar.js?v=2';
+import { moodControlPhrases, moodControlVals, moodInputs, moodPhrases, moodRefreshBtn, moodVals } from './dom.js?v=4';
+import { setSidebarOpen } from './sidebar.js?v=4';
 
 const MOOD_PHRASES = {
   affection: [
@@ -129,8 +129,14 @@ function applyMoodAccent(vals) {
   moodBaseline.tension = vals.tension ?? 20;
   paintAccent();
 }
-function setMoodFill(k, value) {
-  const row = moodVals[k] && moodVals[k].closest('.mood-row');
+function currentMood() {
+  const state = {};
+  for (const k of ['affection', 'trust', 'tension']) {
+    state[k] = moodInputs[k] ? parseInt(moodInputs[k].value, 10) || 0 : moodBaseline[k];
+  }
+  return state;
+}
+function paintMoodRow(row, k, value) {
   if (!row) return;
   const t = Math.max(0, Math.min(1, value / 100));
   const gauge = getComputedStyle(row).getPropertyValue('--gauge').trim();
@@ -139,23 +145,28 @@ function setMoodFill(k, value) {
     `color-mix(in srgb, ${gauge} ${Math.round((0.25 + 0.75 * t) * 100)}%, var(--track-empty))`);
   row.style.setProperty('--glow',
     `color-mix(in srgb, ${gauge} ${Math.round(Math.max(0, t - 0.35) / 0.65 * 100)}%, transparent)`);
+}
+function setMoodFill(k, value) {
+  paintMoodRow(moodVals[k]?.closest('.mood-row'), k, value);
+  paintMoodRow(moodInputs[k]?.closest('.mood-row'), k, value);
   setMoodPhrase(k, value);
 }
 function setMoodPhrase(k, value) {
-  const el = moodPhrases[k];
-  if (!el) return;
   const band = (MOOD_PHRASES[k] || []).find(([min]) => value >= min);
   const text = band ? band[1] : '';
   const next = (text ? text.padEnd(30, '\u2003') : '').repeat(6);
-  if (el.textContent === next) return;
-  el.textContent = next;
+  for (const el of [moodPhrases[k], moodControlPhrases[k]]) {
+    if (el && el.textContent !== next) el.textContent = next;
+  }
 }
 function renderMood(state) {
   const shown = { ...moodBaseline };
   for (const k of ['affection', 'trust', 'tension']) {
     if (!state || typeof state[k] !== 'number') continue;
     shown[k] = state[k];
+    if (moodInputs[k]) moodInputs[k].value = state[k];
     if (moodVals[k]) moodVals[k].textContent = state[k];
+    if (moodControlVals[k]) moodControlVals[k].textContent = state[k];
     setMoodFill(k, state[k]);
   }
   applyMoodAccent(shown);
@@ -167,8 +178,39 @@ export async function loadMood() {
     if (r.ok) renderMood(await r.json());
   } catch (e) { /* offline: leave the gauges as-is */ }
 }
+export function setMoodEditingEnabled(enabled) {
+  for (const input of Object.values(moodInputs)) {
+    if (input) input.disabled = !enabled;
+  }
+}
+let moodPushTimer = null;
+function pushMood() {
+  const body = currentMood();
+  if (moodPushTimer) clearTimeout(moodPushTimer);
+  moodPushTimer = setTimeout(async () => {
+    try {
+      const r = await fetch('/api/relationship.php', {
+        method: 'PUT',
+        credentials: 'same-origin',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify(body),
+      });
+      if (!r.ok) throw new Error('http ' + r.status);
+      renderMood(await r.json());
+    } catch (e) {
+      loadMood();
+    }
+  }, 300);
+}
+for (const k of ['affection', 'trust', 'tension']) {
+  const input = moodInputs[k];
+  if (!input) continue;
+  input.addEventListener('input', () => renderMood(currentMood()));
+  input.addEventListener('change', pushMood);
+}
 for (const k of ['affection', 'trust', 'tension']) setMoodFill(k, moodBaseline[k]);
 applyMoodAccent(moodBaseline);
+if (moodRefreshBtn) moodRefreshBtn.addEventListener('click', loadMood);
 
 document.addEventListener('keydown', (e) => {
   if (e.key !== 'Escape') return;

@@ -1,9 +1,9 @@
-import { abortFn, currentConversationId, sendMessage } from '../app.js?v=2';
-import { cancelIdleNudge } from './consolidation.js?v=2';
-import { closeSettingsBtn, devNoIdleChk, drawerBackdrop, modelSelect, openSettingsBtn, reasoningSelect, sendBtn, siteVolumeInput, thinkChk, ttsChk, ttsSpeedInput, voiceChk, voiceSilenceInput } from './dom.js?v=2';
-import { logAction } from './logging.js?v=2';
-import { loadMood } from './mood.js?v=2';
-import { loadConversation, setSidebarOpen } from './sidebar.js?v=2';
+import { abortFn, currentConversationId, sendMessage } from '../app.js?v=4';
+import { cancelIdleNudge } from './consolidation.js?v=4';
+import { closeSettingsBtn, devNoIdleChk, drawerBackdrop, modelSelect, openSettingsBtn, reasoningSelect, sendBtn, siteVolumeInput, thinkChk, ttsChk, ttsSpeedInput, voiceChk, voiceSilenceInput } from './dom.js?v=4';
+import { logAction } from './logging.js?v=4';
+import { loadMood, setMoodEditingEnabled } from './mood.js?v=4';
+import { loadConversation, setSidebarOpen } from './sidebar.js?v=4';
 
 export function syncThinkToggle() {
   thinkChk.disabled = reasoningSelect.value === 'auto';
@@ -81,6 +81,7 @@ settingsNavItems.forEach((item, idx) => {
     settingsPanels.forEach((p) => { p.hidden = p.dataset.panel !== key; });
     const label = item.querySelector('span');
     if (settingsPanelTitle && label) settingsPanelTitle.textContent = label.textContent;
+    if (key === 'developer') loadMood();
     if (window.MemoryGraph) MemoryGraph.setActive(key === 'memory');
     if (key === 'memory') { loadMemories(); loadMood(); }
   });
@@ -185,15 +186,16 @@ if (memoryClearBtn) memoryClearBtn.addEventListener('click', async () => {
   loadMemories();
 });
 
-const aboutRow = document.getElementById('aboutRow');
+const aboutText = document.getElementById('aboutText');
 const devAccessRow = document.getElementById('devAccessRow');
 const devAccessDesc = document.getElementById('devAccessDesc');
-const adminKeyInput = document.getElementById('adminKeyInput');
+const devKeyInput = document.getElementById('devKeyInput');
 const promoteBtn = document.getElementById('promoteBtn');
 let isAdmin = false;
 
 export function applyRoleGates(user) {
   isAdmin = user?.role === 'admin';
+  setMoodEditingEnabled(isAdmin);
   // Hidden, never taken out of the page. logging.js grabs the buttons inside
   // the developer panel at import time and would throw on a missing node.
   const devTab = document.querySelector('.settings-navitem[data-panel="developer"]');
@@ -205,7 +207,7 @@ export function applyRoleGates(user) {
   if (isAdmin && devAccessRow) {
     devAccessRow.hidden = false;
     if (devAccessDesc) devAccessDesc.textContent = 'Developer access is enabled on this account.';
-    if (adminKeyInput) adminKeyInput.hidden = true;
+    if (devKeyInput) devKeyInput.hidden = true;
     if (promoteBtn) promoteBtn.hidden = true;
   }
 }
@@ -213,7 +215,7 @@ export function applyRoleGates(user) {
 const ABOUT_TAP_GAP_MS = 3000;
 let aboutTaps = 0;
 let aboutTapTimer = null;
-if (aboutRow) aboutRow.addEventListener('click', () => {
+if (aboutText) aboutText.addEventListener('click', () => {
   if (isAdmin) return;
   clearTimeout(aboutTapTimer);
   aboutTapTimer = setTimeout(() => { aboutTaps = 0; }, ABOUT_TAP_GAP_MS);
@@ -221,7 +223,7 @@ if (aboutRow) aboutRow.addEventListener('click', () => {
   aboutTaps = 0;
   clearTimeout(aboutTapTimer);
   if (devAccessRow) devAccessRow.hidden = false;
-  if (adminKeyInput) adminKeyInput.focus();
+  if (devKeyInput) devKeyInput.focus();
 });
 
 if (promoteBtn) promoteBtn.addEventListener('click', async () => {
@@ -231,7 +233,7 @@ if (promoteBtn) promoteBtn.addEventListener('click', async () => {
       method: 'POST',
       credentials: 'same-origin',
       headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({ key: adminKeyInput?.value || '' }),
+      body: JSON.stringify({ key: devKeyInput?.value || '' }),
     });
     if (r.ok) {
       ui.toast('Developer tools unlocked.', 'ok');
@@ -239,7 +241,7 @@ if (promoteBtn) promoteBtn.addEventListener('click', async () => {
       return;
     }
     const j = await r.json().catch(() => ({}));
-    const msgs = { invalid_admin_key: 'Wrong key.', admin_promotion_disabled: 'Developer access is disabled on this server.' };
+    const msgs = { invalid_dev_key: 'Wrong key.', dev_promotion_disabled: 'Developer access is disabled on this server.' };
     if (devAccessDesc) devAccessDesc.textContent = msgs[j.error] || 'Could not unlock developer access.';
   } catch (e) {
     if (devAccessDesc) devAccessDesc.textContent = 'Network error.';
