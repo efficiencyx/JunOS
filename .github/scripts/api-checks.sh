@@ -104,7 +104,7 @@ check 'login with the wrong password'   401 -X POST -H "Origin: $ORIGIN" -H "$(j
 	--data "{\"email\":\"$email\",\"password\":\"wrongwrongwrong\"}" "$BASE/api/auth.php?action=login"
 check 'login'                           200 -X POST -H "Origin: $ORIGIN" -H "$(json)" \
 	--data "{\"email\":\"$email\",\"password\":\"$password\"}" "$BASE/api/auth.php?action=login"
-check 'promote with a wrong admin key'  403 -b "$cookies" -X POST -H "Origin: $ORIGIN" -H "$(json)" \
+check 'promote with a wrong developer key' 403 -b "$cookies" -X POST -H "Origin: $ORIGIN" -H "$(json)" \
 	--data '{"key":"not-the-key"}' "$BASE/api/auth.php?action=promote"
 
 echo "csrf"
@@ -140,6 +140,11 @@ check 'relationship is admin only'      403 -b "$cookies" -X PUT -H "Origin: $OR
 check 'wardrobe'                        200 -b "$cookies" "$BASE/api/wardrobe.php"
 check 'memory notes'                    200 -b "$cookies" "$BASE/api/memory.php"
 check 'stats is admin only'             403 -b "$cookies" "$BASE/api/stats.php"
+check 'unlock developer access'         200 -b "$cookies" -X POST -H "Origin: $ORIGIN" -H "$(json)" \
+	--data '{"key":"ci-dev-key"}' "$BASE/api/auth.php?action=promote"
+check 'relationship override for dev'   200 -b "$cookies" -X PUT -H "Origin: $ORIGIN" \
+	-H "$(json)" --data '{"affection":99,"trust":99,"tension":0}' "$BASE/api/relationship.php"
+body_has 'relationship override stored' '"affection":99'
 
 echo
 if [ "$fails" -gt 0 ]; then

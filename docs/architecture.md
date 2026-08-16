@@ -303,7 +303,7 @@ Endpoint-specific caps:
 - `consolidate.php?action=welcome` preview parameters (`preview`, `away`, `tier`, `hour`); the plain welcome read stays open to everyone.
 - `api/review.php`, the local dataset triage UI (untracked, dev boxes only).
 
-Promotion is a POST to `auth.php?action=promote` with `{"key": …}`, compared against `OMEGA_ADMIN_KEY` with `hash_equals` and rate-limited to 5 attempts an hour; success and failure both log an event. An empty key disables promotion entirely. `auth.php`'s `me`, `signup` and `login` responses all carry `role`, and the frontend uses it only to decide what to draw - `applyRoleGates()` in `js/app/settings.js` hides the Developer tab, the delete-all-memories button and the DEV badge, and `app.js` leaves `js/devhud.js` out of the lazy script list entirely for a non-admin, which is what stops `Ctrl+Shift+D` from doing anything. None of that is a security boundary: every gate above is enforced server-side, and the role must never be sourced from preferences or local storage.
+`OMEGA_DEV_KEY` optionally grants developer access. The frontend hides developer controls from other accounts, while every privileged endpoint independently enforces the role server-side.
 
 Signup takes a `registration_key` matched against `OMEGA_REGISTRATION_KEY` for every account, including the first. An empty/absent variable intentionally enables public signup. `auth.php?action=signup_info` is the unauthenticated read that returns `{registration_key_required}` so the signup form can show the field when needed.
 
