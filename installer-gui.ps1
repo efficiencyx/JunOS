@@ -23,6 +23,30 @@ if (-not $script:PowerShellExe) { $script:PowerShellExe = 'powershell.exe' }
 
 $script:IsCompiled = $PSCommandPath -and $PSCommandPath.EndsWith('.exe', 'OrdinalIgnoreCase')
 
+# tools/build-installer-exe.ps1 rewrites the next line, and ONLY that line, to
+# base64 of install.ps1. leave the marker comment and the exact assignment
+# shape alone or the build stops embedding and says nothing about it.
+$script:EmbeddedInstaller = '' # JUN_EMBEDDED_INSTALLER
+
+# install.ps1 git clones the repo itself, so the exe doesn't have to carry one.
+# embedding that single script is the whole difference between "double click"
+# and "download the repo first".
+function Resolve-InstallerScript {
+    if (-not $script:EmbeddedInstaller) {
+        $beside = Join-Path $PSScriptRoot 'install.ps1'
+        if (-not (Test-Path -LiteralPath $beside)) {
+            throw 'install.ps1 was not found beside this file. Download or clone the complete Jun repository and try again.'
+        }
+        return $beside
+    }
+    $temp = Join-Path ([IO.Path]::GetTempPath()) ("jun-install-$PID.ps1")
+    $bytes = [Convert]::FromBase64String($script:EmbeddedInstaller)
+    [IO.File]::WriteAllBytes($temp, $bytes)
+    $script:tempInstaller = $temp
+    return $temp
+}
+$script:tempInstaller = $null
+
 if ([Threading.Thread]::CurrentThread.GetApartmentState() -ne [Threading.ApartmentState]::STA) {
     if (-not $PSCommandPath) { throw 'Run installer-gui.ps1 from a file so it can start in STA mode.' }
     # a compiled build can't relaunch itself here, it would just spawn another
@@ -914,6 +938,10 @@ function Get-JunUrl {
 
 function Complete-Installation([int]$exitCode) {
     $script:installing = $false
+    if ($script:tempInstaller) {
+        Remove-Item -LiteralPath $script:tempInstaller -Force -ErrorAction SilentlyContinue
+        $script:tempInstaller = $null
+    }
     $InstallProgress.IsIndeterminate = $false
     $InstallProgress.Value = if ($exitCode -eq 0) { 100 } else { 0 }
     $CancelButton.Content = 'Close'
@@ -967,10 +995,7 @@ function Stop-Installation {
 }
 
 function Start-Installation {
-    $installer = Join-Path $PSScriptRoot 'install.ps1'
-    if (-not (Test-Path -LiteralPath $installer)) {
-        throw "install.ps1 was not found beside this file. Download or clone the complete Jun repository and try again."
-    }
+    $installer = Resolve-InstallerScript
 
     $values = Get-SetupValues
     $script:installPath = Resolve-InstallLocation
@@ -982,7 +1007,10 @@ function Start-Installation {
     $info = [Diagnostics.ProcessStartInfo]::new()
     $info.FileName = $script:PowerShellExe
     $info.Arguments = "-NoProfile -ExecutionPolicy Bypass -File `"$installer`""
-    $info.WorkingDirectory = $PSScriptRoot
+    # NOT $PSScriptRoot: a compiled build can sit on a read only stick or in
+    # Downloads, and install.ps1 writes next to its working dir. the parent of
+    # the chosen folder is the one place we already know is writable.
+    $info.WorkingDirectory = $installParent
     $info.UseShellExecute = $false
     $info.CreateNoWindow = $true
     $info.RedirectStandardOutput = $true

@@ -196,12 +196,7 @@ jobs:
       - uses: actions/upload-artifact@v4
         with:
           name: JunSetup
-          # the exe shells out to install.ps1 beside it, it does not embed it.
-          # so the artifact is useless on its own and ships with the scripts.
-          path: |
-            dist/JunSetup.exe
-            install.ps1
-            uninstall.ps1
+          path: dist/JunSetup.exe
 
   android:
     name: android
