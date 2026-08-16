@@ -13,19 +13,19 @@
 // the version number it was written against. change anything in the graph,
 // renumber the Whole graph. no exceptions.
 
-import { showAuthScreen } from './app/auth-screen.js?v=2';
-import { IDLE_AFTER_REPLY_MS, TYPING_POLL_MS, armIdleAfterReply, cancelActiveIdleNudge, cancelAutoReset, cancelIdleNudge, composerPlaceholder, consolidating, fleeActive, reportActivity, resetIdleNudge, scheduleAutoReset, scheduleIdleNudge, setCancelActiveIdleNudge, setConsolidating, showConsolidatingBubble, startFleeLock, syncConsolidationStatus } from './app/consolidation.js?v=2';
-import { chatInput, debugSystemPromptEl, devNoIdleChk, messagesEl, messagesEmpty, missingParamsEl, mobileConversationTitle, modelSelect, narrowSidebarQuery, reasoningSelect, sendBtn, sendButtonIdleMarkup, sendButtonStopMarkup, siteVolumeInput, stageEl, thinkChk } from './app/dom.js?v=2';
-import { announceMobileReply, faceBubble, hideFaceBubble, latestAssistantReply, restartFaceBubbleHide, scheduleFaceBubbleHide, scheduleFaceBubblePosition, setLatestAssistantReply, showFaceBubble } from './app/face-bubble.js?v=2';
-import { appendRaw, logAction, logMissing, logToolStatus, setStageStatus } from './app/logging.js?v=2';
-import { loadMood } from './app/mood.js?v=2';
-import { applyProviderCapabilities, applyRoleGates, setSiteVolume, syncThinkToggle, updateSiteVolumeLabel, wireNameSettings } from './app/settings.js?v=2';
-import { loadConversation, refreshSidebar, setSidebarOpen } from './app/sidebar.js?v=2';
-import { makeNameFilter, makeStreamBuffer } from './app/stream-filters.js?v=2';
-import { escapeHtml, localTimeString, phoneMode } from './app/util.js?v=2';
-import { wireTts } from './app/wire-tts.js?v=2';
-import { wireVoice } from './app/wire-voice.js?v=2';
-import { WELCOME_TIERS, fetchWelcome, playWelcome, previewWelcome } from './app/welcome.js?v=2';
+import { showAuthScreen } from './app/auth-screen.js?v=4';
+import { IDLE_AFTER_REPLY_MS, TYPING_POLL_MS, armIdleAfterReply, cancelActiveIdleNudge, cancelAutoReset, cancelIdleNudge, composerPlaceholder, consolidating, fleeActive, reportActivity, resetIdleNudge, scheduleAutoReset, scheduleIdleNudge, setCancelActiveIdleNudge, setConsolidating, showConsolidatingBubble, startFleeLock, syncConsolidationStatus } from './app/consolidation.js?v=4';
+import { chatInput, debugSystemPromptEl, devNoIdleChk, messagesEl, messagesEmpty, missingParamsEl, mobileConversationTitle, modelSelect, narrowSidebarQuery, reasoningSelect, sendBtn, sendButtonIdleMarkup, sendButtonStopMarkup, siteVolumeInput, stageEl, thinkChk } from './app/dom.js?v=4';
+import { announceMobileReply, faceBubble, hideFaceBubble, latestAssistantReply, restartFaceBubbleHide, scheduleFaceBubbleHide, scheduleFaceBubblePosition, setLatestAssistantReply, showFaceBubble } from './app/face-bubble.js?v=4';
+import { appendRaw, logAction, logMissing, logToolStatus, setStageStatus } from './app/logging.js?v=4';
+import { loadMood } from './app/mood.js?v=4';
+import { applyProviderCapabilities, applyRoleGates, setSiteVolume, syncThinkToggle, updateSiteVolumeLabel, wireNameSettings } from './app/settings.js?v=4';
+import { loadConversation, refreshSidebar, setSidebarOpen } from './app/sidebar.js?v=4';
+import { makeNameFilter, makeStreamBuffer } from './app/stream-filters.js?v=4';
+import { escapeHtml, localTimeString, phoneMode } from './app/util.js?v=4';
+import { wireTts } from './app/wire-tts.js?v=4';
+import { wireVoice } from './app/wire-voice.js?v=4';
+import { WELCOME_TIERS, fetchWelcome, playWelcome, previewWelcome } from './app/welcome.js?v=4';
 
 export const messages = [];
 export let abortFn = null;
@@ -633,18 +633,18 @@ function showBoot() {
   // literally what stops a normal account from opening the HUD at all.
   await loadScripts([
     ['vendor/pixi.min.js', 'vendor/live2dcubismcore.min.js',
-     'vendor/marked.min.js', 'vendor/purify.min.js?v=2',
-     'js/actions.js?v=2', 'js/outfit.js?v=2', 'js/touch.js?v=2',
-     'js/mods.js?v=2', 'js/tts.js?v=2', 'js/voice.js?v=2',
-     'js/voicemode.js?v=2', 'js/trip-loader.js?v=2',
-     ...(currentUser?.role === 'admin' ? ['js/devhud.js?v=2'] : []),
-     'js/wardrobe-open-lines.js?v=2', 'js/wardrobe-reactions.js?v=2',
-     'js/wardrobe-return-lines.js?v=2'],
+     'vendor/marked.min.js', 'vendor/purify.min.js?v=3',
+     'js/actions.js?v=3', 'js/outfit.js?v=8', 'js/touch.js?v=3',
+     'js/mods.js?v=3', 'js/tts.js?v=3', 'js/voice.js?v=3',
+     'js/voicemode.js?v=3', 'js/trip-loader.js?v=3',
+     ...(currentUser?.role === 'admin' ? ['js/devhud.js?v=3'] : []),
+     'js/wardrobe-open-lines.js?v=3', 'js/wardrobe-reactions.js?v=3',
+     'js/wardrobe-return-lines.js?v=3'],
     ['vendor/cubism4.min.js'],
   ]);
   // live2d.js is an ES module so it can't go in a loadScripts group, and it
   // rips PIXI.live2d apart the moment it runs. that's what the await is for.
-  await import('./live2d.js?v=2');
+  await import('./live2d.js?v=5');
 
   // both of these set up a global that loads late, so they can't run at module
   // scope anymore. they'd just silently do nothing before the load.
@@ -743,7 +743,7 @@ function showBoot() {
 
     validateActionMap(live2dInfo.paramIds);
 
-    Outfit.load();
+    await Outfit.load();
     Outfit.applyAll();
     const wBtn = document.getElementById('wardrobeBtn');
     let shopPrefetched = false;

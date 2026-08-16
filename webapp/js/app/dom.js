@@ -28,10 +28,20 @@ export const moodVals = {
   trust: document.getElementById('moodTrustVal'),
   tension: document.getElementById('moodTensionVal'),
 };
+export const moodControlVals = {
+  affection: document.getElementById('moodAffectionControlVal'),
+  trust: document.getElementById('moodTrustControlVal'),
+  tension: document.getElementById('moodTensionControlVal'),
+};
 export const moodPhrases = {
   affection: document.getElementById('moodAffectionPhrase'),
   trust: document.getElementById('moodTrustPhrase'),
   tension: document.getElementById('moodTensionPhrase'),
+};
+export const moodControlPhrases = {
+  affection: document.getElementById('moodAffectionControlPhrase'),
+  trust: document.getElementById('moodTrustControlPhrase'),
+  tension: document.getElementById('moodTensionControlPhrase'),
 };
 export const moodRefreshBtn = document.getElementById('moodRefreshBtn');
 export const stageEl = document.getElementById('stage');
