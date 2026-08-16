@@ -42,7 +42,7 @@
       onStatus: (message) => { status.textContent = message; },
       ignoreSavedPos: true,
     });
-    Outfit.load();
+    await Outfit.load();
     Outfit.applyAll();
     Live2D.startIdle();
     status.textContent = 'Ready';

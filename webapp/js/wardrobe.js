@@ -34,7 +34,7 @@
       },
       ignoreSavedPos: true,
     });
-    Outfit.load();
+    await Outfit.load();
     Outfit.applyAll();
     Live2D.startIdle();
     await Outfit.openWardrobe();
