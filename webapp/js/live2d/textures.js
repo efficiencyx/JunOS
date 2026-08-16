@@ -1,5 +1,5 @@
-import { markDirty, model, publicTint, raw } from '../live2d.js?v=2';
-import { findDrawables } from './geometry.js?v=2';
+import { markDirty, model, publicTint, raw } from '../live2d.js?v=5';
+import { findDrawables } from './geometry.js?v=5';
 
 export function tintByPattern(includes, excludes, rgb) {
   if (!publicTint) return [];
@@ -203,7 +203,22 @@ function recompositeTexture(texIndex) {
   markDirty();
 }
 
-export async function setDrawableTexture(drawableId, url, overlay) {
+// atlas recomposites are async and every caller fires them without awaiting,
+// which is fine on screen - the frame after the load just looks right. it is
+// NOT fine for anything that reads pixels back, so keep a tail of the in-flight
+// work for those callers to wait on. see Live2D.bakeThumb.
+let _texWork = Promise.resolve();
+const _track = (p) => { _texWork = _texWork.catch(() => {}).then(() => p); return p; };
+export function texturesSettled() { return _texWork.catch(() => {}); }
+
+export function setDrawableTexture(drawableId, url, overlay) {
+  return _track(_setDrawableTexture(drawableId, url, overlay));
+}
+export function setDrawableTextures(map) {
+  return _track(_setDrawableTextures(map));
+}
+
+async function _setDrawableTexture(drawableId, url, overlay) {
   const r = _uvRect.get(drawableId);
   if (!r) return;
   if (url) _texOverride.set(drawableId, { url, img: await _loadImg(url), overlay: !!overlay, alphaClip: false, fullClear: false });
@@ -211,7 +226,7 @@ export async function setDrawableTexture(drawableId, url, overlay) {
   recompositeTexture(r.tex);
 }
 
-export async function setDrawableTextures(map) {
+async function _setDrawableTextures(map) {
   const texes = new Set();
   await Promise.all(Object.entries(map).map(async ([id, val]) => {
     const r = _uvRect.get(id);

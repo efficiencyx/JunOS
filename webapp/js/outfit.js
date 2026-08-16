@@ -19,7 +19,12 @@ window.Outfit = (function () {
     { key: 'pants', label: 'Pants', param: 'ParamPantsEnabled', defaultOn: false, excludes: ['skirt','dress','dress1'],
       colorPatterns: ['pants'] },
     { key: 'bra', label: 'Bra', param: 'ParamBraEnabled', defaultOn: true, excludes: ['bikini_top'],
-      colorPatterns: ['bra'], colorExcludes: ['skin','braid'] },
+      // 'nobras' is PlainShirt_FrontNoBras, the shirt's no-bra chest mesh. it
+      // matches 'bra' and the bra group runs after the shirt group, so without
+      // this the shirt front gets painted in the BRA's color. only shows up
+      // once something else hides the bra (bikini top), which is why it sat
+      // there unnoticed until v0.97.5 swimwear.
+      colorPatterns: ['bra'], colorExcludes: ['skin','braid','nobras'] },
     { key: 'panties', label: 'Panties', param: 'ParamPantiesEnabled', defaultOn: true, excludes: ['bikini_bot'],
       colorPatterns: ['panties'], colorExcludes: ['logo'] },
     // v0.97.5 swimwear. no rig parameters either, so visibility only
@@ -239,6 +244,7 @@ window.Outfit = (function () {
         textures: Object.fromEntries(drawables.map(d =>
           [d, { url: `assets/variants/logos/${file}.png`, fullClear: true }])),
         show: drawables,
+        thumb: `assets/variants/logos/${file}.png`,
       })),
     ];
   }
@@ -354,7 +360,132 @@ window.Outfit = (function () {
   const variantState = {};
   for (const v of VARIANTS) variantState[v.key] = 0;
 
-  function load() {
+  let wardrobeQueue = Promise.resolve();
+  let pendingWardrobe = null;
+  let authorizedAssets = new Set();
+  let availableAssets = new Set();
+  let nextWardrobeWrite = 0;
+
+  const assetPath = (value) => {
+    const url = typeof value === 'object' ? value.url : value;
+    return typeof url === 'string' && url.startsWith('assets/') ? url.slice(7) : null;
+  };
+
+  const textureAvailable = (value) => {
+    const path = assetPath(value);
+    return !path || availableAssets.has(path);
+  };
+
+  function activeAssets(items = state, variants = variantState) {
+    const assets = new Set();
+    for (const it of ITEMS) {
+      if (!items[it.key]) continue;
+      for (const value of Object.values(it.textures || {})) {
+        const path = assetPath(value);
+        if (path) assets.add(path);
+      }
+    }
+    for (const v of VARIANTS) {
+      const owners = VARIANT_OWNER[v.key];
+      if (owners && !owners.some(key => items[key])) continue;
+      const opt = v.options[variants[v.key] || 0];
+      for (const value of Object.values(opt.textures || {})) {
+        const path = assetPath(value);
+        if (path) assets.add(path);
+      }
+      const thumb = assetPath(opt.thumb);
+      if (thumb) assets.add(thumb);
+    }
+    const glasses = GLASSES_STYLES[variants.glasses_style || 0];
+    if (glasses) {
+      for (const [part] of glasses.layers) assets.add(`variants/glasses/${glasses.base}_${part}.png`);
+    }
+    return [...assets];
+  }
+
+  function drawablesForAssets(assets) {
+    const paths = new Set(assets);
+    const drawables = new Set();
+    for (const it of ITEMS) {
+      for (const [drawable, texture] of Object.entries(it.textures || {})) {
+        if (paths.has(assetPath(texture))) drawables.add(drawable);
+      }
+    }
+    for (const v of VARIANTS) {
+      const opt = v.options[variantState[v.key] || 0];
+      for (const [drawable, texture] of Object.entries(opt.textures || {})) {
+        if (paths.has(assetPath(texture))) drawables.add(drawable);
+      }
+    }
+    if ([...paths].some(path => path.startsWith('variants/glasses/'))) {
+      drawables.add('ModdableFace');
+    }
+    return drawables;
+  }
+
+  async function writeWardrobe(items, variants) {
+    const wait = nextWardrobeWrite - Date.now();
+    if (wait > 0) await new Promise(resolve => setTimeout(resolve, wait));
+    nextWardrobeWrite = Date.now() + 500;
+    const r = await fetch('/api/outfit.php', {
+      method: 'PUT',
+      credentials: 'same-origin',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ items, variants, assets: activeAssets(items, variants) }),
+    });
+    if (!r.ok) throw new Error(`wardrobe update failed: ${r.status}`);
+    return (await r.json()).state;
+  }
+
+  function importWardrobe(saved) {
+    if (!saved || typeof saved !== 'object') return;
+    authorizedAssets = new Set(Array.isArray(saved.assets) ? saved.assets : []);
+    availableAssets = new Set(authorizedAssets);
+    for (const it of ITEMS) if (typeof saved.items?.[it.key] === 'boolean') state[it.key] = saved.items[it.key];
+    for (const v of VARIANTS) {
+      const value = saved.variants?.[v.key];
+      if (Number.isInteger(value) && value >= 0 && value < v.options.length) variantState[v.key] = value;
+    }
+  }
+
+  function queueWardrobe(mutator, after) {
+    const items = { ...state };
+    const variants = { ...variantState };
+    mutator(items, variants);
+    const changed = loadPresetState({ items, variants });
+    const didChange = changed && (changed.items || changed.variants.length);
+    if (!didChange) return wardrobeQueue;
+
+    try { localStorage.setItem(STORAGE_KEY, JSON.stringify(state)); } catch (e) {}
+    try { localStorage.setItem(VARIANT_KEY, JSON.stringify(variantState)); } catch (e) {}
+    applyChanged(changed);
+    syncUI();
+    if (after) after();
+
+    pendingWardrobe = { items: { ...state }, variants: { ...variantState } };
+    wardrobeQueue = wardrobeQueue.then(async () => {
+      const pending = pendingWardrobe;
+      if (!pending) return;
+      pendingWardrobe = null;
+      const saved = await writeWardrobe(pending.items, pending.variants);
+      const nextAssets = new Set(Array.isArray(saved.assets) ? saved.assets : []);
+      const addedAssets = [...nextAssets].filter(asset => !availableAssets.has(asset));
+      authorizedAssets = nextAssets;
+      for (const asset of nextAssets) availableAssets.add(asset);
+      if (addedAssets.length) {
+        applyItems();
+        applyVariants();
+        applyGlassesTexture();
+        if (window.Mods?.owns
+            && [...drawablesForAssets(addedAssets)].some(drawable => Mods.owns(drawable))) {
+          Mods.applyAll();
+        }
+      }
+    }).catch(e => console.error(e));
+    return wardrobeQueue;
+  }
+
+  async function load() {
     try {
       const raw = localStorage.getItem(STORAGE_KEY);
       if (raw) {
@@ -385,16 +516,22 @@ window.Outfit = (function () {
         }
       }
     } catch (e) {}
+    const r = await fetch('/api/outfit.php', { credentials: 'same-origin' });
+    await loadBakedTiles();
+    if (!r.ok) throw new Error(`wardrobe load failed: ${r.status}`);
+    const remote = await r.json();
+    if (remote.initialized) importWardrobe(remote.state);
+    else importWardrobe(await writeWardrobe({ ...state }, { ...variantState }));
+    try { localStorage.setItem(STORAGE_KEY, JSON.stringify(state)); } catch (e) {}
+    try { localStorage.setItem(VARIANT_KEY, JSON.stringify(variantState)); } catch (e) {}
   }
 
   function saveVariants() {
     try { localStorage.setItem(VARIANT_KEY, JSON.stringify(variantState)); } catch (e) {}
-    if (window.Prefs) Prefs.pushToServer();
   }
 
   function save() {
     try { localStorage.setItem(STORAGE_KEY, JSON.stringify(state)); } catch (e) {}
-    if (window.Prefs) Prefs.pushToServer();
   }
   function saveColors() {
     try { localStorage.setItem(COLOR_KEY, JSON.stringify(colors)); } catch (e) {}
@@ -407,9 +544,12 @@ window.Outfit = (function () {
     'nippiercing', 'navelpiercing',
   ];
 
-  function applyItems() {
+  function applyItems(onlyItems) {
+    const onlyKeys = onlyItems ? new Set(onlyItems) : null;
+    if (onlyKeys?.has('hair_clip')) onlyKeys.add('hair_h0');
     const textureMap = {};
     for (const it of ITEMS) {
+      if (onlyKeys && !onlyKeys.has(it.key)) continue;
       const on = state[it.key] && (!it.requires || state[it.requires]);
       if (it.param) Live2D.setTarget(it.param, on ? 1 : 0);
       if (it.visibilityPatterns && Live2D.opacityByPattern) {
@@ -424,7 +564,7 @@ window.Outfit = (function () {
         Live2D.opacityByPattern(it.hideWhenOn, [], 0);
       }
       for (const [drawable, texture] of Object.entries(it.textures || {})) {
-        textureMap[drawable] = on ? texture : null;
+        textureMap[drawable] = textureAvailable(texture) ? texture : null;
       }
     }
     if (Live2D.setDrawableTextures && Object.keys(textureMap).length) Live2D.setDrawableTextures(textureMap);
@@ -441,15 +581,23 @@ window.Outfit = (function () {
   // only redraw the slot that changed. sending an atlas to the GPU is slow.
   function applyVariants(onlyKey) {
     if (!Live2D.setDrawableTextures) return;
+    const onlyKeys = onlyKey
+      ? new Set(Array.isArray(onlyKey) ? onlyKey : [onlyKey])
+      : null;
     if (Live2D.setDrawableOrderBelow) {
       Live2D.setDrawableOrderBelow(
         VARIANTS.flatMap(v => v.options[variantState[v.key] || 0].order || []));
     }
     for (const v of VARIANTS) {
-      if (onlyKey && v.key !== onlyKey) continue;
+      if (onlyKeys && !onlyKeys.has(v.key)) continue;
       const opt = v.options[variantState[v.key] || 0];
+      const owners = VARIANT_OWNER[v.key];
+      const worn = !owners || owners.some(key => state[key]);
       const map = {};
-      for (const d of v.drawables) map[d] = (opt.textures && opt.textures[d]) || null;
+      for (const d of v.drawables) {
+        const texture = opt.textures ? opt.textures[d] || null : null;
+        map[d] = texture && textureAvailable(texture) ? texture : null;
+      }
       Live2D.setDrawableTextures(map);
       applyVariantVisibility(v);
     }
@@ -475,14 +623,11 @@ window.Outfit = (function () {
   function setVariant(key, index) {
     const v = VARIANTS.find(x => x.key === key);
     if (!v || !v.options[index]) return;
-    variantState[key] = index;
-    saveVariants();
-    applyVariants(key);
-    applyColors();
-    syncUI();
-    if (key.indexOf('hair_') === 0 && window.WardrobeReactions) {
-      WardrobeReactions.react({ key, label: v.label, on: true, state: snapshot() });
-    }
+    return queueWardrobe((items, variants) => { variants[key] = index; }, () => {
+      if (key.indexOf('hair_') === 0 && window.WardrobeReactions) {
+        WardrobeReactions.react({ key, label: v.label, on: true, state: snapshot() });
+      }
+    });
   }
 
   function hexToRgb01(hex) {
@@ -553,6 +698,8 @@ window.Outfit = (function () {
   async function applyGlassesTexture() {
     const style = GLASSES_STYLES[variantState.glasses_style || 0];
     if (!style || !Live2D.setDrawableTextures) return;
+    if (style.layers.some(([part]) =>
+      !availableAssets.has(`variants/glasses/${style.base}_${part}.png`))) return;
     const job = ++glassesJob;
     let imgs;
     try {
@@ -575,27 +722,22 @@ window.Outfit = (function () {
     Live2D.setDrawableTextures({ ModdableFace: { url: c.toDataURL(), fullClear: true } });
   }
 
+  function setDraftItem(items, key, on) {
+    const it = ITEMS.find(x => x.key === key);
+    if (!it) return;
+    items[key] = !!on;
+    if (items[key] && it.excludes) for (const ex of it.excludes) items[ex] = false;
+    if (!items.hair_h0) items.hair_clip = false;
+  }
+
   function setItem(key, on) {
     const it = ITEMS.find(x => x.key === key);
     if (!it) return;
-    state[key] = !!on;
-    if (state[key] && it.excludes) {
-      for (const ex of it.excludes) state[ex] = false;
-    }
-    save();
-    // skip atlas recomposition on parameter-only item toggles
-    const affected = new Set([key, ...(state[key] && it.excludes || [])]);
-    applyItems();
-    for (const k of affected) {
-      for (const vk of ITEM_VARIANTS[k] || []) {
-        const v = VARIANTS.find(x => x.key === vk);
-        if (v) applyVariantVisibility(v);
+    return queueWardrobe((items) => setDraftItem(items, key, on), () => {
+      if (window.WardrobeReactions) {
+        WardrobeReactions.react({ key, label: it.label, on: state[key], state: snapshot() });
       }
-    }
-    syncUI();
-    if (window.WardrobeReactions) {
-      WardrobeReactions.react({ key, label: it.label, on: state[key], state: snapshot() });
-    }
+    });
   }
 
   function setColor(key, hex) {
@@ -1020,14 +1162,14 @@ window.Outfit = (function () {
   }
 
   function reset() {
-    for (const it of ITEMS) state[it.key] = it.defaultOn;
-    for (const g of COLOR_GROUPS) colors[g.key] = g.defaultColor || null;
-    for (const v of VARIANTS) variantState[v.key] = 0;
-    save();
-    saveColors();
-    saveVariants();
-    applyAll();
-    syncUI();
+    return queueWardrobe((items, variants) => {
+      for (const it of ITEMS) items[it.key] = it.defaultOn;
+      for (const v of VARIANTS) variants[v.key] = 0;
+    }, () => {
+      for (const g of COLOR_GROUPS) colors[g.key] = g.defaultColor || null;
+      saveColors();
+      applyColors();
+    });
   }
 
   function exportPreset() {
@@ -1039,12 +1181,13 @@ window.Outfit = (function () {
   function loadPresetState(preset) {
     if (!preset || typeof preset !== 'object') return null;
     const { items = {}, colors: cols = {}, variants = {} } = preset;
-    const changed = { items: false, colors: false, variants: [] };
+    const changed = { items: false, itemKeys: [], colors: false, variants: [] };
     for (const it of ITEMS) {
       const on = items[it.key];
       if (typeof on === 'boolean' && state[it.key] !== on) {
         state[it.key] = on;
         changed.items = true;
+        changed.itemKeys.push(it.key);
       }
     }
     for (const g of COLOR_GROUPS) {
@@ -1066,22 +1209,33 @@ window.Outfit = (function () {
 
   function applyChanged(changed) {
     if (!changed) return;
-    if (changed.items) applyItems();
-    for (const key of changed.variants) applyVariants(key);
-    if (changed.colors || changed.items || changed.variants.length) applyColors();
-    if (changed.items && window.Mods) Mods.applyAll();
+    if (changed.items) applyItems(changed.itemKeys);
+    const variantKeys = new Set(changed.variants);
+    if (changed.items) {
+      const changedItems = new Set(changed.itemKeys);
+      for (const v of VARIANTS) {
+        if (VARIANT_OWNER[v.key]?.some(key => changedItems.has(key))) variantKeys.add(v.key);
+      }
+    }
+    if (variantKeys.size) applyVariants([...variantKeys]);
+    if (changed.colors || changed.variants.length) applyColors();
   }
 
   function applyPreset(preset) {
     clearTimeout(previewTimer);
-    const changed = loadPresetState(preset);
-    if (!changed) return;
+    if (!preset || typeof preset !== 'object') return;
     previewBase = null;
-    save();
-    saveColors();
-    saveVariants();
-    applyChanged(changed);
-    syncUI();
+    return queueWardrobe((items, variants) => {
+      for (const it of ITEMS) if (typeof preset.items?.[it.key] === 'boolean') items[it.key] = preset.items[it.key];
+      for (const v of VARIANTS) if (Number.isInteger(preset.variants?.[v.key])) variants[v.key] = preset.variants[v.key];
+    }, () => {
+      for (const g of COLOR_GROUPS) {
+        const value = preset.colors?.[g.key];
+        if (typeof value === 'string' || value === null) colors[g.key] = value;
+      }
+      saveColors();
+      applyColors();
+    });
   }
 
   // the preview is look-at-only, dressing gestures on the model are suspended
@@ -1093,6 +1247,9 @@ window.Outfit = (function () {
   let previewBase = null;
   function previewPreset(preset) {
     if (!preset) return;
+    const items = { ...state, ...(preset.items || {}) };
+    const variants = { ...variantState, ...(preset.variants || {}) };
+    if (!activeAssets(items, variants).every(path => authorizedAssets.has(path))) return;
     if (!previewBase) previewBase = exportPreset();
     applyChanged(loadPresetState(preset));
   }
@@ -1335,7 +1492,89 @@ window.Outfit = (function () {
     return Live2D.drawableAt(x, y, new Set(worn.keys()), 16);
   }
 
+  // tiles baked by tools/bake-items.html, sitting in the gitignored
+  // webapp/assets/items/. they're game art, so they never ship - whoever ran
+  // the extractor bakes their own. no manifest means no bake ran here and
+  // every tile falls back to the atlas crop below.
+  let bakedTiles = new Set();
+  async function loadBakedTiles() {
+    try {
+      const r = await fetch('assets/items/manifest.json', { credentials: 'same-origin' });
+      if (r.ok) bakedTiles = new Set(await r.json());
+    } catch (e) {}
+  }
+  const bakedTile = (name) => bakedTiles.has(name) ? `assets/items/${name}.png` : null;
+
+  // the shots the baker takes. each one dresses her in exactly the item being
+  // photographed and keeps only its drawables on screen, so what comes back is
+  // the garment laid out the way she wears it instead of one wedge of atlas.
+  // glasses, logos and the limb styles stay out: they're painted into a face
+  // or body texture, so cropping to their drawables gets you her whole face.
+  function bakeShots() {
+    const shots = [];
+    const allOff = Object.fromEntries(ITEMS.map(it => [it.key, false]));
+    const drawablesOf = (keys) => {
+      const ids = new Set();
+      for (const key of keys) {
+        const it = ITEMS.find(x => x.key === key);
+        if (it) for (const id of Live2D.findDrawables(itemPatterns(it), it.colorExcludes)) ids.add(id);
+      }
+      return ids;
+    };
+    for (const it of ITEMS) {
+      const worn = [it.key, ...(it.requires ? [it.requires] : [])];
+      shots.push({
+        name: it.key,
+        items: { ...allOff, ...Object.fromEntries(worn.map(k => [k, true])) },
+        variants: {},
+        keep: () => drawablesOf([it.key]),
+      });
+    }
+    for (const key of ['skirt_style', 'sock_style', 'shoe_style']) {
+      const v = VARIANTS.find(x => x.key === key);
+      const owners = VARIANT_OWNER[key] || [];
+      v.options.forEach((opt, i) => {
+        shots.push({
+          name: `${key}-${i}`,
+          items: { ...allOff, ...Object.fromEntries(owners.map(k => [k, true])) },
+          variants: { [key]: i },
+          keep: () => drawablesOf(owners),
+        });
+      });
+    }
+    return shots;
+  }
+
+  // maintainer-only, driven by tools/bake-items.html. moves state through
+  // loadPresetState/applyChanged rather than setItem, so it never PUTs and
+  // never waits out writeWardrobe's 500ms spacing - 40 shots would otherwise
+  // be half a minute of round trips.
+  async function bakeAll(onProgress) {
+    const restore = exportPreset();
+    const shots = bakeShots();
+    const out = [];
+    try {
+      for (let i = 0; i < shots.length; i++) {
+        const shot = shots[i];
+        if (onProgress) onProgress(i, shots.length, shot.name);
+        applyChanged(loadPresetState({ items: shot.items, variants: shot.variants }));
+        // applyVariants fires the atlas recomposite and doesn't wait for it.
+        // shoot without this and every variant tile is one style behind - you
+        // get two identical Default/Sneakers shoes and nothing tells you.
+        if (Live2D.texturesSettled) await Live2D.texturesSettled();
+        await new Promise(r => setTimeout(r, 0));
+        const png = Live2D.bakeThumb(shot.keep(), 256);
+        if (png) out.push({ name: shot.name, png });
+      }
+    } finally {
+      applyChanged(loadPresetState(restore));
+    }
+    return out;
+  }
+
   function itemThumb(it) {
+    const baked = bakedTile(it.key);
+    if (baked) return baked;
     const ids = Live2D.findDrawables(itemPatterns(it), it.colorExcludes);
     let best = null, bestPx = 0;
     for (const id of ids) {
@@ -1349,12 +1588,24 @@ window.Outfit = (function () {
   }
 
   function variantThumb(v, opt) {
+    // a baked shot is the whole garment on its own, so it reads fine even when
+    // the variant isn't worn. the drawable crop further down only shows
+    // anything while the model is actually wearing it.
+    const baked = bakedTile(`${v.key}-${v.options.indexOf(opt)}`);
+    if (baked) return baked;
+    // opt.thumb is the decal png on its own (logos, the two glasses shots), so
+    // it reads whether or not she's wearing it. api/assets.php serves those
+    // ungated for exactly this.
     if (opt.thumb) return opt.thumb;
-    for (const val of Object.values(opt.textures || {})) {
-      const url = typeof val === 'object' ? val.url : val;
-      if (url) return url;
+    const owners = VARIANT_OWNER[v.key];
+    const active = v.options[variantState[v.key] || 0] === opt
+      && (!owners || owners.some(key => state[key]));
+    if (active) {
+      for (const val of Object.values(opt.textures || {})) {
+        const url = typeof val === 'object' ? val.url : val;
+        if (url) return url;
+      }
     }
-    // the first drawable is the baked default when no variant exists
     return Live2D.drawableThumb(v.drawables[0], 72);
   }
 
@@ -1735,6 +1986,7 @@ window.Outfit = (function () {
       const thumb = variantThumb(v, v.options[variantState[v.key] || 0]);
       tile.innerHTML = `${thumb ? `<img draggable="false" src="${thumb}">` : '<div class="wd-noimg">?</div>'}<span>${v.label}</span>`;
       tile.dataset.variantTile = v.key;
+      tile.dataset.variantIndex = String(variantState[v.key] || 0);
       if (colorKeys && colorKeys.length) tile.appendChild(makeSwatch(colorKeys, v.label));
       const popupCfg = { title: v.label, colorKeys, variants: [v] };
       tile.appendChild(makeOptOrb(popupCfg));
@@ -1979,9 +2231,12 @@ window.Outfit = (function () {
       const tile = wdOverlay.querySelector(`.wd-tile[data-variant-tile="${v.key}"]`);
       if (tile) {
         tile.classList.toggle('on', idx > 0);
-        const img = tile.querySelector('img');
-        const thumb = variantThumb(v, v.options[idx]);
-        if (img && thumb) img.src = thumb;
+        if (tile.dataset.variantIndex !== String(idx)) {
+          const img = tile.querySelector('img');
+          const thumb = variantThumb(v, v.options[idx]);
+          if (img && thumb) img.src = thumb;
+          tile.dataset.variantIndex = String(idx);
+        }
       }
     }
     syncOptionsPopup();
@@ -2069,17 +2324,16 @@ window.Outfit = (function () {
     const keys = aliases[item] || (ITEMS.some(it => it.key === item) ? [item] : []);
 
     if (item === 'nude' && stateOn) {
-      for (const it of ITEMS) {
-        if (!it.section && state[it.key]) setItem(it.key, false);
-      }
-      return;
+      return queueWardrobe((items) => {
+        for (const it of ITEMS) if (!it.section) items[it.key] = false;
+      });
     }
 
-    for (const key of keys) {
-      if (state[key] !== stateOn) setItem(key, stateOn);
-    }
+    return queueWardrobe((items) => {
+      for (const key of keys) setDraftItem(items, key, stateOn);
+    });
   }
 
   return { load, applyAll, describe, snapshot, reset, syncFromAction, setVariant, openWardrobe,
-    makeItemColorButton, refreshColors: applyColors };
+    makeItemColorButton, refreshColors: applyColors, bakeAll };
 })();
