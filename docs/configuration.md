@@ -43,18 +43,13 @@ conditional requirement is `OPENROUTER_API_KEY`, needed only when
 | Variable | Default | Consumed by | What it does |
 |---|---|---|---|
 | `OMEGA_REGISTRATION_KEY` | *(empty)* | `php` service, `webapp/api/auth.php` (`signup`, `signup_info`) | Key every new account, including the first one, must present (`hash_equals`, so a wrong one is a 403 `invalid_registration_key`; a missing one is `registration_closed`). Empty or unset means public signup, and `auth.php?action=signup_info` tells the login page whether to show the field. Both installers generate and print a key. |
-| `OMEGA_ADMIN_KEY` | *(empty)* | `php` service, `webapp/api/auth.php` (`promote`) | Key that flips the caller's `users.role` to `admin` (POST `{"key":...}` to `auth.php?action=promote`, `hash_equals`, rate-limited **5/hour** per client, both outcomes logged). Admin unlocks `stats.php`, `relationship.php` `PUT`, `memory.php` `DELETE`, the debug SSE frame carrying the assembled system prompt, the welcome-preview parameters on `consolidate.php`, and the dev HUD. Empty or unset disables promotion outright (`admin_promotion_disabled`), so the whole developer surface stays closed. |
+| `OMEGA_DEV_KEY` | *(empty)* | `php` service, `webapp/api/auth.php` | Optional developer access key. |
 
 Both installers generate a random hex `OMEGA_REGISTRATION_KEY` when the line is
 absent from `.env` (`ensure_key`/`gen_key` in `install.sh`,
 `Add-EnvKeyIfMissing`/`New-AccessKey` in `install.ps1`) and print it in the
 closing summary. An **empty** value is left alone: that is the operator saying
 "off", and every upgrade run goes back through the same code.
-
-`OMEGA_ADMIN_KEY` is never generated. It has no default and the installers do
-not write it, so a stock install has no way into the developer tools for
-anyone; the operator adds the line by hand and recreates the `php` service to
-apply it. The README documents the promotion flow for end users.
 
 ## 2. AI provider
 

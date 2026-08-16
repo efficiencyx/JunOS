@@ -28,7 +28,7 @@ trap cleanup EXIT INT TERM
 OMEGA_STATE_DIR="$work/state" \
 OMEGA_ALLOWED_HOSTS='localhost,127.0.0.1' \
 OMEGA_REGISTRATION_KEY='' \
-OMEGA_ADMIN_KEY='ci-admin-key' \
+OMEGA_DEV_KEY='ci-dev-key' \
 	php -S "127.0.0.1:$PORT" -t webapp tools/php-router.php >"$work/server.log" 2>&1 &
 srv=$!
 

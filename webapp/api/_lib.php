@@ -253,6 +253,10 @@ function db(): PDO {
     return $pdo;
 }
 
+function no_users_yet(): bool {
+    return db()->query('SELECT id FROM users LIMIT 1')->fetchColumn() === false;
+}
+
 function current_user(): ?array {
     // false until we've looked. null once we know there's no session.
     static $user = false;

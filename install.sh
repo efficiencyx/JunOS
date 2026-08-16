@@ -622,9 +622,6 @@ configure() {
         ok "tensor parallelism on"
     fi
 
-    # Only the registration key is generated. OMEGA_ADMIN_KEY stays whatever
-    # the operator typed in by hand, a box nobody deliberately unlocked has no
-    # way into the developer tools at all. The README says how to set one.
     ensure_key OMEGA_REGISTRATION_KEY
     ok "registration key ready"
 }
@@ -882,6 +879,8 @@ install_asset_recovery() {
 
         if "$recovery_python" tools/recover_assets.py --game "$game_dir"; then
             ok "assets extracted to webapp/assets (local use only)"
+            note "optional: serve the repo root and open /tools/bake-items.html to"
+            note "bake the wardrobe item tiles into webapp/assets/items/."
             return 0
         fi
         warn_ "extraction failed from that location. Try another path or press Enter to skip."
@@ -1176,7 +1175,6 @@ if docker_run docker info >/dev/null 2>&1; then
         docker_run ./mtp-autotune.sh || warn_ "autotune failed - drafting 1 token ahead, re-run ./mtp-autotune.sh anytime"
     fi
     reg_key="$(env_value OMEGA_REGISTRATION_KEY)"
-    admin_key="$(env_value OMEGA_ADMIN_KEY)"
     printf '\n'
     step "access keys"
     if [ -n "$reg_key" ]; then
@@ -1185,14 +1183,6 @@ if docker_run docker info >/dev/null 2>&1; then
     else
         note "registration key is empty, anyone who reaches the page can sign up."
     fi
-    if [ -n "$admin_key" ]; then
-        ok "admin         $admin_key"
-        note "type this one in the app to unlock the developer tools."
-    else
-        note "no admin key, the developer tools stay locked for everyone. set"
-        note "OMEGA_ADMIN_KEY in .env yourself to get in - see the README."
-    fi
-
     printf '\n   %s$%s %s%sready%s %s-%s open %shttp://localhost%s\n' \
         "$OK" "$R" "$B" "$OK" "$R" "$DIM" "$R" "$B$ACCENT" "$R"
     printf '   %sstop:%s ./start.sh stop   %s·%s   %sstatus:%s ./start.sh status\n\n' \
@@ -1205,3 +1195,50 @@ else
     fi
     exit 0
 fi
+
+
+
+# Well done you read the installer, You are a responsible user! I like you
+# Also you use linux/mac and that makes me like you even more!
+
+#                                 -                                 
+#                                 ==:                               
+#                        :=--.    ---                               
+#                          :--==- :=:                               
+#                               .:::::::=-==-:                      
+#                          ::::::::::-==---:-==-=:                  
+#                      .-=====-::-:-==--==-==--==-=-                
+#                    :-=---=--=====--==-==-==-==--==-=              
+#                   -=-===-==--=--==--==--=--==-==-:-=-:            
+#                  =-==--==-==-==--. =-==-==-=--==-== -=-           
+#                 -==-==--=--==-= ::==--==-==-==--=--= ::-          
+#                ::-=--=:-==--=::-::=:=--=--=-==-==-==: ::-         
+#               ::::::-::--==- -:: =-  .--==-=--==-=:::: ::.        
+#               :::::::::---= :--.::.=  ::::::::::::::::: ::        
+#              :::::::::::-- --:: :: @*  :::::::::::::::: ::.       
+#              :::::::::::::.:::::: @@:   :::::::::::::::: ::       
+#              ::::::::::::::::: : @%%%@@# ::::::::::::::: ::       
+#             .::::::::::::.:::: %@@.   %@@:.:::::::..:::: ::       
+#              ::::::::::::.::::=% :+:## %@%%* :  . #  : . ::       
+#              :::::::::::::::::% @@== @*%@@%@@% @=.@   :::::       
+#       -====== :::::::::::: ::. -+===-@@%%@@%#:=:= % .:::: :       
+#   :==== ------ :::::.:::::::-.:-   %@%%@@%@@#-  %** :::::         
+# :====== :------. :::: ::::: -:*@*%%%@@%@@%%@%:@%@%@ :::::         
+#  -========:.   .:-  :: :::: .-=**@@@%@@%%@@%@@@%@# :::::          
+#    ================.     ::: : -*%%@%%@#%*=:*%@@  :::::.          
+#     ------------========   ::. **- *@@%@@@%@@: ::::::::           
+# .==-::---==================:  ***** :   =#     :::  ::            
+# ===-==============.    .=======:     .         ::                 
+# .=============:  ========: -======.  :: =.                        
+#  ==========-- .============ =   -=== :: ===                       
+#  .=======--: ===============:=####* - : =====                     
+#  --------: :=================-:#%%%%:#% -=-===.                   
+#   :----:  :=============-=====- #%%%%%%% =.=====                  
+#    .--:-::=================:==== %%%%%%%%  ======:                
+#       :- =====-:============== -= %%%%%%%* :-=======              
+#         ======-:-================: *%%%%%%:::::::-====            
+#         =======:-===================- *%%%% ::=========           
+#        ========- ::==================== %%*  ::::-=====-.         
+#        ======:==: :::==================-:#=  .:-============-     
+#        =======:==:..:::-==============**#=    ::::::-==========   
+#        =========.-:: :-:::==========%%===#%%==-  ::::::::-=======:
