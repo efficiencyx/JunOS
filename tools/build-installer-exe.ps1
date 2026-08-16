@@ -31,6 +31,21 @@ if ($outDir -and -not (Test-Path -LiteralPath $outDir)) {
     New-Item -ItemType Directory -Path $outDir -Force | Out-Null
 }
 
+$installScript = Join-Path $repoRoot 'install.ps1'
+if (-not (Test-Path -LiteralPath $installScript)) { throw "install.ps1 not found at $installScript" }
+
+# install.ps1 goes in as base64 on one line. it's the only repo file the exe
+# needs - install.ps1 git clones the rest itself - so this is what makes the
+# build standalone. UTF8 without a BOM, powershell -File chokes on a stray one.
+$payload = [Convert]::ToBase64String([IO.File]::ReadAllBytes($installScript))
+$lines = [IO.File]::ReadAllLines($source)
+$marker = ($lines | Select-String -SimpleMatch 'JUN_EMBEDDED_INSTALLER' | Select-Object -First 1)
+if (-not $marker) { throw 'installer-gui.ps1 lost its JUN_EMBEDDED_INSTALLER marker - nothing to embed into.' }
+$lines[$marker.LineNumber - 1] = "`$script:EmbeddedInstaller = '$payload' # JUN_EMBEDDED_INSTALLER"
+
+$staged = Join-Path ([IO.Path]::GetTempPath()) 'jun-installer-gui-staged.ps1'
+[IO.File]::WriteAllLines($staged, $lines, [Text.UTF8Encoding]::new($false))
+
 if (-not (Get-Module -ListAvailable -Name ps2exe)) {
     Write-Host 'installing ps2exe from the PSGallery...'
     Install-Module ps2exe -Scope CurrentUser -Force -AllowClobber
@@ -38,7 +53,7 @@ if (-not (Get-Module -ListAvailable -Name ps2exe)) {
 Import-Module ps2exe
 
 $ps2exeArgs = @{
-    inputFile   = $source
+    inputFile   = $staged
     outputFile  = $OutputPath
     # noConsole hides the console window, STA is what WPF needs and what keeps
     # installer-gui.ps1 out of its self-restart branch (which a compiled build
@@ -58,8 +73,12 @@ $ps2exeArgs = @{
 }
 if ($IconPath) { $ps2exeArgs.iconFile = (Resolve-Path -LiteralPath $IconPath).Path }
 
-Invoke-PS2EXE @ps2exeArgs
+try {
+    Invoke-PS2EXE @ps2exeArgs
+} finally {
+    Remove-Item -LiteralPath $staged -Force -ErrorAction SilentlyContinue
+}
 
 if (-not (Test-Path -LiteralPath $OutputPath)) { throw 'ps2exe reported success but produced no file.' }
-Write-Host "built $OutputPath"
-Write-Host 'ship it next to install.ps1 - the exe shells out to that script, it does not contain it.'
+Write-Host "built $OutputPath ($([int]((Get-Item $OutputPath).Length / 1KB)) KB)"
+Write-Host 'standalone: ship this file on its own, it carries install.ps1 and clones the repo itself.'
