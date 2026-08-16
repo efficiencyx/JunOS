@@ -2,7 +2,7 @@ services:
   ollama:
     build:
       args:
-        OLLAMA_BASE: ollama/ollama:0.30.8-rocm
+        OLLAMA_BASE: ollama/ollama:0.32.6-rocm
     devices:
       - /dev/kfd
       - /dev/dri
