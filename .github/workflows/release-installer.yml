@@ -1,0 +1,42 @@
+name: Release installer
+
+# push a tag and the exe shows up on the release. nothing else here is
+# automated, the release notes are still yours to write.
+on:
+  push:
+    tags: ['v*']
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  installer:
+    name: JunSetup.exe
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Build
+        # powershell (5.1), not pwsh: ps2exe emits a .NET Framework WPF binary
+        # and targets the framework host.
+        shell: powershell
+        run: |
+          $tag = "${{ github.ref_name }}" -replace '^v', ''
+          # ps2exe wants a 4 part numeric version and a tag like v1.2 is not
+          # one. pad it, and fall back for workflow_dispatch where ref_name is
+          # a branch.
+          if ($tag -notmatch '^\d+(\.\d+)*$') { $tag = '0.0.0' }
+          $parts = @($tag -split '\.') + @('0', '0', '0', '0')
+          ./tools/build-installer-exe.ps1 -Version ($parts[0..3] -join '.')
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: JunSetup
+          path: dist/JunSetup.exe
+
+      - name: Attach to release
+        if: startsWith(github.ref, 'refs/tags/')
+        uses: softprops/action-gh-release@v2
+        with:
+          files: dist/JunSetup.exe

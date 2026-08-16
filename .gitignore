@@ -79,3 +79,6 @@ tools/__pycache__/
 # something a user needs
 tools/clothing-render.html
 tools/clothing-render.js
+
+# build output from tools/build-installer-exe.ps1
+dist/
