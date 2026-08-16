@@ -130,6 +130,11 @@ if ($path === '/system_prompt.txt' || str_starts_with($path, '/api/migrations/')
 $isApi = preg_match('#^/api/[^/]+\.php$#', $path) === 1;
 $method = strtoupper($_SERVER['REQUEST_METHOD'] ?? 'GET');
 if (!$isApi && $method !== 'GET' && $method !== 'HEAD') router_fail(405, 'method not allowed');
+if (str_starts_with($path, '/assets/')) {
+    $_SERVER['OMEGA_ASSET_PATH'] = $path;
+    require rtrim((string)($_SERVER['DOCUMENT_ROOT'] ?? ''), '/\\') . '/api/assets.php';
+    return true;
+}
 
 $docroot = realpath($_SERVER['DOCUMENT_ROOT'] ?? '');
 if ($docroot === false) router_fail(500, 'document root unavailable');
