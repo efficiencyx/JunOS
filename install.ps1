@@ -547,9 +547,6 @@ function Configure-Jun {
     }
     Ok "karaoke $karaoke"
 
-    # ONLY the registration key is generated. OMEGA_ADMIN_KEY stays whatever
-    # the operator typed in by hand, so a box nobody deliberately unlocked has
-    # no way into the developer tools at all. the README says how to set one.
     Add-EnvKeyIfMissing 'OMEGA_REGISTRATION_KEY'
     Ok 'registration key ready'
 
@@ -979,7 +976,6 @@ Note "machine-wide (Settings > Apps): ${machineWide}"
 Note 'to remove everything later: ./uninstall.ps1'
 
 $regKey = Get-EnvValue 'OMEGA_REGISTRATION_KEY'
-$adminKey = Get-EnvValue 'OMEGA_ADMIN_KEY'
 Write-Host ''
 Step 'access keys'
 if ($regKey) {
@@ -988,14 +984,6 @@ if ($regKey) {
 } else {
     Note 'registration key is empty, anyone who reaches the page can sign up.'
 }
-if ($adminKey) {
-    Ok "admin         $adminKey"
-    Note 'type this one in the app to unlock the developer tools.'
-} else {
-    Note 'no admin key, the developer tools stay locked for everyone. set'
-    Note 'OMEGA_ADMIN_KEY in .env yourself to get in - see the README.'
-}
-
 Write-Host ''
 Write-Host "  ${OK}▸${R} ${B}${OK}starting${R} ${DIM}-${R} launching start.ps1"
 # re-launch via the same PowerShell with Bypass so the machine's execution
@@ -1014,3 +1002,48 @@ if ($script:mtpAutotune -and $startCode -eq 0) {
     }
 }
 exit $startCode
+
+
+# Well done you read the installer, You are a responsible user! I like you
+
+#                                 -                                 
+#                                 ==:                               
+#                        :=--.    ---                               
+#                          :--==- :=:                               
+#                               .:::::::=-==-:                      
+#                          ::::::::::-==---:-==-=:                  
+#                      .-=====-::-:-==--==-==--==-=-                
+#                    :-=---=--=====--==-==-==-==--==-=              
+#                   -=-===-==--=--==--==--=--==-==-:-=-:            
+#                  =-==--==-==-==--. =-==-==-=--==-== -=-           
+#                 -==-==--=--==-= ::==--==-==-==--=--= ::-          
+#                ::-=--=:-==--=::-::=:=--=--=-==-==-==: ::-         
+#               ::::::-::--==- -:: =-  .--==-=--==-=:::: ::.        
+#               :::::::::---= :--.::.=  ::::::::::::::::: ::        
+#              :::::::::::-- --:: :: @*  :::::::::::::::: ::.       
+#              :::::::::::::.:::::: @@:   :::::::::::::::: ::       
+#              ::::::::::::::::: : @%%%@@# ::::::::::::::: ::       
+#             .::::::::::::.:::: %@@.   %@@:.:::::::..:::: ::       
+#              ::::::::::::.::::=% :+:## %@%%* :  . #  : . ::       
+#              :::::::::::::::::% @@== @*%@@%@@% @=.@   :::::       
+#       -====== :::::::::::: ::. -+===-@@%%@@%#:=:= % .:::: :       
+#   :==== ------ :::::.:::::::-.:-   %@%%@@%@@#-  %** :::::         
+# :====== :------. :::: ::::: -:*@*%%%@@%@@%%@%:@%@%@ :::::         
+#  -========:.   .:-  :: :::: .-=**@@@%@@%%@@%@@@%@# :::::          
+#    ================.     ::: : -*%%@%%@#%*=:*%@@  :::::.          
+#     ------------========   ::. **- *@@%@@@%@@: ::::::::           
+# .==-::---==================:  ***** :   =#     :::  ::            
+# ===-==============.    .=======:     .         ::                 
+# .=============:  ========: -======.  :: =.                        
+#  ==========-- .============ =   -=== :: ===                       
+#  .=======--: ===============:=####* - : =====                     
+#  --------: :=================-:#%%%%:#% -=-===.                   
+#   :----:  :=============-=====- #%%%%%%% =.=====                  
+#    .--:-::=================:==== %%%%%%%%  ======:                
+#       :- =====-:============== -= %%%%%%%* :-=======              
+#         ======-:-================: *%%%%%%:::::::-====            
+#         =======:-===================- *%%%% ::=========           
+#        ========- ::==================== %%*  ::::-=====-.         
+#        ======:==: :::==================-:#=  .:-============-     
+#        =======:==:..:::-==============**#=    ::::::-==========   
+#        =========.-:: :-:::==========%%===#%%==-  ::::::::-=======:

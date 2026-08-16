@@ -18,7 +18,7 @@ export work
 env_file="$work/env"
 {
 	cat .env.example
-	printf '\nOMEGA_REGISTRATION_KEY=\nOMEGA_ADMIN_KEY=ci-admin-key\nDOMAIN=localhost\nBIND_ADDR=127.0.0.1\nTLS_MODE=off\n'
+	printf '\nOMEGA_REGISTRATION_KEY=\nOMEGA_DEV_KEY=ci-dev-key\nDOMAIN=localhost\nBIND_ADDR=127.0.0.1\nTLS_MODE=off\n'
 } >"$env_file"
 # READ THIS BEFORE CHANGING ANY docker LINE IN THIS FILE.
 #

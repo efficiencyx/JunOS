@@ -8,9 +8,10 @@ how to report something you find.
 
 **What the design assumes**
 
-* One person, one trusted machine. Every user account on a Jun install can be
-  created by anyone who can reach the port, so "who can reach the port" is the
-  real access control.
+* One person, one trusted machine. The first account on a fresh database can be
+  created without the registration key. Later accounts require
+  `OMEGA_REGISTRATION_KEY` unless you deliberately leave it empty, so claim the
+  first account before making the install reachable by anyone else.
 * The person installing it is the machine's administrator, and is allowed to
   install Docker, Python and PHP on it.
 * Whatever a model says is untrusted input. Lore, web search results, song
@@ -32,6 +33,9 @@ how to report something you find.
   [Install-time supply chain](#install-time-supply-chain).
 * *Brute force and runaway cost.* Per-IP token buckets on the auth and chat
   endpoints, request size caps, and a body-size limit in PHP.
+* *Developer-only operations.* Privileged endpoints enforce the account role
+  server-side. `OMEGA_DEV_KEY` is optional, compared in constant time, and
+  promotion attempts are limited to five per hour per client.
 * *Containers escalating.* Every service runs with `no-new-privileges`, only
   nginx publishes a port, and everything else talks over the internal `omega`
   network.
@@ -46,9 +50,11 @@ how to report something you find.
 * Prompt injection through the web search and lyrics tools. A page can tell her
   things. She has no tool that can write outside your own account's data, which
   is the limit that actually holds, not her judgment.
-* Anyone on your LAN once you set `BIND_ADDR=0.0.0.0`.
+* The first person to reach an unclaimed install after you set
+  `BIND_ADDR=0.0.0.0`. The first signup intentionally does not ask for the
+  registration key.
 * Multi-tenant hosting. If you host her for other people, their chats are on
-  your box and that is a different job than this file covers.
+  your box and that is a different job than this file covers. more info in README.md.
 
 ## Install-time supply chain
 
@@ -68,7 +74,7 @@ The installers fetch code from other people and run it. What is checked:
 
 The one-liner install (`curl ... | bash`) runs whatever `main` says at that
 moment, unread. Cloning first, reading `install.sh`, and running it from the
-checkout is the recommended path, and the only one where what you read is what
+checkout is the recommended path, and the only one where what you read is 100% what
 you ran. `JUN_REF` holds the clone to a tag or branch, which is as close to a
 pin as this gets.
 
@@ -92,17 +98,21 @@ from Meta's public file host. All of it is cached, so it happens once.
   artist, album and duration go out.
 * `openrouter.ai` - **only** if you chose OpenRouter as the provider, and then
   your messages go to their cloud. That is the whole point of the option, and it
-  is not the default.
+  is not the default nor recommended.
 
 **Never:** there is no analytics, no crash reporting, no usage ping, no update
 check, and nothing reports back to this project. An older build had a
-`TELEMETRY` knob in `.env` for a chat-sharing feature that was never built and
-nothing ever read. It is gone. Delete `TELEMETRY` and `TELEMETRY_INSTALL_ID`
+`TELEMETRY` knob in `.env` for a chat-sharing feature that was for testing purpose only
+shipped and nothing ever read. It is gone. Delete `TELEMETRY` and `TELEMETRY_INSTALL_ID`
 from an old `.env` if you find them there.
+
+If you do have them contact me immediatly, something is very wrong with your installation
+mail: andrea@andrealab.it
+discord: effx__
 
 ## Where your data lives
 
-**Docker:** the `omega_state` volume, mounted at `/var/lib/omega`
+**Linux Docker:** the `omega_state` volume, mounted at `/var/lib/omega`
 (`OMEGA_STATE_DIR`):
 
 * `omega.sqlite` - accounts, password hashes, sessions, conversations and every
@@ -118,9 +128,10 @@ Model weights sit in their own volumes (`ollama_data`, `tts_cache`,
 `runtime\state` for the same database and memory files, `runtime\php`,
 `runtime\tts-venv`, `runtime\asset-recovery-venv`, `runtime\logs`.
 
-**Both:** `.env` in the repo root, which holds your OpenRouter key if you set
-one. The installers restrict it to your user (`chmod 600`, or an ACL on
-Windows). It is gitignored.
+**Both:** `.env` in the repo root, which holds the generated registration key,
+your developer key and OpenRouter key if you set them, and other deployment
+configuration. The installers restrict it to your user (`chmod 600`, or an ACL
+on Windows). It is gitignored.
 
 **In your browser:** IndexedDB holds any game-mod zips you loaded, and
 localStorage holds UI preferences. Mods are never uploaded, the server only ever
@@ -130,7 +141,7 @@ sees item names.
 your own use only - see the NOTICE in [LICENSE](LICENSE).
 
 Nothing here is encrypted at rest. Encrypt the disk if that matters, and
-remember your backups have all of it too.
+remember your backups have all of it too. Consider encrypting them too.
 
 ## Exposing it on purpose
 
@@ -138,7 +149,7 @@ If you put her on the internet:
 
 * `BIND_ADDR=0.0.0.0` is deliberate, and it should be the last thing you change,
   not the first.
-* Do not expose an install that has the original game assets in it.
+* Do not expose an install that has the original game assets in it. You risk legal action.
 * Use `TLS_MODE=on` with the `prod` profile. Serving accounts and chat logs over
   plain http on a network you don't own is not worth it. Startup refuses a
   public bind without TLS unless `OMEGA_ALLOW_INSECURE_PUBLIC_HTTP=1` explicitly
@@ -148,8 +159,10 @@ If you put her on the internet:
   from the proxy.
 * `OMEGA_ALLOWED_ORIGINS` (comma separated) is for a proxy that rewrites `Host`
   and would otherwise trip the cross-origin check.
-* Anyone who can open the page can create an account. Put it behind something
-  that decides who gets that far.
+* Claim the first account before exposing the install. After that, keep the
+  generated `OMEGA_REGISTRATION_KEY` enabled and share it only with people you
+  want to let register. Put public installs behind something that decides who
+  gets as far as the signup page.
 * Their chats are your responsibility now. See the hosting note in the README.
 
 ## Reporting a vulnerability
@@ -162,6 +175,6 @@ isn't exploitable.
 Useful in a report: what you did, what you expected, what happened, and the
 version (`git rev-parse HEAD`). A proof of concept helps and is not required.
 
-This is a small unpaid fan project with no SLA and no bounty. Expect a human
-reply within a couple of weeks, and fixes on `main` rather than backported
+This is a small unpaid fan project with no SLA and no bounty (I'm sorry). Expect a human
+reply within a week, and fixes on `main` rather than backported
 releases.

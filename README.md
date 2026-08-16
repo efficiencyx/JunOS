@@ -74,7 +74,7 @@ less install.sh           # it installs Docker and pulls a few GB. worth a look
 
 The installer's first question is how you want to install: **Express** (press Enter) auto-detects everything and asks nothing else; **Custom** walks you through provider, model and voice. `JUN_YES=1` (or `$env:JUN_YES='1'`) skips the question entirely for unattended installs.
 
-Then open **<http://localhost>** (Windows: **<http://127.0.0.1:8080>**) and say hi. 🎉
+Then open **<https://localhost>** (Windows: **<https://127.0.0.1:8080>**) and say hi. 🎉
 
 ### The one-liner, if you insist
 
@@ -151,7 +151,7 @@ BIND_ADDR=0.0.0.0
 OMEGA_ALLOW_INSECURE_PUBLIC_HTTP=1
 ```
 
-The launcher works out this machine's address on the network by itself and prints it - `reachable as: 192.168.1.42` on Linux, `on your phone: http://192.168.1.42:8080` on Windows - and that's the URL you type into the phone. On Windows it also adds a firewall rule for the port on **private** networks only (it needs an admin PowerShell to do it, otherwise it prints the one-liner for you to run). One request at a time on Windows, so the phone and the desktop take turns.
+The launcher works out this machine's address on the network by itself and prints it - `reachable as: 192.168.1.42` on Linux, `on your phone: https://192.168.1.42:8080` on Windows - and that's the URL you type into the phone. On Windows it also adds a firewall rule for the port on **private** networks only (it needs an admin PowerShell to do it, otherwise it prints the one-liner for you to run). One request at a time on Windows, so the phone and the desktop take turns.
 
 The second line is not decoration: there's no TLS here, so your password and every word she says cross the wifi in the clear. Fine on your own network, **never** on one you don't control, and never port-forwarded to the internet - that's what the certbot setup above is for. 🔒 DHCP moves addresses around, so if she stops answering after a few days, restart the launcher and read the new one.
 
@@ -218,23 +218,13 @@ Everything is environment variables in `.env` - the full reference is [`docs/con
 | `OMEGA_NUM_CTX` | Context window. Auto-sized from leftover VRAM (falling back to RAM) - pin it if she's crowding your card | *(auto)* |
 | `OMEGA_STATE_DIR` / `MEMORY_DIR` | Where the database, rate-limit state and memory notes live | `/var/lib/omega` |
 | `OMEGA_REGISTRATION_KEY` | Sign-ups need this key. The installer generates one for you; empty it to let anyone in | *(generated)* |
-| `OMEGA_ADMIN_KEY` | Unlocks the developer tools. **You** set this one, nothing generates it | *(unset)* |
+| `OMEGA_DEV_KEY` | Optional developer access key | *(unset)* |
 
 ### Who gets in 🔑
 
-Two different locks, and they behave differently on purpose.
-
 **The registration key** is written into `.env` by the installer and printed when it finishes. Every account, including the first one, has to type it; that is what stops whoever reaches a fresh install first from claiming it. Don't want the lock? Empty the value (`OMEGA_REGISTRATION_KEY=`) and sign-ups are open to whoever can reach the page. 🔑 Lost it? It's sitting in plain text in your own `.env` - read it back, or change it to whatever you like and restart.
 
-**The admin key is yours to invent.** Nothing generates it and there's no default, so out of the box *nobody* - not even you - can reach the developer tools. Put a line in `.env` when you want them:
-
-```sh
-OMEGA_ADMIN_KEY=whatever-long-thing-you-like
-```
-
-then restart php so it picks the value up (`docker compose up -d php`). To use it: **Settings → Account → click "About" seven times**, and a Developer access row appears asking for the key. That gets you the Developer tab, the metrics HUD (`Ctrl+Shift+D`), her raw system prompt on the chat stream, the mood override and the memory-delete button. Five wrong guesses an hour and you're rate-limited.
-
-It's tucked behind seven clicks because the tools are a footgun for someone who just wants to talk to her, not because it's a secret. Normal accounts get **Factory Reset** in the same panel instead - one button that erases every conversation, memory and setting and hands the account back the way it came.
+Normal accounts get **Factory Reset** in the same panel - one button that erases every conversation, memory and setting and hands the account back the way it came.
 
 ## Under the hood
 

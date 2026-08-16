@@ -13,7 +13,7 @@ case 'me':
 
 case 'signup_info':
     echo json_encode([
-        'registration_key_required' => env_str('OMEGA_REGISTRATION_KEY') !== '',
+        'registration_key_required' => env_str('OMEGA_REGISTRATION_KEY') !== '' && !no_users_yet(),
     ]);
     break;
 
@@ -34,8 +34,11 @@ case 'signup':
 
     $db = db();
 
+    // empty users table = fresh install, so the very first signup skips the key.
+    // otherwise whoever just ran install.sh has to go dig the generated key out
+    // of .env to make their own account, on their own box. no.
     $regKey = env_str('OMEGA_REGISTRATION_KEY');
-    if ($regKey !== '') {
+    if ($regKey !== '' && !no_users_yet()) {
         $given = (string)($body['registration_key'] ?? '');
         if ($given === '') fail(403, 'registration_closed');
         if (!hash_equals($regKey, $given)) fail(403, 'invalid_registration_key');
@@ -90,11 +93,11 @@ case 'promote':
     $body = json_decode(read_body(4 * 1024), true);
     if (!is_array($body)) fail(400, 'invalid_request');
 
-    $key = env_str('OMEGA_ADMIN_KEY');
-    if ($key === '') fail(403, 'admin_promotion_disabled');
+    $key = env_str('OMEGA_DEV_KEY');
+    if ($key === '') fail(403, 'dev_promotion_disabled');
     if (!hash_equals($key, (string)($body['key'] ?? ''))) {
         log_event(['msg' => 'admin_promote_failed', 'user_id' => $user['id']]);
-        fail(403, 'invalid_admin_key');
+        fail(403, 'invalid_dev_key');
     }
 
     db()->prepare("UPDATE users SET role = 'admin' WHERE id = ?")->execute([$user['id']]);
@@ -115,7 +118,7 @@ case 'factory_reset':
         $db->prepare('DELETE FROM messages WHERE conversation_id IN (SELECT id FROM conversations WHERE user_id = ?)')
            ->execute([$userId]);
         foreach (['conversations', 'preferences', 'relationship', 'memory_consolidation',
-                  'user_bans', 'wardrobe_presets', 'welcome_queue'] as $table) {
+                  'user_bans', 'wardrobe_presets', 'wardrobe_state', 'welcome_queue'] as $table) {
             $db->prepare('DELETE FROM ' . $table . ' WHERE user_id = ?')->execute([$userId]);
         }
         $token = (string)($_COOKIE['omega_session'] ?? '');
