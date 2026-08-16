@@ -74,3 +74,8 @@ factorial-omega-win-64.zip
 tools/dataset_*/
 tools/build_dataset_v6.py
 tools/__pycache__/
+
+# local render rig for clothing shots - opens the shipped webapp assets, not
+# something a user needs
+tools/clothing-render.html
+tools/clothing-render.js
