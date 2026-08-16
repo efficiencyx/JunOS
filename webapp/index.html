@@ -599,24 +599,24 @@ html[data-pre-auth] #app { visibility: hidden; }
 <!-- Fetched during parse but applied by boot-gate.js: the CSP forbids the
      usual media="print" onload= trick, and blocking on the full sheet would
      cost a round trip the auth screen does not need. -->
-<link rel="preload" as="style" href="styles.css?v=2">
+<link rel="preload" as="style" href="styles.css?v=3">
 <link rel="preload" as="style" href="trip-loader.css?v=2">
-<noscript><link rel="stylesheet" href="styles.css?v=2"></noscript>
+<noscript><link rel="stylesheet" href="styles.css?v=3"></noscript>
 
-<script defer src="js/viewport.js?v=2"></script>
+<script defer src="js/viewport.js?v=3"></script>
 <script defer src="js/pwa.js?v=2"></script>
 <script src="js/boot-gate.js?v=2"></script>
 
 <script defer src="js/loader.js?v=2"></script>
-<script defer src="js/auth.js?v=2"></script>
-<script defer src="js/prefs.js?v=2"></script>
+<script defer src="js/auth.js?v=3"></script>
+<script defer src="js/prefs.js?v=3"></script>
 <script defer src="js/names.js?v=2"></script>
 <script defer src="js/chat-api.js?v=2"></script>
-<script defer src="js/ui.js?v=2"></script>
+<script defer src="js/ui.js?v=3"></script>
 <script defer src="js/history.js?v=2"></script>
 <script defer src="js/boot-fx.js?v=2"></script>
 <script defer src="js/memory-graph.js?v=2"></script>
-<script type="module" src="js/app.js?v=2"></script>
+<script type="module" src="js/app.js?v=4"></script>
 </head>
 <body>
 
@@ -939,30 +939,6 @@ html[data-pre-auth] #app { visibility: hidden; }
       <section class="settings-panel" data-panel="memory" hidden>
         <div class="set-block">
           <div class="set-block-head">
-            <div class="set-row-title">Saved memories</div>
-            <span class="count" id="memoryCount">0</span>
-          </div>
-          <div class="set-row-desc">Durable notes Jun keeps about you between conversations, grouped by category alongside her journal.</div>
-          <div class="memory-graph-wrap" id="memoryGraphWrap">
-            <canvas class="memory-graph" id="memoryGraph" aria-label="Interactive constellation of saved memories"></canvas>
-            <div class="memory-graph-status" id="memoryGraphStatus" aria-live="polite">Open this panel to load memories.</div>
-            <aside class="memory-reader" id="memoryReader" hidden>
-              <button class="memory-reader-close ghost" id="memoryReaderClose" type="button" aria-label="Close memory reader">×</button>
-              <div class="memory-reader-meta" id="memoryReaderMeta"></div>
-              <h3 class="memory-reader-title" id="memoryReaderTitle"></h3>
-              <div class="memory-reader-body" id="memoryReaderBody"></div>
-            </aside>
-          </div>
-          <ul class="sr-only" id="memoryA11y"></ul>
-          <div class="memory-add">
-            <input type="text" id="memoryAddInput" maxlength="800" placeholder="Add a memory…" aria-label="New memory">
-            <input type="text" id="memoryAddCategory" maxlength="40" placeholder="category" aria-label="Memory category">
-            <button class="secondary" id="memoryAddBtn">Add</button>
-          </div>
-          <button class="secondary danger" id="memoryClearBtn" title="Delete every saved memory">Delete all memories</button>
-        </div>
-        <div class="set-block">
-          <div class="set-block-head">
             <div class="set-row-title">Relationship</div>
           </div>
           <div class="set-row-desc">Where Jun stands with you right now. She moves these herself, one reply at a time.</div>
@@ -993,6 +969,30 @@ html[data-pre-auth] #app { visibility: hidden; }
             </div>
           </div>
         </div>
+        <div class="set-block">
+          <div class="set-block-head">
+            <div class="set-row-title">Saved memories</div>
+            <span class="count" id="memoryCount">0</span>
+          </div>
+          <div class="set-row-desc">Durable notes Jun keeps about you between conversations, grouped by category alongside her journal.</div>
+          <div class="memory-graph-wrap" id="memoryGraphWrap">
+            <canvas class="memory-graph" id="memoryGraph" aria-label="Interactive constellation of saved memories"></canvas>
+            <div class="memory-graph-status" id="memoryGraphStatus" aria-live="polite">Open this panel to load memories.</div>
+            <aside class="memory-reader" id="memoryReader" hidden>
+              <button class="memory-reader-close ghost" id="memoryReaderClose" type="button" aria-label="Close memory reader">×</button>
+              <div class="memory-reader-meta" id="memoryReaderMeta"></div>
+              <h3 class="memory-reader-title" id="memoryReaderTitle"></h3>
+              <div class="memory-reader-body" id="memoryReaderBody"></div>
+            </aside>
+          </div>
+          <ul class="sr-only" id="memoryA11y"></ul>
+          <div class="memory-add">
+            <input type="text" id="memoryAddInput" maxlength="800" placeholder="Add a memory…" aria-label="New memory">
+            <input type="text" id="memoryAddCategory" maxlength="40" placeholder="category" aria-label="Memory category">
+            <button class="secondary" id="memoryAddBtn">Add</button>
+          </div>
+          <button class="secondary danger" id="memoryClearBtn" title="Delete every saved memory">Delete all memories</button>
+        </div>
       </section>
 
       <section class="settings-panel" data-panel="developer" hidden>
@@ -1009,6 +1009,39 @@ html[data-pre-auth] #app { visibility: hidden; }
             <div class="set-row-desc">Stops Jun from speaking up on her own after a lull. She only replies when you write to her.</div>
           </div>
           <label class="set-row-control"><input type="checkbox" id="devNoIdleChk" class="toggle" aria-label="Silence idle nudges"></label>
+        </div>
+        <div class="set-block">
+          <div class="set-block-head">
+            <div class="set-row-title">Relationship override</div>
+            <button class="ghost" id="moodRefreshBtn" title="Reload current values">refresh</button>
+          </div>
+          <div class="set-row-desc">Drag to set Jun's affection, trust and tension directly.</div>
+          <div class="mood-controls">
+            <label class="mood-row mood-row--affection">
+              <span class="mood-label">Affection</span>
+              <div class="mood-track">
+                <div class="mood-clip"><span class="mood-phrase" id="moodAffectionControlPhrase" aria-hidden="true"></span></div>
+                <input type="range" id="moodAffection" min="0" max="100" step="1" value="60" disabled>
+              </div>
+              <span class="mood-val" id="moodAffectionControlVal">60</span>
+            </label>
+            <label class="mood-row mood-row--trust">
+              <span class="mood-label">Trust</span>
+              <div class="mood-track">
+                <div class="mood-clip"><span class="mood-phrase" id="moodTrustControlPhrase" aria-hidden="true"></span></div>
+                <input type="range" id="moodTrust" min="0" max="100" step="1" value="50" disabled>
+              </div>
+              <span class="mood-val" id="moodTrustControlVal">50</span>
+            </label>
+            <label class="mood-row mood-row--tension">
+              <span class="mood-label">Tension</span>
+              <div class="mood-track">
+                <div class="mood-clip"><span class="mood-phrase" id="moodTensionControlPhrase" aria-hidden="true"></span></div>
+                <input type="range" id="moodTension" min="0" max="100" step="1" value="20" disabled>
+              </div>
+              <span class="mood-val" id="moodTensionControlVal">20</span>
+            </label>
+          </div>
         </div>
         <div class="set-block">
           <div class="set-block-head">
@@ -1056,19 +1089,19 @@ html[data-pre-auth] #app { visibility: hidden; }
       </section>
 
       <section class="settings-panel" data-panel="account" hidden>
-        <div class="set-row" id="aboutRow">
+        <div class="set-row">
           <div class="set-row-text">
-            <div class="set-row-title">About</div>
+            <div class="set-row-title" id="aboutText">About</div>
             <div class="set-row-desc">Jun OS - a fan-made local companion. Runs entirely on this machine.</div>
           </div>
         </div>
         <div class="set-row" id="devAccessRow" hidden>
           <div class="set-row-text">
             <div class="set-row-title">Developer access</div>
-            <div class="set-row-desc" id="devAccessDesc">Enter this server's admin key to unlock developer tools.</div>
+            <div class="set-row-desc" id="devAccessDesc">Enter this server's developer key to unlock developer tools.</div>
           </div>
           <div class="set-row-control">
-            <input type="password" id="adminKeyInput" autocomplete="off" aria-label="Admin key">
+            <input type="password" id="devKeyInput" autocomplete="off" aria-label="Developer key">
             <button class="secondary" id="promoteBtn">Unlock</button>
           </div>
         </div>
