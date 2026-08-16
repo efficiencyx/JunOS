@@ -13,19 +13,19 @@
 // the version number it was written against. change anything in the graph,
 // renumber the Whole graph. no exceptions.
 
-import { showAuthScreen } from './app/auth-screen.js?v=4';
-import { IDLE_AFTER_REPLY_MS, TYPING_POLL_MS, armIdleAfterReply, cancelActiveIdleNudge, cancelAutoReset, cancelIdleNudge, composerPlaceholder, consolidating, fleeActive, reportActivity, resetIdleNudge, scheduleAutoReset, scheduleIdleNudge, setCancelActiveIdleNudge, setConsolidating, showConsolidatingBubble, startFleeLock, syncConsolidationStatus } from './app/consolidation.js?v=4';
-import { chatInput, debugSystemPromptEl, devNoIdleChk, messagesEl, messagesEmpty, missingParamsEl, mobileConversationTitle, modelSelect, narrowSidebarQuery, reasoningSelect, sendBtn, sendButtonIdleMarkup, sendButtonStopMarkup, siteVolumeInput, stageEl, thinkChk } from './app/dom.js?v=4';
-import { announceMobileReply, faceBubble, hideFaceBubble, latestAssistantReply, restartFaceBubbleHide, scheduleFaceBubbleHide, scheduleFaceBubblePosition, setLatestAssistantReply, showFaceBubble } from './app/face-bubble.js?v=4';
-import { appendRaw, logAction, logMissing, logToolStatus, setStageStatus } from './app/logging.js?v=4';
-import { loadMood } from './app/mood.js?v=4';
-import { applyProviderCapabilities, applyRoleGates, setSiteVolume, syncThinkToggle, updateSiteVolumeLabel, wireNameSettings } from './app/settings.js?v=4';
-import { loadConversation, refreshSidebar, setSidebarOpen } from './app/sidebar.js?v=4';
-import { makeNameFilter, makeStreamBuffer } from './app/stream-filters.js?v=4';
-import { escapeHtml, localTimeString, phoneMode } from './app/util.js?v=4';
-import { wireTts } from './app/wire-tts.js?v=4';
-import { wireVoice } from './app/wire-voice.js?v=4';
-import { WELCOME_TIERS, fetchWelcome, playWelcome, previewWelcome } from './app/welcome.js?v=4';
+import { showAuthScreen } from './app/auth-screen.js?v=5';
+import { IDLE_AFTER_REPLY_MS, TYPING_POLL_MS, armIdleAfterReply, cancelActiveIdleNudge, cancelAutoReset, cancelIdleNudge, composerPlaceholder, consolidating, fleeActive, reportActivity, resetIdleNudge, scheduleAutoReset, scheduleIdleNudge, setCancelActiveIdleNudge, setConsolidating, showConsolidatingBubble, startFleeLock, syncConsolidationStatus } from './app/consolidation.js?v=5';
+import { chatInput, debugSystemPromptEl, devNoIdleChk, messagesEl, messagesEmpty, missingParamsEl, mobileConversationTitle, modelSelect, narrowSidebarQuery, reasoningSelect, sendBtn, sendButtonIdleMarkup, sendButtonStopMarkup, siteVolumeInput, stageEl, thinkChk } from './app/dom.js?v=5';
+import { announceMobileReply, faceBubble, hideFaceBubble, latestAssistantReply, restartFaceBubbleHide, scheduleFaceBubbleHide, scheduleFaceBubblePosition, setLatestAssistantReply, showFaceBubble } from './app/face-bubble.js?v=5';
+import { appendRaw, logAction, logMissing, logToolStatus, setStageStatus } from './app/logging.js?v=5';
+import { loadMood } from './app/mood.js?v=5';
+import { applyProviderCapabilities, applyRoleGates, setSiteVolume, syncThinkToggle, updateSiteVolumeLabel, wireNameSettings } from './app/settings.js?v=5';
+import { loadConversation, refreshSidebar, setSidebarOpen } from './app/sidebar.js?v=5';
+import { makeNameFilter, makeStreamBuffer } from './app/stream-filters.js?v=5';
+import { escapeHtml, localTimeString, phoneMode } from './app/util.js?v=5';
+import { wireTts } from './app/wire-tts.js?v=5';
+import { wireVoice } from './app/wire-voice.js?v=5';
+import { WELCOME_TIERS, fetchWelcome, playWelcome, previewWelcome } from './app/welcome.js?v=5';
 
 export const messages = [];
 export let abortFn = null;
@@ -207,7 +207,7 @@ export function sendMessage() {
   reportActivity();
   chatInput.value = '';
   appendMsg('user', text);
-  messages.push({ role: 'user', content: text });
+  messages.push({ role: 'user', content: window.Names ? Names.canonicalize(text) : text });
   runChat({ idle: false });
 }
 
@@ -431,7 +431,7 @@ export function runChat({ idle, ephemeral, audio, onAudioUnsupported }) {
         shown = '';
         typing.remove();
         draft.className = 'msg silence';
-        draft.textContent = 'Jun says nothing.';
+        draft.textContent = (window.Names ? Names.getBot() : 'Jun') + ' says nothing.';
       },
       onFled: (info) => {
         if (!isCurrent()) return;
@@ -635,7 +635,7 @@ function showBoot() {
     ['vendor/pixi.min.js', 'vendor/live2dcubismcore.min.js',
      'vendor/marked.min.js', 'vendor/purify.min.js?v=3',
      'js/actions.js?v=3', 'js/outfit.js?v=8', 'js/touch.js?v=3',
-     'js/mods.js?v=3', 'js/tts.js?v=3', 'js/voice.js?v=3',
+     'js/mods.js?v=3', 'js/tts.js?v=3', 'js/voice.js?v=5',
      'js/voicemode.js?v=3', 'js/trip-loader.js?v=3',
      ...(currentUser?.role === 'admin' ? ['js/devhud.js?v=3'] : []),
      'js/wardrobe-open-lines.js?v=3', 'js/wardrobe-reactions.js?v=3',
@@ -680,7 +680,7 @@ function showBoot() {
 
   // fill in the synced preferences BEFORE any module reads its local keys
   if (window.Prefs) await Prefs.pullFromServer();
-  if (window.Names) Names.load();
+  if (window.Names) { Names.load(); Names.decorate(); }
   wireNameSettings();
 
   const storedVolume = parseFloat(localStorage.getItem('audio.volume') || '1');
@@ -844,11 +844,12 @@ function showBoot() {
 
   async function waitForProvider() {
     let attempt = 0;
+    const bot = window.Names ? Names.getBot() : 'Jun';
     const phases = [
       'Waking the model',
-      'Brewing Coffee for Anon',
-      'Recharging Jun',
-      'Jun is taking its time',
+      'Brewing Coffee for ' + (window.Names ? Names.getPlayer() : 'Anon'),
+      'Recharging ' + bot,
+      bot + ' is taking its time',
     ];
     for (;;) {
       attempt++;
@@ -860,7 +861,7 @@ function showBoot() {
           : 'No models installed yet - `ollama pull <model>`', 'err');
       } catch (e) {
         const phase = phases[Math.min(attempt - 1, phases.length - 1)];
-        setBoot(phase, 'Jun is still sleeping - retrying…', 'err');
+        setBoot(phase, bot + ' is still sleeping - retrying…', 'err');
       }
       await new Promise(r => setTimeout(r, Math.min(1000 + attempt * 250, 3000)));
     }

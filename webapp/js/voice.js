@@ -125,7 +125,8 @@ window.Voice = (function () {
     const settings = (stream.getAudioTracks()[0] || {}).getSettings
       ? stream.getAudioTracks()[0].getSettings() : {};
     if (settings.echoCancellation !== true) {
-      onLog('warn', 'Mic echo cancellation unavailable - use headphones, or Jun may interrupt herself.');
+      onLog('warn', 'Mic echo cancellation unavailable - use headphones, or '
+        + (window.Names ? Names.getBot() : 'Jun') + ' may interrupt herself.');
     }
 
     micCtx = new AudioContext({ sampleRate: SAMPLE_RATE, latencyHint: 'interactive' });

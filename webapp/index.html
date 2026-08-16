@@ -610,13 +610,13 @@ html[data-pre-auth] #app { visibility: hidden; }
 <script defer src="js/loader.js?v=2"></script>
 <script defer src="js/auth.js?v=3"></script>
 <script defer src="js/prefs.js?v=3"></script>
-<script defer src="js/names.js?v=2"></script>
+<script defer src="js/names.js?v=4"></script>
 <script defer src="js/chat-api.js?v=2"></script>
 <script defer src="js/ui.js?v=3"></script>
 <script defer src="js/history.js?v=2"></script>
 <script defer src="js/boot-fx.js?v=2"></script>
 <script defer src="js/memory-graph.js?v=2"></script>
-<script type="module" src="js/app.js?v=4"></script>
+<script type="module" src="js/app.js?v=5"></script>
 </head>
 <body>
 
@@ -792,16 +792,16 @@ html[data-pre-auth] #app { visibility: hidden; }
         <div class="set-row">
           <div class="set-row-text">
             <div class="set-row-title">Your name</div>
-            <div class="set-row-desc">What Jun calls you. Leave blank for the default (Anon).</div>
+            <div class="set-row-desc">What Jun calls you. <span data-no-rename>Leave blank for the default (Anon).</span></div>
           </div>
-          <div class="set-row-control"><input type="text" id="playerNameInput" maxlength="32" placeholder="Anon" autocomplete="off" aria-label="Your name"></div>
+          <div class="set-row-control"><input type="text" id="playerNameInput" data-no-rename maxlength="32" placeholder="Anon" autocomplete="off" aria-label="Your name"></div>
         </div>
         <div class="set-row">
           <div class="set-row-text">
             <div class="set-row-title">Companion name</div>
-            <div class="set-row-desc">What you call her. Leave blank for the default (Jun).</div>
+            <div class="set-row-desc">What you call her. <span data-no-rename>Leave blank for the default (Jun).</span></div>
           </div>
-          <div class="set-row-control"><input type="text" id="botNameInput" maxlength="32" placeholder="Jun" autocomplete="off" aria-label="Companion name"></div>
+          <div class="set-row-control"><input type="text" id="botNameInput" data-no-rename maxlength="32" placeholder="Jun" autocomplete="off" aria-label="Companion name"></div>
         </div>
         <div class="set-row">
           <div class="set-row-text">

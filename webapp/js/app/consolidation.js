@@ -1,8 +1,8 @@
-import { abortFn, currentConversationId, runChat } from '../app.js?v=4';
-import { chatInput, consolidationBanner, consolidationSub, consolidationTitle, devNoIdleChk, fleeEtaEl, fleeOverlay, fleeReasonEl, sendBtn, voiceChk } from './dom.js?v=4';
-import { showFaceBubble } from './face-bubble.js?v=4';
-import { logAction } from './logging.js?v=4';
-import { escapeHtml, formatElapsed } from './util.js?v=4';
+import { abortFn, currentConversationId, runChat } from '../app.js?v=5';
+import { chatInput, consolidationBanner, consolidationSub, consolidationTitle, devNoIdleChk, fleeEtaEl, fleeOverlay, fleeReasonEl, sendBtn, voiceChk } from './dom.js?v=5';
+import { showFaceBubble } from './face-bubble.js?v=5';
+import { logAction } from './logging.js?v=5';
+import { escapeHtml, formatElapsed } from './util.js?v=5';
 
 const BUSY_LINES = [
   "Hang on, ${p}, I'm defragging my SSD.",
@@ -103,9 +103,11 @@ export function fleeActive() { return fleeUntil > Date.now(); }
 
 function fleeCountdown() { return formatElapsed((fleeUntil - Date.now()) / 1000); }
 
+const botName = () => (window.Names ? Names.getBot() : 'Jun');
+
 export function composerPlaceholder() {
-  if (fleeActive()) return 'Jun walked out. Back in ' + fleeCountdown();
-  return consolidating ? 'Jun is busy with her memory…' : 'Write to Jun…';
+  if (fleeActive()) return botName() + ' walked out. Back in ' + fleeCountdown();
+  return consolidating ? botName() + ' is busy with her memory…' : 'Write to ' + botName() + '…';
 }
 
 function renderFleeOverlay() {
@@ -180,7 +182,7 @@ function renderConsolidationBanner() {
   const slow = elapsed >= CONSOLIDATION_SLOW_AFTER_S
     ? ' · runs on your local model, so it can take a few minutes'
     : '';
-  setConsolidationBanner('busy', 'Jun is tidying her memory', phase + ' · ' + formatElapsed(elapsed) + slow);
+  setConsolidationBanner('busy', botName() + ' is tidying her memory', phase + ' · ' + formatElapsed(elapsed) + slow);
 }
 
 function showConsolidationOutcome(last) {
@@ -189,14 +191,14 @@ function showConsolidationOutcome(last) {
     return;
   }
   if (last.status === 'ok') {
-    setConsolidationBanner('done', 'Jun is caught up', last.notes
+    setConsolidationBanner('done', botName() + ' is caught up', last.notes
       ? `She's keeping ${last.notes} note${last.notes === 1 ? '' : 's'} about you. Settings › Memory has the list.`
       : 'Nothing new this time that was worth writing down.');
   } else if (last.status === 'rejected') {
-    setConsolidationBanner('warn', "Jun couldn't finish tidying",
+    setConsolidationBanner('warn', botName() + " couldn't finish tidying",
       'What the model gave back did not look right, so she left her notes exactly as they were.');
   } else {
-    setConsolidationBanner('warn', "Jun couldn't finish tidying",
+    setConsolidationBanner('warn', botName() + " couldn't finish tidying",
       'Something broke partway through. Nothing was changed, she will try again after the next lull.');
   }
   if (consolidationOutcomeTimer) clearTimeout(consolidationOutcomeTimer);
