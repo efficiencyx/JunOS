@@ -1,6 +1,6 @@
-import { currentConversationTitle, setConversationTitle } from '../app.js?v=4';
-import { mobileConversationTitle, mobileReplyStatus, sidebarBackground, stageEl } from './dom.js?v=4';
-import { phoneMode, visualRect } from './util.js?v=4';
+import { currentConversationTitle, setConversationTitle } from '../app.js?v=5';
+import { mobileConversationTitle, mobileReplyStatus, sidebarBackground, stageEl } from './dom.js?v=5';
+import { phoneMode, visualRect } from './util.js?v=5';
 
 export let latestAssistantReply = '';
 export const faceBubble = (() => {
@@ -8,7 +8,7 @@ export const faceBubble = (() => {
   el.className = 'face-bubble';
   el.tabIndex = 0;
   el.setAttribute('role', 'region');
-  el.setAttribute('aria-label', 'Jun reply');
+  el.setAttribute('aria-label', (window.Names ? Names.getBot() : 'Jun') + ' reply');
   el.hidden = true;
   document.body.appendChild(el);
   return el;

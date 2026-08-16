@@ -24,6 +24,7 @@
     if (layoutChanged) syncOrientation();
   });
   TripLoader.mount();
+  if (window.Names) { Names.load(); Names.decorate(); }
 
   try {
     await Live2D.init({
@@ -38,9 +39,10 @@
     Outfit.applyAll();
     Live2D.startIdle();
     await Outfit.openWardrobe();
+    const bot = window.Names ? Names.getBot() : 'Jun';
     status.textContent = coarsePointer.matches
-      ? 'Hold an item, then drag it onto Jun to dress her'
-      : 'Shift+wheel to zoom · drag items onto Jun to dress her';
+      ? `Hold an item, then drag it onto ${bot} to dress her`
+      : `Shift+wheel to zoom · drag items onto ${bot} to dress her`;
     TripLoader.setStage("Welcome to Annalie's");
     await TripLoader.finish();
   } catch (e) {
