@@ -312,6 +312,8 @@ window.Mods = (function () {
     ctx.globalCompositeOperation = 'source-over';
   }
 
+  const ATTACH_DRAWABLE = /^Attach/i;
+
   function itemDrawables(mod, item) {
     const valid = new Set(Live2D.findDrawables ? Live2D.findDrawables([''], []) : []);
     const out = [];
@@ -339,7 +341,13 @@ window.Mods = (function () {
             // "don't scale me by the character's colour". an accessory sets
             // it and keeps its own colour, body art leaves it off and follows
             // her skin. defaults off because that's the serialized default.
-            bypassColorScaler: !!(pd.BypassColorScaler ?? pd.bypassColorScaler),
+            // NOT on the Attach* drawables though. those are her arms and legs
+            // and nothing else, and replacement limbs ship neutral grey art -
+            // Seamless Components sets bypass on all 29 of them, so honouring
+            // it left her with grey arms next to a coloured body. she owns
+            // that colour, a mod doesn't get to opt out of it there.
+            bypassColorScaler: !ATTACH_DRAWABLE.test(id)
+              && !!(pd.BypassColorScaler ?? pd.bypassColorScaler),
           });
         }
       }
