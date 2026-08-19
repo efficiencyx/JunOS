@@ -422,7 +422,11 @@ window.Mods = (function () {
     // DontIncludeVanillaLayers and shipping a 1x1 transparent texture, like
     // Seamless Components' barcode. an erase that only covers the art the mod
     // ships would leave that one sitting there.
-    return { url: c.toDataURL(), overlay: !replacesVanilla, straightAlpha: true };
+    // the canvas goes to the compositor AS a canvas. this used to be a
+    // toDataURL() and the compositor turned it straight back into an Image,
+    // so every equip paid a full PNG encode plus decode per drawable. on a
+    // mod that touches all 29 Attach* limbs that alone was seconds.
+    return { img: c, overlay: !replacesVanilla, straightAlpha: true };
   }
 
   let mods = [];
@@ -493,12 +497,23 @@ window.Mods = (function () {
     return applyAll();
   }
 
-  // baking one drawable is a pile of synchronous canvas work (crop, tint,
-  // toDataURL) and the atlas recomposite after it is worse. it all runs on
-  // the thread that draws her, so an equip done in one go stops the model
-  // dead for most of a second. hand the frame back between drawables and she
-  // keeps blinking while the item lands.
+  // baking a drawable is a pile of synchronous canvas work and the atlas
+  // recomposite after it is worse. it all runs on the thread that draws her,
+  // so a whole equip done in one go stops the model dead. hand the frame back
+  // between bakes and she keeps blinking while the item lands.
   const nextFrame = () => new Promise(r => requestAnimationFrame(() => r()));
+
+  // every pass rebuilds the whole worn set from scratch, so taking one item
+  // off used to re-bake every drawable of everything still on. baked canvases
+  // are kept by what went into them and only the changed ones get redrawn.
+  // the map is replaced each pass with just the hits, that's the eviction.
+  let bakeCache = new Map();
+
+  function bakeKey(entries, colorsFor, tint) {
+    return entries.map(e => [e.url, e.r.x, e.r.y, e.r.w, e.r.h, e.layer, e.colorIndex,
+      e.dontIncludeVanilla ? 1 : 0, e.bypassColorScaler ? 1 : 0, colorsFor(e) || ''].join()).join(';')
+      + '|' + (tint || '');
+  }
 
   let applyRunning = null;
   let applyQueued = null;
@@ -538,22 +553,31 @@ window.Mods = (function () {
     for (const id of [...heldTint.keys()]) {
       if (!byDrawable.has(id)) releaseTint(id);
     }
+    const fresh = new Map();
     for (const [id, entries] of byDrawable) {
-      await nextFrame();
       // only worth taking the uniform over when something actually opts out
       // of it AND there's a colour on the drawable to take over
       const tint = entries.some(e => e.bypassColorScaler) ? hostTintFor(id) : null;
       // ColorIndex points into the owning ITEM's ColorSlots list
-      try {
-        map[id] = await bakeDrawable(entries,
-          (e) => ((modState(e.mod.guid).colors || {})[e.itemIndex] || [])[e.colorIndex] || null,
-          tint);
-      } catch (e) {
-        console.warn('mod bake failed', id, e);
-        delete map[id];
-        releaseTint(id);
-        continue;
+      const colorsFor = (e) => ((modState(e.mod.guid).colors || {})[e.itemIndex] || [])[e.colorIndex] || null;
+      const key = bakeKey(entries, colorsFor, tint);
+      let baked = bakeCache.get(key);
+      if (!baked) {
+        // only the drawables we actually redraw cost anything, so this is
+        // where the frame goes back to the renderer
+        await nextFrame();
+        try {
+          baked = await bakeDrawable(entries, colorsFor, tint);
+          baked.key = key;
+        } catch (e) {
+          console.warn('mod bake failed', id, e);
+          delete map[id];
+          releaseTint(id);
+          continue;
+        }
       }
+      map[id] = baked;
+      fresh.set(key, baked);
       if (tint) {
         map[id].baseTint = tint;
         if (!heldTint.has(id)) {
@@ -564,6 +588,7 @@ window.Mods = (function () {
         releaseTint(id);
       }
     }
+    bakeCache = fresh;
     appliedIds = new Set(byDrawable.keys());
     await Live2D.setDrawableTextures(map);
   }

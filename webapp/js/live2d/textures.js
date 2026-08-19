@@ -288,7 +288,7 @@ export function setDrawableTextures(map) {
 async function _setDrawableTexture(drawableId, url, overlay) {
   const r = _uvRect.get(drawableId);
   if (!r) return;
-  if (url) _texOverride.set(drawableId, { url, img: await _loadImg(url), overlay: !!overlay, alphaClip: false, fullClear: false });
+  if (url) _texOverride.set(drawableId, { key: url, img: await _loadImg(url), overlay: !!overlay, alphaClip: false, fullClear: false });
   else _texOverride.delete(drawableId);
   recompositeTexture(r.tex);
 }
@@ -298,7 +298,12 @@ async function _setDrawableTextures(map) {
   await Promise.all(Object.entries(map).map(async ([id, val]) => {
     const r = _uvRect.get(id);
     if (!r) return;
-    const url = val && typeof val === 'object' ? val.url : val;
+    const url = val && typeof val === 'object' ? (val.url || null) : val;
+    // mods hand us the baked canvas directly plus a key describing what went
+    // into it. going through a data url instead meant a PNG encode on their
+    // side and a decode on ours, per drawable, for nothing.
+    const img0 = val && typeof val === 'object' ? (val.img || null) : null;
+    const key = (val && typeof val === 'object' && val.key) || url;
     const overlay = val && typeof val === 'object' ? !!val.overlay : false;
     const alphaClip = val && typeof val === 'object' ? !!val.alphaClip : false;
     const fullClear = val && typeof val === 'object' ? !!val.fullClear : false;
@@ -306,16 +311,18 @@ async function _setDrawableTextures(map) {
     const straightAlpha = val && typeof val === 'object' ? !!val.straightAlpha : false;
     // don't ship a 4k atlas up again when the outfit update changed nothing
     const prev = _texOverride.get(id);
-    if (url) {
-      if (prev && prev.url === url && prev.overlay === overlay &&
+    if (url || img0) {
+      if (prev && prev.key === key && prev.overlay === overlay &&
           prev.alphaClip === alphaClip && prev.fullClear === fullClear &&
           prev.baseTint === baseTint && prev.straightAlpha === straightAlpha) return;
       // one bad image must NOT kill the whole batch, the other overrides
       // still have to land and get drawn
-      let img;
-      try { img = await _loadImg(url); }
-      catch (e) { console.warn('texture load failed', id, url, e); return; }
-      _texOverride.set(id, { url, img, overlay, alphaClip, fullClear, baseTint, straightAlpha });
+      let img = img0;
+      if (!img) {
+        try { img = await _loadImg(url); }
+        catch (e) { console.warn('texture load failed', id, url, e); return; }
+      }
+      _texOverride.set(id, { key, img, overlay, alphaClip, fullClear, baseTint, straightAlpha });
     } else {
       if (!prev) return;
       _texOverride.delete(id);
