@@ -1,5 +1,5 @@
-import { app, markDirty, model } from '../live2d.js?v=7';
-import { S } from './state.js?v=7';
+import { app, markDirty, model } from '../live2d.js?v=8';
+import { S } from './state.js?v=8';
 
 const CAMERA_STORAGE_KEY = 'l2d.camera';
 const CAMERA_STORAGE_VERSION = 2;
