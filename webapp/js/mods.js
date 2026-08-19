@@ -319,6 +319,12 @@ window.Mods = (function () {
   }
 
   const ATTACH_DRAWABLE = /^Attach/i;
+  const LIMB_KEY = 'omega.mods.limbcolor.v1';
+  // on = her arms and legs take her skin colour no matter what the mod says.
+  // off hands the Attach* drawables back to the mod's own BypassColorScaler,
+  // which is what a limb mod that ships REAL colours (tattoos, a prosthetic)
+  // wants. lives in the skin swatch in the wardrobe.
+  let limbsFollowSkin = localStorage.getItem(LIMB_KEY) !== '0';
 
   // parsing an item's texture jsons is pure work on immutable data, and a
   // pass does it for every worn item on top of the one you just clicked.
@@ -354,12 +360,12 @@ window.Mods = (function () {
             // "don't scale me by the character's colour". an accessory sets
             // it and keeps its own colour, body art leaves it off and follows
             // her skin. defaults off because that's the serialized default.
-            // NOT on the Attach* drawables though. those are her arms and legs
-            // and nothing else, and replacement limbs ship neutral grey art -
-            // Seamless Components sets bypass on all 29 of them, so honouring
-            // it left her with grey arms next to a coloured body. she owns
-            // that colour, a mod doesn't get to opt out of it there.
-            bypassColorScaler: !ATTACH_DRAWABLE.test(id)
+            // NOT on the Attach* drawables while limbsFollowSkin is on. those
+            // are her arms and legs and nothing else, and replacement limbs
+            // ship neutral grey art - Seamless Components sets bypass on all
+            // 29 of them, so honouring it left her with grey arms next to a
+            // coloured body.
+            bypassColorScaler: !(limbsFollowSkin && ATTACH_DRAWABLE.test(id))
               && !!(pd.BypassColorScaler ?? pd.bypassColorScaler),
           });
         }
@@ -824,6 +830,15 @@ window.Mods = (function () {
     }
   }
 
+  function getLimbsFollowSkin() { return limbsFollowSkin; }
+
+  function setLimbsFollowSkin(on) {
+    limbsFollowSkin = !!on;
+    try { localStorage.setItem(LIMB_KEY, limbsFollowSkin ? '1' : '0'); } catch (e) { }
+    applyAll();
+  }
+
   return { applyAll, refreshTints, describe, buildWardrobeSection, importZip, removeMod,
+    getLimbsFollowSkin, setLimbsFollowSkin,
     owns: (id) => appliedIds.has(id) };
 })();
