@@ -574,8 +574,8 @@ window.Outfit = (function () {
     if (Live2D.opacityByPattern) Live2D.opacityByPattern(ALWAYS_HIDDEN, [], 0);
     applyItems();
     applyVariants();
+    // applyColors ends by re-running Mods, which has to see the fresh tints
     applyColors();
-    if (window.Mods) Mods.applyAll();
   }
 
   // only redraw the slot that changed. sending an atlas to the GPU is slow.
@@ -662,6 +662,11 @@ window.Outfit = (function () {
     // glasses sit in the same slot and must NOT get tinted like skin.
     if ((variantState.glasses_style || 0) > 0) Live2D.setDrawableTint('ModdableFace', null);
     applyGlassesTexture();
+    // a mod holding one of these drawables took its tint off the shader and
+    // bakes it in itself, so it has to re-read whatever we just set. every
+    // path that recolors her comes through here, which is why the call lives
+    // here and not in applyAll.
+    if (window.Mods) Mods.refreshTints();
   }
 
   // lens/frame colors can't be drawable tints, the glasses composite into one

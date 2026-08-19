@@ -9,7 +9,6 @@ window.Mods = (function () {
   const ZIP_MAX_ENTRIES = 2048;
   const ZIP_MAX_ENTRY_BYTES = 128 * 1024 * 1024;
   const ZIP_MAX_TOTAL_BYTES = 512 * 1024 * 1024;
-  const ZIP_MAX_RATIO = 200;
 
   function zipPath(name) {
     if (!name || name.length > 512 || name.includes('\\') || name.includes('\0') || name.startsWith('/')) {
@@ -87,9 +86,11 @@ window.Mods = (function () {
       if (names.has(name)) throw new Error('Duplicate path in mod archive');
       names.add(name);
       if (method !== 0 && method !== 8) throw new Error('Unsupported compression in mod archive');
-      if (usize > ZIP_MAX_ENTRY_BYTES || (usize > 1024 * 1024 && usize > Math.max(1, csize) * ZIP_MAX_RATIO)) {
-        throw new Error('Expanded mod file is too large');
-      }
+      // no compression-ratio guard here. a flat-colour png atlas or a big
+      // json legitimately does 500:1 and we were rejecting real mods for it.
+      // the bomb is already capped by ENTRY_BYTES + TOTAL_BYTES below, and
+      // inflateEntry stops the moment output passes the declared usize.
+      if (usize > ZIP_MAX_ENTRY_BYTES) throw new Error('Expanded mod file is too large');
       totalSize += usize;
       if (totalSize > ZIP_MAX_TOTAL_BYTES) throw new Error('Expanded mod archive is too large');
       if (lho + 30 > buf.byteLength || dv.getUint32(lho, true) !== 0x04034b50) {
@@ -173,8 +174,20 @@ window.Mods = (function () {
       }
       pf(m[1]).slots = slots;
     }
+    // three spellings of "which slot does this go in", all in the wild.
+    // PossibleEquipmentSlots is the old one. the exporter writes SlotData now,
+    // either inline or as a closure when the item also declares required
+    // slots. miss it and same-slot items stop being mutually exclusive, so you
+    // end up wearing both variants of a thing at once.
     for (const m of src.matchAll(/(\w+)\s*\.\s*PossibleEquipmentSlots\s*=\s*\{\s*'([^']*)'/g)) {
       pf(m[1]).equip = m[2];
+    }
+    for (const m of src.matchAll(/(\w+)\s*\.\s*SlotData\s*=\s*SlotEquipData\.CreateInstance\(\s*'([^']*)'/g)) {
+      pf(m[1]).equip = m[2];
+    }
+    for (const m of src.matchAll(/(\w+)\s*\.\s*SlotData\s*=\s*\(function\(\)([\s\S]*?)end\)\(\)/g)) {
+      const slot = m[2].match(/TargetSlotString\s*=\s*'([^']*)'/);
+      if (slot) pf(m[1]).equip = slot[1];
     }
     // local X = ModUtilities.GetPackedTexture(guid, '/Folder/file.json') then
     // prefab.AddTexture(X). first bit of the path is the item's folder.
@@ -323,6 +336,10 @@ window.Mods = (function () {
             // it's set the default "vanilla" art is NOT drawn under the mod
             // layers, even if the mod has no layer-0 texture at all.
             dontIncludeVanilla: !!(pt.DontIncludeVanillaLayers ?? pt.dontIncludeVanillaLayers),
+            // "don't scale me by the character's colour". an accessory sets
+            // it and keeps its own colour, body art leaves it off and follows
+            // her skin. defaults off because that's the serialized default.
+            bypassColorScaler: !!(pd.BypassColorScaler ?? pd.bypassColorScaler),
           });
         }
       }
@@ -333,12 +350,17 @@ window.Mods = (function () {
   // bake every worn mod entry for one drawable into a single canvas crop.
   // the compositor only takes ONE override per drawable, so the layers get
   // merged here.
-  async function bakeDrawable(entries, colorsFor) {
+  async function bakeDrawable(entries, colorsFor, hostTint) {
     entries.sort((a, b) => a.layer - b.layer);
-    // vanilla art stays underneath unless a layer-0 texture replaces it, or
-    // the container says no vanilla layers. same as Part.AddVanilla in the
-    // game.
-    const hasBase = entries.some(e => e.layer === 0) || entries.some(e => e.dontIncludeVanilla);
+    // vanilla art stays underneath unless the container says no vanilla
+    // layers. same as Part.AddVanilla in the game.
+    // we used to also treat a layer-0 texture as "replaces vanilla". THIS IS
+    // A LIE. layer is just the z index inside the part and 0 is the common
+    // one: 100 of the 160 vanilla items in variants/game_items.json ship a
+    // layer-0 section, TailFluffy_common among them, on the same TailMain
+    // rect a modded tail uses. so that rule erased her tail the moment you
+    // equipped a mod tail, and ate the panties under a maebari.
+    const replacesVanilla = entries.some(e => e.dontIncludeVanilla);
     let W = 0, H = 0;
     const imgs = [];
     for (const e of entries) {
@@ -356,8 +378,16 @@ window.Mods = (function () {
       // Components by holding the crops next to the vanilla atlas art.
       // canvas crops from the top. so flip it.
       const sy = img.naturalHeight - e.r.y - e.r.h;
-      const hex = e.colorIndex >= 0 ? colorsFor(e) : null;
-      if (!hex) {
+      const tints = [];
+      if (e.colorIndex >= 0) {
+        const hex = colorsFor(e);
+        if (hex) tints.push(hex);
+      }
+      // hostTint is the outfit colour this drawable normally gets from the
+      // shader. we took that uniform away (see applyAll), so the layers that
+      // DO want it have to get it here.
+      if (hostTint && !e.bypassColorScaler) tints.push(hostTint);
+      if (!tints.length) {
         ctx.drawImage(img, e.r.x, sy, e.r.w, e.r.h, 0, 0, W, H);
         return;
       }
@@ -368,7 +398,7 @@ window.Mods = (function () {
       a.width = W; a.height = H;
       a.getContext('2d').drawImage(t, 0, 0);
       t._alphaSrc = a;
-      tintCanvas(t, hex);
+      for (const hex of tints) tintCanvas(t, hex);
       ctx.drawImage(t, 0, 0);
     });
     // the atlas goes up as PREMULTIPLIED alpha (colour already faded by its
@@ -387,10 +417,11 @@ window.Mods = (function () {
     }
     ctx.putImageData(px, 0, 0);
     // a replacement has to clear the WHOLE drawable. the compositor clips to
-    // the mesh so the neighbours are safe, and mods delete decals by shipping
-    // a 1x1 transparent layer-0 texture, like Seamless Components' barcode.
-    // an erase that only covers the art would leave that one sitting there.
-    return { url: c.toDataURL(), overlay: !hasBase };
+    // the mesh so the neighbours are safe, and mods delete decals by setting
+    // DontIncludeVanillaLayers and shipping a 1x1 transparent texture, like
+    // Seamless Components' barcode. an erase that only covers the art the mod
+    // ships would leave that one sitting there.
+    return { url: c.toDataURL(), overlay: !replacesVanilla };
   }
 
   let mods = [];
@@ -421,6 +452,46 @@ window.Mods = (function () {
     return readyPromise;
   }
 
+  // the outfit colour of every drawable we took the shader tint away from, so
+  // we can hand it back when the item comes off. the uniform itself is null
+  // while we hold it, so it can't be read back.
+  const heldTint = new Map();
+
+  const rgbToHex = (rgb) => '#' + rgb
+    .map(v => Math.round(Math.max(0, Math.min(1, v)) * 255).toString(16).padStart(2, '0'))
+    .join('');
+
+  // her skin, hair and tail colours are ONE multiply uniform per drawable, so
+  // anything we bake into that drawable's atlas patch gets multiplied too - a
+  // white latex bowtie on SkinBodyFront came out skin coloured, bunny ears on
+  // ModdableHairFront came out hair coloured. can't exclude pixels from a
+  // uniform, so we take it off the drawable and re-apply it ourselves, to the
+  // vanilla art (see baseTint in textures.js) and to the mod layers that
+  // asked for it. the ones with BypassColorScaler keep their own colour.
+  function hostTintFor(id) {
+    if (heldTint.has(id)) return heldTint.get(id);
+    const rgb = Live2D.getDrawableTint ? Live2D.getDrawableTint(id) : null;
+    return rgb ? rgbToHex(rgb) : null;
+  }
+
+  function releaseTint(id) {
+    if (!heldTint.has(id)) return;
+    const hex = heldTint.get(id);
+    heldTint.delete(id);
+    if (Live2D.setDrawableTint) Live2D.setDrawableTint(id, hexToRgb01(hex));
+  }
+
+  function hexToRgb01(hex) {
+    const m = /^#?([0-9a-f]{2})([0-9a-f]{2})([0-9a-f]{2})$/i.exec(hex || '');
+    return m ? [parseInt(m[1], 16) / 255, parseInt(m[2], 16) / 255, parseInt(m[3], 16) / 255] : null;
+  }
+
+  // outfit just re-tinted the model, so every colour we remembered is stale.
+  function refreshTints() {
+    heldTint.clear();
+    return applyAll();
+  }
+
   async function applyAll() {
     if (!window.Live2D || !Live2D.setDrawableTextures) return;
     await ensureLoaded();
@@ -437,14 +508,32 @@ window.Mods = (function () {
     const map = {};
     // null clears overrides that vanished from this pass
     for (const id of appliedIds) map[id] = null;
+    for (const id of [...heldTint.keys()]) {
+      if (!byDrawable.has(id)) releaseTint(id);
+    }
     for (const [id, entries] of byDrawable) {
+      // only worth taking the uniform over when something actually opts out
+      // of it AND there's a colour on the drawable to take over
+      const tint = entries.some(e => e.bypassColorScaler) ? hostTintFor(id) : null;
       // ColorIndex points into the owning ITEM's ColorSlots list
       try {
         map[id] = await bakeDrawable(entries,
-          (e) => ((modState(e.mod.guid).colors || {})[e.itemIndex] || [])[e.colorIndex] || null);
+          (e) => ((modState(e.mod.guid).colors || {})[e.itemIndex] || [])[e.colorIndex] || null,
+          tint);
       } catch (e) {
         console.warn('mod bake failed', id, e);
         delete map[id];
+        releaseTint(id);
+        continue;
+      }
+      if (tint) {
+        map[id].baseTint = tint;
+        if (!heldTint.has(id)) {
+          heldTint.set(id, tint);
+          if (Live2D.setDrawableTint) Live2D.setDrawableTint(id, null);
+        }
+      } else {
+        releaseTint(id);
       }
     }
     appliedIds = new Set(byDrawable.keys());
@@ -528,12 +617,46 @@ window.Mods = (function () {
 
   let uiBody = null;
 
+  // cut a canvas down to the pixels that aren't transparent. null when there
+  // are none.
+  function trimTransparent(c) {
+    const ctx = c.getContext('2d');
+    const d = ctx.getImageData(0, 0, c.width, c.height).data;
+    let x0 = c.width, y0 = c.height, x1 = -1, y1 = -1;
+    for (let y = 0; y < c.height; y++) {
+      for (let x = 0; x < c.width; x++) {
+        if (d[(y * c.width + x) * 4 + 3] < 8) continue;
+        if (x < x0) x0 = x;
+        if (x > x1) x1 = x;
+        if (y < y0) y0 = y;
+        if (y > y1) y1 = y;
+      }
+    }
+    if (x1 < 0) return null;
+    const t = document.createElement('canvas');
+    t.width = x1 - x0 + 1; t.height = y1 - y0 + 1;
+    t.getContext('2d').drawImage(c, x0, y0, t.width, t.height, 0, 0, t.width, t.height);
+    return t;
+  }
+
+  // the crop is the whole DRAWABLE, not the item, so a bowtie came out as a
+  // 598x1070 torso-shaped hole with a 40px bow in the corner. and the biggest
+  // rect is often the emptiest one (the right cuff's is AttachArmRHandUp2,
+  // which that layer doesn't paint at all), which is how two tiles ended up
+  // fully blank. so trim to the art and skip whatever trims to nothing.
   async function itemThumbUrl(mod, item) {
-    const entries = itemDrawables(mod, item).map(e => ({ ...e, url: fileUrl(mod, e.tex) }));
-    if (!entries.length) return null;
+    const entries = itemDrawables(mod, item);
     entries.sort((a, b) => b.r.w * b.r.h - a.r.w * a.r.h);
-    const baked = await bakeDrawable([entries[0]], () => null);
-    return baked.url;
+    for (const e of entries) {
+      const img = await loadImg(fileUrl(mod, e.tex));
+      const c = document.createElement('canvas');
+      c.width = e.r.w; c.height = e.r.h;
+      c.getContext('2d').drawImage(img, e.r.x, img.naturalHeight - e.r.y - e.r.h, e.r.w, e.r.h,
+        0, 0, e.r.w, e.r.h);
+      const t = trimTransparent(c);
+      if (t) return t.toDataURL();
+    }
+    return null;
   }
 
   function buildWardrobeSection(body) {
@@ -623,6 +746,6 @@ window.Mods = (function () {
     }
   }
 
-  return { applyAll, describe, buildWardrobeSection, importZip, removeMod,
+  return { applyAll, refreshTints, describe, buildWardrobeSection, importZip, removeMod,
     owns: (id) => appliedIds.has(id) };
 })();
