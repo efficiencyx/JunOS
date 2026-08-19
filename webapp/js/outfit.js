@@ -72,12 +72,6 @@ window.Outfit = (function () {
       textures: { H3_Front: { url: 'assets/variants/hair/hime/H3_Front.png', overlay: true } } },
     { key: 'hair_h4', label: 'Ponytail', section: 'hair', defaultOn: false,
       visibilityPatterns: ['h4_'], visOn: 1, visOff: 0 },
-    // v0.97.5 clip for the default hair, swaps H0's front bang for the pinned
-    // one. must stay AFTER hair_h0, its 'h0_' sweep would show both.
-    { key: 'hair_clip', label: 'Hair clip', section: 'hair', defaultOn: false,
-      requires: 'hair_h0', hideWhenOn: ['h0_front_bang'],
-      colorPatterns: ['hairclip'],
-      visibilityPatterns: ['h0_frontclippedup'], visOn: 1, visOff: 0 },
   ];
 
   const COLOR_GROUPS = [
@@ -93,9 +87,11 @@ window.Outfit = (function () {
       excludes: ['hairband','hairpin','hairtie','hairclip','hairbow','hairhologram'] },
 
     // this small group has to come after the main hair to beat its tint
+    { key: 'hair_h0_strand', label: 'Strand', includes: ['h0_sidealt_strand'], excludes: [] },
     { key: 'hair_h1_strand', label: 'Strand', includes: ['h1_front_bang'], excludes: [] },
     { key: 'hair_h2_strand', label: 'Strand', includes: ['h2_front_bang'], excludes: [] },
     { key: 'hair_h3_strand', label: 'Strand', includes: ['h3_front'], excludes: [] },
+    { key: 'hair_clip', label: 'Hair clip', includes: ['hairclip'], excludes: [] },
 
     { key: 'hair_hologram', label: 'Hair hologram', includes: ['hairhologram'], excludes: [] },
 
@@ -121,6 +117,8 @@ window.Outfit = (function () {
     { key: 'glasses_frame', label: 'Glasses frame', includes: [], excludes: [] },
     { key: 'glasses_lens', label: 'Glasses lens', includes: [], excludes: [] },
 
+    { key: 'stockings_accent', label: 'Accent', includes: [], excludes: [] },
+
     ...ITEMS.filter(it => it.colorPatterns).map(it => ({
       key: it.key, label: it.label,
       includes: it.colorPatterns, excludes: it.colorExcludes || [],
@@ -135,11 +133,12 @@ window.Outfit = (function () {
 
   const ITEM_COLOR_GROUPS = {
     ...Object.fromEntries(ITEMS.filter(it => it.colorPatterns).map(it => [it.key, [it.key]])),
+    stockings: ['stockings', 'stockings_accent'],
     cat_ears: ['ear', 'ear_mid'],
     pointy_ears: ['ear'],
     tail: ['tail'],
     hair_hologram: ['hair_hologram'],
-    hair_h0: ['hair'],
+    hair_h0: ['hair', 'hair_h0_strand', 'hair_clip'],
     hair_h1: ['hair', 'hair_h1_strand'],
     hair_h2: ['hair', 'hair_h2_strand'],
     hair_h3: ['hair', 'hair_h3_strand'],
@@ -147,6 +146,7 @@ window.Outfit = (function () {
   };
 
   const ITEM_VARIANTS = {
+    hair_h0: ['hair_h0_style'],
     shirt: ['shirt_logo', 'sleeve_logo'],
     hoodie: ['hoodie_logo'],
     panties: ['panties_logo'],
@@ -276,6 +276,16 @@ window.Outfit = (function () {
 
   const VARIANTS = [
     {
+      key: 'hair_h0_style', label: 'Hair style',
+      drawables: ['H0_Front_Bang', 'H0_FrontClippedUp_Bang', 'H0_FrontClippedUp_HairClip'],
+      options: [
+        { name: 'Default', drawable: 'H0_Front_Bang',
+          show: ['H0_Front_Bang'], hide: ['H0_FrontClippedUp_Bang', 'H0_FrontClippedUp_HairClip'] },
+        { name: 'Hair clip', drawable: 'H0_FrontClippedUp_Bang',
+          show: ['H0_FrontClippedUp_Bang', 'H0_FrontClippedUp_HairClip'], hide: ['H0_Front_Bang'] },
+      ],
+    },
+    {
       key: 'arm_style', label: 'Arms',
       drawables: ARM_EXP_IDS,
       options: [
@@ -321,11 +331,11 @@ window.Outfit = (function () {
         { name: 'Default', textures: {} },
         { name: 'Knee-high', textures: { StockingL: 'assets/variants/kneehighSockL.png', StockingR: 'assets/variants/kneehighSockR.png' } },
         { name: 'Short', textures: { StockingL: 'assets/variants/shortSockL.png', StockingR: 'assets/variants/shortSockR.png' } },
-        { name: 'Two-striped', textures: { StockingL: { url: 'assets/variants/twostripedStockingL.png', overlay: true }, StockingR: { url: 'assets/variants/twostripedStockingR.png', overlay: true } } },
+        { name: 'Two-striped', colorMode: 'overlay', textures: { StockingL: { url: 'assets/variants/twostripedStockingL.png', overlay: true }, StockingR: { url: 'assets/variants/twostripedStockingR.png', overlay: true } } },
         { name: 'Long', textures: { StockingL: 'assets/variants/longSockL.png', StockingR: 'assets/variants/longSockR.png' } },
-        { name: 'Lingerie', textures: { StockingL: 'assets/variants/lingerieSockL.png', StockingR: 'assets/variants/lingerieSockR.png' } },
-        { name: 'Striped stockings', textures: { StockingL: { url: 'assets/variants/stripedStockingL.png', overlay: true }, StockingR: { url: 'assets/variants/stripedStockingR.png', overlay: true } } },
-        { name: 'Stirrups', textures: { StockingL: 'assets/variants/stirrupL.png', StockingR: 'assets/variants/stirrupR.png' } },
+        { name: 'Lingerie', colorMode: 'duotone', textures: { StockingL: 'assets/variants/lingerieSockL.png', StockingR: 'assets/variants/lingerieSockR.png' } },
+        { name: 'Striped stockings', colorMode: 'overlay', textures: { StockingL: { url: 'assets/variants/stripedStockingL.png', overlay: true }, StockingR: { url: 'assets/variants/stripedStockingR.png', overlay: true } } },
+        { name: 'Stirrups', colorMode: 'duotone', textures: { StockingL: 'assets/variants/stirrupL.png', StockingR: 'assets/variants/stirrupR.png' } },
       ],
     },
     {
@@ -453,7 +463,9 @@ window.Outfit = (function () {
     availableAssets = new Set(authorizedAssets);
     for (const it of ITEMS) if (typeof saved.items?.[it.key] === 'boolean') state[it.key] = saved.items[it.key];
     for (const v of VARIANTS) {
-      const value = saved.variants?.[v.key];
+      const legacy = v.key === 'hair_h0_style' && typeof saved.items?.hair_clip === 'boolean'
+        ? Number(saved.items.hair_clip) : undefined;
+      const value = saved.variants?.[v.key] ?? legacy;
       if (Number.isInteger(value) && value >= 0 && value < v.options.length) variantState[v.key] = value;
     }
   }
@@ -510,8 +522,11 @@ window.Outfit = (function () {
       if (raw) {
         const saved = JSON.parse(raw);
         for (const g of COLOR_GROUPS) {
-          if (typeof saved[g.key] === 'string' || saved[g.key] === null) {
-            colors[g.key] = saved[g.key];
+          const value = saved[g.key];
+          if (value === null) colors[g.key] = null;
+          else {
+            const normalized = normalizeHex(value);
+            if (normalized) colors[g.key] = normalized;
           }
         }
       }
@@ -556,7 +571,6 @@ window.Outfit = (function () {
 
   function applyItems(onlyItems) {
     const onlyKeys = onlyItems ? new Set(onlyItems) : null;
-    if (onlyKeys?.has('hair_clip')) onlyKeys.add('hair_h0');
     const textureMap = {};
     for (const it of ITEMS) {
       if (onlyKeys && !onlyKeys.has(it.key)) continue;
@@ -603,12 +617,17 @@ window.Outfit = (function () {
       const opt = v.options[variantState[v.key] || 0];
       const owners = VARIANT_OWNER[v.key];
       const worn = !owners || owners.some(key => state[key]);
-      const map = {};
-      for (const d of v.drawables) {
-        const texture = opt.textures ? opt.textures[d] || null : null;
-        map[d] = texture && textureAvailable(texture) ? texture : null;
+      if (v.key === 'sock_style' && stockingColorMode()) {
+        applyStockingTexture();
+      } else {
+        if (v.key === 'sock_style') stockingsJob++;
+        const map = {};
+        for (const d of v.drawables) {
+          const texture = opt.textures ? opt.textures[d] || null : null;
+          map[d] = texture && textureAvailable(texture) ? texture : null;
+        }
+        Live2D.setDrawableTextures(map);
       }
-      Live2D.setDrawableTextures(map);
       applyVariantVisibility(v);
     }
   }
@@ -626,7 +645,7 @@ window.Outfit = (function () {
       for (const d of o.hide || []) controlled.add(d);
     }
     for (const d of controlled) {
-      const op = worn && show.has(d) ? 1 : hide.has(d) ? 0 : null;
+      const op = owners && !worn ? 0 : show.has(d) ? 1 : hide.has(d) ? 0 : null;
       // null hands the drawable back to the rig, and the rig parks every
       // Moddable* slot at zero. a mod holding one needs it left on.
       if (op === null && window.Mods?.owns?.(d)) continue;
@@ -678,6 +697,7 @@ window.Outfit = (function () {
         Live2D.tintByPattern(g.includes, g.excludes, rgb);
       }
     }
+    if (stockingColorMode()) applyStockingTexture();
     // the face-mod slot only follows skin color while it holds face art.
     // glasses sit in the same slot and must NOT get tinted like skin.
     if ((variantState.glasses_style || 0) > 0) Live2D.setDrawableTint('ModdableFace', null);
@@ -697,13 +717,13 @@ window.Outfit = (function () {
     { base: 'glasses', layers: [['lens', 'glasses_lens'], ['highlight', null], ['frame', 'glasses_frame']] },
     { base: 'heartGlasses', layers: [['lens', 'glasses_lens'], ['frame', 'glasses_frame'], ['heart', 'glasses_frame'], ['highlight', null]] },
   ];
-  const glassesImgCache = {};
-  const glassesImg = (url) => glassesImgCache[url] || (glassesImgCache[url] = new Promise((resolve, reject) => {
+  const textureImgCache = {};
+  const textureImg = (url) => textureImgCache[url] || (textureImgCache[url] = new Promise((resolve, reject) => {
     const img = new Image();
     img.onload = () => resolve(img);
     img.onerror = reject;
     img.src = url;
-  }).catch((e) => { delete glassesImgCache[url]; throw e; }));
+  }).catch((e) => { delete textureImgCache[url]; throw e; }));
 
   function tintedLayer(img, hex) {
     if (!hex) return img;
@@ -719,6 +739,80 @@ window.Outfit = (function () {
     return c;
   }
 
+  function duotoneLayer(img, mainHex, accentHex) {
+    if (!accentHex) return tintedLayer(img, mainHex);
+    const main = hexToRgb01(mainHex || '#ffffff').map(value => value * 255);
+    const accent = hexToRgb01(accentHex).map(value => value * 255);
+    const c = document.createElement('canvas');
+    c.width = img.width; c.height = img.height;
+    const ctx = c.getContext('2d', { willReadFrequently: true });
+    ctx.drawImage(img, 0, 0);
+    const pixels = ctx.getImageData(0, 0, c.width, c.height);
+    const data = pixels.data;
+    for (let i = 0; i < data.length; i += 4) {
+      if (!data[i + 3]) continue;
+      const light = Math.max(data[i], data[i + 1], data[i + 2]) / 255;
+      data[i] = accent[0] + (main[0] - accent[0]) * light;
+      data[i + 1] = accent[1] + (main[1] - accent[1]) * light;
+      data[i + 2] = accent[2] + (main[2] - accent[2]) * light;
+    }
+    ctx.putImageData(pixels, 0, 0);
+    return c;
+  }
+
+  function stockingColorMode() {
+    const variant = VARIANTS.find(v => v.key === 'sock_style');
+    return variant.options[variantState.sock_style || 0].colorMode || null;
+  }
+  let stockingsJob = 0;
+
+  async function applyStockingTexture() {
+    if (!Live2D.setDrawableTextures) return;
+    const index = variantState.sock_style || 0;
+    const variant = VARIANTS.find(v => v.key === 'sock_style');
+    const opt = variant.options[index];
+    const mode = opt.colorMode;
+    if (!mode) return;
+    const entries = Object.entries(opt.textures || {}).filter(([, texture]) => textureAvailable(texture));
+    const job = ++stockingsJob;
+    if (entries.length !== variant.drawables.length) {
+      Live2D.setDrawableTextures(Object.fromEntries(variant.drawables.map(drawable => [drawable, null])));
+      return;
+    }
+    let loaded;
+    try {
+      loaded = await Promise.all(entries.map(async ([drawable, texture]) => {
+        const url = typeof texture === 'object' ? texture.url : texture;
+        return [drawable, url, await textureImg(url)];
+      }));
+    } catch (e) {
+      if (job === stockingsJob) setTimeout(applyStockingTexture, 1000);
+      return;
+    }
+    if (job !== stockingsJob || (variantState.sock_style || 0) !== index) return;
+    const main = colors.stockings;
+    const accent = colors.stockings_accent;
+    const map = {};
+    for (const [drawable, url, img] of loaded) {
+      if (mode === 'overlay') {
+        map[drawable] = {
+          img: tintedLayer(img, accent),
+          key: `${url}|${main || ''}|${accent || ''}`,
+          overlay: true,
+          baseTint: main,
+        };
+      } else {
+        map[drawable] = {
+          img: duotoneLayer(img, main, accent),
+          key: `${url}|${main || ''}|${accent || ''}`,
+        };
+      }
+    }
+    await Live2D.setDrawableTextures(map);
+    if (job !== stockingsJob || (variantState.sock_style || 0) !== index) return;
+    for (const drawable of variant.drawables) Live2D.setDrawableTint(drawable, null);
+  }
+
   let glassesJob = 0;
   async function applyGlassesTexture() {
     const style = GLASSES_STYLES[variantState.glasses_style || 0];
@@ -729,7 +823,7 @@ window.Outfit = (function () {
     let imgs;
     try {
       imgs = await Promise.all(style.layers.map(([part]) =>
-        glassesImg(`assets/variants/glasses/${style.base}_${part}.png`)));
+        textureImg(`assets/variants/glasses/${style.base}_${part}.png`)));
     } catch (e) {
       // a dropped load leaves the raw ModdableFace atlas art on screen, so
       // retry instead of giving up for the rest of the session
@@ -752,7 +846,6 @@ window.Outfit = (function () {
     if (!it) return;
     items[key] = !!on;
     if (items[key] && it.excludes) for (const ex of it.excludes) items[ex] = false;
-    if (!items.hair_h0) items.hair_clip = false;
   }
 
   function setItem(key, on) {
@@ -767,7 +860,9 @@ window.Outfit = (function () {
 
   function setColor(key, hex) {
     if (!(key in colors)) return;
-    colors[key] = hex || null;
+    const value = hex === null ? null : normalizeHex(hex);
+    if (hex !== null && value === null) return;
+    colors[key] = value;
     saveColors();
     applyColors();
     refreshColorButtons();
@@ -1211,6 +1306,97 @@ window.Outfit = (function () {
     return { items: { ...state }, colors: { ...colors }, variants: { ...variantState } };
   }
 
+  const SHARE_CODE_MAX_LENGTH = 16 * 1024;
+  const BASE64_PATTERN = /^(?:[A-Za-z0-9+/]{4})*(?:[A-Za-z0-9+/]{2}==|[A-Za-z0-9+/]{3}=)?$/;
+  const hasOwn = (value, key) => Object.prototype.hasOwnProperty.call(value, key);
+
+  function plainObject(value) {
+    if (!value || typeof value !== 'object' || Array.isArray(value)) return false;
+    const proto = Object.getPrototypeOf(value);
+    return proto === Object.prototype || proto === null;
+  }
+
+  function hasOnlyKeys(value, allowed) {
+    return Object.keys(value).every(key => allowed.has(key));
+  }
+
+  function canonicalPreset(input) {
+    if (!plainObject(input)
+        || !hasOnlyKeys(input, new Set(['items', 'colors', 'variants']))) {
+      throw new Error('invalid outfit');
+    }
+    const itemInput = input.items === undefined ? {} : input.items;
+    const colorInput = input.colors === undefined ? {} : input.colors;
+    const variantInput = input.variants === undefined ? {} : input.variants;
+    if (!plainObject(itemInput) || !plainObject(colorInput) || !plainObject(variantInput)) {
+      throw new Error('invalid outfit');
+    }
+
+    const itemKeys = new Set([...ITEMS.map(it => it.key), 'hair_clip']);
+    const colorKeys = new Set(COLOR_GROUPS.map(group => group.key));
+    const variantKeys = new Set(VARIANTS.map(variant => variant.key));
+    if (!hasOnlyKeys(itemInput, itemKeys)
+        || !hasOnlyKeys(colorInput, colorKeys)
+        || !hasOnlyKeys(variantInput, variantKeys)) {
+      throw new Error('invalid outfit');
+    }
+
+    const clean = { items: {}, colors: {}, variants: {} };
+    if (hasOwn(itemInput, 'hair_clip') && typeof itemInput.hair_clip !== 'boolean') {
+      throw new Error('invalid outfit');
+    }
+    for (const it of ITEMS) {
+      const value = hasOwn(itemInput, it.key) ? itemInput[it.key] : it.defaultOn;
+      if (typeof value !== 'boolean') throw new Error('invalid outfit');
+      clean.items[it.key] = value;
+    }
+    for (const it of ITEMS) {
+      if (!clean.items[it.key]) continue;
+      for (const excluded of it.excludes || []) {
+        if (clean.items[excluded]) throw new Error('invalid outfit');
+      }
+    }
+    for (const group of COLOR_GROUPS) {
+      const fallback = group.defaultColor || null;
+      const value = hasOwn(colorInput, group.key) ? colorInput[group.key] : fallback;
+      if (value !== null && (typeof value !== 'string' || !/^#[0-9a-f]{6}$/i.test(value))) {
+        throw new Error('invalid outfit');
+      }
+      clean.colors[group.key] = typeof value === 'string' ? value.toLowerCase() : null;
+    }
+    for (const variant of VARIANTS) {
+      const legacy = variant.key === 'hair_h0_style' && itemInput.hair_clip === true ? 1 : 0;
+      const value = hasOwn(variantInput, variant.key) ? variantInput[variant.key] : legacy;
+      if (!Number.isInteger(value) || value < 0 || value >= variant.options.length) {
+        throw new Error('invalid outfit');
+      }
+      clean.variants[variant.key] = value;
+    }
+    return clean;
+  }
+
+  function encodeOutfitCode() {
+    return btoa(JSON.stringify({ v: 1, outfit: canonicalPreset(exportPreset()) }));
+  }
+
+  function decodeOutfitCode(value) {
+    const code = typeof value === 'string' ? value.trim() : '';
+    if (!code || code.length > SHARE_CODE_MAX_LENGTH || !BASE64_PATTERN.test(code)) {
+      throw new Error('invalid outfit code');
+    }
+    let payload;
+    try {
+      payload = JSON.parse(atob(code));
+    } catch (e) {
+      throw new Error('invalid outfit code');
+    }
+    if (!plainObject(payload) || payload.v !== 1
+        || !hasOnlyKeys(payload, new Set(['v', 'outfit']))) {
+      throw new Error('invalid outfit code');
+    }
+    return canonicalPreset(payload.outfit);
+  }
+
   // returns the slots that actually moved, so callers can skip the expensive
   // parts of applyAll(). a full applyVariants() recomposes EVERY atlas.
   function loadPresetState(preset) {
@@ -1258,19 +1444,21 @@ window.Outfit = (function () {
 
   function applyPreset(preset) {
     clearTimeout(previewTimer);
-    if (!preset || typeof preset !== 'object') return;
+    const clean = canonicalPreset(preset);
     previewBase = null;
-    return queueWardrobe((items, variants) => {
-      for (const it of ITEMS) if (typeof preset.items?.[it.key] === 'boolean') items[it.key] = preset.items[it.key];
-      for (const v of VARIANTS) if (Number.isInteger(preset.variants?.[v.key])) variants[v.key] = preset.variants[v.key];
-    }, () => {
-      for (const g of COLOR_GROUPS) {
-        const value = preset.colors?.[g.key];
-        if (typeof value === 'string' || value === null) colors[g.key] = value;
-      }
+    const wardrobeChanged = ITEMS.some(it => state[it.key] !== clean.items[it.key])
+      || VARIANTS.some(v => variantState[v.key] !== clean.variants[v.key]);
+    const applyPresetColors = () => {
+      for (const g of COLOR_GROUPS) colors[g.key] = clean.colors[g.key];
       saveColors();
       applyColors();
-    });
+    };
+    const queued = queueWardrobe((items, variants) => {
+      Object.assign(items, clean.items);
+      Object.assign(variants, clean.variants);
+    }, applyPresetColors);
+    if (!wardrobeChanged) applyPresetColors();
+    return queued;
   }
 
   // the preview is look-at-only, dressing gestures on the model are suspended
@@ -1310,7 +1498,21 @@ window.Outfit = (function () {
     async function list() {
       const r = await fetch(url, { credentials: 'same-origin' });
       if (!r.ok) throw new Error('load failed');
-      cache = await r.json();
+      const rows = await r.json();
+      if (!Array.isArray(rows)) throw new Error('load failed');
+      cache = rows.flatMap(row => {
+        try {
+          if (!plainObject(row) || typeof row.name !== 'string') return [];
+          return [{
+            id: row.id,
+            name: row.name,
+            updated_at: Number.isFinite(row.updated_at) ? row.updated_at : 0,
+            data: canonicalPreset(row.data),
+          }];
+        } catch (e) {
+          return [];
+        }
+      });
       return cache;
     }
     async function save(name) {
@@ -1354,6 +1556,10 @@ window.Outfit = (function () {
           <div class="wd-looks-save">
             <input class="wd-looks-name" type="text" maxlength="60" placeholder="Name this outfit" aria-label="Outfit name">
             <button type="button" class="ghost wd-looks-add">Save current</button>
+          </div>
+          <div class="wd-looks-share">
+            <button type="button" class="ghost wd-looks-copy">Copy share code</button>
+            <button type="button" class="ghost wd-looks-import">Wear shared code</button>
           </div>
           <div class="wd-looks-list" role="list"></div>
           <div class="wd-looks-hint"></div>
@@ -1442,6 +1648,31 @@ window.Outfit = (function () {
       } catch (e) { hint.textContent = 'Could not save that outfit.'; }
     }
     looksEl.querySelector('.wd-looks-add').addEventListener('click', saveCurrent);
+    looksEl.querySelector('.wd-looks-copy').addEventListener('click', async () => {
+      let code;
+      try {
+        code = encodeOutfitCode();
+        if (!navigator.clipboard?.writeText) throw new Error('clipboard unavailable');
+        await navigator.clipboard.writeText(code);
+        hint.textContent = 'Outfit code copied. Anyone can import it from this panel.';
+      } catch (e) {
+        if (code) window.prompt('Copy this outfit code:', code);
+        else hint.textContent = 'Could not create an outfit code.';
+      }
+    });
+    looksEl.querySelector('.wd-looks-import').addEventListener('click', async () => {
+      const code = window.prompt('Paste an outfit code:');
+      if (code === null) return;
+      try {
+        await applyPreset(decodeOutfitCode(code));
+        looksActiveId = null;
+        nameInput.value = '';
+        render();
+        hint.textContent = 'Shared outfit equipped. Name it above if you want to save it.';
+      } catch (e) {
+        hint.textContent = 'That outfit code is invalid.';
+      }
+    });
     nameInput.addEventListener('keydown', (e) => {
       if (e.key === 'Enter') { e.preventDefault(); saveCurrent(); }
     });
@@ -1641,7 +1872,7 @@ window.Outfit = (function () {
         if (url) return url;
       }
     }
-    return Live2D.drawableThumb(v.drawables[0], 72);
+    return Live2D.drawableThumb(opt.drawable || v.drawables[0], 72);
   }
 
   function wdMoveGhost(x, y) {
@@ -2353,9 +2584,13 @@ window.Outfit = (function () {
       bikini: ['bikini_top', 'bikini_bot'],
       swimsuit: ['bikini_top', 'bikini_bot'],
       bikini_bottom: ['bikini_bot'],
-      hairclip: ['hair_clip'],
-      clip: ['hair_clip'],
     };
+    if (item === 'hairclip' || item === 'clip') {
+      return queueWardrobe((items, variants) => {
+        if (stateOn) setDraftItem(items, 'hair_h0', true);
+        variants.hair_h0_style = stateOn ? 1 : 0;
+      });
+    }
     const keys = aliases[item] || (ITEMS.some(it => it.key === item) ? [item] : []);
 
     if (item === 'nude' && stateOn) {
