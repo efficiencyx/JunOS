@@ -322,7 +322,15 @@ async function _setDrawableTextures(map) {
     }
     texes.add(r.tex);
   }));
-  for (const t of texes) recompositeTexture(t);
+  // a recomposite is a whole 4k atlas: clip, redraw, alpha pass, upload. two
+  // of them back to back is a visible stall, so give the renderer a frame in
+  // between. callers that read pixels back go through texturesSettled anyway.
+  let first = true;
+  for (const t of texes) {
+    if (!first) await new Promise(r => requestAnimationFrame(() => r()));
+    first = false;
+    recompositeTexture(t);
+  }
 }
 
 export function setDrawableTint(id, rgb) {
