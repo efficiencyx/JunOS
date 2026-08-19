@@ -3,11 +3,11 @@
 // inside js/live2d/ ALL have to match, or the browser builds a second copy
 // of the graph and everything goes sideways.
 
-import { renderIfDirty, resetIdle, setFidgetsEnabled, setMood, setMouthOverride, startIdle, stopIdle, tick } from './live2d/anim.js?v=5';
-import { cameraPreset, cameraStates, captureCameraState, currentCameraMode, fitModel, loadPos, measureStage, rendererResolution, savePos, setCameraPreset, watchStageSize, writeCameraStates } from './live2d/camera.js?v=5';
-import { clamp, drawableAt, drawableThumb, faceAnchor, findDrawables, hitTest, isInteractiveTarget, isOverModel } from './live2d/geometry.js?v=5';
-import { S } from './live2d/state.js?v=5';
-import { installVariantCompositor, listDrawables, opacityByPattern, screenByPattern, setDrawableOpacity, setDrawableOrderBelow, setDrawableScreen, setDrawableTexture, setDrawableTextures, setDrawableTint, texturesSettled, tintByPattern } from './live2d/textures.js?v=5';
+import { renderIfDirty, resetIdle, setFidgetsEnabled, setMood, setMouthOverride, startIdle, stopIdle, tick } from './live2d/anim.js?v=6';
+import { cameraPreset, cameraStates, captureCameraState, currentCameraMode, fitModel, loadPos, measureStage, rendererResolution, savePos, setCameraPreset, watchStageSize, writeCameraStates } from './live2d/camera.js?v=6';
+import { clamp, drawableAt, drawableThumb, faceAnchor, findDrawables, hitTest, isInteractiveTarget, isOverModel } from './live2d/geometry.js?v=6';
+import { S } from './live2d/state.js?v=6';
+import { getDrawableTint, installVariantCompositor, listDrawables, opacityByPattern, screenByPattern, setDrawableOpacity, setDrawableOrderBelow, setDrawableScreen, setDrawableTexture, setDrawableTextures, setDrawableTint, texturesSettled, tintByPattern } from './live2d/textures.js?v=6';
 
 const { Live2DModel, Cubism4ModelSettings } = PIXI.live2d;
 
@@ -377,6 +377,10 @@ async function init({ stageEl, onStatus, ignoreSavedPos }) {
       else forcedMultiplyColor.delete(drawableId);
       markDirty();
     },
+    getMultiply(drawableId) {
+      const c = forcedMultiplyColor.get(drawableId);
+      return c ? [c[0], c[1], c[2]] : null;
+    },
     setScreen(drawableId, rgb) {
       if (rgb) forcedScreenColor.set(drawableId, [rgb[0], rgb[1], rgb[2], 1]);
       else forcedScreenColor.delete(drawableId);
@@ -610,6 +614,7 @@ window.Live2D = {
   findDrawables,
   listDrawables,
   setDrawableTint,
+  getDrawableTint,
   setDrawableScreen,
   setDrawableHighlight(drawableId, rgb) {
     if (publicTint) publicTint.setHighlight(drawableId, rgb);
