@@ -378,7 +378,7 @@ window.Mods = (function () {
   // bake every worn mod entry for one drawable into a single canvas crop.
   // the compositor only takes ONE override per drawable, so the layers get
   // merged here.
-  async function bakeDrawable(entries, colorsFor, hostTint) {
+  async function bakeDrawable(id, entries, colorsFor, hostTint) {
     entries.sort((a, b) => a.layer - b.layer);
     // vanilla art stays underneath unless the container says no vanilla
     // layers. same as Part.AddVanilla in the game.
@@ -454,7 +454,14 @@ window.Mods = (function () {
     // toDataURL() and the compositor turned it straight back into an Image,
     // so every equip paid a full PNG encode plus decode per drawable. on a
     // mod that touches all 29 Attach* limbs that alone was seconds.
-    return { img: c, overlay: !replacesVanilla, straightAlpha: true };
+    // a mod slot has NO vanilla art. what's sitting in its atlas box is the
+    // rig's placeholder - the hair slot's box holds a whole grey bob plus the
+    // shine diamonds - and it only looked fine while the slot part sat at
+    // opacity 0. we turn the slot on now, so the placeholder comes up UNDER
+    // the mod: a bunny ears hat gave her a second head of hair over her face.
+    // so erase the box, padded, same as outfit.js does for glasses in
+    // ModdableFace.
+    return { img: c, overlay: !replacesVanilla, straightAlpha: true, fullClear: MOD_SLOT.test(id) };
   }
 
   let mods = [];
@@ -557,8 +564,8 @@ window.Mods = (function () {
   // the map is replaced each pass with just the hits, that's the eviction.
   let bakeCache = new Map();
 
-  function bakeKey(entries, colorsFor, tint) {
-    return entries.map(e => [e.url, e.r.x, e.r.y, e.r.w, e.r.h, e.layer, e.colorIndex,
+  function bakeKey(id, entries, colorsFor, tint) {
+    return id + '|' + entries.map(e => [e.url, e.r.x, e.r.y, e.r.w, e.r.h, e.layer, e.colorIndex,
       e.dontIncludeVanilla ? 1 : 0, e.bypassColorScaler ? 1 : 0, colorsFor(e) || ''].join()).join(';')
       + '|' + (tint || '');
   }
@@ -611,7 +618,7 @@ window.Mods = (function () {
       const tint = entries.some(e => e.bypassColorScaler) ? hostTintFor(id) : null;
       // ColorIndex points into the owning ITEM's ColorSlots list
       const colorsFor = (e) => ((modState(e.mod.guid).colors || {})[e.itemIndex] || [])[e.colorIndex] || null;
-      const key = bakeKey(entries, colorsFor, tint);
+      const key = bakeKey(id, entries, colorsFor, tint);
       let baked = bakeCache.get(key);
       if (!baked) {
         // only the drawables we actually redraw cost anything, so this is
@@ -619,7 +626,7 @@ window.Mods = (function () {
         await breathe();
         const tb = performance.now();
         try {
-          baked = await bakeDrawable(entries, colorsFor, tint);
+          baked = await bakeDrawable(id, entries, colorsFor, tint);
           baked.key = key;
           bakes++;
           bakeMs += performance.now() - tb;
