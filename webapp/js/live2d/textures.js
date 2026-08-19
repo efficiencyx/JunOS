@@ -133,6 +133,23 @@ function _restoreOriginalTexture(texIndex, origSource) {
   }
 }
 
+// drawables other than this one whose art overlaps its atlas box and that
+// still carry a multiply of their own. only those matter, a drawable we
+// already took the uniform off can't double anything.
+function _sharedMeshes(a, texIndex, W, H) {
+  const out = [];
+  if (!publicTint) return out;
+  const x1 = a.x + a.w, y1 = a.yTop + a.h;
+  for (const [id, r] of _uvRect) {
+    if (id === a.id || r.tex !== texIndex) continue;
+    if (!publicTint.getMultiply(id)) continue;
+    const bx = r.u0 * W, by = (1 - (r.v0 + r.h)) * H;
+    if (bx > x1 || by > y1 || bx + r.w * W < a.x || by + r.h * H < a.yTop) continue;
+    out.push(id);
+  }
+  return out;
+}
+
 function recompositeTexture(texIndex) {
   let hasOverride = false;
   for (const [id, entry] of _texOverride) {
@@ -211,6 +228,31 @@ function recompositeTexture(texIndex) {
     // multiply floods the transparent texels too, cut it back to the art
     tc.globalCompositeOperation = 'destination-in';
     tc.drawImage(c, x, y, w, h, 0, 0, w, h);
+    tc.globalCompositeOperation = 'source-over';
+    // some of these texels are read by MORE than one drawable, SkinLipUpper
+    // sits right on the face art. the sharers still have their own multiply
+    // uniform, so anything we tint here they'd tint AGAIN at draw time and
+    // her lips come out skin times lips colour. brown. so put the untouched
+    // pixels back over the bits they own.
+    const shared = _sharedMeshes(a, texIndex, W, H);
+    if (shared.length) {
+      const m = document.createElement('canvas');
+      m.width = w; m.height = h;
+      const mc = m.getContext('2d');
+      mc.setTransform(1, 0, 0, 1, -x, -y);
+      for (const id of shared) {
+        mc.save();
+        mc.clip(meshPath(id, W, H));
+        mc.drawImage(c, 0, 0);
+        mc.restore();
+      }
+      tc.save();
+      tc.setTransform(1, 0, 0, 1, -x, -y);
+      tc.globalCompositeOperation = 'destination-out';
+      for (const id of shared) tc.fill(meshPath(id, W, H));
+      tc.restore();
+      tc.drawImage(m, 0, 0);
+    }
     ctx.save();
     ctx.clip(meshPath(a.id, W, H));
     ctx.clearRect(x, y, w, h);
