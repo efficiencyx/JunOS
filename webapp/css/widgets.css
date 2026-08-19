@@ -81,6 +81,12 @@
 }
 .ocp-clear:hover:not(:disabled) { border-color: var(--border-2); color: var(--fg); }
 .ocp-clear:disabled { opacity: .55; cursor: default; }
+.ocp-modlimbs {
+  display: flex; align-items: center; gap: 7px;
+  margin-top: 8px; color: var(--muted); cursor: pointer; font-size: .85em;
+}
+.ocp-modlimbs input { accent-color: var(--accent); cursor: pointer; }
+.ocp-modlimbs:hover { color: var(--fg); }
 .ocp-sv:focus-visible, .ocp-hue:focus-visible, .ocp-channel:focus-visible,
 .ocp-close:focus-visible, .ocp-presets button:focus-visible,
 .ocp-clear:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }

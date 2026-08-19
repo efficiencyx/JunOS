@@ -298,10 +298,16 @@ window.Mods = (function () {
     return null;
   }
 
+  // the baked canvases go straight into the compositor's own CPU-side
+  // canvas, so keeping them off the GPU saves a readback per drawable.
+  // same helper as textures.js, and same rule: only the first getContext
+  // on a canvas takes the option.
+  const ctx2d = (c) => c.getContext('2d', { willReadFrequently: true });
+
   // multiply a canvas by an #rrggbb color and keep the alpha. same math the
   // game uses to color its grey item textures.
   function tintCanvas(c, hex) {
-    const ctx = c.getContext('2d');
+    const ctx = ctx2d(c);
     ctx.globalCompositeOperation = 'multiply';
     ctx.fillStyle = hex;
     ctx.fillRect(0, 0, c.width, c.height);
@@ -313,8 +319,21 @@ window.Mods = (function () {
   }
 
   const ATTACH_DRAWABLE = /^Attach/i;
+  const LIMB_KEY = 'omega.mods.limbcolor.v1';
+  // on = her arms and legs take her skin colour no matter what the mod says.
+  // off hands the Attach* drawables back to the mod's own BypassColorScaler,
+  // which is what a limb mod that ships REAL colours (tattoos, a prosthetic)
+  // wants. lives in the skin swatch in the wardrobe.
+  let limbsFollowSkin = localStorage.getItem(LIMB_KEY) !== '0';
+
+  // parsing an item's texture jsons is pure work on immutable data, and a
+  // pass does it for every worn item on top of the one you just clicked.
+  const _drawableCache = new WeakMap();
 
   function itemDrawables(mod, item) {
+    const cached = _drawableCache.get(item);
+    if (cached) return cached;
+    // empty before the model is up, and that must NOT get cached
     const valid = new Set(Live2D.findDrawables ? Live2D.findDrawables([''], []) : []);
     const out = [];
     for (const jsonPath of item.jsons) {
@@ -341,17 +360,18 @@ window.Mods = (function () {
             // "don't scale me by the character's colour". an accessory sets
             // it and keeps its own colour, body art leaves it off and follows
             // her skin. defaults off because that's the serialized default.
-            // NOT on the Attach* drawables though. those are her arms and legs
-            // and nothing else, and replacement limbs ship neutral grey art -
-            // Seamless Components sets bypass on all 29 of them, so honouring
-            // it left her with grey arms next to a coloured body. she owns
-            // that colour, a mod doesn't get to opt out of it there.
-            bypassColorScaler: !ATTACH_DRAWABLE.test(id)
+            // NOT on the Attach* drawables while limbsFollowSkin is on. those
+            // are her arms and legs and nothing else, and replacement limbs
+            // ship neutral grey art - Seamless Components sets bypass on all
+            // 29 of them, so honouring it left her with grey arms next to a
+            // coloured body.
+            bypassColorScaler: !(limbsFollowSkin && ATTACH_DRAWABLE.test(id))
               && !!(pd.BypassColorScaler ?? pd.bypassColorScaler),
           });
         }
       }
     }
+    if (valid.size) _drawableCache.set(item, out);
     return out;
   }
 
@@ -378,7 +398,7 @@ window.Mods = (function () {
     }
     const c = document.createElement('canvas');
     c.width = W; c.height = H;
-    const ctx = c.getContext('2d');
+    const ctx = ctx2d(c);
     entries.forEach((e, i) => {
       const img = imgs[i];
       // RectInt starts from the BOTTOM left, that's unity texture space.
@@ -401,10 +421,10 @@ window.Mods = (function () {
       }
       const t = document.createElement('canvas');
       t.width = W; t.height = H;
-      t.getContext('2d').drawImage(img, e.r.x, sy, e.r.w, e.r.h, 0, 0, W, H);
+      ctx2d(t).drawImage(img, e.r.x, sy, e.r.w, e.r.h, 0, 0, W, H);
       const a = document.createElement('canvas');
       a.width = W; a.height = H;
-      a.getContext('2d').drawImage(t, 0, 0);
+      ctx2d(a).drawImage(t, 0, 0);
       t._alphaSrc = a;
       for (const hex of tints) tintCanvas(t, hex);
       ctx.drawImage(t, 0, 0);
@@ -422,7 +442,11 @@ window.Mods = (function () {
     // DontIncludeVanillaLayers and shipping a 1x1 transparent texture, like
     // Seamless Components' barcode. an erase that only covers the art the mod
     // ships would leave that one sitting there.
-    return { url: c.toDataURL(), overlay: !replacesVanilla, straightAlpha: true };
+    // the canvas goes to the compositor AS a canvas. this used to be a
+    // toDataURL() and the compositor turned it straight back into an Image,
+    // so every equip paid a full PNG encode plus decode per drawable. on a
+    // mod that touches all 29 Attach* limbs that alone was seconds.
+    return { img: c, overlay: !replacesVanilla, straightAlpha: true };
   }
 
   let mods = [];
@@ -493,9 +517,60 @@ window.Mods = (function () {
     return applyAll();
   }
 
-  async function applyAll() {
+  // baking a drawable is a pile of synchronous canvas work and the atlas
+  // recomposite after it is worse. it all runs on the thread that draws her,
+  // so a whole equip done in one go stops the model dead. handing the frame
+  // back keeps her blinking while the item lands.
+  //
+  // but do it per bake and the yields ARE the wait: a bake is ~1ms and a
+  // frame is 16, so 59 of them turned a 54ms job into 1.4 seconds of waiting
+  // for rAF. so yield on time spent, not on count. 8ms is half a frame at
+  // 60Hz, which leaves her ticker room to draw.
+  const nextFrame = () => new Promise(r => requestAnimationFrame(() => r()));
+  let sliceStart = 0;
+  async function breathe() {
+    if (performance.now() - sliceStart < 8) return;
+    await nextFrame();
+    sliceStart = performance.now();
+  }
+
+  // every pass rebuilds the whole worn set from scratch, so taking one item
+  // off used to re-bake every drawable of everything still on. baked canvases
+  // are kept by what went into them and only the changed ones get redrawn.
+  // the map is replaced each pass with just the hits, that's the eviction.
+  let bakeCache = new Map();
+
+  function bakeKey(entries, colorsFor, tint) {
+    return entries.map(e => [e.url, e.r.x, e.r.y, e.r.w, e.r.h, e.layer, e.colorIndex,
+      e.dontIncludeVanilla ? 1 : 0, e.bypassColorScaler ? 1 : 0, colorsFor(e) || ''].join()).join(';')
+      + '|' + (tint || '');
+  }
+
+  let applyRunning = null;
+  let applyQueued = null;
+
+  // clicks arrive faster than a pass takes and only the LAST state matters,
+  // so one queued pass behind the running one is all we ever need.
+  function applyAll() {
+    if (!applyRunning) {
+      applyRunning = applyPass().finally(() => { applyRunning = null; });
+      return applyRunning;
+    }
+    if (!applyQueued) {
+      applyQueued = applyRunning.catch(() => { }).then(() => {
+        applyQueued = null;
+        return applyAll();
+      });
+    }
+    return applyQueued;
+  }
+
+  async function applyPass() {
     if (!window.Live2D || !Live2D.setDrawableTextures) return;
     await ensureLoaded();
+    const t0 = performance.now();
+    sliceStart = t0;
+    let bakeMs = 0, bakes = 0;
     const byDrawable = new Map();
     for (const mod of mods) {
       mod.items.forEach((item, i) => {
@@ -512,21 +587,34 @@ window.Mods = (function () {
     for (const id of [...heldTint.keys()]) {
       if (!byDrawable.has(id)) releaseTint(id);
     }
+    const fresh = new Map();
     for (const [id, entries] of byDrawable) {
       // only worth taking the uniform over when something actually opts out
       // of it AND there's a colour on the drawable to take over
       const tint = entries.some(e => e.bypassColorScaler) ? hostTintFor(id) : null;
       // ColorIndex points into the owning ITEM's ColorSlots list
-      try {
-        map[id] = await bakeDrawable(entries,
-          (e) => ((modState(e.mod.guid).colors || {})[e.itemIndex] || [])[e.colorIndex] || null,
-          tint);
-      } catch (e) {
-        console.warn('mod bake failed', id, e);
-        delete map[id];
-        releaseTint(id);
-        continue;
+      const colorsFor = (e) => ((modState(e.mod.guid).colors || {})[e.itemIndex] || [])[e.colorIndex] || null;
+      const key = bakeKey(entries, colorsFor, tint);
+      let baked = bakeCache.get(key);
+      if (!baked) {
+        // only the drawables we actually redraw cost anything, so this is
+        // where the frame goes back to the renderer
+        await breathe();
+        const tb = performance.now();
+        try {
+          baked = await bakeDrawable(entries, colorsFor, tint);
+          baked.key = key;
+          bakes++;
+          bakeMs += performance.now() - tb;
+        } catch (e) {
+          console.warn('mod bake failed', id, e);
+          delete map[id];
+          releaseTint(id);
+          continue;
+        }
       }
+      map[id] = baked;
+      fresh.set(key, baked);
       if (tint) {
         map[id].baseTint = tint;
         if (!heldTint.has(id)) {
@@ -537,8 +625,15 @@ window.Mods = (function () {
         releaseTint(id);
       }
     }
+    bakeCache = fresh;
     appliedIds = new Set(byDrawable.keys());
+    const tt = performance.now();
     await Live2D.setDrawableTextures(map);
+    const total = performance.now() - t0;
+    if (total > 200) {
+      console.warn(`mods: apply ${total | 0}ms - ${byDrawable.size} drawables, ` +
+        `${bakes} baked ${bakeMs | 0}ms, compositor ${performance.now() - tt | 0}ms`);
+    }
   }
 
   async function importZip(buf) {
@@ -621,7 +716,7 @@ window.Mods = (function () {
   // cut a canvas down to the pixels that aren't transparent. null when there
   // are none.
   function trimTransparent(c) {
-    const ctx = c.getContext('2d');
+    const ctx = ctx2d(c);
     const d = ctx.getImageData(0, 0, c.width, c.height).data;
     let x0 = c.width, y0 = c.height, x1 = -1, y1 = -1;
     for (let y = 0; y < c.height; y++) {
@@ -636,7 +731,7 @@ window.Mods = (function () {
     if (x1 < 0) return null;
     const t = document.createElement('canvas');
     t.width = x1 - x0 + 1; t.height = y1 - y0 + 1;
-    t.getContext('2d').drawImage(c, x0, y0, t.width, t.height, 0, 0, t.width, t.height);
+    ctx2d(t).drawImage(c, x0, y0, t.width, t.height, 0, 0, t.width, t.height);
     return t;
   }
 
@@ -646,13 +741,13 @@ window.Mods = (function () {
   // which that layer doesn't paint at all), which is how two tiles ended up
   // fully blank. so trim to the art and skip whatever trims to nothing.
   async function itemThumbUrl(mod, item) {
-    const entries = itemDrawables(mod, item);
+    const entries = itemDrawables(mod, item).slice();
     entries.sort((a, b) => b.r.w * b.r.h - a.r.w * a.r.h);
     for (const e of entries) {
       const img = await loadImg(fileUrl(mod, e.tex));
       const c = document.createElement('canvas');
       c.width = e.r.w; c.height = e.r.h;
-      c.getContext('2d').drawImage(img, e.r.x, img.naturalHeight - e.r.y - e.r.h, e.r.w, e.r.h,
+      ctx2d(c).drawImage(img, e.r.x, img.naturalHeight - e.r.y - e.r.h, e.r.w, e.r.h,
         0, 0, e.r.w, e.r.h);
       const t = trimTransparent(c);
       if (t) return t.toDataURL();
@@ -747,6 +842,15 @@ window.Mods = (function () {
     }
   }
 
+  function getLimbsFollowSkin() { return limbsFollowSkin; }
+
+  function setLimbsFollowSkin(on) {
+    limbsFollowSkin = !!on;
+    try { localStorage.setItem(LIMB_KEY, limbsFollowSkin ? '1' : '0'); } catch (e) { }
+    applyAll();
+  }
+
   return { applyAll, refreshTints, describe, buildWardrobeSection, importZip, removeMod,
+    getLimbsFollowSkin, setLimbsFollowSkin,
     owns: (id) => appliedIds.has(id) };
 })();

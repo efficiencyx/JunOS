@@ -966,9 +966,13 @@ window.Outfit = (function () {
       <div class="ocp-sv" role="slider" tabindex="0" aria-label="Saturation and brightness"><i class="ocp-sv-thumb"></i></div>
       <div class="ocp-hue" role="slider" tabindex="0" aria-label="Hue"><i class="ocp-hue-thumb"></i></div>
       <div class="ocp-value-row"><i class="ocp-current"></i><input class="ocp-hex" type="text" maxlength="7" spellcheck="false" aria-label="Hex color"></div>
-      <div class="ocp-presets" aria-label="Color presets"></div><button type="button" class="ocp-clear">Use default</button>`;
+      <div class="ocp-presets" aria-label="Color presets"></div><button type="button" class="ocp-clear">Use default</button>
+      <label class="ocp-modlimbs" hidden><input type="checkbox"><span>Mod arms and legs follow this</span></label>`;
     document.body.appendChild(colorPickerEl);
     colorPickerEl.querySelector('.ocp-close').addEventListener('click', () => closeColorPicker(true));
+    colorPickerEl.querySelector('.ocp-modlimbs input').addEventListener('change', (e) => {
+      if (window.Mods) Mods.setLimbsFollowSkin(e.target.checked);
+    });
     const sv = colorPickerEl.querySelector('.ocp-sv');
     sv.addEventListener('pointerdown', (e) => beginColorPointer(e, sv, (ev, rect) => {
       pickerState.hsv.s = Math.max(0, Math.min(1, (ev.clientX - rect.left) / rect.width));
@@ -1074,6 +1078,12 @@ window.Outfit = (function () {
       button.addEventListener('click', () => selectPickerChannel(index));
       channels.appendChild(button);
     });
+    // her limbs are Attach* drawables and sit in the skin group, so the
+    // override belongs on the skin swatch and nowhere else
+    const limbs = colorPickerEl.querySelector('.ocp-modlimbs');
+    limbs.hidden = !(window.Mods && Mods.setLimbsFollowSkin
+      && (pickerState.keys || []).includes('skin'));
+    if (!limbs.hidden) limbs.querySelector('input').checked = Mods.getLimbsFollowSkin();
     colorPickerEl.hidden = false;
     selectPickerChannel(0);
     if (!embedContainer) positionColorPicker();
