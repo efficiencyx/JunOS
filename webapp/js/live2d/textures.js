@@ -1,5 +1,5 @@
-import { markDirty, model, publicTint, raw } from '../live2d.js?v=6';
-import { findDrawables } from './geometry.js?v=6';
+import { markDirty, model, publicTint, raw } from '../live2d.js?v=8';
+import { findDrawables } from './geometry.js?v=8';
 
 export function tintByPattern(includes, excludes, rgb) {
   if (!publicTint) return [];
@@ -133,6 +133,46 @@ function _restoreOriginalTexture(texIndex, origSource) {
   }
 }
 
+// mod patches arrive as straight alpha, the atlas is premultiplied (colour
+// already faded by its own transparency). canvas blends as if everything is
+// straight, so dropping a premultiplied patch onto premultiplied art fades
+// the overlap twice and you get a dark rim on every soft edge. so pull the
+// patch's landing zone back to straight, blend there, premultiply the result.
+function _drawStraight(ctx, c, a, W, H) {
+  const x = Math.max(0, Math.floor(a.x)), y = Math.max(0, Math.floor(a.yTop));
+  const w = Math.min(W, Math.ceil(a.x + a.w)) - x, h = Math.min(H, Math.ceil(a.yTop + a.h)) - y;
+  if (w <= 0 || h <= 0) return;
+  const t = document.createElement('canvas');
+  t.width = w; t.height = h;
+  const tc = t.getContext('2d');
+  tc.drawImage(c, x, y, w, h, 0, 0, w, h);
+  _mapAlpha(tc, w, h, false);
+  if (a.entry.img.width < 64) tc.imageSmoothingEnabled = false;
+  tc.drawImage(a.entry.img, a.x - x, a.yTop - y, a.w, a.h);
+  _mapAlpha(tc, w, h, true);
+  ctx.clearRect(x, y, w, h);
+  ctx.drawImage(t, x, y);
+}
+
+function _mapAlpha(tc, w, h, toPremultiplied) {
+  const px = tc.getImageData(0, 0, w, h);
+  const d = px.data;
+  for (let i = 0; i < d.length; i += 4) {
+    const al = d[i + 3];
+    if (al === 255 || al === 0) continue;
+    if (toPremultiplied) {
+      d[i] = (d[i] * al + 127) / 255 | 0;
+      d[i + 1] = (d[i + 1] * al + 127) / 255 | 0;
+      d[i + 2] = (d[i + 2] * al + 127) / 255 | 0;
+    } else {
+      d[i] = Math.min(255, (d[i] * 255 + (al >> 1)) / al | 0);
+      d[i + 1] = Math.min(255, (d[i + 1] * 255 + (al >> 1)) / al | 0);
+      d[i + 2] = Math.min(255, (d[i + 2] * 255 + (al >> 1)) / al | 0);
+    }
+  }
+  tc.putImageData(px, 0, 0);
+}
+
 function recompositeTexture(texIndex) {
   let hasOverride = false;
   for (const [id, entry] of _texOverride) {
@@ -222,7 +262,8 @@ function recompositeTexture(texIndex) {
     ctx.clip(meshPath(a.id, W, H));
     // the tiny decals are pixel art (the fruit panty logos) so keep them sharp
     if (a.entry.img.width < 64) ctx.imageSmoothingEnabled = false;
-    ctx.drawImage(a.entry.img, a.x, a.yTop, a.w, a.h);
+    if (a.entry.straightAlpha) _drawStraight(ctx, c, a, W, H);
+    else ctx.drawImage(a.entry.img, a.x, a.yTop, a.w, a.h);
     ctx.restore();
   }
   _uploadTexture(texIndex, c);
@@ -262,18 +303,19 @@ async function _setDrawableTextures(map) {
     const alphaClip = val && typeof val === 'object' ? !!val.alphaClip : false;
     const fullClear = val && typeof val === 'object' ? !!val.fullClear : false;
     const baseTint = val && typeof val === 'object' ? (val.baseTint || null) : null;
+    const straightAlpha = val && typeof val === 'object' ? !!val.straightAlpha : false;
     // don't ship a 4k atlas up again when the outfit update changed nothing
     const prev = _texOverride.get(id);
     if (url) {
       if (prev && prev.url === url && prev.overlay === overlay &&
           prev.alphaClip === alphaClip && prev.fullClear === fullClear &&
-          prev.baseTint === baseTint) return;
+          prev.baseTint === baseTint && prev.straightAlpha === straightAlpha) return;
       // one bad image must NOT kill the whole batch, the other overrides
       // still have to land and get drawn
       let img;
       try { img = await _loadImg(url); }
       catch (e) { console.warn('texture load failed', id, url, e); return; }
-      _texOverride.set(id, { url, img, overlay, alphaClip, fullClear, baseTint });
+      _texOverride.set(id, { url, img, overlay, alphaClip, fullClear, baseTint, straightAlpha });
     } else {
       if (!prev) return;
       _texOverride.delete(id);

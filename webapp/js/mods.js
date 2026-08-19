@@ -312,6 +312,8 @@ window.Mods = (function () {
     ctx.globalCompositeOperation = 'source-over';
   }
 
+  const ATTACH_DRAWABLE = /^Attach/i;
+
   function itemDrawables(mod, item) {
     const valid = new Set(Live2D.findDrawables ? Live2D.findDrawables([''], []) : []);
     const out = [];
@@ -339,7 +341,13 @@ window.Mods = (function () {
             // "don't scale me by the character's colour". an accessory sets
             // it and keeps its own colour, body art leaves it off and follows
             // her skin. defaults off because that's the serialized default.
-            bypassColorScaler: !!(pd.BypassColorScaler ?? pd.bypassColorScaler),
+            // NOT on the Attach* drawables though. those are her arms and legs
+            // and nothing else, and replacement limbs ship neutral grey art -
+            // Seamless Components sets bypass on all 29 of them, so honouring
+            // it left her with grey arms next to a coloured body. she owns
+            // that colour, a mod doesn't get to opt out of it there.
+            bypassColorScaler: !ATTACH_DRAWABLE.test(id)
+              && !!(pd.BypassColorScaler ?? pd.bypassColorScaler),
           });
         }
       }
@@ -401,27 +409,20 @@ window.Mods = (function () {
       for (const hex of tints) tintCanvas(t, hex);
       ctx.drawImage(t, 0, 0);
     });
-    // the atlas goes up as PREMULTIPLIED alpha (colour already faded by its
-    // own transparency) because the vanilla art we extracted is baked that
-    // way. mod PNGs are straight alpha, colour and transparency kept apart.
-    // without this every soft edge in the mod art comes out too bright and
-    // you get glowing rims around the lips and the nose shading. cursed.
-    const px = ctx.getImageData(0, 0, W, H);
-    const d = px.data;
-    for (let i = 0; i < d.length; i += 4) {
-      const a = d[i + 3];
-      if (a === 255 || a === 0) continue;
-      d[i] = (d[i] * a + 127) / 255 | 0;
-      d[i + 1] = (d[i + 1] * a + 127) / 255 | 0;
-      d[i + 2] = (d[i + 2] * a + 127) / 255 | 0;
-    }
-    ctx.putImageData(px, 0, 0);
+    // this canvas stays STRAIGHT alpha (colour and transparency kept apart),
+    // same as the mod PNGs went in. the atlas it lands in is premultiplied,
+    // but the compositor converts the whole patch once it has blended us over
+    // her vanilla art - see straightAlpha in textures.js. we used to
+    // premultiply here instead, which is right only when the art lands on
+    // nothing. over vanilla art canvas blends us as straight anyway, so the
+    // colour got faded by its alpha TWICE and every soft edge came out dark.
+    // that's the black rim that showed up around her lips.
     // a replacement has to clear the WHOLE drawable. the compositor clips to
     // the mesh so the neighbours are safe, and mods delete decals by setting
     // DontIncludeVanillaLayers and shipping a 1x1 transparent texture, like
     // Seamless Components' barcode. an erase that only covers the art the mod
     // ships would leave that one sitting there.
-    return { url: c.toDataURL(), overlay: !replacesVanilla };
+    return { url: c.toDataURL(), overlay: !replacesVanilla, straightAlpha: true };
   }
 
   let mods = [];

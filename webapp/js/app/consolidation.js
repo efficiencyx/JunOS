@@ -1,8 +1,8 @@
-import { abortFn, currentConversationId, runChat } from '../app.js?v=6';
-import { chatInput, consolidationBanner, consolidationSub, consolidationTitle, devNoIdleChk, fleeEtaEl, fleeOverlay, fleeReasonEl, sendBtn, voiceChk } from './dom.js?v=6';
-import { showFaceBubble } from './face-bubble.js?v=6';
-import { logAction } from './logging.js?v=6';
-import { escapeHtml, formatElapsed } from './util.js?v=6';
+import { abortFn, currentConversationId, runChat } from '../app.js?v=8';
+import { chatInput, consolidationBanner, consolidationSub, consolidationTitle, devNoIdleChk, fleeEtaEl, fleeOverlay, fleeReasonEl, sendBtn, voiceChk } from './dom.js?v=8';
+import { showFaceBubble } from './face-bubble.js?v=8';
+import { logAction } from './logging.js?v=8';
+import { escapeHtml, formatElapsed } from './util.js?v=8';
 
 const BUSY_LINES = [
   "Hang on, ${p}, I'm defragging my SSD.",
