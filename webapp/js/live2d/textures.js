@@ -75,12 +75,21 @@ function _loadImg(url) {
   return p;
 }
 
+// every canvas in this file is either read back with getImageData or used as
+// a drawImage source for something that is. left on the default the browser
+// puts them on the GPU and each of those reads costs a flush and a pull back
+// over the bus, ~29 of them per mod recomposite. willReadFrequently keeps
+// them in system memory, where the reads are a memcpy. the option only
+// counts on the FIRST getContext for a canvas, later calls hand back the
+// context that already exists and ignore it.
+const ctx2d = (c) => c.getContext('2d', { willReadFrequently: true });
+
 // alphaClip variants want a hard on/off erase mask
 function _alphaMask(img) {
   const c = document.createElement('canvas');
   c.width = img.naturalWidth || img.width;
   c.height = img.naturalHeight || img.height;
-  const x = c.getContext('2d');
+  const x = ctx2d(c);
   x.drawImage(img, 0, 0);
   const d = x.getImageData(0, 0, c.width, c.height);
   const px = d.data;
@@ -97,7 +106,7 @@ export function _baseAtlas(texIndex) {
   const c = document.createElement('canvas');
   c.width = src.naturalWidth || src.width;
   c.height = src.naturalHeight || src.height;
-  c.getContext('2d').drawImage(src, 0, 0);
+  ctx2d(c).drawImage(src, 0, 0);
   _baseCanvas[texIndex] = c;
   return c;
 }
@@ -144,7 +153,7 @@ function _drawStraight(ctx, c, a, W, H) {
   if (w <= 0 || h <= 0) return;
   const t = document.createElement('canvas');
   t.width = w; t.height = h;
-  const tc = t.getContext('2d');
+  const tc = ctx2d(t);
   tc.drawImage(c, x, y, w, h, 0, 0, w, h);
   _mapAlpha(tc, w, h, false);
   if (a.entry.img.width < 64) tc.imageSmoothingEnabled = false;
@@ -174,6 +183,7 @@ function _mapAlpha(tc, w, h, toPremultiplied) {
 }
 
 function recompositeTexture(texIndex) {
+  const _t0 = performance.now();
   let hasOverride = false;
   for (const [id, entry] of _texOverride) {
     const r = _uvRect.get(id);
@@ -198,7 +208,7 @@ function recompositeTexture(texIndex) {
     _liveCanvas[texIndex] = c;
   }
   const c = _liveCanvas[texIndex];
-  const ctx = c.getContext('2d');
+  const ctx = ctx2d(c);
   ctx.clearRect(0, 0, W, H);
   ctx.drawImage(base, 0, 0);
   const active = [];
@@ -243,7 +253,7 @@ function recompositeTexture(texIndex) {
     const w = Math.ceil(a.x + a.w) - x, h = Math.ceil(a.yTop + a.h) - y;
     const t = document.createElement('canvas');
     t.width = w; t.height = h;
-    const tc = t.getContext('2d');
+    const tc = ctx2d(t);
     tc.drawImage(c, x, y, w, h, 0, 0, w, h);
     tc.globalCompositeOperation = 'multiply';
     tc.fillStyle = a.entry.baseTint;
@@ -268,6 +278,11 @@ function recompositeTexture(texIndex) {
   }
   _uploadTexture(texIndex, c);
   markDirty();
+  // this whole function is synchronous and it holds the frame, so when it
+  // goes long she visibly hangs. only ever shows up on somebody else's box
+  // with somebody else's mod, so say it out loud instead of guessing.
+  const _ms = performance.now() - _t0;
+  if (_ms > 100) console.warn(`live2d: recomposite tex${texIndex} ${_ms | 0}ms, ${active.length} overrides`);
 }
 
 // atlas recomposites are async and every caller fires them without awaiting,
