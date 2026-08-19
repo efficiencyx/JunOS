@@ -519,9 +519,20 @@ window.Mods = (function () {
 
   // baking a drawable is a pile of synchronous canvas work and the atlas
   // recomposite after it is worse. it all runs on the thread that draws her,
-  // so a whole equip done in one go stops the model dead. hand the frame back
-  // between bakes and she keeps blinking while the item lands.
+  // so a whole equip done in one go stops the model dead. handing the frame
+  // back keeps her blinking while the item lands.
+  //
+  // but do it per bake and the yields ARE the wait: a bake is ~1ms and a
+  // frame is 16, so 59 of them turned a 54ms job into 1.4 seconds of waiting
+  // for rAF. so yield on time spent, not on count. 8ms is half a frame at
+  // 60Hz, which leaves her ticker room to draw.
   const nextFrame = () => new Promise(r => requestAnimationFrame(() => r()));
+  let sliceStart = 0;
+  async function breathe() {
+    if (performance.now() - sliceStart < 8) return;
+    await nextFrame();
+    sliceStart = performance.now();
+  }
 
   // every pass rebuilds the whole worn set from scratch, so taking one item
   // off used to re-bake every drawable of everything still on. baked canvases
@@ -558,6 +569,7 @@ window.Mods = (function () {
     if (!window.Live2D || !Live2D.setDrawableTextures) return;
     await ensureLoaded();
     const t0 = performance.now();
+    sliceStart = t0;
     let bakeMs = 0, bakes = 0;
     const byDrawable = new Map();
     for (const mod of mods) {
@@ -587,7 +599,7 @@ window.Mods = (function () {
       if (!baked) {
         // only the drawables we actually redraw cost anything, so this is
         // where the frame goes back to the renderer
-        await nextFrame();
+        await breathe();
         const tb = performance.now();
         try {
           baked = await bakeDrawable(entries, colorsFor, tint);
