@@ -1,8 +1,8 @@
-import { LERP_TAU_MS, app, currentValues, forcedPartOpacity, loops, markDirty, model, paramDefault, paramIndex, paramMax, paramMin, pendingSequences, raw, scheduleSequence, startLoop, stopLoop, targetParams } from '../live2d.js?v=6';
-import { daypart, moodFactors, moodTier } from '../mood-tier.js?v=6';
-import { cameraTween } from './camera.js?v=6';
-import { clamp } from './geometry.js?v=6';
-import { S } from './state.js?v=6';
+import { LERP_TAU_MS, app, currentValues, forcedPartOpacity, loops, markDirty, model, paramDefault, paramIndex, paramMax, paramMin, pendingSequences, raw, scheduleSequence, startLoop, stopLoop, targetParams } from '../live2d.js?v=7';
+import { daypart, moodFactors, moodTier } from '../mood-tier.js?v=7';
+import { cameraTween } from './camera.js?v=7';
+import { clamp } from './geometry.js?v=7';
+import { S } from './state.js?v=7';
 
 const ACTIVE_FPS = 60;
 const IDLE_FPS = 30;

@@ -1,6 +1,6 @@
-import { moodControlPhrases, moodControlVals, moodInputs, moodPhrases, moodRefreshBtn, moodVals } from './dom.js?v=6';
-import { renderGreeting } from './greetings.js?v=6';
-import { setSidebarOpen } from './sidebar.js?v=6';
+import { moodControlPhrases, moodControlVals, moodInputs, moodPhrases, moodRefreshBtn, moodVals } from './dom.js?v=7';
+import { renderGreeting } from './greetings.js?v=7';
+import { setSidebarOpen } from './sidebar.js?v=7';
 
 const MOOD_PHRASES = {
   affection: [
