@@ -1,7 +1,8 @@
-import { LERP_TAU_MS, app, currentValues, forcedPartOpacity, loops, markDirty, model, paramDefault, paramIndex, paramMax, paramMin, pendingSequences, raw, scheduleSequence, startLoop, stopLoop, targetParams } from '../live2d.js?v=5';
-import { cameraTween } from './camera.js?v=5';
-import { clamp } from './geometry.js?v=5';
-import { S } from './state.js?v=5';
+import { LERP_TAU_MS, app, currentValues, forcedPartOpacity, loops, markDirty, model, paramDefault, paramIndex, paramMax, paramMin, pendingSequences, raw, scheduleSequence, startLoop, stopLoop, targetParams } from '../live2d.js?v=6';
+import { daypart, moodFactors, moodTier } from '../mood-tier.js?v=6';
+import { cameraTween } from './camera.js?v=6';
+import { clamp } from './geometry.js?v=6';
+import { S } from './state.js?v=6';
 
 const ACTIVE_FPS = 60;
 const IDLE_FPS = 30;
@@ -59,31 +60,6 @@ export function setMood(m) {
   if (idleActive) applyMoodBaseline();
 }
 
-// warmth: -1 (cold) .. 1 (adoring); fear: 0 .. 1 once tension passes 45
-function moodFactors() {
-  const warmth = ((mood.affection + mood.trust) / 2 - 50) / 50;
-  const fear = Math.max(0, (mood.tension - 45) / 55);
-  return { warmth, fear };
-}
-
-function moodTier() {
-  const { warmth, fear } = moodFactors();
-  if (fear >= 0.45) return 'scared';
-  if (fear > 0) return 'nervous';
-  if (warmth >= 0.4) return 'happy';
-  if (warmth <= -0.4) return 'upset';
-  return 'neutral';
-}
-
-function daypart() {
-  const h = new Date().getHours();
-  if (h < 5) return 'night';
-  if (h < 11) return 'morning';
-  if (h < 18) return 'day';
-  if (h < 23) return 'evening';
-  return 'night';
-}
-
 // multiplies the fidget delay we get from mood. she calms down at night and
 // after midnight she barely moves. evening is when she's got energy to burn.
 const DAYPART_PACE = { night: 2.1, morning: 1.35, day: 1, evening: 0.85 };
@@ -101,7 +77,7 @@ function trySet(param, value) {
 }
 
 function applyMoodBaseline() {
-  const { warmth, fear } = moodFactors();
+  const { warmth, fear } = moodFactors(mood);
   const hour = DAYPART_BASELINE[daypart()];
   // fear beats tired. she's not sleepy while she's scared.
   const drowsy = 1 - Math.min(1, fear / 0.4);
@@ -323,7 +299,7 @@ export function setFidgetsEnabled(on) {
 
 function scheduleFidget() {
   if (fidgetTimeout) clearTimeout(fidgetTimeout);
-  const tier = moodTier();
+  const tier = moodTier(mood);
   const part = daypart();
   const [lo, hi] = FIDGET_DELAYS[tier] || FIDGET_DELAYS.neutral;
   const pace = DAYPART_PACE[part] || 1;

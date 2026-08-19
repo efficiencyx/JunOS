@@ -1,5 +1,6 @@
-import { moodControlPhrases, moodControlVals, moodInputs, moodPhrases, moodRefreshBtn, moodVals } from './dom.js?v=5';
-import { setSidebarOpen } from './sidebar.js?v=5';
+import { moodControlPhrases, moodControlVals, moodInputs, moodPhrases, moodRefreshBtn, moodVals } from './dom.js?v=6';
+import { renderGreeting } from './greetings.js?v=6';
+import { setSidebarOpen } from './sidebar.js?v=6';
 
 const MOOD_PHRASES = {
   affection: [
@@ -170,6 +171,7 @@ function renderMood(state) {
     setMoodFill(k, state[k]);
   }
   applyMoodAccent(shown);
+  renderGreeting(shown);
   if (window.Live2D && Live2D.setMood) Live2D.setMood(state);
 }
 export async function loadMood() {
@@ -210,6 +212,7 @@ for (const k of ['affection', 'trust', 'tension']) {
 }
 for (const k of ['affection', 'trust', 'tension']) setMoodFill(k, moodBaseline[k]);
 applyMoodAccent(moodBaseline);
+renderGreeting(moodBaseline);
 if (moodRefreshBtn) moodRefreshBtn.addEventListener('click', loadMood);
 
 document.addEventListener('keydown', (e) => {

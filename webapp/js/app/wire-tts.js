@@ -1,9 +1,9 @@
-import { IDLE_AFTER_REPLY_MS, scheduleIdleNudge } from './consolidation.js?v=5';
-import { ttsChk, ttsEngineSelect, ttsLangRow, ttsLangSelect, ttsSpeedInput, ttsVoiceSelect } from './dom.js?v=5';
-import { finishPendingFaceBubbleHide } from './face-bubble.js?v=5';
-import { logAction } from './logging.js?v=5';
-import { syncVoiceDeps, updateTtsSpeedLabel } from './settings.js?v=5';
-import { escapeHtml } from './util.js?v=5';
+import { IDLE_AFTER_REPLY_MS, scheduleIdleNudge } from './consolidation.js?v=6';
+import { ttsChk, ttsEngineSelect, ttsLangRow, ttsLangSelect, ttsSpeedInput, ttsVoiceSelect } from './dom.js?v=6';
+import { finishPendingFaceBubbleHide } from './face-bubble.js?v=6';
+import { logAction } from './logging.js?v=6';
+import { syncVoiceDeps, updateTtsSpeedLabel } from './settings.js?v=6';
+import { escapeHtml } from './util.js?v=6';
 
 export async function wireTts() {
   if (window.TTS) {
