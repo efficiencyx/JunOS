@@ -635,7 +635,7 @@ function showBoot() {
     ['vendor/pixi.min.js', 'vendor/live2dcubismcore.min.js',
      'vendor/marked.min.js', 'vendor/purify.min.js?v=3',
      'js/actions.js?v=3', 'js/outfit.js?v=10', 'js/touch.js?v=3',
-     'js/mods.js?v=5', 'js/tts.js?v=3', 'js/voice.js?v=8',
+     'js/mods.js?v=6', 'js/tts.js?v=3', 'js/voice.js?v=8',
      'js/voicemode.js?v=3', 'js/trip-loader.js?v=3',
      ...(currentUser?.role === 'admin' ? ['js/devhud.js?v=3'] : []),
      'js/wardrobe-open-lines.js?v=3', 'js/wardrobe-reactions.js?v=3',
