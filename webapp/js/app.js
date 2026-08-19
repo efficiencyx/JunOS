@@ -720,6 +720,13 @@ function showBoot() {
   // the wardrobe is the same session. time in there is NOT an absence.
   if (!fromWardrobe) await fetchWelcome();
   reportActivity(true);
+  // fire this BEFORE Live2D.init, not after. it is one cheap GET that only
+  // needs the session, and the empty state greeting is picked off these
+  // three numbers. left behind the model load it sits on the neutral
+  // baseline for however many seconds the .moc3 takes. she is not neutral.
+  // setMood before init is fine, it just parks the values, and startIdle
+  // calls applyMoodBaseline unconditionally once the model is up.
+  loadMood();
 
   Actions.setLogger(logAction);
   Live2D.setOnMissingParam(logMissing);
@@ -736,7 +743,6 @@ function showBoot() {
       TripLoader.finish();
     }
     Live2D.startIdle();
-    loadMood();
     playWelcome();
 
     await Actions.load('action_map.json');
