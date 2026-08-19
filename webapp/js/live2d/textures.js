@@ -182,7 +182,32 @@ function _mapAlpha(tc, w, h, toPremultiplied) {
   tc.putImageData(px, 0, 0);
 }
 
-function recompositeTexture(texIndex) {
+// how far a fullClear reaches past its own rect, so a repair box has to cover
+// that much slack or it leaves a ring of stale texels behind
+const CLEAR_PAD = 8;
+
+function _boxFor(id, texIndex, W, H) {
+  const r = _uvRect.get(id);
+  if (!r || r.tex !== texIndex) return null;
+  const x0 = r.u0 * W, y0 = (1 - (r.v0 + r.h)) * H;
+  const x = Math.max(0, Math.floor(x0) - CLEAR_PAD);
+  const y = Math.max(0, Math.floor(y0) - CLEAR_PAD);
+  const w = Math.min(W, Math.ceil(x0 + r.w * W) + CLEAR_PAD) - x;
+  const h = Math.min(H, Math.ceil(y0 + r.h * H) + CLEAR_PAD) - y;
+  return w > 0 && h > 0 ? { x, y, w, h } : null;
+}
+
+const _hits = (a, boxes) => boxes.some(b =>
+  a.x - CLEAR_PAD < b.x + b.w && a.x + a.w + CLEAR_PAD > b.x &&
+  a.yTop - CLEAR_PAD < b.y + b.h && a.yTop + a.h + CLEAR_PAD > b.y);
+
+// dirtyIds, when given, are the drawables whose override actually changed.
+// everything else on this atlas is already correct on the live canvas, so the
+// repair gets clipped to their boxes and only the overrides reaching into one
+// get redrawn. that's the difference between 59 patches and 2. it stays
+// correct because the clip means a redrawn neighbour can only touch pixels we
+// just restored to the pristine atlas, in the same order as a full pass.
+function recompositeTexture(texIndex, dirtyIds) {
   const _t0 = performance.now();
   let hasOverride = false;
   for (const [id, entry] of _texOverride) {
@@ -197,26 +222,51 @@ function recompositeTexture(texIndex) {
     const orig = _originalSource[texIndex];
     if (orig) {
       _restoreOriginalTexture(texIndex, orig);
+      // pixi is back on the untouched atlas, so whatever the live canvas
+      // still holds is a lie. next override rebuilds it from scratch.
+      _liveCanvas[texIndex] = null;
       return;
     }
   }
 
   const base = _baseAtlas(texIndex), W = base.width, H = base.height;
-  if (!_liveCanvas[texIndex]) {
+  const rebuild = !_liveCanvas[texIndex];
+  if (rebuild) {
     const c = document.createElement('canvas');
     c.width = W; c.height = H;
     _liveCanvas[texIndex] = c;
   }
   const c = _liveCanvas[texIndex];
   const ctx = ctx2d(c);
-  ctx.clearRect(0, 0, W, H);
-  ctx.drawImage(base, 0, 0);
-  const active = [];
+  let active = [];
   for (const [id, entry] of _texOverride) {
     const r = _uvRect.get(id);
     if (!r || r.tex !== texIndex || !entry) continue;
     // Cubism counts v from the BOTTOM, so the canvas origin has to flip
     active.push({ id, entry, x: r.u0 * W, yTop: (1 - (r.v0 + r.h)) * H, w: r.w * W, h: r.h * H });
+  }
+  let boxes = null;
+  if (!rebuild && dirtyIds && dirtyIds.size) {
+    boxes = [];
+    for (const id of dirtyIds) {
+      const b = _boxFor(id, texIndex, W, H);
+      if (b) boxes.push(b);
+    }
+    if (!boxes.length) return;
+  }
+  if (boxes) {
+    ctx.save();
+    ctx.beginPath();
+    for (const b of boxes) ctx.rect(b.x, b.y, b.w, b.h);
+    ctx.clip();
+    for (const b of boxes) {
+      ctx.clearRect(b.x, b.y, b.w, b.h);
+      ctx.drawImage(base, b.x, b.y, b.w, b.h, b.x, b.y, b.w, b.h);
+    }
+    active = active.filter(a => _hits(a, boxes));
+  } else {
+    ctx.clearRect(0, 0, W, H);
+    ctx.drawImage(base, 0, 0);
   }
   // erase before painting or overlapping atlas regions wipe each other out
   for (const a of active) {
@@ -276,13 +326,15 @@ function recompositeTexture(texIndex) {
     else ctx.drawImage(a.entry.img, a.x, a.yTop, a.w, a.h);
     ctx.restore();
   }
+  if (boxes) ctx.restore();
   _uploadTexture(texIndex, c);
   markDirty();
   // this whole function is synchronous and it holds the frame, so when it
   // goes long she visibly hangs. only ever shows up on somebody else's box
   // with somebody else's mod, so say it out loud instead of guessing.
   const _ms = performance.now() - _t0;
-  if (_ms > 100) console.warn(`live2d: recomposite tex${texIndex} ${_ms | 0}ms, ${active.length} overrides`);
+  if (_ms > 100) console.warn(`live2d: recomposite tex${texIndex} ${_ms | 0}ms, ` +
+    `${active.length} overrides${boxes ? ' (repair)' : ''}`);
 }
 
 // atlas recomposites are async and every caller fires them without awaiting,
@@ -305,11 +357,11 @@ async function _setDrawableTexture(drawableId, url, overlay) {
   if (!r) return;
   if (url) _texOverride.set(drawableId, { key: url, img: await _loadImg(url), overlay: !!overlay, alphaClip: false, fullClear: false });
   else _texOverride.delete(drawableId);
-  recompositeTexture(r.tex);
+  recompositeTexture(r.tex, new Set([drawableId]));
 }
 
 async function _setDrawableTextures(map) {
-  const texes = new Set();
+  const dirty = new Map();
   await Promise.all(Object.entries(map).map(async ([id, val]) => {
     const r = _uvRect.get(id);
     if (!r) return;
@@ -342,16 +394,17 @@ async function _setDrawableTextures(map) {
       if (!prev) return;
       _texOverride.delete(id);
     }
-    texes.add(r.tex);
+    if (!dirty.has(r.tex)) dirty.set(r.tex, new Set());
+    dirty.get(r.tex).add(id);
   }));
   // a recomposite is a whole 4k atlas: clip, redraw, alpha pass, upload. two
   // of them back to back is a visible stall, so give the renderer a frame in
   // between. callers that read pixels back go through texturesSettled anyway.
   let first = true;
-  for (const t of texes) {
+  for (const [t, ids] of dirty) {
     if (!first) await new Promise(r => requestAnimationFrame(() => r()));
     first = false;
-    recompositeTexture(t);
+    recompositeTexture(t, ids);
   }
 }
 
