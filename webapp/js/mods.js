@@ -298,10 +298,16 @@ window.Mods = (function () {
     return null;
   }
 
+  // the baked canvases go straight into the compositor's own CPU-side
+  // canvas, so keeping them off the GPU saves a readback per drawable.
+  // same helper as textures.js, and same rule: only the first getContext
+  // on a canvas takes the option.
+  const ctx2d = (c) => c.getContext('2d', { willReadFrequently: true });
+
   // multiply a canvas by an #rrggbb color and keep the alpha. same math the
   // game uses to color its grey item textures.
   function tintCanvas(c, hex) {
-    const ctx = c.getContext('2d');
+    const ctx = ctx2d(c);
     ctx.globalCompositeOperation = 'multiply';
     ctx.fillStyle = hex;
     ctx.fillRect(0, 0, c.width, c.height);
@@ -314,7 +320,14 @@ window.Mods = (function () {
 
   const ATTACH_DRAWABLE = /^Attach/i;
 
+  // parsing an item's texture jsons is pure work on immutable data, and a
+  // pass does it for every worn item on top of the one you just clicked.
+  const _drawableCache = new WeakMap();
+
   function itemDrawables(mod, item) {
+    const cached = _drawableCache.get(item);
+    if (cached) return cached;
+    // empty before the model is up, and that must NOT get cached
     const valid = new Set(Live2D.findDrawables ? Live2D.findDrawables([''], []) : []);
     const out = [];
     for (const jsonPath of item.jsons) {
@@ -352,6 +365,7 @@ window.Mods = (function () {
         }
       }
     }
+    if (valid.size) _drawableCache.set(item, out);
     return out;
   }
 
@@ -378,7 +392,7 @@ window.Mods = (function () {
     }
     const c = document.createElement('canvas');
     c.width = W; c.height = H;
-    const ctx = c.getContext('2d');
+    const ctx = ctx2d(c);
     entries.forEach((e, i) => {
       const img = imgs[i];
       // RectInt starts from the BOTTOM left, that's unity texture space.
@@ -401,10 +415,10 @@ window.Mods = (function () {
       }
       const t = document.createElement('canvas');
       t.width = W; t.height = H;
-      t.getContext('2d').drawImage(img, e.r.x, sy, e.r.w, e.r.h, 0, 0, W, H);
+      ctx2d(t).drawImage(img, e.r.x, sy, e.r.w, e.r.h, 0, 0, W, H);
       const a = document.createElement('canvas');
       a.width = W; a.height = H;
-      a.getContext('2d').drawImage(t, 0, 0);
+      ctx2d(a).drawImage(t, 0, 0);
       t._alphaSrc = a;
       for (const hex of tints) tintCanvas(t, hex);
       ctx.drawImage(t, 0, 0);
@@ -537,6 +551,8 @@ window.Mods = (function () {
   async function applyPass() {
     if (!window.Live2D || !Live2D.setDrawableTextures) return;
     await ensureLoaded();
+    const t0 = performance.now();
+    let bakeMs = 0, bakes = 0;
     const byDrawable = new Map();
     for (const mod of mods) {
       mod.items.forEach((item, i) => {
@@ -566,9 +582,12 @@ window.Mods = (function () {
         // only the drawables we actually redraw cost anything, so this is
         // where the frame goes back to the renderer
         await nextFrame();
+        const tb = performance.now();
         try {
           baked = await bakeDrawable(entries, colorsFor, tint);
           baked.key = key;
+          bakes++;
+          bakeMs += performance.now() - tb;
         } catch (e) {
           console.warn('mod bake failed', id, e);
           delete map[id];
@@ -590,7 +609,13 @@ window.Mods = (function () {
     }
     bakeCache = fresh;
     appliedIds = new Set(byDrawable.keys());
+    const tt = performance.now();
     await Live2D.setDrawableTextures(map);
+    const total = performance.now() - t0;
+    if (total > 200) {
+      console.warn(`mods: apply ${total | 0}ms - ${byDrawable.size} drawables, ` +
+        `${bakes} baked ${bakeMs | 0}ms, compositor ${performance.now() - tt | 0}ms`);
+    }
   }
 
   async function importZip(buf) {
@@ -673,7 +698,7 @@ window.Mods = (function () {
   // cut a canvas down to the pixels that aren't transparent. null when there
   // are none.
   function trimTransparent(c) {
-    const ctx = c.getContext('2d');
+    const ctx = ctx2d(c);
     const d = ctx.getImageData(0, 0, c.width, c.height).data;
     let x0 = c.width, y0 = c.height, x1 = -1, y1 = -1;
     for (let y = 0; y < c.height; y++) {
@@ -688,7 +713,7 @@ window.Mods = (function () {
     if (x1 < 0) return null;
     const t = document.createElement('canvas');
     t.width = x1 - x0 + 1; t.height = y1 - y0 + 1;
-    t.getContext('2d').drawImage(c, x0, y0, t.width, t.height, 0, 0, t.width, t.height);
+    ctx2d(t).drawImage(c, x0, y0, t.width, t.height, 0, 0, t.width, t.height);
     return t;
   }
 
@@ -698,13 +723,13 @@ window.Mods = (function () {
   // which that layer doesn't paint at all), which is how two tiles ended up
   // fully blank. so trim to the art and skip whatever trims to nothing.
   async function itemThumbUrl(mod, item) {
-    const entries = itemDrawables(mod, item);
+    const entries = itemDrawables(mod, item).slice();
     entries.sort((a, b) => b.r.w * b.r.h - a.r.w * a.r.h);
     for (const e of entries) {
       const img = await loadImg(fileUrl(mod, e.tex));
       const c = document.createElement('canvas');
       c.width = e.r.w; c.height = e.r.h;
-      c.getContext('2d').drawImage(img, e.r.x, img.naturalHeight - e.r.y - e.r.h, e.r.w, e.r.h,
+      ctx2d(c).drawImage(img, e.r.x, img.naturalHeight - e.r.y - e.r.h, e.r.w, e.r.h,
         0, 0, e.r.w, e.r.h);
       const t = trimTransparent(c);
       if (t) return t.toDataURL();
