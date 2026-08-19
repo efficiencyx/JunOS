@@ -454,6 +454,15 @@ window.Mods = (function () {
   let readyPromise = null;
   let appliedIds = new Set();
 
+  // the game's ten mod slots. they all hang off one part the rig parks at
+  // opacity 0, and nothing in the model ever turns it back on - the GAME does
+  // that when an item goes in the slot. so a face crack mod bakes a perfect
+  // patch into ModdableFace's atlas box and you see absolutely nothing.
+  // outfit.js already does this for its glasses and logos with its show
+  // lists. this is the same thing for mods.
+  const MOD_SLOT = /^Moddable/;
+  const shownSlots = new Set();
+
   function loadState() {
     try { state = JSON.parse(localStorage.getItem(STATE_KEY)) || {}; } catch (e) { state = {}; }
   }
@@ -627,6 +636,23 @@ window.Mods = (function () {
     }
     bakeCache = fresh;
     appliedIds = new Set(byDrawable.keys());
+    if (Live2D.setDrawableOpacity) {
+      let released = false;
+      for (const id of shownSlots) {
+        if (byDrawable.has(id)) continue;
+        Live2D.setDrawableOpacity(id, null);
+        shownSlots.delete(id);
+        released = true;
+      }
+      for (const id of byDrawable.keys()) {
+        if (!MOD_SLOT.test(id)) continue;
+        Live2D.setDrawableOpacity(id, 1);
+        shownSlots.add(id);
+      }
+      // glasses live in ModdableFace too. dropping a face mod must not take
+      // them down with it, so hand the slot back and let outfit re-claim it.
+      if (released && window.Outfit?.refreshVisibility) Outfit.refreshVisibility();
+    }
     const tt = performance.now();
     await Live2D.setDrawableTextures(map);
     const total = performance.now() - t0;
