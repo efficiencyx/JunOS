@@ -677,7 +677,16 @@ function Install-Php {
             --accept-source-agreements --accept-package-agreements
     }
 
-    if (Test-Path $phpExe) { return }
+    $phpReady = $true
+    foreach ($required in 'php.exe', 'php.ini', 'ext\php_curl.dll', 'ext\php_mbstring.dll',
+            'ext\php_openssl.dll', 'ext\php_pdo_sqlite.dll', 'ext\php_sqlite3.dll') {
+        if (-not (Test-Path (Join-Path $phpDir $required))) {
+            $phpReady = $false
+            break
+        }
+    }
+    if ($phpReady) { return }
+    if (Test-Path $phpDir) { Warn_ 'portable PHP is incomplete - repairing it' }
 
     Step 'download portable PHP'
     $releases = Invoke-RestMethod 'https://windows.php.net/downloads/releases/releases.json' -UseBasicParsing
@@ -693,6 +702,7 @@ function Install-Php {
 
     $tmpDir = Join-Path $env:TEMP ('jun-php-' + [guid]::NewGuid().ToString('N'))
     New-Item -ItemType Directory -Force -Path $tmpDir | Out-Null
+    $phpStage = $null
     try {
         $zip = Join-Path $tmpDir 'php.zip'
         Invoke-WebRequest -Uri $zipUrl -OutFile $zip -UseBasicParsing
@@ -704,8 +714,24 @@ function Install-Php {
                 $zipSha, (Get-FileHash -Algorithm SHA256 -LiteralPath $zip).Hash)
         }
         Ok 'PHP zip matches the sha256 in releases.json'
-        New-Item -ItemType Directory -Force -Path $phpDir | Out-Null
-        Expand-Archive -Path $zip -DestinationPath $phpDir -Force
+        $phpParent = Split-Path -Parent $phpDir
+        New-Item -ItemType Directory -Force -Path $phpParent | Out-Null
+        $phpStage = Join-Path $phpParent ('php-staging-' + [guid]::NewGuid().ToString('N'))
+        New-Item -ItemType Directory -Force -Path $phpStage | Out-Null
+        Add-Type -AssemblyName System.IO.Compression.FileSystem
+        [IO.Compression.ZipFile]::ExtractToDirectory($zip, $phpStage)
+        if (-not (Test-Path (Join-Path $phpStage 'php.exe'))) {
+            throw 'The verified PHP archive did not contain php.exe.'
+        }
+
+        # a half extracted php must never be visible in $phpDir. so we unpack
+        # next door and rename in one shot. staging sits under the same parent
+        # on purpose, [IO.Directory]::Move across volumes just throws.
+        if (Test-Path $phpDir) {
+            Remove-Item -LiteralPath $phpDir -Recurse -Force
+        }
+        [IO.Directory]::Move($phpStage, $phpDir)
+        $phpStage = $null
 
         # curl.se publishes the digest next to the bundle. a tampered CA
         # bundle is WORSE than none at all, it makes PHP trust a CA you never
@@ -717,11 +743,14 @@ function Install-Php {
             Invoke-WebRequest -Uri 'https://curl.se/ca/cacert.pem' -OutFile $caTmp -UseBasicParsing
             $caWant = ((Invoke-WebRequest -Uri 'https://curl.se/ca/cacert.pem.sha256' -UseBasicParsing).Content -split '\s+')[0]
             if (-not (Test-Sha256 $caTmp $caWant)) { throw 'cacert.pem does not match its published sha256' }
-            Move-Item -LiteralPath $caTmp -Destination $cacert -Force
+            [IO.File]::Copy($caTmp, $cacert, $true)
         } catch {
             Warn_ ("skipping cacert.pem ({0}); HTTPS from PHP (web fetch tool) may not work" -f $_.Exception.Message)
         }
     } finally {
+        if ($phpStage -and (Test-Path $phpStage)) {
+            Remove-Item -LiteralPath $phpStage -Recurse -Force -ErrorAction SilentlyContinue
+        }
         Remove-Item -LiteralPath $tmpDir -Recurse -Force -ErrorAction SilentlyContinue
     }
     $ini = @(

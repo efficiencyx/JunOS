@@ -245,7 +245,18 @@ if (promoteBtn) promoteBtn.addEventListener('click', async () => {
     }
     const j = await r.json().catch(() => ({}));
     const msgs = { invalid_dev_key: 'Wrong key.', dev_promotion_disabled: 'Developer access is disabled on this server.' };
-    if (devAccessDesc) devAccessDesc.textContent = msgs[j.error] || 'Could not unlock developer access.';
+    if (r.status === 429 || j.error === 'rate_limit_exceeded') {
+      const retryAfter = Number(j.retry_after || r.headers.get('Retry-After'));
+      let wait = 'a moment';
+      if (Number.isFinite(retryAfter) && retryAfter > 0) {
+        const count = Math.ceil(retryAfter < 60 ? retryAfter : retryAfter / 60);
+        const unit = retryAfter < 60 ? 'second' : 'minute';
+        wait = `${count} ${unit}${count === 1 ? '' : 's'}`;
+      }
+      if (devAccessDesc) devAccessDesc.textContent = `Too many attempts. Try again in ${wait}.`;
+    } else if (devAccessDesc) {
+      devAccessDesc.textContent = msgs[j.error] || 'Could not unlock developer access.';
+    }
   } catch (e) {
     if (devAccessDesc) devAccessDesc.textContent = 'Network error.';
   }
