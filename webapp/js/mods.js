@@ -319,18 +319,18 @@ window.Mods = (function () {
   }
 
   const ATTACH_DRAWABLE = /^Attach/i;
-  const LIMB_KEY = 'omega.mods.limbcolor.v1';
-  // on = her arms and legs take her skin colour no matter what the mod says.
-  // off hands the Attach* drawables back to the mod's own BypassColorScaler,
-  // which is what a limb mod that ships REAL colours (tattoos, a prosthetic)
-  // wants. lives in the skin swatch in the wardrobe.
-  let limbsFollowSkin = localStorage.getItem(LIMB_KEY) !== '0';
+  // per item. on = her arms and legs take her skin colour no matter what the
+  // mod says. off hands the Attach* drawables back to the mod's own
+  // BypassColorScaler, which is what a limb mod shipping REAL colours
+  // (tattoos, a prosthetic) wants. it's in each item's colour menu.
+  const limbsFollowSkin = (guid, itemIndex) =>
+    (modState(guid).limbs || {})[itemIndex] !== false;
 
   // parsing an item's texture jsons is pure work on immutable data, and a
   // pass does it for every worn item on top of the one you just clicked.
   const _drawableCache = new WeakMap();
 
-  function itemDrawables(mod, item) {
+  function itemDrawables(mod, item, followSkin = true) {
     const cached = _drawableCache.get(item);
     if (cached) return cached;
     // empty before the model is up, and that must NOT get cached
@@ -365,7 +365,7 @@ window.Mods = (function () {
             // ship neutral grey art - Seamless Components sets bypass on all
             // 29 of them, so honouring it left her with grey arms next to a
             // coloured body.
-            bypassColorScaler: !(limbsFollowSkin && ATTACH_DRAWABLE.test(id))
+            bypassColorScaler: !(followSkin && ATTACH_DRAWABLE.test(id))
               && !!(pd.BypassColorScaler ?? pd.bypassColorScaler),
           });
         }
@@ -575,7 +575,7 @@ window.Mods = (function () {
     for (const mod of mods) {
       mod.items.forEach((item, i) => {
         if (!isEquipped(mod, i)) return;
-        for (const e of itemDrawables(mod, item)) {
+        for (const e of itemDrawables(mod, item, limbsFollowSkin(mod.guid, i))) {
           if (!byDrawable.has(e.id)) byDrawable.set(e.id, []);
           byDrawable.get(e.id).push({ ...e, url: fileUrl(mod, e.tex), mod, itemIndex: i });
         }
@@ -830,6 +830,12 @@ window.Mods = (function () {
           tile.appendChild(Outfit.makeItemColorButton(
             item.label, item.slots, values,
             (slotIndex, hex) => setColor(mod.guid, i, slotIndex, hex),
+            'wd-swatch',
+            {
+              label: 'Arms and legs follow her skin',
+              get: () => limbsFollowSkin(mod.guid, i),
+              set: (on) => setLimbsFollowSkin(mod.guid, i, on),
+            },
           ));
         }
         tile.addEventListener('click', () => {
@@ -842,15 +848,14 @@ window.Mods = (function () {
     }
   }
 
-  function getLimbsFollowSkin() { return limbsFollowSkin; }
-
-  function setLimbsFollowSkin(on) {
-    limbsFollowSkin = !!on;
-    try { localStorage.setItem(LIMB_KEY, limbsFollowSkin ? '1' : '0'); } catch (e) { }
+  function setLimbsFollowSkin(guid, itemIndex, on) {
+    const st = modState(guid);
+    st.limbs = st.limbs || {};
+    st.limbs[itemIndex] = !!on;
+    saveState();
     applyAll();
   }
 
   return { applyAll, refreshTints, describe, buildWardrobeSection, importZip, removeMod,
-    getLimbsFollowSkin, setLimbsFollowSkin,
     owns: (id) => appliedIds.has(id) };
 })();
