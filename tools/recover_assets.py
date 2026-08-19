@@ -518,14 +518,18 @@ class Recovery:
                         x, y, w, h = entry["rect"]
                         # unity rectangles start at the BOTTOM left
                         crop = img.crop((x, H - y - h, x + w, H - y))
-                        # an all transparent crop is the item saying "this
-                        # drawable keeps its vanilla art" (barcode and lines
-                        # on the hightech skin). writing it out anyway gives
-                        # outfit.js an empty override, and the compositor
-                        # clears a drawable's box before it draws, so the
-                        # vanilla art gets wiped and nothing replaces it.
+                        # an all transparent crop is the item saying "get rid
+                        # of this drawable" - hightechHypercamoSkin_interact
+                        # does it to barcode and lines, her chest barcode and
+                        # the cracks down her cheeks, because the hypercamo is
+                        # a smooth white shell. an empty PNG can't express
+                        # that (outfit.js paints limb crops with alphaClip,
+                        # which erases through the patch's own alpha, so an
+                        # empty patch erases nothing). so don't write it, and
+                        # put the drawable in the option's hide list instead.
                         if crop.getchannel("A").getextrema() == (0, 0):
-                            print(f"  skip variants/limbs/{d}/{en}.png (empty crop)")
+                            print(f"  skip variants/limbs/{d}/{en}.png "
+                                  "(empty crop - hide the drawable in outfit.js instead)")
                             continue
                         self.save(crop, f"variants/limbs/{d}/{en}.png")
                         mapping[group][en] = f"assets/variants/limbs/{d}/{en}.png"

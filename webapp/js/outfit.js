@@ -262,12 +262,12 @@ window.Outfit = (function () {
     'AttachArmRHandUp2', 'AttachArmRHandUp3', 'AttachArmRLowerArmDown', 'AttachArmRLowerArmUp'];
   const LEG_EXP_IDS = ['AttachLegLFeet', 'AttachLegLKnee', 'AttachLegLLower', 'AttachLegLThigh',
     'AttachLegRFeet', 'AttachLegRKnee', 'AttachLegRLower', 'AttachLegRThigh'];
-  // the game's hightechHypercamoSkin_interact also lists barcode and lines,
-  // and its crops for those two are 100% transparent in the game's own atlas.
-  // that's the game saying "leave those alone", the art is already in
-  // texture_00.png and the drawables are visible by default. we took it as a
-  // texture and the compositor clears a drawable's box before it draws, so
-  // equipping the skin ERASED her barcode. so they stay out of this list.
+  // the game's hightechHypercamoSkin_interact also lists barcode and lines
+  // (her chest barcode and the cracks down her cheeks), with rects that are
+  // 100% transparent in the game's own atlas. an empty crop is the item
+  // saying GET RID OF IT - the hypercamo is a smooth white shell, she doesn't
+  // keep a barcode on it. they're not textures, so they don't belong in this
+  // list, they're in the option's hide list instead.
   const HT_SKIN_IDS = ['SkinArmL', 'SkinArmR', 'SkinPelvis', 'SkinThighL', 'SkinThighR'];
   // mech knees have to be TOLD to draw over the calf and thigh
   const LEG_ORDER = [
@@ -298,7 +298,12 @@ window.Outfit = (function () {
       drawables: HT_SKIN_IDS,
       options: [
         { name: 'Standard skin', textures: {} },
-        { name: 'High-Tech Skin', textures: limbTex('hightech', HT_SKIN_IDS) },
+        // both are visible in the rig by default and nothing else turns them
+        // off. shipping the empty crop as a texture did NOTHING: limbTex sets
+        // alphaClip, and alphaClip erases through the patch's own alpha, so
+        // an empty patch erases an empty shape. hiding the drawable is the
+        // honest way to say it anyway.
+        { name: 'High-Tech Skin', textures: limbTex('hightech', HT_SKIN_IDS), hide: ['barcode', 'lines'] },
       ],
     },
     {

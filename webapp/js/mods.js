@@ -388,8 +388,16 @@ window.Mods = (function () {
     // layer-0 section, TailFluffy_common among them, on the same TailMain
     // rect a modded tail uses. so that rule erased her tail the moment you
     // equipped a mod tail, and ate the panties under a maebari.
-    const replacesVanilla = entries.some(e => e.dontIncludeVanilla);
-    let W = 0, H = 0;
+    // the OTHER way a mod says "delete this decal": a 1x1 RectInt, pointing
+    // at the transparent corner of its own sheet, stretched over a whole
+    // drawable. nobody paints with that. Seamless Components does it to
+    // barcode and lines on its smooth skins while its Translucent Abs variant
+    // ships the real 322x126 lines crop in the same zip, so the mod is
+    // telling us which it means. it never sets DontIncludeVanillaLayers.
+    const isBlank = (e) => e.r.w <= 1 && e.r.h <= 1;
+    const replacesVanilla = entries.some(e => e.dontIncludeVanilla || isBlank(e));
+    entries = entries.filter(e => !isBlank(e));
+    let W = 1, H = 1;
     const imgs = [];
     for (const e of entries) {
       const img = await loadImg(e.url);
