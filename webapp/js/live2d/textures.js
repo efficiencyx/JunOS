@@ -1,5 +1,5 @@
-import { markDirty, model, publicTint, raw } from '../live2d.js?v=5';
-import { findDrawables } from './geometry.js?v=5';
+import { markDirty, model, publicTint, raw } from '../live2d.js?v=6';
+import { findDrawables } from './geometry.js?v=6';
 
 export function tintByPattern(includes, excludes, rgb) {
   if (!publicTint) return [];
@@ -191,6 +191,32 @@ function recompositeTexture(texIndex) {
     }
     ctx.restore();
   }
+  // a mod that keeps its own colour on a drawable her skin or hair colour
+  // normally tints has to have that uniform taken off it, because one
+  // multiply covers the whole drawable and you can't spare the mod's pixels
+  // from it. so the caller cleared the uniform and handed us the colour, and
+  // the art underneath gets it here instead. mods.js does the same to its own
+  // layers that wanted it.
+  for (const a of active) {
+    if (!a.entry.baseTint || a.entry.fullClear || !a.entry.overlay) continue;
+    const x = Math.floor(a.x), y = Math.floor(a.yTop);
+    const w = Math.ceil(a.x + a.w) - x, h = Math.ceil(a.yTop + a.h) - y;
+    const t = document.createElement('canvas');
+    t.width = w; t.height = h;
+    const tc = t.getContext('2d');
+    tc.drawImage(c, x, y, w, h, 0, 0, w, h);
+    tc.globalCompositeOperation = 'multiply';
+    tc.fillStyle = a.entry.baseTint;
+    tc.fillRect(0, 0, w, h);
+    // multiply floods the transparent texels too, cut it back to the art
+    tc.globalCompositeOperation = 'destination-in';
+    tc.drawImage(c, x, y, w, h, 0, 0, w, h);
+    ctx.save();
+    ctx.clip(meshPath(a.id, W, H));
+    ctx.clearRect(x, y, w, h);
+    ctx.drawImage(t, x, y);
+    ctx.restore();
+  }
   for (const a of active) {
     ctx.save();
     ctx.clip(meshPath(a.id, W, H));
@@ -235,17 +261,19 @@ async function _setDrawableTextures(map) {
     const overlay = val && typeof val === 'object' ? !!val.overlay : false;
     const alphaClip = val && typeof val === 'object' ? !!val.alphaClip : false;
     const fullClear = val && typeof val === 'object' ? !!val.fullClear : false;
+    const baseTint = val && typeof val === 'object' ? (val.baseTint || null) : null;
     // don't ship a 4k atlas up again when the outfit update changed nothing
     const prev = _texOverride.get(id);
     if (url) {
       if (prev && prev.url === url && prev.overlay === overlay &&
-          prev.alphaClip === alphaClip && prev.fullClear === fullClear) return;
+          prev.alphaClip === alphaClip && prev.fullClear === fullClear &&
+          prev.baseTint === baseTint) return;
       // one bad image must NOT kill the whole batch, the other overrides
       // still have to land and get drawn
       let img;
       try { img = await _loadImg(url); }
       catch (e) { console.warn('texture load failed', id, url, e); return; }
-      _texOverride.set(id, { url, img, overlay, alphaClip, fullClear });
+      _texOverride.set(id, { url, img, overlay, alphaClip, fullClear, baseTint });
     } else {
       if (!prev) return;
       _texOverride.delete(id);
@@ -257,6 +285,10 @@ async function _setDrawableTextures(map) {
 
 export function setDrawableTint(id, rgb) {
   if (publicTint) publicTint.setMultiply(id, rgb);
+}
+
+export function getDrawableTint(id) {
+  return publicTint ? publicTint.getMultiply(id) : null;
 }
 
 export function setDrawableScreen(id, rgb) {

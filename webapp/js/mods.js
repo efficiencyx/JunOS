@@ -336,6 +336,10 @@ window.Mods = (function () {
             // it's set the default "vanilla" art is NOT drawn under the mod
             // layers, even if the mod has no layer-0 texture at all.
             dontIncludeVanilla: !!(pt.DontIncludeVanillaLayers ?? pt.dontIncludeVanillaLayers),
+            // "don't scale me by the character's colour". an accessory sets
+            // it and keeps its own colour, body art leaves it off and follows
+            // her skin. defaults off because that's the serialized default.
+            bypassColorScaler: !!(pd.BypassColorScaler ?? pd.bypassColorScaler),
           });
         }
       }
@@ -346,7 +350,7 @@ window.Mods = (function () {
   // bake every worn mod entry for one drawable into a single canvas crop.
   // the compositor only takes ONE override per drawable, so the layers get
   // merged here.
-  async function bakeDrawable(entries, colorsFor) {
+  async function bakeDrawable(entries, colorsFor, hostTint) {
     entries.sort((a, b) => a.layer - b.layer);
     // vanilla art stays underneath unless the container says no vanilla
     // layers. same as Part.AddVanilla in the game.
@@ -374,8 +378,16 @@ window.Mods = (function () {
       // Components by holding the crops next to the vanilla atlas art.
       // canvas crops from the top. so flip it.
       const sy = img.naturalHeight - e.r.y - e.r.h;
-      const hex = e.colorIndex >= 0 ? colorsFor(e) : null;
-      if (!hex) {
+      const tints = [];
+      if (e.colorIndex >= 0) {
+        const hex = colorsFor(e);
+        if (hex) tints.push(hex);
+      }
+      // hostTint is the outfit colour this drawable normally gets from the
+      // shader. we took that uniform away (see applyAll), so the layers that
+      // DO want it have to get it here.
+      if (hostTint && !e.bypassColorScaler) tints.push(hostTint);
+      if (!tints.length) {
         ctx.drawImage(img, e.r.x, sy, e.r.w, e.r.h, 0, 0, W, H);
         return;
       }
@@ -386,7 +398,7 @@ window.Mods = (function () {
       a.width = W; a.height = H;
       a.getContext('2d').drawImage(t, 0, 0);
       t._alphaSrc = a;
-      tintCanvas(t, hex);
+      for (const hex of tints) tintCanvas(t, hex);
       ctx.drawImage(t, 0, 0);
     });
     // the atlas goes up as PREMULTIPLIED alpha (colour already faded by its
@@ -440,6 +452,46 @@ window.Mods = (function () {
     return readyPromise;
   }
 
+  // the outfit colour of every drawable we took the shader tint away from, so
+  // we can hand it back when the item comes off. the uniform itself is null
+  // while we hold it, so it can't be read back.
+  const heldTint = new Map();
+
+  const rgbToHex = (rgb) => '#' + rgb
+    .map(v => Math.round(Math.max(0, Math.min(1, v)) * 255).toString(16).padStart(2, '0'))
+    .join('');
+
+  // her skin, hair and tail colours are ONE multiply uniform per drawable, so
+  // anything we bake into that drawable's atlas patch gets multiplied too - a
+  // white latex bowtie on SkinBodyFront came out skin coloured, bunny ears on
+  // ModdableHairFront came out hair coloured. can't exclude pixels from a
+  // uniform, so we take it off the drawable and re-apply it ourselves, to the
+  // vanilla art (see baseTint in textures.js) and to the mod layers that
+  // asked for it. the ones with BypassColorScaler keep their own colour.
+  function hostTintFor(id) {
+    if (heldTint.has(id)) return heldTint.get(id);
+    const rgb = Live2D.getDrawableTint ? Live2D.getDrawableTint(id) : null;
+    return rgb ? rgbToHex(rgb) : null;
+  }
+
+  function releaseTint(id) {
+    if (!heldTint.has(id)) return;
+    const hex = heldTint.get(id);
+    heldTint.delete(id);
+    if (Live2D.setDrawableTint) Live2D.setDrawableTint(id, hexToRgb01(hex));
+  }
+
+  function hexToRgb01(hex) {
+    const m = /^#?([0-9a-f]{2})([0-9a-f]{2})([0-9a-f]{2})$/i.exec(hex || '');
+    return m ? [parseInt(m[1], 16) / 255, parseInt(m[2], 16) / 255, parseInt(m[3], 16) / 255] : null;
+  }
+
+  // outfit just re-tinted the model, so every colour we remembered is stale.
+  function refreshTints() {
+    heldTint.clear();
+    return applyAll();
+  }
+
   async function applyAll() {
     if (!window.Live2D || !Live2D.setDrawableTextures) return;
     await ensureLoaded();
@@ -456,14 +508,32 @@ window.Mods = (function () {
     const map = {};
     // null clears overrides that vanished from this pass
     for (const id of appliedIds) map[id] = null;
+    for (const id of [...heldTint.keys()]) {
+      if (!byDrawable.has(id)) releaseTint(id);
+    }
     for (const [id, entries] of byDrawable) {
+      // only worth taking the uniform over when something actually opts out
+      // of it AND there's a colour on the drawable to take over
+      const tint = entries.some(e => e.bypassColorScaler) ? hostTintFor(id) : null;
       // ColorIndex points into the owning ITEM's ColorSlots list
       try {
         map[id] = await bakeDrawable(entries,
-          (e) => ((modState(e.mod.guid).colors || {})[e.itemIndex] || [])[e.colorIndex] || null);
+          (e) => ((modState(e.mod.guid).colors || {})[e.itemIndex] || [])[e.colorIndex] || null,
+          tint);
       } catch (e) {
         console.warn('mod bake failed', id, e);
         delete map[id];
+        releaseTint(id);
+        continue;
+      }
+      if (tint) {
+        map[id].baseTint = tint;
+        if (!heldTint.has(id)) {
+          heldTint.set(id, tint);
+          if (Live2D.setDrawableTint) Live2D.setDrawableTint(id, null);
+        }
+      } else {
+        releaseTint(id);
       }
     }
     appliedIds = new Set(byDrawable.keys());
@@ -676,6 +746,6 @@ window.Mods = (function () {
     }
   }
 
-  return { applyAll, describe, buildWardrobeSection, importZip, removeMod,
+  return { applyAll, refreshTints, describe, buildWardrobeSection, importZip, removeMod,
     owns: (id) => appliedIds.has(id) };
 })();
