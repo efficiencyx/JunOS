@@ -262,8 +262,13 @@ window.Outfit = (function () {
     'AttachArmRHandUp2', 'AttachArmRHandUp3', 'AttachArmRLowerArmDown', 'AttachArmRLowerArmUp'];
   const LEG_EXP_IDS = ['AttachLegLFeet', 'AttachLegLKnee', 'AttachLegLLower', 'AttachLegLThigh',
     'AttachLegRFeet', 'AttachLegRKnee', 'AttachLegRLower', 'AttachLegRThigh'];
-  const HT_SKIN_IDS = ['SkinArmL', 'SkinArmR', 'SkinPelvis', 'SkinThighL', 'SkinThighR',
-    'barcode', 'lines'];
+  // the game's hightechHypercamoSkin_interact also lists barcode and lines
+  // (her chest barcode and the cracks down her cheeks), with rects that are
+  // 100% transparent in the game's own atlas. an empty crop is the item
+  // saying GET RID OF IT - the hypercamo is a smooth white shell, she doesn't
+  // keep a barcode on it. they're not textures, so they don't belong in this
+  // list, they're in the option's hide list instead.
+  const HT_SKIN_IDS = ['SkinArmL', 'SkinArmR', 'SkinPelvis', 'SkinThighL', 'SkinThighR'];
   // mech knees have to be TOLD to draw over the calf and thigh
   const LEG_ORDER = [
     ['AttachLegLLower', 'AttachLegLThigh'], ['AttachLegRLower', 'AttachLegRThigh'],
@@ -293,7 +298,12 @@ window.Outfit = (function () {
       drawables: HT_SKIN_IDS,
       options: [
         { name: 'Standard skin', textures: {} },
-        { name: 'High-Tech Skin', textures: limbTex('hightech', HT_SKIN_IDS), show: ['barcode', 'lines'] },
+        // both are visible in the rig by default and nothing else turns them
+        // off. shipping the empty crop as a texture did NOTHING: limbTex sets
+        // alphaClip, and alphaClip erases through the patch's own alpha, so
+        // an empty patch erases an empty shape. hiding the drawable is the
+        // honest way to say it anyway.
+        { name: 'High-Tech Skin', textures: limbTex('hightech', HT_SKIN_IDS), hide: ['barcode', 'lines'] },
       ],
     },
     {
@@ -616,8 +626,18 @@ window.Outfit = (function () {
       for (const d of o.hide || []) controlled.add(d);
     }
     for (const d of controlled) {
-      Live2D.setDrawableOpacity(d, worn && show.has(d) ? 1 : hide.has(d) ? 0 : null);
+      const op = worn && show.has(d) ? 1 : hide.has(d) ? 0 : null;
+      // null hands the drawable back to the rig, and the rig parks every
+      // Moddable* slot at zero. a mod holding one needs it left on.
+      if (op === null && window.Mods?.owns?.(d)) continue;
+      Live2D.setDrawableOpacity(d, op);
     }
+  }
+
+  // mods.js calls this after it lets go of a drawable it had forced visible,
+  // so whatever WE wanted showing there gets asserted again.
+  function refreshVisibility() {
+    for (const v of VARIANTS) applyVariantVisibility(v);
   }
 
   function setVariant(key, index) {
@@ -2350,5 +2370,5 @@ window.Outfit = (function () {
   }
 
   return { load, applyAll, describe, snapshot, reset, syncFromAction, setVariant, openWardrobe,
-    makeItemColorButton, refreshColors: applyColors, bakeAll };
+    makeItemColorButton, refreshColors: applyColors, refreshVisibility, bakeAll };
 })();

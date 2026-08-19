@@ -378,7 +378,7 @@ window.Mods = (function () {
   // bake every worn mod entry for one drawable into a single canvas crop.
   // the compositor only takes ONE override per drawable, so the layers get
   // merged here.
-  async function bakeDrawable(entries, colorsFor, hostTint) {
+  async function bakeDrawable(id, entries, colorsFor, hostTint) {
     entries.sort((a, b) => a.layer - b.layer);
     // vanilla art stays underneath unless the container says no vanilla
     // layers. same as Part.AddVanilla in the game.
@@ -388,8 +388,16 @@ window.Mods = (function () {
     // layer-0 section, TailFluffy_common among them, on the same TailMain
     // rect a modded tail uses. so that rule erased her tail the moment you
     // equipped a mod tail, and ate the panties under a maebari.
-    const replacesVanilla = entries.some(e => e.dontIncludeVanilla);
-    let W = 0, H = 0;
+    // the OTHER way a mod says "delete this decal": a 1x1 RectInt, pointing
+    // at the transparent corner of its own sheet, stretched over a whole
+    // drawable. nobody paints with that. Seamless Components does it to
+    // barcode and lines on its smooth skins while its Translucent Abs variant
+    // ships the real 322x126 lines crop in the same zip, so the mod is
+    // telling us which it means. it never sets DontIncludeVanillaLayers.
+    const isBlank = (e) => e.r.w <= 1 && e.r.h <= 1;
+    const replacesVanilla = entries.some(e => e.dontIncludeVanilla || isBlank(e));
+    entries = entries.filter(e => !isBlank(e));
+    let W = 1, H = 1;
     const imgs = [];
     for (const e of entries) {
       const img = await loadImg(e.url);
@@ -446,13 +454,29 @@ window.Mods = (function () {
     // toDataURL() and the compositor turned it straight back into an Image,
     // so every equip paid a full PNG encode plus decode per drawable. on a
     // mod that touches all 29 Attach* limbs that alone was seconds.
-    return { img: c, overlay: !replacesVanilla, straightAlpha: true };
+    // a mod slot has NO vanilla art. what's sitting in its atlas box is the
+    // rig's placeholder - the hair slot's box holds a whole grey bob plus the
+    // shine diamonds - and it only looked fine while the slot part sat at
+    // opacity 0. we turn the slot on now, so the placeholder comes up UNDER
+    // the mod: a bunny ears hat gave her a second head of hair over her face.
+    // so erase the box, padded, same as outfit.js does for glasses in
+    // ModdableFace.
+    return { img: c, overlay: !replacesVanilla, straightAlpha: true, fullClear: MOD_SLOT.test(id) };
   }
 
   let mods = [];
   let state = {};
   let readyPromise = null;
   let appliedIds = new Set();
+
+  // the game's ten mod slots. they all hang off one part the rig parks at
+  // opacity 0, and nothing in the model ever turns it back on - the GAME does
+  // that when an item goes in the slot. so a face crack mod bakes a perfect
+  // patch into ModdableFace's atlas box and you see absolutely nothing.
+  // outfit.js already does this for its glasses and logos with its show
+  // lists. this is the same thing for mods.
+  const MOD_SLOT = /^Moddable/;
+  const shownSlots = new Set();
 
   function loadState() {
     try { state = JSON.parse(localStorage.getItem(STATE_KEY)) || {}; } catch (e) { state = {}; }
@@ -540,8 +564,8 @@ window.Mods = (function () {
   // the map is replaced each pass with just the hits, that's the eviction.
   let bakeCache = new Map();
 
-  function bakeKey(entries, colorsFor, tint) {
-    return entries.map(e => [e.url, e.r.x, e.r.y, e.r.w, e.r.h, e.layer, e.colorIndex,
+  function bakeKey(id, entries, colorsFor, tint) {
+    return id + '|' + entries.map(e => [e.url, e.r.x, e.r.y, e.r.w, e.r.h, e.layer, e.colorIndex,
       e.dontIncludeVanilla ? 1 : 0, e.bypassColorScaler ? 1 : 0, colorsFor(e) || ''].join()).join(';')
       + '|' + (tint || '');
   }
@@ -594,7 +618,7 @@ window.Mods = (function () {
       const tint = entries.some(e => e.bypassColorScaler) ? hostTintFor(id) : null;
       // ColorIndex points into the owning ITEM's ColorSlots list
       const colorsFor = (e) => ((modState(e.mod.guid).colors || {})[e.itemIndex] || [])[e.colorIndex] || null;
-      const key = bakeKey(entries, colorsFor, tint);
+      const key = bakeKey(id, entries, colorsFor, tint);
       let baked = bakeCache.get(key);
       if (!baked) {
         // only the drawables we actually redraw cost anything, so this is
@@ -602,7 +626,7 @@ window.Mods = (function () {
         await breathe();
         const tb = performance.now();
         try {
-          baked = await bakeDrawable(entries, colorsFor, tint);
+          baked = await bakeDrawable(id, entries, colorsFor, tint);
           baked.key = key;
           bakes++;
           bakeMs += performance.now() - tb;
@@ -627,6 +651,23 @@ window.Mods = (function () {
     }
     bakeCache = fresh;
     appliedIds = new Set(byDrawable.keys());
+    if (Live2D.setDrawableOpacity) {
+      let released = false;
+      for (const id of shownSlots) {
+        if (byDrawable.has(id)) continue;
+        Live2D.setDrawableOpacity(id, null);
+        shownSlots.delete(id);
+        released = true;
+      }
+      for (const id of byDrawable.keys()) {
+        if (!MOD_SLOT.test(id)) continue;
+        Live2D.setDrawableOpacity(id, 1);
+        shownSlots.add(id);
+      }
+      // glasses live in ModdableFace too. dropping a face mod must not take
+      // them down with it, so hand the slot back and let outfit re-claim it.
+      if (released && window.Outfit?.refreshVisibility) Outfit.refreshVisibility();
+    }
     const tt = performance.now();
     await Live2D.setDrawableTextures(map);
     const total = performance.now() - t0;
