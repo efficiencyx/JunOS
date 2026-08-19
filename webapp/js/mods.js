@@ -493,7 +493,33 @@ window.Mods = (function () {
     return applyAll();
   }
 
-  async function applyAll() {
+  // baking one drawable is a pile of synchronous canvas work (crop, tint,
+  // toDataURL) and the atlas recomposite after it is worse. it all runs on
+  // the thread that draws her, so an equip done in one go stops the model
+  // dead for most of a second. hand the frame back between drawables and she
+  // keeps blinking while the item lands.
+  const nextFrame = () => new Promise(r => requestAnimationFrame(() => r()));
+
+  let applyRunning = null;
+  let applyQueued = null;
+
+  // clicks arrive faster than a pass takes and only the LAST state matters,
+  // so one queued pass behind the running one is all we ever need.
+  function applyAll() {
+    if (!applyRunning) {
+      applyRunning = applyPass().finally(() => { applyRunning = null; });
+      return applyRunning;
+    }
+    if (!applyQueued) {
+      applyQueued = applyRunning.catch(() => { }).then(() => {
+        applyQueued = null;
+        return applyAll();
+      });
+    }
+    return applyQueued;
+  }
+
+  async function applyPass() {
     if (!window.Live2D || !Live2D.setDrawableTextures) return;
     await ensureLoaded();
     const byDrawable = new Map();
@@ -513,6 +539,7 @@ window.Mods = (function () {
       if (!byDrawable.has(id)) releaseTint(id);
     }
     for (const [id, entries] of byDrawable) {
+      await nextFrame();
       // only worth taking the uniform over when something actually opts out
       // of it AND there's a colour on the drawable to take over
       const tint = entries.some(e => e.bypassColorScaler) ? hostTintFor(id) : null;
