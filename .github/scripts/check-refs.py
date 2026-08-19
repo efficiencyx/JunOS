@@ -20,8 +20,10 @@ tracked = set(
 
 HTML_REF = re.compile(r'(?:src|href)\s*=\s*"([^"]+)"')
 # the lookbehind keeps string literals out of it: get('from') === 'wardrobe'
-# otherwise reads as an import of 'wardrobe'.
-JS_IMPORT = re.compile(r"""(?<!['"\w$])(?:from|import)\s*\(?\s*['"]([^'"]+)['"]""")
+# otherwise reads as an import of 'wardrobe'. the hyphen is in there for the
+# same reason, class names like .wd-looks-import sit right next to a quote in
+# the html templates and every one of them looked like a bare import.
+JS_IMPORT = re.compile(r"""(?<![-'"\w$])(?:from|import)\s*\(?\s*['"]([^'"]+)['"]""")
 
 problems = []
 
