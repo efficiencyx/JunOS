@@ -9,14 +9,28 @@ const WARDROBE_ITEM_DEFAULTS = [
     'cat_ears' => true, 'pointy_ears' => false, 'tail' => true,
     'hair_hologram' => true, 'hair_h0' => true, 'hair_h1' => false,
     'hair_h2' => false, 'hair_h3' => false, 'hair_h4' => false,
-    'hair_clip' => false,
 ];
 
 const WARDROBE_VARIANT_MAX = [
-    'arm_style' => 2, 'leg_style' => 2, 'hightech_skin' => 1,
+    'hair_h0_style' => 1, 'arm_style' => 2, 'leg_style' => 2, 'hightech_skin' => 1,
     'skirt_style' => 1, 'sock_style' => 7, 'shoe_style' => 2,
     'glasses_style' => 2, 'shirt_logo' => 100, 'sleeve_logo' => 100,
     'hoodie_logo' => 100, 'panties_logo' => 100,
+];
+
+const WARDROBE_COLOR_DEFAULTS = [
+    'skin' => null, 'blush' => '#ff3a3a', 'hair' => null,
+    'hair_h0_strand' => null, 'hair_h1_strand' => null,
+    'hair_h2_strand' => null, 'hair_h3_strand' => null,
+    'hair_hologram' => null, 'ear' => null, 'ear_mid' => null, 'tail' => null,
+    'eyebrows' => null, 'eye_sclera' => null, 'eye_iris' => null,
+    'eye_pupil' => null, 'eye_highlight' => null, 'lips' => null,
+    'mouth_interior' => null, 'glasses_frame' => null, 'glasses_lens' => null,
+    'shirt' => null, 'hoodie' => null, 'dress' => null, 'dress1' => null,
+    'skirt' => null, 'pants' => null, 'bra' => null, 'panties' => null,
+    'bikini_top' => null, 'bikini_bot' => null, 'shoe_l' => null,
+    'shoe_r' => null, 'stockings' => null, 'stockings_accent' => null, 'headband' => null,
+    'wizard_hat' => null, 'bow' => null, 'choker' => null, 'hair_clip' => null,
 ];
 
 function wardrobe_default_state(): array {
@@ -33,6 +47,7 @@ function wardrobe_canonical_state(array $input): array {
     $variants = $input['variants'] ?? [];
     $assets = $input['assets'] ?? [];
     if (!is_array($items) || !is_array($variants) || !is_array($assets)) fail(400, 'invalid_wardrobe');
+    if (array_key_exists('hair_clip', $items) && !is_bool($items['hair_clip'])) fail(400, 'invalid_wardrobe');
 
     foreach (WARDROBE_ITEM_DEFAULTS as $key => $default) {
         if (array_key_exists($key, $items)) {
@@ -46,6 +61,9 @@ function wardrobe_canonical_state(array $input): array {
         if (!is_int($value) || $value < 0 || $value > $max) fail(400, 'invalid_wardrobe');
         $state['variants'][$key] = $value;
     }
+    if (!array_key_exists('hair_h0_style', $variants) && ($items['hair_clip'] ?? false)) {
+        $state['variants']['hair_h0_style'] = 1;
+    }
 
     $conflicts = [
         ['dress', 'shirt'], ['dress', 'hoodie'], ['dress', 'skirt'], ['dress', 'pants'], ['dress', 'dress1'],
@@ -56,8 +74,6 @@ function wardrobe_canonical_state(array $input): array {
     foreach ($conflicts as [$left, $right]) {
         if ($state['items'][$left] && $state['items'][$right]) fail(400, 'invalid_wardrobe');
     }
-    if ($state['items']['hair_clip'] && !$state['items']['hair_h0']) fail(400, 'invalid_wardrobe');
-
     $clean = [];
     foreach ($assets as $asset) {
         if (!is_string($asset) || !preg_match('#^variants/[A-Za-z0-9_./-]+\\.png$#', $asset)
@@ -71,6 +87,46 @@ function wardrobe_canonical_state(array $input): array {
     }
     sort($state['assets']);
     return $state;
+}
+
+function wardrobe_canonical_preset(array $input): array {
+    foreach (array_keys($input) as $key) {
+        if (!in_array($key, ['items', 'colors', 'variants'], true)) fail(400, 'invalid_wardrobe');
+    }
+
+    $items = $input['items'] ?? [];
+    $colors = $input['colors'] ?? [];
+    $variants = $input['variants'] ?? [];
+    if (!is_array($items) || !is_array($colors) || !is_array($variants)) fail(400, 'invalid_wardrobe');
+
+    foreach (array_keys($items) as $key) {
+        if ($key === 'hair_clip') {
+            if (!is_bool($items[$key])) fail(400, 'invalid_wardrobe');
+        } elseif (!array_key_exists($key, WARDROBE_ITEM_DEFAULTS)) fail(400, 'invalid_wardrobe');
+    }
+    foreach (array_keys($variants) as $key) {
+        if (!array_key_exists($key, WARDROBE_VARIANT_MAX)) fail(400, 'invalid_wardrobe');
+    }
+
+    $wardrobe = wardrobe_canonical_state([
+        'items' => $items,
+        'variants' => $variants,
+        'assets' => [],
+    ]);
+    $cleanColors = WARDROBE_COLOR_DEFAULTS;
+    foreach ($colors as $key => $value) {
+        if (!array_key_exists($key, WARDROBE_COLOR_DEFAULTS)) fail(400, 'invalid_wardrobe');
+        if ($value !== null && (!is_string($value) || !preg_match('/^#[0-9a-f]{6}$/iD', $value))) {
+            fail(400, 'invalid_wardrobe');
+        }
+        $cleanColors[$key] = is_string($value) ? strtolower($value) : null;
+    }
+
+    return [
+        'items' => $wardrobe['items'],
+        'colors' => $cleanColors,
+        'variants' => $wardrobe['variants'],
+    ];
 }
 
 function wardrobe_asset_matches_state(string $asset, array $state): bool {

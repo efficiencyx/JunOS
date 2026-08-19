@@ -164,6 +164,14 @@ body.looks-open .wardrobe-overlay {
   padding: 6px 10px;
 }
 .wd-looks-add:hover { background: var(--accent-soft); color: var(--accent); }
+.wd-looks-share { display: flex; gap: 6px; margin-bottom: 10px; }
+.wd-looks-share button {
+  flex: 1; min-width: 0;
+  border: 1px solid var(--border); border-radius: 6px;
+  color: var(--muted); font: inherit; font-size: 11px;
+  padding: 6px 8px;
+}
+.wd-looks-share button:hover { border-color: var(--border-2); color: var(--fg); }
 .wd-looks-list { flex: 1; min-height: 0; overflow-y: auto; display: flex; flex-direction: column; gap: 4px; scrollbar-width: thin; }
 .wd-look {
   display: flex; align-items: stretch; gap: 2px;
@@ -593,7 +601,7 @@ body.wd-over-worn-item { cursor: grab; }
   .wd-swatch { top: 4px; right: 4px; }
   .wd-optorb { right: 4px; bottom: 4px; }
   .wd-close { width: 44px; height: 44px; }
-  .wd-reset, .wd-looks, .wd-looks-add, .wd-look-main, .wd-look-del, .wd-nav, .wd-expand, .wd-opt-equip, .ocp-channel, .ocp-clear {
+  .wd-reset, .wd-looks, .wd-looks-add, .wd-looks-share button, .wd-look-main, .wd-look-del, .wd-nav, .wd-expand, .wd-opt-equip, .ocp-channel, .ocp-clear {
     min-height: 44px;
   }
   .wd-expand { min-width: 44px; }
@@ -622,7 +630,7 @@ body.wd-over-worn-item { cursor: grab; }
 <script defer src="js/names.js?v=4"></script>
 <script type="module" src="js/live2d.js?v=8"></script>
 <script defer src="js/mods.js?v=9"></script>
-<script defer src="js/outfit.js?v=12"></script>
+<script defer src="js/outfit.js?v=16"></script>
 <script defer src="js/tts.js?v=3"></script>
 <script defer src="js/wardrobe-open-lines.js?v=3"></script>
 <script defer src="js/wardrobe-return-lines.js?v=3"></script>

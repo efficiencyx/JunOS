@@ -1,5 +1,6 @@
 <?php
 require_once __DIR__ . '/_lib.php';
+require_once __DIR__ . '/_wardrobe.php';
 
 header('Content-Type: application/json');
 rate_limit('wardrobe', 60, 60);
@@ -34,6 +35,7 @@ if ($method === 'POST') {
     $name = trim((string)($req['name'] ?? ''));
     $data = $req['data'] ?? null;
     if ($name === '' || mb_strlen($name) > 60 || !is_array($data)) fail(400, 'invalid_request');
+    $data = wardrobe_canonical_preset($data);
 
     $count = $db->prepare('SELECT COUNT(*) FROM wardrobe_presets WHERE user_id=? AND name<>?');
     $count->execute([$user['id'], $name]);
@@ -42,7 +44,7 @@ if ($method === 'POST') {
     $db->prepare(
         'INSERT INTO wardrobe_presets (user_id, name, data, updated_at) VALUES (?, ?, ?, ?)
          ON CONFLICT(user_id, name) DO UPDATE SET data=excluded.data, updated_at=excluded.updated_at'
-    )->execute([$user['id'], $name, json_encode($data, JSON_UNESCAPED_UNICODE), time()]);
+    )->execute([$user['id'], $name, json_encode($data, JSON_UNESCAPED_SLASHES), time()]);
 
     $id = $db->prepare('SELECT id FROM wardrobe_presets WHERE user_id=? AND name=?');
     $id->execute([$user['id'], $name]);
