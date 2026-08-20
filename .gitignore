@@ -82,3 +82,12 @@ tools/clothing-render.js
 
 # build output from tools/build-installer-exe.ps1
 dist/
+
+# the promo reel. drives the real rig off the real webapp/assets/, so it only
+# runs on a machine that already has them - nothing to ship to a user, and
+# nothing that would survive a fresh clone anyway.
+webapp/showcase.html
+webapp/showcase.css
+webapp/js/showcase.js
+webapp/showcase-audio/
+webapp/showcase-mod/
