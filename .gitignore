@@ -89,3 +89,5 @@ dist/
 webapp/showcase.html
 webapp/showcase.css
 webapp/js/showcase.js
+webapp/showcase-audio/
+webapp/showcase-mod/
