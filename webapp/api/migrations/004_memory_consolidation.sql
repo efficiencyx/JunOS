@@ -1,0 +1,6 @@
+CREATE TABLE memory_consolidation (
+  user_id INTEGER PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE,
+  upto_id INTEGER NOT NULL DEFAULT 0,
+  last_run INTEGER NOT NULL DEFAULT 0
+);
+INSERT INTO schema_version(v) VALUES (4);

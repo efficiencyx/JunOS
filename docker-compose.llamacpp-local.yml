@@ -1,0 +1,13 @@
+services:
+# Serve a GGUF already on disk instead of pulling one from Hugging Face.
+# start.sh layers this in when LLAMACPP_MODEL_FILE is set. it needs its own
+# overlay because llama.cpp picks --hf-repo whenever it gets both, and its file
+# arguments refuse an empty value, so the local ones have to be MISSING and not
+# blank. one compose file can't say that.
+  llamacpp:
+    environment:
+      LLAMA_ARG_HF_REPO: ""
+      LLAMA_ARG_MODEL: "/models/${LLAMACPP_MODEL_FILE}"
+      LLAMA_ARG_ALIAS: "${LLAMACPP_MODEL_ALIAS:-jun-local}"
+    volumes:
+      - "${LLAMACPP_MODELS_DIR}:/models:ro"

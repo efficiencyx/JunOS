@@ -1,0 +1,132 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="color-scheme" content="dark">
+<meta name="robots" content="noindex">
+<title>Privacy notice · Jun OS</title>
+<link rel="icon" type="image/png" href="favicon.png?v=1">
+<link rel="stylesheet" href="boot.css?v=1">
+<link rel="stylesheet" href="styles.css?v=1">
+<link rel="stylesheet" href="privacy.css?v=1">
+</head>
+<body class="privacy-page">
+
+<a class="privacy-back" href="index.html">
+  <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="19" y1="12" x2="5" y2="12"/><polyline points="12 19 5 12 12 5"/></svg>
+  Back to Jun
+</a>
+
+<div class="privacy-shell">
+
+  <header class="privacy-hero">
+    <div class="privacy-eyebrow">
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
+      Jun OS
+    </div>
+    <h1>Privacy notice</h1>
+    <p class="privacy-lede">Nothing leaves your machine. Here is what that means in
+    practice, and the bits the law wants said out loud.</p>
+    <div class="privacy-badges">
+      <span class="privacy-badge">Version 2026-08-03.2</span>
+      <span class="privacy-badge">≈2 min read</span>
+    </div>
+  </header>
+
+  <section class="privacy-summary" aria-labelledby="tldr">
+    <h2 id="tldr">The short version</h2>
+    <ul>
+      <li>
+        <span class="privacy-tick" aria-hidden="true">✓</span>
+        <span><strong>With the bundled local AI, Jun runs on your machine.</strong> Your
+        account, chats, her memory and every setting stay in a database there. A hosted AI
+        provider is a separate choice described below.</span>
+      </li>
+      <li>
+        <span class="privacy-tick" aria-hidden="true">✓</span>
+        <span><strong>Nothing is sent to the maintainer.</strong> Jun OS has no telemetry, no
+        analytics and no phone-home of any kind.</span>
+      </li>
+      <li>
+        <span class="privacy-tick" aria-hidden="true">✓</span>
+        <span><strong>Deleting is deleting.</strong> Remove the app and its state directory and
+        the data is gone; there is no copy anywhere else.</span>
+      </li>
+    </ul>
+  </section>
+
+  <div class="privacy-body">
+
+    <nav class="privacy-toc" aria-label="On this page">
+      <p class="privacy-toc-title">On this page</p>
+      <ol>
+        <li><a href="#local">Where your data lives</a></li>
+        <li><a href="#other">Other services</a></li>
+        <li><a href="#ai-system">Jun is an AI system</a></li>
+        <li><a href="#misc">Automated decisions &amp; children</a></li>
+      </ol>
+    </nav>
+
+    <main class="privacy-prose">
+
+      <section id="local">
+        <h2>Where your data lives</h2>
+        <p>Jun OS is an unofficial fan project meant to be installed and run by you, on your own
+        machine. Your account, your conversations, Jun’s memory notes and journal, the
+        relationship gauges, the wardrobe and every setting are written to a database and a state
+        directory on that machine and stay there. The app does not upload that stored data on its own.</p>
+        <p>Whoever controls the machine controls the data: if you run Jun for other people, their
+        chats are on your box and it is on you to keep it, and its backups, to yourself.</p>
+      </section>
+
+      <section id="other">
+        <h2>Other services this app can talk to</h2>
+        <p>Whichever AI provider you pick is where your messages go. With the bundled Ollama or
+        llama.cpp that is your own machine, and nothing leaves it. If you configure a hosted
+        provider instead (<strong>OpenRouter</strong> is the one shipped today), your prompts are
+        sent to that provider, and its terms and retention apply to them. Review those before
+        enabling it. Voice and karaoke run locally in sidecar containers. A message beginning with
+        <code>/search </code> sends the exact text after that prefix to DuckDuckGo once; Jun cannot
+        add conversation or memory text to it. Karaoke can send song title, artist, album and duration
+        to LRCLIB for a lyrics lookup.</p>
+      </section>
+
+      <section id="ai-system">
+        <h2>Jun is an AI system</h2>
+        <p>Jun is not a person and there is no person behind her. Her replies come from a
+        language model, her voice from a text-to-speech model, and her expressions and poses
+        from action tags the model writes into its own output. Nothing she says is a statement
+        of fact about the world, about you, or about anyone else, and she has no feelings,
+        memory or intentions beyond the notes and gauges this app stores for her. She is a
+        fan-made character from a fictional game, not a real individual.</p>
+        <p>This is the disclosure required by art. 50(1) of Regulation (EU) 2024/1689 (the AI
+        Act), which applies from 2 August 2026. If you run your own instance for anyone other
+        than yourself, you are its deployer and the deployer duties in art. 50 are yours.</p>
+        <p>Generated audio carries provenance metadata marking it as artificially generated, as
+        required by art. 50(2). Jun’s chat text is generated too, and stays on your machine.
+        Assistive functions that only process material you supply (speech recognition on your
+        microphone, karaoke stem separation on your own audio files) do not generate
+        synthetic content and are not marked.</p>
+      </section>
+
+      <section id="misc">
+        <h2>Automated decisions &amp; children</h2>
+        <p>Jun’s replies are generated by a language model, but nothing here makes automated
+        decisions that have legal effects for you, or that similarly significantly affect you,
+        within the meaning of art. 22.</p>
+        <p>This app displays adult content and is for people aged 18 or over. It is not intended
+        for children. The current age gate is a self-declaration, not independent age
+        verification or age assurance.</p>
+      </section>
+
+      <footer class="privacy-footer">
+        <a href="index.html">← Back to Jun</a>
+        <span>Version 2026-08-03.2</span>
+      </footer>
+
+    </main>
+  </div>
+</div>
+</body>
+</html>

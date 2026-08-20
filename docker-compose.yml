@@ -1,0 +1,289 @@
+name: omega
+
+services:
+
+  nginx:
+    build:
+      context: .
+      dockerfile: docker/nginx.Dockerfile
+    container_name: omega-nginx
+    restart: unless-stopped
+    mem_limit: "${NGINX_MEMORY_LIMIT:-256m}"
+    cpus: "${NGINX_CPU_LIMIT:-1.0}"
+    pids_limit: 128
+    # Loopback by default. A bare "80:80" is reachable from every machine on the
+    # coffee shop wifi, and there is no login wall in front of Jun worth that.
+    # BIND_ADDR=0.0.0.0 opens it up, which is also what a public TLS_MODE needs
+    # so Let's Encrypt can reach the challenge.
+    ports:
+      - "${BIND_ADDR:-127.0.0.1}:80:80"
+      - "${BIND_ADDR:-127.0.0.1}:443:443"
+    environment:
+      DOMAIN:    "${DOMAIN:-localhost}"
+      TLS_MODE:  "${TLS_MODE:-off}"
+      BIND_ADDR: "${BIND_ADDR:-127.0.0.1}"
+      OMEGA_ALLOW_INSECURE_PUBLIC_HTTP: "${OMEGA_ALLOW_INSECURE_PUBLIC_HTTP:-}"
+      OMEGA_EXTRA_HOSTS: "${OMEGA_EXTRA_HOSTS:-}"
+    volumes:
+      - letsencrypt:/etc/letsencrypt:ro
+      - certbot_webroot:/var/www/certbot:ro
+      - selfsigned:/etc/nginx/selfsigned
+    depends_on:
+      php:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://127.0.0.1/health"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+      start_period: 10s
+    security_opt:
+      - "no-new-privileges:true"
+    cap_drop: [ALL]
+    cap_add: [CHOWN, DAC_OVERRIDE, NET_BIND_SERVICE, SETGID, SETUID]
+    networks: [omega]
+
+  php:
+    build:
+      context: .
+      dockerfile: docker/php.Dockerfile
+    container_name: omega-php
+    restart: unless-stopped
+    mem_limit: "${PHP_MEMORY_LIMIT:-1g}"
+    cpus: "${PHP_CPU_LIMIT:-2.0}"
+    pids_limit: 256
+    # NO read_only here, unlike ollama and llamacpp. sync-webapp.sh pushes
+    # webapp/ in with docker cp and the daemon refuses that against a
+    # read-only rootfs ("container rootfs is marked read-only"), which kills
+    # the entire dev loop. php still runs as www-data with cap_drop ALL and
+    # no-new-privileges.
+    tmpfs:
+      - /tmp:size=128m,mode=1777
+    expose:
+      - "9000"
+    environment:
+      AI_PROVIDER: "${AI_PROVIDER:-ollama}"
+      OLLAMA_URL: "${OLLAMA_URL:-http://ollama:11434}"
+      OLLAMA_MODELS_TO_PULL: "${OLLAMA_MODELS_TO_PULL:-hf.co/efficiencyx/Jun-LoRA-E2B-GGUF:Q4_K_M}"
+      TITLE_MODEL: "${TITLE_MODEL-hf.co/efficiencyx/Titlewen-GGUF:F16}"
+      OLLAMA_MTP: "${OLLAMA_MTP:-}"
+      OLLAMA_MTP_MODEL: "${OLLAMA_MTP_MODEL:-jun-mtp}"
+      OPENROUTER_API_KEY: "${OPENROUTER_API_KEY:-}"
+      OPENROUTER_MODEL: "${OPENROUTER_MODEL:-}"
+      LLAMACPP_URL: "${LLAMACPP_URL:-http://llamacpp:8080}"
+      OMEGA_NUM_CTX: "${OMEGA_NUM_CTX:-}"
+      OMEGA_DEV_KEY: "${OMEGA_DEV_KEY:-}"
+      OMEGA_REGISTRATION_KEY: "${OMEGA_REGISTRATION_KEY:-}"
+      OMEGA_ALLOWED_HOSTS: "${DOMAIN:-localhost},localhost,127.0.0.1,::1,${OMEGA_EXTRA_HOSTS:-}"
+      OMEGA_ALLOWED_ORIGINS: "${OMEGA_ALLOWED_ORIGINS:-}"
+# start.sh reads this on the host, php has no GPU device of its own.
+      OMEGA_GPU_VRAM_MB: "${OMEGA_GPU_VRAM_MB:-}"
+      LLAMACPP_TOOLS: "${LLAMACPP_TOOLS:-}"
+# KOKORO_URL is the old name, kept so existing .env files still work.
+      TTS_URL: "${TTS_URL:-}"
+      KOKORO_URL: "${KOKORO_URL:-http://tts:8001}"
+      KARAOKE_URL: "${KARAOKE_URL:-http://karaoke:8001}"
+    volumes:
+      - omega_state:/var/lib/omega
+      - ./tools:/var/www/omega/tools
+# Soft dependencies, the model server and TTS come and go with their profiles.
+    healthcheck:
+      test: ["CMD", "cgi-fcgi", "-bind", "-connect", "127.0.0.1:9000"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+      start_period: 15s
+    security_opt:
+      - "no-new-privileges:true"
+    cap_drop: [ALL]
+    networks: [omega]
+
+  ollama:
+    build:
+      context: .
+      dockerfile: docker/ollama.Dockerfile
+      network: host
+    container_name: omega-ollama
+    profiles: [ollama]
+    restart: unless-stopped
+    mem_limit: "${OLLAMA_MEMORY_LIMIT:-16g}"
+    cpus: "${OLLAMA_CPU_LIMIT:-8.0}"
+    pids_limit: 512
+    read_only: true
+    tmpfs:
+      - /tmp:size=256m,mode=1777
+    environment:
+      OLLAMA_MODELS_TO_PULL: "${OLLAMA_MODELS_TO_PULL:-hf.co/efficiencyx/Jun-LoRA-E2B-GGUF:Q4_K_M}"
+      TITLE_MODEL: "${TITLE_MODEL-hf.co/efficiencyx/Titlewen-GGUF:F16}"
+      OLLAMA_MTP: "${OLLAMA_MTP:-}"
+      OLLAMA_MTP_N_MAX: "${OLLAMA_MTP_N_MAX:-4}"
+      OLLAMA_MTP_MODEL: "${OLLAMA_MTP_MODEL:-jun-mtp}"
+# Cap how many requests and models Ollama holds at once. each one keeps its own
+# KV cache, the memory of the prompt it already read, so they add up fast.
+      OLLAMA_NUM_PARALLEL: "${OLLAMA_NUM_PARALLEL:-1}"
+      OLLAMA_MAX_LOADED_MODELS: "${OLLAMA_MAX_LOADED_MODELS:-3}"
+      OLLAMA_KEEP_ALIVE: "${OLLAMA_KEEP_ALIVE:-5m}"
+# q8_0 stores that cache smaller. it needs flash attention, without it we get f16.
+      OLLAMA_FLASH_ATTENTION: "${OLLAMA_FLASH_ATTENTION:-1}"
+      OLLAMA_KV_CACHE_TYPE: "${OLLAMA_KV_CACHE_TYPE:-q8_0}"
+    volumes:
+      - ollama_data:/root/.ollama
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://127.0.0.1:11434/api/tags"]
+      interval: 10s
+      timeout: 3s
+      retries: 30
+      start_period: 30s
+    security_opt:
+      - "no-new-privileges:true"
+    cap_drop: [ALL]
+    networks: [omega]
+
+  llamacpp:
+    image: ghcr.io/ggml-org/llama.cpp:server@sha256:190813e82f33a82f506e66826f367004a3159f8b8139b11d07566437aecdac93
+    container_name: omega-llamacpp
+    profiles: [llamacpp]
+    restart: unless-stopped
+    mem_limit: "${LLAMACPP_MEMORY_LIMIT:-16g}"
+    cpus: "${LLAMACPP_CPU_LIMIT:-8.0}"
+    pids_limit: 512
+    read_only: true
+    tmpfs:
+      - /tmp:size=256m,mode=1777
+    environment:
+      LLAMA_ARG_HF_REPO: "${LLAMACPP_MODEL_HF:-efficiencyx/Jun-LoRA-E2B-GGUF:Q4_K_M}"
+      LLAMA_ARG_CTX_SIZE: "16384"
+      LLAMA_ARG_JINJA: "1"           # chat-template tool calling
+      LLAMA_ARG_HOST: "0.0.0.0"
+      LLAMA_ARG_PORT: "8080"
+    volumes:
+      - llamacpp_cache:/root/.cache/llama.cpp
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://127.0.0.1:8080/health"]
+      interval: 10s
+      timeout: 3s
+      retries: 90
+      start_period: 60s
+    security_opt:
+      - "no-new-privileges:true"
+    cap_drop: [ALL]
+    networks: [omega]
+
+  tts:
+    build:
+      context: .
+      dockerfile: docker/tts.Dockerfile
+      network: host
+      args:
+        TORCH_INDEX: "${TTS_TORCH_INDEX:-https://download.pytorch.org/whl/cpu}"
+    container_name: omega-tts
+    restart: unless-stopped
+    profiles: [voice]
+    mem_limit: "${TTS_MEMORY_LIMIT:-8g}"
+    cpus: "${TTS_CPU_LIMIT:-4.0}"
+    pids_limit: 256
+    read_only: true
+    tmpfs:
+      - /tmp:size=512m,mode=1777
+    environment:
+      CORS_ORIGIN: "${CORS_ORIGIN:-http://nginx}"
+      TTS_DEVICE: "${TTS_DEVICE:-cpu}"
+      STT_MODEL: "${STT_MODEL:-base}"
+      STT_LANG: "${STT_LANG-}"
+      STT_DEVICE: "${STT_DEVICE:-cpu}"
+      STT_MAX_DURATION_S: "${STT_MAX_DURATION_S:-120}"
+      STT_MAX_CONCURRENT: "${STT_MAX_CONCURRENT:-1}"
+    volumes:
+      - tts_cache:/home/omega/.cache
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://127.0.0.1:8001/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 30
+      start_period: 300s
+    security_opt:
+      - "no-new-privileges:true"
+    cap_drop: [ALL]
+    cap_add: [CHOWN, DAC_OVERRIDE, SETGID, SETUID]
+    networks: [omega]
+
+# The same server.py as `tts`, built with demucs and, on the GPU overlays, a CUDA
+# or ROCm torch. it sits behind a profile because the image is several GB and only
+# karaoke wants it. with the profile off api/karaoke.php just can't reach the
+# host, and the webapp greys the karaoke button out.
+  karaoke:
+    build:
+      context: .
+      dockerfile: docker/karaoke.Dockerfile
+      network: host
+      args:
+        TORCH_INDEX: "${KARAOKE_TORCH_INDEX:-https://download.pytorch.org/whl/cpu}"
+    container_name: omega-karaoke
+    profiles: [karaoke]
+    restart: unless-stopped
+    mem_limit: "${KARAOKE_MEMORY_LIMIT:-12g}"
+    cpus: "${KARAOKE_CPU_LIMIT:-6.0}"
+    pids_limit: 384
+    read_only: true
+    tmpfs:
+      - /tmp:size=1g,mode=1777
+    environment:
+      CORS_ORIGIN: "${CORS_ORIGIN:-http://nginx}"
+      SEP_DEVICE: "${SEP_DEVICE:-auto}"
+      STT_MODEL: "${STT_MODEL:-base}"
+      STT_LANG: "${STT_LANG-}"
+      STT_DEVICE: "${STT_DEVICE:-cpu}"
+      SEP_MAX_DURATION_S: "${SEP_MAX_DURATION_S:-900}"
+      SEP_MAX_CONCURRENT: "${SEP_MAX_CONCURRENT:-1}"
+      STT_MAX_CONCURRENT: "${STT_MAX_CONCURRENT:-1}"
+    volumes:
+      - karaoke_cache:/home/omega/.cache
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://127.0.0.1:8001/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 30
+      start_period: 300s
+    security_opt:
+      - "no-new-privileges:true"
+    cap_drop: [ALL]
+    cap_add: [CHOWN, DAC_OVERRIDE, SETGID, SETUID]
+    networks: [omega]
+
+  certbot:
+    build:
+      context: .
+      dockerfile: docker/certbot.Dockerfile
+    container_name: omega-certbot
+    profiles: [prod]
+    restart: unless-stopped
+    mem_limit: "${CERTBOT_MEMORY_LIMIT:-512m}"
+    cpus: "${CERTBOT_CPU_LIMIT:-1.0}"
+    pids_limit: 128
+    environment:
+      DOMAIN: "${DOMAIN:-localhost}"
+      EMAIL:  "${EMAIL:-admin@localhost}"
+    volumes:
+      - letsencrypt:/etc/letsencrypt
+      - certbot_webroot:/var/www/certbot
+    security_opt:
+      - "no-new-privileges:true"
+    cap_drop: [ALL]
+    networks: [omega]
+
+volumes:
+  ollama_data:
+  llamacpp_cache:
+  tts_cache:
+    # Pinned to the old volume name so an install that already exists keeps the
+    # weights it downloaded, 300MB and up, instead of fetching them again.
+    name: omega_kokoro_cache
+  karaoke_cache:
+  omega_state:
+  letsencrypt:
+  certbot_webroot:
+  selfsigned:
+
+networks:
+  omega:
+    name: omega

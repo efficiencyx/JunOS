@@ -1,0 +1,56 @@
+body {
+  background:
+    radial-gradient(70% 60% at 50% 72%, color-mix(in srgb, var(--accent) 12%, transparent), transparent 72%),
+    var(--bg);
+}
+
+.karaoke-page-back {
+  position: fixed;
+  top: calc(18px + env(safe-area-inset-top, 0px));
+  left: calc(18px + env(safe-area-inset-left, 0px));
+  z-index: 60;
+  padding: 8px 12px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-pill);
+  background: var(--bg-2);
+  color: var(--muted);
+  font-size: 13px;
+  text-decoration: none;
+  transition: color .15s, background .15s;
+}
+.karaoke-page-back:hover { color: var(--fg); background: var(--bg-3); }
+
+.karaoke-page-status {
+  position: fixed;
+  left: calc(18px + env(safe-area-inset-left, 0px));
+  bottom: calc(18px + env(safe-area-inset-bottom, 0px));
+  z-index: 45;
+  max-width: min(420px, calc(100vw - 36px));
+  color: var(--muted);
+  font-size: 12px;
+}
+body.karaoke-mode .karaoke-page-status { display: none; }
+
+.karaoke-volume-control {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  color: var(--muted);
+  font-size: 11px;
+}
+.karaoke-volume-control .karaoke-vol { width: 100px; }
+
+@media (max-width: 640px) {
+  .karaoke-controls {
+    flex-wrap: wrap;
+    justify-content: center;
+  }
+  .karaoke-volume-control {
+    width: calc(50% - 8px);
+    justify-content: center;
+  }
+  .karaoke-volume-control .karaoke-vol {
+    width: min(100px, 22vw);
+    min-height: 44px;
+  }
+}

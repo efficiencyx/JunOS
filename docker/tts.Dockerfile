@@ -1,0 +1,93 @@
+# The voice sidecar. Kokoro-82M and pocket-tts do the talking, faster-whisper
+# does the listening. this is a CPU build, the models are small enough to keep up
+# in real time there, and a GPU copy would sit on ~2GB of VRAM that the LLM wants
+# for its own layers. the one audio job that really does want a GPU lives in
+# docker/karaoke.Dockerfile.
+FROM python:3.11.13-slim
+
+# uv installs the Python deps much faster than pip. it works out versions and
+# downloads several at once, and unzips while it is still fetching. that is most
+# of the build time on the GPU overlays where torch is a multi-GB wheel. apart
+# from speed it is the same as pip, same wheels, same TORCH_INDEX.
+COPY --from=ghcr.io/astral-sh/uv:0.11.29 /uv /uvx /bin/
+
+RUN apt-get update \
+ && apt-get install -y --no-install-recommends \
+      espeak-ng \
+      libsndfile1 \
+      ca-certificates \
+      curl \
+      util-linux \
+ && rm -rf /var/lib/apt/lists/*
+
+RUN useradd --create-home --uid 10001 omega
+
+WORKDIR /app
+
+# Where we get torch from. CPU only, so kokoro or pocket-tts can't quietly pull
+# a multi-GB GPU build in behind them. TTS_TORCH_INDEX overrides it for the rare
+# bare metal setup that wants GPU voice, no compose overlay touches it.
+ARG TORCH_INDEX=https://download.pytorch.org/whl/cpu
+
+# Install torch FIRST, from TORCH_INDEX, or something later drags a different
+# build in behind it. keep it in its own layer
+# ahead of the requirements COPY so editing requirements.txt doesn't re-run this
+# install. No BuildKit cache mount here on purpose - `docker compose build` on
+# the legacy builder errors on --mount, so we rely on uv's speed instead.
+RUN UV_HTTP_TIMEOUT=120 uv pip install --system torch --index-url ${TORCH_INDEX}
+
+COPY tts/requirements.txt /app/requirements.txt
+RUN uv pip install --system -r /app/requirements.txt
+
+ARG SPACY_MODEL_VERSION=3.8.0
+ARG SPACY_MODEL_SHA256=1932429db727d4bff3deed6b34cfc05df17794f4a52eeb26cf8928f7c1a0fb85
+RUN curl -fsSL \
+      "https://github.com/explosion/spacy-models/releases/download/en_core_web_sm-${SPACY_MODEL_VERSION}/en_core_web_sm-${SPACY_MODEL_VERSION}-py3-none-any.whl" \
+      -o "/tmp/en_core_web_sm-${SPACY_MODEL_VERSION}-py3-none-any.whl" \
+ && echo "${SPACY_MODEL_SHA256}  /tmp/en_core_web_sm-${SPACY_MODEL_VERSION}-py3-none-any.whl" | sha256sum -c - \
+ && uv pip install --system "/tmp/en_core_web_sm-${SPACY_MODEL_VERSION}-py3-none-any.whl" \
+ && rm "/tmp/en_core_web_sm-${SPACY_MODEL_VERSION}-py3-none-any.whl"
+
+COPY tts/server.py /app/server.py
+COPY docker/sidecar-entrypoint.sh /usr/local/bin/omega-sidecar-entrypoint
+RUN chmod +x /usr/local/bin/omega-sidecar-entrypoint \
+ && mkdir -p /home/omega/.cache \
+ && chown -R omega:omega /home/omega
+
+# TTS_DEVICE: cpu | cuda | auto. "auto" uses the GPU when the installed torch
+# exposes one, so it's a no-op on this CPU build and only bites when TORCH_INDEX
+# was overridden.
+# STT_MODEL / STT_LANG: must agree. base is the multilingual default with
+#   STT_LANG="" (auto-detect per utterance/song). The ".en" builds (base.en,
+#   small.en) are English-ONLY and a touch faster/sharper on English - pair one
+#   with STT_LANG=en if you never leave English. For better non-English accuracy
+#   size up the multilingual model (small, medium, large-v3), CPU cost permitting.
+#   Auto-detect costs an extra decode pass and is shaky under ~2s of audio; pin
+#   STT_LANG to a code (it, es, de, ...) when you know the language.
+#   Note Kokoro only speaks American English; the pockettts engine is the one
+#   with it/es/de/pt/fr voices, so a non-English loop needs engine=pockettts too.
+# STT_DEVICE: cpu | cuda. Separate from TTS_DEVICE and defaults to cpu on
+#   purpose - whisper runs on CTranslate2, not torch, and CUDA CTranslate2 needs
+#   cuDNN that the torch CUDA wheel doesn't reliably ship (and has no ROCm
+#   backend at all). CPU whisper isn't the bottleneck; Kokoro is.
+# OMP_NUM_THREADS bounds torch's intra-op pool and is also read by server.py as
+#   whisper's cpu_threads. Unpinned, both libraries grab every core and fight
+#   when STT and TTS overlap. Raise it on a big box, drop to 2 on a 4-core one.
+ENV SIDECAR_ROLE=tts \
+    TTS_HOST=0.0.0.0 \
+    TTS_PORT=8001 \
+    TTS_DEVICE=auto \
+    STT_MODEL=base \
+    STT_LANG= \
+    STT_COMPUTE=int8 \
+    STT_DEVICE=cpu \
+    OMP_NUM_THREADS=4 \
+    HOME=/home/omega \
+    HF_HOME=/home/omega/.cache/huggingface \
+    PYTHONDONTWRITEBYTECODE=1 \
+    TTS_IDLE_UNLOAD_S=180
+
+EXPOSE 8001
+
+ENTRYPOINT ["/usr/local/bin/omega-sidecar-entrypoint"]
+CMD ["python", "server.py"]

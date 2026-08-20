@@ -1,0 +1,13 @@
+services:
+# Multi-token prediction. Gemma 4 ships a seperate little assistant model that
+# guesses the next few tokens, llama.cpp checks the guesses against the real
+# model in one pass and keeps the ones that matched, so the tokens it got right
+# came almost free. start.sh layers this in when LLAMACPP_MTP names the drafter.
+# it needs its own overlay for the same reason the local one does: off has to
+# mean the variables are MISSING, an empty LLAMA_ARG_SPEC_TYPE is not "none",
+# it's a value llama.cpp tries to parse and dies on.
+  llamacpp:
+    environment:
+      LLAMA_ARG_SPEC_TYPE: "draft-mtp"
+      LLAMA_ARG_SPEC_DRAFT_HF_REPO: "${LLAMACPP_MTP}"
+      LLAMA_ARG_SPEC_DRAFT_N_MAX: "${LLAMACPP_MTP_N_MAX:-4}"

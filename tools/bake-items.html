@@ -1,0 +1,160 @@
+<!DOCTYPE html>
+<html lang="en" class="wd-landscape">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<!-- every relative url on this page resolves into webapp/, because live2d.js
+     fetches 'assets/interaction_model.moc3' relative to the DOCUMENT, not to
+     itself, and so do all of outfit.js's variant textures. serve the repo root
+     and open /tools/bake-items.html. -->
+<base href="../webapp/">
+<title>Jun - bake wardrobe tiles</title>
+<style>
+  html, body { margin: 0; height: 100%; background: #14121c; color: #e8e4f0;
+               font: 14px/1.5 system-ui, sans-serif; }
+  #stage { position: fixed; inset: 0; }
+  #panel {
+    position: fixed; top: 14px; left: 14px; z-index: 10; width: 320px; padding: 14px;
+    background: rgba(22,20,30,0.94); border: 1px solid rgba(255,255,255,0.14);
+    border-radius: 10px; backdrop-filter: blur(8px);
+  }
+  #panel h1 { font-size: 13px; text-transform: uppercase; letter-spacing: .09em; margin: 0 0 8px; }
+  #panel button { width: 100%; margin-top: 10px; padding: 8px; cursor: pointer;
+                  background: #2b2838; color: #e8e4f0;
+                  border: 1px solid rgba(255,255,255,0.14); border-radius: 5px; font: inherit; }
+  #panel button:hover:not(:disabled) { background: #363248; }
+  #panel button:disabled { opacity: .5; cursor: default; }
+  #log { margin-top: 10px; font-size: 12px; color: rgba(255,255,255,0.55); min-height: 3em; }
+  #sheet { position: fixed; inset: auto 14px 14px 14px; z-index: 10; display: flex;
+           flex-wrap: wrap; gap: 6px; max-height: 40vh; overflow: auto; }
+  #sheet img { width: 72px; height: 72px; object-fit: contain;
+               background: rgba(255,255,255,0.06); border-radius: 6px; }
+</style>
+<script>
+// this page runs off a dumb static server. there is no php, so /api/outfit.php
+// 404s on GET and 501s on PUT, and outfit.js treats both as fatal - the
+// wardrobe is server-backed since 015_wardrobe_state.sql. so stand the endpoint
+// up in the browser, backed by localStorage, matching what api/outfit.php
+// returns: GET gives {initialized, state}, PUT echoes {state}.
+//
+// answering the first GET with initialized:false makes outfit.js turn around
+// and PUT its own defaults, and echoing that PUT back hands it an `assets` list
+// it computed itself. that list matters: outfit.js drops any variant whose
+// files aren't in it, and an empty stub gets you a naked model with no styles.
+//
+// NOT defer. it has to replace fetch before outfit.js is parsed.
+(function () {
+  const KEY = 'omega.tools.wardrobe.v1';
+  const json = (body) => new Response(JSON.stringify(body),
+    { status: 200, headers: { 'content-type': 'application/json' } });
+  const realFetch = window.fetch.bind(window);
+  window.fetch = (input, init) => {
+    const url = typeof input === 'string' ? input : input.url;
+    if (!url.includes('/api/outfit.php')) return realFetch(input, init);
+    if ((init && init.method) === 'PUT') {
+      localStorage.setItem(KEY, init.body);
+      return Promise.resolve(json({ state: JSON.parse(init.body) }));
+    }
+    const saved = localStorage.getItem(KEY);
+    return Promise.resolve(saved
+      ? json({ initialized: true, state: JSON.parse(saved) })
+      : json({ initialized: false }));
+  };
+})();
+</script>
+</head>
+<body>
+<div id="stage"></div>
+<div id="panel">
+  <h1>Bake wardrobe tiles</h1>
+  <div>Renders one PNG per item and per skirt/sock/shoe style, straight off the
+       model. Save them into <code>webapp/assets/items/</code>.</div>
+  <button id="bake" disabled>Loading model...</button>
+  <button id="save" disabled>Save to folder...</button>
+  <div id="log"></div>
+</div>
+<div id="sheet"></div>
+
+<script src="vendor/live2dcubismcore.min.js"></script>
+<script src="vendor/pixi.min.js"></script>
+<script src="vendor/cubism4.min.js"></script>
+<!-- same ?v= as everywhere else. a mismatch here and the browser builds a
+     second copy of the module graph, which is an afternoon you don't get back -->
+<script type="module" src="js/live2d.js?v=3"></script>
+<script defer src="js/mods.js?v=3"></script>
+<script defer src="js/outfit.js?v=6"></script>
+<script type="module">
+const log = (msg) => { document.getElementById('log').textContent = msg; };
+const bakeBtn = document.getElementById('bake');
+const saveBtn = document.getElementById('save');
+const sheet = document.getElementById('sheet');
+let baked = [];
+
+// classic scripts with defer are not ready when a module runs
+await new Promise(r => window.addEventListener('load', r, { once: true }));
+
+await Live2D.init({
+  stageEl: document.getElementById('stage'),
+  onStatus: log,
+  // don't touch the camera the real app saved in localStorage
+  ignoreSavedPos: true,
+});
+await Outfit.load();
+Outfit.applyAll();
+bakeBtn.disabled = false;
+bakeBtn.textContent = 'Bake all tiles';
+log('ready');
+
+bakeBtn.addEventListener('click', async () => {
+  bakeBtn.disabled = saveBtn.disabled = true;
+  sheet.textContent = '';
+  baked = await Outfit.bakeAll((i, total, name) => log(`${i + 1}/${total}  ${name}`));
+  for (const { name, png } of baked) {
+    const img = new Image();
+    img.src = png; img.title = name;
+    sheet.append(img);
+  }
+  log(`${baked.length} tiles baked. check them, then save.`);
+  bakeBtn.disabled = false;
+  saveBtn.disabled = !baked.length;
+});
+
+const files = () => [
+  ...baked.map(({ name, png }) => [`${name}.png`, fetch(png).then(r => r.blob())]),
+  ['manifest.json', Promise.resolve(new Blob([JSON.stringify(baked.map(b => b.name))],
+    { type: 'application/json' }))],
+];
+
+saveBtn.addEventListener('click', async () => {
+  saveBtn.disabled = true;
+  try {
+    // showDirectoryPicker is chromium only. everywhere else this falls back to
+    // dumping every file into Downloads, which you then move by hand.
+    if (window.showDirectoryPicker) {
+      const dir = await showDirectoryPicker({ mode: 'readwrite' });
+      for (const [name, blobPromise] of files()) {
+        const handle = await dir.getFileHandle(name, { create: true });
+        const w = await handle.createWritable();
+        await w.write(await blobPromise);
+        await w.close();
+      }
+      log(`wrote ${baked.length + 1} files. point it at webapp/assets/items/.`);
+    } else {
+      for (const [name, blobPromise] of files()) {
+        const a = document.createElement('a');
+        a.href = URL.createObjectURL(await blobPromise);
+        a.download = name;
+        a.click();
+        setTimeout(() => URL.revokeObjectURL(a.href), 5000);
+        await new Promise(r => setTimeout(r, 120));
+      }
+      log('downloaded. move them into webapp/assets/items/.');
+    }
+  } catch (e) {
+    log('save failed: ' + e.message);
+  }
+  saveBtn.disabled = false;
+});
+</script>
+</body>
+</html>

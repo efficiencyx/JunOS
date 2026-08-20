@@ -1,0 +1,461 @@
+.header-left,
+.mobile-menu-btn,
+.mobile-conversation-title,
+.sidebar-backdrop { display: none; }
+
+#ageGate,
+#authScreen,
+.boot-overlay,
+.confirm-backdrop {
+  height: 100vh;
+  height: 100dvh;
+  overflow-y: auto;
+  padding:
+    max(var(--space-4), env(safe-area-inset-top, 0px))
+    max(var(--space-4), env(safe-area-inset-right, 0px))
+    max(var(--space-4), env(safe-area-inset-bottom, 0px))
+    max(var(--space-4), env(safe-area-inset-left, 0px));
+}
+
+@media (max-width: 900px) {
+  html, body { overflow: hidden; }
+
+  .sidebar-brand { min-height: 44px; }
+  .sidebar-toggle {
+    width: 44px;
+    height: 44px;
+  }
+
+  #app {
+    height: var(--visual-viewport-height, 100dvh);
+  }
+
+  .app-main,
+  .app-main.sidebar-collapsed {
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-rows: minmax(220px, 40%) minmax(0, 1fr);
+    height: 100%;
+    overflow: hidden;
+  }
+
+  .app-header {
+    position: fixed;
+    top: var(--visual-viewport-top, 0px);
+    left: var(--visual-viewport-left, 0px);
+    right: auto;
+    width: var(--visual-viewport-width, 100vw);
+    height: calc(var(--header-h) + env(safe-area-inset-top, 0px));
+    padding:
+      env(safe-area-inset-top, 0px)
+      max(var(--space-3), env(safe-area-inset-right, 0px))
+      0
+      max(var(--space-3), env(safe-area-inset-left, 0px));
+    justify-content: space-between;
+    pointer-events: none;
+  }
+  .app-header button,
+  .app-header .ai-badge,
+  .app-header .status-pill { pointer-events: auto; }
+  .header-left {
+    display: flex;
+    align-items: center;
+    flex: 1;
+    min-width: 0;
+    gap: var(--space-2);
+  }
+  .mobile-menu-btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 44px;
+    height: 44px;
+    flex: none;
+    padding: 0;
+    border: 0;
+    border-radius: 50%;
+    background: transparent;
+    color: var(--fg);
+  }
+  .mobile-conversation-title {
+    display: block;
+    min-width: 0;
+    max-width: min(46vw, 320px);
+    padding: 8px 6px;
+    overflow: hidden;
+    color: var(--fg);
+    background: transparent;
+    border: 0;
+    border-radius: var(--radius-sm);
+    font-size: 14px;
+    font-weight: 600;
+    text-align: left;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    min-height: 44px;
+  }
+  .mobile-conversation-title:disabled { opacity: 1; color: var(--muted); }
+  .header-right { flex: none; margin-left: var(--space-2); }
+  #resetLive2DBtn { display: none; }
+
+  .conv-sidebar {
+    position: fixed;
+    display: flex;
+    top: var(--visual-viewport-top, 0px);
+    left: var(--visual-viewport-left, 0px);
+    z-index: 151;
+    width: 320px;
+    max-width: calc(var(--visual-viewport-width, 100vw) - 48px);
+    height: var(--visual-viewport-height, 100dvh);
+    padding:
+      max(var(--space-2), env(safe-area-inset-top, 0px))
+      10px
+      max(var(--space-2), env(safe-area-inset-bottom, 0px))
+      max(10px, env(safe-area-inset-left, 0px));
+    background: var(--bg);
+    box-shadow: 18px 0 48px rgba(0, 0, 0, .48);
+    transform: translateX(calc(-100% - 24px));
+    transition: transform 220ms cubic-bezier(.2, .7, .2, 1);
+  }
+  body.sidebar-open .conv-sidebar { transform: translateX(0); }
+  .app-main.sidebar-collapsed .conv-sidebar .sidebar-toggle { display: inline-flex; }
+  .app-main.sidebar-collapsed .conv-sidebar .sidebar-brand-name { display: inline; }
+  .app-main.sidebar-collapsed .conv-sidebar .conv-list { display: block; }
+  .app-main.sidebar-collapsed .conv-sidebar .user-info { display: flex; }
+  .app-main.sidebar-collapsed .conv-sidebar .sidebar-brand {
+    position: static;
+    width: auto;
+    gap: 8px;
+    transform: none;
+  }
+  .app-main.sidebar-collapsed .conv-sidebar .sidebar-item,
+  .app-main.sidebar-collapsed .conv-sidebar .user-chip {
+    gap: 12px;
+    padding: 11px 14px;
+  }
+  .app-main.sidebar-collapsed .conv-sidebar .sidebar-item span,
+  .app-main.sidebar-collapsed .conv-sidebar .sidebar-label,
+  .app-main.sidebar-collapsed .conv-sidebar .sidebar-brand-name,
+  .app-main.sidebar-collapsed .conv-sidebar .user-info {
+    width: auto;
+    opacity: 1;
+    pointer-events: auto;
+  }
+  .app-main.sidebar-collapsed .conv-sidebar .sidebar-section.sidebar-scroll { overflow-y: auto; }
+  .sidebar-backdrop {
+    position: fixed;
+    display: block;
+    inset: 0;
+    z-index: 150;
+    background: rgba(0, 0, 0, .58);
+    opacity: 0;
+    visibility: hidden;
+    pointer-events: none;
+    transition: opacity 180ms, visibility 180ms;
+  }
+  .sidebar-backdrop.open {
+    opacity: 1;
+    visibility: visible;
+    pointer-events: auto;
+  }
+
+  #stage {
+    position: relative;
+    z-index: auto;
+    grid-column: 1;
+    grid-row: 1;
+    min-height: 0;
+    pointer-events: none;
+  }
+  .chat-panel {
+    grid-column: 1;
+    grid-row: 2;
+    min-height: 0;
+  }
+  .composer-area {
+    padding-right: max(var(--space-5), env(safe-area-inset-right, 0px));
+    padding-bottom: max(var(--space-4), env(safe-area-inset-bottom, 0px));
+    padding-left: max(var(--space-5), env(safe-area-inset-left, 0px));
+  }
+  .composer-icon,
+  .composer-send,
+  #openSettingsBtn {
+    width: 44px;
+    height: 44px;
+    flex: none;
+    padding: 0;
+    align-items: center;
+    justify-content: center;
+  }
+  .conv-item {
+    min-height: 48px;
+    padding: 2px 4px 2px 10px;
+  }
+  .conv-open,
+  .conv-delete {
+    min-height: 44px;
+  }
+  .sidebar-item,
+  .user-chip { min-height: 44px; }
+  .conv-delete {
+    width: 44px;
+    height: 44px;
+  }
+  @media (pointer: coarse) {
+    .conv-delete { opacity: 1; }
+  }
+
+  .settings-drawer {
+    top: calc(var(--visual-viewport-top, 0px) + var(--visual-viewport-height, 100dvh) / 2);
+    left: calc(var(--visual-viewport-left, 0px) + var(--visual-viewport-width, 100vw) / 2);
+    width: min(780px, calc(var(--visual-viewport-width, 100vw) - 16px));
+    height: min(580px, calc(var(--visual-viewport-height, 100dvh) - 16px));
+    max-width: none;
+  }
+  .settings-nav { width: 60px; }
+
+  #toasts {
+    top: calc(var(--visual-viewport-top, 0px) + var(--header-h) + env(safe-area-inset-top, 0px) + var(--space-2));
+    right: max(var(--space-2), env(safe-area-inset-right, 0px));
+    left: max(var(--space-2), env(safe-area-inset-left, 0px));
+  }
+  .toast { max-width: none; }
+}
+
+html.phone-ui #app,
+html.phone-ui .app-main,
+html.phone-ui .app-main.sidebar-collapsed {
+  display: block;
+  width: 100%;
+  height: var(--stage-viewport-height, 100lvh);
+  overflow: hidden;
+}
+
+html.phone-ui #stage {
+  position: fixed;
+  inset: 0;
+  z-index: 40;
+  width: 100%;
+  height: var(--stage-viewport-height, 100lvh);
+  pointer-events: auto;
+  touch-action: none;
+}
+
+html.phone-ui .chat-panel {
+  position: fixed;
+  top: var(--visual-viewport-top, 0px);
+  left: var(--visual-viewport-left, 0px);
+  z-index: 50;
+  width: var(--visual-viewport-width, 100vw);
+  height: var(--visual-viewport-height, 100dvh);
+  overflow: visible;
+  border: 0;
+  background: transparent;
+  pointer-events: none;
+}
+html.phone-ui .messages,
+html.phone-ui .messages-empty,
+html.phone-ui .prompt-chips { display: none; }
+html.phone-ui .composer-area {
+  position: absolute;
+  right: 0;
+  bottom: 0;
+  left: 0;
+  z-index: 2;
+  max-width: 760px;
+  margin-inline: auto;
+  padding:
+    var(--space-2)
+    max(var(--space-3), env(safe-area-inset-right, 0px))
+    max(var(--space-3), env(safe-area-inset-bottom, 0px))
+    max(var(--space-3), env(safe-area-inset-left, 0px));
+  pointer-events: auto;
+}
+html.phone-ui .composer textarea { font-size: 16px; }
+html.phone-ui .face-bubble {
+  pointer-events: auto;
+  touch-action: pan-x pan-y;
+}
+html.phone-ui .fb-text {
+  overflow: auto;
+  overscroll-behavior: contain;
+}
+html.phone-ui .stage-status {
+  top: calc(var(--visual-viewport-top, 0px) + var(--header-h) + env(safe-area-inset-top, 0px) + 4px);
+  right: auto;
+  bottom: auto;
+  left: max(12px, env(safe-area-inset-left, 0px));
+  max-width: calc(var(--visual-viewport-width, 100vw) - 24px);
+}
+
+html.phone-ui .settings-drawer,
+html.phone-ui .settings-drawer.open {
+  top: var(--visual-viewport-top, 0px);
+  left: var(--visual-viewport-left, 0px);
+  width: var(--visual-viewport-width, 100vw);
+  height: var(--visual-viewport-height, 100dvh);
+  max-width: none;
+  flex-direction: column;
+  border: 0;
+  border-radius: 0;
+  transform: none;
+}
+html.phone-ui .settings-nav {
+  width: 100%;
+  flex: none;
+  flex-direction: row;
+  align-items: center;
+  gap: var(--space-2);
+  padding:
+    max(var(--space-2), env(safe-area-inset-top, 0px))
+    max(var(--space-2), env(safe-area-inset-right, 0px))
+    var(--space-2)
+    max(var(--space-2), env(safe-area-inset-left, 0px));
+  overflow: hidden;
+  border-right: 0;
+  border-bottom: 1px solid var(--border);
+}
+html.phone-ui .settings-close { flex: none; width: 44px; height: 44px; }
+html.phone-ui .settings-navlist {
+  flex: 1;
+  flex-direction: row;
+  gap: var(--space-1);
+  min-width: 0;
+  margin-top: 0;
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+html.phone-ui .settings-navitem {
+  flex: none;
+  justify-content: center;
+  min-height: 44px;
+  padding: 9px 11px;
+  white-space: nowrap;
+}
+html.phone-ui .settings-navitem span { display: inline; font-size: 12px; }
+html.phone-ui .settings-main { min-height: 0; }
+html.phone-ui .settings-main-head {
+  padding-right: max(var(--space-4), env(safe-area-inset-right, 0px));
+  padding-left: max(var(--space-4), env(safe-area-inset-left, 0px));
+}
+html.phone-ui .settings-main-body {
+  scrollbar-width: none;
+  padding:
+    var(--space-1)
+    max(var(--space-4), env(safe-area-inset-right, 0px))
+    max(var(--space-5), env(safe-area-inset-bottom, 0px))
+    max(var(--space-4), env(safe-area-inset-left, 0px));
+}
+html.phone-ui .settings-navlist::-webkit-scrollbar,
+html.phone-ui .settings-main-body::-webkit-scrollbar { display: none; }
+html.phone-ui .set-row {
+  align-items: stretch;
+  flex-direction: column;
+  gap: var(--space-3);
+}
+html.phone-ui .set-row-control,
+html.phone-ui .set-row-control input[type="text"],
+html.phone-ui .set-row-control input[type="number"],
+html.phone-ui .set-row-control select,
+html.phone-ui .set-row-control button { width: 100%; max-width: none; }
+html.phone-ui label.set-row-control {
+  min-height: 44px;
+  justify-content: flex-start;
+  cursor: pointer;
+}
+html.phone-ui label.set-row-control input[type="checkbox"] { width: 24px; height: 24px; }
+html.phone-ui .settings-drawer input[type="text"],
+html.phone-ui .settings-drawer input[type="password"],
+html.phone-ui .settings-drawer input[type="number"],
+html.phone-ui .settings-drawer select,
+html.phone-ui .settings-drawer button,
+html.phone-ui .auth-field input,
+html.phone-ui .auth-submit,
+html.phone-ui .confirm-btn { min-height: 44px; }
+html.phone-ui .set-row-control.range-control input[type="range"] { flex: 1; width: auto; min-width: 0; }
+html.phone-ui .settings-drawer input[type="range"] { min-height: 44px; }
+html.phone-ui .mood-row input[type="range"] {
+  height: 44px;
+  background: transparent;
+  box-shadow: none;
+}
+html.phone-ui .mood-row input[type="range"]::-webkit-slider-runnable-track {
+  background: linear-gradient(90deg, var(--fill-color, var(--gauge)) 0 var(--fill), var(--track-empty) var(--fill));
+  box-shadow: 0 0 12px -1px var(--glow, transparent);
+}
+html.phone-ui .mood-row input[type="range"]::-moz-range-track {
+  box-shadow: 0 0 12px -1px var(--glow, transparent);
+}
+html.phone-ui .memory-add { display: grid; grid-template-columns: 1fr; gap: var(--space-2); }
+html.phone-ui .memory-add input,
+html.phone-ui .memory-add button { width: 100%; }
+html.phone-ui .memory-graph-wrap,
+html.phone-ui .memory-graph { min-height: 260px; }
+html.phone-ui .memory-reader {
+  inset: auto 0 0;
+  width: 100%;
+  max-height: 70%;
+  border-right: 0;
+  border-bottom: 0;
+  border-left: 0;
+  border-radius: var(--radius-md) var(--radius-md) 0 0;
+}
+html.phone-ui .mood-row { grid-template-columns: 64px minmax(0, 1fr) 28px; gap: var(--space-2); }
+html.phone-ui input[type="text"],
+html.phone-ui input[type="password"],
+html.phone-ui input[type="number"],
+html.phone-ui select { font-size: 16px; }
+
+html.phone-ui #ageGate,
+html.phone-ui #authScreen,
+html.phone-ui .boot-overlay,
+html.phone-ui .confirm-backdrop,
+html.phone-ui .voice-overlay,
+html.phone-ui .karaoke-overlay {
+  top: var(--visual-viewport-top, 0px);
+  right: auto;
+  bottom: auto;
+  left: var(--visual-viewport-left, 0px);
+  width: var(--visual-viewport-width, 100vw);
+  height: var(--visual-viewport-height, 100dvh);
+}
+html.phone-ui .age-gate-panel { width: min(420px, 100%); padding: clamp(24px, 8vw, 40px); }
+html.phone-ui .auth-term { margin-block: auto; }
+html.phone-ui .auth-field input { font-size: 16px; }
+html.phone-ui .boot-console { margin-block: auto; }
+html.phone-ui .confirm-dialog { margin-block: auto; }
+html.phone-ui .devhud {
+  top: calc(var(--visual-viewport-top, 0px) + var(--header-h) + env(safe-area-inset-top, 0px));
+  right: max(8px, env(safe-area-inset-right, 0px));
+  max-width: calc(var(--visual-viewport-width, 100vw) - 16px);
+  max-height: calc(var(--visual-viewport-height, 100dvh) - var(--header-h) - 16px);
+}
+html.phone-ui .voice-overlay-close {
+  top: calc(16px + env(safe-area-inset-top, 0px));
+  right: calc(16px + env(safe-area-inset-right, 0px));
+}
+html.phone-ui .voice-overlay-controls { bottom: calc(20px + env(safe-area-inset-bottom, 0px)); }
+
+@media (max-height: 560px) {
+  .age-gate-panel,
+  .auth-term-body { gap: var(--space-2); padding-top: var(--space-3); padding-bottom: var(--space-3); }
+  .auth-head { display: none; }
+  .boot-console { gap: var(--space-2); }
+  .boot-sigil { font-size: 42px; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .conv-sidebar,
+  .sidebar-backdrop { transition: none; }
+}
+
+.set-row-link {
+  padding: 7px 14px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-pill);
+  background: var(--bg-3);
+  color: var(--muted);
+  font-size: 13px;
+  text-decoration: none;
+  transition: color .14s, background .14s, border-color .14s;
+}
+.set-row-link:hover { background: var(--bg-hover); color: var(--fg); border-color: var(--border-2); }

@@ -1,0 +1,19 @@
+/* An index, not a stylesheet. the sheets below ARE this file, split up and kept
+   in
+   cascade order. responsive.css overrides everything before it, so it stays
+   last. The :root tokens live in boot.css, which loads before any of this.
+
+   @import rather than nine <link> tags because four pages pull styles.css in
+   (index, karaoke, privacy, and boot-gate.js at runtime) and they would all
+   need the same nine, in the same order, forever. */
+
+@import url("css/base.css?v=1");
+@import url("css/shell.css?v=1");
+@import url("css/sidebar.css?v=1");
+@import url("css/chat.css?v=1");
+@import url("css/stage.css?v=1");
+@import url("css/settings.css?v=2");
+@import url("css/widgets.css?v=3");
+@import url("css/voice-karaoke.css?v=1");
+@import url("css/welcome.css?v=1");
+@import url("css/responsive.css?v=1");
