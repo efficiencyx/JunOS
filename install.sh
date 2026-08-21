@@ -352,8 +352,9 @@ ask_tensor_parallel() {
 # she agrees with came cheap. Nothing gets said that she wouldn't have said
 # anyway. Experimental because whether it is faster at all depends on the card,
 # hence the depth question right after. Sets $MTP (on|off) and $MTP_DRAFTER.
-# Off under Express, this is not a setting to hand somebody who asked for
-# defaults. Without a prompt: JUN_MTP=on|off.
+# On under Express: the depth question right below answers itself with a real
+# measurement, so the risky half of "experimental" is already handled.
+# Without a prompt: JUN_MTP=on|off.
 ask_mtp() {
     local v preset
     MTP=off
@@ -370,6 +371,7 @@ ask_mtp() {
         return 0
     fi
     if [ "${JUN_YES:-}" = "1" ] || [ ! -r /dev/tty ]; then
+        MTP=on
         return 0
     fi
 

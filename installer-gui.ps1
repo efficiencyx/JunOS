@@ -711,7 +711,7 @@ function Select-Model([string]$modelRef) {
 $script:recommendedModel = Get-RecommendedModel $false
 Select-Model $script:recommendedModel
 $recommendedLabel = ($modelChoices | Where-Object { $_.Ref -eq $script:recommendedModel } | Select-Object -First 1).Label
-$ExpressSummaryText.Text = "Ollama with $recommendedLabel`nVoice conversation and karaoke enabled`nLive2D asset recovery offered separately"
+$ExpressSummaryText.Text = "Ollama with $recommendedLabel`nVoice conversation and karaoke enabled`nMulti-token prediction on, draft depth measured after install`nLive2D asset recovery offered separately"
 
 if ($script:gpuVendor -eq 'cpu') {
     $HardwareText.Text = 'No NVIDIA or AMD GPU was detected. The CPU-friendly Jun E2B model is recommended; local inference will still work.'
@@ -764,8 +764,8 @@ function Update-Mode {
         $VoiceCheck.IsChecked = $true
         $KaraokeCheck.IsChecked = $true
         $KaraokeCheck.Visibility = 'Visible'
-        $MtpCheck.IsChecked = $false
-        $MtpDepthPanel.Visibility = 'Collapsed'
+        $MtpCheck.IsChecked = $true
+        $MtpDepthPanel.Visibility = 'Visible'
     }
 }
 
@@ -843,7 +843,7 @@ function Get-SetupValues {
         TensorParallel = (-not $express -and $TensorParallelCheck.IsChecked -eq $true)
         Voice = ($express -or $VoiceCheck.IsChecked -eq $true)
         Karaoke = ($express -or $KaraokeCheck.IsChecked -eq $true)
-        Mtp = (-not $express -and $MtpCheck.IsChecked -eq $true)
+        Mtp = ($express -or $MtpCheck.IsChecked -eq $true)
         MtpDepth = (Get-SelectedTag $MtpDepthCombo)
         Extract = ($ExtractCheck.IsChecked -eq $true)
     }
