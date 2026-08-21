@@ -1,6 +1,9 @@
 # Pinned exactly, not ranges. both installers build a venv from this file, and a
 # range means every fresh install gets whatever went up on PyPI that morning.
 # bump these by hand when you have read the release.
+# 3.10 to 3.12 ONLY - kokoro declares Requires-Python <3.13 and pip on a 3.13+
+# interpreter answers "no matching distribution" for it. install.ps1 picks an
+# interpreter in that window on purpose, the docker image is 3.11.
 kokoro==0.9.4
 pocket-tts==2.1.0
 # STT. Runs on CTranslate2 (not torch) and decodes audio via PyAV, whose wheel
