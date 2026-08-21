@@ -920,10 +920,24 @@ function Install-AssetRecovery {
 
     $venv = Join-Path (Get-Location) 'runtime\asset-recovery-venv'
     $recoveryPython = Join-Path $venv 'Scripts\python.exe'
-    if (-not (Test-Path $recoveryPython)) {
+    # a venv whose pip never bootstrapped is worse than no venv: python.exe is
+    # there so a Test-Path check passes, and the install dies on "No module
+    # named pip" one line later. check for pip, rebuild when it's missing.
+    $hasPip = $false
+    if (Test-Path $recoveryPython) {
+        & $recoveryPython -m pip --version *> $null
+        $hasPip = ($LASTEXITCODE -eq 0)
+    }
+    if (-not $hasPip) {
         Step 'set up local asset-recovery environment'
-        & $python -m venv $venv
+        & $python -m venv --clear $venv
         if ($LASTEXITCODE -ne 0) { throw 'Could not create the asset-recovery virtual environment.' }
+        & $recoveryPython -m pip --version *> $null
+        if ($LASTEXITCODE -ne 0) {
+            & $recoveryPython -m ensurepip --upgrade *> $null
+            & $recoveryPython -m pip --version *> $null
+            if ($LASTEXITCODE -ne 0) { throw 'The asset-recovery virtual environment has no pip.' }
+        }
     }
 
     Step 'install UnityPy + Pillow'

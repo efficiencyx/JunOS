@@ -858,12 +858,23 @@ install_asset_recovery() {
     venv="runtime/asset-recovery-venv"
     recovery_python="$venv/bin/python"
 
-    if [ ! -x "$recovery_python" ]; then
+    # a venv whose pip never bootstrapped is worse than no venv: the python is
+    # there, so the old existence check passed, and the install died on "No
+    # module named pip" instead. so check for pip, not for the interpreter, and
+    # rebuild from scratch when it's missing.
+    if [ ! -x "$recovery_python" ] || ! "$recovery_python" -m pip --version >/dev/null 2>&1; then
         note "setting up the local asset-recovery environment"
-        "$python" -m venv "$venv" || {
+        "$python" -m venv --clear "$venv" || {
             warn_ "could not create the asset-recovery virtual environment."
             return 1
         }
+        "$recovery_python" -m pip --version >/dev/null 2>&1 \
+            || "$recovery_python" -m ensurepip --upgrade >/dev/null 2>&1 || true
+        if ! "$recovery_python" -m pip --version >/dev/null 2>&1; then
+            warn_ "the asset-recovery environment has no pip - install your distro's"
+            warn_ "python venv/pip package (python3-venv on Debian) and re-run."
+            return 1
+        fi
     fi
     run "install UnityPy + Pillow" "$recovery_python" -m pip install \
         --disable-pip-version-check --quiet -r tools/requirements-recovery.txt
