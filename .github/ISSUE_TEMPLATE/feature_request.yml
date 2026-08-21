@@ -1,0 +1,77 @@
+name: Feature request
+description: Suggest a focused improvement to Jun OS
+title: "[Feature]: "
+labels:
+  - enhancement
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for the idea. Jun OS is a local-first, unofficial fan project, so proposals should preserve privacy, graceful offline behavior, and the asset-redistribution rules in `LICENSE`.
+
+  - type: checkboxes
+    id: checks
+    attributes:
+      label: Before submitting
+      options:
+        - label: I searched existing issues for the same or a closely related request.
+          required: true
+        - label: This request does not require redistributing extracted or recovered game assets.
+          required: true
+
+  - type: dropdown
+    id: area
+    attributes:
+      label: Area
+      options:
+        - Installation or deployment
+        - Chat or model providers
+        - Memory or lore
+        - Voice or karaoke
+        - Live2D, wardrobe, or mods
+        - Android app
+        - Google Colab
+        - Documentation or contributor experience
+        - Other
+    validations:
+      required: true
+
+  - type: textarea
+    id: problem
+    attributes:
+      label: Problem or opportunity
+      description: What is difficult, missing, or worth improving? Focus on the user need rather than only the implementation.
+    validations:
+      required: true
+
+  - type: textarea
+    id: proposal
+    attributes:
+      label: Proposed solution
+      description: Describe how the feature should behave, including its local, Docker, Windows, Colab, or Android impact where relevant.
+    validations:
+      required: true
+
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternatives considered
+      description: Note any workarounds or simpler approaches you considered.
+
+  - type: dropdown
+    id: contribution
+    attributes:
+      label: Would you like to work on this?
+      options:
+        - Yes, I can open a pull request
+        - Maybe, with maintainer guidance
+        - No, I am only suggesting it
+    validations:
+      required: true
+
+  - type: textarea
+    id: additional
+    attributes:
+      label: Additional context
+      description: Add mockups, examples, or related links. Do not attach recovered game assets.
+
