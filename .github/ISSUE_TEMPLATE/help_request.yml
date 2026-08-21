@@ -1,0 +1,72 @@
+name: Setup or support request
+description: Ask for help installing, configuring, or running Jun OS
+title: "[Help]: "
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Please check the README's **When things go sideways** section and `docs/configuration.md` first.
+
+        Do not post `.env` files, passwords, API or registration keys, private chat content, or recovered game assets. This form is public. Use a private security advisory for vulnerabilities.
+
+  - type: checkboxes
+    id: checks
+    attributes:
+      label: Before submitting
+      options:
+        - label: I checked the troubleshooting and configuration documentation.
+          required: true
+        - label: I searched existing issues for the same question.
+          required: true
+        - label: I removed secrets, private data, and recovered game assets from this request.
+          required: true
+
+  - type: dropdown
+    id: install
+    attributes:
+      label: Installation method
+      options:
+        - Docker on Linux, macOS, or WSL
+        - Bare-metal Windows
+        - Google Colab
+        - Android
+        - Not installed yet
+        - Other
+    validations:
+      required: true
+
+  - type: input
+    id: version
+    attributes:
+      label: Version
+      description: Paste the release tag or output of `git rev-parse --short HEAD`, if available.
+      placeholder: v1.2.3 or a1b2c3d
+
+  - type: textarea
+    id: goal
+    attributes:
+      label: What are you trying to do?
+    validations:
+      required: true
+
+  - type: textarea
+    id: tried
+    attributes:
+      label: What have you tried?
+      description: Include the commands or settings you used and what happened.
+    validations:
+      required: true
+
+  - type: textarea
+    id: environment
+    attributes:
+      label: Environment
+      description: Include OS, GPU, provider, and enabled profiles when relevant.
+
+  - type: textarea
+    id: logs
+    attributes:
+      label: Relevant output
+      description: Paste a short, redacted excerpt rather than the entire log.
+      render: shell
+
