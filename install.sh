@@ -1143,14 +1143,53 @@ check_repo_source() {
     case "$a" in y|Y|yes|YES) ;; *) fail_ "aborted."; exit 1 ;; esac
 }
 
+# markers, not the folder name - JUN_DIR lets people call it whatever they
+# want, and "Jun" on its own could be anything.
+is_jun_checkout() {
+    [ -f "$1/start.sh" ] && [ -f "$1/docker-compose.yml" ] && [ -d "$1/webapp" ]
+}
+
+# people re-run the install one-liner from inside the checkout they already
+# have (or from webapp/ two levels down). without this we clone Jun/Jun next
+# to it and set up a second stack fighting the first one for :80. so: look at
+# $DIR, then walk up from here. an explicit JUN_DIR is a decision, it wins.
+locate_install() {
+    is_jun_checkout "$DIR" && { EXISTING="$DIR"; return 0; }
+    [ -n "${JUN_DIR:-}" ] && return 1
+    local d="$PWD"
+    while :; do
+        is_jun_checkout "$d" && { EXISTING="$d"; return 0; }
+        [ "$d" = "/" ] && return 1
+        d="$(dirname "$d")"
+    done
+}
+
 banner
 choose_install_mode
-check_repo_source
+EXISTING=""
+locate_install || true
+# nothing gets cloned when she's already here, so the fork warning has nothing
+# to warn about.
+[ -n "$EXISTING" ] || check_repo_source
 confirm_deps
 
-if [ -d "$DIR/.git" ]; then
-    step "update repository"
-    run "$DIR up to date" git -C "$DIR" pull --ff-only
+if [ -n "$EXISTING" ]; then
+    DIR="$EXISTING"
+    step "existing install"
+    ok "found Jun in $DIR - updating instead of cloning"
+    if [ -d "$DIR/.git" ]; then
+        if git -C "$DIR" pull --ff-only >/dev/null 2>&1; then
+            ok "repo up to date"
+        else
+            # local commits, a dirty tree, a branch of their own. all fine,
+            # all reasons a pull can't fast-forward. NOT a reason to stop -
+            # the rest of the installer still fixes .env, deps and the stack.
+            warn_ "couldn't fast-forward $DIR - keeping the code that's on disk"
+            note "pull it yourself with: git -C $DIR pull"
+        fi
+    else
+        note "not a git checkout, nothing to pull - re-running setup on what's here"
+    fi
 else
     step "clone repository"
     run "$REPO ($REF)" git clone --depth 1 --branch "$REF" "$REPO" "$DIR"
