@@ -934,7 +934,7 @@ function Install-AssetRecovery {
     # a supplied path is deliberate, and non-interactive installs must NEVER
     # wait for input. only offer the friendly fallback after auto-discovery.
     if ($env:JUN_GAME_DIR -or -not $interactive) {
-        Warn_ 'Asset extraction failed. Set JUN_GAME_DIR to the game folder, then re-run with JUN_EXTRACT=1.'
+        Warn_ "Couldn't extract - she'll use placeholder art for now. Set JUN_GAME_DIR to the game folder and re-run with JUN_EXTRACT=1 for her real model."
         return
     }
 
@@ -1032,22 +1032,36 @@ Warn_ 'My Dystopian Robot Girlfriend. tools/recover_assets.py rebuilds'
 Warn_ 'them from YOUR game copy, for personal use only - do NOT'
 Warn_ 'republish them (public fork, release, mirror). See NOTICE in LICENSE.'
 
-# opt-in extraction of the Live2D assets from the user's own game install.
-# NEVER runs unless explicitly requested. answer y here, or JUN_EXTRACT=1 when
-# non-interactive. without it the webapp uses placeholder assets.
+# extraction of the Live2D assets from the user's OWN game install, nothing is
+# downloaded and nothing leaves the box. Express does it, because a placeholder
+# avatar is not "everything with recommended settings" and she is the whole
+# point of the app. Custom asks. JUN_EXTRACT=1 forces it, JUN_EXTRACT=0 opts
+# out of the Express one. no game on this machine and recover_assets.py just
+# says so and the install carries on with placeholders.
 $extract = $false
 switch -Regex ($env:JUN_EXTRACT) {
     '^(1|on|yes|true)$'  { $extract = $true }
     '^(0|off|no|false)$' { $extract = $false }
     default {
-        if ($interactive) {
+        if ($env:JUN_YES -eq '1') {
+            $extract = $true
+        } elseif ($interactive) {
             $e = Read-Styled "     ${OK}▸${R} extract them now from your game install? ${DIM}[y/N]${R} ${ACCENT}›${R} "
             $extract = $e -match '^(y|yes)$'
         }
     }
 }
 if ($extract) {
-    Install-AssetRecovery
+    # every throw in there is "no python", "venv died", "pip died" - all of
+    # them survivable, she just wears the placeholders. before Express turned
+    # this on the throw took the whole install down with it, which is a rough
+    # way to lose a stack that was otherwise about to boot.
+    try {
+        Install-AssetRecovery
+    } catch {
+        Warn_ ("asset recovery stopped: {0}" -f $_.Exception.Message)
+        Note 'carrying on with placeholder art - re-run install.ps1 with $env:JUN_EXTRACT=1 to try again.'
+    }
 } else {
     Note 'skipped - re-run install.ps1 with JUN_EXTRACT=1 anytime to extract.'
 }
