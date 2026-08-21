@@ -985,9 +985,36 @@ function Install-AssetRecovery {
 }
 
 
+# markers, not the folder name - JUN_DIR lets people call it whatever they
+# want, and "Jun" on its own could be anything.
+function Test-JunCheckout([string]$path) {
+    if (-not $path) { return $false }
+    return (Test-Path (Join-Path $path 'start.ps1')) -and
+           (Test-Path (Join-Path $path 'docker-compose.yml')) -and
+           (Test-Path (Join-Path $path 'webapp'))
+}
+
+# people re-run the install line from inside the checkout they already have
+# (or from webapp\ two levels down). without this we clone Jun\Jun next to it
+# and set up a second copy fighting the first one for :80. so: look at $dir,
+# then walk up from here. an explicit JUN_DIR is a decision, it wins.
+function Find-JunInstall {
+    if (Test-JunCheckout $dir) { return (Resolve-Path -LiteralPath $dir).Path }
+    if ($env:JUN_DIR) { return $null }
+    $d = (Get-Location).Path
+    while ($d) {
+        if (Test-JunCheckout $d) { return $d }
+        $d = Split-Path -Parent $d
+    }
+    return $null
+}
+
 Show-Banner
 Choose-InstallMode
-Confirm-RepoSource
+$existing = Find-JunInstall
+# nothing gets cloned when she's already here, so the fork warning has nothing
+# to warn about.
+if (-not $existing) { Confirm-RepoSource }
 
 Step 'check dependencies'
 
@@ -1002,10 +1029,24 @@ if (-not (Get-Command git -ErrorAction SilentlyContinue)) {
 }
 Ok 'git found'
 
-if (Test-Path (Join-Path $dir '.git')) {
-    Step 'update repository'
-    git -C $dir pull --ff-only
-    Ok "$dir up to date"
+if ($existing) {
+    $dir = $existing
+    Step 'existing install'
+    Ok "found Jun in $dir - updating instead of cloning"
+    if (Test-Path (Join-Path $dir '.git')) {
+        git -C $dir pull --ff-only 2>&1 | Out-Null
+        if ($LASTEXITCODE -eq 0) {
+            Ok 'repo up to date'
+        } else {
+            # local commits, a dirty tree, a branch of their own. all fine,
+            # all reasons a pull can't fast-forward. NOT a reason to stop -
+            # the rest of the installer still fixes .env, deps and the stack.
+            Warn_ "couldn't fast-forward $dir - keeping the code that's on disk"
+            Note "pull it yourself with: git -C $dir pull"
+        }
+    } else {
+        Note 'not a git checkout, nothing to pull - re-running setup on what is here'
+    }
 } else {
     Step 'clone repository'
     git clone --depth 1 --branch $ref $repo $dir
