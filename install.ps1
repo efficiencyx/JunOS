@@ -643,20 +643,42 @@ function Install-MachineTools([string[]]$missing, [switch]$Optional) {
     Refresh-Path
 }
 
-function Get-UsablePython {
-    $candidates = @(
+# every interpreter this box has, PATH ones first. the py launcher matters
+# here: winget can install 3.11 and leave 3.14 sitting first on PATH, and
+# then the only way to reach the one we asked for is `py -3.11`.
+function Get-PythonCandidates {
+    $paths = @()
+    foreach ($c in @(
         Get-Command python -ErrorAction SilentlyContinue
         Get-Command python3 -ErrorAction SilentlyContinue
-    ) | Where-Object { $_ }
-
-    foreach ($python in $candidates) {
+    )) {
         # skip the windows store alias stub outright. probing it writes to
         # stderr, which $ErrorActionPreference='Stop' turns into a terminating
-        # NativeCommandError on PowerShell 5.1. run the probe through cmd so
+        # NativeCommandError on PowerShell 5.1. run every probe through cmd so
         # any other stderr output never reaches PowerShell either.
-        if ($python.Source -like '*\WindowsApps\*') { continue }
-        cmd /c "`"$($python.Source)`" -c `"import ensurepip, sys, venv; assert sys.version_info >= (3, 9)`" >nul 2>nul"
-        if ($LASTEXITCODE -eq 0) { return $python }
+        if ($c -and $c.Source -and $c.Source -notlike '*\WindowsApps\*') { $paths += $c.Source }
+    }
+    $launcher = Get-Command py -ErrorAction SilentlyContinue
+    if ($launcher -and $launcher.Source -notlike '*\WindowsApps\*') {
+        foreach ($v in '3.12', '3.11', '3.10') {
+            $exe = cmd /c "`"$($launcher.Source)`" -$v -c `"import sys; print(sys.executable)`" 2>nul"
+            if ($LASTEXITCODE -eq 0 -and $exe) { $paths += $exe.Trim() }
+        }
+    }
+    $paths | Where-Object { $_ } | Select-Object -Unique
+}
+
+# returns a path to an interpreter, or $null. $Below is an exclusive upper
+# bound like '3.13' - the voice venv needs one because kokoro 0.9.4 declares
+# Requires-Python <3.13 and pip on a 3.13+ interpreter just says "no matching
+# distribution" and takes voice down with it.
+function Get-UsablePython([string]$Min = '3.9', [string]$Below) {
+    $check = "import ensurepip, sys, venv; assert sys.version_info >= ({0})" -f ($Min -replace '\.', ', ')
+    if ($Below) { $check += "; assert sys.version_info < ({0})" -f ($Below -replace '\.', ', ') }
+
+    foreach ($path in Get-PythonCandidates) {
+        cmd /c "`"$path`" -c `"$check`" >nul 2>nul"
+        if ($LASTEXITCODE -eq 0) { return $path }
     }
     return $null
 }
@@ -791,12 +813,13 @@ function Install-Tts([string]$Karaoke = 'off') {
     $py = Join-Path $venv 'Scripts\python.exe'
 
     if (-not (Test-Path $py)) {
-        $python = Get-UsablePython
+        $python = Get-UsablePython -Min '3.10' -Below '3.13'
         if (-not $python) {
             Install-MachineTools @('python') -Optional
-            $python = Get-UsablePython
+            $python = Get-UsablePython -Min '3.10' -Below '3.13'
             if (-not $python) {
-                Warn_ 'Python still not found - skipping voice. Re-run install.ps1 after installing it.'
+                Warn_ 'no Python 3.10, 3.11 or 3.12 found - skipping voice. 3.13 and newer do'
+                Warn_ 'not work here: kokoro has no wheel for them. install one of those and re-run.'
                 Set-EnvKey 'VOICE' 'off'
                 Set-EnvKey 'KARAOKE' 'off'
                 return
@@ -804,7 +827,7 @@ function Install-Tts([string]$Karaoke = 'off') {
         }
 
         Step 'set up TTS voice engine (a few GB, one-time)'
-        & $python.Source -m venv $venv
+        & $python -m venv $venv
         & $py -m pip install --upgrade pip
         # CPU torch wheel first so the resolver doesn't drag CUDA builds in as
         # a transitive dep. both voice models hit real-time on CPU anyway.
@@ -855,7 +878,7 @@ function Install-AssetRecovery {
     $recoveryPython = Join-Path $venv 'Scripts\python.exe'
     if (-not (Test-Path $recoveryPython)) {
         Step 'set up local asset-recovery environment'
-        & $python.Source -m venv $venv
+        & $python -m venv $venv
         if ($LASTEXITCODE -ne 0) { throw 'Could not create the asset-recovery virtual environment.' }
     }
 
