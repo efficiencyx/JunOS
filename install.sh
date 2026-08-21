@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-REPO_UPSTREAM="https://github.com/efficiencyx/Jun.git"
+REPO_UPSTREAM="https://github.com/efficiencyx/JunOS.git"
 REPO="${JUN_REPO:-$REPO_UPSTREAM}"
 DIR="${JUN_DIR:-Jun}"
 REF="${JUN_REF:-main}"

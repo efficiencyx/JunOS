@@ -66,8 +66,8 @@ Curious how any of it works? [Under the hood](#under-the-hood).
 Clone it, look at what you just downloaded, then run it. **Linux / macOS / WSL** needs Docker (with Compose) and git; **Windows** needs neither, she runs bare metal out of one folder.
 
 ```sh
-git clone https://github.com/efficiencyx/Jun.git
-cd Jun
+git clone https://github.com/efficiencyx/JunOS.git
+cd JunOS
 less install.sh           # it installs Docker and pulls a few GB. worth a look
 ./install.sh              # Windows: .\install.ps1
 ```
@@ -79,11 +79,11 @@ Then open **<https://localhost>** (Windows: **<https://127.0.0.1:8080>**) and sa
 ### The one-liner, if you insist
 
 ```sh
-curl -fsSL https://raw.githubusercontent.com/efficiencyx/Jun/main/install.sh | bash
+curl -fsSL https://raw.githubusercontent.com/efficiencyx/JunOS/main/install.sh | bash
 ```
 
 ```powershell
-powershell -NoProfile -ExecutionPolicy Bypass -Command "irm https://raw.githubusercontent.com/efficiencyx/Jun/main/install.ps1 | iex"
+powershell -NoProfile -ExecutionPolicy Bypass -Command "irm https://raw.githubusercontent.com/efficiencyx/JunOS/main/install.ps1 | iex"
 ```
 
 This runs whatever `main` says right now, unread, and `main` moves. `JUN_REF` will hold it to a branch or tag you picked. Two more knobs in the same spirit: `JUN_REPO` needs `JUN_ALLOW_FORK=1` before it will clone from anywhere but here, and `JUN_DOCKER_SCRIPT_SHA256` pins Docker's own install script (the installer prints its digest either way, and never pipes it into a root shell). More in [SECURITY.md](SECURITY.md).
@@ -91,8 +91,8 @@ This runs whatever `main` says right now, unread, and `main` moves. `JUN_REF` wi
 ### Skipping the installer entirely
 
 ```sh
-git clone https://github.com/efficiencyx/Jun.git
-cd Jun
+git clone https://github.com/efficiencyx/JunOS.git
+cd JunOS
 cp .env.example .env
 ./start.sh                # Windows: ./start.ps1
 ```
@@ -113,7 +113,7 @@ First boot pulls whatever's in `OLLAMA_MODELS_TO_PULL` - by default the CPU-frie
 
 Run the whole stack on a **free Colab T4** - nothing installed, nothing on your machine, just a Google account.
 
-[![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/efficiencyx/Jun/blob/main/colab.ipynb)
+[![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/efficiencyx/JunOS/blob/main/colab.ipynb)
 
 1. Open [`colab.ipynb`](colab.ipynb) with the badge.
 2. **Runtime → Change runtime type → T4 GPU → Save.**

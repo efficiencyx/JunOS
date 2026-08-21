@@ -168,7 +168,7 @@ If you put her on the internet:
 ## Reporting a vulnerability
 
 Please report privately first, through GitHub: **Security → Report a
-vulnerability** on <https://github.com/efficiencyx/Jun>, which opens a private
+vulnerability** on <https://github.com/efficiencyx/JunOS>, which opens a private
 advisory only the maintainers can see. Public issues are fine for anything that
 isn't exploitable.
 
