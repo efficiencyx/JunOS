@@ -146,10 +146,45 @@ function Get-MtpBudgetMb([string]$modelRef) {
     }
 }
 
+# no nvidia-smi equivalent on the AMD side, so we ask Windows. AdapterRAM is a
+# 32 bit field and anything past 4GB comes back wrong, which is why the
+# registry's qwMemorySize goes first and AdapterRAM is only the fallback. same
+# order and same keys as installer-gui.ps1.
+function Get-AmdMemoryMb {
+    try {
+        $controllers = @(Get-CimInstance Win32_VideoController -ErrorAction Stop |
+            Where-Object { $_.Name -match '(?i)AMD|Radeon' })
+        if ($controllers.Count -eq 0) { return @() }
+        $names = @($controllers | ForEach-Object { $_.Name } | Sort-Object -Unique)
+
+        $registryMemory = @(Get-ItemProperty -Path 'HKLM:\SYSTEM\CurrentControlSet\Control\Video\*\0000' -ErrorAction SilentlyContinue |
+            Where-Object { $names -contains [string]$_.'HardwareInformation.AdapterString' } |
+            ForEach-Object {
+                $memory = $_.'HardwareInformation.qwMemorySize'
+                if ($memory -is [byte[]] -and $memory.Length -ge 8) {
+                    [BitConverter]::ToUInt64($memory, 0)
+                } elseif ($null -ne $memory) {
+                    [uint64]$memory
+                }
+            } | Where-Object { $_ -gt 0 } | Sort-Object -Unique)
+
+        if ($registryMemory.Count -gt 0) {
+            return @($registryMemory | ForEach-Object { [int]($_ / 1MB) })
+        }
+        return @($controllers | Where-Object { $_.AdapterRAM -gt 0 } |
+            ForEach-Object { [int]([uint64]$_.AdapterRAM / 1MB) })
+    } catch {
+        return @()
+    }
+}
+
 function Get-GpuMemoryMb {
-    if (-not (Get-Command nvidia-smi -ErrorAction SilentlyContinue)) { return @() }
-    $out = & nvidia-smi --query-gpu=memory.total --format=csv,noheader,nounits 2>$null
-    return @($out | Where-Object { $_ -match '\d' } | ForEach-Object { [int]($_.Trim()) })
+    if (Get-Command nvidia-smi -ErrorAction SilentlyContinue) {
+        $out = & nvidia-smi --query-gpu=memory.total --format=csv,noheader,nounits 2>$null
+        $mb = @($out | Where-Object { $_ -match '\d' } | ForEach-Object { [int]($_.Trim()) })
+        if ($mb.Count -gt 0) { return $mb }
+    }
+    return @(Get-AmdMemoryMb)
 }
 
 function Get-VramMb {

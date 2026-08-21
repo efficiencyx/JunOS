@@ -167,34 +167,62 @@ resolve_model() {  # alias|full-ref -> full-ref
     esac
 }
 
+# rocm-smi is ROCm userland, not the amdgpu kernel driver, and a plain mesa
+# desktop does not have it - so "no rocm-smi" says NOTHING about whether there
+# is a card in the box. this file ships with the driver itself, one per card,
+# VRAM in bytes. start.sh detects AMD off /dev/kfd for the same reason, and the
+# two scripts disagreeing is how a 7900 XTX ended up being handed E2B.
+amd_sysfs_vram_mb() {
+    local f name
+    for f in /sys/class/drm/card*/device/mem_info_vram_total; do
+        [ -r "$f" ] || continue
+        # card0-DP-1 and friends are connectors, and their device symlink lands
+        # back on the same card. count those and every GPU shows up twice.
+        name="${f#/sys/class/drm/}"; name="${name%%/*}"
+        case "$name" in *-*) continue ;; esac
+        # an APU's carveout is in here too, usually 512MB. that is not a card
+        # you plan a model around, and calling it one also flips karaoke onto a
+        # GPU that cannot hold the stems.
+        awk '{ mb = int($1 / 1048576); if (mb >= 1024) print mb }' "$f"
+    done
+}
+
+# One line per AMD card, VRAM in MB. rocm-smi when it is there, the driver's
+# own sysfs when it is not.
+amd_vram_mb_list() {
+    local out=
+    if command -v rocm-smi >/dev/null 2>&1; then
+        out="$(rocm-smi --showmeminfo vram --csv 2>/dev/null \
+            | awk -F, 'NR>1 { gsub(/[^0-9]/,"",$2); if ($2 != "") print int($2/1048576) }')"
+    fi
+    [ -n "$out" ] || out="$(amd_sysfs_vram_mb)"
+    [ -z "$out" ] || printf '%s\n' "$out"
+}
+
 detect_vram_mb() {
     if command -v nvidia-smi >/dev/null 2>&1; then
         nvidia-smi --query-gpu=memory.total --format=csv,noheader,nounits 2>/dev/null \
             | tr -dc '0-9\n' | sort -nr | head -n1
-    elif command -v rocm-smi >/dev/null 2>&1; then
-        rocm-smi --showmeminfo vram 2>/dev/null \
-            | grep -i 'total' | grep -oE '[0-9]+' | sort -nr | head -n1 \
-            | awk '{ if ($1 > 0) print int($1 / 1048576) }'
+        return
     fi
+    amd_vram_mb_list | sort -nr | head -n1
 }
 
 detect_vram_total_mb() {
     if command -v nvidia-smi >/dev/null 2>&1; then
         nvidia-smi --query-gpu=memory.total --format=csv,noheader,nounits 2>/dev/null \
             | tr -dc '0-9\n' | awk '{ t += $1 } END { if (t > 0) print t }'
-    elif command -v rocm-smi >/dev/null 2>&1; then
-        rocm-smi --showmeminfo vram 2>/dev/null \
-            | grep -i 'total' | grep -oE '[0-9]+' \
-            | awk '{ t += $1 } END { if (t > 0) print int(t / 1048576) }'
+        return
     fi
+    amd_vram_mb_list | awk '{ t += $1 } END { if (t > 0) print t }'
 }
 
 detect_gpu_count() {
     if command -v nvidia-smi >/dev/null 2>&1; then
         nvidia-smi --query-gpu=memory.total --format=csv,noheader,nounits 2>/dev/null | grep -c '[0-9]' || true
-    elif command -v rocm-smi >/dev/null 2>&1; then
-        rocm-smi --showmeminfo vram 2>/dev/null | grep -ci 'total' || true
+        return
     fi
+    amd_vram_mb_list | grep -c '[0-9]' || true
 }
 
 recommend_model() {
