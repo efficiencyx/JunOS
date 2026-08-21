@@ -76,6 +76,26 @@ The installer's first question is how you want to install: **Express** (press En
 
 Then open **<https://localhost>** (Windows: **<https://127.0.0.1:8080>**) and say hi. 🎉
 
+### Windows: click it, or type it
+
+Two front doors, same installer behind both. 🚪
+
+**Click it.** Grab **`JunSetup.exe`** from the [latest release](https://github.com/efficiencyx/JunOS/releases/latest) and double-click it. Four pages - install folder, Express or Custom, Live2D assets, a review of what's about to happen - then it downloads, installs and starts her while the log scrolls in the window, and finishes on an **Open Jun OS** button that opens the browser for you. No git clone first: the exe carries `install.ps1` inside itself and that script fetches the rest. It leaves "install missing prerequisites with winget" ticked (git, Ollama or llama.cpp, Python, the VC++ runtime) - those are the only machine-wide things; everything else lands in the folder you chose and `uninstall.ps1` takes it back out. Windows will flash a SmartScreen warning at an unsigned exe: **More info → Run anyway**, or use one of the other two doors.
+
+Already have the repo? `installer-gui.ps1` is that same window without the exe - right-click → **Run with PowerShell**, or:
+
+```powershell
+powershell -NoProfile -ExecutionPolicy Bypass -STA -File .\installer-gui.ps1
+```
+
+**Type it.** `.\install.ps1` asks the same things as text in the terminal, and it's what you want for scripted or unattended runs. It's also what the GUI actually runs: the window collects your answers, sets `JUN_DIR`, `JUN_PROVIDER`, `JUN_MODEL`, `JUN_EXTRACT` and friends, adds `JUN_YES=1` so nothing prompts, and hands over. Anything you can click you can also set as an env var:
+
+```powershell
+$env:JUN_YES='1'; $env:JUN_PROVIDER='ollama'; $env:JUN_EXTRACT='on'; .\install.ps1
+```
+
+Either way you end up at **<https://127.0.0.1:8080>**, and `.\start.ps1` is how you bring her back up next time.
+
 ### The one-liner, if you insist
 
 ```sh
@@ -333,6 +353,7 @@ The model-server containers are profile-gated. `./start.sh` derives `COMPOSE_PRO
 │   ├── boot.css      Critical CSS, inlined into index.html at sync time
 │   └── system_prompt.txt
 ├── install.sh · install.ps1     One-line bootstrap (Docker · bare metal)
+├── installer-gui.ps1            The Windows click-through window (ships as JunSetup.exe)
 ├── start.sh · start.ps1         Launchers, and the stop/status/logs control panel
 ├── sync-webapp.sh               The dev loop
 ├── colab.ipynb                  The free-GPU notebook
