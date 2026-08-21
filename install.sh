@@ -819,7 +819,7 @@ ensure_recovery_python() {
     if [ "${JUN_YES:-}" = "1" ]; then
         proceed=1
     elif [ -r /dev/tty ]; then
-        printf '     %s$%s install Python 3 for asset recovery with %s%s%s? %s[y/N]%s %sâ†’%s ' \
+        printf '     %s$%s install Python 3 for asset recovery with %s%s%s? %s[y/N]%s %s→%s ' \
             "$OK" "$R" "$B" "$PM" "$R" "$DIM" "$R" "$ACCENT" "$R" > /dev/tty
         read -r answer < /dev/tty || answer=""
         case "$answer" in y|Y|yes|YES) proceed=1 ;; esac
@@ -872,7 +872,8 @@ install_asset_recovery() {
     # A supplied path is deliberate, and non-interactive installs must never
     # wait for input. Only offer the friendly fallback after auto-discovery.
     if [ -n "${JUN_GAME_DIR:-}" ] || [ "${JUN_YES:-}" = "1" ] || [ ! -r /dev/tty ]; then
-        warn_ "extraction failed - set JUN_GAME_DIR to the game folder, then re-run with JUN_EXTRACT=1."
+        warn_ "couldn't extract - she'll use placeholder art for now. set JUN_GAME_DIR"
+        warn_ "to the game folder and re-run with JUN_EXTRACT=1 for her real model."
         return 1
     fi
 
@@ -1162,15 +1163,20 @@ warn_ "My Dystopian Robot Girlfriend. tools/recover_assets.py rebuilds"
 warn_ "them from YOUR game copy, for personal use only - do NOT"
 warn_ "republish them (public fork, release, mirror). See NOTICE in LICENSE."
 
-# Opt-in extraction of the Live2D assets from the user's own game install.
-# Never runs unless explicitly requested: answer y here, or JUN_EXTRACT=1
-# when non-interactive. Without it the webapp uses placeholder assets.
+# Extraction of the Live2D assets from the user's OWN game install, nothing is
+# downloaded and nothing leaves the box. Express does it, because a placeholder
+# avatar is not "everything with recommended settings" and she is the whole
+# point of the app. Custom asks. JUN_EXTRACT=1 forces it, JUN_EXTRACT=0 opts
+# out of the Express one. No game on this machine and recover_assets.py just
+# says so and the install carries on with placeholders.
 extract=0
 case "$(printf '%s' "${JUN_EXTRACT:-}" | tr '[:upper:]' '[:lower:]')" in
     1|on|yes|true) extract=1 ;;
     0|off|no|false) extract=0 ;;
     *)
-        if [ -r /dev/tty ] && [ "${JUN_YES:-}" != "1" ]; then
+        if [ "${JUN_YES:-}" = "1" ]; then
+            extract=1
+        elif [ -r /dev/tty ]; then
             printf '     %s$%s extract them now from your game install? %s[y/N]%s %s→%s ' \
                 "$OK" "$R" "$DIM" "$R" "$ACCENT" "$R" > /dev/tty
             read -r e < /dev/tty || e=""
