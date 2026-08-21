@@ -246,6 +246,11 @@ function Add-EnvKeyIfMissing([string]$key) {
 }
 
 $interactive = [Environment]::UserInteractive -and ($env:JUN_YES -ne '1')
+# true only when a person picked Express at the keyboard. JUN_YES on its own can
+# mean an unattended run - CI, or installer-gui.ps1 driving this script with its
+# output redirected - and the two want opposite things the moment something
+# needs asking.
+$script:expressInteractive = $false
 
 function Test-Sha256([string]$path, [string]$expected) {
     if (-not $expected) { return $false }
@@ -305,7 +310,9 @@ function Protect-EnvFile {
 function Choose-InstallMode {
     if ($env:JUN_YES -eq '1') { return }
     if ($env:JUN_EXPRESS -match '^(1|on|yes|true)$') {
-        $env:JUN_YES = '1'; $script:interactive = $false; return
+        $env:JUN_YES = '1'; $script:interactive = $false
+        $script:expressInteractive = [Environment]::UserInteractive
+        return
     }
     if (-not [Environment]::UserInteractive) { return }
     Write-Host ''
@@ -317,6 +324,7 @@ function Choose-InstallMode {
         Note "custom install - I'll ask about each option below"
     } else {
         $env:JUN_YES = '1'; $script:interactive = $false
+        $script:expressInteractive = $true
         Ok 'express install - using recommended settings'
     }
 }
@@ -931,9 +939,14 @@ function Install-AssetRecovery {
         return
     }
 
-    # a supplied path is deliberate, and non-interactive installs must NEVER
-    # wait for input. only offer the friendly fallback after auto-discovery.
-    if ($env:JUN_GAME_DIR -or -not $interactive) {
+    # a supplied path is deliberate, and unattended installs must NEVER wait for
+    # input. Express is NOT unattended: somebody pressed Enter half a minute ago
+    # and is watching this scroll, so it gets the same drag-the-folder-here
+    # fallback Custom does. JUN_YES without $expressInteractive is the actual
+    # headless case - installer-gui.ps1 spawns us with stdout redirected and no
+    # window, and a Read-Host there hangs the GUI with nothing on screen to say
+    # why - and still bails.
+    if ($env:JUN_GAME_DIR -or (-not $interactive -and -not $script:expressInteractive)) {
         Warn_ "Couldn't extract - she'll use placeholder art for now. Set JUN_GAME_DIR to the game folder and re-run with JUN_EXTRACT=1 for her real model."
         return
     }

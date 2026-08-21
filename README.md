@@ -72,7 +72,7 @@ less install.sh           # it installs Docker and pulls a few GB. worth a look
 ./install.sh              # Windows: .\install.ps1
 ```
 
-The installer's first question is how you want to install: **Express** (press Enter) auto-detects everything, rebuilds her Live2D model from your game copy if it finds one, and asks nothing else; **Custom** walks you through provider, model and voice. `JUN_YES=1` (or `$env:JUN_YES='1'`) skips the question entirely for unattended installs.
+The installer's first question is how you want to install: **Express** (press Enter) auto-detects everything and rebuilds her Live2D model from your game copy - the only thing it can still ask you is where that game is, and only when it can't find it itself; **Custom** walks you through provider, model and voice. `JUN_YES=1` (or `$env:JUN_YES='1'`) skips the question entirely for unattended installs.
 
 Then open **<https://localhost>** (Windows: **<https://127.0.0.1:8080>**) and say hi. 🎉
 
@@ -105,7 +105,7 @@ First boot pulls whatever's in `OLLAMA_MODELS_TO_PULL` - by default the CPU-frie
 >
 > The Live2D model and textures belong to *My Dystopian Robot Girlfriend* and aren't redistributed here - you rebuild them from your own copy of the game. Express does this for you; under Custom, answer **yes** when the installer offers. Either way it sets up a local `runtime/asset-recovery-venv` (UnityPy + Pillow, no global `pip install`) and runs the recovery script. 🔧
 >
-> No game on that machine? Nothing breaks, she just wears the placeholders and the install carries on. Want it later, or don't want it at all? `JUN_EXTRACT=1` re-runs it, `JUN_EXTRACT=0` tells Express to leave it alone (`$env:JUN_EXTRACT='1'; .\install.ps1` on Windows). If auto-detection misses the game, paste its folder when asked, or set `JUN_GAME_DIR` for scripted installs.
+> Can't find the game? It'll ask you to paste the folder or drag the game onto the terminal - Express included, press Enter to skip. No game on that machine at all? Nothing breaks, she just wears the placeholders and the install carries on. Want it later, or don't want it at all? `JUN_EXTRACT=1` re-runs it, `JUN_EXTRACT=0` tells Express to leave it alone (`$env:JUN_EXTRACT='1'; .\install.ps1` on Windows). If auto-detection misses the game, paste its folder when asked, or set `JUN_GAME_DIR` for scripted installs.
 >
 > The result lands in `webapp/assets/` and is **for your own use** - please don't republish it. It's gitignored so it can't get pushed by accident. See the NOTICE in [`LICENSE`](LICENSE).
 

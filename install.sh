@@ -10,6 +10,10 @@ DOCKER_SCRIPT=""
 OS="$(uname -s)"
 NEED_SG=0
 DOCKER_JUST_INSTALLED=0
+# 1 only when a person picked Express at the keyboard. JUN_YES on its own can
+# mean an unattended run, and the two want opposite things the moment something
+# needs asking.
+EXPRESS=0
 
 if [ "$(id -u)" -eq 0 ]; then
     SUDO=""
@@ -869,9 +873,13 @@ install_asset_recovery() {
         return 0
     fi
 
-    # A supplied path is deliberate, and non-interactive installs must never
-    # wait for input. Only offer the friendly fallback after auto-discovery.
-    if [ -n "${JUN_GAME_DIR:-}" ] || [ "${JUN_YES:-}" = "1" ] || [ ! -r /dev/tty ]; then
+    # A supplied path is deliberate, and unattended installs must never wait for
+    # input. Express is NOT unattended: somebody pressed Enter half a minute ago
+    # and is watching this scroll, so it gets the same drag-the-folder-here
+    # fallback Custom does. JUN_YES without $EXPRESS is the actual headless
+    # case (CI, the GUI driving install.sh) and still bails.
+    if [ -n "${JUN_GAME_DIR:-}" ] || [ ! -r /dev/tty ] \
+       || { [ "${JUN_YES:-}" = "1" ] && [ "$EXPRESS" != 1 ]; }; then
         warn_ "couldn't extract - she'll use placeholder art for now. set JUN_GAME_DIR"
         warn_ "to the game folder and re-run with JUN_EXTRACT=1 for her real model."
         return 1
@@ -1086,7 +1094,7 @@ confirm_deps() {
 choose_install_mode() {
     [ "${JUN_YES:-}" = "1" ] && return
     case "$(printf '%s' "${JUN_EXPRESS:-}" | tr '[:upper:]' '[:lower:]')" in
-        1|on|yes|true) JUN_YES=1; export JUN_YES; return ;;
+        1|on|yes|true) JUN_YES=1; export JUN_YES; EXPRESS=1; return ;;
     esac
     # A readable /dev/tty node can still fail to open with no controlling
     # terminal, so probe an actual open rather than trusting the mode bits.
@@ -1101,7 +1109,7 @@ choose_install_mode() {
     read -r ans < /dev/tty || ans=""
     case "$ans" in
         2|custom|Custom|CUSTOM) note "custom install - I'll ask about each option below" ;;
-        *) JUN_YES=1; export JUN_YES; ok "express install - using recommended settings" ;;
+        *) JUN_YES=1; export JUN_YES; EXPRESS=1; ok "express install - using recommended settings" ;;
     esac
 }
 
