@@ -16,7 +16,7 @@ try {
     [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
 }
 
-$repoUpstream = 'https://github.com/efficiencyx/Jun.git'
+$repoUpstream = 'https://github.com/efficiencyx/JunOS.git'
 $repo = if ($env:JUN_REPO) { $env:JUN_REPO } else { $repoUpstream }
 $dir  = if ($env:JUN_DIR)  { $env:JUN_DIR }  else { 'Jun' }
 $ref  = if ($env:JUN_REF)  { $env:JUN_REF }  else { 'main' }

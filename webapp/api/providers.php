@@ -27,7 +27,7 @@ function chat_request_headers(?string $provider = null): array {
     if ($provider === 'openrouter') {
         $key = env_str('OPENROUTER_API_KEY');
         if ($key !== '') $h[] = 'Authorization: Bearer ' . $key;
-        $h[] = 'HTTP-Referer: https://github.com/efficiencyx/Jun';
+        $h[] = 'HTTP-Referer: https://github.com/efficiencyx/JunOS';
         $h[] = 'X-Title: Jun OS';
     }
     return $h;
