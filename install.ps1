@@ -346,14 +346,15 @@ function Ask-Karaoke([string]$voice) {
 # a small drafter model guesses a few tokens ahead and Jun checks the guesses
 # in one pass, so the ones she agrees with came cheap. nothing gets said that
 # she wouldn't have said anyway. experimental because whether it's faster AT
-# ALL depends on the card, hence the depth question right after. off under
-# Express, this is not a setting to hand somebody who asked for defaults.
+# ALL depends on the card, hence the depth question right after. on under
+# Express: that depth question answers itself with a real measurement, so the
+# risky half of "experimental" is already handled.
 # without a prompt: JUN_MTP=on|off, JUN_MTP_DEPTH=auto|1|2|3|4.
 function Ask-Mtp {
     if ($env:JUN_MTP) {
         return $(if ($env:JUN_MTP.ToLower() -match '^(on|1|true|yes|y)$') { 'on' } else { 'off' })
     }
-    if (-not $interactive) { return 'off' }
+    if (-not $interactive) { return 'on' }
     $v = Read-Styled "     ${OK}▸${R} enable experimental multi-token prediction? ${DIM}(speculative decoding - faster on some cards, slower on others)${R} ${DIM}[y/N]${R} ${ACCENT}›${R} "
     return $(if ($v -match '^(y|yes)$') { 'on' } else { 'off' })
 }
