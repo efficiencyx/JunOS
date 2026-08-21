@@ -251,6 +251,11 @@ The gory version - the action state machine, the tick loop, the memory pipeline 
 
 ### Contributing or Tweaking her?
 
+> 📦 **How this repo gets updated.** Day-to-day work happens in a development repo - that's where the extracted Live2D art lives, plus the dataset tooling and a pile of half-finished experiments nobody needs to see. What lands here is snapshots: working states, pushed when something's actually done, reviewed and CI passes. So the commits are chunky and the timestamps come in bursts.
+
+> 🎨 **Her art isn't in here** and won't be - see the NOTICE in [LICENSE](LICENSE). `tools/recover_assets.py` rebuilds `webapp/assets/` from your own copy of the game, which is the only way it's allowed to work. Fresh clone looks a bit naked until you run it.
+
+
 Editing anything under `webapp/`? Run **`./sync-webapp.sh`** - it pushes the files into the running containers and restarts php-fpm (opcache won't notice otherwise). `-s` for static-only.
 
 Lore datamine from LLMs in `tools/lore_dataset.jsonl`; rebuild the index after editing it:
