@@ -81,6 +81,12 @@ if ($provider === 'openrouter') {
         //
         // /api/tags always writes the tag out, .env usually doesn't, so fill
         // in :latest before comparing or `jun-mtp` never matches.
+        //
+        // and hide -MTP by name on top of that. ./mtp-autotune.sh pulls the
+        // drafter it derives (repo + -MTP), so switching OLLAMA_MTP later
+        // leaves the old one sitting in the store, off this list and back in
+        // the picker. pick it once and prefs.php hands that dead name to
+        // every browser you own until you notice.
         $withTag = fn(string $n): string => strpos($n, ':') === false ? "$n:latest" : $n;
         $hidden = [];
         foreach ([env_str('OLLAMA_MTP'), ollama_mtp_model()] as $name) {
@@ -91,6 +97,7 @@ if ($provider === 'openrouter') {
             if (!isset($m['name'])) continue;
             if ($m['name'] === $titleModel || stripos($m['name'], 'title') !== false) continue;
             if (in_array($withTag($m['name']), $hidden, true)) continue;
+            if (stripos($m['name'], '-mtp') !== false) continue;
             $models[] = $m['name'];
         }
     }

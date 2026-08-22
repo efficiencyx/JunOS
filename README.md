@@ -63,49 +63,82 @@ Curious how any of it works? [Under the hood](#under-the-hood).
 
 ## Meet her in five minutes
 
-Clone it, look at what you just downloaded, then run it. **Linux / macOS / WSL** needs Docker (with Compose) and git; **Windows** needs neither, she runs bare metal out of one folder.
+You don't need to know how any of this works. You copy one line, paste it into a black window, and wait. That line installs whatever your computer is missing, downloads her brain, rebuilds her body from your own copy of the game, and starts her up.
 
-```sh
-git clone https://github.com/efficiencyx/JunOS.git
-cd JunOS
-less install.sh           # it installs Docker and pulls a few GB. worth a look
-./install.sh              # Windows: .\install.ps1
+**The black window.**
+On Windows Press the Start button, type `Command Prompt`, hit Enter.
+On Linux you already know. Paste with `Ctrl + Shift + V`, then hit Enter.
+
+> ⚠️ **Before you paste anything, anywhere.** The commands below download a script off the internet and run it on your computer. That's a lot of trust to hand a stranger, and the habit of doing it without looking is how people get malware. If you don't understand a command, don't run it - paste it into ChatGPT or Claude and ask what it does. Same goes for the next person's "just run this", not only ours.
+>
+> Want to read our script first? Good. 👀 Grab it without running it:
+>
+> - **Windows:** `powershell irm https://raw.githubusercontent.com/efficiencyx/JunOS/main/install.ps1 -OutFile install.ps1` - then open `install.ps1` in **Notepad**.
+> - **Linux / macOS:** `curl -fsSL https://raw.githubusercontent.com/efficiencyx/JunOS/main/install.sh | less` - press `q` to quit when you're done reading.
+
+### 🪟 On Windows
+
+She runs directly on Windows, no Docker (Docker on Windows is a pain). Pick **one** of these two lines - both do the same install, they just look different while they work.
+
+With a window and buttons:
+
+```powershell
+powershell irm https://raw.githubusercontent.com/efficiencyx/JunOS/main/installer-gui.ps1 -OutFile install.ps1; powershell -ExecutionPolicy Bypass -File .\install.ps1
 ```
 
-The installer's first question is how you want to install: **Express** (press Enter) auto-detects everything and asks nothing else; **Custom** walks you through provider, model and voice. `JUN_YES=1` (or `$env:JUN_YES='1'`) skips the question entirely for unattended installs.
+Or plain text scrolling by:
 
-Then open **<https://localhost>** (Windows: **<https://127.0.0.1:8080>**) and say hi. 🎉
+```powershell
+powershell irm https://raw.githubusercontent.com/efficiencyx/JunOS/main/install.ps1 -OutFile install.ps1; powershell -ExecutionPolicy Bypass -File .\install.ps1
+```
 
-### The one-liner, if you insist
+### 🐧 On Linux, macOS or WSL
+
+Needs `git` and Docker. Don't have them? The script installs them for you.
 
 ```sh
 curl -fsSL https://raw.githubusercontent.com/efficiencyx/JunOS/main/install.sh | bash
 ```
 
-```powershell
-powershell -NoProfile -ExecutionPolicy Bypass -Command "irm https://raw.githubusercontent.com/efficiencyx/JunOS/main/install.ps1 | iex"
-```
+### Doing it manually without the installer
 
-This runs whatever `main` says right now, unread, and `main` moves. `JUN_REF` will hold it to a branch or tag you picked. Two more knobs in the same spirit: `JUN_REPO` needs `JUN_ALLOW_FORK=1` before it will clone from anywhere but here, and `JUN_DOCKER_SCRIPT_SHA256` pins Docker's own install script (the installer prints its digest either way, and never pipes it into a root shell). More in [SECURITY.md](SECURITY.md).
+The step-by-step commands for it, every provider, and the manual compose invocations live in the **[wiki](https://github.com/efficiencyx/JunOS/wiki)**.
 
-### Skipping the installer entirely
+### What it asks you
 
-```sh
-git clone https://github.com/efficiencyx/JunOS.git
-cd JunOS
-cp .env.example .env
-./start.sh                # Windows: ./start.ps1
-```
+Exactly one question: **Express** or **Custom**.
 
-`start.sh` sniffs out your GPU, layers the right compose overlay and brings the stack up. It's also the control panel: `./start.sh stop | status | restart | logs [service]`. On Windows, `start.ps1` starts native processes instead (Ollama, a portable PHP, the optional voice sidecar) and needs `install.ps1` to have run once.
+- **Express** - press Enter and forget about it. It figures out your hardware on its own and rebuilds her Live2D model from your game copy. The only thing it might still ask is *where* the game is, and only if it can't find it by itself.
+- **Custom** - walks you through which provider, which model, which voice.
 
-First boot pulls whatever's in `OLLAMA_MODELS_TO_PULL` - by default the CPU-friendly `hf.co/efficiencyx/Jun-LoRA-E2B-GGUF:Q4_K_M`. Watch it crawl in with `./start.sh logs ollama`. She's ready when everything reports healthy, usually 30–90 seconds once the weights are cached.
+Installing on a machine you can't sit in front of? `JUN_YES=1` (on Windows, `$env:JUN_YES='1'`) skips the question entirely.
+
+### Then say hi 🎉
+
+Open your browser at **<https://localhost>** - or **<https://127.0.0.1:8080>** if you're on Windows.
+
+### Managing Her
+
+Windows: 
+Start her: `powershell .\Jun\start.ps1`
+Stop her: `powershell .\Jun\start.ps1 stop`
+
+Linux:
+Start her: `./Jun/start.sh`
+Stop her: `./Jun/start.sh stop`
+
+### Why the first start is slow
+
+The very first boot downloads her brain - whatever model is listed in `OLLAMA_MODELS_TO_PULL`, by default `hf.co/efficiencyx/Jun-LoRA-E2B-GGUF:Q4_K_M`, which is the one that runs fine without a fancy graphics card. It's a big file. Watch it crawl in with `./start.sh logs ollama`.
+
+She's ready once everything reports **healthy**. After that first download it's usually 30-90 seconds. 💤
+
 
 > ### Her body isn't in this repo
 >
-> The Live2D model and textures belong to *My Dystopian Robot Girlfriend* and aren't redistributed here - you rebuild them from your own copy of the game. Answer **yes** when the installer offers to extract them and it sets up a local `runtime/asset-recovery-venv` (UnityPy + Pillow, no global `pip install`) and runs the recovery script.
+> The Live2D model and textures belong to *My Dystopian Robot Girlfriend* and aren't redistributed here - you rebuild them from your own copy of the game. Express does this for you; under Custom, answer **yes** when the installer offers. Either way it sets up a local `runtime/asset-recovery-venv` (UnityPy + Pillow, no global `pip install`) and runs the recovery script. 🔧
 >
-> Skipped it? Re-run with `JUN_EXTRACT=1` (or `$env:JUN_EXTRACT=1; .\install.ps1`). If auto-detection misses the game, paste its folder when asked, or set `JUN_GAME_DIR` for scripted installs.
+> Can't find the game? It'll ask you to paste the folder or drag the game onto the terminal - Express included, press Enter to skip. No game on that machine at all? Nothing breaks, she just wears the placeholders and the install carries on. Want it later, or don't want it at all? `JUN_EXTRACT=1` re-runs it, `JUN_EXTRACT=0` tells Express to leave it alone (`$env:JUN_EXTRACT='1'; .\install.ps1` on Windows). If auto-detection misses the game, paste its folder when asked, or set `JUN_GAME_DIR` for scripted installs.
 >
 > The result lands in `webapp/assets/` and is **for your own use** - please don't republish it. It's gitignored so it can't get pushed by accident. See the NOTICE in [`LICENSE`](LICENSE).
 
@@ -151,7 +184,7 @@ BIND_ADDR=0.0.0.0
 OMEGA_ALLOW_INSECURE_PUBLIC_HTTP=1
 ```
 
-The launcher works out this machine's address on the network by itself and prints it - `reachable as: 192.168.1.42` on Linux, `on your phone: https://192.168.1.42:8080` on Windows - and that's the URL you type into the phone. On Windows it also adds a firewall rule for the port on **private** networks only (it needs an admin PowerShell to do it, otherwise it prints the one-liner for you to run). One request at a time on Windows, so the phone and the desktop take turns.
+The launcher works out this machine's address on the network by itself and prints it - `reachable as: 192.168.X.X` on Linux, `on your phone: https://192.168.X.X:8080` on Windows - and that's the URL you type into the phone. On Windows it also adds a firewall rule for the port on **private** networks only (it needs an admin PowerShell to do it, otherwise it prints the one-liner for you to run). One request at a time on Windows, so the phone and the desktop take turns.
 
 The second line is not decoration: there's no TLS here, so your password and every word she says cross the wifi in the clear. Fine on your own network, **never** on one you don't control, and never port-forwarded to the internet - that's what the certbot setup above is for. 🔒 DHCP moves addresses around, so if she stops answering after a few days, restart the launcher and read the new one.
 
@@ -333,6 +366,7 @@ The model-server containers are profile-gated. `./start.sh` derives `COMPOSE_PRO
 │   ├── boot.css      Critical CSS, inlined into index.html at sync time
 │   └── system_prompt.txt
 ├── install.sh · install.ps1     One-line bootstrap (Docker · bare metal)
+├── installer-gui.ps1            The Windows click-through window (ships as JunSetup.exe)
 ├── start.sh · start.ps1         Launchers, and the stop/status/logs control panel
 ├── sync-webapp.sh               The dev loop
 ├── colab.ipynb                  The free-GPU notebook

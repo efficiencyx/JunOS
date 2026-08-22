@@ -150,7 +150,7 @@ in one pass; the guesses she agrees with came almost free. Nothing is said that
 she would not have said anyway — rejected guesses are discarded, so output is
 unchanged, only the timing moves.
 
-Both installers offer it (`JUN_MTP=on|off` non-interactively, off under Express)
+Both installers offer it (`JUN_MTP=on|off` non-interactively, on under Express)
 and then ask how many tokens to draft ahead: `auto`, or a fixed `1`–`4`
 (`JUN_MTP_DEPTH`). The drafter repo is chosen from the model you picked, keyed
 by Gemma 4 size **and** QAT branch — `Janvitos/gemma-4-12B-it-qat-assistant-MTP-Q8_0-GGUF`

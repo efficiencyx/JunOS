@@ -319,18 +319,34 @@ window.Mods = (function () {
   }
 
   const ATTACH_DRAWABLE = /^Attach/i;
-  // per item. on = her arms and legs take her skin colour no matter what the
-  // mod says. off hands the Attach* drawables back to the mod's own
-  // BypassColorScaler, which is what a limb mod shipping REAL colours
-  // (tattoos, a prosthetic) wants. it's in each item's colour menu.
-  const limbsFollowSkin = (guid, itemIndex) =>
-    (modState(guid).limbs || {})[itemIndex] !== false;
+  // per item, sits in its colour menu. it OVERRIDES BypassColorScaler both
+  // ways on every drawable the item has: on = they all take the colour of the
+  // part they land on, off = none of them do and the mod's own art colour
+  // stands. it used to mean "on = force follow, off = whatever the mod said",
+  // which read as broken - most mods leave the flag unset (that's the
+  // serialized default and it already means follow her), so unticking the box
+  // changed nothing at all.
+  // never touched = whatever the mod asked for, collapsed to one answer for
+  // the whole item: off if any drawable sets the flag, on otherwise. except
+  // on her arms and legs, where she always wins - replacement limbs ship
+  // neutral grey and set bypass on every one of them (Seamless Components
+  // does it on all 29), so honouring it there left her with grey arms next to
+  // a coloured body.
+  function followsHerColors(mod, itemIndex) {
+    // stored under "limbs", from when this only covered the Attach*
+    // drawables. renaming the key would drop everyone's saved choice.
+    const stored = (modState(mod.guid).limbs || {})[itemIndex];
+    if (typeof stored === 'boolean') return stored;
+    const entries = itemDrawables(mod, mod.items[itemIndex]);
+    if (entries.some(e => ATTACH_DRAWABLE.test(e.id))) return true;
+    return !entries.some(e => e.bypassColorScaler);
+  }
 
   // parsing an item's texture jsons is pure work on immutable data, and a
   // pass does it for every worn item on top of the one you just clicked.
   const _drawableCache = new WeakMap();
 
-  function itemDrawables(mod, item, followSkin = true) {
+  function itemDrawables(mod, item) {
     const cached = _drawableCache.get(item);
     if (cached) return cached;
     // empty before the model is up, and that must NOT get cached
@@ -360,13 +376,10 @@ window.Mods = (function () {
             // "don't scale me by the character's colour". an accessory sets
             // it and keeps its own colour, body art leaves it off and follows
             // her skin. defaults off because that's the serialized default.
-            // NOT on the Attach* drawables while limbsFollowSkin is on. those
-            // are her arms and legs and nothing else, and replacement limbs
-            // ship neutral grey art - Seamless Components sets bypass on all
-            // 29 of them, so honouring it left her with grey arms next to a
-            // coloured body.
-            bypassColorScaler: !(followSkin && ATTACH_DRAWABLE.test(id))
-              && !!(pd.BypassColorScaler ?? pd.bypassColorScaler),
+            // this is the mod's raw answer and it is only the DEFAULT for the
+            // item's "follow her colors" box - applyPass overwrites it per
+            // entry with what the box actually says.
+            bypassColorScaler: !!(pd.BypassColorScaler ?? pd.bypassColorScaler),
           });
         }
       }
@@ -378,7 +391,7 @@ window.Mods = (function () {
   // bake every worn mod entry for one drawable into a single canvas crop.
   // the compositor only takes ONE override per drawable, so the layers get
   // merged here.
-  async function bakeDrawable(id, entries, colorsFor, hostTint) {
+  async function bakeDrawable(id, entries, colorsFor, hostTint, replaceVanilla) {
     entries.sort((a, b) => a.layer - b.layer);
     // vanilla art stays underneath unless the container says no vanilla
     // layers. same as Part.AddVanilla in the game.
@@ -394,8 +407,14 @@ window.Mods = (function () {
     // barcode and lines on its smooth skins while its Translucent Abs variant
     // ships the real 322x126 lines crop in the same zip, so the mod is
     // telling us which it means. it never sets DontIncludeVanillaLayers.
+    // and the wardrobe gets a say too. while the vanilla item that owns this
+    // drawable is OFF, the mod is the only thing meant to be in it - we're
+    // the ones holding the drawable visible at all (see applyPass), so the
+    // art the rig was hiding has to go. without this a modded skirt came up
+    // with the vanilla one poking out from under the hem.
     const isBlank = (e) => e.r.w <= 1 && e.r.h <= 1;
-    const replacesVanilla = entries.some(e => e.dontIncludeVanilla || isBlank(e));
+    const replacesVanilla = replaceVanilla
+      || entries.some(e => e.dontIncludeVanilla || isBlank(e));
     entries = entries.filter(e => !isBlank(e));
     let W = 1, H = 1;
     const imgs = [];
@@ -564,10 +583,10 @@ window.Mods = (function () {
   // the map is replaced each pass with just the hits, that's the eviction.
   let bakeCache = new Map();
 
-  function bakeKey(id, entries, colorsFor, tint) {
+  function bakeKey(id, entries, colorsFor, tint, replaceVanilla) {
     return id + '|' + entries.map(e => [e.url, e.r.x, e.r.y, e.r.w, e.r.h, e.layer, e.colorIndex,
       e.dontIncludeVanilla ? 1 : 0, e.bypassColorScaler ? 1 : 0, colorsFor(e) || ''].join()).join(';')
-      + '|' + (tint || '');
+      + '|' + (tint || '') + (replaceVanilla ? '|R' : '');
   }
 
   let applyRunning = null;
@@ -599,12 +618,24 @@ window.Mods = (function () {
     for (const mod of mods) {
       mod.items.forEach((item, i) => {
         if (!isEquipped(mod, i)) return;
-        for (const e of itemDrawables(mod, item, limbsFollowSkin(mod.guid, i))) {
+        const bypass = !followsHerColors(mod, i);
+        for (const e of itemDrawables(mod, item)) {
           if (!byDrawable.has(e.id)) byDrawable.set(e.id, []);
-          byDrawable.get(e.id).push({ ...e, url: fileUrl(mod, e.tex), mod, itemIndex: i });
+          byDrawable.get(e.id).push({
+            ...e, bypassColorScaler: bypass, url: fileUrl(mod, e.tex), mod, itemIndex: i,
+          });
         }
       });
     }
+    // mod items land in vanilla drawables as often as in the Moddable* slots,
+    // and the rig keeps those at zero opacity while the wardrobe item that
+    // owns them is off. so a modded skirt showed NOTHING until you switched
+    // the vanilla skirt back on, and then the vanilla skirt was under it.
+    // both halves are wrong: we hold the drawable up ourselves, and the bake
+    // replaces the vanilla art rather than layering over it. switch the
+    // vanilla item on and they layer again, which is what you'd want from a
+    // mod that only adds a decal.
+    const hiddenByOutfit = window.Outfit?.hiddenItemDrawables?.() || new Set();
     const map = {};
     // null clears overrides that vanished from this pass
     for (const id of appliedIds) map[id] = null;
@@ -618,7 +649,8 @@ window.Mods = (function () {
       const tint = entries.some(e => e.bypassColorScaler) ? hostTintFor(id) : null;
       // ColorIndex points into the owning ITEM's ColorSlots list
       const colorsFor = (e) => ((modState(e.mod.guid).colors || {})[e.itemIndex] || [])[e.colorIndex] || null;
-      const key = bakeKey(id, entries, colorsFor, tint);
+      const replaceVanilla = hiddenByOutfit.has(id);
+      const key = bakeKey(id, entries, colorsFor, tint, replaceVanilla);
       let baked = bakeCache.get(key);
       if (!baked) {
         // only the drawables we actually redraw cost anything, so this is
@@ -626,7 +658,7 @@ window.Mods = (function () {
         await breathe();
         const tb = performance.now();
         try {
-          baked = await bakeDrawable(id, entries, colorsFor, tint);
+          baked = await bakeDrawable(id, entries, colorsFor, tint, replaceVanilla);
           baked.key = key;
           bakes++;
           bakeMs += performance.now() - tb;
@@ -652,15 +684,18 @@ window.Mods = (function () {
     bakeCache = fresh;
     appliedIds = new Set(byDrawable.keys());
     if (Live2D.setDrawableOpacity) {
+      const hold = new Set();
+      for (const id of byDrawable.keys()) {
+        if (MOD_SLOT.test(id) || hiddenByOutfit.has(id)) hold.add(id);
+      }
       let released = false;
       for (const id of shownSlots) {
-        if (byDrawable.has(id)) continue;
+        if (hold.has(id)) continue;
         Live2D.setDrawableOpacity(id, null);
         shownSlots.delete(id);
         released = true;
       }
-      for (const id of byDrawable.keys()) {
-        if (!MOD_SLOT.test(id)) continue;
+      for (const id of hold) {
         Live2D.setDrawableOpacity(id, 1);
         shownSlots.add(id);
       }
@@ -754,6 +789,20 @@ window.Mods = (function () {
 
   let uiBody = null;
 
+  // the grid is ONE horizontally scrolling row and wardrobe.html hides its
+  // scrollbar, so past the four tiles that fit there is nothing on screen
+  // saying the rest exist. a tester spent an evening hunting for the left
+  // stocking of a pair that was sitting two tiles off the right edge. the
+  // vanilla sections have had the chevron since forever, this is the same
+  // one. outfit.js runs updateExpand on resize and on every wardrobe open,
+  // because a grid measures 0 wide while the panel is still closed.
+  const expandables = [];
+  function updateExpand() {
+    for (const [grid, expand] of expandables) {
+      expand.hidden = !(grid.classList.contains('expanded') || grid.scrollWidth > grid.clientWidth + 1);
+    }
+  }
+
   // cut a canvas down to the pixels that aren't transparent. null when there
   // are none.
   function trimTransparent(c) {
@@ -833,6 +882,7 @@ window.Mods = (function () {
     const list = uiBody && uiBody.querySelector('[data-mod-list]');
     if (!list) return;
     list.innerHTML = '';
+    expandables.length = 0;
     for (const mod of mods) {
       const head = document.createElement('div');
       head.style.cssText = 'display:flex;gap:8px;align-items:center;margin:6px 0 4px;font-size:13px';
@@ -849,6 +899,21 @@ window.Mods = (function () {
       });
       const grid = document.createElement('div');
       grid.className = 'wd-grid';
+      const expand = document.createElement('button');
+      expand.type = 'button';
+      expand.className = 'wd-expand';
+      expand.title = 'Show all';
+      expand.hidden = true;
+      expand.setAttribute('aria-expanded', 'false');
+      expand.textContent = '⌄';
+      expand.addEventListener('click', () => {
+        const on = grid.classList.toggle('expanded');
+        expand.classList.toggle('on', on);
+        expand.setAttribute('aria-expanded', String(on));
+        expand.title = on ? 'Collapse' : 'Show all';
+      });
+      head.insertBefore(expand, remove);
+      expandables.push([grid, expand]);
       mod.items.forEach((item, i) => {
         const tile = document.createElement('div');
         tile.className = 'wd-tile';
@@ -873,9 +938,9 @@ window.Mods = (function () {
             (slotIndex, hex) => setColor(mod.guid, i, slotIndex, hex),
             'wd-swatch',
             {
-              label: 'Arms and legs follow her skin',
-              get: () => limbsFollowSkin(mod.guid, i),
-              set: (on) => setLimbsFollowSkin(mod.guid, i, on),
+              label: 'Follow her colors',
+              get: () => followsHerColors(mod, i),
+              set: (on) => setFollowsHerColors(mod.guid, i, on),
             },
           ));
         }
@@ -887,9 +952,10 @@ window.Mods = (function () {
       });
       list.append(head, grid);
     }
+    requestAnimationFrame(updateExpand);
   }
 
-  function setLimbsFollowSkin(guid, itemIndex, on) {
+  function setFollowsHerColors(guid, itemIndex, on) {
     const st = modState(guid);
     st.limbs = st.limbs || {};
     st.limbs[itemIndex] = !!on;
@@ -898,5 +964,5 @@ window.Mods = (function () {
   }
 
   return { applyAll, refreshTints, describe, buildWardrobeSection, importZip, removeMod,
-    owns: (id) => appliedIds.has(id) };
+    updateExpand, owns: (id) => appliedIds.has(id), holds: (id) => shownSlots.has(id) };
 })();
