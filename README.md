@@ -63,55 +63,70 @@ Curious how any of it works? [Under the hood](#under-the-hood).
 
 ## Meet her in five minutes
 
-One command. It installs whatever's missing, pulls a model, rebuilds her Live2D body from your own copy of the game, and starts her.
+You don't need to know how any of this works. You copy one line, paste it into a black window, and wait. That line installs whatever your computer is missing, downloads her brain, rebuilds her body from your own copy of the game, and starts her up. ☕
 
-**Linux / macOS / WSL** - needs git and Docker, and installs Docker for you if it isn't there:
+**The black window.** On Windows it's called **PowerShell** - press the Start button, type `powershell`, hit Enter. On Mac it's **Terminal** - press `Cmd + Space`, type `terminal`, hit Enter. On Linux you already know. Paste with `Ctrl + V` (Mac: `Cmd + V`), then press Enter to run.
+
+> ⚠️ **Before you paste anything, anywhere.** The commands below download a script off the internet and run it on your computer. That's a lot of trust to hand a stranger, and the habit of doing it without looking is how people get burned. If you don't understand a command, don't run it - paste it into ChatGPT or Claude and ask what it does. Same goes for the next person's "just run this", not only ours.
+>
+> Want to read our script first? Good. 👀 Grab it without running it:
+>
+> - **Windows:** `irm https://raw.githubusercontent.com/efficiencyx/JunOS/main/install.ps1 -OutFile install.ps1` - then open `install.ps1` in Notepad.
+> - **Linux / macOS:** `curl -fsSL https://raw.githubusercontent.com/efficiencyx/JunOS/main/install.sh | less` - press `q` to quit when you're done reading.
+
+### 🪟 On Windows
+
+She runs directly on Windows, no Docker (Docker on Windows is a pain). Pick **one** of these two lines - both do the same install, they just look different while they work.
+
+With a window and buttons:
+
+```powershell
+powershell irm https://raw.githubusercontent.com/efficiencyx/JunOS/main/installer-gui.ps1 -OutFile install.ps1; powershell -ExecutionPolicy Bypass -File .\install.ps1
+```
+
+Or plain text scrolling by:
+
+```powershell
+powershell irm https://raw.githubusercontent.com/efficiencyx/JunOS/main/install.ps1 -OutFile install.ps1; powershell -ExecutionPolicy Bypass -File .\install.ps1
+```
+
+### 🐧 On Linux, macOS or WSL
+
+Needs `git` and Docker. Don't have them? The script installs them for you.
 
 ```sh
 curl -fsSL https://raw.githubusercontent.com/efficiencyx/JunOS/main/install.sh | bash
 ```
 
-**Windows** - no Docker, she runs bare metal out of one folder. Two front doors, same installer behind both. 🚪 Either double-click **`JunSetup.exe`** from the [latest release](https://github.com/efficiencyx/JunOS/releases/latest), or paste the line below into PowerShell.
+### Then say hi 🎉
 
-It downloads first and runs second, instead of the usual `irm ... | iex`. That pipe hands a script off the internet straight to the interpreter, which is what a dropper does, so Defender calls it a trojan and eats it. Same two steps, no alert. (`;` and not `&&` because Windows PowerShell 5.1, the one you get by default, doesn't have `&&`.)
+Open your browser at **<https://localhost>** - or **<https://127.0.0.1:8080>** if you're on Windows.
 
-```powershell
-irm https://raw.githubusercontent.com/efficiencyx/JunOS/main/install.ps1 -OutFile install.ps1; powershell -ExecutionPolicy Bypass -File .\install.ps1
-```
+### What it asks you
 
-Then open **<https://localhost>** (Windows: **<https://127.0.0.1:8080>**) and say hi. 🎉
+Exactly one question: **Express** or **Custom**.
 
-The installer's first question is how you want to install: **Express** (press Enter) auto-detects everything and rebuilds her Live2D model from your game copy - the only thing it can still ask you is where that game is, and only when it can't find it itself; **Custom** walks you through provider, model and voice. `JUN_YES=1` (or `$env:JUN_YES='1'`) skips the question entirely for unattended installs.
+- **Express** - press Enter and forget about it. It figures out your hardware on its own and rebuilds her Live2D model from your game copy. The only thing it might still ask is *where* the game is, and only if it can't find it by itself.
+- **Custom** - walks you through which provider, which model, which voice.
 
-`./start.sh` is how you bring her back up next time, and it doubles as the control panel: `./start.sh stop | status | restart | logs [service]`. Windows: `.\start.ps1`.
+Installing on a machine you can't sit in front of? `JUN_YES=1` (on Windows, `$env:JUN_YES='1'`) skips the question entirely.
 
-### Before you run a script off the internet
+### Bringing her back tomorrow
 
-Either one-liner runs whatever `main` says right now, unread, and `main` moves. Want to look first? Download it, read it, then run it:
+`./start.sh` starts her again - that's the one to remember. On Windows it's `.\start.ps1`.
 
-```sh
-curl -fsSL https://raw.githubusercontent.com/efficiencyx/JunOS/main/install.sh -o install.sh
-less install.sh           # it installs Docker and pulls a few GB. worth a look
-bash install.sh
-```
+The same command is also the control panel: `./start.sh stop | status | restart | logs [service]`. Add the name of a piece to see what it's doing, like `./start.sh logs ollama`.
 
-`JUN_REF` holds the install to a branch or tag you picked. Two more knobs in the same spirit: `JUN_REPO` needs `JUN_ALLOW_FORK=1` before it will clone from anywhere but here, and `JUN_DOCKER_SCRIPT_SHA256` pins Docker's own install script (the installer prints its digest either way, and never pipes it into a root shell). More in [SECURITY.md](SECURITY.md).
+### Why the first start is slow
 
-### Windows: which door
+The very first boot downloads her brain - whatever model is listed in `OLLAMA_MODELS_TO_PULL`, by default `hf.co/efficiencyx/Jun-LoRA-E2B-GGUF:Q4_K_M`, which is the one that runs fine without a fancy graphics card. It's a big file. Watch it crawl in with `./start.sh logs ollama`.
 
-**The GUI (`JunSetup.exe`).** Four pages - install folder, Express or Custom, Live2D assets, a review of what's about to happen - then it downloads, installs and starts her while the log scrolls, and finishes on an **Open Jun OS** button that opens the browser for you. Nothing to clone first: the exe carries `install.ps1` inside itself and that script fetches the rest. It leaves "install missing prerequisites with winget" ticked (git, Ollama or llama.cpp, Python, the VC++ runtime) - those are the only machine-wide things; everything else lands in the folder you chose and `uninstall.ps1` takes it back out. Windows will flash a SmartScreen warning at an unsigned exe: **More info → Run anyway**, or take the CLI door. Already have the repo? `installer-gui.ps1` is that same window without the exe - right-click → **Run with PowerShell**.
-
-**The CLI (`install.ps1`).** Same questions as text in the terminal, and it's what you want for scripted or unattended runs. It's also what the GUI actually runs: the window collects your answers, sets the env vars and hands over. So anything you can click you can also set (`JUN_DIR`, `JUN_PROVIDER`, `JUN_MODEL`, `JUN_EXTRACT`, plus `JUN_YES=1` so nothing prompts):
-
-```powershell
-$env:JUN_YES='1'; $env:JUN_PROVIDER='ollama'; $env:JUN_EXTRACT='on'; .\install.ps1
-```
+She's ready once everything reports **healthy**. After that first download it's usually 30-90 seconds. 💤
 
 ### Doing it by hand
 
-Clone, `cp .env.example .env`, run `./start.sh` yourself - that path still works and always will. The step-by-step commands for it, every provider, and the manual compose invocations live in the **[wiki](https://github.com/efficiencyx/JunOS/wiki)**.
+The step-by-step commands for it, every provider, and the manual compose invocations live in the **[wiki](https://github.com/efficiencyx/JunOS/wiki)**.
 
-First boot pulls whatever's in `OLLAMA_MODELS_TO_PULL` - by default the CPU-friendly `hf.co/efficiencyx/Jun-LoRA-E2B-GGUF:Q4_K_M`. Watch it crawl in with `./start.sh logs ollama`. She's ready when everything reports healthy, usually 30–90 seconds once the weights are cached.
 
 > ### Her body isn't in this repo
 >
