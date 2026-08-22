@@ -63,61 +63,54 @@ Curious how any of it works? [Under the hood](#under-the-hood).
 
 ## Meet her in five minutes
 
-Clone it, look at what you just downloaded, then run it. **Linux / macOS / WSL** needs Docker (with Compose) and git; **Windows** needs neither, she runs bare metal out of one folder.
+One command. It installs whatever's missing, pulls a model, rebuilds her Live2D body from your own copy of the game, and starts her.
 
-```sh
-git clone https://github.com/efficiencyx/JunOS.git
-cd JunOS
-less install.sh           # it installs Docker and pulls a few GB. worth a look
-./install.sh              # Windows: .\install.ps1
-```
-
-The installer's first question is how you want to install: **Express** (press Enter) auto-detects everything and rebuilds her Live2D model from your game copy - the only thing it can still ask you is where that game is, and only when it can't find it itself; **Custom** walks you through provider, model and voice. `JUN_YES=1` (or `$env:JUN_YES='1'`) skips the question entirely for unattended installs.
-
-Then open **<https://localhost>** (Windows: **<https://127.0.0.1:8080>**) and say hi. 🎉
-
-### Windows: click it, or type it
-
-Two front doors, same installer behind both. 🚪
-
-**Click it.** Grab **`JunSetup.exe`** from the [latest release](https://github.com/efficiencyx/JunOS/releases/latest) and double-click it. Four pages - install folder, Express or Custom, Live2D assets, a review of what's about to happen - then it downloads, installs and starts her while the log scrolls in the window, and finishes on an **Open Jun OS** button that opens the browser for you. No git clone first: the exe carries `install.ps1` inside itself and that script fetches the rest. It leaves "install missing prerequisites with winget" ticked (git, Ollama or llama.cpp, Python, the VC++ runtime) - those are the only machine-wide things; everything else lands in the folder you chose and `uninstall.ps1` takes it back out. Windows will flash a SmartScreen warning at an unsigned exe: **More info → Run anyway**, or use one of the other two doors.
-
-Already have the repo? `installer-gui.ps1` is that same window without the exe - right-click → **Run with PowerShell**, or:
-
-```powershell
-powershell -NoProfile -ExecutionPolicy Bypass -STA -File .\installer-gui.ps1
-```
-
-**Type it.** `.\install.ps1` asks the same things as text in the terminal, and it's what you want for scripted or unattended runs. It's also what the GUI actually runs: the window collects your answers, sets `JUN_DIR`, `JUN_PROVIDER`, `JUN_MODEL`, `JUN_EXTRACT` and friends, adds `JUN_YES=1` so nothing prompts, and hands over. Anything you can click you can also set as an env var:
-
-```powershell
-$env:JUN_YES='1'; $env:JUN_PROVIDER='ollama'; $env:JUN_EXTRACT='on'; .\install.ps1
-```
-
-Either way you end up at **<https://127.0.0.1:8080>**, and `.\start.ps1` is how you bring her back up next time.
-
-### The one-liner, if you insist
+**Linux / macOS / WSL** - needs git and Docker, and installs Docker for you if it isn't there:
 
 ```sh
 curl -fsSL https://raw.githubusercontent.com/efficiencyx/JunOS/main/install.sh | bash
 ```
 
+**Windows** - no Docker, she runs bare metal out of one folder. Two front doors, same installer behind both. 🚪 Either double-click **`JunSetup.exe`** from the [latest release](https://github.com/efficiencyx/JunOS/releases/latest), or in PowerShell:
+
 ```powershell
-powershell -NoProfile -ExecutionPolicy Bypass -Command "irm https://raw.githubusercontent.com/efficiencyx/JunOS/main/install.ps1 | iex"
+powershell irm https://raw.githubusercontent.com/efficiencyx/JunOS/main/install.ps1 -OutFile install.ps1
+powershell -ExecutionPolicy Bypass -File .\install.ps1
 ```
 
-This runs whatever `main` says right now, unread, and `main` moves. `JUN_REF` will hold it to a branch or tag you picked. Two more knobs in the same spirit: `JUN_REPO` needs `JUN_ALLOW_FORK=1` before it will clone from anywhere but here, and `JUN_DOCKER_SCRIPT_SHA256` pins Docker's own install script (the installer prints its digest either way, and never pipes it into a root shell). More in [SECURITY.md](SECURITY.md).
+Two lines, not one, and on purpose: `irm ... | iex` pipes a downloaded script straight into the interpreter, which is exactly what a dropper does, and Defender flags it as a trojan. Land it on disk first and it's just a file you ran.
 
-### Skipping the installer entirely
+Then open **<https://localhost>** (Windows: **<https://127.0.0.1:8080>**) and say hi. 🎉
+
+The installer's first question is how you want to install: **Express** (press Enter) auto-detects everything and rebuilds her Live2D model from your game copy - the only thing it can still ask you is where that game is, and only when it can't find it itself; **Custom** walks you through provider, model and voice. `JUN_YES=1` (or `$env:JUN_YES='1'`) skips the question entirely for unattended installs.
+
+`./start.sh` is how you bring her back up next time, and it doubles as the control panel: `./start.sh stop | status | restart | logs [service]`. Windows: `.\start.ps1`.
+
+### Before you run a script off the internet
+
+Either one-liner runs whatever `main` says right now, unread, and `main` moves. Want to look first? Download it, read it, then run it:
 
 ```sh
-git clone https://github.com/efficiencyx/JunOS.git
-cd JunOS
-cp .env.example .env
-./start.sh                # Windows: ./start.ps1
+curl -fsSL https://raw.githubusercontent.com/efficiencyx/JunOS/main/install.sh -o install.sh
+less install.sh           # it installs Docker and pulls a few GB. worth a look
+bash install.sh
 ```
 
-`start.sh` sniffs out your GPU, layers the right compose overlay and brings the stack up. It's also the control panel: `./start.sh stop | status | restart | logs [service]`. On Windows, `start.ps1` starts native processes instead (Ollama, a portable PHP, the optional voice sidecar) and needs `install.ps1` to have run once.
+`JUN_REF` holds the install to a branch or tag you picked. Two more knobs in the same spirit: `JUN_REPO` needs `JUN_ALLOW_FORK=1` before it will clone from anywhere but here, and `JUN_DOCKER_SCRIPT_SHA256` pins Docker's own install script (the installer prints its digest either way, and never pipes it into a root shell). More in [SECURITY.md](SECURITY.md).
+
+### Windows: which door
+
+**The GUI (`JunSetup.exe`).** Four pages - install folder, Express or Custom, Live2D assets, a review of what's about to happen - then it downloads, installs and starts her while the log scrolls, and finishes on an **Open Jun OS** button that opens the browser for you. Nothing to clone first: the exe carries `install.ps1` inside itself and that script fetches the rest. It leaves "install missing prerequisites with winget" ticked (git, Ollama or llama.cpp, Python, the VC++ runtime) - those are the only machine-wide things; everything else lands in the folder you chose and `uninstall.ps1` takes it back out. Windows will flash a SmartScreen warning at an unsigned exe: **More info → Run anyway**, or take the CLI door. Already have the repo? `installer-gui.ps1` is that same window without the exe - right-click → **Run with PowerShell**.
+
+**The CLI (`install.ps1`).** Same questions as text in the terminal, and it's what you want for scripted or unattended runs. It's also what the GUI actually runs: the window collects your answers, sets the env vars and hands over. So anything you can click you can also set (`JUN_DIR`, `JUN_PROVIDER`, `JUN_MODEL`, `JUN_EXTRACT`, plus `JUN_YES=1` so nothing prompts):
+
+```powershell
+$env:JUN_YES='1'; $env:JUN_PROVIDER='ollama'; $env:JUN_EXTRACT='on'; .\install.ps1
+```
+
+### Doing it by hand
+
+Clone, `cp .env.example .env`, run `./start.sh` yourself - that path still works and always will. The step-by-step commands for it, every provider, and the manual compose invocations live in the **[wiki](https://github.com/efficiencyx/JunOS/wiki)**.
 
 First boot pulls whatever's in `OLLAMA_MODELS_TO_PULL` - by default the CPU-friendly `hf.co/efficiencyx/Jun-LoRA-E2B-GGUF:Q4_K_M`. Watch it crawl in with `./start.sh logs ollama`. She's ready when everything reports healthy, usually 30–90 seconds once the weights are cached.
 
