@@ -569,6 +569,26 @@ window.Outfit = (function () {
     'nippiercing', 'navelpiercing',
   ];
 
+  const itemPatterns = (it) => it.colorPatterns || it.visibilityPatterns || [];
+  const itemDrawableIds = (it) =>
+    Live2D.findDrawables ? Live2D.findDrawables(itemPatterns(it), it.colorExcludes) : [];
+
+  // the drawables the wardrobe is currently keeping hidden. a mod paints into
+  // vanilla drawables - a modded skirt lands in Skirt, the same box the real
+  // one uses - so with the vanilla skirt off the rig has that drawable at
+  // zero and the mod is invisible. mods.js holds these up itself, and wipes
+  // the vanilla art out of the box instead of painting on top of it.
+  function hiddenItemDrawables() {
+    const hidden = new Set(), worn = new Set();
+    for (const it of ITEMS) {
+      const on = state[it.key] && (!it.requires || state[it.requires]);
+      for (const id of itemDrawableIds(it)) (on ? worn : hidden).add(id);
+    }
+    // patterns overlap ('dress' matches Dress1 too), and worn wins
+    for (const id of worn) hidden.delete(id);
+    return hidden;
+  }
+
   function applyItems(onlyItems) {
     const onlyKeys = onlyItems ? new Set(onlyItems) : null;
     const textureMap = {};
@@ -576,11 +596,15 @@ window.Outfit = (function () {
       if (onlyKeys && !onlyKeys.has(it.key)) continue;
       const on = state[it.key] && (!it.requires || state[it.requires]);
       if (it.param) Live2D.setTarget(it.param, on ? 1 : 0);
-      if (it.visibilityPatterns && Live2D.opacityByPattern) {
+      if (it.visibilityPatterns && Live2D.setDrawableOpacity) {
         const visOn  = it.visOn  !== undefined ? it.visOn  : null;
         const visOff = it.visOff !== undefined ? it.visOff : 0;
-        Live2D.opacityByPattern(it.visibilityPatterns, it.visibilityExcludes,
-          on ? visOn : visOff);
+        const op = on ? visOn : visOff;
+        for (const id of Live2D.findDrawables(it.visibilityPatterns, it.visibilityExcludes)) {
+          // mods.js has this one up on purpose, don't put it back down
+          if (window.Mods?.holds?.(id)) continue;
+          Live2D.setDrawableOpacity(id, op);
+        }
       }
       // only set while it's worn. the item that owns them rewrites these
       // every pass, so clearing the override here just fights it.
@@ -648,7 +672,7 @@ window.Outfit = (function () {
       const op = owners && !worn ? 0 : show.has(d) ? 1 : hide.has(d) ? 0 : null;
       // null hands the drawable back to the rig, and the rig parks every
       // Moddable* slot at zero. a mod holding one needs it left on.
-      if (op === null && window.Mods?.owns?.(d)) continue;
+      if (op === null && window.Mods?.holds?.(d)) continue;
       Live2D.setDrawableOpacity(d, op);
     }
   }
@@ -656,6 +680,7 @@ window.Outfit = (function () {
   // mods.js calls this after it lets go of a drawable it had forced visible,
   // so whatever WE wanted showing there gets asserted again.
   function refreshVisibility() {
+    applyItems();
     for (const v of VARIANTS) applyVariantVisibility(v);
   }
 
@@ -1440,6 +1465,15 @@ window.Outfit = (function () {
     }
     if (variantKeys.size) applyVariants([...variantKeys]);
     if (changed.colors || changed.variants.length) applyColors();
+    // taking a vanilla item off is what tells a mod sitting in the same
+    // drawable to wipe the art under it instead of layering over it, so a
+    // toggle on anything a mod is holding has to re-bake.
+    if (changed.items && window.Mods?.owns) {
+      const touched = changed.itemKeys
+        .map(key => ITEMS.find(it => it.key === key))
+        .flatMap(it => (it ? itemDrawableIds(it) : []));
+      if (touched.some(id => Mods.owns(id))) Mods.applyAll();
+    }
   }
 
   function applyPreset(preset) {
@@ -1721,13 +1755,11 @@ window.Outfit = (function () {
 
   let wdOverlay = null, wdTooltip = null, wdGhost = null, wdUpdateExpand = null;
 
-  const itemPatterns = (it) => it.colorPatterns || it.visibilityPatterns || [];
-
   function wornDrawableMap() {
     const map = new Map();
     for (const it of ITEMS) {
       if (!state[it.key]) continue;
-      for (const id of Live2D.findDrawables(itemPatterns(it), it.colorExcludes)) map.set(id, it.key);
+      for (const id of itemDrawableIds(it)) map.set(id, it.key);
     }
     if ((variantState.glasses_style || 0) > 0) map.set('ModdableFace', 'glasses_style');
     return map;
@@ -2233,6 +2265,7 @@ window.Outfit = (function () {
       for (const [grid, expand] of expandableGrids) {
         expand.hidden = !(grid.classList.contains('expanded') || grid.scrollWidth > grid.clientWidth + 1);
       }
+      if (window.Mods && Mods.updateExpand) Mods.updateExpand();
     };
     window.addEventListener('resize', updateExpandButtons);
     wdUpdateExpand = updateExpandButtons;
@@ -2605,5 +2638,6 @@ window.Outfit = (function () {
   }
 
   return { load, applyAll, describe, snapshot, reset, syncFromAction, setVariant, openWardrobe,
-    makeItemColorButton, refreshColors: applyColors, refreshVisibility, bakeAll };
+    makeItemColorButton, refreshColors: applyColors, refreshVisibility, bakeAll,
+    hiddenItemDrawables };
 })();

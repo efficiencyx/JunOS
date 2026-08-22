@@ -10,6 +10,10 @@ DOCKER_SCRIPT=""
 OS="$(uname -s)"
 NEED_SG=0
 DOCKER_JUST_INSTALLED=0
+# 1 only when a person picked Express at the keyboard. JUN_YES on its own can
+# mean an unattended run, and the two want opposite things the moment something
+# needs asking.
+EXPRESS=0
 
 if [ "$(id -u)" -eq 0 ]; then
     SUDO=""
@@ -167,34 +171,62 @@ resolve_model() {  # alias|full-ref -> full-ref
     esac
 }
 
+# rocm-smi is ROCm userland, not the amdgpu kernel driver, and a plain mesa
+# desktop does not have it - so "no rocm-smi" says NOTHING about whether there
+# is a card in the box. this file ships with the driver itself, one per card,
+# VRAM in bytes. start.sh detects AMD off /dev/kfd for the same reason, and the
+# two scripts disagreeing is how a 7900 XTX ended up being handed E2B.
+amd_sysfs_vram_mb() {
+    local f name
+    for f in /sys/class/drm/card*/device/mem_info_vram_total; do
+        [ -r "$f" ] || continue
+        # card0-DP-1 and friends are connectors, and their device symlink lands
+        # back on the same card. count those and every GPU shows up twice.
+        name="${f#/sys/class/drm/}"; name="${name%%/*}"
+        case "$name" in *-*) continue ;; esac
+        # an APU's carveout is in here too, usually 512MB. that is not a card
+        # you plan a model around, and calling it one also flips karaoke onto a
+        # GPU that cannot hold the stems.
+        awk '{ mb = int($1 / 1048576); if (mb >= 1024) print mb }' "$f"
+    done
+}
+
+# One line per AMD card, VRAM in MB. rocm-smi when it is there, the driver's
+# own sysfs when it is not.
+amd_vram_mb_list() {
+    local out=
+    if command -v rocm-smi >/dev/null 2>&1; then
+        out="$(rocm-smi --showmeminfo vram --csv 2>/dev/null \
+            | awk -F, 'NR>1 { gsub(/[^0-9]/,"",$2); if ($2 != "") print int($2/1048576) }')"
+    fi
+    [ -n "$out" ] || out="$(amd_sysfs_vram_mb)"
+    [ -z "$out" ] || printf '%s\n' "$out"
+}
+
 detect_vram_mb() {
     if command -v nvidia-smi >/dev/null 2>&1; then
         nvidia-smi --query-gpu=memory.total --format=csv,noheader,nounits 2>/dev/null \
             | tr -dc '0-9\n' | sort -nr | head -n1
-    elif command -v rocm-smi >/dev/null 2>&1; then
-        rocm-smi --showmeminfo vram 2>/dev/null \
-            | grep -i 'total' | grep -oE '[0-9]+' | sort -nr | head -n1 \
-            | awk '{ if ($1 > 0) print int($1 / 1048576) }'
+        return
     fi
+    amd_vram_mb_list | sort -nr | head -n1
 }
 
 detect_vram_total_mb() {
     if command -v nvidia-smi >/dev/null 2>&1; then
         nvidia-smi --query-gpu=memory.total --format=csv,noheader,nounits 2>/dev/null \
             | tr -dc '0-9\n' | awk '{ t += $1 } END { if (t > 0) print t }'
-    elif command -v rocm-smi >/dev/null 2>&1; then
-        rocm-smi --showmeminfo vram 2>/dev/null \
-            | grep -i 'total' | grep -oE '[0-9]+' \
-            | awk '{ t += $1 } END { if (t > 0) print int(t / 1048576) }'
+        return
     fi
+    amd_vram_mb_list | awk '{ t += $1 } END { if (t > 0) print t }'
 }
 
 detect_gpu_count() {
     if command -v nvidia-smi >/dev/null 2>&1; then
         nvidia-smi --query-gpu=memory.total --format=csv,noheader,nounits 2>/dev/null | grep -c '[0-9]' || true
-    elif command -v rocm-smi >/dev/null 2>&1; then
-        rocm-smi --showmeminfo vram 2>/dev/null | grep -ci 'total' || true
+        return
     fi
+    amd_vram_mb_list | grep -c '[0-9]' || true
 }
 
 recommend_model() {
@@ -352,8 +384,9 @@ ask_tensor_parallel() {
 # she agrees with came cheap. Nothing gets said that she wouldn't have said
 # anyway. Experimental because whether it is faster at all depends on the card,
 # hence the depth question right after. Sets $MTP (on|off) and $MTP_DRAFTER.
-# Off under Express, this is not a setting to hand somebody who asked for
-# defaults. Without a prompt: JUN_MTP=on|off.
+# On under Express: the depth question right below answers itself with a real
+# measurement, so the risky half of "experimental" is already handled.
+# Without a prompt: JUN_MTP=on|off.
 ask_mtp() {
     local v preset
     MTP=off
@@ -370,6 +403,7 @@ ask_mtp() {
         return 0
     fi
     if [ "${JUN_YES:-}" = "1" ] || [ ! -r /dev/tty ]; then
+        MTP=on
         return 0
     fi
 
@@ -789,7 +823,7 @@ ensure_recovery_python() {
     if [ "${JUN_YES:-}" = "1" ]; then
         proceed=1
     elif [ -r /dev/tty ]; then
-        printf '     %s$%s install Python 3 for asset recovery with %s%s%s? %s[y/N]%s %sâ†’%s ' \
+        printf '     %s$%s install Python 3 for asset recovery with %s%s%s? %s[y/N]%s %s→%s ' \
             "$OK" "$R" "$B" "$PM" "$R" "$DIM" "$R" "$ACCENT" "$R" > /dev/tty
         read -r answer < /dev/tty || answer=""
         case "$answer" in y|Y|yes|YES) proceed=1 ;; esac
@@ -824,12 +858,23 @@ install_asset_recovery() {
     venv="runtime/asset-recovery-venv"
     recovery_python="$venv/bin/python"
 
-    if [ ! -x "$recovery_python" ]; then
+    # a venv whose pip never bootstrapped is worse than no venv: the python is
+    # there, so the old existence check passed, and the install died on "No
+    # module named pip" instead. so check for pip, not for the interpreter, and
+    # rebuild from scratch when it's missing.
+    if [ ! -x "$recovery_python" ] || ! "$recovery_python" -m pip --version >/dev/null 2>&1; then
         note "setting up the local asset-recovery environment"
-        "$python" -m venv "$venv" || {
+        "$python" -m venv --clear "$venv" || {
             warn_ "could not create the asset-recovery virtual environment."
             return 1
         }
+        "$recovery_python" -m pip --version >/dev/null 2>&1 \
+            || "$recovery_python" -m ensurepip --upgrade >/dev/null 2>&1 || true
+        if ! "$recovery_python" -m pip --version >/dev/null 2>&1; then
+            warn_ "the asset-recovery environment has no pip - install your distro's"
+            warn_ "python venv/pip package (python3-venv on Debian) and re-run."
+            return 1
+        fi
     fi
     run "install UnityPy + Pillow" "$recovery_python" -m pip install \
         --disable-pip-version-check --quiet -r tools/requirements-recovery.txt
@@ -839,10 +884,15 @@ install_asset_recovery() {
         return 0
     fi
 
-    # A supplied path is deliberate, and non-interactive installs must never
-    # wait for input. Only offer the friendly fallback after auto-discovery.
-    if [ -n "${JUN_GAME_DIR:-}" ] || [ "${JUN_YES:-}" = "1" ] || [ ! -r /dev/tty ]; then
-        warn_ "extraction failed - set JUN_GAME_DIR to the game folder, then re-run with JUN_EXTRACT=1."
+    # A supplied path is deliberate, and unattended installs must never wait for
+    # input. Express is NOT unattended: somebody pressed Enter half a minute ago
+    # and is watching this scroll, so it gets the same drag-the-folder-here
+    # fallback Custom does. JUN_YES without $EXPRESS is the actual headless
+    # case (CI, the GUI driving install.sh) and still bails.
+    if [ -n "${JUN_GAME_DIR:-}" ] || [ ! -r /dev/tty ] \
+       || { [ "${JUN_YES:-}" = "1" ] && [ "$EXPRESS" != 1 ]; }; then
+        warn_ "couldn't extract - she'll use placeholder art for now. set JUN_GAME_DIR"
+        warn_ "to the game folder and re-run with JUN_EXTRACT=1 for her real model."
         return 1
     fi
 
@@ -1055,7 +1105,7 @@ confirm_deps() {
 choose_install_mode() {
     [ "${JUN_YES:-}" = "1" ] && return
     case "$(printf '%s' "${JUN_EXPRESS:-}" | tr '[:upper:]' '[:lower:]')" in
-        1|on|yes|true) JUN_YES=1; export JUN_YES; return ;;
+        1|on|yes|true) JUN_YES=1; export JUN_YES; EXPRESS=1; return ;;
     esac
     # A readable /dev/tty node can still fail to open with no controlling
     # terminal, so probe an actual open rather than trusting the mode bits.
@@ -1070,7 +1120,7 @@ choose_install_mode() {
     read -r ans < /dev/tty || ans=""
     case "$ans" in
         2|custom|Custom|CUSTOM) note "custom install - I'll ask about each option below" ;;
-        *) JUN_YES=1; export JUN_YES; ok "express install - using recommended settings" ;;
+        *) JUN_YES=1; export JUN_YES; EXPRESS=1; ok "express install - using recommended settings" ;;
     esac
 }
 
@@ -1104,14 +1154,53 @@ check_repo_source() {
     case "$a" in y|Y|yes|YES) ;; *) fail_ "aborted."; exit 1 ;; esac
 }
 
+# markers, not the folder name - JUN_DIR lets people call it whatever they
+# want, and "Jun" on its own could be anything.
+is_jun_checkout() {
+    [ -f "$1/start.sh" ] && [ -f "$1/docker-compose.yml" ] && [ -d "$1/webapp" ]
+}
+
+# people re-run the install one-liner from inside the checkout they already
+# have (or from webapp/ two levels down). without this we clone Jun/Jun next
+# to it and set up a second stack fighting the first one for :80. so: look at
+# $DIR, then walk up from here. an explicit JUN_DIR is a decision, it wins.
+locate_install() {
+    is_jun_checkout "$DIR" && { EXISTING="$DIR"; return 0; }
+    [ -n "${JUN_DIR:-}" ] && return 1
+    local d="$PWD"
+    while :; do
+        is_jun_checkout "$d" && { EXISTING="$d"; return 0; }
+        [ "$d" = "/" ] && return 1
+        d="$(dirname "$d")"
+    done
+}
+
 banner
 choose_install_mode
-check_repo_source
+EXISTING=""
+locate_install || true
+# nothing gets cloned when she's already here, so the fork warning has nothing
+# to warn about.
+[ -n "$EXISTING" ] || check_repo_source
 confirm_deps
 
-if [ -d "$DIR/.git" ]; then
-    step "update repository"
-    run "$DIR up to date" git -C "$DIR" pull --ff-only
+if [ -n "$EXISTING" ]; then
+    DIR="$EXISTING"
+    step "existing install"
+    ok "found Jun in $DIR - updating instead of cloning"
+    if [ -d "$DIR/.git" ]; then
+        if git -C "$DIR" pull --ff-only >/dev/null 2>&1; then
+            ok "repo up to date"
+        else
+            # local commits, a dirty tree, a branch of their own. all fine,
+            # all reasons a pull can't fast-forward. NOT a reason to stop -
+            # the rest of the installer still fixes .env, deps and the stack.
+            warn_ "couldn't fast-forward $DIR - keeping the code that's on disk"
+            note "pull it yourself with: git -C $DIR pull"
+        fi
+    else
+        note "not a git checkout, nothing to pull - re-running setup on what's here"
+    fi
 else
     step "clone repository"
     run "$REPO ($REF)" git clone --depth 1 --branch "$REF" "$REPO" "$DIR"
@@ -1132,15 +1221,20 @@ warn_ "My Dystopian Robot Girlfriend. tools/recover_assets.py rebuilds"
 warn_ "them from YOUR game copy, for personal use only - do NOT"
 warn_ "republish them (public fork, release, mirror). See NOTICE in LICENSE."
 
-# Opt-in extraction of the Live2D assets from the user's own game install.
-# Never runs unless explicitly requested: answer y here, or JUN_EXTRACT=1
-# when non-interactive. Without it the webapp uses placeholder assets.
+# Extraction of the Live2D assets from the user's OWN game install, nothing is
+# downloaded and nothing leaves the box. Express does it, because a placeholder
+# avatar is not "everything with recommended settings" and she is the whole
+# point of the app. Custom asks. JUN_EXTRACT=1 forces it, JUN_EXTRACT=0 opts
+# out of the Express one. No game on this machine and recover_assets.py just
+# says so and the install carries on with placeholders.
 extract=0
 case "$(printf '%s' "${JUN_EXTRACT:-}" | tr '[:upper:]' '[:lower:]')" in
     1|on|yes|true) extract=1 ;;
     0|off|no|false) extract=0 ;;
     *)
-        if [ -r /dev/tty ] && [ "${JUN_YES:-}" != "1" ]; then
+        if [ "${JUN_YES:-}" = "1" ]; then
+            extract=1
+        elif [ -r /dev/tty ]; then
             printf '     %s$%s extract them now from your game install? %s[y/N]%s %s→%s ' \
                 "$OK" "$R" "$DIM" "$R" "$ACCENT" "$R" > /dev/tty
             read -r e < /dev/tty || e=""

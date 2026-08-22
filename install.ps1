@@ -146,10 +146,45 @@ function Get-MtpBudgetMb([string]$modelRef) {
     }
 }
 
+# no nvidia-smi equivalent on the AMD side, so we ask Windows. AdapterRAM is a
+# 32 bit field and anything past 4GB comes back wrong, which is why the
+# registry's qwMemorySize goes first and AdapterRAM is only the fallback. same
+# order and same keys as installer-gui.ps1.
+function Get-AmdMemoryMb {
+    try {
+        $controllers = @(Get-CimInstance Win32_VideoController -ErrorAction Stop |
+            Where-Object { $_.Name -match '(?i)AMD|Radeon' })
+        if ($controllers.Count -eq 0) { return @() }
+        $names = @($controllers | ForEach-Object { $_.Name } | Sort-Object -Unique)
+
+        $registryMemory = @(Get-ItemProperty -Path 'HKLM:\SYSTEM\CurrentControlSet\Control\Video\*\0000' -ErrorAction SilentlyContinue |
+            Where-Object { $names -contains [string]$_.'HardwareInformation.AdapterString' } |
+            ForEach-Object {
+                $memory = $_.'HardwareInformation.qwMemorySize'
+                if ($memory -is [byte[]] -and $memory.Length -ge 8) {
+                    [BitConverter]::ToUInt64($memory, 0)
+                } elseif ($null -ne $memory) {
+                    [uint64]$memory
+                }
+            } | Where-Object { $_ -gt 0 } | Sort-Object -Unique)
+
+        if ($registryMemory.Count -gt 0) {
+            return @($registryMemory | ForEach-Object { [int]($_ / 1MB) })
+        }
+        return @($controllers | Where-Object { $_.AdapterRAM -gt 0 } |
+            ForEach-Object { [int]([uint64]$_.AdapterRAM / 1MB) })
+    } catch {
+        return @()
+    }
+}
+
 function Get-GpuMemoryMb {
-    if (-not (Get-Command nvidia-smi -ErrorAction SilentlyContinue)) { return @() }
-    $out = & nvidia-smi --query-gpu=memory.total --format=csv,noheader,nounits 2>$null
-    return @($out | Where-Object { $_ -match '\d' } | ForEach-Object { [int]($_.Trim()) })
+    if (Get-Command nvidia-smi -ErrorAction SilentlyContinue) {
+        $out = & nvidia-smi --query-gpu=memory.total --format=csv,noheader,nounits 2>$null
+        $mb = @($out | Where-Object { $_ -match '\d' } | ForEach-Object { [int]($_.Trim()) })
+        if ($mb.Count -gt 0) { return $mb }
+    }
+    return @(Get-AmdMemoryMb)
 }
 
 function Get-VramMb {
@@ -211,6 +246,11 @@ function Add-EnvKeyIfMissing([string]$key) {
 }
 
 $interactive = [Environment]::UserInteractive -and ($env:JUN_YES -ne '1')
+# true only when a person picked Express at the keyboard. JUN_YES on its own can
+# mean an unattended run - CI, or installer-gui.ps1 driving this script with its
+# output redirected - and the two want opposite things the moment something
+# needs asking.
+$script:expressInteractive = $false
 
 function Test-Sha256([string]$path, [string]$expected) {
     if (-not $expected) { return $false }
@@ -270,7 +310,9 @@ function Protect-EnvFile {
 function Choose-InstallMode {
     if ($env:JUN_YES -eq '1') { return }
     if ($env:JUN_EXPRESS -match '^(1|on|yes|true)$') {
-        $env:JUN_YES = '1'; $script:interactive = $false; return
+        $env:JUN_YES = '1'; $script:interactive = $false
+        $script:expressInteractive = [Environment]::UserInteractive
+        return
     }
     if (-not [Environment]::UserInteractive) { return }
     Write-Host ''
@@ -282,6 +324,7 @@ function Choose-InstallMode {
         Note "custom install - I'll ask about each option below"
     } else {
         $env:JUN_YES = '1'; $script:interactive = $false
+        $script:expressInteractive = $true
         Ok 'express install - using recommended settings'
     }
 }
@@ -346,14 +389,15 @@ function Ask-Karaoke([string]$voice) {
 # a small drafter model guesses a few tokens ahead and Jun checks the guesses
 # in one pass, so the ones she agrees with came cheap. nothing gets said that
 # she wouldn't have said anyway. experimental because whether it's faster AT
-# ALL depends on the card, hence the depth question right after. off under
-# Express, this is not a setting to hand somebody who asked for defaults.
+# ALL depends on the card, hence the depth question right after. on under
+# Express: that depth question answers itself with a real measurement, so the
+# risky half of "experimental" is already handled.
 # without a prompt: JUN_MTP=on|off, JUN_MTP_DEPTH=auto|1|2|3|4.
 function Ask-Mtp {
     if ($env:JUN_MTP) {
         return $(if ($env:JUN_MTP.ToLower() -match '^(on|1|true|yes|y)$') { 'on' } else { 'off' })
     }
-    if (-not $interactive) { return 'off' }
+    if (-not $interactive) { return 'on' }
     $v = Read-Styled "     ${OK}▸${R} enable experimental multi-token prediction? ${DIM}(speculative decoding - faster on some cards, slower on others)${R} ${DIM}[y/N]${R} ${ACCENT}›${R} "
     return $(if ($v -match '^(y|yes)$') { 'on' } else { 'off' })
 }
@@ -643,20 +687,42 @@ function Install-MachineTools([string[]]$missing, [switch]$Optional) {
     Refresh-Path
 }
 
-function Get-UsablePython {
-    $candidates = @(
+# every interpreter this box has, PATH ones first. the py launcher matters
+# here: winget can install 3.11 and leave 3.14 sitting first on PATH, and
+# then the only way to reach the one we asked for is `py -3.11`.
+function Get-PythonCandidates {
+    $paths = @()
+    foreach ($c in @(
         Get-Command python -ErrorAction SilentlyContinue
         Get-Command python3 -ErrorAction SilentlyContinue
-    ) | Where-Object { $_ }
-
-    foreach ($python in $candidates) {
+    )) {
         # skip the windows store alias stub outright. probing it writes to
         # stderr, which $ErrorActionPreference='Stop' turns into a terminating
-        # NativeCommandError on PowerShell 5.1. run the probe through cmd so
+        # NativeCommandError on PowerShell 5.1. run every probe through cmd so
         # any other stderr output never reaches PowerShell either.
-        if ($python.Source -like '*\WindowsApps\*') { continue }
-        cmd /c "`"$($python.Source)`" -c `"import ensurepip, sys, venv; assert sys.version_info >= (3, 9)`" >nul 2>nul"
-        if ($LASTEXITCODE -eq 0) { return $python }
+        if ($c -and $c.Source -and $c.Source -notlike '*\WindowsApps\*') { $paths += $c.Source }
+    }
+    $launcher = Get-Command py -ErrorAction SilentlyContinue
+    if ($launcher -and $launcher.Source -notlike '*\WindowsApps\*') {
+        foreach ($v in '3.12', '3.11', '3.10') {
+            $exe = cmd /c "`"$($launcher.Source)`" -$v -c `"import sys; print(sys.executable)`" 2>nul"
+            if ($LASTEXITCODE -eq 0 -and $exe) { $paths += $exe.Trim() }
+        }
+    }
+    $paths | Where-Object { $_ } | Select-Object -Unique
+}
+
+# returns a path to an interpreter, or $null. $Below is an exclusive upper
+# bound like '3.13' - the voice venv needs one because kokoro 0.9.4 declares
+# Requires-Python <3.13 and pip on a 3.13+ interpreter just says "no matching
+# distribution" and takes voice down with it.
+function Get-UsablePython([string]$Min = '3.9', [string]$Below) {
+    $check = "import ensurepip, sys, venv; assert sys.version_info >= ({0})" -f ($Min -replace '\.', ', ')
+    if ($Below) { $check += "; assert sys.version_info < ({0})" -f ($Below -replace '\.', ', ') }
+
+    foreach ($path in Get-PythonCandidates) {
+        cmd /c "`"$path`" -c `"$check`" >nul 2>nul"
+        if ($LASTEXITCODE -eq 0) { return $path }
     }
     return $null
 }
@@ -791,12 +857,13 @@ function Install-Tts([string]$Karaoke = 'off') {
     $py = Join-Path $venv 'Scripts\python.exe'
 
     if (-not (Test-Path $py)) {
-        $python = Get-UsablePython
+        $python = Get-UsablePython -Min '3.10' -Below '3.13'
         if (-not $python) {
             Install-MachineTools @('python') -Optional
-            $python = Get-UsablePython
+            $python = Get-UsablePython -Min '3.10' -Below '3.13'
             if (-not $python) {
-                Warn_ 'Python still not found - skipping voice. Re-run install.ps1 after installing it.'
+                Warn_ 'no Python 3.10, 3.11 or 3.12 found - skipping voice. 3.13 and newer do'
+                Warn_ 'not work here: kokoro has no wheel for them. install one of those and re-run.'
                 Set-EnvKey 'VOICE' 'off'
                 Set-EnvKey 'KARAOKE' 'off'
                 return
@@ -804,7 +871,7 @@ function Install-Tts([string]$Karaoke = 'off') {
         }
 
         Step 'set up TTS voice engine (a few GB, one-time)'
-        & $python.Source -m venv $venv
+        & $python -m venv $venv
         & $py -m pip install --upgrade pip
         # CPU torch wheel first so the resolver doesn't drag CUDA builds in as
         # a transitive dep. both voice models hit real-time on CPU anyway.
@@ -853,10 +920,24 @@ function Install-AssetRecovery {
 
     $venv = Join-Path (Get-Location) 'runtime\asset-recovery-venv'
     $recoveryPython = Join-Path $venv 'Scripts\python.exe'
-    if (-not (Test-Path $recoveryPython)) {
+    # a venv whose pip never bootstrapped is worse than no venv: python.exe is
+    # there so a Test-Path check passes, and the install dies on "No module
+    # named pip" one line later. check for pip, rebuild when it's missing.
+    $hasPip = $false
+    if (Test-Path $recoveryPython) {
+        & $recoveryPython -m pip --version *> $null
+        $hasPip = ($LASTEXITCODE -eq 0)
+    }
+    if (-not $hasPip) {
         Step 'set up local asset-recovery environment'
-        & $python.Source -m venv $venv
+        & $python -m venv --clear $venv
         if ($LASTEXITCODE -ne 0) { throw 'Could not create the asset-recovery virtual environment.' }
+        & $recoveryPython -m pip --version *> $null
+        if ($LASTEXITCODE -ne 0) {
+            & $recoveryPython -m ensurepip --upgrade *> $null
+            & $recoveryPython -m pip --version *> $null
+            if ($LASTEXITCODE -ne 0) { throw 'The asset-recovery virtual environment has no pip.' }
+        }
     }
 
     Step 'install UnityPy + Pillow'
@@ -872,10 +953,15 @@ function Install-AssetRecovery {
         return
     }
 
-    # a supplied path is deliberate, and non-interactive installs must NEVER
-    # wait for input. only offer the friendly fallback after auto-discovery.
-    if ($env:JUN_GAME_DIR -or -not $interactive) {
-        Warn_ 'Asset extraction failed. Set JUN_GAME_DIR to the game folder, then re-run with JUN_EXTRACT=1.'
+    # a supplied path is deliberate, and unattended installs must NEVER wait for
+    # input. Express is NOT unattended: somebody pressed Enter half a minute ago
+    # and is watching this scroll, so it gets the same drag-the-folder-here
+    # fallback Custom does. JUN_YES without $expressInteractive is the actual
+    # headless case - installer-gui.ps1 spawns us with stdout redirected and no
+    # window, and a Read-Host there hangs the GUI with nothing on screen to say
+    # why - and still bails.
+    if ($env:JUN_GAME_DIR -or (-not $interactive -and -not $script:expressInteractive)) {
+        Warn_ "Couldn't extract - she'll use placeholder art for now. Set JUN_GAME_DIR to the game folder and re-run with JUN_EXTRACT=1 for her real model."
         return
     }
 
@@ -913,9 +999,36 @@ function Install-AssetRecovery {
 }
 
 
+# markers, not the folder name - JUN_DIR lets people call it whatever they
+# want, and "Jun" on its own could be anything.
+function Test-JunCheckout([string]$path) {
+    if (-not $path) { return $false }
+    return (Test-Path (Join-Path $path 'start.ps1')) -and
+           (Test-Path (Join-Path $path 'docker-compose.yml')) -and
+           (Test-Path (Join-Path $path 'webapp'))
+}
+
+# people re-run the install line from inside the checkout they already have
+# (or from webapp\ two levels down). without this we clone Jun\Jun next to it
+# and set up a second copy fighting the first one for :80. so: look at $dir,
+# then walk up from here. an explicit JUN_DIR is a decision, it wins.
+function Find-JunInstall {
+    if (Test-JunCheckout $dir) { return (Resolve-Path -LiteralPath $dir).Path }
+    if ($env:JUN_DIR) { return $null }
+    $d = (Get-Location).Path
+    while ($d) {
+        if (Test-JunCheckout $d) { return $d }
+        $d = Split-Path -Parent $d
+    }
+    return $null
+}
+
 Show-Banner
 Choose-InstallMode
-Confirm-RepoSource
+$existing = Find-JunInstall
+# nothing gets cloned when she's already here, so the fork warning has nothing
+# to warn about.
+if (-not $existing) { Confirm-RepoSource }
 
 Step 'check dependencies'
 
@@ -930,10 +1043,24 @@ if (-not (Get-Command git -ErrorAction SilentlyContinue)) {
 }
 Ok 'git found'
 
-if (Test-Path (Join-Path $dir '.git')) {
-    Step 'update repository'
-    git -C $dir pull --ff-only
-    Ok "$dir up to date"
+if ($existing) {
+    $dir = $existing
+    Step 'existing install'
+    Ok "found Jun in $dir - updating instead of cloning"
+    if (Test-Path (Join-Path $dir '.git')) {
+        git -C $dir pull --ff-only 2>&1 | Out-Null
+        if ($LASTEXITCODE -eq 0) {
+            Ok 'repo up to date'
+        } else {
+            # local commits, a dirty tree, a branch of their own. all fine,
+            # all reasons a pull can't fast-forward. NOT a reason to stop -
+            # the rest of the installer still fixes .env, deps and the stack.
+            Warn_ "couldn't fast-forward $dir - keeping the code that's on disk"
+            Note "pull it yourself with: git -C $dir pull"
+        }
+    } else {
+        Note 'not a git checkout, nothing to pull - re-running setup on what is here'
+    }
 } else {
     Step 'clone repository'
     git clone --depth 1 --branch $ref $repo $dir
@@ -973,22 +1100,36 @@ Warn_ 'My Dystopian Robot Girlfriend. tools/recover_assets.py rebuilds'
 Warn_ 'them from YOUR game copy, for personal use only - do NOT'
 Warn_ 'republish them (public fork, release, mirror). See NOTICE in LICENSE.'
 
-# opt-in extraction of the Live2D assets from the user's own game install.
-# NEVER runs unless explicitly requested. answer y here, or JUN_EXTRACT=1 when
-# non-interactive. without it the webapp uses placeholder assets.
+# extraction of the Live2D assets from the user's OWN game install, nothing is
+# downloaded and nothing leaves the box. Express does it, because a placeholder
+# avatar is not "everything with recommended settings" and she is the whole
+# point of the app. Custom asks. JUN_EXTRACT=1 forces it, JUN_EXTRACT=0 opts
+# out of the Express one. no game on this machine and recover_assets.py just
+# says so and the install carries on with placeholders.
 $extract = $false
 switch -Regex ($env:JUN_EXTRACT) {
     '^(1|on|yes|true)$'  { $extract = $true }
     '^(0|off|no|false)$' { $extract = $false }
     default {
-        if ($interactive) {
+        if ($env:JUN_YES -eq '1') {
+            $extract = $true
+        } elseif ($interactive) {
             $e = Read-Styled "     ${OK}▸${R} extract them now from your game install? ${DIM}[y/N]${R} ${ACCENT}›${R} "
             $extract = $e -match '^(y|yes)$'
         }
     }
 }
 if ($extract) {
-    Install-AssetRecovery
+    # every throw in there is "no python", "venv died", "pip died" - all of
+    # them survivable, she just wears the placeholders. before Express turned
+    # this on the throw took the whole install down with it, which is a rough
+    # way to lose a stack that was otherwise about to boot.
+    try {
+        Install-AssetRecovery
+    } catch {
+        Warn_ ("asset recovery stopped: {0}" -f $_.Exception.Message)
+        Note 'carrying on with placeholder art - re-run install.ps1 with $env:JUN_EXTRACT=1 to try again.'
+    }
 } else {
     Note 'skipped - re-run install.ps1 with JUN_EXTRACT=1 anytime to extract.'
 }
