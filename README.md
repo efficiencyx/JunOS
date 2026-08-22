@@ -74,11 +74,10 @@ curl -fsSL https://raw.githubusercontent.com/efficiencyx/JunOS/main/install.sh |
 **Windows** - no Docker, she runs bare metal out of one folder. Two front doors, same installer behind both. 🚪 Either double-click **`JunSetup.exe`** from the [latest release](https://github.com/efficiencyx/JunOS/releases/latest), or in PowerShell:
 
 ```powershell
-powershell irm https://raw.githubusercontent.com/efficiencyx/JunOS/main/install.ps1 -OutFile install.ps1
-powershell -ExecutionPolicy Bypass -File .\install.ps1
+irm https://raw.githubusercontent.com/efficiencyx/JunOS/main/install.ps1 -OutFile install.ps1; powershell -ExecutionPolicy Bypass -File .\install.ps1
 ```
 
-Two lines, not one, and on purpose: `irm ... | iex` pipes a downloaded script straight into the interpreter, which is exactly what a dropper does, and Defender flags it as a trojan. Land it on disk first and it's just a file you ran.
+Downloaded first, then run, instead of the usual `irm ... | iex`. That pipe hands a script off the internet straight to the interpreter, which is what a dropper does, so Defender calls it a trojan and eats it. Same two steps, no alert. (`;` and not `&&` because Windows PowerShell 5.1, the one you get by default, doesn't have `&&`.)
 
 Then open **<https://localhost>** (Windows: **<https://127.0.0.1:8080>**) and say hi. 🎉
 
