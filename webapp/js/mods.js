@@ -754,6 +754,20 @@ window.Mods = (function () {
 
   let uiBody = null;
 
+  // the grid is ONE horizontally scrolling row and wardrobe.html hides its
+  // scrollbar, so past the four tiles that fit there is nothing on screen
+  // saying the rest exist. a tester spent an evening hunting for the left
+  // stocking of a pair that was sitting two tiles off the right edge. the
+  // vanilla sections have had the chevron since forever, this is the same
+  // one. outfit.js runs updateExpand on resize and on every wardrobe open,
+  // because a grid measures 0 wide while the panel is still closed.
+  const expandables = [];
+  function updateExpand() {
+    for (const [grid, expand] of expandables) {
+      expand.hidden = !(grid.classList.contains('expanded') || grid.scrollWidth > grid.clientWidth + 1);
+    }
+  }
+
   // cut a canvas down to the pixels that aren't transparent. null when there
   // are none.
   function trimTransparent(c) {
@@ -833,6 +847,7 @@ window.Mods = (function () {
     const list = uiBody && uiBody.querySelector('[data-mod-list]');
     if (!list) return;
     list.innerHTML = '';
+    expandables.length = 0;
     for (const mod of mods) {
       const head = document.createElement('div');
       head.style.cssText = 'display:flex;gap:8px;align-items:center;margin:6px 0 4px;font-size:13px';
@@ -849,6 +864,21 @@ window.Mods = (function () {
       });
       const grid = document.createElement('div');
       grid.className = 'wd-grid';
+      const expand = document.createElement('button');
+      expand.type = 'button';
+      expand.className = 'wd-expand';
+      expand.title = 'Show all';
+      expand.hidden = true;
+      expand.setAttribute('aria-expanded', 'false');
+      expand.textContent = '⌄';
+      expand.addEventListener('click', () => {
+        const on = grid.classList.toggle('expanded');
+        expand.classList.toggle('on', on);
+        expand.setAttribute('aria-expanded', String(on));
+        expand.title = on ? 'Collapse' : 'Show all';
+      });
+      head.insertBefore(expand, remove);
+      expandables.push([grid, expand]);
       mod.items.forEach((item, i) => {
         const tile = document.createElement('div');
         tile.className = 'wd-tile';
@@ -887,6 +917,7 @@ window.Mods = (function () {
       });
       list.append(head, grid);
     }
+    requestAnimationFrame(updateExpand);
   }
 
   function setLimbsFollowSkin(guid, itemIndex, on) {
@@ -898,5 +929,5 @@ window.Mods = (function () {
   }
 
   return { applyAll, refreshTints, describe, buildWardrobeSection, importZip, removeMod,
-    owns: (id) => appliedIds.has(id) };
+    updateExpand, owns: (id) => appliedIds.has(id) };
 })();
