@@ -71,13 +71,13 @@ One command. It installs whatever's missing, pulls a model, rebuilds her Live2D 
 curl -fsSL https://raw.githubusercontent.com/efficiencyx/JunOS/main/install.sh | bash
 ```
 
-**Windows** - no Docker, she runs bare metal out of one folder. Two front doors, same installer behind both. 🚪 Either double-click **`JunSetup.exe`** from the [latest release](https://github.com/efficiencyx/JunOS/releases/latest), or in PowerShell:
+**Windows** - no Docker, she runs bare metal out of one folder. Two front doors, same installer behind both. 🚪 Either double-click **`JunSetup.exe`** from the [latest release](https://github.com/efficiencyx/JunOS/releases/latest), or paste the line below into PowerShell.
+
+It downloads first and runs second, instead of the usual `irm ... | iex`. That pipe hands a script off the internet straight to the interpreter, which is what a dropper does, so Defender calls it a trojan and eats it. Same two steps, no alert. (`;` and not `&&` because Windows PowerShell 5.1, the one you get by default, doesn't have `&&`.)
 
 ```powershell
 irm https://raw.githubusercontent.com/efficiencyx/JunOS/main/install.ps1 -OutFile install.ps1; powershell -ExecutionPolicy Bypass -File .\install.ps1
 ```
-
-Downloaded first, then run, instead of the usual `irm ... | iex`. That pipe hands a script off the internet straight to the interpreter, which is what a dropper does, so Defender calls it a trojan and eats it. Same two steps, no alert. (`;` and not `&&` because Windows PowerShell 5.1, the one you get by default, doesn't have `&&`.)
 
 Then open **<https://localhost>** (Windows: **<https://127.0.0.1:8080>**) and say hi. 🎉
 
