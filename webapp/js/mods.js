@@ -328,11 +328,14 @@ window.Mods = (function () {
 
   // parsing an item's texture jsons is pure work on immutable data, and a
   // pass does it for every worn item on top of the one you just clicked.
+  // item -> followSkin -> entries. the flag has to be in the key: it decides
+  // each entry's bypassColorScaler, so one list per item handed the next pass
+  // back whatever the toggle said the FIRST time and the checkbox did nothing.
   const _drawableCache = new WeakMap();
 
   function itemDrawables(mod, item, followSkin = true) {
     const cached = _drawableCache.get(item);
-    if (cached) return cached;
+    if (cached && cached.has(followSkin)) return cached.get(followSkin);
     // empty before the model is up, and that must NOT get cached
     const valid = new Set(Live2D.findDrawables ? Live2D.findDrawables([''], []) : []);
     const out = [];
@@ -371,7 +374,10 @@ window.Mods = (function () {
         }
       }
     }
-    if (valid.size) _drawableCache.set(item, out);
+    if (valid.size) {
+      if (cached) cached.set(followSkin, out);
+      else _drawableCache.set(item, new Map([[followSkin, out]]));
+    }
     return out;
   }
 
