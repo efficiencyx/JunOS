@@ -391,7 +391,7 @@ window.Mods = (function () {
   // bake every worn mod entry for one drawable into a single canvas crop.
   // the compositor only takes ONE override per drawable, so the layers get
   // merged here.
-  async function bakeDrawable(id, entries, colorsFor, hostTint) {
+  async function bakeDrawable(id, entries, colorsFor, hostTint, replaceVanilla) {
     entries.sort((a, b) => a.layer - b.layer);
     // vanilla art stays underneath unless the container says no vanilla
     // layers. same as Part.AddVanilla in the game.
@@ -407,8 +407,14 @@ window.Mods = (function () {
     // barcode and lines on its smooth skins while its Translucent Abs variant
     // ships the real 322x126 lines crop in the same zip, so the mod is
     // telling us which it means. it never sets DontIncludeVanillaLayers.
+    // and the wardrobe gets a say too. while the vanilla item that owns this
+    // drawable is OFF, the mod is the only thing meant to be in it - we're
+    // the ones holding the drawable visible at all (see applyPass), so the
+    // art the rig was hiding has to go. without this a modded skirt came up
+    // with the vanilla one poking out from under the hem.
     const isBlank = (e) => e.r.w <= 1 && e.r.h <= 1;
-    const replacesVanilla = entries.some(e => e.dontIncludeVanilla || isBlank(e));
+    const replacesVanilla = replaceVanilla
+      || entries.some(e => e.dontIncludeVanilla || isBlank(e));
     entries = entries.filter(e => !isBlank(e));
     let W = 1, H = 1;
     const imgs = [];
@@ -577,10 +583,10 @@ window.Mods = (function () {
   // the map is replaced each pass with just the hits, that's the eviction.
   let bakeCache = new Map();
 
-  function bakeKey(id, entries, colorsFor, tint) {
+  function bakeKey(id, entries, colorsFor, tint, replaceVanilla) {
     return id + '|' + entries.map(e => [e.url, e.r.x, e.r.y, e.r.w, e.r.h, e.layer, e.colorIndex,
       e.dontIncludeVanilla ? 1 : 0, e.bypassColorScaler ? 1 : 0, colorsFor(e) || ''].join()).join(';')
-      + '|' + (tint || '');
+      + '|' + (tint || '') + (replaceVanilla ? '|R' : '');
   }
 
   let applyRunning = null;
@@ -621,6 +627,15 @@ window.Mods = (function () {
         }
       });
     }
+    // mod items land in vanilla drawables as often as in the Moddable* slots,
+    // and the rig keeps those at zero opacity while the wardrobe item that
+    // owns them is off. so a modded skirt showed NOTHING until you switched
+    // the vanilla skirt back on, and then the vanilla skirt was under it.
+    // both halves are wrong: we hold the drawable up ourselves, and the bake
+    // replaces the vanilla art rather than layering over it. switch the
+    // vanilla item on and they layer again, which is what you'd want from a
+    // mod that only adds a decal.
+    const hiddenByOutfit = window.Outfit?.hiddenItemDrawables?.() || new Set();
     const map = {};
     // null clears overrides that vanished from this pass
     for (const id of appliedIds) map[id] = null;
@@ -634,7 +649,8 @@ window.Mods = (function () {
       const tint = entries.some(e => e.bypassColorScaler) ? hostTintFor(id) : null;
       // ColorIndex points into the owning ITEM's ColorSlots list
       const colorsFor = (e) => ((modState(e.mod.guid).colors || {})[e.itemIndex] || [])[e.colorIndex] || null;
-      const key = bakeKey(id, entries, colorsFor, tint);
+      const replaceVanilla = hiddenByOutfit.has(id);
+      const key = bakeKey(id, entries, colorsFor, tint, replaceVanilla);
       let baked = bakeCache.get(key);
       if (!baked) {
         // only the drawables we actually redraw cost anything, so this is
@@ -642,7 +658,7 @@ window.Mods = (function () {
         await breathe();
         const tb = performance.now();
         try {
-          baked = await bakeDrawable(id, entries, colorsFor, tint);
+          baked = await bakeDrawable(id, entries, colorsFor, tint, replaceVanilla);
           baked.key = key;
           bakes++;
           bakeMs += performance.now() - tb;
@@ -668,15 +684,18 @@ window.Mods = (function () {
     bakeCache = fresh;
     appliedIds = new Set(byDrawable.keys());
     if (Live2D.setDrawableOpacity) {
+      const hold = new Set();
+      for (const id of byDrawable.keys()) {
+        if (MOD_SLOT.test(id) || hiddenByOutfit.has(id)) hold.add(id);
+      }
       let released = false;
       for (const id of shownSlots) {
-        if (byDrawable.has(id)) continue;
+        if (hold.has(id)) continue;
         Live2D.setDrawableOpacity(id, null);
         shownSlots.delete(id);
         released = true;
       }
-      for (const id of byDrawable.keys()) {
-        if (!MOD_SLOT.test(id)) continue;
+      for (const id of hold) {
         Live2D.setDrawableOpacity(id, 1);
         shownSlots.add(id);
       }
@@ -945,5 +964,5 @@ window.Mods = (function () {
   }
 
   return { applyAll, refreshTints, describe, buildWardrobeSection, importZip, removeMod,
-    updateExpand, owns: (id) => appliedIds.has(id) };
+    updateExpand, owns: (id) => appliedIds.has(id), holds: (id) => shownSlots.has(id) };
 })();
