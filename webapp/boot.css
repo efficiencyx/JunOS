@@ -302,6 +302,14 @@ html[data-age-gated] #app { visibility: hidden; }
 
 html[data-pre-auth] #app { visibility: hidden; }
 
+/* the settings drawer sits OUTSIDE #app, so neither rule above
+   touches it. before settings.css lands it's 380 lines of raw
+   form controls dumped on the page, tabs and all, and one frame
+   of that is what a hard refresh shows you. settings.css
+   re-declares this selector later with display: flex, so this
+   only covers the gap. */
+.settings-drawer { display: none; }
+
 #ageGate {
   position: fixed;
   inset: 0;
