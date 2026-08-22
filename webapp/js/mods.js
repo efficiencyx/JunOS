@@ -319,34 +319,36 @@ window.Mods = (function () {
   }
 
   const ATTACH_DRAWABLE = /^Attach/i;
-  // per item, sits in its colour menu. on = every drawable of the item takes
-  // the colour of the part it lands on, whatever the mod says. off hands them
-  // all back to the mod's own BypassColorScaler, which is what an accessory
-  // shipping REAL colours (a white bowtie, a tattoo) wants.
-  // never clicked = on for items that touch her arms and legs, off for the
-  // rest. replacement limbs ship neutral grey and set bypass on every one of
-  // them (Seamless Components does it on all 29), so honouring it there left
-  // her with grey arms next to a coloured body.
+  // per item, sits in its colour menu. it OVERRIDES BypassColorScaler both
+  // ways on every drawable the item has: on = they all take the colour of the
+  // part they land on, off = none of them do and the mod's own art colour
+  // stands. it used to mean "on = force follow, off = whatever the mod said",
+  // which read as broken - most mods leave the flag unset (that's the
+  // serialized default and it already means follow her), so unticking the box
+  // changed nothing at all.
+  // never touched = whatever the mod asked for, collapsed to one answer for
+  // the whole item: off if any drawable sets the flag, on otherwise. except
+  // on her arms and legs, where she always wins - replacement limbs ship
+  // neutral grey and set bypass on every one of them (Seamless Components
+  // does it on all 29), so honouring it there left her with grey arms next to
+  // a coloured body.
   function followsHerColors(mod, itemIndex) {
     // stored under "limbs", from when this only covered the Attach*
     // drawables. renaming the key would drop everyone's saved choice.
     const stored = (modState(mod.guid).limbs || {})[itemIndex];
     if (typeof stored === 'boolean') return stored;
-    return itemDrawables(mod, mod.items[itemIndex], false)
-      .some(e => ATTACH_DRAWABLE.test(e.id));
+    const entries = itemDrawables(mod, mod.items[itemIndex]);
+    if (entries.some(e => ATTACH_DRAWABLE.test(e.id))) return true;
+    return !entries.some(e => e.bypassColorScaler);
   }
 
   // parsing an item's texture jsons is pure work on immutable data, and a
   // pass does it for every worn item on top of the one you just clicked.
-  // item -> followColors -> entries. the flag has to be in the key: it
-  // decides each entry's bypassColorScaler, so one list per item handed the
-  // next pass back whatever the box said the FIRST time and ticking it did
-  // nothing.
   const _drawableCache = new WeakMap();
 
-  function itemDrawables(mod, item, followColors = true) {
+  function itemDrawables(mod, item) {
     const cached = _drawableCache.get(item);
-    if (cached && cached.has(followColors)) return cached.get(followColors);
+    if (cached) return cached;
     // empty before the model is up, and that must NOT get cached
     const valid = new Set(Live2D.findDrawables ? Live2D.findDrawables([''], []) : []);
     const out = [];
@@ -374,18 +376,15 @@ window.Mods = (function () {
             // "don't scale me by the character's colour". an accessory sets
             // it and keeps its own colour, body art leaves it off and follows
             // her skin. defaults off because that's the serialized default.
-            // dead while the item's "follow her colors" box is ticked - see
-            // followsHerColors.
-            bypassColorScaler: !followColors
-              && !!(pd.BypassColorScaler ?? pd.bypassColorScaler),
+            // this is the mod's raw answer and it is only the DEFAULT for the
+            // item's "follow her colors" box - applyPass overwrites it per
+            // entry with what the box actually says.
+            bypassColorScaler: !!(pd.BypassColorScaler ?? pd.bypassColorScaler),
           });
         }
       }
     }
-    if (valid.size) {
-      if (cached) cached.set(followColors, out);
-      else _drawableCache.set(item, new Map([[followColors, out]]));
-    }
+    if (valid.size) _drawableCache.set(item, out);
     return out;
   }
 
@@ -613,9 +612,12 @@ window.Mods = (function () {
     for (const mod of mods) {
       mod.items.forEach((item, i) => {
         if (!isEquipped(mod, i)) return;
-        for (const e of itemDrawables(mod, item, followsHerColors(mod, i))) {
+        const bypass = !followsHerColors(mod, i);
+        for (const e of itemDrawables(mod, item)) {
           if (!byDrawable.has(e.id)) byDrawable.set(e.id, []);
-          byDrawable.get(e.id).push({ ...e, url: fileUrl(mod, e.tex), mod, itemIndex: i });
+          byDrawable.get(e.id).push({
+            ...e, bypassColorScaler: bypass, url: fileUrl(mod, e.tex), mod, itemIndex: i,
+          });
         }
       });
     }
