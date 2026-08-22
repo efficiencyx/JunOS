@@ -2233,6 +2233,7 @@ window.Outfit = (function () {
       for (const [grid, expand] of expandableGrids) {
         expand.hidden = !(grid.classList.contains('expanded') || grid.scrollWidth > grid.clientWidth + 1);
       }
+      if (window.Mods && Mods.updateExpand) Mods.updateExpand();
     };
     window.addEventListener('resize', updateExpandButtons);
     wdUpdateExpand = updateExpandButtons;
