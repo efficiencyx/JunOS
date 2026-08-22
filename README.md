@@ -63,15 +63,17 @@ Curious how any of it works? [Under the hood](#under-the-hood).
 
 ## Meet her in five minutes
 
-You don't need to know how any of this works. You copy one line, paste it into a black window, and wait. That line installs whatever your computer is missing, downloads her brain, rebuilds her body from your own copy of the game, and starts her up. ☕
+You don't need to know how any of this works. You copy one line, paste it into a black window, and wait. That line installs whatever your computer is missing, downloads her brain, rebuilds her body from your own copy of the game, and starts her up.
 
-**The black window.** On Windows it's called **PowerShell** - press the Start button, type `powershell`, hit Enter. On Mac it's **Terminal** - press `Cmd + Space`, type `terminal`, hit Enter. On Linux you already know. Paste with `Ctrl + V` (Mac: `Cmd + V`), then press Enter to run.
+**The black window.**
+On Windows Press the Start button, type `Command Prompt`, hit Enter.
+On Linux you already know. Paste with `Ctrl + Shift + V`, then hit Enter.
 
-> ⚠️ **Before you paste anything, anywhere.** The commands below download a script off the internet and run it on your computer. That's a lot of trust to hand a stranger, and the habit of doing it without looking is how people get burned. If you don't understand a command, don't run it - paste it into ChatGPT or Claude and ask what it does. Same goes for the next person's "just run this", not only ours.
+> ⚠️ **Before you paste anything, anywhere.** The commands below download a script off the internet and run it on your computer. That's a lot of trust to hand a stranger, and the habit of doing it without looking is how people get malware. If you don't understand a command, don't run it - paste it into ChatGPT or Claude and ask what it does. Same goes for the next person's "just run this", not only ours.
 >
 > Want to read our script first? Good. 👀 Grab it without running it:
 >
-> - **Windows:** `irm https://raw.githubusercontent.com/efficiencyx/JunOS/main/install.ps1 -OutFile install.ps1` - then open `install.ps1` in Notepad.
+> - **Windows:** `powershell irm https://raw.githubusercontent.com/efficiencyx/JunOS/main/install.ps1 -OutFile install.ps1` - then open `install.ps1` in **Notepad**.
 > - **Linux / macOS:** `curl -fsSL https://raw.githubusercontent.com/efficiencyx/JunOS/main/install.sh | less` - press `q` to quit when you're done reading.
 
 ### 🪟 On Windows
@@ -98,9 +100,9 @@ Needs `git` and Docker. Don't have them? The script installs them for you.
 curl -fsSL https://raw.githubusercontent.com/efficiencyx/JunOS/main/install.sh | bash
 ```
 
-### Then say hi 🎉
+### Doing it manually without the installer
 
-Open your browser at **<https://localhost>** - or **<https://127.0.0.1:8080>** if you're on Windows.
+The step-by-step commands for it, every provider, and the manual compose invocations live in the **[wiki](https://github.com/efficiencyx/JunOS/wiki)**.
 
 ### What it asks you
 
@@ -111,21 +113,25 @@ Exactly one question: **Express** or **Custom**.
 
 Installing on a machine you can't sit in front of? `JUN_YES=1` (on Windows, `$env:JUN_YES='1'`) skips the question entirely.
 
-### Bringing her back tomorrow
+### Then say hi 🎉
 
-`./start.sh` starts her again - that's the one to remember. On Windows it's `.\start.ps1`.
+Open your browser at **<https://localhost>** - or **<https://127.0.0.1:8080>** if you're on Windows.
 
-The same command is also the control panel: `./start.sh stop | status | restart | logs [service]`. Add the name of a piece to see what it's doing, like `./start.sh logs ollama`.
+### Managing Her
+
+Windows: 
+Start her: `powershell .\JunOS\start.ps1`
+Stop her: `powershell .\JunOS\start.ps1 stop`
+
+Linux:
+Start her: `./JunOS/start.sh`
+Stop her: `./JunOS/start.sh stop`
 
 ### Why the first start is slow
 
 The very first boot downloads her brain - whatever model is listed in `OLLAMA_MODELS_TO_PULL`, by default `hf.co/efficiencyx/Jun-LoRA-E2B-GGUF:Q4_K_M`, which is the one that runs fine without a fancy graphics card. It's a big file. Watch it crawl in with `./start.sh logs ollama`.
 
 She's ready once everything reports **healthy**. After that first download it's usually 30-90 seconds. 💤
-
-### Doing it by hand
-
-The step-by-step commands for it, every provider, and the manual compose invocations live in the **[wiki](https://github.com/efficiencyx/JunOS/wiki)**.
 
 
 > ### Her body isn't in this repo
@@ -178,7 +184,7 @@ BIND_ADDR=0.0.0.0
 OMEGA_ALLOW_INSECURE_PUBLIC_HTTP=1
 ```
 
-The launcher works out this machine's address on the network by itself and prints it - `reachable as: 192.168.1.42` on Linux, `on your phone: https://192.168.1.42:8080` on Windows - and that's the URL you type into the phone. On Windows it also adds a firewall rule for the port on **private** networks only (it needs an admin PowerShell to do it, otherwise it prints the one-liner for you to run). One request at a time on Windows, so the phone and the desktop take turns.
+The launcher works out this machine's address on the network by itself and prints it - `reachable as: 192.168.X.X` on Linux, `on your phone: https://192.168.X.X:8080` on Windows - and that's the URL you type into the phone. On Windows it also adds a firewall rule for the port on **private** networks only (it needs an admin PowerShell to do it, otherwise it prints the one-liner for you to run). One request at a time on Windows, so the phone and the desktop take turns.
 
 The second line is not decoration: there's no TLS here, so your password and every word she says cross the wifi in the clear. Fine on your own network, **never** on one you don't control, and never port-forwarded to the internet - that's what the certbot setup above is for. 🔒 DHCP moves addresses around, so if she stops answering after a few days, restart the launcher and read the new one.
 
