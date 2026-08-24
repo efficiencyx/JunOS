@@ -1,5 +1,5 @@
 import { LERP_TAU_MS, app, currentValues, forcedPartOpacity, loops, markDirty, model, paramDefault, paramIndex, paramMax, paramMin, pendingSequences, raw, scheduleSequence, startLoop, stopLoop, targetParams } from '../live2d.js?v=9';
-import { daypart, moodFactors, moodTier } from '../mood-tier.js?v=8';
+import { daypart, moodFactors, moodTier } from '../mood-tier.js?v=9';
 import { cameraTween } from './camera.js?v=9';
 import { clamp } from './geometry.js?v=9';
 import { S } from './state.js?v=9';

@@ -2616,6 +2616,28 @@ window.Outfit = (function () {
     return true;
   }
 
+  // what the change_outfit tool decided, coming back down the stream. the
+  // server already resolved the conflicts against the state we last PUT, so
+  // this is a list of keys with their new value - but it still goes through
+  // queueWardrobe rather than straight into `state`, because that is the one
+  // path that re-authorizes textures and writes the result back. the PUT it
+  // makes is the same state the server just saved, so the two converge.
+  function applyToolChange(change) {
+    if (!change || typeof change !== 'object') return;
+    if (typeof change.look === 'string' && change.look) return wearLook(change.look);
+    const items = change.items && typeof change.items === 'object' ? change.items : {};
+    const keys = Object.keys(items).filter(key => ITEMS.some(it => it.key === key));
+    if (keys.length) {
+      queueWardrobe((draft) => {
+        for (const key of keys) setDraftItem(draft, key, !!items[key]);
+      });
+    }
+    const mods = change.mods && typeof change.mods === 'object' ? change.mods : {};
+    if (window.Mods?.wearByName) {
+      for (const [name, on] of Object.entries(mods)) Mods.wearByName(name, !!on);
+    }
+  }
+
   function snapshot() {
     const out = {};
     for (const it of ITEMS) out[it.key] = state[it.key];
@@ -2665,7 +2687,8 @@ window.Outfit = (function () {
     });
   }
 
-  return { load, applyAll, describe, snapshot, reset, syncFromAction, wearLook, setVariant, openWardrobe,
+  return { load, applyAll, describe, snapshot, reset, syncFromAction, wearLook, applyToolChange,
+    setVariant, openWardrobe,
     makeItemColorButton, refreshColors: applyColors, refreshVisibility, bakeAll,
     hiddenItemDrawables };
 })();
