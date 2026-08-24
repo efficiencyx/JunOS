@@ -317,6 +317,34 @@ wait_for_ollama() {
   echo "warning: omega-ollama did not report healthy; starting karaoke anyway" >&2
 }
 
+# "is she even on the right card" is the first thing anyone asks after an
+# install, and the only thing that actually knows is ollama's own startup
+# log. a box with an iGPU next to a real one is where this bites: we hand
+# down a device list sorted biggest VRAM first, ollama picks from it, and
+# nothing has ever said out loud which one it took. so say it.
+# waits up to 20s for the line, then gives up without a word - the model
+# server pulling an 8 GB fine-tune on first boot is not an error.
+report_gpu_placement() {
+  local i line
+  [ "$gpu" != cpu ] || return 0
+  case ",${profiles}," in *,ollama,*) ;; *) return 0 ;; esac
+  for i in $(seq 1 10); do
+    line="$(docker logs omega-ollama 2>&1 | grep 'inference compute' || true)"
+    [ -n "$line" ] && break
+    sleep 2
+  done
+  [ -n "$line" ] || return 0
+  echo "ollama is running on:"
+  printf '%s\n' "$line" | awk '{
+    lib = ""; nm = ""; tot = "";
+    if (match($0, /library=[^ ]+/))  lib = substr($0, RSTART + 8,  RLENGTH - 8);
+    if (match($0, /name="[^"]*"/))   nm  = substr($0, RSTART + 6,  RLENGTH - 7);
+    if (match($0, /total="[^"]*"/))  tot = substr($0, RSTART + 7,  RLENGTH - 8);
+    if (nm != "") printf "  %s (%s%s)\n", nm, lib, (tot != "" ? ", " tot : "");
+  }'
+  echo "  wrong card? pin it with GPU_DEVICES= in .env, biggest-VRAM-first is only our guess."
+}
+
 # The draft depth in .env is a measurement, and it only describes
 # the card it was measured on. Swap the GPU and the number in
 # there is about hardware that left the building, so hold the
@@ -424,6 +452,7 @@ case "${1:-up}" in
   restart)    shift; docker compose "${files[@]}" down
               set -x; docker compose "${files[@]}" up -d --build "$@"
               { set +x; } 2>/dev/null
+              report_gpu_placement
               mtp_recheck ;;
   status|ps)  shift; set -x; exec docker compose "${files[@]}" ps "$@" ;;
   logs)       shift; set -x; exec docker compose "${files[@]}" logs -f "$@" ;;
@@ -440,5 +469,6 @@ case "${1:-up}" in
               # with compose's own exit code.
               set -x; docker compose "${files[@]}" up -d --build "$@"
               { set +x; } 2>/dev/null
+              report_gpu_placement
               mtp_recheck ;;
 esac

@@ -154,9 +154,13 @@ server {
     # Prevent direct PHP access outside /api.
     location ~ \.php$ { return 404; }
 
-    # The document must stay revalidated, otherwise the ?v= bumps below it
-    # would themselves be cached and never seen.
-    location = /index.html {
+    # Every page must stay revalidated, otherwise the ?v= bumps below it
+    # would themselves be cached and never seen. This matches every .html
+    # file, not just index.html: wardrobe.html and karaoke.html otherwise
+    # carry no Cache-Control and the browser caches them on its own
+    # heuristic, which serves a page whose ?v= values are older than the
+    # ones index.html is loading.
+    location ~* \.html$ {
         add_header Cache-Control "no-cache" always;
         include /etc/nginx/snippets/security-headers.conf;
     }

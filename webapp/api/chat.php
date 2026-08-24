@@ -1123,11 +1123,14 @@ if (!$idle && !$ephemeral) {
 
 ollama_evict_if_partially_offloaded($model);
 
+$messages = fit_messages_to_context($messages, provider_window_tokens($PROVIDER));
+
 $upstreamPayload = provider_chat_payload($PROVIDER, $model, $messages, $reasoning, $think);
 
 if ($toolsOffered) $upstreamPayload['tools'] = tool_catalog($approvedWebSearchQuery);
 
 $sawError = false;
+$mtpFellBack = false;
 $assistantBuffer = '';
 $usedTools = false;
 $stats = null;
@@ -1166,6 +1169,24 @@ for ($round = 0; $round < 3; $round++) {
         if ($result['curl_error'] !== '') {
             log_event(['msg' => 'upstream_curl_error', 'provider' => $PROVIDER, 'err' => $result['curl_error']]);
             sse_send(['error' => 'upstream_unavailable']);
+            $sawError = true;
+        }
+
+        if (!provider_uses_openai_protocol($PROVIDER) && $result['http_status'] >= 400 && !$sawError) {
+            log_event(['msg' => 'upstream_http_error', 'provider' => $PROVIDER,
+                       'model' => $upstreamPayload['model'], 'status' => $result['http_status'],
+                       'body' => mb_substr($result['error_body'], 0, 500)]);
+            $fallback = $mtpFellBack ? '' : ollama_mtp_fallback_model((string)$upstreamPayload['model']);
+            if ($fallback !== '') {
+                $mtpFellBack = true;
+                $model = $fallback;
+                $upstreamPayload['model'] = $fallback;
+                $retryRound = true;
+                continue;
+            }
+            $errObj = json_decode($result['error_body'], true);
+            sse_send(['error' => is_array($errObj) && is_string($errObj['error'] ?? null)
+                ? $errObj['error'] : 'upstream_error']);
             $sawError = true;
         }
 

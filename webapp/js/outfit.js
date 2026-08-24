@@ -549,6 +549,9 @@ window.Outfit = (function () {
     else importWardrobe(await writeWardrobe({ ...state }, { ...variantState }));
     try { localStorage.setItem(STORAGE_KEY, JSON.stringify(state)); } catch (e) {}
     try { localStorage.setItem(VARIANT_KEY, JSON.stringify(variantState)); } catch (e) {}
+    // describe() reads the saved-look names straight off this cache and it
+    // runs on the chat page, where nothing else ever opens the Looks modal.
+    Presets.list().catch(() => {});
   }
 
   function saveVariants() {
@@ -2592,7 +2595,25 @@ window.Outfit = (function () {
       .map(v => `${v.label.toLowerCase()}: ${v.options[variantState[v.key]].name.toLowerCase()}`);
     if (styles.length) s += ` Styles - ${styles.join('; ')}.`;
     if (window.Mods) s += Mods.describe();
+    const looks = Presets.cache.map(p => p.name);
+    if (looks.length) {
+      s += ` Saved looks you can put on whole, by name, with [A:wear_look|name=NAME]:`
+        + ` ${looks.join(', ')}.`;
+    }
     return s;
+  }
+
+  // one named look, applied exactly as it was saved. this is the deterministic
+  // way to dress her: no per-item tags to get wrong, no half-changed outfit
+  // when she emits three of the five she meant to.
+  function wearLook(name) {
+    const want = String(name || '').toLowerCase().trim();
+    if (!want) return false;
+    const hit = Presets.cache.find(p => p.name.toLowerCase() === want)
+      || Presets.cache.find(p => p.name.toLowerCase().includes(want));
+    if (!hit) return false;
+    applyPreset(hit.data);
+    return true;
   }
 
   function snapshot() {
@@ -2601,7 +2622,7 @@ window.Outfit = (function () {
     return out;
   }
 
-  function syncFromAction(name, kwargs) {
+  function syncFromAction(name, kwargs, resolvedByMap = false) {
     if ((name || '').toLowerCase() !== 'outfit') return;
     const item = (kwargs.item || '').toLowerCase();
     const stateOn = (kwargs.state || 'on').toLowerCase() === 'on';
@@ -2632,12 +2653,19 @@ window.Outfit = (function () {
       });
     }
 
+    // nothing vanilla answers to that name, so it's either a modded item or
+    // she made it up
+    if (!keys.length) {
+      if (!resolvedByMap && window.Mods?.wearByName) Mods.wearByName(kwargs.item, stateOn);
+      return;
+    }
+
     return queueWardrobe((items) => {
       for (const key of keys) setDraftItem(items, key, stateOn);
     });
   }
 
-  return { load, applyAll, describe, snapshot, reset, syncFromAction, setVariant, openWardrobe,
+  return { load, applyAll, describe, snapshot, reset, syncFromAction, wearLook, setVariant, openWardrobe,
     makeItemColorButton, refreshColors: applyColors, refreshVisibility, bakeAll,
     hiddenItemDrawables };
 })();

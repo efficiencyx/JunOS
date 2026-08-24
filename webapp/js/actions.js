@@ -39,6 +39,7 @@ window.Actions = (function () {
     self_touch:  ['zone'],
     moan:        ['type'],
     outfit:      ['item', 'state'],
+    wear_look:   ['name'],
     mood:        ['level'],
   };
 
@@ -272,13 +273,21 @@ window.Actions = (function () {
   }
 
   function applyAction({ name, kwargs }) {
+    // whole saved outfit, straight out of the shop's Looks list. no rig
+    // params of its own, Outfit puts the look on and that moves them.
+    if (name === 'wear_look') {
+      if (window.Outfit && Outfit.wearLook) Outfit.wearLook(kwargs.name);
+      return;
+    }
     const node = resolveAction(name, kwargs);
     if (!node) {
-      if (name === 'outfit' && window.Outfit && Outfit.syncFromAction) Outfit.syncFromAction(name, kwargs);
+      if (name === 'outfit' && window.Outfit && Outfit.syncFromAction) Outfit.syncFromAction(name, kwargs, false);
       return;
     }
     applyNode(node, kwargs, 0);
-    if (window.Outfit && Outfit.syncFromAction) Outfit.syncFromAction(name, kwargs);
+    // the map already knew this one, so it is vanilla and Outfit must not go
+    // looking for a mod called "skirt up"
+    if (window.Outfit && Outfit.syncFromAction) Outfit.syncFromAction(name, kwargs, true);
     const k = Object.keys(kwargs).map(x => `${x}=${kwargs[x]}`).join('|');
     log('ok', `▶ ${name}${k ? '|' + k : ''}`);
   }

@@ -1,4 +1,4 @@
-import { app, markDirty, model } from '../live2d.js?v=8';
+import { app, markDirty, model } from '../live2d.js?v=9';
 import { S } from './state.js?v=8';
 
 const CAMERA_STORAGE_KEY = 'l2d.camera';
