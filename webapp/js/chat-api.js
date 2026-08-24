@@ -6,7 +6,7 @@ window.ChatAPI = (function () {
     return r.json();
   }
 
-  function chat({ messages, model, reasoning, think, outfit_context, conversation_id, idle, ephemeral, client_time, audio }, { onToken, onThinking, onDone, onError, onDebug, onStats, onToolStatus, onSilence, onFled }) {
+  function chat({ messages, model, reasoning, think, outfit_context, mod_items, conversation_id, idle, ephemeral, client_time, audio }, { onToken, onThinking, onDone, onError, onDebug, onStats, onToolStatus, onOutfit, onSilence, onFled }) {
     const ctrl = new AbortController();
 
     (async () => {
@@ -14,7 +14,7 @@ window.ChatAPI = (function () {
         const res = await fetch('api/chat.php', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ messages, model, reasoning, think, outfit_context, conversation_id, idle, ephemeral, client_time, audio }),
+          body: JSON.stringify({ messages, model, reasoning, think, outfit_context, mod_items, conversation_id, idle, ephemeral, client_time, audio }),
           signal: ctrl.signal,
         });
         if (!res.ok || !res.body) {
@@ -54,6 +54,7 @@ window.ChatAPI = (function () {
                 if (obj.debug) { onDebug && onDebug(obj.debug); continue; }
                 if (obj.stats) { onStats && onStats(obj.stats); continue; }
                 if (obj.tool_status) { onToolStatus && onToolStatus(obj.tool_status); continue; }
+                if (obj.outfit) { onOutfit && onOutfit(obj.outfit); continue; }
                 if (typeof obj.thinking === 'string') { onThinking && onThinking(obj.thinking); continue; }
                 if (typeof obj.token === 'string') onToken && onToken(obj.token);
               } catch (e) {}

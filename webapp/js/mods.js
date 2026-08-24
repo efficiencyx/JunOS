@@ -798,6 +798,15 @@ window.Mods = (function () {
     return s;
   }
 
+  // every item name, worn or not. goes up with the chat request so the
+  // change_outfit tool can tell a modded item apart from one she invented.
+  // names and nothing else, same boundary describe() has always had.
+  function itemNames() {
+    const out = [];
+    for (const mod of mods) for (const item of mod.items) out.push(item.label);
+    return out.slice(0, DESCRIBE_MAX);
+  }
+
   // she only ever sees LABELS, so this is how a name out of an action tag
   // gets back to an index. exact first, then a loose contains match, because
   // she paraphrases - "bunny ears" for "Bunny Ears Hat". short labels do not
@@ -992,6 +1001,6 @@ window.Mods = (function () {
     applyAll();
   }
 
-  return { applyAll, refreshTints, describe, wearByName, buildWardrobeSection, importZip,
+  return { applyAll, refreshTints, describe, wearByName, itemNames, buildWardrobeSection, importZip,
     removeMod, updateExpand, owns: (id) => appliedIds.has(id), holds: (id) => shownSlots.has(id) };
 })();

@@ -1,5 +1,5 @@
-import { daypart, moodTier } from '../mood-tier.js?v=8';
-import { emptySub, promptChips } from './dom.js?v=8';
+import { daypart, moodTier } from '../mood-tier.js?v=9';
+import { emptySub, promptChips } from './dom.js?v=9';
 
 // the empty state used to say "How can I help you today?", which is a
 // customer support ticket, not Jun. so the line comes off the gauges
