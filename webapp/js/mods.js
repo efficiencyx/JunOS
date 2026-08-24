@@ -777,14 +777,43 @@ window.Mods = (function () {
     applyAll();
   }
 
-  // names of currently worn modded items. the ONLY mod data that ever leaves
-  // the browser, inside the outfit_context system-prompt string.
+  // item names, worn and owned. the ONLY mod data that ever leaves the
+  // browser, inside the outfit_context system-prompt string. the owned half
+  // is there because she can't put on a name she's never been told - before
+  // this she'd either refuse a modded item or "equip" it and nothing
+  // happened, since the tag went out with a word wearByName can't match.
+  // capped at 40 names, some packs ship a hundred and the whole list rides
+  // in the live-context tail of every single turn.
+  const DESCRIBE_MAX = 40;
   function describe() {
-    const worn = [];
+    const worn = [], owned = [];
     for (const mod of mods) {
-      mod.items.forEach((item, i) => { if (isEquipped(mod, i)) worn.push(item.label); });
+      mod.items.forEach((item, i) => (isEquipped(mod, i) ? worn : owned).push(item.label));
     }
-    return worn.length ? ` You are also wearing these special items: ${worn.join(', ')}.` : '';
+    let s = worn.length ? ` You are also wearing these special items: ${worn.join(', ')}.` : '';
+    if (owned.length) {
+      s += ` Special items you own but are not wearing, usable by this exact name in`
+        + ` an [A:outfit|item=NAME|state=on] tag: ${owned.slice(0, DESCRIBE_MAX).join(', ')}.`;
+    }
+    return s;
+  }
+
+  // she only ever sees LABELS, so this is how a name out of an action tag
+  // gets back to an index. exact first, then a loose contains match, because
+  // she paraphrases - "bunny ears" for "Bunny Ears Hat". short labels do not
+  // get the loose pass, "bow" would swallow half a pack.
+  function wearByName(name, on) {
+    const want = String(name || '').toLowerCase().replace(/[_\s]+/g, ' ').trim();
+    if (!want) return false;
+    const entries = [];
+    for (const mod of mods) {
+      mod.items.forEach((item, i) => entries.push({ guid: mod.guid, i, label: item.label.toLowerCase() }));
+    }
+    const hit = entries.find(e => e.label === want)
+      || entries.find(e => e.label.length >= 4 && (e.label.includes(want) || want.includes(e.label)));
+    if (!hit) return false;
+    setEquipped(hit.guid, hit.i, on);
+    return true;
   }
 
   let uiBody = null;
@@ -963,6 +992,6 @@ window.Mods = (function () {
     applyAll();
   }
 
-  return { applyAll, refreshTints, describe, buildWardrobeSection, importZip, removeMod,
-    updateExpand, owns: (id) => appliedIds.has(id), holds: (id) => shownSlots.has(id) };
+  return { applyAll, refreshTints, describe, wearByName, buildWardrobeSection, importZip,
+    removeMod, updateExpand, owns: (id) => appliedIds.has(id), holds: (id) => shownSlots.has(id) };
 })();

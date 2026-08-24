@@ -3,11 +3,11 @@
 // inside js/live2d/ ALL have to match, or the browser builds a second copy
 // of the graph and everything goes sideways.
 
-import { renderIfDirty, resetIdle, setFidgetsEnabled, setMood, setMouthOverride, startIdle, stopIdle, tick } from './live2d/anim.js?v=8';
-import { cameraPreset, cameraStates, captureCameraState, currentCameraMode, fitModel, loadPos, measureStage, rendererResolution, savePos, setCameraPreset, watchStageSize, writeCameraStates } from './live2d/camera.js?v=8';
-import { clamp, drawableAt, drawableThumb, faceAnchor, findDrawables, hitTest, isInteractiveTarget, isOverModel } from './live2d/geometry.js?v=8';
-import { S } from './live2d/state.js?v=8';
-import { getDrawableTint, installVariantCompositor, listDrawables, opacityByPattern, screenByPattern, setDrawableOpacity, setDrawableOrderBelow, setDrawableScreen, setDrawableTexture, setDrawableTextures, setDrawableTint, texturesSettled, tintByPattern } from './live2d/textures.js?v=8';
+import { renderIfDirty, resetIdle, setFidgetsEnabled, setMood, setMouthOverride, startIdle, stopIdle, tick } from './live2d/anim.js?v=9';
+import { cameraPreset, cameraStates, captureCameraState, currentCameraMode, fitModel, loadPos, measureStage, rendererResolution, savePos, setCameraPreset, watchStageSize, writeCameraStates } from './live2d/camera.js?v=9';
+import { clamp, drawableAt, drawableThumb, faceAnchor, findDrawables, hitTest, isInteractiveTarget, isOverModel } from './live2d/geometry.js?v=9';
+import { S } from './live2d/state.js?v=9';
+import { getDrawableTint, installVariantCompositor, listDrawables, opacityByPattern, screenByPattern, setDrawableOpacity, setDrawableOrderBelow, setDrawableScreen, setDrawableTexture, setDrawableTextures, setDrawableTint, texturesSettled, tintByPattern } from './live2d/textures.js?v=9';
 
 const { Live2DModel, Cubism4ModelSettings } = PIXI.live2d;
 

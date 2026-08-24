@@ -1,4 +1,4 @@
-import { app, forcedDrawableOpacity, model, paramMax, paramMin, publicTint, raw } from '../live2d.js?v=8';
+import { app, forcedDrawableOpacity, model, paramMax, paramMin, publicTint, raw } from '../live2d.js?v=9';
 import { S } from './state.js?v=8';
 import { _baseAtlas, _uvRect } from './textures.js?v=8';
 

@@ -65,6 +65,20 @@ function ollama_resolve_chat_model(string $model): string {
     return $model === ollama_base_chat_model() ? $mtp : $model;
 }
 
+// the MTP twin is the base weights with a drafter bolted on. when the runner
+// behind it dies - and it does, speculative decoding plus a long prompt is
+// how - ollama answers 500 for that model and keeps answering 500, so every
+// message in the conversation comes back as an error until somebody
+// reinstalls. the base model is the same fine-tune minus the drafter, so
+// falling back to it costs speed and nothing else. empty when we're not on
+// the twin or there's nothing under it.
+function ollama_mtp_fallback_model(string $model): string {
+    if (ai_provider() !== 'ollama') return '';
+    $mtp = ollama_mtp_model();
+    if ($mtp === '' || $model !== $mtp) return '';
+    return ollama_base_chat_model();
+}
+
 function default_chat_model(): string {
     switch (ai_provider()) {
         case 'openrouter':
@@ -671,6 +685,17 @@ function provider_stream_round(string $provider, array $payload, callable $emit,
 
     if (!$openai) {
         curl_setopt($ch, CURLOPT_WRITEFUNCTION, function ($ch, $chunk) use (&$buf, &$state, $emit) {
+            if ($state['http_status'] === 0) {
+                $state['http_status'] = (int)curl_getinfo($ch, CURLINFO_RESPONSE_CODE);
+            }
+            // a dead runner comes back as one 500 with a json body, and
+            // parsing that as a stream chunk fires the error at the browser
+            // before chat.php gets a say. hold it here so the caller can
+            // decide to retry somewhere else first.
+            if ($state['http_status'] >= 400) {
+                $state['error_body'] .= $chunk;
+                return strlen($chunk);
+            }
             provider_parse_ollama_chunk($chunk, $buf, $state, $emit);
             return strlen($chunk);
         });
@@ -709,6 +734,45 @@ function provider_tool_message(string $provider, string $name, string $callId, s
     ];
     if (!provider_uses_openai_protocol($provider)) $message['name'] = $name;
     return $message;
+}
+
+// how many tokens the window holds, before anything is put in it. zero for
+// openrouter - the model behind it is whatever the user picked and we don't
+// know its window.
+function provider_window_tokens(string $provider): int {
+    if ($provider === 'llamacpp') return 16384;
+    if ($provider === 'openrouter') return 0;
+    return default_num_ctx();
+}
+
+// ollama and llama.cpp both cut a prompt that doesn't fit the window, and the
+// end they cut from is the FRONT - which here is the system frame, every rule
+// she has. so a long enough conversation quietly turns her into a stock model
+// that says it changed clothes and then doesn't. we drop whole old turns
+// ourselves instead, oldest first, and the system frame and the newest turns
+// stay.
+//
+// 4 bytes per token is the rough latin ratio and it's deliberately generous,
+// real gemma tokens run nearer 3.7. reserve is what we leave for the reply
+// plus the tool results that get appended to this same window mid-turn.
+function fit_messages_to_context(array $messages, int $numCtx, int $reserve = 1024): array {
+    $budget = $numCtx - $reserve;
+    if ($numCtx <= 0 || $budget <= 0 || count($messages) <= 5) return $messages;
+    $cost = static function (array $m): int {
+        // +8 for the role and the turn markers the template wraps it in
+        return (int)(strlen((string)($m['content'] ?? '')) / 4) + 8;
+    };
+    $total = 0;
+    foreach ($messages as $m) $total += $cost($m);
+    $floor = count($messages) - 4;
+    $dropped = 0;
+    for ($i = 1; $total > $budget && $i < $floor; $i++) {
+        $total -= $cost($messages[$i]);
+        unset($messages[$i]);
+        $dropped++;
+    }
+    if ($dropped) log_event(['msg' => 'history_trimmed', 'dropped' => $dropped, 'num_ctx' => $numCtx]);
+    return array_values($messages);
 }
 
 function provider_context_size(string $provider, array $payload): int {
