@@ -84,9 +84,9 @@
     "ParamBlush": 0, "ParamHeart": 0, "ParamEyesHappy": 0
   },
   "breath": {
-    "calm":    { "_loop_param": "ParamBodyY", "_amplitude": 0.3, "_period_ms": 3500 },
-    "excited": { "_loop_param": "ParamBodyY", "_amplitude": 0.6, "_period_ms": 1500 },
-    "sleepy":  { "_loop_param": "ParamBodyY", "_amplitude": 0.2, "_period_ms": 5000 }
+    "calm":    { "_loop_param": "ParamBodyY", "_amplitude": 0.3, "_period_ms": 3500, "_scale": ["amount"] },
+    "excited": { "_loop_param": "ParamBodyY", "_amplitude": 0.6, "_period_ms": 1500, "_scale": ["amount"] },
+    "sleepy":  { "_loop_param": "ParamBodyY", "_amplitude": 0.2, "_period_ms": 5000, "_scale": ["amount"] }
   },
 
   "_comment_arm_gesture": "ParamArmLGesture / ParamArmRGesture are discrete: 1=point/rest, 2=open palm/wave, 3=intuition/smart moment.",

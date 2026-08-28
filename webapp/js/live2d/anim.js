@@ -360,9 +360,23 @@ const TAIL_SEGMENTS = Array.from({ length: 9 }, (_, i) => `Param_Angle_Rotation_
 // wiggle on top is what the fidgets and [A:tail_wag] actually buy you now.
 const TAIL_IDLE_AMP = 0.18;
 const TAIL_WAG_AMP = 0.7;
-const TAIL_PERIOD_MS = 2800;
+// one full sway takes this long at rest. a cat at rest is SLOW, and the whole
+// point of this sine is that you shouldn't be able to catch it doing it.
+const TAIL_PERIOD_MS = 5200;
 // how far behind the segment above each one runs, in periods
 const TAIL_LAG = 0.1;
+/* the phase has to ACCUMULATE, and this is not a style thing.
+   it used to be now / period. period moves with the wiggle EVERY FRAME, and
+   now is milliseconds since the page loaded, so a period dropping 2800 -> 1260
+   at now = 100000 slides the phase by 43 whole cycles in one frame. worked out
+   to the tail spinning something like 1.7 cycles per frame while a wiggle loop
+   was running, i.e. always, and it got worse the longer the tab had been open
+   because the error scales with now. it did not read as a wag. it read as a
+   tail having a seizure.
+   integrating dt / period instead means a period change alters the SPEED and
+   nothing else, which is what "faster wag" was supposed to mean all along. */
+let tailPhase = 0;
+let tailLastMs = performance.now();
 
 function driveTail(ps, now) {
   const wiggleIdx = paramIndex.get('ParamTailWiggle');
@@ -370,6 +384,9 @@ function driveTail(ps, now) {
   const amp = TAIL_IDLE_AMP + wiggle * TAIL_WAG_AMP;
   // a wag is faster than a resting sway, not just wider
   const period = TAIL_PERIOD_MS * (1 - 0.55 * wiggle);
+  // cap the step or a backgrounded tab comes back and skips half a sway
+  tailPhase += Math.min(100, Math.max(0, now - tailLastMs)) / period;
+  tailLastMs = now;
   for (let i = 0; i < TAIL_SEGMENTS.length; i++) {
     const id = TAIL_SEGMENTS[i];
     const idx = paramIndex.get(id);
@@ -377,7 +394,7 @@ function driveTail(ps, now) {
     const span = Math.min(Math.abs(paramMax.get(id) ?? 1), Math.abs(paramMin.get(id) ?? 1)) || 1;
     // the tip swings widest, the root barely moves
     const reach = (i + 1) / TAIL_SEGMENTS.length;
-    const phase = now / period - i * TAIL_LAG;
+    const phase = tailPhase - i * TAIL_LAG;
     ps.values[idx] = clamp(id, Math.sin(2 * Math.PI * phase) * amp * reach * span);
   }
 }
