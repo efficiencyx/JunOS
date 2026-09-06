@@ -576,6 +576,26 @@ window.Outfit = (function () {
   const itemDrawableIds = (it) =>
     Live2D.findDrawables ? Live2D.findDrawables(itemPatterns(it), it.colorExcludes) : [];
 
+  const moddedItems = new Set();
+
+  function setModdedDrawables(drawables) {
+    const owned = drawables instanceof Set ? drawables : new Set(drawables || []);
+    const next = new Set();
+    const controlled = new Set();
+    for (const it of ITEMS) {
+      if (!it.param || it.visibilityPatterns) continue;
+      const ids = itemDrawableIds(it);
+      if (!ids.some(id => owned.has(id))) continue;
+      next.add(it.key);
+      for (const id of ids) controlled.add(id);
+    }
+    const changed = new Set([...moddedItems, ...next].filter(key => moddedItems.has(key) !== next.has(key)));
+    moddedItems.clear();
+    for (const key of next) moddedItems.add(key);
+    if (changed.size) applyItems(changed);
+    return controlled;
+  }
+
   // the drawables the wardrobe is currently keeping hidden. a mod paints into
   // vanilla drawables - a modded skirt lands in Skirt, the same box the real
   // one uses - so with the vanilla skirt off the rig has that drawable at
@@ -598,7 +618,7 @@ window.Outfit = (function () {
     for (const it of ITEMS) {
       if (onlyKeys && !onlyKeys.has(it.key)) continue;
       const on = state[it.key] && (!it.requires || state[it.requires]);
-      if (it.param) Live2D.setTarget(it.param, on ? 1 : 0);
+      if (it.param) Live2D.setTarget(it.param, on || moddedItems.has(it.key) ? 1 : 0);
       if (it.visibilityPatterns && Live2D.setDrawableOpacity) {
         const visOn  = it.visOn  !== undefined ? it.visOn  : null;
         const visOff = it.visOff !== undefined ? it.visOff : 0;
@@ -2690,5 +2710,5 @@ window.Outfit = (function () {
   return { load, applyAll, describe, snapshot, reset, syncFromAction, wearLook, applyToolChange,
     setVariant, openWardrobe,
     makeItemColorButton, refreshColors: applyColors, refreshVisibility, bakeAll,
-    hiddenItemDrawables };
+    hiddenItemDrawables, setModdedDrawables };
 })();
