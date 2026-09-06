@@ -627,14 +627,14 @@ window.Mods = (function () {
         }
       });
     }
+    const controllerDrawables = window.Outfit?.setModdedDrawables?.(new Set(byDrawable.keys())) || new Set();
     // mod items land in vanilla drawables as often as in the Moddable* slots,
     // and the rig keeps those at zero opacity while the wardrobe item that
-    // owns them is off. so a modded skirt showed NOTHING until you switched
-    // the vanilla skirt back on, and then the vanilla skirt was under it.
-    // both halves are wrong: we hold the drawable up ourselves, and the bake
-    // replaces the vanilla art rather than layering over it. switch the
-    // vanilla item on and they layer again, which is what you'd want from a
-    // mod that only adds a decal.
+    // owns them is off. parameter-driven garments go back through the rig so
+    // it can choose the current pose meshes; simple slots are held up here.
+    // either way the bake replaces the vanilla art rather than layering over
+    // it. switch the vanilla item on and they layer again, which is what you'd
+    // want from a mod that only adds a decal.
     const hiddenByOutfit = window.Outfit?.hiddenItemDrawables?.() || new Set();
     const map = {};
     // null clears overrides that vanished from this pass
@@ -686,7 +686,7 @@ window.Mods = (function () {
     if (Live2D.setDrawableOpacity) {
       const hold = new Set();
       for (const id of byDrawable.keys()) {
-        if (MOD_SLOT.test(id) || hiddenByOutfit.has(id)) hold.add(id);
+        if (MOD_SLOT.test(id) || (hiddenByOutfit.has(id) && !controllerDrawables.has(id))) hold.add(id);
       }
       let released = false;
       for (const id of shownSlots) {
