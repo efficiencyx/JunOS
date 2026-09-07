@@ -69,20 +69,6 @@ letsencrypt/
 # game archive (never republish - see LICENSE NOTICE)
 factorial-omega-win-64.zip
 
-# dataset dev tooling - training data curation stays on the maintainer's
-# machine, webapp users don't need it
-tools/dataset_*/
-tools/build_dataset_v6.py
-tools/__pycache__/
-
-# v7 is the one exception. it's tracked HERE so the seeds survive a fresh
-# clone, and kept out of the public tree by publish.sh instead - both the
-# rsync exclude and the BAD guard, not this file. the negation has to name
-# the DIRECTORY: git never descends into an excluded dir, so re-including
-# only the contents underneath it does exactly nothing.
-!tools/dataset_v7/
-tools/dataset_v7/out/
-
 # local render rig for clothing shots - opens the shipped webapp assets, not
 # something a user needs
 tools/clothing-render.html
