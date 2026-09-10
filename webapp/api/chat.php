@@ -2,6 +2,7 @@
 
 require_once __DIR__ . '/_lib.php';
 require_once __DIR__ . '/lore.php';
+require_once __DIR__ . '/_wardrobe.php';
 
 const MEMORY_CONTEXT_MAX_CHARS = 2500;
 
@@ -99,6 +100,19 @@ if (isset($body['outfit_context'])) {
         sse_fail('invalid_request');
     }
     $outfitContext = trim($body['outfit_context']);
+}
+
+// mod item names, this turn only. the server has never stored a mod and is
+// not starting now - it needs the list purely so change_outfit can tell "you
+// don't own that" apart from "that's a modded item".
+$modItems = [];
+if (isset($body['mod_items'])) {
+    if (!is_array($body['mod_items'])) sse_fail('invalid_request');
+    foreach (array_slice($body['mod_items'], 0, 60) as $item) {
+        if (!is_string($item)) continue;
+        $item = trim(preg_replace('/[\x00-\x1F\x7F]+/u', ' ', $item));
+        if ($item !== '') $modItems[] = mb_substr($item, 0, 80);
+    }
 }
 
 $clientTime = '';
@@ -224,6 +238,32 @@ function tool_catalog(?string $approvedWebSearchQuery): array {
         [
             'type' => 'function',
             'function' => [
+                'name' => 'change_outfit',
+                'description' => 'Put clothes on or take them off. Calling this is the ONLY thing that actually changes what you are wearing - describing a change in your reply does not move a single thread. It answers with what you have on afterwards, so call it BEFORE you say anything about your clothes.',
+                'parameters' => [
+                    'type' => 'object',
+                    'properties' => [
+                        'put_on' => [
+                            'type' => 'array',
+                            'items' => ['type' => 'string'],
+                            'description' => 'Items to put on. Use the names listed in your current wardrobe state.',
+                        ],
+                        'take_off' => [
+                            'type' => 'array',
+                            'items' => ['type' => 'string'],
+                            'description' => 'Items to take off. "nude" takes off all of your clothes at once.',
+                        ],
+                        'look' => [
+                            'type' => 'string',
+                            'description' => 'Name of a saved look to put on whole, from the saved looks in your wardrobe state. Overrides put_on and take_off.',
+                        ],
+                    ],
+                ],
+            ],
+        ],
+        [
+            'type' => 'function',
+            'function' => [
                 'name' => 'stay_silent',
                 'description' => 'Say nothing at all this turn - ignoring him, too hurt/angry, or the scene calls for silence. Sends no message.',
                 'parameters' => [
@@ -266,6 +306,8 @@ You can call tools when they materially improve the accuracy, relevance, or cont
 
 `memory_write` is an exception to every restriction below. It does not answer anything, so "can you answer without it" never applies. Call it whenever Anon shares something durable - a preference, a personal fact, a plan, a boundary, or anything emotionally significant - including alongside another tool call in the same turn, and including when you are already answering perfectly well without it. Missing a save costs more than saving something redundant.
 
+`change_outfit` is the other exception, for the opposite reason: it is not a lookup, it is the act itself. Nothing you write in your reply changes your clothes. If a single garment is going on or coming off, call it, and call it **before** you describe the change, because its answer tells you what you are actually wearing and whether the item exists at all. Never say you changed, started to change, or are about to change without calling it in the same turn.
+
 ### Tools are not action tags
 
 These two are completely separate channels and must never be mixed:
@@ -273,7 +315,7 @@ These two are completely separate channels and must never be mixed:
 * **Tools** (this section) are function calls. You invoke them through the tool-call channel. Their names never appear as text in your reply.
 * **Action tags** (`[A:...]`, listed in your persona rules) are written inline in your reply and only move the avatar. That list is complete - nothing in this section belongs in it.
 
-So: never write a tool name in brackets - `[A:memory_write|...]`, `[A:search_recent_chats|...]`, `[A:web_search|...]`, `[A:stay_silent]`, `[A:flee]` are not tags and do nothing at all. Never pass an action tag as a tool argument. Never describe calling a tool in your text instead of actually calling it, and never write out a tool call as JSON or code in the message.
+So: never write a tool name in brackets - `[A:memory_write|...]`, `[A:search_recent_chats|...]`, `[A:web_search|...]`, `[A:stay_silent]`, `[A:flee]`, `[A:change_outfit|...]` are not tags and do nothing at all. Never pass an action tag as a tool argument. Never describe calling a tool in your text instead of actually calling it, and never write out a tool call as JSON or code in the message.
 
 ### Tool-call format
 
@@ -523,6 +565,8 @@ If a fact is irrelevant to Anon’s latest message, ignore it.
 The items Jun is currently wearing.
 
 Remain consistent with this state when describing Jun or performing actions.
+
+This block also names every item you own, including your special items, and every saved look. Those names are the only ones that exist. `change_outfit` is what dresses and undresses you; it reads this same state and answers with the result, so trust its answer over this block when the two disagree - this block was written before your call.
 
 Do not emit an `[A:outfit|...]` action to equip or remove an item that is already in the requested state. Only emit an outfit action when an actual wardrobe change occurs or when another instruction explicitly requires the tag.
 
@@ -1123,11 +1167,14 @@ if (!$idle && !$ephemeral) {
 
 ollama_evict_if_partially_offloaded($model);
 
+$messages = fit_messages_to_context($messages, provider_window_tokens($PROVIDER));
+
 $upstreamPayload = provider_chat_payload($PROVIDER, $model, $messages, $reasoning, $think);
 
 if ($toolsOffered) $upstreamPayload['tools'] = tool_catalog($approvedWebSearchQuery);
 
 $sawError = false;
+$mtpFellBack = false;
 $assistantBuffer = '';
 $usedTools = false;
 $stats = null;
@@ -1166,6 +1213,24 @@ for ($round = 0; $round < 3; $round++) {
         if ($result['curl_error'] !== '') {
             log_event(['msg' => 'upstream_curl_error', 'provider' => $PROVIDER, 'err' => $result['curl_error']]);
             sse_send(['error' => 'upstream_unavailable']);
+            $sawError = true;
+        }
+
+        if (!provider_uses_openai_protocol($PROVIDER) && $result['http_status'] >= 400 && !$sawError) {
+            log_event(['msg' => 'upstream_http_error', 'provider' => $PROVIDER,
+                       'model' => $upstreamPayload['model'], 'status' => $result['http_status'],
+                       'body' => mb_substr($result['error_body'], 0, 500)]);
+            $fallback = $mtpFellBack ? '' : ollama_mtp_fallback_model((string)$upstreamPayload['model']);
+            if ($fallback !== '') {
+                $mtpFellBack = true;
+                $model = $fallback;
+                $upstreamPayload['model'] = $fallback;
+                $retryRound = true;
+                continue;
+            }
+            $errObj = json_decode($result['error_body'], true);
+            sse_send(['error' => is_array($errObj) && is_string($errObj['error'] ?? null)
+                ? $errObj['error'] : 'upstream_error']);
             $sawError = true;
         }
 
@@ -1229,6 +1294,13 @@ for ($round = 0; $round < 3; $round++) {
                 $silenceReason = trim((string)($args['reason'] ?? ''));
                 $toolResult = json_encode(['silent' => true]);
             }
+        } elseif ($name === 'change_outfit') {
+            $outfit = wardrobe_tool_change($args, (int)$user['id'], $modItems);
+            // the browser owns what's on screen, so it gets the change as its
+            // own frame rather than having to parse it back out of the tool
+            // result the model reads
+            if ($outfit['apply'] !== null) sse_send(['outfit' => $outfit['apply']]);
+            $toolResult = json_encode($outfit['reply'], JSON_UNESCAPED_UNICODE);
         } elseif ($name === 'flee') {
             if ($fleeDecided) {
                 $toolResult = json_encode(['fled' => false, 'reason' => 'already_decided']);

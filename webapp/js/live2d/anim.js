@@ -1,8 +1,8 @@
-import { LERP_TAU_MS, app, currentValues, forcedPartOpacity, loops, markDirty, model, paramDefault, paramIndex, paramMax, paramMin, pendingSequences, raw, scheduleSequence, startLoop, stopLoop, targetParams } from '../live2d.js?v=8';
-import { daypart, moodFactors, moodTier } from '../mood-tier.js?v=8';
-import { cameraTween } from './camera.js?v=8';
-import { clamp } from './geometry.js?v=8';
-import { S } from './state.js?v=8';
+import { LERP_TAU_MS, app, currentValues, forcedPartOpacity, loops, markDirty, model, paramDefault, paramIndex, paramMax, paramMin, pendingSequences, raw, scheduleSequence, startLoop, stopLoop, targetParams } from '../live2d.js?v=9';
+import { daypart, moodFactors, moodTier } from '../mood-tier.js?v=9';
+import { cameraTween } from './camera.js?v=9';
+import { clamp } from './geometry.js?v=9';
+import { S } from './state.js?v=9';
 
 const ACTIVE_FPS = 60;
 const IDLE_FPS = 30;
@@ -345,6 +345,60 @@ export function stopIdle() {
   if (fidgetTimeout) { clearTimeout(fidgetTimeout); fidgetTimeout = null; }
 }
 
+// the tail. ParamTailWiggle is a physics INPUT, same family as
+// ParamHairPhysicsBaseToShort and ParamPhysicsBoobXL, and the game feeds it
+// through a physics3.json we don't have. so on its own it moves absolutely
+// nothing and every [A:tail_wag] and tail fidget we ever wrote was a no-op -
+// that's why she came with a tail that just hangs there.
+// what the physics WOULD have written is these nine rotation params, root to
+// tip. so we write them ourselves: one sine going down the segments, each one
+// behind the one above it, which is what a tail looks like. it isn't real
+// physics, it's a sine, and at this amplitude nobody can tell.
+const TAIL_SEGMENTS = Array.from({ length: 9 }, (_, i) => `Param_Angle_Rotation_${i + 1}_TailMain`);
+// fractions of each segment's own range, because these are angle params and
+// their range is whatever the rigger picked. 0.18 is a resting sway, the
+// wiggle on top is what the fidgets and [A:tail_wag] actually buy you now.
+const TAIL_IDLE_AMP = 0.18;
+const TAIL_WAG_AMP = 0.7;
+// one full sway takes this long at rest. a cat at rest is SLOW, and the whole
+// point of this sine is that you shouldn't be able to catch it doing it.
+const TAIL_PERIOD_MS = 5200;
+// how far behind the segment above each one runs, in periods
+const TAIL_LAG = 0.1;
+/* the phase has to ACCUMULATE, and this is not a style thing.
+   it used to be now / period. period moves with the wiggle EVERY FRAME, and
+   now is milliseconds since the page loaded, so a period dropping 2800 -> 1260
+   at now = 100000 slides the phase by 43 whole cycles in one frame. worked out
+   to the tail spinning something like 1.7 cycles per frame while a wiggle loop
+   was running, i.e. always, and it got worse the longer the tab had been open
+   because the error scales with now. it did not read as a wag. it read as a
+   tail having a seizure.
+   integrating dt / period instead means a period change alters the SPEED and
+   nothing else, which is what "faster wag" was supposed to mean all along. */
+let tailPhase = 0;
+let tailLastMs = performance.now();
+
+function driveTail(ps, now) {
+  const wiggleIdx = paramIndex.get('ParamTailWiggle');
+  const wiggle = wiggleIdx === undefined ? 0 : Math.min(1, Math.abs(ps.values[wiggleIdx]));
+  const amp = TAIL_IDLE_AMP + wiggle * TAIL_WAG_AMP;
+  // a wag is faster than a resting sway, not just wider
+  const period = TAIL_PERIOD_MS * (1 - 0.55 * wiggle);
+  // cap the step or a backgrounded tab comes back and skips half a sway
+  tailPhase += Math.min(100, Math.max(0, now - tailLastMs)) / period;
+  tailLastMs = now;
+  for (let i = 0; i < TAIL_SEGMENTS.length; i++) {
+    const id = TAIL_SEGMENTS[i];
+    const idx = paramIndex.get(id);
+    if (idx === undefined) continue;
+    const span = Math.min(Math.abs(paramMax.get(id) ?? 1), Math.abs(paramMin.get(id) ?? 1)) || 1;
+    // the tip swings widest, the root barely moves
+    const reach = (i + 1) / TAIL_SEGMENTS.length;
+    const phase = tailPhase - i * TAIL_LAG;
+    ps.values[idx] = clamp(id, Math.sin(2 * Math.PI * phase) * amp * reach * span);
+  }
+}
+
 export function tick() {
   if (!raw) return;
   const now = performance.now();
@@ -387,6 +441,8 @@ export function tick() {
     const idx = paramIndex.get(id);
     if (idx !== undefined) ps.values[idx] = clamp(id, v);
   }
+
+  driveTail(ps, now);
 
   if (forcedPartOpacity.size && raw.parts && raw.parts.opacities) {
     for (const [id, op] of forcedPartOpacity) {

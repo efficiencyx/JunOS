@@ -549,6 +549,9 @@ window.Outfit = (function () {
     else importWardrobe(await writeWardrobe({ ...state }, { ...variantState }));
     try { localStorage.setItem(STORAGE_KEY, JSON.stringify(state)); } catch (e) {}
     try { localStorage.setItem(VARIANT_KEY, JSON.stringify(variantState)); } catch (e) {}
+    // describe() reads the saved-look names straight off this cache and it
+    // runs on the chat page, where nothing else ever opens the Looks modal.
+    Presets.list().catch(() => {});
   }
 
   function saveVariants() {
@@ -573,6 +576,26 @@ window.Outfit = (function () {
   const itemDrawableIds = (it) =>
     Live2D.findDrawables ? Live2D.findDrawables(itemPatterns(it), it.colorExcludes) : [];
 
+  const moddedItems = new Set();
+
+  function setModdedDrawables(drawables) {
+    const owned = drawables instanceof Set ? drawables : new Set(drawables || []);
+    const next = new Set();
+    const controlled = new Set();
+    for (const it of ITEMS) {
+      if (!it.param || it.visibilityPatterns) continue;
+      const ids = itemDrawableIds(it);
+      if (!ids.some(id => owned.has(id))) continue;
+      next.add(it.key);
+      for (const id of ids) controlled.add(id);
+    }
+    const changed = new Set([...moddedItems, ...next].filter(key => moddedItems.has(key) !== next.has(key)));
+    moddedItems.clear();
+    for (const key of next) moddedItems.add(key);
+    if (changed.size) applyItems(changed);
+    return controlled;
+  }
+
   // the drawables the wardrobe is currently keeping hidden. a mod paints into
   // vanilla drawables - a modded skirt lands in Skirt, the same box the real
   // one uses - so with the vanilla skirt off the rig has that drawable at
@@ -595,7 +618,7 @@ window.Outfit = (function () {
     for (const it of ITEMS) {
       if (onlyKeys && !onlyKeys.has(it.key)) continue;
       const on = state[it.key] && (!it.requires || state[it.requires]);
-      if (it.param) Live2D.setTarget(it.param, on ? 1 : 0);
+      if (it.param) Live2D.setTarget(it.param, on || moddedItems.has(it.key) ? 1 : 0);
       if (it.visibilityPatterns && Live2D.setDrawableOpacity) {
         const visOn  = it.visOn  !== undefined ? it.visOn  : null;
         const visOff = it.visOff !== undefined ? it.visOff : 0;
@@ -2592,7 +2615,47 @@ window.Outfit = (function () {
       .map(v => `${v.label.toLowerCase()}: ${v.options[variantState[v.key]].name.toLowerCase()}`);
     if (styles.length) s += ` Styles - ${styles.join('; ')}.`;
     if (window.Mods) s += Mods.describe();
+    const looks = Presets.cache.map(p => p.name);
+    if (looks.length) {
+      s += ` Saved looks you can put on whole, by name, with [A:wear_look|name=NAME]:`
+        + ` ${looks.join(', ')}.`;
+    }
     return s;
+  }
+
+  // one named look, applied exactly as it was saved. this is the deterministic
+  // way to dress her: no per-item tags to get wrong, no half-changed outfit
+  // when she emits three of the five she meant to.
+  function wearLook(name) {
+    const want = String(name || '').toLowerCase().trim();
+    if (!want) return false;
+    const hit = Presets.cache.find(p => p.name.toLowerCase() === want)
+      || Presets.cache.find(p => p.name.toLowerCase().includes(want));
+    if (!hit) return false;
+    applyPreset(hit.data);
+    return true;
+  }
+
+  // what the change_outfit tool decided, coming back down the stream. the
+  // server already resolved the conflicts against the state we last PUT, so
+  // this is a list of keys with their new value - but it still goes through
+  // queueWardrobe rather than straight into `state`, because that is the one
+  // path that re-authorizes textures and writes the result back. the PUT it
+  // makes is the same state the server just saved, so the two converge.
+  function applyToolChange(change) {
+    if (!change || typeof change !== 'object') return;
+    if (typeof change.look === 'string' && change.look) return wearLook(change.look);
+    const items = change.items && typeof change.items === 'object' ? change.items : {};
+    const keys = Object.keys(items).filter(key => ITEMS.some(it => it.key === key));
+    if (keys.length) {
+      queueWardrobe((draft) => {
+        for (const key of keys) setDraftItem(draft, key, !!items[key]);
+      });
+    }
+    const mods = change.mods && typeof change.mods === 'object' ? change.mods : {};
+    if (window.Mods?.wearByName) {
+      for (const [name, on] of Object.entries(mods)) Mods.wearByName(name, !!on);
+    }
   }
 
   function snapshot() {
@@ -2601,7 +2664,7 @@ window.Outfit = (function () {
     return out;
   }
 
-  function syncFromAction(name, kwargs) {
+  function syncFromAction(name, kwargs, resolvedByMap = false) {
     if ((name || '').toLowerCase() !== 'outfit') return;
     const item = (kwargs.item || '').toLowerCase();
     const stateOn = (kwargs.state || 'on').toLowerCase() === 'on';
@@ -2632,12 +2695,20 @@ window.Outfit = (function () {
       });
     }
 
+    // nothing vanilla answers to that name, so it's either a modded item or
+    // she made it up
+    if (!keys.length) {
+      if (!resolvedByMap && window.Mods?.wearByName) Mods.wearByName(kwargs.item, stateOn);
+      return;
+    }
+
     return queueWardrobe((items) => {
       for (const key of keys) setDraftItem(items, key, stateOn);
     });
   }
 
-  return { load, applyAll, describe, snapshot, reset, syncFromAction, setVariant, openWardrobe,
+  return { load, applyAll, describe, snapshot, reset, syncFromAction, wearLook, applyToolChange,
+    setVariant, openWardrobe,
     makeItemColorButton, refreshColors: applyColors, refreshVisibility, bakeAll,
-    hiddenItemDrawables };
+    hiddenItemDrawables, setModdedDrawables };
 })();

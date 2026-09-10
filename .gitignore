@@ -69,12 +69,6 @@ letsencrypt/
 # game archive (never republish - see LICENSE NOTICE)
 factorial-omega-win-64.zip
 
-# dataset dev tooling - training data curation stays on the maintainer's
-# machine, webapp users don't need it
-tools/dataset_*/
-tools/build_dataset_v6.py
-tools/__pycache__/
-
 # local render rig for clothing shots - opens the shipped webapp assets, not
 # something a user needs
 tools/clothing-render.html
@@ -83,11 +77,17 @@ tools/clothing-render.js
 # build output from tools/build-installer-exe.ps1
 dist/
 
-# the promo reel. drives the real rig off the real webapp/assets/, so it only
-# runs on a machine that already has them - nothing to ship to a user, and
-# nothing that would survive a fresh clone anyway.
+
+# the promo reels, landscape and vertical. both drive the real rig off the real
+# webapp/assets/, so they only run on a machine that already has them - nothing
+# to ship to a user, and nothing that would survive a fresh clone anyway. the
+# audio and the mod tiles under them are generated too, out of material that is
+# itself gitignored.
 webapp/showcase.html
 webapp/showcase.css
 webapp/js/showcase.js
 webapp/showcase-audio/
 webapp/showcase-mod/
+webapp/showcase-tiktok.html
+webapp/showcase-tiktok.css
+webapp/js/showcase-tiktok.js

@@ -13,19 +13,19 @@
 // the version number it was written against. change anything in the graph,
 // renumber the Whole graph. no exceptions.
 
-import { showAuthScreen } from './app/auth-screen.js?v=8';
-import { IDLE_AFTER_REPLY_MS, TYPING_POLL_MS, armIdleAfterReply, cancelActiveIdleNudge, cancelAutoReset, cancelIdleNudge, composerPlaceholder, consolidating, fleeActive, reportActivity, resetIdleNudge, scheduleAutoReset, scheduleIdleNudge, setCancelActiveIdleNudge, setConsolidating, showConsolidatingBubble, startFleeLock, syncConsolidationStatus } from './app/consolidation.js?v=8';
-import { chatInput, debugSystemPromptEl, devNoIdleChk, messagesEl, messagesEmpty, missingParamsEl, mobileConversationTitle, modelSelect, narrowSidebarQuery, reasoningSelect, sendBtn, sendButtonIdleMarkup, sendButtonStopMarkup, siteVolumeInput, stageEl, thinkChk } from './app/dom.js?v=8';
-import { announceMobileReply, faceBubble, hideFaceBubble, latestAssistantReply, restartFaceBubbleHide, scheduleFaceBubbleHide, scheduleFaceBubblePosition, setLatestAssistantReply, showFaceBubble } from './app/face-bubble.js?v=8';
-import { appendRaw, logAction, logMissing, logToolStatus, setStageStatus } from './app/logging.js?v=8';
-import { loadMood } from './app/mood.js?v=8';
-import { applyProviderCapabilities, applyRoleGates, setSiteVolume, syncThinkToggle, updateSiteVolumeLabel, wireNameSettings } from './app/settings.js?v=8';
-import { loadConversation, refreshSidebar, setSidebarOpen } from './app/sidebar.js?v=8';
-import { makeNameFilter, makeStreamBuffer } from './app/stream-filters.js?v=8';
-import { escapeHtml, localTimeString, phoneMode } from './app/util.js?v=8';
-import { wireTts } from './app/wire-tts.js?v=8';
-import { wireVoice } from './app/wire-voice.js?v=8';
-import { WELCOME_TIERS, fetchWelcome, playWelcome, previewWelcome } from './app/welcome.js?v=8';
+import { showAuthScreen } from './app/auth-screen.js?v=9';
+import { IDLE_AFTER_REPLY_MS, TYPING_POLL_MS, armIdleAfterReply, cancelActiveIdleNudge, cancelAutoReset, cancelIdleNudge, composerPlaceholder, consolidating, fleeActive, reportActivity, resetIdleNudge, scheduleAutoReset, scheduleIdleNudge, setCancelActiveIdleNudge, setConsolidating, showConsolidatingBubble, startFleeLock, syncConsolidationStatus } from './app/consolidation.js?v=9';
+import { chatInput, debugSystemPromptEl, devNoIdleChk, messagesEl, messagesEmpty, missingParamsEl, mobileConversationTitle, modelSelect, narrowSidebarQuery, reasoningSelect, sendBtn, sendButtonIdleMarkup, sendButtonStopMarkup, siteVolumeInput, stageEl, thinkChk } from './app/dom.js?v=9';
+import { announceMobileReply, faceBubble, hideFaceBubble, latestAssistantReply, restartFaceBubbleHide, scheduleFaceBubbleHide, scheduleFaceBubblePosition, setLatestAssistantReply, showFaceBubble } from './app/face-bubble.js?v=9';
+import { appendRaw, logAction, logMissing, logToolStatus, setStageStatus } from './app/logging.js?v=9';
+import { loadMood } from './app/mood.js?v=9';
+import { applyProviderCapabilities, applyRoleGates, setSiteVolume, syncThinkToggle, updateSiteVolumeLabel, wireNameSettings } from './app/settings.js?v=9';
+import { loadConversation, refreshSidebar, setSidebarOpen } from './app/sidebar.js?v=9';
+import { makeNameFilter, makeStreamBuffer } from './app/stream-filters.js?v=9';
+import { escapeHtml, localTimeString, phoneMode } from './app/util.js?v=9';
+import { wireTts } from './app/wire-tts.js?v=9';
+import { wireVoice } from './app/wire-voice.js?v=9';
+import { WELCOME_TIERS, fetchWelcome, playWelcome, previewWelcome } from './app/welcome.js?v=9';
 
 export const messages = [];
 export let abortFn = null;
@@ -397,7 +397,9 @@ export function runChat({ idle, ephemeral, audio, onAudioUnsupported }) {
   abortFn = ChatAPI.chat(
     { messages: [...messages], model: modelSelect.value,
       reasoning: reasoningSelect.value, think: thinkChk.checked,
-      outfit_context: Outfit.describe(), conversation_id: currentConversationId,
+      outfit_context: Outfit.describe(),
+      mod_items: window.Mods && Mods.itemNames ? Mods.itemNames() : [],
+      conversation_id: currentConversationId,
       idle: !!idle, ephemeral: !!ephemeral, client_time: localTimeString(),
       audio },
     {
@@ -420,6 +422,10 @@ export function runChat({ idle, ephemeral, audio, onAudioUnsupported }) {
         else ui.setStatus('streaming', 'streaming');
         logToolStatus(s);
       },
+      // deliberately NOT behind isCurrent(). the server has already written
+      // this change, so dropping it because the user opened another chat
+      // leaves the model wearing one thing and the database saying another.
+      onOutfit: (change) => Outfit.applyToolChange(change),
       onSilence: () => {
         if (!isCurrent()) return;
         // she decided to say nothing, so whatever leaked into the bubble
@@ -634,8 +640,8 @@ function showBoot() {
   await loadScripts([
     ['vendor/pixi.min.js', 'vendor/live2dcubismcore.min.js',
      'vendor/marked.min.js', 'vendor/purify.min.js?v=3',
-     'js/actions.js?v=3', 'js/outfit.js?v=18', 'js/touch.js?v=3',
-     'js/mods.js?v=11', 'js/tts.js?v=3', 'js/voice.js?v=8',
+     'js/actions.js?v=4', 'js/outfit.js?v=21', 'js/touch.js?v=3',
+     'js/mods.js?v=14', 'js/tts.js?v=3', 'js/voice.js?v=8',
      'js/voicemode.js?v=3', 'js/trip-loader.js?v=3',
      ...(currentUser?.role === 'admin' ? ['js/devhud.js?v=3'] : []),
      'js/wardrobe-open-lines.js?v=3', 'js/wardrobe-reactions.js?v=3',
@@ -644,7 +650,7 @@ function showBoot() {
   ]);
   // live2d.js is an ES module so it can't go in a loadScripts group, and it
   // rips PIXI.live2d apart the moment it runs. that's what the await is for.
-  await import('./live2d.js?v=8');
+  await import('./live2d.js?v=9');
 
   // both of these set up a global that loads late, so they can't run at module
   // scope anymore. they'd just silently do nothing before the load.

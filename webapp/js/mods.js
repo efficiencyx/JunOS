@@ -627,14 +627,14 @@ window.Mods = (function () {
         }
       });
     }
+    const controllerDrawables = window.Outfit?.setModdedDrawables?.(new Set(byDrawable.keys())) || new Set();
     // mod items land in vanilla drawables as often as in the Moddable* slots,
     // and the rig keeps those at zero opacity while the wardrobe item that
-    // owns them is off. so a modded skirt showed NOTHING until you switched
-    // the vanilla skirt back on, and then the vanilla skirt was under it.
-    // both halves are wrong: we hold the drawable up ourselves, and the bake
-    // replaces the vanilla art rather than layering over it. switch the
-    // vanilla item on and they layer again, which is what you'd want from a
-    // mod that only adds a decal.
+    // owns them is off. parameter-driven garments go back through the rig so
+    // it can choose the current pose meshes; simple slots are held up here.
+    // either way the bake replaces the vanilla art rather than layering over
+    // it. switch the vanilla item on and they layer again, which is what you'd
+    // want from a mod that only adds a decal.
     const hiddenByOutfit = window.Outfit?.hiddenItemDrawables?.() || new Set();
     const map = {};
     // null clears overrides that vanished from this pass
@@ -686,7 +686,7 @@ window.Mods = (function () {
     if (Live2D.setDrawableOpacity) {
       const hold = new Set();
       for (const id of byDrawable.keys()) {
-        if (MOD_SLOT.test(id) || hiddenByOutfit.has(id)) hold.add(id);
+        if (MOD_SLOT.test(id) || (hiddenByOutfit.has(id) && !controllerDrawables.has(id))) hold.add(id);
       }
       let released = false;
       for (const id of shownSlots) {
@@ -777,14 +777,52 @@ window.Mods = (function () {
     applyAll();
   }
 
-  // names of currently worn modded items. the ONLY mod data that ever leaves
-  // the browser, inside the outfit_context system-prompt string.
+  // item names, worn and owned. the ONLY mod data that ever leaves the
+  // browser, inside the outfit_context system-prompt string. the owned half
+  // is there because she can't put on a name she's never been told - before
+  // this she'd either refuse a modded item or "equip" it and nothing
+  // happened, since the tag went out with a word wearByName can't match.
+  // capped at 40 names, some packs ship a hundred and the whole list rides
+  // in the live-context tail of every single turn.
+  const DESCRIBE_MAX = 40;
   function describe() {
-    const worn = [];
+    const worn = [], owned = [];
     for (const mod of mods) {
-      mod.items.forEach((item, i) => { if (isEquipped(mod, i)) worn.push(item.label); });
+      mod.items.forEach((item, i) => (isEquipped(mod, i) ? worn : owned).push(item.label));
     }
-    return worn.length ? ` You are also wearing these special items: ${worn.join(', ')}.` : '';
+    let s = worn.length ? ` You are also wearing these special items: ${worn.join(', ')}.` : '';
+    if (owned.length) {
+      s += ` Special items you own but are not wearing, usable by this exact name in`
+        + ` an [A:outfit|item=NAME|state=on] tag: ${owned.slice(0, DESCRIBE_MAX).join(', ')}.`;
+    }
+    return s;
+  }
+
+  // every item name, worn or not. goes up with the chat request so the
+  // change_outfit tool can tell a modded item apart from one she invented.
+  // names and nothing else, same boundary describe() has always had.
+  function itemNames() {
+    const out = [];
+    for (const mod of mods) for (const item of mod.items) out.push(item.label);
+    return out.slice(0, DESCRIBE_MAX);
+  }
+
+  // she only ever sees LABELS, so this is how a name out of an action tag
+  // gets back to an index. exact first, then a loose contains match, because
+  // she paraphrases - "bunny ears" for "Bunny Ears Hat". short labels do not
+  // get the loose pass, "bow" would swallow half a pack.
+  function wearByName(name, on) {
+    const want = String(name || '').toLowerCase().replace(/[_\s]+/g, ' ').trim();
+    if (!want) return false;
+    const entries = [];
+    for (const mod of mods) {
+      mod.items.forEach((item, i) => entries.push({ guid: mod.guid, i, label: item.label.toLowerCase() }));
+    }
+    const hit = entries.find(e => e.label === want)
+      || entries.find(e => e.label.length >= 4 && (e.label.includes(want) || want.includes(e.label)));
+    if (!hit) return false;
+    setEquipped(hit.guid, hit.i, on);
+    return true;
   }
 
   let uiBody = null;
@@ -963,6 +1001,6 @@ window.Mods = (function () {
     applyAll();
   }
 
-  return { applyAll, refreshTints, describe, buildWardrobeSection, importZip, removeMod,
-    updateExpand, owns: (id) => appliedIds.has(id), holds: (id) => shownSlots.has(id) };
+  return { applyAll, refreshTints, describe, wearByName, itemNames, buildWardrobeSection, importZip,
+    removeMod, updateExpand, owns: (id) => appliedIds.has(id), holds: (id) => shownSlots.has(id) };
 })();

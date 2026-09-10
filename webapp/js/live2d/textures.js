@@ -1,5 +1,5 @@
-import { markDirty, model, publicTint, raw } from '../live2d.js?v=8';
-import { findDrawables } from './geometry.js?v=8';
+import { markDirty, model, publicTint, raw } from '../live2d.js?v=9';
+import { findDrawables } from './geometry.js?v=9';
 
 export function tintByPattern(includes, excludes, rgb) {
   if (!publicTint) return [];
