@@ -83,7 +83,7 @@ She runs directly on Windows, no Docker (Docker on Windows is a pain). Pick **on
 With a window and buttons:
 
 ```powershell
-powershell irm https://raw.githubusercontent.com/efficiencyx/JunOS/main/installer-gui.ps1 -OutFile install.ps1; powershell -ExecutionPolicy Bypass -File .\install.ps1
+powershell irm https://raw.githubusercontent.com/efficiencyx/JunOS/main/installer-gui.ps1 -OutFile installer-gui.ps1; powershell -ExecutionPolicy Bypass -File .\install.ps1
 ```
 
 Or plain text scrolling by:
