@@ -66,7 +66,8 @@ The installers fetch code from other people and run it. What is checked:
 | Docker (Linux, only if missing) | `get.docker.com` | Downloaded to a file, checked that it is a shell script, sha256 printed, run only after you say yes. `JUN_DOCKER_SCRIPT_SHA256=<digest>` turns that into a hard check. It is never piped into a root shell. |
 | Portable PHP (Windows) | `windows.php.net` | sha256 from `releases.json`, checked before unpacking. Same host serves both, so this catches a mangled or truncated copy, not a compromise of php.net itself. |
 | CA bundle (Windows) | `curl.se` | sha256 from `cacert.pem.sha256`. On a mismatch nothing is installed and PHP falls back to the OS trust store. |
-| git, Ollama, Python, llama.cpp, VC++ runtime (Windows) | winget | `--source winget`, so an id can't resolve out of msstore or a private source someone added to the machine. Package signatures are winget's job. |
+| git, Python, llama.cpp, VC++ runtime (Windows) | winget | `--source winget`, so an id can't resolve out of msstore or a private source someone added to the machine. Package signatures are winget's job. |
+| Ollama (Windows) | `ollama.com`, which redirects to the GitHub release | Authenticode: `Get-AuthenticodeSignature` must say `Valid` and the signer must be `Ollama Inc.` before `OllamaSetup.exe` runs. Nothing pins a version, you get the latest. |
 | winget itself, if absent | PSGallery | Not automatic. It asks first, or takes `JUN_BOOTSTRAP_WINGET=1`. |
 | Python packages | PyPI, `download.pytorch.org` | Exact versions in `tts/requirements*.txt` and `tools/requirements-recovery.txt`. Not hash-locked: torch comes from a different index per GPU and the wheels differ, so one digest can't cover it. Transitive deps float. |
 | Base images | Docker Hub, ghcr.io | Version tags, not digests. `ollama/ollama:latest` and `ghcr.io/ggml-org/llama.cpp:server` are rolling on purpose, they track hardware support. Tags are mutable: pin them yourself if that matters to you. |
@@ -82,8 +83,8 @@ pin as this gets.
 
 **During install:** github.com, your distro's package mirrors or Homebrew,
 `get.docker.com` (Linux, only when Docker is missing), Docker Hub and ghcr.io
-for base images, `windows.php.net` and `curl.se` (Windows), winget and PSGallery
-(Windows), PyPI and `download.pytorch.org` when voice or karaoke is on.
+for base images, `windows.php.net`, `curl.se` and `ollama.com` (Windows), winget
+and PSGallery (Windows), PyPI and `download.pytorch.org` when voice or karaoke is on.
 
 **On first run:** Hugging Face, for the chat model through Ollama or llama.cpp,
 and again for the voice and STT weights. demucs pulls its `htdemucs` weights

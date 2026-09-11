@@ -82,7 +82,9 @@ function Read-Styled([string]$prompt) {
     catch { return (Read-Host) }
 }
 
-$wingetIds = @{ git = 'Git.Git'; ollama = 'Ollama.Ollama'; python = 'Python.Python.3.11'; llamacpp = 'ggml.llamacpp' }
+# ollama isn't here on purpose, Install-Ollama fetches it straight from
+# ollama.com. see there for why.
+$wingetIds = @{ git = 'Git.Git'; python = 'Python.Python.3.11'; llamacpp = 'ggml.llamacpp' }
 $manualUrls = @{
     git      = 'https://git-scm.com/download/win'
     ollama   = 'https://ollama.com/download/windows'
@@ -641,8 +643,58 @@ function Ensure-Winget {
     return [bool](Get-Command winget -ErrorAction SilentlyContinue)
 }
 
-# install the named tools with winget, after warning that these are the ONLY
-# machine-wide pieces. each keeps its own uninstaller in Settings > Apps.
+# NOT winget for this one. OllamaSetup.exe is a per-user inno installer
+# (PrivilegesRequired=lowest, lands in %LocalAppData%\Programs\Ollama, adds
+# itself to the user PATH) and ollama.com serves the latest one at a fixed
+# url. going through winget bought us nothing but its failure modes: a stale
+# App Installer that can't read the source index anymore, "Failed in
+# attempting to update the source", the 1.5 GB download dying inside winget
+# with a bare exit code. so we fetch the exe ourselves, check that Ollama Inc.
+# signed it, and run it with the same silent switches winget would have used.
+function Install-Ollama {
+    $url = 'https://ollama.com/download/OllamaSetup.exe'
+    $tmp = Join-Path $env:TEMP ('jun-ollama-' + [guid]::NewGuid().ToString('N') + '.exe')
+    try {
+        Note 'downloading OllamaSetup.exe (about 1.5 GB, this takes a while)'
+        # WebClient streams to disk. Invoke-WebRequest on 5.1 holds the whole
+        # body in memory before it writes the file. all 1.5 GB of it.
+        $task = (New-Object Net.WebClient).DownloadFileTaskAsync($url, $tmp)
+        while (-not $task.IsCompleted) {
+            Start-Sleep -Seconds 3
+            if (Test-Path -LiteralPath $tmp) {
+                Write-Host -NoNewline ("`r    ${DIM}  {0:N0} MB${R}" -f ((Get-Item -LiteralPath $tmp).Length / 1MB))
+            }
+        }
+        Write-Host ''
+        if ($task.IsFaulted) { throw ("download failed: {0}" -f $task.Exception.GetBaseException().Message) }
+
+        # authenticode, so the check is on who signed it, not on a digest
+        # served by the same host as the file.
+        $sig = Get-AuthenticodeSignature -LiteralPath $tmp
+        if ($sig.Status -ne 'Valid' -or $sig.SignerCertificate.Subject -notmatch 'CN=Ollama Inc') {
+            throw ("OllamaSetup.exe isn't signed by Ollama Inc. (signature {0}) - not running it." -f $sig.Status)
+        }
+
+        Step 'run OllamaSetup.exe'
+        # WaitForExit, not Start-Process -Wait. -Wait also waits for every
+        # descendant, and the installer ends by launching the ollama tray app
+        # (nowait), which never exits. so -Wait never returns.
+        $p = Start-Process -FilePath $tmp -ArgumentList '/VERYSILENT', '/SUPPRESSMSGBOXES', '/NORESTART' -PassThru
+        $p.WaitForExit()
+        if ($p.ExitCode -ne 0) { throw ("OllamaSetup.exe exited with code {0}" -f $p.ExitCode) }
+        Ok 'ollama installed'
+    } catch {
+        Fail_ $_.Exception.Message
+        Note ("install it yourself from {0} and re-run this installer." -f $manualUrls.ollama)
+        exit 1
+    } finally {
+        Remove-Item -LiteralPath $tmp -Force -ErrorAction SilentlyContinue
+    }
+}
+
+# install the named tools, after warning that these are the ONLY machine-wide
+# pieces. each keeps its own uninstaller in Settings > Apps. anything with a
+# winget id goes through winget, ollama goes through Install-Ollama.
 function Install-MachineTools([string[]]$missing, [switch]$Optional) {
     if ($missing.Count -eq 0) { return }
 
@@ -651,7 +703,7 @@ function Install-MachineTools([string[]]$missing, [switch]$Optional) {
     Note 'they are the only machine-wide installs Jun needs; everything else stays'
     Note 'inside the Jun folder. Each gets a normal uninstaller under Settings > Apps.'
 
-    if (-not (Ensure-Winget)) {
+    if (($missing | Where-Object { $wingetIds[$_] }) -and -not (Ensure-Winget)) {
         Fail_ "winget (App Installer) isn't available - install them manually and re-run:"
         foreach ($c in $missing) { Write-Host ("       ${ACCENT}{0,-7}${R} ${DIM}{1}${R}" -f $c, $manualUrls[$c]) }
         if ($Optional) { return } else { exit 1 }
@@ -663,7 +715,7 @@ function Install-MachineTools([string[]]$missing, [switch]$Optional) {
             Note "re-run in an interactive terminal (or set `$env:JUN_YES='1') to install them."
             if ($Optional) { return } else { exit 1 }
         }
-        $answer = Read-Styled ("     ${OK}▸${R} install {0} now with winget? ${DIM}[y/N]${R} ${ACCENT}›${R} " -f ($missing -join ' and '))
+        $answer = Read-Styled ("     ${OK}▸${R} install {0} now? ${DIM}[y/N]${R} ${ACCENT}›${R} " -f ($missing -join ' and '))
         $proceed = $answer -match '^(y|yes)$'
     }
     if (-not $proceed) {
@@ -673,6 +725,7 @@ function Install-MachineTools([string[]]$missing, [switch]$Optional) {
 
     foreach ($c in $missing) {
         Step ("install {0}" -f $c)
+        if ($c -eq 'ollama') { Install-Ollama; continue }
         # --source winget ON PURPOSE. without it the id can resolve out of
         # msstore or any private source somebody added to this machine, and
         # we'd install whatever answers to that name over there.

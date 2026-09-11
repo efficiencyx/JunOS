@@ -1,8 +1,9 @@
 ﻿#
 # Uninstaller for the bare-metal Windows install. Everything Jun created
-# lives either in this folder or as a normal winget app, so removal is:
+# lives either in this folder or as a normal app under Settings > Apps, so
+# removal is:
 #   1. stop the running processes (start.ps1 stop)
-#   2. optionally uninstall Ollama / llama.cpp (machine-wide, installed via winget)
+#   2. optionally uninstall Ollama / llama.cpp (machine-wide apps)
 #   3. delete this folder (webapp, PHP, TTS venv, model weights, chat data)
 #
 # git (and Python, if voice or asset recovery installed it) are left alone - they're
@@ -46,7 +47,14 @@ if (Get-Command llama-server -ErrorAction SilentlyContinue) {
 if (Get-Command ollama -ErrorAction SilentlyContinue) {
     if (Confirm-Step 'Uninstall Ollama too (machine-wide app)?') {
         Get-Process 'ollama*' -ErrorAction SilentlyContinue | Stop-Process -Force -ErrorAction SilentlyContinue
-        winget uninstall -e --id Ollama.Ollama
+        # install.ps1 runs OllamaSetup.exe directly, so the Inno uninstaller sits next to
+        # ollama.exe. winget is only for an Ollama that came from somewhere else.
+        $unins = Join-Path (Split-Path -Parent (Get-Command ollama).Source) 'unins000.exe'
+        if (Test-Path $unins) {
+            Start-Process $unins -ArgumentList '/VERYSILENT', '/NORESTART' -Wait
+        } else {
+            winget uninstall -e --id Ollama.Ollama
+        }
         # Models pulled by Jun live in runtime\ollama-models (deleted below),
         # but a pre-existing / self-started Ollama keeps its own store:
         $store = Join-Path $env:USERPROFILE '.ollama'
