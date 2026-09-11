@@ -359,7 +359,7 @@ function Start-Tracked([string]$name, [string]$exe, [string[]]$exeArgs) {
 # the install folder so the weights go away with it on uninstall.
 if ($Provider -eq 'ollama') {
 if (-not (Get-Command ollama -ErrorAction SilentlyContinue)) {
-    throw 'ollama is not installed. Run install.ps1 first (it installs Ollama via winget).'
+    throw 'ollama is not installed. Run install.ps1 first (it installs Ollama for you).'
 }
 
 $ownOllama = $false

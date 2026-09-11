@@ -558,7 +558,7 @@ public sealed class InstallerProcessOutput
                         <TextBlock x:Name="ReviewText" TextWrapping="Wrap" FontFamily="Consolas" LineHeight="24" />
                     </Border>
                     <CheckBox x:Name="DependencyAgreement" Margin="0,18,0,0">
-                        <TextBlock Text="Install missing machine-wide prerequisites with winget. These may include Git, Ollama or llama.cpp, Python, and the Microsoft Visual C++ runtime." TextWrapping="Wrap" MaxWidth="690" />
+                        <TextBlock Text="Install missing machine-wide prerequisites. Git, llama.cpp, Python and the Microsoft Visual C++ runtime come through winget, Ollama straight from ollama.com." TextWrapping="Wrap" MaxWidth="690" />
                     </CheckBox>
                     <TextBlock Text="Everything else stays inside the selected Jun folder and can be removed with uninstall.ps1." TextWrapping="Wrap" Foreground="#8D95A5" FontSize="12" Margin="22,8,0,0" />
                 </StackPanel>
