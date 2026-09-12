@@ -69,7 +69,7 @@ switch ($action) {
         $id = (int)($_GET['id'] ?? 0);
         if (!$id) fail(400, 'invalid_request');
         $body = json_decode(read_body(4 * 1024), true);
-        $title = substr(trim((string)($body['title'] ?? '')), 0, 120);
+        $title = mb_substr(trim((string)($body['title'] ?? '')), 0, 120);
         if ($title === '') fail(400, 'invalid_request');
         $stmt = $db->prepare('UPDATE conversations SET title=? WHERE id=? AND user_id=?');
         $stmt->execute([$title, $id, $user['id']]);

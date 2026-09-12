@@ -1149,7 +1149,7 @@ if (!$sawError && $assistantBuffer !== '') {
         // a spoken turn leaves $lastUserMsg empty, so there's nothing
         // to name the chat after. next typed turn handles it.
         if (!$conversationTitle && $lastUserMsg !== '') {
-            $newTitle = generate_chat_title($lastUserMsg) ?: substr($lastUserMsg, 0, 60);
+            $newTitle = generate_chat_title($lastUserMsg) ?: mb_substr($lastUserMsg, 0, 60);
             db()->prepare('UPDATE conversations SET title=? WHERE id=?')
                 ->execute([$newTitle, $convId]);
         }
