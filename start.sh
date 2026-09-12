@@ -156,6 +156,17 @@ case "$bind_addr" in
   *) echo "listening on: $bind_addr - anything that can reach this box can open Jun" ;;
 esac
 
+# install.sh and install.ps1 both write this on first run, but
+# cp .env.example .env && ./start.sh never went through either,
+# and that box has open signup until someone notices. same rule
+# as the installers, only when the line is MISSING. an empty
+# OMEGA_REGISTRATION_KEY= is the operator saying "off".
+if [ -f .env ] && ! grep -qE '^OMEGA_REGISTRATION_KEY=' .env; then
+  reg_key="$(openssl rand -hex 16 2>/dev/null || head -c16 /dev/urandom | od -An -tx1 | tr -d ' \n')"
+  printf 'OMEGA_REGISTRATION_KEY=%s\n' "$reg_key" >> .env
+  echo "registration key: $reg_key (written to .env, the first account skips it, everyone after needs it)"
+fi
+
 # nginx and php both refuse a Host they don't know (444 and 421),
 # so opening the phone at http://192.168.1.42 needs that exact
 # address in the allowlist. the containers can't work it out
