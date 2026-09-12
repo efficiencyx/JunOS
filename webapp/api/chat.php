@@ -56,7 +56,14 @@ if (!is_array($body) || !isset($body['messages']) || !is_array($body['messages']
     sse_fail('invalid_request');
 }
 
-if (count($body['messages']) > 160) sse_fail('invalid_request');
+// the client sends the whole conversation every turn and compact
+// only moves a pointer, it never trims what the browser holds. so
+// past 160 we drop the oldest instead of failing, or the 161st
+// message kills the chat for good. the summary skip below shifts
+// by the same count, the dropped rows are the oldest ones and so
+// are the covered ones.
+$droppedOldest = max(0, count($body['messages']) - 160);
+if ($droppedOldest > 0) $body['messages'] = array_slice($body['messages'], -160);
 foreach ($body['messages'] as $m) {
     if (!is_array($m)) sse_fail('invalid_request');
     if (!in_array($m['role'] ?? '', ['user', 'assistant', 'system'], true)) sse_fail('invalid_request');
@@ -739,7 +746,7 @@ if ($journalContext !== '') $systemContent .= "\n\n" . $journalContext;
 
 $messages = [];
 $messages[] = ['role' => 'system', 'content' => $systemContent];
-$skipCovered = $summaryCoveredCount;
+$skipCovered = max(0, $summaryCoveredCount - $droppedOldest);
 foreach ($body['messages'] as $m) {
     if (!is_array($m) || !isset($m['role'], $m['content'])) continue;
     // the system turn is ours. Never the client's.
