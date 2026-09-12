@@ -1,7 +1,7 @@
-import { chatInput, sendBtn } from './dom.js?v=9';
-import { replayFaceBubbleIntro, scheduleFaceBubbleHide, showFaceBubble } from './face-bubble.js?v=9';
-import { loadMood } from './mood.js?v=9';
-import { escapeHtml } from './util.js?v=9';
+import { chatInput, sendBtn } from './dom.js?v=10';
+import { replayFaceBubbleIntro, scheduleFaceBubbleHide, showFaceBubble } from './face-bubble.js?v=10';
+import { loadMood } from './mood.js?v=10';
+import { escapeHtml } from './util.js?v=10';
 
 const CAMERA_MS = 450;
 const SCENE_TAIL_MS = 1800;
