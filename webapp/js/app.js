@@ -1,17 +1,10 @@
-// the ?v= on an import is part of what the module IS. not a cache key. an
-// identity. load this file from index.html at one version while a child asks
-// for ../app.js at another and the browser builds it TWICE, which turns the
-// import cycles into "can't access lexical declaration before
-// initialization". every URL in this graph carries one number and they all
-// move together: the <script> tag, the imports below, and every ?v= inside
-// js/app/ and js/live2d/. no example numbers in here on purpose, a bulk
-// renumber would rewrite them and kill the exact mismatch we're describing.
-//
-// bumping only the files you edited is NOT enough, and it fails late. js is
-// served immutable for a year, so a module whose *body* changed while its own
-// ?v= stayed put is Never fetched again, and that stale copy keeps asking for
-// the version number it was written against. change anything in the graph,
-// renumber the Whole graph. no exceptions.
+// ?v= is module identity. mismatched imports create two copies
+// and cycles fail with "can't access lexical declaration before
+// initialization". version changes must cover index.html, imports
+// here, js/app/ and js/live2d/. immutable caching lasts a year:
+// unchanged URLs keep stale imports, so renumber the whole graph.
+// avoid example version numbers that a bulk renumber could
+// rewrite.
 
 import { showAuthScreen } from './app/auth-screen.js?v=9';
 import { IDLE_AFTER_REPLY_MS, TYPING_POLL_MS, armIdleAfterReply, cancelActiveIdleNudge, cancelAutoReset, cancelIdleNudge, composerPlaceholder, consolidating, fleeActive, reportActivity, resetIdleNudge, scheduleAutoReset, scheduleIdleNudge, setCancelActiveIdleNudge, setConsolidating, showConsolidatingBubble, startFleeLock, syncConsolidationStatus } from './app/consolidation.js?v=9';
@@ -32,12 +25,8 @@ export let abortFn = null;
 export let currentConversationId = null;
 export let currentUser = null;
 
-// the sidebar changes conversations but the id gets read all over app.js, so
-// ownership stays here and we hand it over instead of exporting something
-// you can write to.
 export function setCurrentConversationId(id) { currentConversationId = id; }
 
-// console handle for replaying the welcome scene, Welcome.preview('panicked')
 window.Welcome = { preview: previewWelcome, tiers: WELCOME_TIERS };
 let chatGeneration = 0;
 
@@ -246,9 +235,10 @@ export function sendFromVoice(text) {
   sendMessage();
 }
 
-// bubble says "spoken", history says <audio>. that string is ALSO what the
-// server stores for the turn, both sides have to match or the next request
-// replays a different conversation than the one on disk.
+// bubble says "spoken", history says <audio>. that string is ALSO
+// what the server stores for the turn, both sides have to match
+// or the next request replays a different conversation than the
+// one on disk.
 export function sendAudioFromVoice(b64, onUnsupported) {
   if (stopActiveStream) stopActiveStream();
   resetIdleNudge();
@@ -381,10 +371,10 @@ export function runChat({ idle, ephemeral, audio, onAudioUnsupported }) {
   if (window.DevHud) DevHud.beginGen();
   appendRaw('--- ' + new Date().toLocaleTimeString() + (idle ? ' (idle nudge)' : '') + ' ---\n');
 
-  // guess the reply's language off Anon's message so the pocket-tts model can
-  // warm up while she writes. this ONLY picks the voice, the guess never
-  // reaches the model, she works out Anon's language from the conversation
-  // herself.
+  // guess the reply's language off Anon's message so the pocket-tts
+  // model can warm up while she writes. this ONLY picks the voice,
+  // the guess never reaches the model, she works out Anon's
+  // language from the conversation herself.
   if (window.TTS && TTS.predictLang) {
     const lastUser = [...messages].reverse().find(m => m.role === 'user');
     const predicted = TTS.predictLang(lastUser ? lastUser.content : '');
@@ -422,9 +412,10 @@ export function runChat({ idle, ephemeral, audio, onAudioUnsupported }) {
         else ui.setStatus('streaming', 'streaming');
         logToolStatus(s);
       },
-      // deliberately NOT behind isCurrent(). the server has already written
-      // this change, so dropping it because the user opened another chat
-      // leaves the model wearing one thing and the database saying another.
+      // deliberately NOT behind isCurrent(). the server has already
+      // written this change, so dropping it because the user opened
+      // another chat leaves the model wearing one thing and the
+      // database saying another.
       onOutfit: (change) => Outfit.applyToolChange(change),
       onSilence: () => {
         if (!isCurrent()) return;
@@ -464,7 +455,8 @@ export function runChat({ idle, ephemeral, audio, onAudioUnsupported }) {
         if (window.TTS) TTS.flush();
         typing.remove();
         if (silenced) {
-          // the flushes above can still push held back bytes. none of it exists
+          // the flushes above can still push held back bytes. none of it
+          // exists
           visible = '';
           shown = '';
           if (window.TTS) TTS.stop();
@@ -633,10 +625,8 @@ function showBoot() {
   currentUser = me.user || null;
   applyRoleGates(currentUser);
 
-  // the avatar stack and the per feature scripts are useless to somebody who
-  // never gets past the auth screen, so we only fetch them NOW.
-  // devhud.js owns the Ctrl+Shift+D handler, so keeping it out of the list is
-  // literally what stops a normal account from opening the HUD at all.
+  // load avatar features after auth. devhud.js owns Ctrl+Shift+D,
+  // so only admins get that script.
   await loadScripts([
     ['vendor/pixi.min.js', 'vendor/live2dcubismcore.min.js',
      'vendor/marked.min.js', 'vendor/purify.min.js?v=3',
@@ -648,12 +638,14 @@ function showBoot() {
      'js/wardrobe-return-lines.js?v=3'],
     ['vendor/cubism4.min.js'],
   ]);
-  // live2d.js is an ES module so it can't go in a loadScripts group, and it
-  // rips PIXI.live2d apart the moment it runs. that's what the await is for.
+  // live2d.js is an ES module so it can't go in a loadScripts
+  // group, and it rips PIXI.live2d apart the moment it runs. that's
+  // what the await is for.
   await import('./live2d.js?v=9');
 
-  // both of these set up a global that loads late, so they can't run at module
-  // scope anymore. they'd just silently do nothing before the load.
+  // both of these set up a global that loads late, so they can't
+  // run at module scope anymore. they'd just silently do nothing
+  // before the load.
   marked.setOptions({ gfm: true, breaks: true });
   ModelTouch.init({
     sendEvent: sendTouchEvent,
@@ -665,8 +657,9 @@ function showBoot() {
     },
   });
 
-  // coming back from the wardrobe, the return cutscene REPLACES the boot
-  // terminal. skipping BootFX.start also makes BootFX.finish a no-op later.
+  // coming back from the wardrobe, the return cutscene REPLACES the
+  // boot terminal. skipping BootFX.start also makes BootFX.finish a
+  // no-op later.
   const fromWardrobe = new URLSearchParams(location.search).get('from') === 'wardrobe';
   if (fromWardrobe) {
     history.replaceState(null, '', location.pathname);
@@ -677,14 +670,14 @@ function showBoot() {
       bo.setAttribute('aria-hidden', 'true');
     }
   } else {
-    // keep the shell hidden until the logged in boot overlay fades out
     showBoot();
   }
 
   const emailEl = document.getElementById('userEmail');
   if (me.user && emailEl) emailEl.textContent = me.user.email || '';
 
-  // fill in the synced preferences BEFORE any module reads its local keys
+  // fill in the synced preferences BEFORE any module reads its
+  // local keys
   if (window.Prefs) await Prefs.pullFromServer();
   if (window.Names) { Names.load(); Names.decorate(); }
   wireNameSettings();
@@ -716,22 +709,20 @@ function showBoot() {
     devNoIdleChk.checked = localStorage.getItem('no_idle_nudges') === '1';
   }
   syncThinkToggle();
-  // lock the composer up front until the first status check answers, but
-  // leave the banner alone. it only ever speaks for something the server
-  // actually said is true, so a normal load never flashes a consolidation
-  // notice and then takes it back.
+  // lock the composer up front until the first status check
+  // answers, but leave the banner alone. it only ever speaks for
+  // something the server actually said is true, so a normal load
+  // never flashes a consolidation notice and then takes it back.
   chatInput.disabled = true;
   sendBtn.disabled = true;
   await syncConsolidationStatus();
-  // the wardrobe is the same session. time in there is NOT an absence.
+  // the wardrobe is the same session. time in there is NOT an
+  // absence.
   if (!fromWardrobe) await fetchWelcome();
   reportActivity(true);
-  // fire this BEFORE Live2D.init, not after. it is one cheap GET that only
-  // needs the session, and the empty state greeting is picked off these
-  // three numbers. left behind the model load it sits on the neutral
-  // baseline for however many seconds the .moc3 takes. she is not neutral.
-  // setMood before init is fine, it just parks the values, and startIdle
-  // calls applyMoodBaseline unconditionally once the model is up.
+  // fetch gauges before Live2D.init so the empty-state greeting
+  // does not wait on .moc3 with neutral values. setMood can park
+  // values before init, and startIdle applies the baseline.
   loadMood();
 
   Actions.setLogger(logAction);
@@ -881,9 +872,8 @@ function showBoot() {
 
   const m = await waitForProvider();
   applyProviderCapabilities(m.provider);
-  // every Jun in the list starts with the same `hf.co/efficiencyx/`, so it
-  // tells you nothing and shoves the part that does off the end of the box.
-  // the value keeps the full name, that's what we send back.
+  // hide the shared hf.co/efficiencyx/ prefix in labels only.
+  // requests still need the full model name.
   const shortName = (n) => n.replace(/^hf\.co\/[^/]+\//, '');
   modelSelect.innerHTML = m.models.map(n =>
     `<option value="${escapeHtml(n)}">${escapeHtml(shortName(n))}</option>`).join('');

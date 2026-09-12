@@ -121,10 +121,11 @@ window.Karaoke = (function () {
     return Math.floor(whole / 60) + ':' + String(whole % 60).padStart(2, '0');
   }
 
-  // a WIDE range on purpose, this is not a countdown. htdemucs (the thing that
-  // splits a song into vocals and backing) is slower than realtime on a CPU
-  // and way faster on a GPU. whisper then reads the vocal track back, and the
-  // very first run also has to download the model. so, you know. varies.
+  // a WIDE range on purpose, this is not a countdown. htdemucs (the
+  // thing that splits a song into vocals and backing) is slower
+  // than realtime on a CPU and way faster on a GPU. whisper then
+  // reads the vocal track back, and the very first run also has to
+  // download the model. so, you know. varies.
   function estimateSeparation(duration, device) {
     if (!duration || (device !== 'cpu' && device !== 'cuda')) return null;
     return device === 'cpu' ? [duration * 1.2, duration * 2.6] : [duration * 0.15, duration * 0.5];
@@ -236,8 +237,9 @@ window.Karaoke = (function () {
     });
   }
 
-  // decodeAudioData DETACHES the ArrayBuffer you hand it, so decode a copy and
-  // keep the original bytes for IndexedDB. AudioBuffer itself isn't storable.
+  // decodeAudioData DETACHES the ArrayBuffer you hand it, so decode
+  // a copy and keep the original bytes for IndexedDB. AudioBuffer
+  // itself isn't storable.
   async function decodeCopy(raw) {
     return audioCtx.decodeAudioData(raw.slice(0));
   }
@@ -612,14 +614,16 @@ window.Karaoke = (function () {
           setStatus('Reading the track…');
           sourceDuration = (await decodeCopy(raw)).duration;
         } catch (e) {
-          // only needed for the estimate, separation reports a bad file properly
+          // only needed for the estimate, separation reports a bad file
+          // properly
         }
         setStatus(h.device === 'cpu'
           ? 'Splitting the vocals off on CPU…'
           : 'Splitting the vocals off…');
         startClock(estimateSeparation(sourceDuration, h.device));
-        // aborting only stops US waiting. the sidecar carries right on to the
-        // end of the job it started, there's no cancel on the demucs side.
+        // aborting only stops US waiting. the sidecar carries right on to
+        // the end of the job it started, there's no cancel on the demucs
+        // side.
         sepAbort = new AbortController();
         setCancellable(() => sepAbort && sepAbort.abort());
         let sepRes;
@@ -865,8 +869,9 @@ window.Karaoke = (function () {
         owner: sec.owner,
         matched: m,
         total: refN.length,
-        // words that normalise to nothing are punctuation-only and were never
-        // scorable, so they render plain instead of as something you missed
+        // words that normalise to nothing are punctuation-only and were
+        // never scorable, so they render plain instead of as something
+        // you missed
         words: sec.words.map((w, wi) => ({
           word: w.word,
           scorable: !!normWord(w.word),
@@ -1033,7 +1038,8 @@ window.Karaoke = (function () {
     guideSource.buffer = track.guideBuf;
     guideSource.connect(guideGain);
     guideGain.connect(masterGain);
-    // tap AFTER the gain, lipsync follows only the vocal you actually hear
+    // tap AFTER the gain, lipsync follows only the vocal you actually
+    // hear
     guideGain.connect(analyser);
 
     startTime = audioCtx.currentTime + START_LEAD;

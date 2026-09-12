@@ -1,11 +1,13 @@
 #requires -Version 5.1
 
 <#
-    Compiles installer-gui.ps1 into JunSetup.exe.
+Compiles installer-gui.ps1 into JunSetup.exe.
 
-    Windows only, and it has to be Windows PowerShell 5.1 or pwsh on Windows:
-    ps2exe emits a .NET Framework WPF binary and there is no cross compile.
-    Run it from a checkout, the exe still needs the repo around it.
+Windows only, and it has to be Windows PowerShell 5.1 or pwsh
+on Windows: ps2exe emits a .NET Framework WPF binary and there
+is no cross compile. Build from a checkout. The EXE embeds
+install.ps1 and runs on its own; that installer clones the
+repo.
 #>
 
 [CmdletBinding()]
@@ -34,9 +36,10 @@ if ($outDir -and -not (Test-Path -LiteralPath $outDir)) {
 $installScript = Join-Path $repoRoot 'install.ps1'
 if (-not (Test-Path -LiteralPath $installScript)) { throw "install.ps1 not found at $installScript" }
 
-# install.ps1 goes in as base64 on one line. it's the only repo file the exe
-# needs - install.ps1 git clones the rest itself - so this is what makes the
-# build standalone. UTF8 without a BOM, powershell -File chokes on a stray one.
+# install.ps1 goes in as base64 on one line. it's the only repo
+# file the exe needs - install.ps1 git clones the rest itself -
+# so this is what makes the build standalone. UTF8 without a BOM,
+# powershell -File chokes on a stray one.
 $payload = [Convert]::ToBase64String([IO.File]::ReadAllBytes($installScript))
 $lines = [IO.File]::ReadAllLines($source)
 $marker = ($lines | Select-String -SimpleMatch 'JUN_EMBEDDED_INSTALLER' | Select-Object -First 1)
@@ -55,10 +58,10 @@ Import-Module ps2exe
 $ps2exeArgs = @{
     inputFile   = $staged
     outputFile  = $OutputPath
-    # noConsole hides the console window, STA is what WPF needs and what keeps
-    # installer-gui.ps1 out of its self-restart branch (which a compiled build
-    # can't take). x64 also matters: it puts powershell.exe under System32
-    # where the installer looks for it.
+    # noConsole hides the console window, STA is what WPF needs and
+    # what keeps installer-gui.ps1 out of its self-restart branch
+    # (which a compiled build can't take). x64 also matters: it puts
+    # powershell.exe under System32 where the installer looks for it.
     noConsole   = $true
     STA         = $true
     x64         = $true
@@ -66,9 +69,9 @@ $ps2exeArgs = @{
     product     = 'Jun OS'
     description = 'Graphical installer for Jun OS'
     version     = $Version
-    # UAC comes from install.ps1 itself where it's actually needed. asking for
-    # admin up front would run the whole GUI elevated and drop every file it
-    # touches under the admin profile.
+    # UAC comes from install.ps1 itself where it's actually needed.
+    # asking for admin up front would run the whole GUI elevated and
+    # drop every file it touches under the admin profile.
     requireAdmin = $false
 }
 if ($IconPath) { $ps2exeArgs.iconFile = (Resolve-Path -LiteralPath $IconPath).Path }

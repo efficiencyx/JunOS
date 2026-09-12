@@ -34,9 +34,10 @@ case 'signup':
 
     $db = db();
 
-    // empty users table = fresh install, so the very first signup skips the key.
-    // otherwise whoever just ran install.sh has to go dig the generated key out
-    // of .env to make their own account, on their own box. no.
+    // empty users table = fresh install, so the very first signup
+    // skips the key. otherwise whoever just ran install.sh has to go
+    // dig the generated key out of .env to make their own account, on
+    // their own box. no.
     $regKey = env_str('OMEGA_REGISTRATION_KEY');
     if ($regKey !== '' && !no_users_yet()) {
         $given = (string)($body['registration_key'] ?? '');

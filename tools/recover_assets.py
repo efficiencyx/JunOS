@@ -1,22 +1,25 @@
 #!/usr/bin/env python3
-"""Recover webapp/assets from the game's Unity data files.
+"""rebuild webapp/assets straight from the game install.
 
-Rebuilds everything the webapp needs straight from the game install
-(no intermediate dumps required):
+no intermediate dumps. these are the files the webapp needs:
 
   interaction_model.moc3        CubismMoc blob in resources.assets
-  interaction_model.model3.json generated (moc + the three atlases)
-  texture_00/01/02.png          base atlases, resolved through each
-                                drawable's CubismRenderer main texture
-  variants/*.png                clothing variants: alpha-composite of the
-                                layer textures listed in each item's
-                                PackedTexturesContainer, plus the four
-                                standalone logo textures
-  variants/game_items.json      every packed item layer and ColorIndex
-  variants/hair/**              separately colorable native hair strands
-  variants/limbs/**             per-drawable crops of the packed variant
-                                textures (Experimental limbs + High-Tech
-                                skin), with mapping.json for outfit.js
+  interaction_model.model3.json generated moc + three atlases
+  texture_00/01/02.png          base atlases, resolved through
+                               each drawable's CubismRenderer
+                               main texture
+  variants/*.png               clothing variants: alpha-composite
+                               of layer textures listed in each
+                               item's PackedTexturesContainer,
+                               plus four standalone logo textures
+  variants/game_items.json     every packed item layer and
+                               ColorIndex
+  variants/hair/**             separately colorable native hair
+                               strands
+  variants/limbs/**            per-drawable crops of packed variant
+                               textures (Experimental limbs +
+                               High-Tech skin), with mapping.json
+                               for outfit.js
 
 Usage:
   python3 tools/recover_assets.py [--game DIR] [--out DIR]
@@ -38,8 +41,9 @@ from PIL import Image
 import UnityPy
 
 REPO = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-# linux and windows builds ship identical unity data. the folder is named
-# factorial-omega-<platform>-64 either way and holds this marker directory.
+# linux and windows builds ship identical unity data. the folder
+# is named factorial-omega-<platform>-64 either way and holds
+# this marker directory.
 GAME_GLOB = "factorial-omega-*-64"
 GAME_MARKER = "My Dystopian Robot Girlfriend_Data"
 DEFAULT_OUT = os.path.join(REPO, "webapp", "assets")
@@ -265,9 +269,8 @@ def parse_container(raw):
     return name, sections
 
 
-# UnityPy 1.10 renamed NamedObject.name to m_Name. android is
-# pinned to 1.7.43, the last build without UnityPyBoost, so this
-# file has to handle BOTH.
+# UnityPy 1.10 renamed NamedObject.name to m_Name. keep both
+# shapes working for older recovery environments.
 def obj_name(obj):
     name = getattr(obj, "m_Name", None)
     return name if name is not None else getattr(obj, "name", None)

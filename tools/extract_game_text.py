@@ -1,17 +1,18 @@
 #!/usr/bin/env python3
-"""Extract the game's authored dialogue for the V5 style corpus.
+"""Jun's game dialogue for the V5 style corpus.
 
-Pulls Jun's canonical lines (and the rest of the scripted dialogue) out of the
-Unity build so the V5 dataset generator can match her real cadence, and so a
-curated subset can seed verbatim training rows. Personal-use only per the NOTICE
-in LICENSE - the outputs are gitignored; do not republish game text.
+her canonical lines and the other scripted dialogue give the V5
+generator her cadence, plus a curated set of verbatim rows.
+Personal-use only per the NOTICE in LICENSE. Outputs are
+gitignored. Do not republish game text.
 
-The game is an IL2CPP build with no MonoBehaviour type metadata in the assets,
-so localization tables (I2 Localization LanguageSourceAsset, one per language
-per category: Story_en, Dialogue_en, ...) can't be read field-by-field. Instead
-we scan the raw serialized bytes for Unity-serialized strings (int32 length +
-UTF-8, 4-byte aligned), which recovers every line in narrative order. Scripted
-speech is speaker-tagged inline ("Bot:" is Jun, "You:" is Anon, plus NPCs).
+the IL2CPP build has no MonoBehaviour type metadata in its
+assets. I2 Localization LanguageSourceAsset tables, one per
+language per category (Story_en, Dialogue_en, ...), can't be
+read field-by-field. so scan the raw bytes for Unity strings:
+int32 length + UTF-8, 4-byte aligned. this keeps narrative
+order. speech has inline speaker tags, "Bot:" for Jun, "You:"
+for Anon, plus NPCs.
 
 Usage:
   python3 tools/extract_game_text.py [--game DIR] [--out DIR]
@@ -33,7 +34,8 @@ REPO = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 GAME_MARKER = "My Dystopian Robot Girlfriend_Data"
 DEFAULT_OUT = os.path.join(REPO, "tools", "dataset_v5")
 
-# the english source assets worth pulling out, the I2 per language tables
+# the english source assets worth pulling out, the I2 per
+# language tables
 LOCALIZATION = ("Story", "Dialogue", "Comments", "Blog", "Emails",
                 "Common", "Other", "Polyglot")
 LOC_RE = re.compile(r"^(%s)_en$" % "|".join(LOCALIZATION))
@@ -164,8 +166,8 @@ def main():
 
     dialogue, jun, speakers = [], [], {}
     for name, lines in tables.items():
-        # one stored string can hold several speaker lines at once, split by a
-        # newline or by the game's own '|' marker
+        # one stored string can hold several speaker lines at once, split
+        # by a newline or by the game's own '|' marker
         idx = 0
         for element in lines:
             for line in re.split(r"[\n|]", element):

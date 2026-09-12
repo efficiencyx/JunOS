@@ -1,26 +1,31 @@
-# Pinned exactly, not ranges. both installers build a venv from this file, and a
-# range means every fresh install gets whatever went up on PyPI that morning.
-# bump these by hand when you have read the release.
-# 3.10 to 3.12 ONLY - kokoro declares Requires-Python <3.13 and pip on a 3.13+
-# interpreter answers "no matching distribution" for it. install.ps1 picks an
-# interpreter in that window on purpose, the docker image is 3.11.
+# Pinned exactly, not ranges. both installers build a venv from
+# this file, and a range means every fresh install gets whatever
+# went up on PyPI that morning. bump these by hand when you have
+# read the release. 3.10 to 3.12 ONLY - kokoro declares
+# Requires-Python <3.13 and pip on a 3.13+ interpreter answers
+# "no matching distribution" for it. install.ps1 picks an
+# interpreter in that window on purpose, the docker image is
+# 3.11.
 kokoro==0.9.4
 pocket-tts==2.1.0
-# STT. Runs on CTranslate2 (not torch) and decodes audio via PyAV, whose wheel
-# bundles ffmpeg - so no ffmpeg package is needed in the image.
+# STT. Runs on CTranslate2 (not torch) and decodes audio via
+# PyAV, whose wheel bundles ffmpeg - so no ffmpeg package is
+# needed in the image.
 faster-whisper==1.2.1
-# CPU wheel here on purpose - see docker/tts.Dockerfile. Karaoke separation is a
-# separate sidecar (requirements-karaoke.txt) precisely so this one never needs a
-# GPU torch competing with the LLM for VRAM.
+# CPU wheel here on purpose - see docker/tts.Dockerfile. Karaoke
+# separation is a separate sidecar (requirements-karaoke.txt)
+# precisely so this one never needs a GPU torch competing with
+# the LLM for VRAM.
 #
-# The one range we keep. torch comes from TORCH_INDEX, and the cu124 and rocm
-# indexes carry different version numbers than PyPI does, so no single pinned
-# number exists on all three. the cap at least stops a new major landing on
-# someone mid-install.
+# The one range we keep. torch comes from TORCH_INDEX, and the
+# cu124 and rocm indexes carry different version numbers than
+# PyPI does, so no single pinned number exists on all three. the
+# cap at least stops a new major landing on someone mid-install.
 torch>=2.5,<2.14
 fastapi==0.141.1
 uvicorn[standard]==0.52.1
 soundfile==0.14.0
-# 2.2.x is the last numpy line with 3.10 wheels, and install.ps1 still accepts a
-# 3.10 interpreter. newer numpy would build from source there, slowly, then fail.
+# 2.2.x is the last numpy line with 3.10 wheels, and install.ps1
+# still accepts a 3.10 interpreter. newer numpy would build from
+# source there, slowly, then fail.
 numpy==2.2.6

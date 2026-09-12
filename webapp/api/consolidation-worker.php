@@ -1,8 +1,8 @@
 <?php
 
-// Sits under the web root so it ships with the rest of the api/ tree, but
-// nginx is happy to send a request here, and one HTTP hit would hold an fpm
-// child in the loop below for Ever.
+// Sits under the web root so it ships with the rest of the api/
+// tree, but nginx is happy to send a request here, and one HTTP
+// hit would hold an fpm child in the loop below for Ever.
 if (PHP_SAPI !== 'cli') { http_response_code(404); exit; }
 
 require_once __DIR__ . '/_consolidation.php';
