@@ -153,6 +153,13 @@ const KV_MIB_PER_TOKEN = 0.2;
 const VRAM_RESERVE_MB = 2048;
 const CTX_TIERS = [6144, 8192, 12288, 16384];
 
+// a thinking turn used to go out with num_predict -1, meaning "no
+// limit". the client picks think, so any logged-in user could
+// park the runner for the full 600s nginx timeout (or burn
+// openrouter credit) on every turn. 16k is more than any real
+// trace needs and still a ceiling.
+const THINK_MAX_TOKENS = 16384;
+
 // what's left on the card once the weights and a bit of working
 // room are gone. zero when we don't know the GPU size, see
 // OMEGA_GPU_VRAM_MB in start.sh.
@@ -279,7 +286,7 @@ function provider_chat_payload(
                 'min_p' => 0.01,
                 'presence_penalty' => 0,
                 'num_ctx' => default_num_ctx(),
-                'num_predict' => $think ? -1 : 128,
+                'num_predict' => $think ? THINK_MAX_TOKENS : 128,
             ],
         ];
         if (!$think) $payload['think'] = false;
@@ -296,7 +303,7 @@ function provider_chat_payload(
         'min_p' => 0.01,
         'stream_options' => ['include_usage' => true],
     ];
-    if (!$think) $payload['max_tokens'] = 128;
+    $payload['max_tokens'] = $think ? THINK_MAX_TOKENS : 128;
     if ($provider === 'openrouter' && $think) {
         $payload['reasoning'] = ['effort' => $reasoning];
     }

@@ -634,9 +634,9 @@ function showBoot() {
      'js/mods.js?v=14', 'js/tts.js?v=3', 'js/voice.js?v=8',
      'js/voicemode.js?v=3', 'js/trip-loader.js?v=3',
      ...(currentUser?.role === 'admin' ? ['js/devhud.js?v=3'] : []),
-     'js/wardrobe-open-lines.js?v=3', 'js/wardrobe-reactions.js?v=3',
+     'js/wardrobe-open-lines.js?v=3', 'js/wardrobe-reactions.js?v=4',
      'js/wardrobe-return-lines.js?v=3'],
-    ['vendor/cubism4.min.js'],
+    ['vendor/cubism4.min.js', 'vendor/pixi-unsafe-eval.min.js'],
   ]);
   // live2d.js is an ES module so it can't go in a loadScripts
   // group, and it rips PIXI.live2d apart the moment it runs. that's

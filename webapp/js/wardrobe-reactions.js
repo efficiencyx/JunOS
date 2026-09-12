@@ -419,9 +419,12 @@ window.WardrobeReactions = (function () {
     document.head.appendChild(style);
     card = document.createElement('div');
     card.className = 'wardrobe-reaction';
-    const botName = (window.Names && Names.getBot && Names.getBot()) || 'JUN';
-    card.innerHTML = `<div class="wardrobe-reaction-name">${botName}</div><div class="wardrobe-reaction-text"></div>`;
-    textEl = card.querySelector('.wardrobe-reaction-text');
+    const nameEl = document.createElement('div');
+    nameEl.className = 'wardrobe-reaction-name';
+    nameEl.textContent = (window.Names && Names.getBot && Names.getBot()) || 'JUN';
+    textEl = document.createElement('div');
+    textEl.className = 'wardrobe-reaction-text';
+    card.append(nameEl, textEl);
     stage.appendChild(card);
   }
 
