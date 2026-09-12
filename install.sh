@@ -9,6 +9,7 @@ DOCKER_SCRIPT_URL="https://get.docker.com"
 DOCKER_SCRIPT=""
 OS="$(uname -s)"
 NEED_SG=0
+NEED_SUDO=0
 DOCKER_JUST_INSTALLED=0
 # 1 only when a person picked Express at the keyboard. JUN_YES on its own can
 # mean an unattended run, and the two want opposite things the moment something
@@ -966,14 +967,36 @@ prepare_docker() {
         $SUDO service docker start 2>/dev/null || true
     fi
     local me; me="$(id -un)"
-    if [ "$(id -u)" -ne 0 ] && ! id -nG "$me" 2>/dev/null | tr ' ' '\n' | grep -qx docker; then
-        $SUDO usermod -aG docker "$me" 2>/dev/null || true
-        command -v sg >/dev/null 2>&1 && NEED_SG=1
+    [ "$(id -u)" -eq 0 ] && return
+    id -nG "$me" 2>/dev/null | tr ' ' '\n' | grep -qx docker && return
+    # the docker socket is root. anyone in the docker group can
+    # mount / into a container and own the box, no password asked,
+    # forever. so it's opt in. express says yes because express
+    # asks nothing, everyone else defaults to sudo.
+    local a=""
+    if [ "$EXPRESS" = 1 ] || [ "${JUN_YES:-}" = "1" ] || [ ! -r /dev/tty ]; then
+        a=y
+    else
+        printf '     %s$%s add %s to the docker group? %s(root without a password, for any process running as you)%s %s[y/N]%s %s→%s ' \
+            "$OK" "$R" "$me" "$WARN" "$R" "$DIM" "$R" "$ACCENT" "$R" > /dev/tty
+        read -r a < /dev/tty || a=""
     fi
+    case "$a" in
+        y|Y|yes|YES)
+            $SUDO usermod -aG docker "$me" 2>/dev/null || true
+            command -v sg >/dev/null 2>&1 && NEED_SG=1
+            ;;
+        *)
+            NEED_SUDO=1
+            note "docker stays behind sudo - run the scripts as: sudo ./start.sh, sudo ./sync-webapp.sh"
+            ;;
+    esac
 }
 
 docker_run() {
-    if [ "$NEED_SG" = 1 ]; then sg docker -c "$*"; else "$@"; fi
+    if [ "$NEED_SG" = 1 ]; then sg docker -c "$*"
+    elif [ "$NEED_SUDO" = 1 ]; then $SUDO "$@"
+    else "$@"; fi
 }
 
 # Rootless Docker (Bazzite/Fedora Atomic, brew) can't bind :80 - RootlessKit
@@ -1281,10 +1304,11 @@ if docker_run docker info >/dev/null 2>&1; then
         "$OK" "$R" "$B" "$OK" "$R" "$DIM" "$R" "$B$ACCENT" "$R"
     printf '   %sstop:%s ./start.sh stop   %s·%s   %sstatus:%s ./start.sh status\n\n' \
         "$DIM" "$R" "$DIM" "$R" "$DIM" "$R"
+    [ "$NEED_SUDO" = 1 ] && note "you're not in the docker group, so prefix those with sudo."
 else
     printf '\n'
     warn_ "Docker isn't reachable yet - finish its setup and run ./start.sh from $DIR."
-    if [ "$OS" != "Darwin" ]; then
+    if [ "$NEED_SG" = 1 ]; then
         note "you may also need to log out and back in for the 'docker' group to apply."
     fi
     exit 0
