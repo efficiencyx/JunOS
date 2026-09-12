@@ -9,7 +9,7 @@ The bare-metal Windows launcher (`start.ps1`) also parses `.env` directly
 skips anything that looks like a Docker-internal hostname:
 
 ```powershell
-# start.ps1 ~line 47-48
+# start.ps1: Docker hostname filter
 if ($v -match '://(ollama|tts|kokoro|nginx|php|llamacpp)\b') { continue }
 ```
 
@@ -42,7 +42,7 @@ conditional requirement is `OPENROUTER_API_KEY`, needed only when
 
 | Variable | Default | Consumed by | What it does |
 |---|---|---|---|
-| `OMEGA_REGISTRATION_KEY` | *(empty)* | `php` service, `webapp/api/auth.php` (`signup`, `signup_info`) | Key every new account, including the first one, must present (`hash_equals`, so a wrong one is a 403 `invalid_registration_key`; a missing one is `registration_closed`). Empty or unset means public signup, and `auth.php?action=signup_info` tells the login page whether to show the field. Both installers generate and print a key. |
+| `OMEGA_REGISTRATION_KEY` | *(empty)* | `php` service, `webapp/api/auth.php` (`signup`, `signup_info`) | Key every new account after the first must present (the first signup on an empty `users` table skips it) (`hash_equals`, so a wrong one is a 403 `invalid_registration_key`; a missing one is `registration_closed`). Empty or unset means public signup, and `auth.php?action=signup_info` tells the login page whether to show the field. Both installers generate and print a key. |
 | `OMEGA_DEV_KEY` | *(empty)* | `php` service, `webapp/api/auth.php` | Optional developer access key. |
 
 Both installers generate a random hex `OMEGA_REGISTRATION_KEY` when the line is

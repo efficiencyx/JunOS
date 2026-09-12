@@ -51,9 +51,7 @@ In short it's an AI wrapper
 - **You can talk back.** Turn on the mic and it's a hands-free conversation.
 - **She has feelings about you.** Affection, trust and tension move with every exchange, and she treats you accordingly.
 - **She remembers.** She'll bring up things you said in other chats, and quietly keeps notes and a journal between sessions.
-- **She knows her lore.** Ask her a
-
-bout the game's world and she stays in canon.
+- **She knows her lore.** Ask her about the game's world and she stays in canon.
 - **She'll sing with you.** 🎤 Load a song, get timed lyrics, and see how close you got.
 - **Dress her up.** A whole wardrobe to toggle and recolor - she'll tell you what she thinks of it.
 - **Bring your mods.** Game-mod zips load straight into the browser.
@@ -255,7 +253,7 @@ Everything is environment variables in `.env` - the full reference is [`docs/con
 
 ### Who gets in 🔑
 
-**The registration key** is written into `.env` by the installer and printed when it finishes. Every account, including the first one, has to type it; that is what stops whoever reaches a fresh install first from claiming it. Don't want the lock? Empty the value (`OMEGA_REGISTRATION_KEY=`) and sign-ups are open to whoever can reach the page. 🔑 Lost it? It's sitting in plain text in your own `.env` - read it back, or change it to whatever you like and restart.
+**The registration key** is written into `.env` by the installer and printed when it finishes. The very first account on a fresh install skips it (it's your box, you just ran the installer); every account after that has to type it, so nobody who reaches the page later can make themselves a login. Don't want the lock? Empty the value (`OMEGA_REGISTRATION_KEY=`) and sign-ups are open to whoever can reach the page. 🔑 Lost it? It's sitting in plain text in your own `.env` - read it back, or change it to whatever you like and restart.
 
 Normal accounts get **Factory Reset** in the same panel - one button that erases every conversation, memory and setting and hands the account back the way it came.
 

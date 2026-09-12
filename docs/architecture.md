@@ -150,7 +150,6 @@ pixi-live2d-display ships motion, expression, breath, eyeBlink, physics, pose, a
 ```js
 model.internalModel.motionManager.destroy();
 model.internalModel.expressionManager.destroy();
-// ... etc.
 ```
 
 This prevents those systems from overwriting `coreModel.parameters.values` between ticks. Without this, a physics subsystem with a 1-frame lag would undo every parameter write from the action system.
@@ -305,7 +304,7 @@ Endpoint-specific caps:
 
 `OMEGA_DEV_KEY` optionally grants developer access. The frontend hides developer controls from other accounts, while every privileged endpoint independently enforces the role server-side.
 
-Signup takes a `registration_key` matched against `OMEGA_REGISTRATION_KEY` for every account, including the first. An empty/absent variable intentionally enables public signup. `auth.php?action=signup_info` is the unauthenticated read that returns `{registration_key_required}` so the signup form can show the field when needed.
+Signup takes a `registration_key` matched against `OMEGA_REGISTRATION_KEY`, except for the very first account on an empty `users` table (`no_users_yet()`), which is the installer's own owner claiming the instance. An empty/absent variable intentionally enables public signup. `auth.php?action=signup_info` is the unauthenticated read that returns `{registration_key_required}` so the signup form can show the field when needed.
 
 `auth.php?action=factory_reset` (POST, 3/hour) is the user's own wipe, and needs no role: inside one transaction it deletes the caller's rows from `messages` (via their conversations), `conversations`, `preferences`, `relationship`, `memory_consolidation`, `user_bans`, `wardrobe_presets` and `welcome_queue`, plus every session but the current one; then `memory_wipe_user()` in `_lib.php` removes the per-user memory directory, the legacy flat files and their `.migrated` copies. The `users` row, its role and the live session survive, so the account comes back empty rather than gone. A failure on either half returns `factory_reset_incomplete`.
 
