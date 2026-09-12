@@ -71,7 +71,9 @@ window.Voice = (function () {
   function setOnTranscript(fn) { onTranscript = fn || (() => {}); }
   // set this and the wav goes straight to the chat model. return
   // false from it and that turn falls back to whisper. one turn at
-  // a time, not a latch
+  // a time, not a latch. the second arg is a retry, call it when
+  // the server refuses the wav after the fact and the same
+  // utterance goes through whisper instead of getting lost
   function setOnAudio(fn) { onAudio = fn || null; }
   function setOnState(fn) { onState = fn || (() => {}); }
   function setOnBargeIn(fn) { onBargeIn = fn || (() => {}); }
@@ -288,11 +290,8 @@ window.Voice = (function () {
     node.port.postMessage({ type: 'stop', discard: false });
   }
 
-  async function onPcm(pcm) {
-    if (!pcm || !pcm.length) { resume(); return; }
-    const wav = encodeWav(pcm, SAMPLE_RATE);
+  async function transcribe(wav) {
     try {
-      if (onAudio && onAudio(base64Of(wav)) !== false) return;
       const res = await fetch(`${STT_URL}?action=stt`, {
         method: 'POST',
         headers: { 'Content-Type': 'audio/wav' },
@@ -308,6 +307,15 @@ window.Voice = (function () {
       if (text) onTranscript(text);
     } catch (e) {
       onLog('warn', `Voice: ${e.message}`);
+    }
+  }
+
+  async function onPcm(pcm) {
+    if (!pcm || !pcm.length) { resume(); return; }
+    const wav = encodeWav(pcm, SAMPLE_RATE);
+    try {
+      if (onAudio && onAudio(base64Of(wav), () => transcribe(wav)) !== false) return;
+      await transcribe(wav);
     } finally {
       // ALWAYS. every path. on the whisper path we go deaf for the
       // ~500ms of the STT fetch on purpose, you just stopped talking

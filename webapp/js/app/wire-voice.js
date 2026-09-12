@@ -1,8 +1,8 @@
-import { VOICE_STATE_LABELS, renderVoiceDraft, sendAudioFromVoice, sendFromVoice, stopActiveStream, sttAvailable } from '../app.js?v=9';
-import { voiceBargeChk, voiceChk, voiceSilenceInput, voiceState } from './dom.js?v=9';
-import { hideFaceBubble } from './face-bubble.js?v=9';
-import { logAction } from './logging.js?v=9';
-import { syncVoiceDeps, updateVoiceSilenceLabel } from './settings.js?v=9';
+import { VOICE_STATE_LABELS, renderVoiceDraft, sendAudioFromVoice, sendFromVoice, stopActiveStream, sttAvailable } from '../app.js?v=10';
+import { voiceBargeChk, voiceChk, voiceSilenceInput, voiceState } from './dom.js?v=10';
+import { hideFaceBubble } from './face-bubble.js?v=10';
+import { logAction } from './logging.js?v=10';
+import { syncVoiceDeps, updateVoiceSilenceLabel } from './settings.js?v=10';
 
 export async function wireVoice() {
   if (window.Voice && voiceChk) {
@@ -11,11 +11,12 @@ export async function wireVoice() {
 
     // she hears the wav herself when the backend can take it. the FIRST
     // refusal turns this off for the rest of the page, we never ask the
-    // server up front.
+    // server up front. the refused utterance goes through whisper
+    // right away, not the next one
     let audioTurns = true;
-    Voice.setOnAudio((b64) => {
+    Voice.setOnAudio((b64, transcribe) => {
       if (!audioTurns) return false;
-      sendAudioFromVoice(b64, () => { audioTurns = false; });
+      sendAudioFromVoice(b64, () => { audioTurns = false; transcribe(); });
       return true;
     });
 
