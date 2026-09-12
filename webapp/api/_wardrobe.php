@@ -33,10 +33,11 @@ const WARDROBE_COLOR_DEFAULTS = [
     'wizard_hat' => null, 'bow' => null, 'choker' => null, 'hair_clip' => null,
 ];
 
-// pairs that cannot both be on. this is the same list ITEMS[].excludes holds
-// in outfit.js and the two have to stay in step: a state the browser thinks is
-// fine and this file rejects means every wardrobe PUT after it 400s and
-// nothing the user does in the shop persists again.
+// pairs that cannot both be on. this is the same list
+// ITEMS[].excludes holds in outfit.js and the two have to stay in
+// step: a state the browser thinks is fine and this file rejects
+// means every wardrobe PUT after it 400s and nothing the user
+// does in the shop persists again.
 const WARDROBE_CONFLICTS = [
     ['dress', 'shirt'], ['dress', 'hoodie'], ['dress', 'skirt'], ['dress', 'pants'], ['dress', 'dress1'],
     ['dress1', 'shirt'], ['dress1', 'hoodie'], ['dress1', 'skirt'], ['dress1', 'pants'],
@@ -44,9 +45,9 @@ const WARDROBE_CONFLICTS = [
     ['headband', 'wizard_hat'], ['cat_ears', 'pointy_ears'],
 ];
 
-// what a person calls the thing -> the keys the state uses. mirrors the alias
-// table in outfit.js syncFromAction, because she reaches for the same words
-// whichever channel she uses.
+// what a person calls the thing -> the keys the state uses.
+// mirrors the alias table in outfit.js syncFromAction, because
+// she reaches for the same words whichever channel she uses.
 const WARDROBE_ALIASES = [
     'shoes' => ['shoe_l', 'shoe_r'],
     'shoe' => ['shoe_l', 'shoe_r'],
@@ -76,8 +77,8 @@ const WARDROBE_ALIASES = [
     'hair' => ['hair_h0'],
 ];
 
-// only the keys that don't read as English on their own. everything else gets
-// its underscores swapped for spaces.
+// only the keys that don't read as English on their own.
+// everything else gets its underscores swapped for spaces.
 const WARDROBE_LABELS = [
     'shoe_l' => 'left shoe', 'shoe_r' => 'right shoe',
     'bikini_top' => 'bikini top', 'bikini_bot' => 'bikini bottom',
@@ -101,8 +102,9 @@ function wardrobe_excludes(string $key): array {
     return $out;
 }
 
-// one name she asked for -> item keys, empty when nothing vanilla answers to
-// it (which is the caller's cue to go looking through the mod list)
+// one name she asked for -> item keys, empty when nothing vanilla
+// answers to it (which is the caller's cue to go looking through
+// the mod list)
 function wardrobe_resolve_item(string $name): array {
     $key = strtolower(trim($name));
     $key = preg_replace('/[^a-z0-9]+/', '_', $key);
@@ -110,27 +112,29 @@ function wardrobe_resolve_item(string $name): array {
     if ($key === '') return [];
     if (isset(WARDROBE_ALIASES[$key])) return WARDROBE_ALIASES[$key];
     if (array_key_exists($key, WARDROBE_ITEM_DEFAULTS)) return [$key];
-    // the tool hands her the LABELS as the list of what exists, so every label
-    // has to come back. without this she reads "bell choker" off valid_items,
-    // asks for it by that name and is told she doesn't own one.
+    // the tool hands her the LABELS as the list of what exists, so
+    // every label has to come back. without this she reads "bell
+    // choker" off valid_items, asks for it by that name and is told
+    // she doesn't own one.
     foreach (WARDROBE_LABELS as $itemKey => $label) {
         if (str_replace(' ', '_', $label) === $key) return [$itemKey];
     }
     return [];
 }
 
-// every clothing key, which is everything except the body and hair sections.
-// "nude" means these and only these - taking her ears and tail off is not
-// getting undressed.
+// every clothing key, which is everything except the body and
+// hair sections. "nude" means these and only these - taking her
+// ears and tail off is not getting undressed.
 const WARDROBE_CLOTHING = [
     'shirt', 'hoodie', 'dress', 'dress1', 'skirt', 'pants', 'bra', 'panties',
     'bikini_top', 'bikini_bot', 'shoe_l', 'shoe_r', 'stockings', 'headband',
     'wizard_hat', 'bow', 'choker',
 ];
 
-// turn one item on or off in a state, resolving the conflicts the way the
-// browser does: putting something on takes off whatever it can't share the
-// body with. returns the keys that actually moved.
+// turn one item on or off in a state, resolving the conflicts the
+// way the browser does: putting something on takes off whatever
+// it can't share the body with. returns the keys that actually
+// moved.
 function wardrobe_set_item(array &$state, string $key, bool $on): array {
     $moved = [];
     if ($state['items'][$key] !== $on) {
@@ -146,9 +150,10 @@ function wardrobe_set_item(array &$state, string $key, bool $on): array {
     return $moved;
 }
 
-// an asset stays authorized only while the state it belongs to is still on.
-// without this pass, taking the side-swept hair off leaves its texture in the
-// list and the next PUT from the browser is rejected as invalid_wardrobe.
+// an asset stays authorized only while the state it belongs to is
+// still on. without this pass, taking the side-swept hair off
+// leaves its texture in the list and the next PUT from the
+// browser is rejected as invalid_wardrobe.
 function wardrobe_prune_assets(array $state): array {
     $state['assets'] = array_values(array_filter(
         $state['assets'],
@@ -296,10 +301,11 @@ function wardrobe_presets(int $userId): array {
     return $out;
 }
 
-// the stored state, with every key present and nothing outside the schema.
-// deliberately NOT wardrobe_canonical_state(): that one calls fail(), which
-// prints a json error and exits, and doing that halfway through an SSE stream
-// leaves the browser holding a half-written reply.
+// the stored state, with every key present and nothing outside
+// the schema. deliberately NOT wardrobe_canonical_state(): that
+// one calls fail(), which prints a json error and exits, and
+// doing that halfway through an SSE stream leaves the browser
+// holding a half-written reply.
 function wardrobe_tool_state(int $userId): array {
     $state = wardrobe_state($userId);
     if (!is_array($state)) $state = wardrobe_default_state();
@@ -329,9 +335,10 @@ function wardrobe_tool_names($value): array {
     return $out;
 }
 
-// mods never reach the server as anything but names the browser hands up for
-// this one turn, so matching them is string work. same rules as
-// Mods.wearByName so both channels accept the same words.
+// mods never reach the server as anything but names the browser
+// hands up for this one turn, so matching them is string work.
+// same rules as Mods.wearByName so both channels accept the same
+// words.
 function wardrobe_match_mod(string $name, array $modItems): ?string {
     $want = strtolower(trim($name));
     foreach ($modItems as $item) {
@@ -346,15 +353,16 @@ function wardrobe_match_mod(string $name, array $modItems): ?string {
 
 const WARDROBE_STRIP_WORDS = ['nude', 'naked', 'everything', 'all', 'clothes', 'all clothes', 'undress'];
 
-// the change_outfit tool. every answer here is computed against the state the
-// browser last wrote, so what she reads back is her actual clothes and not
-// what she hoped happened. that's the whole point of it being a tool: an
-// [A:outfit] tag goes out and NOTHING comes back, so she has no way to know
-// she asked for an item that doesn't exist, or one she already had on, and
-// she reports the change she intended either way.
+// the change_outfit tool. every answer here is computed against
+// the state the browser last wrote, so what she reads back is her
+// actual clothes and not what she hoped happened. that's the
+// whole point of it being a tool: an [A:outfit] tag goes out and
+// NOTHING comes back, so she has no way to know she asked for an
+// item that doesn't exist, or one she already had on, and she
+// reports the change she intended either way.
 //
-// returns ['reply' => what the model reads, 'apply' => what the browser does].
-// apply is null when nothing moved.
+// returns ['reply' => what the model reads, 'apply' => what the
+// browser does]. apply is null when nothing moved.
 function wardrobe_tool_change(array $args, int $userId, array $modItems): array {
     $state = wardrobe_tool_state($userId);
     $look = is_string($args['look'] ?? null) ? trim($args['look']) : '';

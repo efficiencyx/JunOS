@@ -1,9 +1,11 @@
-// the gauge bucketing, shared by her face and by the chat copy. it sits out
-// here so both read the SAME tier off the same numbers. two copies of this
-// arithmetic and the greeting cheerfully tells you she's fine while she's
-// sitting there terrified.
+// the gauge bucketing, shared by her face and by the chat copy.
+// it sits out here so both read the SAME tier off the same
+// numbers. two copies of this arithmetic and the greeting
+// cheerfully tells you she's fine while she's sitting there
+// terrified.
 
-// warmth: -1 (cold) .. 1 (adoring); fear: 0 .. 1 once tension passes 45
+// warmth: -1 (cold) .. 1 (adoring); fear: 0 .. 1 once tension
+// passes 45
 export function moodFactors(mood) {
   const warmth = ((mood.affection + mood.trust) / 2 - 50) / 50;
   const fear = Math.max(0, (mood.tension - 45) / 55);

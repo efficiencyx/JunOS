@@ -281,7 +281,6 @@ html, body {
   100% { transform: scale(2.4);  opacity: 0; }
 }
 
-/* boot, age gate and auth panels all use this animation. */
 @keyframes bootCardIn {
   from { opacity: 0; transform: translateY(12px) scale(.98); }
   to   { opacity: 1; transform: none; }

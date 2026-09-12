@@ -1,8 +1,7 @@
-// mod archives get read and drawn in the browser. we Never run the Lua.
+// mod archives get read and drawn in the browser. we Never run
+// the Lua.
 
 window.Mods = (function () {
-  // stored as { [guid]: { items: {i: bool},
-  // colors: [hex|null] } }
   const STATE_KEY = 'omega.mods.state.v1';
   const DB_NAME = 'omega-mods', DB_STORE = 'zips';
   const ZIP_MAX_BYTES = 256 * 1024 * 1024;
@@ -43,7 +42,6 @@ window.Mods = (function () {
     return output;
   }
 
-  // ONLY zip method 0 (stored) and 8 (deflate) work here
   async function unzip(buf) {
     if (!(buf instanceof ArrayBuffer) || buf.byteLength < 22 || buf.byteLength > ZIP_MAX_BYTES) {
       throw new Error('Mod archive is empty or too large');
@@ -86,17 +84,17 @@ window.Mods = (function () {
       if (names.has(name)) throw new Error('Duplicate path in mod archive');
       names.add(name);
       if (method !== 0 && method !== 8) throw new Error('Unsupported compression in mod archive');
-      // no compression-ratio guard here. a flat-colour png atlas or a big
-      // json legitimately does 500:1 and we were rejecting real mods for it.
-      // the bomb is already capped by ENTRY_BYTES + TOTAL_BYTES below, and
-      // inflateEntry stops the moment output passes the declared usize.
+      // flat-colour PNGs and JSON can compress 500:1. use ENTRY_BYTES +
+      // TOTAL_BYTES for the bomb limits, not a ratio. inflateEntry
+      // stops at declared usize.
       if (usize > ZIP_MAX_ENTRY_BYTES) throw new Error('Expanded mod file is too large');
       totalSize += usize;
       if (totalSize > ZIP_MAX_TOTAL_BYTES) throw new Error('Expanded mod archive is too large');
       if (lho + 30 > buf.byteLength || dv.getUint32(lho, true) !== 0x04034b50) {
         throw new Error('Corrupt mod archive');
       }
-      // the local header repeats the name and extra lengths, data comes after
+      // the local header repeats the name and extra lengths, data comes
+      // after
       const lnl = dv.getUint16(lho + 26, true), lel = dv.getUint16(lho + 28, true);
       const dataOffset = lho + 30 + lnl + lel;
       if (dataOffset > buf.byteLength || csize > buf.byteLength - dataOffset) throw new Error('Corrupt mod archive');
@@ -154,10 +152,8 @@ window.Mods = (function () {
   const luaStr = `'((?:\\\\'|[^'])*)'|"((?:\\\\"|[^"])*)"`;
   const unesc = (s) => (s || '').replace(/\\(['"\\n])/g, (m, c) => c === 'n' ? '\n' : c);
 
-  // prefab info scraped out of the generated script, which we never run. the
-  // lua ties each prefab to its texture folders through GetPackedTexture
-  // paths, and folder order is NOT prefab order, so we're stuck using that
-  // mapping.
+  // GetPackedTexture paths tie prefabs to texture folders. folder
+  // order is NOT prefab order. parse the Lua, never run it.
   function parseLua(src) {
     const prefabs = new Map();
     const pf = (v) => {
@@ -174,11 +170,9 @@ window.Mods = (function () {
       }
       pf(m[1]).slots = slots;
     }
-    // three spellings of "which slot does this go in", all in the wild.
-    // PossibleEquipmentSlots is the old one. the exporter writes SlotData now,
-    // either inline or as a closure when the item also declares required
-    // slots. miss it and same-slot items stop being mutually exclusive, so you
-    // end up wearing both variants of a thing at once.
+    // accept legacy PossibleEquipmentSlots and SlotData, inline or in
+    // a closure with required slots. missing either lets mutually
+    // exclusive items stack.
     for (const m of src.matchAll(/(\w+)\s*\.\s*PossibleEquipmentSlots\s*=\s*\{\s*'([^']*)'/g)) {
       pf(m[1]).equip = m[2];
     }
@@ -189,8 +183,9 @@ window.Mods = (function () {
       const slot = m[2].match(/TargetSlotString\s*=\s*'([^']*)'/);
       if (slot) pf(m[1]).equip = slot[1];
     }
-    // local X = ModUtilities.GetPackedTexture(guid, '/Folder/file.json') then
-    // prefab.AddTexture(X). first bit of the path is the item's folder.
+    // local X = ModUtilities.GetPackedTexture(guid,
+    // '/Folder/file.json') then prefab.AddTexture(X). first bit of
+    // the path is the item's folder.
     const texVarFolder = new Map();
     for (const m of src.matchAll(/(\w+)\s*=\s*ModUtilities\.GetPackedTexture\([^,]+,\s*'\/?([^/']+)\//g)) {
       texVarFolder.set(m[1], m[2]);
@@ -202,8 +197,9 @@ window.Mods = (function () {
     return [...prefabs.values()].filter(p => p.name);
   }
 
-  // a RectInt the way the game writes it. field names change with the
-  // serializer, so take x/y/width/height AND the xMin/yMin/xMax/yMax form.
+  // a RectInt the way the game writes it. field names change with
+  // the serializer, so take x/y/width/height AND the
+  // xMin/yMin/xMax/yMax form.
   function rect(r) {
     if (!r) return null;
     const g = (...keys) => { for (const k of keys) if (typeof r[k] === 'number') return r[k]; return null; };
@@ -214,9 +210,6 @@ window.Mods = (function () {
     return (x === null || y === null || !w || !h) ? null : { x, y, w, h };
   }
 
-  // find the drawable name inside a PackedDrawable. take a field matching a
-  // real drawable in the loaded model first, otherwise fall back to whatever
-  // looks like a Name.
   function drawableName(pd, validIds) {
     for (const v of Object.values(pd)) {
       if (typeof v === 'string' && validIds.has(v)) return v;
@@ -224,9 +217,8 @@ window.Mods = (function () {
     return pd.Name || pd.name || pd.DrawableName || null;
   }
 
-  // turn one mod's file map into items you can actually see and wear. only
-  // the "interaction" scene containers work on this model, the rest of the
-  // zip stays in IndexedDB but we skip it when drawing.
+  // only interaction containers fit this model. keep other scenes
+  // in IndexedDB, but skip drawing them.
   function parseMod(guid, files) {
     let meta = {};
     let lua = [];
@@ -298,40 +290,31 @@ window.Mods = (function () {
     return null;
   }
 
-  // the baked canvases go straight into the compositor's own CPU-side
-  // canvas, so keeping them off the GPU saves a readback per drawable.
-  // same helper as textures.js, and same rule: only the first getContext
-  // on a canvas takes the option.
+  // the baked canvases go straight into the compositor's own
+  // CPU-side canvas, so keeping them off the GPU saves a readback
+  // per drawable. same helper as textures.js, and same rule: only
+  // the first getContext on a canvas takes the option.
   const ctx2d = (c) => c.getContext('2d', { willReadFrequently: true });
 
-  // multiply a canvas by an #rrggbb color and keep the alpha. same math the
-  // game uses to color its grey item textures.
   function tintCanvas(c, hex) {
     const ctx = ctx2d(c);
     ctx.globalCompositeOperation = 'multiply';
     ctx.fillStyle = hex;
     ctx.fillRect(0, 0, c.width, c.height);
     ctx.globalCompositeOperation = 'destination-in';
-    // draw the alpha back from the pixels we had before the multiply. the
-    // multiply filled the WHOLE rect, so cut it back to where the art is.
+    // multiply fills transparent pixels too. restore the original
+    // alpha.
     ctx.drawImage(c._alphaSrc, 0, 0, c.width, c.height);
     ctx.globalCompositeOperation = 'source-over';
   }
 
   const ATTACH_DRAWABLE = /^Attach/i;
-  // per item, sits in its colour menu. it OVERRIDES BypassColorScaler both
-  // ways on every drawable the item has: on = they all take the colour of the
-  // part they land on, off = none of them do and the mod's own art colour
-  // stands. it used to mean "on = force follow, off = whatever the mod said",
-  // which read as broken - most mods leave the flag unset (that's the
-  // serialized default and it already means follow her), so unticking the box
-  // changed nothing at all.
-  // never touched = whatever the mod asked for, collapsed to one answer for
-  // the whole item: off if any drawable sets the flag, on otherwise. except
-  // on her arms and legs, where she always wins - replacement limbs ship
-  // neutral grey and set bypass on every one of them (Seamless Components
-  // does it on all 29), so honouring it there left her with grey arms next to
-  // a coloured body.
+  // the colour toggle overrides BypassColorScaler both ways on
+  // every drawable: on follows the host, off keeps mod colours.
+  // untouched defaults to off if any drawable bypasses, on
+  // otherwise. limbs default on: neutral-grey replacements set
+  // bypass (all 29 in Seamless Components), but need her skin
+  // colour.
   function followsHerColors(mod, itemIndex) {
     // stored under "limbs", from when this only covered the Attach*
     // drawables. renaming the key would drop everyone's saved choice.
@@ -342,8 +325,6 @@ window.Mods = (function () {
     return !entries.some(e => e.bypassColorScaler);
   }
 
-  // parsing an item's texture jsons is pure work on immutable data, and a
-  // pass does it for every worn item on top of the one you just clicked.
   const _drawableCache = new WeakMap();
 
   function itemDrawables(mod, item) {
@@ -373,12 +354,8 @@ window.Mods = (function () {
             // it's set the default "vanilla" art is NOT drawn under the mod
             // layers, even if the mod has no layer-0 texture at all.
             dontIncludeVanilla: !!(pt.DontIncludeVanillaLayers ?? pt.dontIncludeVanillaLayers),
-            // "don't scale me by the character's colour". an accessory sets
-            // it and keeps its own colour, body art leaves it off and follows
-            // her skin. defaults off because that's the serialized default.
-            // this is the mod's raw answer and it is only the DEFAULT for the
-            // item's "follow her colors" box - applyPass overwrites it per
-            // entry with what the box actually says.
+            // BypassColorScaler defaults off in exports. applyPass replaces
+            // this raw default with the item's colour-toggle choice.
             bypassColorScaler: !!(pd.BypassColorScaler ?? pd.bypassColorScaler),
           });
         }
@@ -388,30 +365,20 @@ window.Mods = (function () {
     return out;
   }
 
-  // bake every worn mod entry for one drawable into a single canvas crop.
-  // the compositor only takes ONE override per drawable, so the layers get
-  // merged here.
+  // the compositor accepts one override per drawable, so merge
+  // layers here.
   async function bakeDrawable(id, entries, colorsFor, hostTint, replaceVanilla) {
     entries.sort((a, b) => a.layer - b.layer);
-    // vanilla art stays underneath unless the container says no vanilla
-    // layers. same as Part.AddVanilla in the game.
-    // we used to also treat a layer-0 texture as "replaces vanilla". THIS IS
-    // A LIE. layer is just the z index inside the part and 0 is the common
-    // one: 100 of the 160 vanilla items in variants/game_items.json ship a
-    // layer-0 section, TailFluffy_common among them, on the same TailMain
-    // rect a modded tail uses. so that rule erased her tail the moment you
-    // equipped a mod tail, and ate the panties under a maebari.
-    // the OTHER way a mod says "delete this decal": a 1x1 RectInt, pointing
-    // at the transparent corner of its own sheet, stretched over a whole
-    // drawable. nobody paints with that. Seamless Components does it to
-    // barcode and lines on its smooth skins while its Translucent Abs variant
-    // ships the real 322x126 lines crop in the same zip, so the mod is
-    // telling us which it means. it never sets DontIncludeVanillaLayers.
-    // and the wardrobe gets a say too. while the vanilla item that owns this
-    // drawable is OFF, the mod is the only thing meant to be in it - we're
-    // the ones holding the drawable visible at all (see applyPass), so the
-    // art the rig was hiding has to go. without this a modded skirt came up
-    // with the vanilla one poking out from under the hem.
+    // keep vanilla layers as Part.AddVanilla does, unless
+    // DontIncludeVanillaLayers is set. layer 0 is only a z index: 100
+    // of 160 items in variants/game_items.json use it, including
+    // TailFluffy_common on TailMain. treating it as replacement
+    // erases tails and panties under maebari. a transparent 1x1
+    // RectInt also deletes a decal: Seamless Components uses it for
+    // barcode/lines without DontIncludeVanillaLayers, while
+    // Translucent Abs keeps a 322x126 lines crop. hidden vanilla
+    // items must stay absent under mods, even when applyPass wakes
+    // their drawables.
     const isBlank = (e) => e.r.w <= 1 && e.r.h <= 1;
     const replacesVanilla = replaceVanilla
       || entries.some(e => e.dontIncludeVanilla || isBlank(e));
@@ -428,19 +395,17 @@ window.Mods = (function () {
     const ctx = ctx2d(c);
     entries.forEach((e, i) => {
       const img = imgs[i];
-      // RectInt starts from the BOTTOM left, that's unity texture space.
-      // checked against both the tutorial cat-ears mod and Seamless
-      // Components by holding the crops next to the vanilla atlas art.
-      // canvas crops from the top. so flip it.
+      // RectInt uses bottom-left Unity coordinates, canvas uses
+      // top-left.
       const sy = img.naturalHeight - e.r.y - e.r.h;
       const tints = [];
       if (e.colorIndex >= 0) {
         const hex = colorsFor(e);
         if (hex) tints.push(hex);
       }
-      // hostTint is the outfit colour this drawable normally gets from the
-      // shader. we took that uniform away (see applyAll), so the layers that
-      // DO want it have to get it here.
+      // hostTint is the outfit colour this drawable normally gets from
+      // the shader. we took that uniform away (see applyAll), so the
+      // layers that DO want it have to get it here.
       if (hostTint && !e.bypassColorScaler) tints.push(hostTint);
       if (!tints.length) {
         ctx.drawImage(img, e.r.x, sy, e.r.w, e.r.h, 0, 0, W, H);
@@ -456,30 +421,16 @@ window.Mods = (function () {
       for (const hex of tints) tintCanvas(t, hex);
       ctx.drawImage(t, 0, 0);
     });
-    // this canvas stays STRAIGHT alpha (colour and transparency kept apart),
-    // same as the mod PNGs went in. the atlas it lands in is premultiplied,
-    // but the compositor converts the whole patch once it has blended us over
-    // her vanilla art - see straightAlpha in textures.js. we used to
-    // premultiply here instead, which is right only when the art lands on
-    // nothing. over vanilla art canvas blends us as straight anyway, so the
-    // colour got faded by its alpha TWICE and every soft edge came out dark.
-    // that's the black rim that showed up around her lips.
-    // a replacement has to clear the WHOLE drawable. the compositor clips to
-    // the mesh so the neighbours are safe, and mods delete decals by setting
-    // DontIncludeVanillaLayers and shipping a 1x1 transparent texture, like
-    // Seamless Components' barcode. an erase that only covers the art the mod
-    // ships would leave that one sitting there.
-    // the canvas goes to the compositor AS a canvas. this used to be a
-    // toDataURL() and the compositor turned it straight back into an Image,
-    // so every equip paid a full PNG encode plus decode per drawable. on a
-    // mod that touches all 29 Attach* limbs that alone was seconds.
-    // a mod slot has NO vanilla art. what's sitting in its atlas box is the
-    // rig's placeholder - the hair slot's box holds a whole grey bob plus the
-    // shine diamonds - and it only looked fine while the slot part sat at
-    // opacity 0. we turn the slot on now, so the placeholder comes up UNDER
-    // the mod: a bunny ears hat gave her a second head of hair over her face.
-    // so erase the box, padded, same as outfit.js does for glasses in
-    // ModdableFace.
+    // keep STRAIGHT alpha (colour separate from transparency).
+    // textures.js blends over vanilla before premultiplying via
+    // straightAlpha, or soft edges get darkened twice. clear the
+    // whole replacement drawable, mesh-clipped to protect neighbours:
+    // DontIncludeVanillaLayers + a transparent 1x1 texture must erase
+    // decals such as Seamless Components' barcode. pass the canvas
+    // directly to avoid PNG encode/decode on all 29 Attach* limbs.
+    // mod slots contain placeholder art, not vanilla: pad the erase
+    // box or the grey hair bob and shine diamonds show underneath.
+    // outfit.js does the same for glasses in ModdableFace.
     return { img: c, overlay: !replacesVanilla, straightAlpha: true, fullClear: MOD_SLOT.test(id) };
   }
 
@@ -488,12 +439,9 @@ window.Mods = (function () {
   let readyPromise = null;
   let appliedIds = new Set();
 
-  // the game's ten mod slots. they all hang off one part the rig parks at
-  // opacity 0, and nothing in the model ever turns it back on - the GAME does
-  // that when an item goes in the slot. so a face crack mod bakes a perfect
-  // patch into ModdableFace's atlas box and you see absolutely nothing.
-  // outfit.js already does this for its glasses and logos with its show
-  // lists. this is the same thing for mods.
+  // the game enables its ten mod slots by raising their parent part
+  // from opacity 0. the rig never does it. match outfit.js show
+  // lists or ModdableFace patches stay invisible.
   const MOD_SLOT = /^Moddable/;
   const shownSlots = new Set();
 
@@ -520,22 +468,21 @@ window.Mods = (function () {
     return readyPromise;
   }
 
-  // the outfit colour of every drawable we took the shader tint away from, so
-  // we can hand it back when the item comes off. the uniform itself is null
-  // while we hold it, so it can't be read back.
+  // the outfit colour of every drawable we took the shader tint
+  // away from, so we can hand it back when the item comes off. the
+  // uniform itself is null while we hold it, so it can't be read
+  // back.
   const heldTint = new Map();
 
   const rgbToHex = (rgb) => '#' + rgb
     .map(v => Math.round(Math.max(0, Math.min(1, v)) * 255).toString(16).padStart(2, '0'))
     .join('');
 
-  // her skin, hair and tail colours are ONE multiply uniform per drawable, so
-  // anything we bake into that drawable's atlas patch gets multiplied too - a
-  // white latex bowtie on SkinBodyFront came out skin coloured, bunny ears on
-  // ModdableHairFront came out hair coloured. can't exclude pixels from a
-  // uniform, so we take it off the drawable and re-apply it ourselves, to the
-  // vanilla art (see baseTint in textures.js) and to the mod layers that
-  // asked for it. the ones with BypassColorScaler keep their own colour.
+  // one multiply uniform tints the whole drawable, including mod
+  // pixels. remove it and apply baseTint in textures.js to vanilla
+  // and opted-in layers only. BypassColorScaler layers keep their
+  // colour, including SkinBodyFront and ModdableHairFront
+  // accessories.
   function hostTintFor(id) {
     if (heldTint.has(id)) return heldTint.get(id);
     const rgb = Live2D.getDrawableTint ? Live2D.getDrawableTint(id) : null;
@@ -554,21 +501,17 @@ window.Mods = (function () {
     return m ? [parseInt(m[1], 16) / 255, parseInt(m[2], 16) / 255, parseInt(m[3], 16) / 255] : null;
   }
 
-  // outfit just re-tinted the model, so every colour we remembered is stale.
+  // outfit just re-tinted the model, so every colour we remembered
+  // is stale.
   function refreshTints() {
     heldTint.clear();
     return applyAll();
   }
 
-  // baking a drawable is a pile of synchronous canvas work and the atlas
-  // recomposite after it is worse. it all runs on the thread that draws her,
-  // so a whole equip done in one go stops the model dead. handing the frame
-  // back keeps her blinking while the item lands.
-  //
-  // but do it per bake and the yields ARE the wait: a bake is ~1ms and a
-  // frame is 16, so 59 of them turned a 54ms job into 1.4 seconds of waiting
-  // for rAF. so yield on time spent, not on count. 8ms is half a frame at
-  // 60Hz, which leaves her ticker room to draw.
+  // yield by elapsed work, not per bake. at ~1ms per bake and 16ms
+  // per frame, 59 yields turned a 54ms job into 1.4s. an 8ms budget
+  // leaves half a 60Hz frame for drawing during baking and atlas
+  // recomposition.
   const nextFrame = () => new Promise(r => requestAnimationFrame(() => r()));
   let sliceStart = 0;
   async function breathe() {
@@ -577,10 +520,9 @@ window.Mods = (function () {
     sliceStart = performance.now();
   }
 
-  // every pass rebuilds the whole worn set from scratch, so taking one item
-  // off used to re-bake every drawable of everything still on. baked canvases
-  // are kept by what went into them and only the changed ones get redrawn.
-  // the map is replaced each pass with just the hits, that's the eviction.
+  // cache by bake inputs so removing one item does not rebake the
+  // rest. replacing the map with this pass's hits evicts unused
+  // canvases.
   let bakeCache = new Map();
 
   function bakeKey(id, entries, colorsFor, tint, replaceVanilla) {
@@ -592,8 +534,9 @@ window.Mods = (function () {
   let applyRunning = null;
   let applyQueued = null;
 
-  // clicks arrive faster than a pass takes and only the LAST state matters,
-  // so one queued pass behind the running one is all we ever need.
+  // clicks arrive faster than a pass takes and only the LAST state
+  // matters, so one queued pass behind the running one is all we
+  // ever need.
   function applyAll() {
     if (!applyRunning) {
       applyRunning = applyPass().finally(() => { applyRunning = null; });
@@ -628,24 +571,22 @@ window.Mods = (function () {
       });
     }
     const controllerDrawables = window.Outfit?.setModdedDrawables?.(new Set(byDrawable.keys())) || new Set();
-    // mod items land in vanilla drawables as often as in the Moddable* slots,
-    // and the rig keeps those at zero opacity while the wardrobe item that
-    // owns them is off. parameter-driven garments go back through the rig so
-    // it can choose the current pose meshes; simple slots are held up here.
-    // either way the bake replaces the vanilla art rather than layering over
-    // it. switch the vanilla item on and they layer again, which is what you'd
+    // mod items land in vanilla drawables as often as in the
+    // Moddable* slots, and the rig keeps those at zero opacity while
+    // the wardrobe item that owns them is off. parameter-driven
+    // garments go back through the rig so it can choose the current
+    // pose meshes; simple slots are held up here. either way the bake
+    // replaces the vanilla art rather than layering over it. switch
+    // the vanilla item on and they layer again, which is what you'd
     // want from a mod that only adds a decal.
     const hiddenByOutfit = window.Outfit?.hiddenItemDrawables?.() || new Set();
     const map = {};
-    // null clears overrides that vanished from this pass
     for (const id of appliedIds) map[id] = null;
     for (const id of [...heldTint.keys()]) {
       if (!byDrawable.has(id)) releaseTint(id);
     }
     const fresh = new Map();
     for (const [id, entries] of byDrawable) {
-      // only worth taking the uniform over when something actually opts out
-      // of it AND there's a colour on the drawable to take over
       const tint = entries.some(e => e.bypassColorScaler) ? hostTintFor(id) : null;
       // ColorIndex points into the owning ITEM's ColorSlots list
       const colorsFor = (e) => ((modState(e.mod.guid).colors || {})[e.itemIndex] || [])[e.colorIndex] || null;
@@ -653,8 +594,6 @@ window.Mods = (function () {
       const key = bakeKey(id, entries, colorsFor, tint, replaceVanilla);
       let baked = bakeCache.get(key);
       if (!baked) {
-        // only the drawables we actually redraw cost anything, so this is
-        // where the frame goes back to the renderer
         await breathe();
         const tb = performance.now();
         try {
@@ -699,8 +638,9 @@ window.Mods = (function () {
         Live2D.setDrawableOpacity(id, 1);
         shownSlots.add(id);
       }
-      // glasses live in ModdableFace too. dropping a face mod must not take
-      // them down with it, so hand the slot back and let outfit re-claim it.
+      // glasses live in ModdableFace too. dropping a face mod must not
+      // take them down with it, so hand the slot back and let outfit
+      // re-claim it.
       if (released && window.Outfit?.refreshVisibility) Outfit.refreshVisibility();
     }
     const tt = performance.now();
@@ -718,7 +658,8 @@ window.Mods = (function () {
     let guid = null;
     try {
       const meta = JSON.parse(new TextDecoder().decode(metaRaw));
-      // real exports nest it: doNotChangeVariablesBelowThis.guid.serializedGuid
+      // real exports nest it:
+      // doNotChangeVariablesBelowThis.guid.serializedGuid
       const nested = meta.doNotChangeVariablesBelowThis;
       guid = (nested && nested.guid && nested.guid.serializedGuid)
         || meta.Guid || meta.guid || meta.GUID;
@@ -728,14 +669,14 @@ window.Mods = (function () {
     }
     const mod = parseMod(guid, files);
     if (!mod.items.length) throw new Error('No items usable in the interaction scene found in this mod.');
-    // like the game, importing the same guid replaces its old copy
     mods = mods.filter(m => m.guid !== guid);
     mods.push(mod);
     await idbPut({ guid, buf });
-    // NOTHING is auto-equipped. like the game, items land in the "inventory"
-    // and the user equips them, because mods often ship mutually exclusive
-    // variants (three alternative skins, say) that must not stack.
-    // re-importing resets the equip state, item indices may have moved anyway.
+    // NOTHING is auto-equipped. like the game, items land in the
+    // "inventory" and the user equips them, because mods often ship
+    // mutually exclusive variants (three alternative skins, say) that
+    // must not stack. re-importing resets the equip state, item
+    // indices may have moved anyway.
     state[guid] = { items: {}, colors: {} };
     saveState();
     await applyAll();
@@ -753,8 +694,6 @@ window.Mods = (function () {
   function setEquipped(guid, index, on) {
     const st = modState(guid);
     st.items[index] = !!on;
-    // items sharing an equipment slot are mutually exclusive. game behavior,
-    // equipping a Skin item replaces whatever Skin item is already on.
     const mod = mods.find(m => m.guid === guid);
     if (on && mod) {
       const slot = mod.items[index] && mod.items[index].equip;
@@ -777,13 +716,10 @@ window.Mods = (function () {
     applyAll();
   }
 
-  // item names, worn and owned. the ONLY mod data that ever leaves the
-  // browser, inside the outfit_context system-prompt string. the owned half
-  // is there because she can't put on a name she's never been told - before
-  // this she'd either refuse a modded item or "equip" it and nothing
-  // happened, since the tag went out with a word wearByName can't match.
-  // capped at 40 names, some packs ship a hundred and the whole list rides
-  // in the live-context tail of every single turn.
+  // only names leave the browser via outfit_context, never mod
+  // assets. include owned names so wearByName can match her
+  // requests. cap at 40 because every turn carries this
+  // live-context list.
   const DESCRIBE_MAX = 40;
   function describe() {
     const worn = [], owned = [];
@@ -798,19 +734,19 @@ window.Mods = (function () {
     return s;
   }
 
-  // every item name, worn or not. goes up with the chat request so the
-  // change_outfit tool can tell a modded item apart from one she invented.
-  // names and nothing else, same boundary describe() has always had.
+  // change_outfit needs all owned names to distinguish mods from
+  // invented items. same names-only boundary as describe().
   function itemNames() {
     const out = [];
     for (const mod of mods) for (const item of mod.items) out.push(item.label);
     return out.slice(0, DESCRIBE_MAX);
   }
 
-  // she only ever sees LABELS, so this is how a name out of an action tag
-  // gets back to an index. exact first, then a loose contains match, because
-  // she paraphrases - "bunny ears" for "Bunny Ears Hat". short labels do not
-  // get the loose pass, "bow" would swallow half a pack.
+  // she only ever sees LABELS, so this is how a name out of an
+  // action tag gets back to an index. exact first, then a loose
+  // contains match, because she paraphrases - "bunny ears" for
+  // "Bunny Ears Hat". short labels do not get the loose pass, "bow"
+  // would swallow half a pack.
   function wearByName(name, on) {
     const want = String(name || '').toLowerCase().replace(/[_\s]+/g, ' ').trim();
     if (!want) return false;
@@ -827,13 +763,10 @@ window.Mods = (function () {
 
   let uiBody = null;
 
-  // the grid is ONE horizontally scrolling row and wardrobe.html hides its
-  // scrollbar, so past the four tiles that fit there is nothing on screen
-  // saying the rest exist. a tester spent an evening hunting for the left
-  // stocking of a pair that was sitting two tiles off the right edge. the
-  // vanilla sections have had the chevron since forever, this is the same
-  // one. outfit.js runs updateExpand on resize and on every wardrobe open,
-  // because a grid measures 0 wide while the panel is still closed.
+  // wardrobe.html hides the horizontal scrollbar, so the chevron
+  // has to show that more items exist past the four visible tiles.
+  // outfit.js runs updateExpand on resize and every wardrobe open,
+  // because the grid measures 0 wide while the panel is closed.
   const expandables = [];
   function updateExpand() {
     for (const [grid, expand] of expandables) {
@@ -841,8 +774,6 @@ window.Mods = (function () {
     }
   }
 
-  // cut a canvas down to the pixels that aren't transparent. null when there
-  // are none.
   function trimTransparent(c) {
     const ctx = ctx2d(c);
     const d = ctx.getImageData(0, 0, c.width, c.height).data;
@@ -863,11 +794,9 @@ window.Mods = (function () {
     return t;
   }
 
-  // the crop is the whole DRAWABLE, not the item, so a bowtie came out as a
-  // 598x1070 torso-shaped hole with a 40px bow in the corner. and the biggest
-  // rect is often the emptiest one (the right cuff's is AttachArmRHandUp2,
-  // which that layer doesn't paint at all), which is how two tiles ended up
-  // fully blank. so trim to the art and skip whatever trims to nothing.
+  // trim to painted pixels, not drawable size. a 598x1070 torso can
+  // hold a 40px bow, and AttachArmRHandUp2 can be entirely empty
+  // for a cuff. skip empty crops.
   async function itemThumbUrl(mod, item) {
     const entries = itemDrawables(mod, item).slice();
     entries.sort((a, b) => b.r.w * b.r.h - a.r.w * a.r.h);

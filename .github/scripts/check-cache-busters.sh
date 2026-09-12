@@ -1,9 +1,10 @@
 #!/bin/sh
-# Every reference to a given JS module must carry the same ?v= number across
-# the whole webapp. Modules are independent of each other, so two different
-# modules sitting at different versions is normal and expected. What this
-# catches is one module referenced at two versions: the browser then fetches
-# it twice and builds two separate copies of the module.
+# Every reference to a given JS module must carry the same ?v=
+# number across the whole webapp. Modules are independent of each
+# other, so two different modules sitting at different versions
+# is normal and expected. What this catches is one module
+# referenced at two versions: the browser then fetches it twice
+# and builds two separate copies of the module.
 set -eu
 
 cd "$(dirname "$0")/../.." || exit 1
@@ -16,7 +17,8 @@ if [ -z "$refs" ]; then
 	exit 1
 fi
 
-# grep -rno prints file:line:match, and none of these paths contain a colon.
+# grep -rno prints file:line:match, and none of these paths
+# contain a colon.
 printf '%s\n' "$refs" | awk -F: '
 {
 	file = $1

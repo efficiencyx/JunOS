@@ -48,9 +48,10 @@ export function showAuthScreen() {
   revealRegKeyField();
 }
 
-// a server with no key set never mentions one, so the field only shows up
-// where it's actually needed. if the probe fails we leave it hidden and let
-// the signup call come back with registration_closed.
+// a server with no key set never mentions one, so the field only
+// shows up where it's actually needed. if the probe fails we
+// leave it hidden and let the signup call come back with
+// registration_closed.
 async function revealRegKeyField() {
   const field = document.getElementById('signupRegKeyField');
   if (!field) return;

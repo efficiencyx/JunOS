@@ -1,34 +1,36 @@
-// The worklet keeps VAD metering and PCM capture going in background tabs.
+// the worklet keeps VAD (speech detection) and PCM (raw audio
+// samples) capture running in background tabs.
 
 class MicProcessor extends AudioWorkletProcessor {
   constructor(opts) {
     super();
     const o = (opts && opts.processorOptions) || {};
 
-    // Pre-roll ring. voice.js won't call it "speech" until a ~96ms debounce
-    // is done, and by then the start of the word is gone, whisper hears
-    // "y Jun" when you said "Hey Jun". so we always keep the last N ms and
-    // stick it on the front when recording starts. this is the whole reason
-    // capture lives in a worklet and not in a MediaRecorder we start when
-    // we need it.
+    // Pre-roll ring. voice.js won't call it "speech" until a ~96ms
+    // debounce is done, and by then the start of the word is gone,
+    // whisper hears "y Jun" when you said "Hey Jun". so we always
+    // keep the last N ms and stick it on the front when recording
+    // starts. this is the whole reason capture lives in a worklet and
+    // not in a MediaRecorder we start when we need it.
     const preRollLen = Math.ceil(((o.preRollMs || 300) / 1000) * sampleRate);
     this.ring = new Float32Array(preRollLen);
     this.ringPos = 0;
     this.ringFilled = 0;
 
-    // Utterance buffer, made once. asking for megabytes on the audio thread
-    // in the middle of a word can give us a GC pause and a dropped frame, so
-    // we take the full size up front and reuse it. 30s @ 16kHz float32 is
-    // ~1.9MB.
+    // Utterance buffer, made once. asking for megabytes on the audio
+    // thread in the middle of a word can give us a GC pause and a
+    // dropped frame, so we take the full size up front and reuse it.
+    // 30s @ 16kHz float32 is ~1.9MB.
     this.maxLen = Math.ceil(((o.maxMs || 30000) / 1000) * sampleRate);
     this.buf = new Float32Array(this.maxLen);
     this.len = 0;
     this.recording = false;
 
-    // EMA over frame RMS. raw per frame RMS jumps around so much at 8ms that
-    // a hard p or a click goes over any threshold worth having. ~40ms of
-    // smoothing takes that out and still keeps the Start of real speech
-    // sharp.
+    // EMA (exponential moving average) smooths frame RMS, the audio
+    // signal level. raw RMS jumps around so much at 8ms that a hard p
+    // or a click goes over any threshold worth having. ~40ms of
+    // smoothing takes that out and still keeps the Start of real
+    // speech sharp.
     this.alpha = o.alpha || 0.2;
     this.ema = 0;
     this.tick = 0;

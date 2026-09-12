@@ -1,9 +1,10 @@
 #!/bin/sh
-# boots the webapp the way a bare metal install does (php -S in front of
-# tools/php-router.php) and runs api-checks.sh at it. no docker, no nginx, no
-# model backend. everything here has to pass with ollama DOWN, which is the
-# point: auth, the router's 404 rules, the CSRF and Host gates and the
-# migration chain all sit below the LLM and break quietly.
+# boots the webapp the way a bare metal install does (php -S in
+# front of tools/php-router.php) and runs api-checks.sh at it. no
+# docker, no nginx, no model backend. everything here has to pass
+# with ollama DOWN, which is the point: auth, the router's 404
+# rules, the CSRF and Host gates and the migration chain all sit
+# below the LLM and break quietly.
 set -eu
 
 cd "$(dirname "$0")/../.." || exit 1
@@ -47,7 +48,8 @@ pass() { printf '  ok   %s\n' "$1"; }
 fail() { printf '  FAIL %s\n' "$1"; fails=1; }
 
 echo "router only"
-# nginx answers a bad Host with 444 (no response at all), the router answers
+# nginx answers a bad Host with 444 (no response at all), the
+# router answers
 # 421. same intent, different shape, so it lives here and not in api-checks.
 check_status() {
 	got=$(curl -sS -o /dev/null -w '%{http_code}' "$@" || echo 000)
@@ -79,9 +81,10 @@ else
 	else
 		fail "schema_version is $applied but the newest migration is $latest"
 	fi
-	# start_session stores sha256(cookie), never the cookie. a row holding the
-	# cookie verbatim means migration 014's hashing got dropped somewhere, and
-	# then whoever walks off with omega.sqlite can log in as you.
+	# start_session stores sha256(cookie), never the cookie. a row
+	# holding the cookie verbatim means migration 014's hashing got
+	# dropped somewhere, and then whoever walks off with omega.sqlite
+	# can log in as you.
 	cookie=$(awk '/omega_session/ {print $7}' "$work/cookies.txt")
 	if [ -n "$cookie" ] && [ "$(sqlite3 "$db" "SELECT COUNT(*) FROM sessions WHERE token = '$cookie'")" = "0" ]; then
 		pass 'sessions store the hash, not the cookie'
