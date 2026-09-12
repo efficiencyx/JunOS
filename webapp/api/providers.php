@@ -352,10 +352,10 @@ function generate_chat_title(string $userMessage): ?string {
     $title = trim($title, " \t\n\r\0\x0B\"'");
     $title = trim(preg_replace('/\s+/', ' ', $title));
     $title = preg_replace('/^Title:\s*/i', '', $title);
-    if (strlen($title) > 60) {
-        $title = substr($title, 0, 60);
-        $lastSpace = strrpos($title, ' ');
-        if ($lastSpace !== false) $title = substr($title, 0, $lastSpace);
+    if (mb_strlen($title) > 60) {
+        $title = mb_substr($title, 0, 60);
+        $lastSpace = mb_strrpos($title, ' ');
+        if ($lastSpace !== false) $title = mb_substr($title, 0, $lastSpace);
         $title = rtrim($title);
     }
     if ($title === '' || !preg_match('/[a-zA-Z]/', $title)) return null;
