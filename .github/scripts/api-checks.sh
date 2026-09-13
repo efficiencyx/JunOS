@@ -145,6 +145,12 @@ check 'relationship is admin only'      403 -b "$cookies" -X PUT -H "Origin: $OR
 check 'wardrobe'                        200 -b "$cookies" "$BASE/api/wardrobe.php"
 check 'memory notes'                    200 -b "$cookies" "$BASE/api/memory.php"
 check 'stats is admin only'             403 -b "$cookies" "$BASE/api/stats.php"
+# no sidecar in either driver. the answer has to be a clean 502
+# the client can read, not a 500 from an uncaught curl error.
+check 'tts voices with the sidecar down'   502 -b "$cookies" "$BASE/api/tts.php?action=voices"
+body_has 'tts says why' 'tts_unreachable'
+check 'stt with the sidecar down'          502 -b "$cookies" -X POST -H "Origin: $ORIGIN" \
+	-H 'Content-Type: audio/wav' --data 'RIFF' "$BASE/api/stt.php?action=stt"
 check 'unlock developer access'         200 -b "$cookies" -X POST -H "Origin: $ORIGIN" -H "$(json)" \
 	--data '{"key":"ci-dev-key"}' "$BASE/api/auth.php?action=promote"
 check 'relationship override for dev'   200 -b "$cookies" -X PUT -H "Origin: $ORIGIN" \
