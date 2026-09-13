@@ -11,12 +11,14 @@ function request_id(): string {
 function client_ip(): string {
     // behind our one nginx, X-Forwarded-For is literally whatever the
     // caller typed. only trust it when the operator asks for it with
-    // TRUST_PROXY=1.
+    // TRUST_PROXY=1, and then take the LAST entry, the one the proxy
+    // itself appended. the first is whatever the client put there.
     if (env_str('TRUST_PROXY') === '1') {
         $xff = $_SERVER['HTTP_X_FORWARDED_FOR'] ?? '';
         if ($xff !== '') {
-            $first = preg_replace('/[^0-9a-fA-F.:]/', '', trim(explode(',', $xff)[0]));
-            if ($first !== '') return $first;
+            $hops = explode(',', $xff);
+            $last = preg_replace('/[^0-9a-fA-F.:]/', '', trim(end($hops)));
+            if ($last !== '') return $last;
         }
     }
     return $_SERVER['REMOTE_ADDR'] ?? 'unknown';
@@ -25,6 +27,17 @@ function client_ip(): string {
 function env_str(string $key, string $default = ''): string {
     $v = getenv($key);
     return ($v !== false && $v !== '') ? $v : $default;
+}
+
+// the tts and karaoke sidecars take a shared secret in a header
+// and 403 anything without it (tts/server.py). start.sh and
+// start.ps1 mint one into .env, colab passes a fresh one per run.
+// empty means the sidecar was started without one, it then
+// falls back to its Host allowlist and says so in its log.
+function sidecar_headers(array $headers = []): array {
+    $secret = env_str('SIDECAR_SECRET');
+    if ($secret !== '') $headers[] = 'X-Sidecar-Secret: ' . $secret;
+    return $headers;
 }
 
 // somewhere we can actually write, for the SQLite DB and the rate
@@ -165,25 +178,22 @@ function read_body(int $maxBytes): string {
     return $body;
 }
 
-// token bucket per IP in a flat file. best effort, if we can't
-// get a writable dir we let the request through instead of
-// 500ing.
+// token bucket per IP in a flat file. this used to let the
+// request through when it couldn't get a writable dir, which
+// made "state dir is read only" mean "login has no brute force
+// lockout". now it's a 503, same as db() below, and the state
+// dir gets fixed.
 function rate_limit(string $bucket, int $maxPerWindow, int $windowSec): void {
     $key = sha1($bucket . '|' . client_ip());
 
     $dir = state_dir() . '/rl';
     if (!is_dir($dir)) @mkdir($dir, 0700, true);
-    if (!is_dir($dir) || !is_writable($dir)) {
-        $dir = sys_get_temp_dir() . '/omega_rl';
-        if (!is_dir($dir)) @mkdir($dir, 0700, true);
+    $fp = (is_dir($dir) && is_writable($dir)) ? fopen($dir . '/' . $key . '.json', 'c+') : false;
+    if ($fp === false) {
+        log_event(['msg' => 'rate_limit_storage_unavailable', 'dir' => $dir]);
+        fail(503, 'state_unavailable');
     }
-    if (!is_dir($dir) || !is_writable($dir)) return;
-
-    $file = $dir . '/' . $key . '.json';
     $now = time();
-
-    $fp = fopen($file, 'c+');
-    if ($fp === false) return;
     flock($fp, LOCK_EX);
 
     $data = ['hits' => []];
@@ -220,7 +230,13 @@ function db(): PDO {
     $base = state_dir();
     if (!is_dir($base)) @mkdir($base, 0700, true);
     if (is_dir($base)) @chmod($base, 0700);
-    $path = is_writable($base) ? $base . '/omega.sqlite' : sys_get_temp_dir() . '/omega.sqlite';
+    // no /tmp fallback. a db that lands there looks like it works
+    // and then every account is gone on the next restart.
+    if (!is_writable($base)) {
+        log_event(['msg' => 'state_dir_unwritable', 'dir' => $base]);
+        fail(503, 'state_unavailable');
+    }
+    $path = $base . '/omega.sqlite';
     $pdo = new PDO('sqlite:' . $path, null, null, [
         PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION,
         PDO::ATTR_DEFAULT_FETCH_MODE => PDO::FETCH_ASSOC,
@@ -1012,6 +1028,10 @@ function welcome_queue_read(int $userId, bool $drain = true): array {
 function require_user(): array {
     $user = current_user();
     if ($user === null) fail(401, 'unauthorized');
+    // default for anything behind a session: chats, memory, prefs,
+    // her voice. the few endpoints that want caching (models,
+    // voices, assets) set their own header after this and win.
+    header('Cache-Control: no-store');
     return $user;
 }
 

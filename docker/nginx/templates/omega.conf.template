@@ -98,6 +98,9 @@ server {
 
     location = /api/tts.php {
         limit_req zone=api burst=10 nodelay;
+        # js/tts.js keeps 3 synthesis requests in flight per reply,
+        # plus one warm call.
+        limit_conn conns 4;
         client_max_body_size 16k;
 
         gzip off;

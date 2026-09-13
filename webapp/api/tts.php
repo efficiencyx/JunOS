@@ -32,6 +32,7 @@ if ($action === 'voices') {
     }
 
     $ch = curl_init($ttsUrl . '/voices');
+    curl_setopt($ch, CURLOPT_HTTPHEADER, sidecar_headers());
     curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
     curl_setopt($ch, CURLOPT_CONNECTTIMEOUT, 5);
     curl_setopt($ch, CURLOPT_TIMEOUT, 10);
@@ -108,7 +109,7 @@ if ($action === 'tts') {
     curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
     curl_setopt($ch, CURLOPT_POST, true);
     curl_setopt($ch, CURLOPT_POSTFIELDS, $rawBody);
-    curl_setopt($ch, CURLOPT_HTTPHEADER, ['Content-Type: application/json']);
+    curl_setopt($ch, CURLOPT_HTTPHEADER, sidecar_headers(['Content-Type: application/json']));
     curl_setopt($ch, CURLOPT_CONNECTTIMEOUT, 5);
     curl_setopt($ch, CURLOPT_TIMEOUT, 60);
     $res = curl_exec($ch);
@@ -155,7 +156,7 @@ if ($action === 'warm') {
     curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
     curl_setopt($ch, CURLOPT_POST, true);
     curl_setopt($ch, CURLOPT_POSTFIELDS, $rawBody);
-    curl_setopt($ch, CURLOPT_HTTPHEADER, ['Content-Type: application/json']);
+    curl_setopt($ch, CURLOPT_HTTPHEADER, sidecar_headers(['Content-Type: application/json']));
     curl_setopt($ch, CURLOPT_CONNECTTIMEOUT, 5);
     // Loading a cold language checkpoint can take several seconds. the client
     // is not waiting on this, so give the sidecar room to finish.

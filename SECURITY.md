@@ -130,9 +130,15 @@ Model weights sit in their own volumes (`ollama_data`, `tts_cache`,
 `runtime\tts-venv`, `runtime\asset-recovery-venv`, `runtime\logs`.
 
 **Both:** `.env` in the repo root, which holds the generated registration key,
-your developer key and OpenRouter key if you set them, and other deployment
-configuration. The installers restrict it to your user (`chmod 600`, or an ACL
-on Windows). It is gitignored.
+the sidecar secret, your developer key and OpenRouter key if you set them, and
+other deployment configuration. The installers restrict it to your user
+(`chmod 600`, or an ACL on Windows). It is gitignored.
+
+**Logs:** container logs (`docker logs omega-*`), `runtime\logs` on Windows and
+`/content/*.log` on Colab hold request ids, sizes and error codes. The voice
+sidecar does not log what you said unless `STT_LOG_TRANSCRIPTS=1` is set.
+Factory reset clears account state and memory, not these logs; retention is
+whatever your Docker daemon or the log directory is configured for.
 
 **In your browser:** IndexedDB holds any game-mod zips you loaded, and
 localStorage holds UI preferences. Mods are never uploaded, the server only ever
@@ -156,8 +162,9 @@ If you put her on the internet:
   public bind without TLS unless `OMEGA_ALLOW_INSECURE_PUBLIC_HTTP=1` explicitly
   accepts that risk.
 * Set `TRUST_PROXY=1` only when a proxy you control sets
-  `X-Forwarded-For`. Without that, rate limiting counts every request as coming
-  from the proxy.
+  `X-Forwarded-For`. The last entry in that header is used (the one your proxy
+  appended). Without that, rate limiting counts every request as coming from the
+  proxy.
 * `OMEGA_ALLOWED_ORIGINS` (comma separated) is for a proxy that rewrites `Host`
   and would otherwise trip the cross-origin check.
 * Claim the first account before exposing the install. After that, keep the

@@ -596,6 +596,7 @@ function Configure-Jun {
     Ok "karaoke $karaoke"
 
     Add-EnvKeyIfMissing 'OMEGA_REGISTRATION_KEY'
+    Add-EnvKeyIfMissing 'SIDECAR_SECRET'
     Ok 'registration key ready'
 
     return @{ provider = $provider; voice = $voice; karaoke = $karaoke

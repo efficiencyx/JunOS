@@ -1,3 +1,9 @@
+# 11.0.0 is the newest Pillow chaquopy ships a wheel for
+# (https://chaquo.com/pypi-13.1/pillow/, checked 2026-09-13).
+# it is under CVE-2026-59199 (crop box overflow -> heap write,
+# fixed in 12.3.0). recover_assets.py bounds every crop before
+# Pillow sees it, so this stays safe as long as that check does.
+# bump the moment a 12.3+ arm64 wheel shows up.
 Pillow==11.0.0
 lz4==4.3.2
 Brotli==1.1.0

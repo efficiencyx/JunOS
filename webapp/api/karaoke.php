@@ -64,6 +64,7 @@ if ($action === 'health') {
     header('Content-Type: application/json');
 
     $ch = curl_init($sepUrl . '/health');
+    curl_setopt($ch, CURLOPT_HTTPHEADER, sidecar_headers());
     curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
     curl_setopt($ch, CURLOPT_CONNECTTIMEOUT, 5);
     curl_setopt($ch, CURLOPT_TIMEOUT, 10);
@@ -84,10 +85,12 @@ if ($action === 'health') {
 if ($action === 'separate') {
     require_post();
 
-    evict_chat_model();
-
     $rawBody = read_body(KARAOKE_MAX_BYTES);
     if ($rawBody === '') fail(400, 'invalid_request');
+
+    // only now. an empty or oversized upload used to kick the chat
+    // model out of VRAM first and then 400.
+    evict_chat_model();
 
     $ch = curl_init($sepUrl . '/separate');
     curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
@@ -96,7 +99,7 @@ if ($action === 'separate') {
     // "Expect:" for the same reason as api/stt.php: a megabyte body
     // would otherwise stall a full second on libcurl's 100-continue
     // handshake.
-    curl_setopt($ch, CURLOPT_HTTPHEADER, ['Content-Type: application/octet-stream', 'Expect:']);
+    curl_setopt($ch, CURLOPT_HTTPHEADER, sidecar_headers(['Content-Type: application/octet-stream', 'Expect:']));
     curl_setopt($ch, CURLOPT_CONNECTTIMEOUT, 5);
     // Demucs on the CPU is slower than realtime, so a whole song can
     // take well over five minutes. keep it in step with
@@ -171,7 +174,7 @@ if ($action === 'stem') {
     curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
     curl_setopt($ch, CURLOPT_POST, true);
     curl_setopt($ch, CURLOPT_POSTFIELDS, json_encode(['token' => $sidecarToken, 'which' => $which]));
-    curl_setopt($ch, CURLOPT_HTTPHEADER, ['Content-Type: application/json']);
+    curl_setopt($ch, CURLOPT_HTTPHEADER, sidecar_headers(['Content-Type: application/json']));
     curl_setopt($ch, CURLOPT_CONNECTTIMEOUT, 5);
     curl_setopt($ch, CURLOPT_TIMEOUT, 60);
     $res = curl_exec($ch);
@@ -217,7 +220,7 @@ if ($action === 'transcribe') {
     curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
     curl_setopt($ch, CURLOPT_POST, true);
     curl_setopt($ch, CURLOPT_POSTFIELDS, $rawBody);
-    curl_setopt($ch, CURLOPT_HTTPHEADER, ['Content-Type: application/octet-stream', 'Expect:']);
+    curl_setopt($ch, CURLOPT_HTTPHEADER, sidecar_headers(['Content-Type: application/octet-stream', 'Expect:']));
     curl_setopt($ch, CURLOPT_CONNECTTIMEOUT, 5);
     curl_setopt($ch, CURLOPT_TIMEOUT, 300);
     $res = curl_exec($ch);

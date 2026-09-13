@@ -664,6 +664,7 @@ configure() {
     fi
 
     ensure_key OMEGA_REGISTRATION_KEY
+    ensure_key SIDECAR_SECRET
     ok "registration key ready"
 }
 

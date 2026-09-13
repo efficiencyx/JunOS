@@ -293,6 +293,36 @@ def safe_component(value):
     return f"{clean[:72]}_{digest}"
 
 
+# drawable names go into output filenames as-is (outfit.js keys
+# on them, so they can't be rewritten). the real ones are plain
+# [A-Za-z0-9_-]. anything else came out of a doctored archive
+# and would walk out of the output dir, so refuse it.
+DRAWABLE_NAME = re.compile(r"[A-Za-z0-9_\-]{1,120}")
+WINDOWS_RESERVED = {"con", "prn", "aux", "nul"} | {
+    f"{d}{n}" for d in ("com", "lpt") for n in range(1, 10)}
+
+
+def checked_name(value):
+    if not DRAWABLE_NAME.fullmatch(value) or value.lower() in WINDOWS_RESERVED:
+        raise ValueError(f"unsafe drawable name {value!r}")
+    return value
+
+
+# the rect comes straight out of the serialized container, so a
+# doctored archive can put anything in it. Pillow's crop takes
+# the box on trust, and up to 12.2 a box that overflows int is a
+# heap write (CVE-2026-59199). android is stuck on 11.0.0 (no
+# chaquopy wheel past it), so the bounds get checked HERE, before
+# any Pillow call, on every platform.
+def crop_box(img, rect):
+    x, y, w, h = rect
+    width, height = img.size
+    if w <= 0 or h <= 0 or x < 0 or y < 0 or x + w > width or y + h > height:
+        raise ValueError(f"crop {rect} outside {width}x{height} texture")
+    # unity rectangles start at the BOTTOM left
+    return (x, height - y - h, x + w, height - y)
+
+
 class Recovery:
     def __init__(self, game, out, atlas_size=None):
         data = os.path.join(game, "My Dystopian Robot Girlfriend_Data")
@@ -342,6 +372,9 @@ class Recovery:
 
     def save(self, img, rel):
         path = os.path.join(self.out, rel)
+        root = os.path.realpath(self.out)
+        if os.path.commonpath([root, os.path.realpath(path)]) != root:
+            raise ValueError(f"refusing to write outside the output dir: {rel}")
         os.makedirs(os.path.dirname(path), exist_ok=True)
         img.save(path, "PNG")
         print("  wrote", rel)
@@ -516,11 +549,9 @@ class Recovery:
             for cname in cnames:
                 for sec in self.containers[cname]:
                     img = self.tex_by_path(sec["path"]).convert("RGBA")
-                    _, H = img.size
                     for en, entry in sec["entries"].items():
-                        x, y, w, h = entry["rect"]
-                        # unity rectangles start at the BOTTOM left
-                        crop = img.crop((x, H - y - h, x + w, H - y))
+                        checked_name(en)
+                        crop = img.crop(crop_box(img, entry["rect"]))
                         # an all transparent crop is the item saying "get rid
                         # of this drawable" - hightechHypercamoSkin_interact
                         # does it to barcode and lines, her chest barcode and
@@ -547,10 +578,9 @@ class Recovery:
             mapping[key] = []
             for sec_index, sec in enumerate(self.containers[cname]):
                 img = self.tex_by_path(sec["path"]).convert("RGBA")
-                _, height = img.size
                 for drawable, entry in sec["entries"].items():
-                    x, y, w, h = entry["rect"]
-                    crop = img.crop((x, height - y - h, x + w, height - y))
+                    checked_name(drawable)
+                    crop = img.crop(crop_box(img, entry["rect"]))
                     rel = f"variants/hair/{key}/{drawable}.png"
                     self.save(crop, rel)
                     mapping[key].append({

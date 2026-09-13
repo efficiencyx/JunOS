@@ -1,5 +1,11 @@
 .git
 .gitignore
+.env
+.env.local
+.env.bak-*
+runtime/
+.venv/
+android/
 .editorconfig
 .github/
 Junk/

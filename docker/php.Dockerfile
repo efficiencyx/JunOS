@@ -33,8 +33,12 @@ WORKDIR /var/www/omega
 COPY webapp/ /var/www/omega/
 COPY docker/php-entrypoint.sh /usr/local/bin/omega-php-entrypoint
 
+# the app tree stays root owned. php only ever reads it (state,
+# memory, the rate limit files all live under /var/lib/omega), so
+# a php bug can't rewrite its own code either.
 RUN mkdir -p /var/lib/omega/rl \
- && chown -R www-data:www-data /var/lib/omega /var/www/omega \
+ && chown -R www-data:www-data /var/lib/omega \
+ && chmod -R a+rX /var/www/omega \
  && chmod +x /usr/local/bin/omega-php-entrypoint
 
 EXPOSE 9000
