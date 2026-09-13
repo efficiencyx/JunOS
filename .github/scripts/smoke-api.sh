@@ -167,7 +167,8 @@ user = [m for m in msgs if m['role'] == 'user'][-1]['content']
 marker = '\n\n# Live context for THIS reply'
 assert user.startswith(question + marker), 'his words must come first, then the live context'
 assert '## World facts (canon)' in user, 'lore never made it into the live context'
-print('  ok   system prefix is byte-identical, question before live context, lore attached')
+assert user.rstrip('>').rsplit('<think:', 1)[-1] in ('low', 'med', 'high') and user.endswith('>'), 'the <think:LEVEL> budget token is not the last thing in the user turn'
+print('  ok   system prefix is byte-identical, question before live context, lore attached, budget token last')
 PY
 
 curl -sS -b "$cookies" "$BASE/api/conversations.php?action=messages&id=$convo" >"$work/body"

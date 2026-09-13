@@ -834,6 +834,11 @@ if ($reasoning === 'auto') {
     [$reasoning, $think, $route] = route_reasoning($lastUserMsg, $idle);
 }
 
+// the budget token goes dead last, after the live context. v7
+// rows end user turns with "\n\n<think:LEVEL>" and the level
+// names are low/med/high there, not medium.
+$messages[count($messages) - 1]['content'] .= "\n\n<think:" . ($reasoning === 'medium' ? 'med' : $reasoning) . '>';
+
 // this frame carries the WHOLE assembled system prompt, so it
 // stays behind the admin role. the dev HUD is the only thing that
 // reads it.
