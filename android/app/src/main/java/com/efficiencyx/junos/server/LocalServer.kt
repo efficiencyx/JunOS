@@ -9,12 +9,15 @@ import com.efficiencyx.junos.data.JunDatabase
 import com.efficiencyx.junos.data.PreferenceEntity
 import com.efficiencyx.junos.data.RelationshipEntity
 import com.efficiencyx.junos.data.WardrobePresetEntity
+import com.efficiencyx.junos.data.WardrobeStateEntity
 import com.efficiencyx.junos.inference.ChatEngine
 import com.efficiencyx.junos.inference.ChatRequest
 import com.efficiencyx.junos.memory.MemoryStore
 import com.efficiencyx.junos.setup.AssetRecovery
 import com.efficiencyx.junos.voice.TtsRequest
 import com.efficiencyx.junos.voice.VoiceEngine
+import com.efficiencyx.junos.wardrobe.Wardrobe
+import com.efficiencyx.junos.wardrobe.WardrobeState
 import io.ktor.http.ContentType
 import io.ktor.http.HttpHeaders
 import io.ktor.http.HttpMethod
@@ -44,6 +47,7 @@ import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
 import kotlinx.serialization.encodeToString
+import kotlinx.serialization.json.encodeToJsonElement
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonElement
@@ -194,6 +198,22 @@ class LocalServer(
             get("/api/wardrobe.php") { if (call.authorized()) wardrobe() }
             post("/api/wardrobe.php") { if (call.authorized()) wardrobe() }
             delete("/api/wardrobe.php") { if (call.authorized()) wardrobe() }
+
+            get("/api/outfit.php") {
+                if (!call.authorized()) return@get
+                val stored = database.dao().wardrobeState()?.let { runCatching { json.decodeFromString<WardrobeState>(it.data) }.getOrNull() }
+                call.json(buildJsonObject {
+                    put("initialized", stored != null)
+                    put("state", json.encodeToJsonElement(stored ?: WardrobeState.default()))
+                })
+            }
+            put("/api/outfit.php") {
+                if (!call.authorized()) return@put
+                val body = call.jsonBody(32 * 1024) ?: return@put
+                val state = Wardrobe.canonicalState(body) ?: return@put call.error(HttpStatusCode.BadRequest, "invalid_wardrobe")
+                database.dao().putWardrobeState(WardrobeStateEntity(data = json.encodeToString(state), updatedAt = now()))
+                call.json(buildJsonObject { put("state", json.encodeToJsonElement(state)) })
+            }
 
             get("/api/memory.php") {
                 if (!call.authorized()) return@get

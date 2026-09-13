@@ -21,6 +21,11 @@ class ChatRequestTest {
     }
 
     @Test
+    fun acceptsOversizedHistory() {
+        request(messages = List(161) { ClientMessage("user", "hey") }).validate()
+    }
+
+    @Test
     fun rejectsUnknownRoles() {
         val error = assertThrows(IllegalArgumentException::class.java) {
             request(messages = listOf(ClientMessage("tool", "result"))).validate()
