@@ -98,11 +98,17 @@ fi
 
 # Warm it up. get the chat model into VRAM NOW so the first
 # message you send doesn't sit through the ~2 min cold load.
-if [ -n "$CHAT_MODEL" ]; then
-  echo "[ollama-entrypoint] pre-warming $CHAT_MODEL..."
+# ONLY with the exact num_ctx php will send. ollama treats a
+# different num_ctx as a different runner and reloads, so a warm
+# with the default 4096 never got reused, and when you'd already
+# sent a message it evicted the runner you were on. php works the
+# context out from OMEGA_NUM_CTX or the card size, we only get the
+# first one here, so no override means no warm.
+if [ -n "$CHAT_MODEL" ] && [ "${OMEGA_NUM_CTX:-0}" -gt 0 ] 2>/dev/null; then
+  echo "[ollama-entrypoint] pre-warming $CHAT_MODEL at num_ctx $OMEGA_NUM_CTX..."
   curl -s -X POST "http://127.0.0.1:11434/api/generate" \
     -H 'Content-Type: application/json' \
-    -d "{\"model\":\"$CHAT_MODEL\",\"prompt\":\"\",\"stream\":false}" >/dev/null \
+    -d "{\"model\":\"$CHAT_MODEL\",\"prompt\":\"\",\"stream\":false,\"keep_alive\":-1,\"options\":{\"num_ctx\":$OMEGA_NUM_CTX}}" >/dev/null \
     && echo "[ollama-entrypoint] pre-warm done" \
     || echo "[ollama-entrypoint] pre-warm failed (non-fatal)"
 fi

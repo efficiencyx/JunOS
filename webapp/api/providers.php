@@ -134,11 +134,17 @@ function ollama_api_json(string $path, ?array $post = null, int $timeout = 3): a
     return is_array($data) ? $data : [];
 }
 
+// ollama reports a model we created as jun-mtp:latest, we ask for
+// jun-mtp. compare without the implied tag or nothing matches.
+function ollama_model_name(string $name): string {
+    return preg_replace('/:latest$/', '', $name);
+}
+
 function ollama_model_weights_mb(string $model): int {
     static $cache = [];
     if (isset($cache[$model])) return $cache[$model];
     foreach ((ollama_api_json('/api/tags')['models'] ?? []) as $entry) {
-        if ((string)($entry['name'] ?? '') !== $model) continue;
+        if (ollama_model_name((string)($entry['name'] ?? '')) !== ollama_model_name($model)) continue;
         return $cache[$model] = (int)round(((int)($entry['size'] ?? 0)) / 1048576);
     }
     return $cache[$model] = 0;
@@ -227,7 +233,7 @@ function ollama_evict_if_partially_offloaded(string $model): void {
 
     $loaded = null;
     foreach ((ollama_api_json('/api/ps')['models'] ?? []) as $entry) {
-        if ((string)($entry['name'] ?? '') === $model) { $loaded = $entry; break; }
+        if (ollama_model_name((string)($entry['name'] ?? '')) === ollama_model_name($model)) { $loaded = $entry; break; }
     }
     if ($loaded === null) return;
 
@@ -362,8 +368,44 @@ function generate_chat_title(string $userMessage): ?string {
     return $title;
 }
 
+// one non-streaming chat call, decoded. null + $error on failure.
+// same MTP fallback chat.php has: jun-mtp failing to load (the
+// drafter wants its own VRAM even when the main weights got
+// fitted to CPU) retries on the base tag. without it every
+// consolidation and title call asked ollama to load the twin
+// again, and a second 7 GB runner in the 16 GB container took
+// the working one down with it.
+function provider_post_chat(string $provider, array $payload, ?string &$error = null): ?array {
+    $error = null;
+    for ($attempt = 0; $attempt < 2; $attempt++) {
+        $ch = curl_init(provider_chat_endpoint($provider));
+        curl_setopt_array($ch, [
+            CURLOPT_POST => true,
+            CURLOPT_HTTPHEADER => chat_request_headers($provider),
+            CURLOPT_POSTFIELDS => json_encode($payload, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES),
+            CURLOPT_RETURNTRANSFER => true,
+            CURLOPT_TIMEOUT => 120,
+            CURLOPT_CONNECTTIMEOUT => 10,
+        ]);
+        $resp = curl_exec($ch);
+        $status = (int)curl_getinfo($ch, CURLINFO_RESPONSE_CODE);
+        $error = $resp === false ? curl_error($ch) : ($status >= 300 ? 'http_' . $status : null);
+        curl_close($ch);
+        if ($error === null) {
+            $obj = json_decode($resp, true);
+            if (is_array($obj)) return $obj;
+            $error = 'invalid_response';
+            return null;
+        }
+        $fallback = $status >= 400 ? ollama_mtp_fallback_model((string)($payload['model'] ?? '')) : '';
+        if ($fallback === '') return null;
+        log_event(['msg' => 'mtp_fallback', 'from' => $payload['model'], 'to' => $fallback, 'err' => $error]);
+        $payload['model'] = $fallback;
+    }
+    return null;
+}
+
 function provider_complete_once(string $provider, string $model, array $messages, int $maxTokens = 512, bool $think = false, string $reasoning = 'medium'): ?string {
-    $endpoint = provider_chat_endpoint($provider);
     if (provider_uses_openai_protocol($provider)) {
         $payload = ['model' => $model, 'messages' => $messages, 'stream' => false,
                     'temperature' => 0.3, 'max_tokens' => $maxTokens];
@@ -380,26 +422,11 @@ function provider_complete_once(string $provider, string $model, array $messages
         if (!$think) $payload['think'] = false;
     }
 
-    $ch = curl_init($endpoint);
-    curl_setopt_array($ch, [
-        CURLOPT_POST => true,
-        CURLOPT_HTTPHEADER => chat_request_headers($provider),
-        CURLOPT_POSTFIELDS => json_encode($payload, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES),
-        CURLOPT_RETURNTRANSFER => true,
-        CURLOPT_TIMEOUT => 120,
-        CURLOPT_CONNECTTIMEOUT => 10,
-    ]);
-    $resp = curl_exec($ch);
-    $status = (int)curl_getinfo($ch, CURLINFO_RESPONSE_CODE);
-    if ($resp === false || $status >= 300) {
-        log_event(['msg' => 'complete_once_error', 'err' => $resp === false ? curl_error($ch) : 'http_' . $status]);
-        curl_close($ch);
+    $obj = provider_post_chat($provider, $payload, $error);
+    if ($obj === null) {
+        log_event(['msg' => 'complete_once_error', 'err' => $error]);
         return null;
     }
-    curl_close($ch);
-
-    $obj = json_decode($resp, true);
-    if (!is_array($obj)) return null;
     $text = provider_uses_openai_protocol($provider)
         ? ($obj['choices'][0]['message']['content'] ?? null)
         : ($obj['message']['content'] ?? null);
@@ -409,7 +436,6 @@ function provider_complete_once(string $provider, string $model, array $messages
 }
 
 function provider_complete_tools(string $provider, string $model, array $messages, array $tools, int $maxTokens = 1024, bool $think = false, string $reasoning = 'medium'): array {
-    $endpoint = provider_chat_endpoint($provider);
     if (provider_uses_openai_protocol($provider)) {
         $payload = [
             'model' => $model,
@@ -437,27 +463,11 @@ function provider_complete_tools(string $provider, string $model, array $message
         if (!$think) $payload['think'] = false;
     }
 
-    $ch = curl_init($endpoint);
-    curl_setopt_array($ch, [
-        CURLOPT_POST => true,
-        CURLOPT_HTTPHEADER => chat_request_headers($provider),
-        CURLOPT_POSTFIELDS => json_encode($payload, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES),
-        CURLOPT_RETURNTRANSFER => true,
-        CURLOPT_TIMEOUT => 120,
-        CURLOPT_CONNECTTIMEOUT => 10,
-    ]);
-    $resp = curl_exec($ch);
-    $status = (int)curl_getinfo($ch, CURLINFO_RESPONSE_CODE);
-    if ($resp === false || $status >= 300) {
-        $error = $resp === false ? curl_error($ch) : 'http_' . $status;
+    $obj = provider_post_chat($provider, $payload, $error);
+    if ($obj === null) {
         log_event(['msg' => 'complete_tools_error', 'provider' => $provider, 'err' => $error]);
-        curl_close($ch);
         return ['content' => '', 'tool_calls' => [], 'error' => $error];
     }
-    curl_close($ch);
-
-    $obj = json_decode($resp, true);
-    if (!is_array($obj)) return ['content' => '', 'tool_calls' => [], 'error' => 'invalid_response'];
     $message = provider_uses_openai_protocol($provider)
         ? ($obj['choices'][0]['message'] ?? null)
         : ($obj['message'] ?? null);
