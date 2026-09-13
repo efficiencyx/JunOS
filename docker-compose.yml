@@ -126,6 +126,7 @@ services:
       OLLAMA_MTP: "${OLLAMA_MTP:-}"
       OLLAMA_MTP_N_MAX: "${OLLAMA_MTP_N_MAX:-4}"
       OLLAMA_MTP_MODEL: "${OLLAMA_MTP_MODEL:-jun-mtp}"
+      OMEGA_NUM_CTX: "${OMEGA_NUM_CTX:-}"
 # Cap how many requests and models Ollama holds at once. each one
 # keeps its own KV cache, the memory of the prompt it already
 # read, so they add up fast.
