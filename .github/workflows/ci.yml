@@ -36,6 +36,12 @@ jobs:
           done
           exit $fail
 
+      - name: Stream buffer tests
+        # the one piece of frontend logic with a runtime test. node's
+        # own runner, no deps, dom imports stubbed by the loader hooks
+        # next to it.
+        run: node --test .github/scripts/js/*.test.mjs
+
       - name: Cache busters
         run: sh .github/scripts/check-cache-busters.sh
 
@@ -56,6 +62,9 @@ jobs:
       - name: JSON
         run: git ls-files '*.json' | xargs -r -n1 python3 -m json.tool > /dev/null
 
+      - name: Workflows
+        run: docker run --rm -v "$PWD:/repo" -w /repo rhysd/actionlint:latest -color
+
   python:
     name: python
     runs-on: ubuntu-latest
@@ -72,6 +81,20 @@ jobs:
         # gigabyte). compileall is the syntax half; ruff below covers the
         # errors an import would have caught.
         run: python -m compileall -q tools tts android/app/src/main/python .github
+
+      - name: Colab notebook
+        # the *.json step skips .ipynb. every code cell has to at
+        # least compile, with the ! and % magic lines dropped since
+        # those are colab's, not python's.
+        run: |
+          python3 - <<'PY'
+          import json
+          nb = json.load(open('colab.ipynb'))
+          for i, cell in enumerate(c for c in nb['cells'] if c['cell_type'] == 'code'):
+              src = '\n'.join(l for l in ''.join(cell['source']).splitlines()
+                              if not l.lstrip().startswith(('!', '%')))
+              compile(src, f'colab.ipynb cell {i}', 'exec')
+          PY
 
       - uses: astral-sh/ruff-action@v3
         with:
