@@ -166,6 +166,12 @@ if [ -f .env ] && ! grep -qE '^OMEGA_REGISTRATION_KEY=' .env; then
   printf 'OMEGA_REGISTRATION_KEY=%s\n' "$reg_key" >> .env
   echo "registration key: $reg_key (written to .env, the first account skips it, everyone after needs it)"
 fi
+# same shape for the header php shows the tts/karaoke sidecars.
+# an empty SIDECAR_SECRET= is honoured too, the sidecar then runs
+# on its Host allowlist alone and warns about it at startup.
+if [ -f .env ] && ! grep -qE '^SIDECAR_SECRET=' .env; then
+  printf 'SIDECAR_SECRET=%s\n' "$(openssl rand -hex 32 2>/dev/null || head -c32 /dev/urandom | od -An -tx1 | tr -d ' \n')" >> .env
+fi
 
 # nginx and php both refuse a Host they don't know (444 and 421),
 # so opening the phone at http://192.168.1.42 needs that exact

@@ -50,8 +50,23 @@ else
   docker run --rm -v "$PWD:/w" -w /w php:cli php tools/build-critical-css.php
 fi
 
+# docker cp keeps the host's uid and mode bits, and the containers
+# drop every capability, so nothing in there can chown or chmod
+# afterwards (root included). the checkout has to be world
+# readable on its own, which a normal umask gives you.
+# api/review.php is the local dataset review page. the image build
+# leaves it out (.dockerignore) and so does the sync, unless you
+# ask: SYNC_REVIEW=1 ./sync-webapp.sh
+copy_tree() {
+  if [ "${SYNC_REVIEW:-}" = 1 ]; then
+    tar -C webapp -cf - . | docker cp - "$1:$DEST"
+  else
+    tar -C webapp --exclude=./api/review.php -cf - . | docker cp - "$1:$DEST"
+  fi
+}
+
 echo "→ static assets → $NGINX:$DEST"
-docker cp webapp/. "$NGINX:$DEST"
+copy_tree "$NGINX"
 
 if [ "$static_only" -eq 1 ]; then
   echo "✓ static synced. Hard-refresh the browser (Ctrl-Shift-R) to drop cached js/css."
@@ -60,11 +75,7 @@ fi
 
 if running "$PHP"; then
   echo "→ php           → $PHP:$DEST"
-  docker cp webapp/. "$PHP:$DEST"
-  # tools/ is mounted read only so chown always complains about it,
-  # and set -e would quit before the restart below and leave the
-  # old opcache running.
-  docker exec "$PHP" chown -R www-data:www-data "$DEST" 2>/dev/null || true
+  copy_tree "$PHP"
   echo "→ restarting php-fpm (flushes opcache)"
   docker restart "$PHP" >/dev/null
 else

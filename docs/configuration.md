@@ -44,6 +44,8 @@ conditional requirement is `OPENROUTER_API_KEY`, needed only when
 |---|---|---|---|
 | `OMEGA_REGISTRATION_KEY` | *(empty)* | `php` service, `webapp/api/auth.php` (`signup`, `signup_info`) | Key every new account after the first must present (the first signup on an empty `users` table skips it) (`hash_equals`, so a wrong one is a 403 `invalid_registration_key`; a missing one is `registration_closed`). Empty or unset means public signup, and `auth.php?action=signup_info` tells the login page whether to show the field. Both installers generate and print a key. |
 | `OMEGA_DEV_KEY` | *(empty)* | `php` service, `webapp/api/auth.php` | Optional developer access key. |
+| `OMEGA_TURN_TIMEOUT_S` | `900` | `webapp/api/providers.php` (`stream_turn_deadline()`) | Wall-clock ceiling for one chat turn against the model server, every tool round included. Each round gets what is left of it as its curl timeout. Floor 30. |
+| `OMEGA_STREAM_IDLE_S` | `300` | `webapp/api/providers.php` | Hang up on an upstream stream that has sent nothing for this long (curl low-speed limit, 1 byte/s). Has to cover a cold model load plus prompt eval on a large context. Floor 10. The per-stream byte caps next to it (`STREAM_ERROR_BODY_MAX` 64 KiB, `STREAM_PENDING_MAX` 1 MiB, `STREAM_CONTENT_MAX` 4 MiB) are constants, not env. |
 
 Both installers generate a random hex `OMEGA_REGISTRATION_KEY` when the line is
 absent from `.env` (`ensure_key`/`gen_key` in `install.sh`,
@@ -93,7 +95,11 @@ single process in both roles.
 | `STT_DEVICE` | `cpu` | `tts/server.py` | `cpu` \| `cuda`. Separate from `TTS_DEVICE` by design - whisper runs on CTranslate2, which needs different CUDA/cuDNN support than the torch wheel ships. |
 | `STT_MAX_DURATION_S` / `STT_MAX_CONCURRENT` | `120` / `1` | `tts/server.py` | Maximum decoded utterance duration and simultaneous STT jobs. The decoded limit applies regardless of compressed upload size. |
 | `SEP_MAX_DURATION_S` / `SEP_MAX_CONCURRENT` | `900` / `1` | `tts/server.py` | Maximum decoded song duration and simultaneous separation jobs. |
-| `CORS_ORIGIN` | `http://nginx` (Docker) | `tts/server.py` (FastAPI `CORSMiddleware`) | Allowed browser origin for the sidecar's own HTTP API. Should match wherever nginx serves the frontend from; `start.ps1` sets it to the bare-metal site URL. |
+| `SEP_MAX_JOBS` | `4` | `tts/server.py` | Separated songs kept on disk waiting for their stems to be fetched; past this the oldest job is deleted. |
+| `TTS_MAX_CONCURRENT` / `TTS_MAX_QUEUE` / `TTS_QUEUE_WAIT_S` | `2` / `8` / `30` | `tts/server.py` | Simultaneous synthesis jobs, how many more may wait for a slot, and for how long. Anything past the queue gets a 429 straight away. |
+| `SIDECAR_SECRET` | random, written to `.env` by `start.sh` / `install.ps1` | `tts/server.py`, `webapp/api/_lib.php` (`sidecar_headers()`) | Shared secret PHP sends the tts/karaoke sidecars in `X-Sidecar-Secret`. The sidecar refuses every request without it except `/health`. Empty means the sidecar runs on `SIDECAR_ALLOWED_HOSTS` alone and warns at startup. Colab mints one per run. |
+| `SIDECAR_ALLOWED_HOSTS` | `localhost,127.0.0.1,::1,tts,karaoke` | `tts/server.py` | Host header allowlist for the sidecar (port ignored). Requests carrying `Origin` or `Sec-Fetch-Site` are refused regardless: browsers go through PHP, never straight to the sidecar. |
+| `STT_LOG_TRANSCRIPTS` | unset | `tts/server.py` | `1` logs the recognised text of every `/stt` call at INFO. Off by default: container logs outlive a factory reset. |
 
 `TTS_HOST`, `TTS_PORT`, `STT_COMPUTE`, and `SIDECAR_ROLE` also exist as `ENV`
 defaults baked into `docker/tts.Dockerfile` / `docker/karaoke.Dockerfile`
@@ -119,7 +125,7 @@ route stays mounted in both roles.
 | Variable | Default | Consumed by | What it does |
 |---|---|---|---|
 | `OMEGA_ALLOWED_ORIGINS` | *(empty)* | `webapp/api/_lib.php` (`allowed_origins()`) | Extra origins accepted on writes, comma-separated, scheme included, no trailing slash (`https://jun.example.com`). Only needed behind a proxy whose public origin differs from `DOMAIN`. Docker derives the allowed Host set from `DOMAIN` and rejects every other Host before PHP. |
-| `TRUST_PROXY` | *(unset)* | `webapp/api/_lib.php` (`client_ip()`) | `1` makes rate limiting read the first entry of `X-Forwarded-For` instead of the socket address. Set it **only** behind a proxy you control that overwrites the header - otherwise any caller can pick their own rate-limit bucket. |
+| `TRUST_PROXY` | *(unset)* | `webapp/api/_lib.php` (`client_ip()`), forwarded by `docker-compose.yml` | `1` makes rate limiting read the **last** entry of `X-Forwarded-For` (the one your proxy appended) instead of the socket address. Set it **only** behind a proxy you control that appends or overwrites the header - otherwise any caller can pick their own rate-limit bucket. |
 
 ## 5. State & persistence
 

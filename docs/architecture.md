@@ -310,7 +310,7 @@ Signup takes a `registration_key` matched against `OMEGA_REGISTRATION_KEY`, exce
 
 ### Sidecar/Ollama isolation
 
-Neither service publishes a port to the host. The audio sidecar additionally enforces `CORS_ORIGIN` via FastAPI `CORSMiddleware`; the browser never talks to the sidecar directly; all requests go through `webapp/api/tts.php` / `stt.php`.
+Neither service publishes a port to the host. The audio sidecar additionally requires the `X-Sidecar-Secret` header (`SIDECAR_SECRET`, minted into `.env` by `start.sh`), checks the `Host` header against `SIDECAR_ALLOWED_HOSTS`, refuses any request carrying `Origin` or `Sec-Fetch-Site`, and enforces the expected content type, all before reading a body. The browser never talks to the sidecar directly; all requests go through `webapp/api/tts.php` / `stt.php` / `karaoke.php`, which hold the session check and the rate limiter.
 
 ---
 

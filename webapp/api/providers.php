@@ -484,6 +484,7 @@ function provider_stream_state(): array {
         'error_body' => '',
         'stream_error' => false,
         'curl_error' => '',
+        'aborted' => '',
         'duration_ns' => 0,
         'think_open' => false,
         'think_hold' => '',
@@ -679,6 +680,24 @@ function provider_finish_openai_tool_calls(array $toolAcc, array &$state, int $r
     }
 }
 
+// the ceilings on one upstream stream. a turn is every tool
+// round of one chat.php request, so the deadline is shared and
+// each round gets what's left. idle is curl's low speed check:
+// under 1 byte/s for that many seconds and it hangs up. that has
+// to cover a cold load plus prompt eval on a big context, which
+// is minutes on CPU, so it's long. the byte caps are for a
+// provider that streams garbage: a frame that never ends, a
+// reply that never stops, an error page the size of a novel.
+const STREAM_ERROR_BODY_MAX = 64 * 1024;
+const STREAM_PENDING_MAX = 1024 * 1024;
+const STREAM_CONTENT_MAX = 4 * 1024 * 1024;
+
+function stream_turn_deadline(): float {
+    static $deadline = null;
+    if ($deadline === null) $deadline = microtime(true) + max(30, (int)env_str('OMEGA_TURN_TIMEOUT_S', '900'));
+    return $deadline;
+}
+
 function provider_stream_round(string $provider, array $payload, callable $emit, int $round = 0): array {
     $openai = provider_uses_openai_protocol($provider);
     $state = provider_stream_state();
@@ -691,11 +710,28 @@ function provider_stream_round(string $provider, array $payload, callable $emit,
     curl_setopt($ch, CURLOPT_HTTPHEADER, chat_request_headers($provider));
     curl_setopt($ch, CURLOPT_POSTFIELDS, json_encode($payload, JSON_UNESCAPED_UNICODE));
     curl_setopt($ch, CURLOPT_RETURNTRANSFER, false);
-    curl_setopt($ch, CURLOPT_TIMEOUT, 0);
+    curl_setopt($ch, CURLOPT_TIMEOUT_MS, max(1000, (int)((stream_turn_deadline() - $started) * 1000)));
+    curl_setopt($ch, CURLOPT_LOW_SPEED_LIMIT, 1);
+    curl_setopt($ch, CURLOPT_LOW_SPEED_TIME, max(10, (int)env_str('OMEGA_STREAM_IDLE_S', '300')));
     curl_setopt($ch, CURLOPT_CONNECTTIMEOUT, 10);
 
+    // returning anything but strlen($chunk) makes curl drop the
+    // transfer. that's how every cap below hangs up on upstream.
+    $abort = function (string $why) use (&$state, $emit): int {
+        $state['aborted'] = $why;
+        if ($why !== 'client_gone') {
+            $state['stream_error'] = true;
+            $emit(['error' => $why]);
+        }
+        return -1;
+    };
+    $overflowed = function () use (&$buf, &$state): bool {
+        return strlen($buf) > STREAM_PENDING_MAX || strlen($state['content']) > STREAM_CONTENT_MAX;
+    };
+
     if (!$openai) {
-        curl_setopt($ch, CURLOPT_WRITEFUNCTION, function ($ch, $chunk) use (&$buf, &$state, $emit) {
+        curl_setopt($ch, CURLOPT_WRITEFUNCTION, function ($ch, $chunk) use (&$buf, &$state, $emit, $abort, $overflowed) {
+            if (connection_aborted()) return $abort('client_gone');
             if ($state['http_status'] === 0) {
                 $state['http_status'] = (int)curl_getinfo($ch, CURLINFO_RESPONSE_CODE);
             }
@@ -704,28 +740,36 @@ function provider_stream_round(string $provider, array $payload, callable $emit,
             // before chat.php gets a say. hold it here so the caller can
             // decide to retry somewhere else first.
             if ($state['http_status'] >= 400) {
+                if (strlen($state['error_body']) > STREAM_ERROR_BODY_MAX) return $abort('upstream_error');
                 $state['error_body'] .= $chunk;
                 return strlen($chunk);
             }
             provider_parse_ollama_chunk($chunk, $buf, $state, $emit);
+            if ($overflowed()) return $abort('upstream_overflow');
             return strlen($chunk);
         });
     } else {
-        curl_setopt($ch, CURLOPT_WRITEFUNCTION, function ($ch, $chunk) use (&$buf, &$toolAcc, &$state, $emit) {
+        curl_setopt($ch, CURLOPT_WRITEFUNCTION, function ($ch, $chunk) use (&$buf, &$toolAcc, &$state, $emit, $abort, $overflowed) {
+            if (connection_aborted()) return $abort('client_gone');
             if ($state['http_status'] === 0) {
                 $state['http_status'] = (int)curl_getinfo($ch, CURLINFO_RESPONSE_CODE);
             }
             if ($state['http_status'] >= 400) {
+                if (strlen($state['error_body']) > STREAM_ERROR_BODY_MAX) return $abort('upstream_error');
                 $state['error_body'] .= $chunk;
                 return strlen($chunk);
             }
 
             provider_parse_openai_chunk($chunk, $buf, $toolAcc, $state, $emit);
+            if ($overflowed()) return $abort('upstream_overflow');
             return strlen($chunk);
         });
     }
 
-    if (curl_exec($ch) === false) $state['curl_error'] = curl_error($ch);
+    if (curl_exec($ch) === false && $state['aborted'] === '') {
+        $state['curl_error'] = curl_errno($ch) === CURLE_OPERATION_TIMEDOUT
+            ? 'timeout: ' . curl_error($ch) : curl_error($ch);
+    }
     if ($state['http_status'] === 0) {
         $state['http_status'] = (int)curl_getinfo($ch, CURLINFO_RESPONSE_CODE);
     }

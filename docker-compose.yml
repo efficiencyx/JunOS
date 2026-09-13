@@ -73,10 +73,13 @@ services:
       OPENROUTER_MODEL: "${OPENROUTER_MODEL:-}"
       LLAMACPP_URL: "${LLAMACPP_URL:-http://llamacpp:8080}"
       OMEGA_NUM_CTX: "${OMEGA_NUM_CTX:-}"
+      OMEGA_TURN_TIMEOUT_S: "${OMEGA_TURN_TIMEOUT_S:-}"
+      OMEGA_STREAM_IDLE_S: "${OMEGA_STREAM_IDLE_S:-}"
       OMEGA_DEV_KEY: "${OMEGA_DEV_KEY:-}"
       OMEGA_REGISTRATION_KEY: "${OMEGA_REGISTRATION_KEY:-}"
       OMEGA_ALLOWED_HOSTS: "${DOMAIN:-localhost},localhost,127.0.0.1,::1,${OMEGA_EXTRA_HOSTS:-}"
       OMEGA_ALLOWED_ORIGINS: "${OMEGA_ALLOWED_ORIGINS:-}"
+      TRUST_PROXY: "${TRUST_PROXY:-}"
 # start.sh reads this on the host, php has no GPU device of its
 # own.
       OMEGA_GPU_VRAM_MB: "${OMEGA_GPU_VRAM_MB:-}"
@@ -86,6 +89,7 @@ services:
       TTS_URL: "${TTS_URL:-}"
       KOKORO_URL: "${KOKORO_URL:-http://tts:8001}"
       KARAOKE_URL: "${KARAOKE_URL:-http://karaoke:8001}"
+      SIDECAR_SECRET: "${SIDECAR_SECRET:-}"
     volumes:
       - omega_state:/var/lib/omega
       - ./tools:/var/www/omega/tools
@@ -192,13 +196,15 @@ services:
     tmpfs:
       - /tmp:size=512m,mode=1777
     environment:
-      CORS_ORIGIN: "${CORS_ORIGIN:-http://nginx}"
+      SIDECAR_SECRET: "${SIDECAR_SECRET:-}"
       TTS_DEVICE: "${TTS_DEVICE:-cpu}"
       STT_MODEL: "${STT_MODEL:-base}"
       STT_LANG: "${STT_LANG-}"
       STT_DEVICE: "${STT_DEVICE:-cpu}"
       STT_MAX_DURATION_S: "${STT_MAX_DURATION_S:-120}"
       STT_MAX_CONCURRENT: "${STT_MAX_CONCURRENT:-1}"
+      TTS_MAX_CONCURRENT: "${TTS_MAX_CONCURRENT:-2}"
+      TTS_MAX_QUEUE: "${TTS_MAX_QUEUE:-8}"
     volumes:
       - tts_cache:/home/omega/.cache
     healthcheck:
@@ -235,13 +241,14 @@ services:
     tmpfs:
       - /tmp:size=1g,mode=1777
     environment:
-      CORS_ORIGIN: "${CORS_ORIGIN:-http://nginx}"
+      SIDECAR_SECRET: "${SIDECAR_SECRET:-}"
       SEP_DEVICE: "${SEP_DEVICE:-auto}"
       STT_MODEL: "${STT_MODEL:-base}"
       STT_LANG: "${STT_LANG-}"
       STT_DEVICE: "${STT_DEVICE:-cpu}"
       SEP_MAX_DURATION_S: "${SEP_MAX_DURATION_S:-900}"
       SEP_MAX_CONCURRENT: "${SEP_MAX_CONCURRENT:-1}"
+      SEP_MAX_JOBS: "${SEP_MAX_JOBS:-4}"
       STT_MAX_CONCURRENT: "${STT_MAX_CONCURRENT:-1}"
     volumes:
       - karaoke_cache:/home/omega/.cache

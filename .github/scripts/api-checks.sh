@@ -78,6 +78,16 @@ check 'dotfiles are not public'         404 "$BASE/.env"
 # normalizes and 404s. either is a refusal, the point is nobody
 # gets composer.json.
 refused 'traversal out of the docroot' --path-as-is "$BASE/../composer.json"
+# the same files behind an encoded, doubled or backslashed
+# leading slash. the router used to string-match "/assets/" on
+# the decoded path and then realpath() the file, and those two
+# see "//assets/x" differently. nginx 400s some of these itself.
+refused 'encoded slash alias of an asset'   --path-as-is "$BASE/%2fassets/texture_00.png"
+refused 'double slash alias of an asset'    --path-as-is "$BASE//assets/texture_00.png"
+refused 'encoded slash alias of the prompt' --path-as-is "$BASE/%2fsystem_prompt.txt"
+refused 'backslash alias of the prompt'     --path-as-is "$BASE/%5csystem_prompt.txt"
+refused 'uppercase alias of a migration'    --path-as-is "$BASE/API/migrations/001_init.sql"
+check 'asset without a session'          401 "$BASE/assets/texture_00.png"
 
 echo "headers"
 curl -sS -D "$work/head" -o /dev/null "$BASE/" || true

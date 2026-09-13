@@ -98,14 +98,26 @@ if (Test-Path .env) {
             }
         }
     }
+    # the header php shows the tts sidecar. install.ps1 writes
+    # one, but a .env from before that has no line at all, and
+    # the sidecar survives across runs so a per-run value would
+    # lock php out of it on the second start. same rule as
+    # start.sh, only when the line is MISSING.
+    if (-not (Get-Content .env | Where-Object { $_ -match '^SIDECAR_SECRET=' })) {
+        $bytes = [byte[]]::new(32)
+        [Security.Cryptography.RandomNumberGenerator]::Create().GetBytes($bytes)
+        $env:SIDECAR_SECRET = ($bytes | ForEach-Object { $_.ToString('x2') }) -join ''
+        Add-Content .env "SIDECAR_SECRET=$env:SIDECAR_SECRET"
+    }
+}
+$SidecarSecret = if ($env:SIDECAR_SECRET) { $env:SIDECAR_SECRET } else { '' }
 }
 
 $Port      = if ($env:JUN_PORT) { $env:JUN_PORT } else { '8080' }
 $OllamaUrl = if ($env:OLLAMA_URL) { $env:OLLAMA_URL } else { 'http://127.0.0.1:11434' }
 # SiteUrl stays loopback whatever we bind to. it is what the
-# health probe polls, what the browser opens and what CORS_ORIGIN
-# gets, and all three of those are this machine talking to
-# itself.
+# health probe polls and what the browser opens, and both of
+# those are this machine talking to itself.
 $SiteUrl   = "http://127.0.0.1:$Port"
 $BindAddr  = if ($env:BIND_ADDR) { $env:BIND_ADDR.Trim() } else { '127.0.0.1' }
 $LanHosts  = @()
@@ -491,7 +503,7 @@ if (-not $voiceOff -and (Test-Path $ttsPython)) {
         Note 'first run downloads voice models'
         $env:TTS_HOST    = '127.0.0.1'
         $env:TTS_PORT    = '8001'
-        $env:CORS_ORIGIN = $SiteUrl
+        $env:SIDECAR_SECRET = $SidecarSecret
         $env:HF_HOME     = Join-Path $Runtime 'hf-cache'
         Start-Tracked 'tts' $ttsPython @((Join-Path $PSScriptRoot 'tts\server.py')) | Out-Null
     }
@@ -527,6 +539,7 @@ $env:AI_PROVIDER            = $Provider
 $env:OLLAMA_URL             = $OllamaUrl
 $env:LLAMACPP_URL           = $LlamacppUrl
 $env:TTS_URL                = 'http://127.0.0.1:8001'
+$env:SIDECAR_SECRET         = $SidecarSecret
 # one sidecar process serves both roles here, unlike docker where
 # karaoke gets its own (GPU-capable) container.
 $env:KARAOKE_URL            = 'http://127.0.0.1:8001'

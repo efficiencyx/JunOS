@@ -13,6 +13,7 @@ if ($action === 'health') {
     header('Content-Type: application/json');
 
     $ch = curl_init($ttsUrl . '/health');
+    curl_setopt($ch, CURLOPT_HTTPHEADER, sidecar_headers());
     curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
     curl_setopt($ch, CURLOPT_CONNECTTIMEOUT, 5);
     curl_setopt($ch, CURLOPT_TIMEOUT, 10);
@@ -57,7 +58,7 @@ if ($action === 'stt') {
     // which is bigger than every other saving in the voice path put
     // together. tts.php doesn't need it, its JSON bodies stay under
     // 1KB.
-    curl_setopt($ch, CURLOPT_HTTPHEADER, ['Content-Type: audio/wav', 'Expect:']);
+    curl_setopt($ch, CURLOPT_HTTPHEADER, sidecar_headers(['Content-Type: audio/wav', 'Expect:']));
     curl_setopt($ch, CURLOPT_CONNECTTIMEOUT, 5);
     curl_setopt($ch, CURLOPT_TIMEOUT, 60);
     $res = curl_exec($ch);

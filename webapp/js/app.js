@@ -629,7 +629,7 @@ function showBoot() {
   // so only admins get that script.
   await loadScripts([
     ['vendor/pixi.min.js', 'vendor/live2dcubismcore.min.js',
-     'vendor/marked.min.js', 'vendor/purify.min.js?v=3',
+     'vendor/marked.min.js', 'vendor/purify.min.js?v=4',
      'js/actions.js?v=4', 'js/outfit.js?v=21', 'js/touch.js?v=3',
      'js/mods.js?v=14', 'js/tts.js?v=3', 'js/voice.js?v=9',
      'js/voicemode.js?v=3', 'js/trip-loader.js?v=3',

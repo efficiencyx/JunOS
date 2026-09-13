@@ -22,7 +22,9 @@ Run: python server.py
 """
 
 import gc
+import hmac
 import io
+import json
 import logging
 import os
 import secrets
@@ -35,8 +37,8 @@ from typing import Annotated
 import numpy as np
 import soundfile as sf
 from fastapi import FastAPI, Request, Response
-from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
+from starlette.concurrency import run_in_threadpool
 from pydantic import BaseModel, Field, StringConstraints
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s: %(message)s")
@@ -118,6 +120,10 @@ STT_LANG = (os.environ.get("STT_LANG", "").strip().lower() or None)
 # TTL when a client just never comes back.
 SEP_MAX_BYTES = 50 * 1024 * 1024
 SEP_TTL_S = 15 * 60
+# how many split songs sit on disk waiting to be fetched. each is
+# two full-length wavs (~100MB a song), and /tmp is a 1g tmpfs in
+# compose. past this the oldest one goes.
+SEP_MAX_JOBS = max(1, int(os.environ.get("SEP_MAX_JOBS", "4")))
 SEP_MAX_DURATION_S = float(os.environ.get("SEP_MAX_DURATION_S", "900"))
 
 _pipeline = None
@@ -144,6 +150,33 @@ _sep_ok = None
 _sep_tokens = {}
 _stt_slots = threading.BoundedSemaphore(max(1, int(os.environ.get("STT_MAX_CONCURRENT", "1"))))
 _sep_slots = threading.BoundedSemaphore(max(1, int(os.environ.get("SEP_MAX_CONCURRENT", "1"))))
+# /tts used to have no cap at all, every request got a thread and
+# they all ran the model at once. js/tts.js keeps 3 in flight per
+# reply, so 2 running plus a short wait line covers one user and
+# a second user's burst gets a 429 instead of an unbounded pile.
+_tts_slots = threading.BoundedSemaphore(max(1, int(os.environ.get("TTS_MAX_CONCURRENT", "2"))))
+TTS_MAX_QUEUE = max(0, int(os.environ.get("TTS_MAX_QUEUE", "8")))
+TTS_QUEUE_WAIT_S = float(os.environ.get("TTS_QUEUE_WAIT_S", "30"))
+_tts_waiting = 0
+
+# only PHP talks to this thing. the browser never does, it goes
+# through api/tts.php and friends, which hold the session check
+# and the rate limiter. so a request straight from a browser
+# (Origin or Sec-Fetch-Site set) is wrong by definition and gets
+# a 403 whatever else it carries. SIDECAR_SECRET is the shared
+# header PHP sends, start.sh/start.ps1/colab mint one. empty
+# means an old .env or a hand-rolled compose, we log it once and
+# fall back to the Host allowlist alone.
+SIDECAR_SECRET = os.environ.get("SIDECAR_SECRET", "").strip()
+SIDECAR_ALLOWED_HOSTS = {
+    h.strip().lower() for h in os.environ.get(
+        "SIDECAR_ALLOWED_HOSTS", "localhost,127.0.0.1,::1,tts,karaoke").split(",")
+    if h.strip()}
+# what each POST route takes in its body. anything else is a 415
+# before the body gets read.
+_RAW_AUDIO_PATHS = {"/stt", "/separate", "/transcribe_timed"}
+_JSON_PATHS = {"/tts", "/warm", "/separate/stem"}
+JSON_MAX_BYTES = 16 * 1024
 
 
 class AudioDurationExceeded(Exception):
@@ -406,12 +439,65 @@ def _reaper():
 
 
 app = FastAPI()
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=[os.environ.get("CORS_ORIGIN", "http://nginx")],
-    allow_methods=["POST", "GET"],
-    allow_headers=["Content-Type"],
-)
+
+
+class BodyTooLarge(Exception):
+    pass
+
+
+# counts while the bytes come in, so a 2GB upload stops at the
+# cap instead of sitting in RAM first and getting measured after.
+async def read_body(request, limit):
+    declared = request.headers.get("content-length")
+    if declared and declared.isdigit() and int(declared) > limit:
+        raise BodyTooLarge
+    chunks = []
+    size = 0
+    async for chunk in request.stream():
+        size += len(chunk)
+        if size > limit:
+            raise BodyTooLarge
+        chunks.append(chunk)
+    return b"".join(chunks)
+
+
+def _host_name(value):
+    host = value.strip().lower()
+    if host.startswith("["):
+        return host[1:host.find("]")] if "]" in host else host
+    return host.rsplit(":", 1)[0] if host.count(":") == 1 else host
+
+
+def _gate(request):
+    if request.url.path == "/health":
+        return None
+    if "origin" in request.headers or "sec-fetch-site" in request.headers:
+        return "browser_not_allowed"
+    if _host_name(request.headers.get("host", "")) not in SIDECAR_ALLOWED_HOSTS:
+        return "bad_host"
+    if SIDECAR_SECRET and not hmac.compare_digest(
+            request.headers.get("x-sidecar-secret", ""), SIDECAR_SECRET):
+        return "bad_secret"
+    if request.method == "POST":
+        ct = request.headers.get("content-type", "").split(";")[0].strip().lower()
+        path = request.url.path
+        if path in _RAW_AUDIO_PATHS and not (ct.startswith("audio/") or ct == "application/octet-stream"):
+            return "unsupported_media_type"
+        if path in _JSON_PATHS and ct != "application/json":
+            return "unsupported_media_type"
+    return None
+
+
+@app.middleware("http")
+async def gate(request: Request, call_next):
+    # runs BEFORE any handler reads the body, so a rejected request
+    # costs a header parse and nothing else
+    why = _gate(request)
+    if why is not None:
+        log.warning("refused %s %s: %s", request.method, request.url.path, why)
+        status = 415 if why == "unsupported_media_type" else 403
+        return JSONResponse({"error": why}, status_code=status)
+    return await call_next(request)
 
 
 @app.exception_handler(Exception)
@@ -453,6 +539,10 @@ def prewarm():
     # voice starting cold. pocket-tts just warms up on its own first
     # request instead.
     global _last_used
+    if not SIDECAR_SECRET:
+        log.warning("SIDECAR_SECRET is empty, only the Host allowlist (%s) stands "
+                    "between this port and anyone who can reach it",
+                    ",".join(sorted(SIDECAR_ALLOWED_HOSTS)))
     if SIDECAR_ROLE != "karaoke":
         try:
             for _gs, _ps, _audio in get_pipeline()("Hi.", voice=KOKORO_DEFAULT, speed=1.0):
@@ -550,20 +640,44 @@ def synth_pocket(text, voice, language):
     return audio, model.sample_rate
 
 
+def _tts_busy():
+    return JSONResponse({"error": "tts_busy"}, status_code=429, headers={"Retry-After": "2"})
+
+
+def _acquire_tts_slot():
+    global _tts_waiting
+    if _tts_slots.acquire(blocking=False):
+        return True
+    with _lock:
+        if _tts_waiting >= TTS_MAX_QUEUE:
+            return False
+        _tts_waiting += 1
+    try:
+        return _tts_slots.acquire(timeout=TTS_QUEUE_WAIT_S)
+    finally:
+        with _lock:
+            _tts_waiting -= 1
+
+
 @app.post("/tts")
 def tts(req: TTSReq):
     if not req.text:
         return Response(status_code=204)
 
     engine = req.engine if req.engine in TTS_ENGINES else DEFAULT_ENGINE
-    _begin_use(engine)
+    if not _acquire_tts_slot():
+        return _tts_busy()
     try:
-        if engine == "pockettts":
-            result = synth_pocket(req.text, req.voice, req.lang)
-        else:
-            result = synth_kokoro(req.text, req.voice, req.speed)
+        _begin_use(engine)
+        try:
+            if engine == "pockettts":
+                result = synth_pocket(req.text, req.voice, req.lang)
+            else:
+                result = synth_kokoro(req.text, req.voice, req.speed)
+        finally:
+            _end_use()
     finally:
-        _end_use()
+        _tts_slots.release()
 
     if result is None:
         return Response(status_code=204)
@@ -586,12 +700,17 @@ def warm(req: WarmReq):
         return {"ok": True, "warmed": None}
     language = req.lang if req.lang in POCKET_LANG_IDS else POCKET_DEFAULT_LANG
     voice = req.voice if req.voice in POCKET_VOICES else POCKET_DEFAULT
-    _begin_use("pockettts")
+    if not _acquire_tts_slot():
+        return _tts_busy()
     try:
-        model = get_pocket_model(language)
-        pocket_state(model, voice)
+        _begin_use("pockettts")
+        try:
+            model = get_pocket_model(language)
+            pocket_state(model, voice)
+        finally:
+            _end_use()
     finally:
-        _end_use()
+        _tts_slots.release()
     return {"ok": True, "warmed": language}
 
 
@@ -603,12 +722,19 @@ async def stt(request: Request):
     if not _stt_available():
         return JSONResponse({"error": "stt_unavailable"}, status_code=503)
 
-    body = await request.body()
-    if len(body) > STT_MAX_BYTES:
+    try:
+        body = await read_body(request, STT_MAX_BYTES)
+    except BodyTooLarge:
         return JSONResponse({"error": "audio_too_large"}, status_code=413)
     if not body:
         return JSONResponse({"text": ""})
+    # decode + whisper are seconds of blocking work. on the event
+    # loop thread that stalls /health and every other request for
+    # the whole time, so it goes to the threadpool.
+    return await run_in_threadpool(_stt_sync, body)
 
+
+def _stt_sync(body):
     if not _stt_slots.acquire(blocking=False):
         return JSONResponse({"error": "stt_busy"}, status_code=429, headers={"Retry-After": "2"})
     try:
@@ -636,7 +762,13 @@ async def stt(request: Request):
         text = " ".join(seg.text.strip() for seg in segments).strip()
     finally:
         _stt_slots.release()
-    log.info("stt: %d bytes -> %r", len(body), text)
+    # NOT the text. this log outlives a factory reset and what she
+    # heard is nobody's business. STT_LOG_TRANSCRIPTS=1 for a
+    # debugging session, then turn it back off.
+    if os.environ.get("STT_LOG_TRANSCRIPTS") == "1":
+        log.info("stt: %d bytes -> %r", len(body), text)
+    else:
+        log.info("stt: %d bytes -> %d chars", len(body), len(text))
     return JSONResponse({"text": text})
 
 
@@ -726,12 +858,16 @@ async def separate(request: Request):
     if not _sep_available():
         return JSONResponse({"error": "sep_unavailable"}, status_code=503)
 
-    body = await request.body()
-    if len(body) > SEP_MAX_BYTES:
+    try:
+        body = await read_body(request, SEP_MAX_BYTES)
+    except BodyTooLarge:
         return JSONResponse({"error": "audio_too_large"}, status_code=413)
     if not body:
         return JSONResponse({"error": "empty_audio"}, status_code=400)
+    return await run_in_threadpool(_separate_sync, body)
 
+
+def _separate_sync(body):
     if not _sep_slots.acquire(blocking=False):
         return JSONResponse({"error": "sep_busy"}, status_code=429, headers={"Retry-After": "5"})
     # everything past the acquire lives in the try. one slot, so a
@@ -768,6 +904,12 @@ async def separate(request: Request):
             sf.write(os.path.join(d, "vocals_guide.wav"), vocals.T.numpy(), sr, subtype="PCM_16")
             with _lock:
                 _sep_tokens[token] = {"dir": d, "created_at": time.monotonic(), "fetched": set()}
+                evicted = []
+                while len(_sep_tokens) > SEP_MAX_JOBS:
+                    oldest = min(_sep_tokens, key=lambda t: _sep_tokens[t]["created_at"])
+                    evicted.append(_sep_tokens.pop(oldest)["dir"])
+            for old in evicted:
+                shutil.rmtree(old, ignore_errors=True)
 
             lyrics = []
             if _stt_available():
@@ -784,7 +926,9 @@ async def separate(request: Request):
 @app.post("/separate/stem")
 async def separate_stem(request: Request):
     try:
-        body = await request.json()
+        body = json.loads(await read_body(request, JSON_MAX_BYTES))
+    except BodyTooLarge:
+        return JSONResponse({"error": "request_too_large"}, status_code=413)
     except Exception:
         return JSONResponse({"error": "invalid_request"}, status_code=400)
     token = body.get("token") if isinstance(body, dict) else None
@@ -802,7 +946,7 @@ async def separate_stem(request: Request):
     if not os.path.exists(path):
         return JSONResponse({"error": "unknown_stem"}, status_code=404)
     with open(path, "rb") as f:
-        data = f.read()
+        data = await run_in_threadpool(f.read)
     with _lock:
         info["fetched"].add(which)
         done = {"instrumental", "guide"} <= info["fetched"]
@@ -818,12 +962,16 @@ async def transcribe_timed(request: Request):
     if not _stt_available():
         return JSONResponse({"error": "stt_unavailable"}, status_code=503)
 
-    body = await request.body()
-    if len(body) > SEP_MAX_BYTES:
+    try:
+        body = await read_body(request, SEP_MAX_BYTES)
+    except BodyTooLarge:
         return JSONResponse({"error": "audio_too_large"}, status_code=413)
     if not body:
         return JSONResponse({"text": "", "words": []})
+    return await run_in_threadpool(_transcribe_timed_sync, body)
 
+
+def _transcribe_timed_sync(body):
     if not _stt_slots.acquire(blocking=False):
         return JSONResponse({"error": "stt_busy"}, status_code=429, headers={"Retry-After": "2"})
     try:
