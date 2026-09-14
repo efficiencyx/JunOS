@@ -47,6 +47,7 @@ diag_thinking.py
 smoke_thinking.py
 from_think_tags.py
 webapp/api/review.php
+webapp/api/review.js
 
 # raw Live2D source assets - kept locally, not in the repo
 live2d_raw/
