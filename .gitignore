@@ -52,7 +52,9 @@ webapp/api/review.js
 # raw Live2D source assets - kept locally, not in the repo
 live2d_raw/
 
-# lore corpus - generated from tools/lore_dataset.jsonl by build_lore_index.php
+# lore dataset and the corpus built from it by build_lore_index.php. the jsonl is
+# kept locally, not in the repo.
+tools/lore_dataset.jsonl
 # (.bin/.json came from the embedding index, deleted in 2026-07; still ignored so
 # stale copies in older checkouts never get committed)
 webapp/lore_corpus.txt

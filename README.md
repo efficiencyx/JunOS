@@ -291,7 +291,7 @@ The gory version - the action state machine, the tick loop, the memory pipeline 
 
 Editing anything under `webapp/`? Run **`./sync-webapp.sh`** - it pushes the files into the running containers and restarts php-fpm (opcache won't notice otherwise). `-s` for static-only.
 
-Lore datamine from LLMs in `tools/lore_dataset.jsonl`; rebuild the index after editing it:
+Lore datamine from LLMs lives in `tools/lore_dataset.jsonl` (kept local, not in the repo); rebuild the index after editing it:
 
 ```sh
 docker compose exec php php tools/build_lore_index.php
