@@ -44,15 +44,21 @@ diag_labels.py
 diag_thinking.py
 smoke_thinking.py
 from_think_tags.py
+# review.php is tracked here; the line only matters once this file is
+# copied to the public tree, where a stale local copy must stay ignored.
+webapp/api/review.php
 webapp/api/review.js
 
 # raw Live2D source assets - kept locally, not in the repo
 live2d_raw/
 
-# lore corpus - generated from tools/lore_dataset.jsonl by
-# build_lore_index.php (.bin/.json came from the embedding index,
-# deleted in 2026-07; still ignored so stale copies in older
-# checkouts never get committed)
+# lore dataset and the corpus built from it by build_lore_index.php.
+# the jsonl is tracked here but publish.sh keeps it out of the public
+# tree; this line is what stops it being re-added over there.
+tools/lore_dataset.jsonl
+# (.bin/.json came from the embedding index, deleted in 2026-07;
+# still ignored so stale copies in older checkouts never get
+# committed)
 webapp/lore_corpus.txt
 webapp/lore_index.bin
 webapp/lore_meta.json
