@@ -10,7 +10,7 @@
 # this stays safe as long as that check does. the dependabot
 # alerts on the public repo are dismissed with this reasoning.
 # bump the moment a 12.3+ arm64 wheel shows up.
-Pillow==11.0.0
+Pillow==12.3.0
 lz4==4.3.2
 attrs==26.1.0
 fsspec==2026.7.0
