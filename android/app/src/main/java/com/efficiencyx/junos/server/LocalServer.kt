@@ -9,12 +9,15 @@ import com.efficiencyx.junos.data.JunDatabase
 import com.efficiencyx.junos.data.PreferenceEntity
 import com.efficiencyx.junos.data.RelationshipEntity
 import com.efficiencyx.junos.data.WardrobePresetEntity
+import com.efficiencyx.junos.data.WardrobeStateEntity
 import com.efficiencyx.junos.inference.ChatEngine
 import com.efficiencyx.junos.inference.ChatRequest
 import com.efficiencyx.junos.memory.MemoryStore
 import com.efficiencyx.junos.setup.AssetRecovery
 import com.efficiencyx.junos.voice.TtsRequest
 import com.efficiencyx.junos.voice.VoiceEngine
+import com.efficiencyx.junos.wardrobe.Wardrobe
+import com.efficiencyx.junos.wardrobe.WardrobeState
 import io.ktor.http.ContentType
 import io.ktor.http.HttpHeaders
 import io.ktor.http.HttpMethod
@@ -44,6 +47,7 @@ import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
 import kotlinx.serialization.encodeToString
+import kotlinx.serialization.json.encodeToJsonElement
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonElement
@@ -195,6 +199,22 @@ class LocalServer(
             post("/api/wardrobe.php") { if (call.authorized()) wardrobe() }
             delete("/api/wardrobe.php") { if (call.authorized()) wardrobe() }
 
+            get("/api/outfit.php") {
+                if (!call.authorized()) return@get
+                val stored = database.dao().wardrobeState()?.let { runCatching { json.decodeFromString<WardrobeState>(it.data) }.getOrNull() }
+                call.json(buildJsonObject {
+                    put("initialized", stored != null)
+                    put("state", json.encodeToJsonElement(stored ?: WardrobeState.default()))
+                })
+            }
+            put("/api/outfit.php") {
+                if (!call.authorized()) return@put
+                val body = call.jsonBody(32 * 1024) ?: return@put
+                val state = Wardrobe.canonicalState(body) ?: return@put call.error(HttpStatusCode.BadRequest, "invalid_wardrobe")
+                database.dao().putWardrobeState(WardrobeStateEntity(data = json.encodeToString(state), updatedAt = now()))
+                call.json(buildJsonObject { put("state", json.encodeToJsonElement(state)) })
+            }
+
             get("/api/memory.php") {
                 if (!call.authorized()) return@get
                 call.respondText(json.encodeToString(memory.snapshot()), ContentType.Application.Json)
@@ -294,36 +314,41 @@ class LocalServer(
         val id = call.request.queryParameters["id"]?.toLongOrNull()
         when (action) {
             "list" -> {
-                if (call.request.httpMethod != HttpMethod.Get) return call.error(HttpStatusCode.MethodNotAllowed, "method_not_allowed")
+                if (!call.requireMethod(HttpMethod.Get)) return
                 call.json(buildJsonArray { dao.conversations().forEach { value -> add(buildJsonObject {
                     put("id", value.id); value.title?.let { put("title", it) }; put("created_at", value.createdAt); put("updated_at", value.updatedAt)
                 }) } })
             }
             "create" -> {
-                if (call.request.httpMethod != HttpMethod.Post) return call.error(HttpStatusCode.MethodNotAllowed, "method_not_allowed")
+                if (!call.requireMethod(HttpMethod.Post)) return
                 val now = now(); call.json(buildJsonObject { put("id", dao.insertConversation(ConversationEntity(createdAt = now, updatedAt = now))) })
             }
             "messages" -> {
+                if (!call.requireMethod(HttpMethod.Get)) return
                 if (id == null || dao.conversation(id) == null) return call.error(HttpStatusCode.NotFound, "not_found")
                 call.json(buildJsonArray { dao.messages(id).forEach { add(buildJsonObject {
                     put("role", it.role); put("content", it.content); put("created_at", it.createdAt)
                 }) } })
             }
             "rename" -> {
+                if (!call.requireMethod(HttpMethod.Post)) return
                 if (id == null) return call.error(HttpStatusCode.BadRequest, "invalid_request")
                 val title = call.jsonBody(4 * 1024)?.get("title")?.jsonPrimitive?.content?.trim()?.take(120).orEmpty()
                 if (title.isBlank() || dao.renameConversation(id, title, now()) == 0) return call.error(HttpStatusCode.NotFound, "not_found")
                 call.ok()
             }
             "delete" -> {
+                if (!call.requireMethod(HttpMethod.Delete)) return
                 if (id == null || dao.deleteConversation(id) == 0) return call.error(HttpStatusCode.NotFound, "not_found")
                 call.ok()
             }
             "delete_last_assistant" -> {
+                if (!call.requireMethod(HttpMethod.Post)) return
                 if (id == null || dao.conversation(id) == null) return call.error(HttpStatusCode.NotFound, "not_found")
                 dao.deleteLastAssistant(id); call.ok()
             }
             "compact" -> {
+                if (!call.requireMethod(HttpMethod.Post)) return
                 if (id == null) return call.error(HttpStatusCode.BadRequest, "invalid_request")
                 val conversation = dao.conversation(id) ?: return call.error(HttpStatusCode.NotFound, "not_found")
                 val tail = dao.messagesAfter(id, conversation.summaryUptoId)
@@ -378,14 +403,16 @@ class LocalServer(
         val dao = database.dao(); dao.ensureDefaults(now())
         when (call.request.queryParameters["action"]) {
             "status" -> {
+                if (!call.requireMethod(HttpMethod.Get)) return
                 val state = dao.consolidation()!!
                 call.json(buildJsonObject {
                     put("enabled", state.enabled); put("running", false); put("pending", 0); put("last_activity", state.lastActivity)
                     if (state.lastRun > 0) put("last", buildJsonObject { put("at", state.lastRun); put("status", state.lastStatus); put("notes", state.lastNoteCount) })
                 })
             }
-            "welcome" -> call.json(buildJsonObject { put("messages", JsonArray(emptyList())); put("away", 0); put("tier", "none") })
+            "welcome" -> if (call.requireMethod(HttpMethod.Get)) call.json(buildJsonObject { put("messages", JsonArray(emptyList())); put("away", 0); put("tier", "none") })
             "activity" -> {
+                if (!call.requireMethod(HttpMethod.Post)) return
                 val current = dao.consolidation() ?: ConsolidationEntity()
                 dao.putConsolidation(current.copy(lastActivity = now(), enabled = call.request.queryParameters["enabled"] != "0")); call.ok()
             }
@@ -400,7 +427,35 @@ class LocalServer(
             error(HttpStatusCode.Forbidden, "forbidden")
             return false
         }
+        val self = "$LOOPBACK:${request.local.localPort}"
+        if (request.headers[HttpHeaders.Host] != self) {
+            error(HttpStatusCode.Forbidden, "forbidden")
+            return false
+        }
+        // same rule as require_same_origin() in _lib.php. the cookie
+        // is SameSite=Strict but every 127.0.0.1 port is one site, so
+        // a page on another local port could still post our cookie.
+        // Sec-Fetch-Site is the webview's own verdict and goes first,
+        // then Origin, then Referer. a mutation with none of the
+        // three isn't a browser we know.
+        val method = request.httpMethod
+        if (method == HttpMethod.Get || method == HttpMethod.Head || method == HttpMethod.Options) return true
+        val site = request.headers["Sec-Fetch-Site"]
+        val origin = request.headers[HttpHeaders.Origin]
+            ?: request.headers[HttpHeaders.Referrer]?.let { Regex("^[a-z]+://[^/]+", RegexOption.IGNORE_CASE).find(it)?.value }
+        val sameOrigin = if (site != null) site == "same-origin" else origin?.lowercase() == "http://$self"
+        if (!sameOrigin) {
+            Log.w(TAG, "cross-origin mutation blocked")
+            error(HttpStatusCode.Forbidden, "cross_origin_blocked")
+            return false
+        }
         return true
+    }
+
+    private suspend fun io.ktor.server.application.ApplicationCall.requireMethod(method: HttpMethod): Boolean {
+        if (request.httpMethod == method) return true
+        error(HttpStatusCode.MethodNotAllowed, "method_not_allowed")
+        return false
     }
 
     private suspend fun io.ktor.server.application.ApplicationCall.jsonBody(limit: Int): JsonObject? =

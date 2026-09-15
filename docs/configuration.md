@@ -9,7 +9,7 @@ The bare-metal Windows launcher (`start.ps1`) also parses `.env` directly
 skips anything that looks like a Docker-internal hostname:
 
 ```powershell
-# start.ps1 ~line 47-48
+# start.ps1: Docker hostname filter
 if ($v -match '://(ollama|tts|kokoro|nginx|php|llamacpp)\b') { continue }
 ```
 
@@ -36,14 +36,16 @@ conditional requirement is `OPENROUTER_API_KEY`, needed only when
 | `OMEGA_EXTRA_HOSTS` | *(empty)* | `start.sh`, `start.ps1`, nginx `server_name` (both templates), `OMEGA_ALLOWED_HOSTS` for `php` | Extra `Host` values this install answers to, beyond `DOMAIN`, `localhost` and `127.0.0.1`. An unknown Host is a 444 at nginx and a 421 at `require_allowed_host()` in `webapp/api/_lib.php`. When `BIND_ADDR` is off loopback, `start.sh` appends the host's own RFC1918 IPv4 addresses (docker bridges excluded) and prints them as `reachable as:`, so a LAN client normally needs nothing here. `start.ps1` does the same with `Get-NetIPAddress`, skipping the Hyper-V/WSL/VirtualBox/VMware adapters. Space or comma separated; `start.sh` normalizes commas to spaces because `server_name` does not accept them. |
 | `OMEGA_ALLOWED_HOSTS` | `localhost,127.0.0.1,::1` | `webapp/api/_lib.php`, `tools/php-router.php` | The allowlist itself, assembled from `DOMAIN` and `OMEGA_EXTRA_HOSTS` by `docker-compose.yml`. Set it directly only for a bare-metal install with no compose. |
 | `OMEGA_ALLOW_INSECURE_PUBLIC_HTTP` | *(empty)* | `start.sh`, `start.ps1`, `nginx` startup | Set to `1` only to override the public-HTTP refusal. This deliberately allows unencrypted credentials, sessions and chats and should not be used on the internet. |
-| `COMPOSE_PROFILES` | `ollama` | `docker compose` itself (not forwarded into any container) | Picks which model-server containers run: `ollama`, `llamacpp`, `prod` (certbot). `start.sh` derives it from `AI_PROVIDER` when unset; `install.sh` writes it for you. |
+| `COMPOSE_PROFILES` | `ollama` | `docker compose` itself (not forwarded into any container) | Picks which optional containers run: `ollama`, `llamacpp`, `voice`, `karaoke`, `prod` (certbot). `start.sh` merges whatever is set here with what it derives from `AI_PROVIDER`, `VOICE` and `KARAOKE`, so by hand you only ever need it for `prod`; `install.sh` writes it for you. |
 
 ## 1b. Accounts & access
 
 | Variable | Default | Consumed by | What it does |
 |---|---|---|---|
-| `OMEGA_REGISTRATION_KEY` | *(empty)* | `php` service, `webapp/api/auth.php` (`signup`, `signup_info`) | Key every new account, including the first one, must present (`hash_equals`, so a wrong one is a 403 `invalid_registration_key`; a missing one is `registration_closed`). Empty or unset means public signup, and `auth.php?action=signup_info` tells the login page whether to show the field. Both installers generate and print a key. |
+| `OMEGA_REGISTRATION_KEY` | *(empty)* | `php` service, `webapp/api/auth.php` (`signup`, `signup_info`) | Key every new account after the first must present (the first signup on an empty `users` table skips it) (`hash_equals`, so a wrong one is a 403 `invalid_registration_key`; a missing one is `registration_closed`). Empty or unset means public signup, and `auth.php?action=signup_info` tells the login page whether to show the field. Both installers generate and print a key. |
 | `OMEGA_DEV_KEY` | *(empty)* | `php` service, `webapp/api/auth.php` | Optional developer access key. |
+| `OMEGA_TURN_TIMEOUT_S` | `900` | `webapp/api/providers.php` (`stream_turn_deadline()`) | Wall-clock ceiling for one chat turn against the model server, every tool round included. Each round gets what is left of it as its curl timeout. Floor 30. |
+| `OMEGA_STREAM_IDLE_S` | `300` | `webapp/api/providers.php` | Hang up on an upstream stream that has sent nothing for this long (curl low-speed limit, 1 byte/s). Has to cover a cold model load plus prompt eval on a large context. Floor 10. The per-stream byte caps next to it (`STREAM_ERROR_BODY_MAX` 64 KiB, `STREAM_PENDING_MAX` 1 MiB, `STREAM_CONTENT_MAX` 4 MiB) are constants, not env. |
 
 Both installers generate a random hex `OMEGA_REGISTRATION_KEY` when the line is
 absent from `.env` (`ensure_key`/`gen_key` in `install.sh`,
@@ -74,13 +76,13 @@ closing summary. An **empty** value is left alone: that is the operator saying
 
 ## 3. Audio sidecars
 
-Two containers off one `tts/server.py`: `tts` (voice, always CPU) and `karaoke`
-(stem separation, GPU by default, profile-gated). Bare-metal installs run a
-single process in both roles.
+Two containers off one `tts/server.py`: `tts` (voice, always CPU, `voice`
+profile) and `karaoke` (stem separation, GPU by default, `karaoke` profile).
+Bare-metal installs run a single process in both roles.
 
 | Variable | Default | Consumed by | What it does |
 |---|---|---|---|
-| `VOICE` | `on` | `start.ps1` only | **Bare-metal Windows only.** `off` skips launching the TTS/STT sidecar process. Under Docker the `tts` service always runs (no compose `voice` profile exists); `php`/frontend degrade to text-only when it's unreachable or unhealthy. |
+| `VOICE` | `on` | `start.sh` (adds the `voice` compose profile), `start.ps1` | `off` skips the voice sidecar: under Docker the `tts` service sits behind `profiles: [voice]` and is never started, on bare-metal Windows the TTS/STT process is not launched. `php`/frontend degrade to text-only when it's absent, unreachable or unhealthy. |
 | `TTS_URL` | `http://tts:8001` (Docker) / `http://localhost:8001` (PHP fallback) | `webapp/api/tts.php`, `stt.php` | Base URL of the voice sidecar. The pre-rename name `KOKORO_URL` is still honored as a fallback for existing `.env` files. |
 | `TTS_DEVICE` | `cpu` | `start.sh`, `docker/tts.Dockerfile` ENV → `tts/server.py` | `cpu` \| `cuda` \| `auto`. Torch device for TTS synthesis. The image ships a CPU torch, so `auto` resolves to CPU there and `cuda` only means something on bare metal or after a `TTS_TORCH_INDEX` override. Both engines are real-time on CPU; GPU TTS holds ~2GB VRAM, which costs more in LLM layer offload than it buys in synthesis speed. |
 | `TTS_TORCH_INDEX` | `https://download.pytorch.org/whl/cpu` | `docker-compose.yml` → `docker/tts.Dockerfile` | Advanced override for the PyTorch wheel index the voice image builds against. No GPU overlay touches it any more - that plumbing moved to `KARAOKE_TORCH_INDEX`. Normally leave this unset. |
@@ -93,7 +95,11 @@ single process in both roles.
 | `STT_DEVICE` | `cpu` | `tts/server.py` | `cpu` \| `cuda`. Separate from `TTS_DEVICE` by design - whisper runs on CTranslate2, which needs different CUDA/cuDNN support than the torch wheel ships. |
 | `STT_MAX_DURATION_S` / `STT_MAX_CONCURRENT` | `120` / `1` | `tts/server.py` | Maximum decoded utterance duration and simultaneous STT jobs. The decoded limit applies regardless of compressed upload size. |
 | `SEP_MAX_DURATION_S` / `SEP_MAX_CONCURRENT` | `900` / `1` | `tts/server.py` | Maximum decoded song duration and simultaneous separation jobs. |
-| `CORS_ORIGIN` | `http://nginx` (Docker) | `tts/server.py` (FastAPI `CORSMiddleware`) | Allowed browser origin for the sidecar's own HTTP API. Should match wherever nginx serves the frontend from; `start.ps1` sets it to the bare-metal site URL. |
+| `SEP_MAX_JOBS` | `4` | `tts/server.py` | Separated songs kept on disk waiting for their stems to be fetched; past this the oldest job is deleted. |
+| `TTS_MAX_CONCURRENT` / `TTS_MAX_QUEUE` / `TTS_QUEUE_WAIT_S` | `2` / `8` / `30` | `tts/server.py` | Simultaneous synthesis jobs, how many more may wait for a slot, and for how long. Anything past the queue gets a 429 straight away. |
+| `SIDECAR_SECRET` | random, written to `.env` by `start.sh` / `install.ps1` | `tts/server.py`, `webapp/api/_lib.php` (`sidecar_headers()`) | Shared secret PHP sends the tts/karaoke sidecars in `X-Sidecar-Secret`. The sidecar refuses every request without it except `/health`. Empty means the sidecar runs on `SIDECAR_ALLOWED_HOSTS` alone and warns at startup. Colab mints one per run. |
+| `SIDECAR_ALLOWED_HOSTS` | `localhost,127.0.0.1,::1,tts,karaoke` | `tts/server.py` | Host header allowlist for the sidecar (port ignored). Requests carrying `Origin` or `Sec-Fetch-Site` are refused regardless: browsers go through PHP, never straight to the sidecar. |
+| `STT_LOG_TRANSCRIPTS` | unset | `tts/server.py` | `1` logs the recognised text of every `/stt` call at INFO. Off by default: container logs outlive a factory reset. |
 
 `TTS_HOST`, `TTS_PORT`, `STT_COMPUTE`, and `SIDECAR_ROLE` also exist as `ENV`
 defaults baked into `docker/tts.Dockerfile` / `docker/karaoke.Dockerfile`
@@ -119,7 +125,7 @@ route stays mounted in both roles.
 | Variable | Default | Consumed by | What it does |
 |---|---|---|---|
 | `OMEGA_ALLOWED_ORIGINS` | *(empty)* | `webapp/api/_lib.php` (`allowed_origins()`) | Extra origins accepted on writes, comma-separated, scheme included, no trailing slash (`https://jun.example.com`). Only needed behind a proxy whose public origin differs from `DOMAIN`. Docker derives the allowed Host set from `DOMAIN` and rejects every other Host before PHP. |
-| `TRUST_PROXY` | *(unset)* | `webapp/api/_lib.php` (`client_ip()`) | `1` makes rate limiting read the first entry of `X-Forwarded-For` instead of the socket address. Set it **only** behind a proxy you control that overwrites the header - otherwise any caller can pick their own rate-limit bucket. |
+| `TRUST_PROXY` | *(unset)* | `webapp/api/_lib.php` (`client_ip()`), forwarded by `docker-compose.yml` | `1` makes rate limiting read the **last** entry of `X-Forwarded-For` (the one your proxy appended) instead of the socket address. Set it **only** behind a proxy you control that appends or overwrites the header - otherwise any caller can pick their own rate-limit bucket. |
 
 ## 5. State & persistence
 

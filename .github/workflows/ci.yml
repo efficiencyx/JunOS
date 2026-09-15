@@ -24,9 +24,10 @@ jobs:
           node-version: '20'
 
       - name: JS syntax
-        # node --check parses a .js file as CommonJS and rejects import/export.
-        # Node 22.7+ detects module syntax on its own, 20 does not, so copy each
-        # file to .mjs and let the extension pick the ES module parser.
+        # node --check parses a .js file as CommonJS and rejects
+        # import/export. Node 22.7+ detects module syntax on its own, 20
+        # does not, so copy each file to .mjs and let the extension pick
+        # the ES module parser.
         run: |
           fail=0
           for f in $(git ls-files 'webapp/js/**/*.js' 'webapp/*.js' ':!webapp/vendor'); do
@@ -34,6 +35,12 @@ jobs:
             node --check "$RUNNER_TEMP/check.mjs" || { echo "syntax error: $f"; fail=1; }
           done
           exit $fail
+
+      - name: Stream buffer tests
+        # the one piece of frontend logic with a runtime test. node's
+        # own runner, no deps, dom imports stubbed by the loader hooks
+        # next to it.
+        run: node --test .github/scripts/js/*.test.mjs
 
       - name: Cache busters
         run: sh .github/scripts/check-cache-busters.sh
@@ -46,13 +53,17 @@ jobs:
 
       - name: Shell scripts
         # -S error, not warning: the tracked scripts currently trip 5
-        # warning-level findings (unused loop vars in ollama-entrypoint.sh,
-        # start.sh and install.sh, a unicode quote in install.sh, a stray space
-        # after = in sync-webapp.sh). Move this to -S warning once they are fixed.
+        # warning-level findings (unused loop vars in
+        # ollama-entrypoint.sh, start.sh and install.sh, a unicode quote
+        # in install.sh, a stray space after = in sync-webapp.sh). Move
+        # this to -S warning once they are fixed.
         run: git ls-files '*.sh' | xargs -r shellcheck -S error
 
       - name: JSON
         run: git ls-files '*.json' | xargs -r -n1 python3 -m json.tool > /dev/null
+
+      - name: Workflows
+        run: docker run --rm -v "$PWD:/repo" -w /repo rhysd/actionlint:latest -color
 
   python:
     name: python
@@ -65,11 +76,25 @@ jobs:
           python-version: '3.11'
 
       - name: Compile
-        # the sidecar and the recovery tools import torch, demucs and UnityPy,
-        # none of which we install here (torch alone is a gigabyte). compileall
-        # is the syntax half; ruff below covers the errors an import would have
-        # caught.
+        # the sidecar and the recovery tools import torch, demucs and
+        # UnityPy, none of which we install here (torch alone is a
+        # gigabyte). compileall is the syntax half; ruff below covers the
+        # errors an import would have caught.
         run: python -m compileall -q tools tts android/app/src/main/python .github
+
+      - name: Colab notebook
+        # the *.json step skips .ipynb. every code cell has to at
+        # least compile, with the ! and % magic lines dropped since
+        # those are colab's, not python's.
+        run: |
+          python3 - <<'PY'
+          import json
+          nb = json.load(open('colab.ipynb'))
+          for i, cell in enumerate(c for c in nb['cells'] if c['cell_type'] == 'code'):
+              src = '\n'.join(l for l in ''.join(cell['source']).splitlines()
+                              if not l.lstrip().startswith(('!', '%')))
+              compile(src, f'colab.ipynb cell {i}', 'exec')
+          PY
 
       - uses: astral-sh/ruff-action@v3
         with:
@@ -83,8 +108,9 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        # 8.2 is what docker/php.Dockerfile ships. 8.4 is what a fresh bare
-        # metal install pulls down, and it is where the deprecations land first.
+        # 8.2 is what docker/php.Dockerfile ships. 8.4 is what a fresh
+        # bare metal install pulls down, and it is where the deprecations
+        # land first.
         php: ['8.2', '8.4']
     steps:
       - uses: actions/checkout@v4
@@ -97,8 +123,9 @@ jobs:
           coverage: none
 
       - name: Syntax
-        # php -l reports parse errors on stdout next to the "No syntax errors"
-        # noise, so keep the output in a log and print only the failures.
+        # php -l reports parse errors on stdout next to the "No syntax
+        # errors" noise, so keep the output in a log and print only the
+        # failures.
         run: |
           git ls-files '*.php' | xargs -r -n1 -P4 php -l > "$RUNNER_TEMP/php-lint.log" || {
             grep -v 'No syntax errors detected' "$RUNNER_TEMP/php-lint.log"
@@ -106,9 +133,9 @@ jobs:
           }
 
       - name: API smoke test
-        # php -S + tools/php-router.php, which is the bare metal install. no
-        # docker, no ollama: everything under test here has to work with the
-        # model backend down.
+        # php -S + tools/php-router.php, which is the bare metal install.
+        # no docker, no ollama: everything under test here has to work
+        # with the model backend down.
         run: sh .github/scripts/smoke-api.sh
 
   docker:
@@ -135,8 +162,8 @@ jobs:
           KARAOKE=on docker compose -f docker-compose.yml --profile karaoke config -q
 
       - name: Dockerfiles
-        # error threshold only. the warnings are all "pin your apt versions",
-        # which we deliberately don't.
+        # error threshold only. the warnings are all "pin your apt
+        # versions", which we deliberately don't.
         run: |
           fail=0
           for f in docker/*.Dockerfile; do
@@ -187,9 +214,10 @@ jobs:
           }
 
       - name: Build JunSetup.exe
-        # ps2exe emits a .NET Framework WPF binary, so this only builds on a
-        # windows runner - there is no cross compile from the linux jobs.
-        # powershell (5.1), not pwsh: ps2exe targets the framework host.
+        # ps2exe emits a .NET Framework WPF binary, so this only builds
+        # on a windows runner - there is no cross compile from the linux
+        # jobs. powershell (5.1), not pwsh: ps2exe targets the framework
+        # host.
         shell: powershell
         run: ./tools/build-installer-exe.ps1 -Version "1.0.${{ github.run_number }}.0"
 
@@ -218,8 +246,9 @@ jobs:
         run: echo "JUN_PYTHON_312=${{ steps.python312.outputs.python-path }}" >> "$GITHUB_ENV"
 
       - name: Cache gradle bootstrap
-        # android/gradlew downloads gradle itself and checks it against a SHA
-        # pinned in the script, so the version in the key is the whole identity.
+        # android/gradlew downloads gradle itself and checks it against a
+        # SHA pinned in the script, so the version in the key is the
+        # whole identity.
         uses: actions/cache@v4
         with:
           path: ~/.gradle/junos-bootstrap
@@ -234,6 +263,7 @@ jobs:
           key: android-gradle-${{ hashFiles('android/**/*.gradle.kts', 'android/gradle/wrapper/gradle-wrapper.properties') }}
 
       - name: Unit tests
-        # gradlew is tracked without the executable bit, so run it through sh.
+        # gradlew is tracked without the executable bit, so run it
+        # through sh.
         working-directory: android
         run: sh ./gradlew :app:testDebugUnitTest --no-daemon

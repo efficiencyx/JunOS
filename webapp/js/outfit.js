@@ -19,11 +19,9 @@ window.Outfit = (function () {
     { key: 'pants', label: 'Pants', param: 'ParamPantsEnabled', defaultOn: false, excludes: ['skirt','dress','dress1'],
       colorPatterns: ['pants'] },
     { key: 'bra', label: 'Bra', param: 'ParamBraEnabled', defaultOn: true, excludes: ['bikini_top'],
-      // 'nobras' is PlainShirt_FrontNoBras, the shirt's no-bra chest mesh. it
-      // matches 'bra' and the bra group runs after the shirt group, so without
-      // this the shirt front gets painted in the BRA's color. only shows up
-      // once something else hides the bra (bikini top), which is why it sat
-      // there unnoticed until v0.97.5 swimwear.
+      // PlainShirt_FrontNoBras matches bra, whose tint runs after
+      // shirt. exclude it or the v0.97.5 bikini top exposes a shirt
+      // front in bra colour.
       colorPatterns: ['bra'], colorExcludes: ['skin','braid','nobras'] },
     { key: 'panties', label: 'Panties', param: 'ParamPantiesEnabled', defaultOn: true, excludes: ['bikini_bot'],
       colorPatterns: ['panties'], colorExcludes: ['logo'] },
@@ -112,8 +110,9 @@ window.Outfit = (function () {
     { key: 'mouth_interior', label: 'Mouth interior',
       includes: ['innermouth','tounge','tongue','teeth','saliva'], excludes: [] },
 
-    // applyGlassesTexture paints these into the ModdableFace texture itself,
-    // they're not drawable tints, so there's nothing to include here
+    // applyGlassesTexture paints these into the ModdableFace texture
+    // itself, they're not drawable tints, so there's nothing to
+    // include here
     { key: 'glasses_frame', label: 'Glasses frame', includes: [], excludes: [] },
     { key: 'glasses_lens', label: 'Glasses lens', includes: [], excludes: [] },
 
@@ -165,11 +164,10 @@ window.Outfit = (function () {
     }
   }
 
-  // the decal catalog straight out of the game, variants/logos/, see DECALS in
-  // tools/recover_assets.py. garment tags copy the game's own item names,
-  // BedabotsShirt and MilfHunterHoodie and USBPanties and friends, pulled from
-  // its Il2Cpp metadata, so each picker only offers what the game actually
-  // sells for that piece of clothing.
+  // variants/logos/ mirrors DECALS in tools/recover_assets.py.
+  // garment tags retain Il2Cpp item names (BedabotsShirt,
+  // MilfHunterHoodie, USBPanties) so pickers offer only matching
+  // game decals.
   const LOGO_CATALOG = [
     ['aguiLogo', 'A-GUI', 'sh'],
     ['avocado', 'Avocado', 'p'],
@@ -249,7 +247,6 @@ window.Outfit = (function () {
     ];
   }
 
-  // limb variants are crops from the game atlas, placed through drawable UVs
   const LIMB_DIR = 'assets/variants/limbs';
   // these atlas regions overlap, so they need alphaClip
   const limbTex = (v, ids) => Object.fromEntries(
@@ -262,12 +259,9 @@ window.Outfit = (function () {
     'AttachArmRHandUp2', 'AttachArmRHandUp3', 'AttachArmRLowerArmDown', 'AttachArmRLowerArmUp'];
   const LEG_EXP_IDS = ['AttachLegLFeet', 'AttachLegLKnee', 'AttachLegLLower', 'AttachLegLThigh',
     'AttachLegRFeet', 'AttachLegRKnee', 'AttachLegRLower', 'AttachLegRThigh'];
-  // the game's hightechHypercamoSkin_interact also lists barcode and lines
-  // (her chest barcode and the cracks down her cheeks), with rects that are
-  // 100% transparent in the game's own atlas. an empty crop is the item
-  // saying GET RID OF IT - the hypercamo is a smooth white shell, she doesn't
-  // keep a barcode on it. they're not textures, so they don't belong in this
-  // list, they're in the option's hide list instead.
+  // hightechHypercamoSkin_interact gives barcode and lines 100%
+  // transparent rects. these remove her chest barcode and cheek
+  // cracks, so put them in hide, not the texture list.
   const HT_SKIN_IDS = ['SkinArmL', 'SkinArmR', 'SkinPelvis', 'SkinThighL', 'SkinThighR'];
   // mech knees have to be TOLD to draw over the calf and thigh
   const LEG_ORDER = [
@@ -308,11 +302,9 @@ window.Outfit = (function () {
       drawables: HT_SKIN_IDS,
       options: [
         { name: 'Standard skin', textures: {} },
-        // both are visible in the rig by default and nothing else turns them
-        // off. shipping the empty crop as a texture did NOTHING: limbTex sets
-        // alphaClip, and alphaClip erases through the patch's own alpha, so
-        // an empty patch erases an empty shape. hiding the drawable is the
-        // honest way to say it anyway.
+        // alphaClip erases through patch alpha. a transparent crop erases
+        // nothing, so explicitly hide these otherwise-visible rig
+        // drawables.
         { name: 'High-Tech Skin', textures: limbTex('hightech', HT_SKIN_IDS), hide: ['barcode', 'lines'] },
       ],
     },
@@ -549,8 +541,9 @@ window.Outfit = (function () {
     else importWardrobe(await writeWardrobe({ ...state }, { ...variantState }));
     try { localStorage.setItem(STORAGE_KEY, JSON.stringify(state)); } catch (e) {}
     try { localStorage.setItem(VARIANT_KEY, JSON.stringify(variantState)); } catch (e) {}
-    // describe() reads the saved-look names straight off this cache and it
-    // runs on the chat page, where nothing else ever opens the Looks modal.
+    // describe() reads the saved-look names straight off this cache
+    // and it runs on the chat page, where nothing else ever opens the
+    // Looks modal.
     Presets.list().catch(() => {});
   }
 
@@ -566,7 +559,8 @@ window.Outfit = (function () {
     if (window.Prefs) Prefs.pushToServer();
   }
 
-  // this rig has no opacity control for these overlay meshes. the game does.
+  // this rig has no opacity control for these overlay meshes. the
+  // game does.
   const ALWAYS_HIDDEN = [
     'cumoutside', 'shadowboob', 'fondle',
     'nippiercing', 'navelpiercing',
@@ -596,11 +590,9 @@ window.Outfit = (function () {
     return controlled;
   }
 
-  // the drawables the wardrobe is currently keeping hidden. a mod paints into
-  // vanilla drawables - a modded skirt lands in Skirt, the same box the real
-  // one uses - so with the vanilla skirt off the rig has that drawable at
-  // zero and the mod is invisible. mods.js holds these up itself, and wipes
-  // the vanilla art out of the box instead of painting on top of it.
+  // mods.js wakes hidden vanilla drawables, such as Skirt, and
+  // clears their vanilla art before painting. track what the
+  // wardrobe hid so mods can do that.
   function hiddenItemDrawables() {
     const hidden = new Set(), worn = new Set();
     for (const it of ITEMS) {
@@ -645,11 +637,11 @@ window.Outfit = (function () {
     if (Live2D.opacityByPattern) Live2D.opacityByPattern(ALWAYS_HIDDEN, [], 0);
     applyItems();
     applyVariants();
-    // applyColors ends by re-running Mods, which has to see the fresh tints
+    // applyColors ends by re-running Mods, which has to see the fresh
+    // tints
     applyColors();
   }
 
-  // only redraw the slot that changed. sending an atlas to the GPU is slow.
   function applyVariants(onlyKey) {
     if (!Live2D.setDrawableTextures) return;
     const onlyKeys = onlyKey
@@ -700,8 +692,9 @@ window.Outfit = (function () {
     }
   }
 
-  // mods.js calls this after it lets go of a drawable it had forced visible,
-  // so whatever WE wanted showing there gets asserted again.
+  // mods.js calls this after it lets go of a drawable it had forced
+  // visible, so whatever WE wanted showing there gets asserted
+  // again.
   function refreshVisibility() {
     applyItems();
     for (const v of VARIANTS) applyVariantVisibility(v);
@@ -727,7 +720,8 @@ window.Outfit = (function () {
 
   function applyColors() {
     if (!Live2D.tintByPattern || !Live2D.findDrawables || !Live2D.setDrawableTint) return;
-    // clear FIRST, or a small tint wipes out the colors of a bigger group
+    // clear FIRST, or a small tint wipes out the colors of a bigger
+    // group
     const touched = new Set();
     for (const g of COLOR_GROUPS) {
       for (const id of Live2D.findDrawables(g.includes, g.excludes)) touched.add(id);
@@ -746,20 +740,21 @@ window.Outfit = (function () {
       }
     }
     if (stockingColorMode()) applyStockingTexture();
-    // the face-mod slot only follows skin color while it holds face art.
-    // glasses sit in the same slot and must NOT get tinted like skin.
+    // the face-mod slot only follows skin color while it holds face
+    // art. glasses sit in the same slot and must NOT get tinted like
+    // skin.
     if ((variantState.glasses_style || 0) > 0) Live2D.setDrawableTint('ModdableFace', null);
     applyGlassesTexture();
-    // a mod holding one of these drawables took its tint off the shader and
-    // bakes it in itself, so it has to re-read whatever we just set. every
-    // path that recolors her comes through here, which is why the call lives
-    // here and not in applyAll.
+    // a mod holding one of these drawables took its tint off the
+    // shader and bakes it in itself, so it has to re-read whatever we
+    // just set. every path that recolors her comes through here,
+    // which is why the call lives here and not in applyAll.
     if (window.Mods) Mods.refreshTints();
   }
 
-  // lens/frame colors can't be drawable tints, the glasses composite into one
-  // drawable, so each part gets multiplied client-side and the result baked
-  // into the ModdableFace texture.
+  // lens/frame colors can't be drawable tints, the glasses
+  // composite into one drawable, so each part gets multiplied
+  // client-side and the result baked into the ModdableFace texture.
   const GLASSES_STYLES = [
     null,
     { base: 'glasses', layers: [['lens', 'glasses_lens'], ['highlight', null], ['frame', 'glasses_frame']] },
@@ -873,8 +868,8 @@ window.Outfit = (function () {
       imgs = await Promise.all(style.layers.map(([part]) =>
         textureImg(`assets/variants/glasses/${style.base}_${part}.png`)));
     } catch (e) {
-      // a dropped load leaves the raw ModdableFace atlas art on screen, so
-      // retry instead of giving up for the rest of the session
+      // a dropped load leaves the raw ModdableFace atlas art on screen,
+      // so retry instead of giving up for the rest of the session
       console.warn('glasses layer load failed, retrying', e);
       if (job === glassesJob) setTimeout(applyGlassesTexture, 1000);
       return;
@@ -1325,7 +1320,6 @@ window.Outfit = (function () {
 
   let containerEl = null;
   function syncUI() {
-    // wardrobe.html has no settings panel, just the wardrobe
     syncWardrobe();
     if (!containerEl) return;
     for (const it of ITEMS) {
@@ -1445,8 +1439,9 @@ window.Outfit = (function () {
     return canonicalPreset(payload.outfit);
   }
 
-  // returns the slots that actually moved, so callers can skip the expensive
-  // parts of applyAll(). a full applyVariants() recomposes EVERY atlas.
+  // returns the slots that actually moved, so callers can skip the
+  // expensive parts of applyAll(). a full applyVariants()
+  // recomposes EVERY atlas.
   function loadPresetState(preset) {
     if (!preset || typeof preset !== 'object') return null;
     const { items = {}, colors: cols = {}, variants = {} } = preset;
@@ -1488,9 +1483,9 @@ window.Outfit = (function () {
     }
     if (variantKeys.size) applyVariants([...variantKeys]);
     if (changed.colors || changed.variants.length) applyColors();
-    // taking a vanilla item off is what tells a mod sitting in the same
-    // drawable to wipe the art under it instead of layering over it, so a
-    // toggle on anything a mod is holding has to re-bake.
+    // taking a vanilla item off is what tells a mod sitting in the
+    // same drawable to wipe the art under it instead of layering over
+    // it, so a toggle on anything a mod is holding has to re-bake.
     if (changed.items && window.Mods?.owns) {
       const touched = changed.itemKeys
         .map(key => ITEMS.find(it => it.key === key))
@@ -1518,12 +1513,10 @@ window.Outfit = (function () {
     return queued;
   }
 
-  // the preview is look-at-only, dressing gestures on the model are suspended
-  // while the modal is up
   const looksOpen = () => document.body.classList.contains('looks-open');
 
-  // preview dresses the model without touching storage. previewBase holds the
-  // look to fall back to until the user either commits or leaves the card.
+  // previewBase restores the saved look when hover ends. previews
+  // never write storage.
   let previewBase = null;
   function previewPreset(preset) {
     if (!preset) return;
@@ -1533,8 +1526,8 @@ window.Outfit = (function () {
     if (!previewBase) previewBase = exportPreset();
     applyChanged(loadPresetState(preset));
   }
-  // otherwise sliding the pointer down the list queues one full re-dress
-  // per row it crosses. no thank you.
+  // otherwise sliding the pointer down the list queues one full
+  // re-dress per row it crosses. no thank you.
   let previewTimer = null;
   function schedulePreview(preset) {
     clearTimeout(previewTimer);
@@ -1739,8 +1732,8 @@ window.Outfit = (function () {
       if (e.key === 'Escape' && !looksEl.hidden) toggleLooks(false);
     });
 
-    // the dialog's right pane is an empty hole. the real Live2D stage gets
-    // moved under it so the preview IS the live model, not a second renderer.
+    // move the existing Live2D stage into the preview pane to avoid a
+    // second renderer.
     const pane = looksEl.querySelector('.wd-looks-stage');
     if (window.ResizeObserver) new ResizeObserver(syncStageHole).observe(pane);
     window.addEventListener('resize', () => { if (!looksEl.hidden) syncStageHole(); });
@@ -1807,16 +1800,18 @@ window.Outfit = (function () {
     else setItem(key, true);
   }
 
-  // small accessories (bow, choker, glasses) are a nightmare to grab with an
-  // exact mesh test, so the tolerance falls back to padded bounding boxes
+  // small accessories (bow, choker, glasses) are a nightmare to
+  // grab with an exact mesh test, so the tolerance falls back to
+  // padded bounding boxes
   function wornHitAt(x, y, worn) {
     return Live2D.drawableAt(x, y, new Set(worn.keys()), 16);
   }
 
   // tiles baked by tools/bake-items.html, sitting in the gitignored
-  // webapp/assets/items/. they're game art, so they never ship - whoever ran
-  // the extractor bakes their own. no manifest means no bake ran here and
-  // every tile falls back to the atlas crop below.
+  // webapp/assets/items/. they're game art, so they never ship -
+  // whoever ran the extractor bakes their own. no manifest means no
+  // bake ran here and every tile falls back to the atlas crop
+  // below.
   let bakedTiles = new Set();
   async function loadBakedTiles() {
     try {
@@ -1826,11 +1821,9 @@ window.Outfit = (function () {
   }
   const bakedTile = (name) => bakedTiles.has(name) ? `assets/items/${name}.png` : null;
 
-  // the shots the baker takes. each one dresses her in exactly the item being
-  // photographed and keeps only its drawables on screen, so what comes back is
-  // the garment laid out the way she wears it instead of one wedge of atlas.
-  // glasses, logos and the limb styles stay out: they're painted into a face
-  // or body texture, so cropping to their drawables gets you her whole face.
+  // bake actual garment drawables, not atlas wedges. exclude
+  // glasses, logos and limb styles: they share face/body textures
+  // and would crop the whole face or body.
   function bakeShots() {
     const shots = [];
     const allOff = Object.fromEntries(ITEMS.map(it => [it.key, false]));
@@ -1866,10 +1859,10 @@ window.Outfit = (function () {
     return shots;
   }
 
-  // maintainer-only, driven by tools/bake-items.html. moves state through
-  // loadPresetState/applyChanged rather than setItem, so it never PUTs and
-  // never waits out writeWardrobe's 500ms spacing - 40 shots would otherwise
-  // be half a minute of round trips.
+  // maintainer-only, driven by tools/bake-items.html. moves state
+  // through loadPresetState/applyChanged rather than setItem, so it
+  // never PUTs and never waits out writeWardrobe's 500ms spacing -
+  // 40 shots would otherwise be half a minute of round trips.
   async function bakeAll(onProgress) {
     const restore = exportPreset();
     const shots = bakeShots();
@@ -1879,9 +1872,8 @@ window.Outfit = (function () {
         const shot = shots[i];
         if (onProgress) onProgress(i, shots.length, shot.name);
         applyChanged(loadPresetState({ items: shot.items, variants: shot.variants }));
-        // applyVariants fires the atlas recomposite and doesn't wait for it.
-        // shoot without this and every variant tile is one style behind - you
-        // get two identical Default/Sneakers shoes and nothing tells you.
+        // await applyVariants' atlas work or shots lag one style, giving
+        // identical Default/Sneakers tiles.
         if (Live2D.texturesSettled) await Live2D.texturesSettled();
         await new Promise(r => setTimeout(r, 0));
         const png = Live2D.bakeThumb(shot.keep(), 256);
@@ -1901,7 +1893,8 @@ window.Outfit = (function () {
     for (const id of ids) {
       const img = Live2D.drawableThumb(id, 72);
       if (!img) continue;
-      // data URL length is a rough proxy for crop detail. good enough tbh.
+      // data URL length is a rough proxy for crop detail. good enough
+      // tbh.
       const px = img.length;
       if (px > bestPx) { bestPx = px; best = img; }
     }
@@ -1909,14 +1902,15 @@ window.Outfit = (function () {
   }
 
   function variantThumb(v, opt) {
-    // a baked shot is the whole garment on its own, so it reads fine even when
-    // the variant isn't worn. the drawable crop further down only shows
-    // anything while the model is actually wearing it.
+    // a baked shot is the whole garment on its own, so it reads fine
+    // even when the variant isn't worn. the drawable crop further
+    // down only shows anything while the model is actually wearing
+    // it.
     const baked = bakedTile(`${v.key}-${v.options.indexOf(opt)}`);
     if (baked) return baked;
-    // opt.thumb is the decal png on its own (logos, the two glasses shots), so
-    // it reads whether or not she's wearing it. api/assets.php serves those
-    // ungated for exactly this.
+    // opt.thumb is the decal png on its own (logos, the two glasses
+    // shots), so it reads whether or not she's wearing it.
+    // api/assets.php serves those ungated for exactly this.
     if (opt.thumb) return opt.thumb;
     const owners = VARIANT_OWNER[v.key];
     const active = v.options[variantState[v.key] || 0] === opt
@@ -2623,9 +2617,6 @@ window.Outfit = (function () {
     return s;
   }
 
-  // one named look, applied exactly as it was saved. this is the deterministic
-  // way to dress her: no per-item tags to get wrong, no half-changed outfit
-  // when she emits three of the five she meant to.
   function wearLook(name) {
     const want = String(name || '').toLowerCase().trim();
     if (!want) return false;
@@ -2636,12 +2627,9 @@ window.Outfit = (function () {
     return true;
   }
 
-  // what the change_outfit tool decided, coming back down the stream. the
-  // server already resolved the conflicts against the state we last PUT, so
-  // this is a list of keys with their new value - but it still goes through
-  // queueWardrobe rather than straight into `state`, because that is the one
-  // path that re-authorizes textures and writes the result back. the PUT it
-  // makes is the same state the server just saved, so the two converge.
+  // change_outfit already resolved conflicts on the server. still
+  // use queueWardrobe: it re-authorizes textures and PUTs the same
+  // state back, keeping both sides in sync.
   function applyToolChange(change) {
     if (!change || typeof change !== 'object') return;
     if (typeof change.look === 'string' && change.look) return wearLook(change.look);
@@ -2695,8 +2683,6 @@ window.Outfit = (function () {
       });
     }
 
-    // nothing vanilla answers to that name, so it's either a modded item or
-    // she made it up
     if (!keys.length) {
       if (!resolvedByMap && window.Mods?.wearByName) Mods.wearByName(kwargs.item, stateOn);
       return;

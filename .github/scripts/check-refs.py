@@ -1,9 +1,10 @@
 #!/usr/bin/env python3
-# every local file the webapp points at has to exist AND be tracked by git.
-# there is no bundler here, so a renamed module is not a build error, it is a
-# 404 at runtime and a white screen. and webapp/assets is gitignored, so a file
-# that works on the maintainer's box can be missing from a fresh clone: "exists
-# on disk" is not the question, "is in the repo" is.
+# every local file the webapp points at has to exist AND be
+# tracked by git. there is no bundler here, so a renamed module
+# is not a build error, it is a 404 at runtime and a white
+# screen. and webapp/assets is gitignored, so a file that works
+# on the maintainer's box can be missing from a fresh clone:
+# "exists on disk" is not the question, "is in the repo" is.
 import re
 import subprocess
 import sys
@@ -19,10 +20,11 @@ tracked = set(
 )
 
 HTML_REF = re.compile(r'(?:src|href)\s*=\s*"([^"]+)"')
-# the lookbehind keeps string literals out of it: get('from') === 'wardrobe'
-# otherwise reads as an import of 'wardrobe'. the hyphen is in there for the
-# same reason, class names like .wd-looks-import sit right next to a quote in
-# the html templates and every one of them looked like a bare import.
+# the lookbehind keeps string literals out of it: get('from') ===
+# 'wardrobe' otherwise reads as an import of 'wardrobe'. the
+# hyphen is in there for the same reason, class names like
+# .wd-looks-import sit right next to a quote in the html
+# templates and every one of them looked like a bare import.
 JS_IMPORT = re.compile(r"""(?<![-'"\w$])(?:from|import)\s*\(?\s*['"]([^'"]+)['"]""")
 
 problems = []
@@ -59,8 +61,8 @@ for js in sorted(WEBAPP.rglob("*.js")):
     if "vendor" in js.parts:
         continue
     for ref in JS_IMPORT.findall(js.read_text(encoding="utf-8")):
-        # bare specifiers would need a bundler or an import map, and this repo
-        # has neither, so every one of them is already a mistake.
+        # bare specifiers would need a bundler or an import map, and this
+        # repo has neither, so every one of them is already a mistake.
         if not ref.startswith((".", "/")):
             problems.append(f"{js.relative_to(ROOT)}: bare import specifier {ref!r}, "
                             "nothing here resolves those")

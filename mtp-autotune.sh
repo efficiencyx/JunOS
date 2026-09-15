@@ -1,16 +1,18 @@
 #!/usr/bin/env bash
-# Find the draft depth that is actually fastest on THIS machine, then write it
-# into .env.
+# Find the draft depth that is actually fastest on THIS machine,
+# then write it into .env.
 #
-# Speculation only pays when checking K+1 tokens costs about what checking 1
-# costs. Whether that holds depends on the card, so the only honest answer is
-# to measure. Measured on a 3060 with the 12B: depth 1 gave +25%, depth 2 +16%,
-# depth 3 broke even, depth 4 came out Slower than no drafter at all. A bigger
-# card can afford a deeper draft. Yours might not.
+# Speculation only pays when checking K+1 tokens costs about what
+# checking 1 costs. Whether that holds depends on the card, so
+# the only honest answer is to measure. Measured on a 3060 with
+# the 12B: depth 1 gave +25%, depth 2 +16%, depth 3 broke even,
+# depth 4 came out Slower than no drafter at all. A bigger card
+# can afford a deeper draft. Yours might not.
 #
-# Needs the stack up and the models pulled. Safe to re-run any time. After a GPU
-# change you don't have to remember to, start.sh sees the card this was measured
-# on is gone and runs it for you.
+# Needs the stack up and the models pulled. Safe to re-run any
+# time. After a GPU change you don't have to remember to,
+# start.sh sees the card this was measured on is gone and runs it
+# for you.
 #
 #   ./mtp-autotune.sh
 #
@@ -85,10 +87,10 @@ stamp_gpu() {
     set_env MTP_TUNED_GPU "$sig"
 }
 
-# The drafter that goes with a chat model is the same repo with -MTP
-# in the name, so Jun-LoRA-12B-GGUF drafts off Jun-LoRA-12B-MTP-GGUF.
-# The quant tag rides along untouched. A repo that doesn't end in
-# -GGUF just gets -MTP on the end.
+# The drafter that goes with a chat model is the same repo with
+# -MTP in the name, so Jun-LoRA-12B-GGUF drafts off
+# Jun-LoRA-12B-MTP-GGUF. The quant tag rides along untouched. A
+# repo that doesn't end in -GGUF just gets -MTP on the end.
 mtp_repo_for() {
     _ref="$1"
     case "${_ref##*/}" in
@@ -101,31 +103,34 @@ mtp_repo_for() {
     esac
 }
 
-# One number out of a flat JSON body. Enough for eval_count and friends, and it
-# saves a dependency this script would otherwise need on every distro.
+# One number out of a flat JSON body. Enough for eval_count and
+# friends, and it saves a dependency this script would otherwise
+# need on every distro.
 json_num() {
     sed -n "s/.*\"$1\"[[:space:]]*:[[:space:]]*\([0-9][0-9.]*\).*/\1/p" | head -n1
 }
 
 command -v docker >/dev/null 2>&1 || die "docker not found"
 
-# Two in-character turns, no code. A coding prompt makes any drafter look
-# great, Gemma's assistants were tuned on code, and then the number you tuned
-# against is one Jun's traffic NEVER sees. Prose is what she actually writes.
+# Two in-character turns, no code. A coding prompt makes any
+# drafter look great, Gemma's assistants were tuned on code, and
+# then the number you tuned against is one Jun's traffic NEVER
+# sees. Prose is what she actually writes.
 P1='You have been quiet all evening. Talk to me, properly.'
 P2='Tell me what you remember about the day we met.'
 
-# 2 prompts x 80 tokens is 160 per row, five rows, so the whole ollama sweep
-# lands near half a minute on a normal card. Short rows are noisier, that is
-# what MARGIN below is for, a depth that only ties inside the noise doesn't
-# get to win anyway.
+# 2 prompts x 80 tokens is 160 per row, five rows, so the whole
+# ollama sweep lands near half a minute on a normal card. Short
+# rows are noisier, that is what MARGIN below is for, a depth
+# that only ties inside the noise doesn't get to win anyway.
 TOKENS=80
 
-# Her real system prompt goes in front of every one of those, because it goes in
-# front of every real message too. Measured bare, depth 2 came out on top by 1%,
-# measured with the prompt in place depth 1 won by 6% - same box, same drafter,
-# same afternoon. Tuning without it picks the winner for a regime the app never
-# runs in.
+# Her real system prompt goes in front of every one of those,
+# because it goes in front of every real message too. Measured
+# bare, depth 2 came out on top by 1%, measured with the prompt
+# in place depth 1 won by 6% - same box, same drafter, same
+# afternoon. Tuning without it picks the winner for a regime the
+# app never runs in.
 SYSTEM_JSON=""
 if [ -f webapp/system_prompt.txt ]; then
     SYSTEM_JSON="$(sed -e 's/\\/\\\\/g' -e 's/"/\\"/g' -e 's/\t/\\t/g' -e 's/\r//g' \
@@ -140,25 +145,28 @@ messages_json() {
     fi
 }
 
-# Anything under this much is noise on a warm box, and a deeper draft that only
-# ties costs VRAM and gets worse the moment layers spill to the CPU. So a deeper
-# one has to actually earn the spot, not tie for it.
+# Anything under this much is noise on a warm box, and a deeper
+# draft that only ties costs VRAM and gets worse the moment
+# layers spill to the CPU. So a deeper one has to actually earn
+# the spot, not tie for it.
 MARGIN=1.02
 
-better() {  # a beats b by enough to be worth it
+better() {
     awk -v a="$1" -v b="$2" -v m="$MARGIN" 'BEGIN { exit !(a > b * m) }'
 }
 
 ollama_exec() { docker exec -i omega-ollama sh -c "$1"; }
 
-# We just wrote OLLAMA_MTP into .env, but php got its copy from compose the day
-# the container was built and nothing re-reads the file. Until php is recreated
-# it still believes MTP is off, so it keeps offering the raw drafter in the
-# picker - pick that one and ollama tries to load a drafter as a chat model,
-# which fails and reaches you as an empty reply.
+# We just wrote OLLAMA_MTP into .env, but php got its copy from
+# compose the day the container was built and nothing re-reads
+# the file. Until php is recreated it still believes MTP is off,
+# so it keeps offering the raw drafter in the picker - pick that
+# one and ollama tries to load a drafter as a chat model, which
+# fails and reaches you as an empty reply.
 #
-# Only php. the GPU overlays don't touch that service, so recreating it alone
-# needs no -f flags and can't drop anyone else's device config.
+# Only php. the GPU overlays don't touch that service, so
+# recreating it alone needs no -f flags and can't drop anyone
+# else's device config.
 sync_php_env() {
     docker ps --format '{{.Names}}' | grep -qx omega-php || return 0
     _want="$(env_get OLLAMA_MTP)"
@@ -169,9 +177,9 @@ sync_php_env() {
         || warn_ "could not restart php - run ./start.sh to pick the new setting up"
 }
 
-# tok/s for one ollama model, pooled over both prompts. Ollama reports
-# eval_count and eval_duration per request, so this counts generation only and
-# leaves prompt processing out of it.
+# tok/s for one ollama model, pooled over both prompts. Ollama
+# reports eval_count and eval_duration per request, so this
+# counts generation only and leaves prompt processing out of it.
 bench_ollama() {
     _model="$1"; _tok=0; _ns=0
     for _p in "$P1" "$P2"; do
@@ -203,9 +211,9 @@ tune_ollama() {
         set_env OLLAMA_MTP "$drafter"
     fi
 
-    # DRAFT wants a path to a gguf, a model name is rejected. For a gguf-only
-    # pull the blob ollama landed it in IS the gguf, and the modelfile is where
-    # it admits which blob that was.
+    # DRAFT wants a path to a gguf, a model name is rejected. For a
+    # gguf-only pull the blob ollama landed it in IS the gguf, and
+    # the modelfile is where it admits which blob that was.
     blob="$(ollama_exec "ollama show --modelfile '$drafter' 2>/dev/null | awk '/^FROM /{print \$2; exit}'" | tr -d '\r')"
     case "$blob" in
         /*) ;;
@@ -215,9 +223,10 @@ tune_ollama() {
     printf '\n     %smeasuring%s %s(a few seconds per row)%s\n' "$B" "$R" "$DIM" "$R"
     base="$(bench_ollama "$chat")"
     printf '       %sno drafter%s   %s tok/s\n' "$DIM" "$R" "$base"
-    # A baseline of zero means every request failed, not that she is infinitely
-    # slow. Carrying on from here would read the silence as "drafting never
-    # helps" and switch the feature off on the strength of nothing.
+    # A baseline of zero means every request failed, not that she is
+    # infinitely slow. Carrying on from here would read the silence
+    # as "drafting never helps" and switch the feature off on the
+    # strength of nothing.
     better "$base" 0 || die "could not measure a baseline - is $chat pulled and the stack healthy?"
 
     best_n=0; best="$base"
@@ -286,9 +295,10 @@ restart_llamacpp() {
     wait_llamacpp || { warn_ "llama-server did not come back healthy"; return 1; }
 }
 
-# llama-server takes the draft depth as a startup flag, so unlike ollama there
-# is no way to swap it on a live server. Every row down here is a full restart,
-# which is why this half is the slow one.
+# llama-server takes the draft depth as a startup flag, so unlike
+# ollama there is no way to swap it on a live server. Every row
+# down here is a full restart, which is why this half is the slow
+# one.
 tune_llamacpp() {
     drafter="$(env_get LLAMACPP_MTP)"
     if [ -z "$drafter" ]; then
@@ -307,9 +317,10 @@ tune_llamacpp() {
     base="$(bench_llamacpp)"
     printf '       %sno drafter%s   %s tok/s\n' "$DIM" "$R" "$base"
     set_env LLAMACPP_MTP "$drafter"
-    # A baseline of zero means every request failed, not that she is infinitely
-    # slow. Carrying on from here would read the silence as "drafting never
-    # helps" and switch the feature off on the strength of nothing.
+    # A baseline of zero means every request failed, not that she is
+    # infinitely slow. Carrying on from here would read the silence
+    # as "drafting never helps" and switch the feature off on the
+    # strength of nothing.
     better "$base" 0 || die "could not measure a baseline - is llama-server healthy?"
 
     best_n=0; best="$base"
@@ -349,9 +360,10 @@ case "$provider" in
     *) die "AI_PROVIDER is '$provider' - MTP only applies to ollama and llamacpp." ;;
 esac
 
-# The sweep runs on an idle card. Once a browser is drawing Live2D it takes
-# about 1.5GB of the same VRAM, and if that pushes layers onto the CPU every
-# number above shifts down. Deeper drafts got Worse under that pressure when it
-# was measured, not better, so the winner still holds.
+# The sweep runs on an idle card. Once a browser is drawing
+# Live2D it takes about 1.5GB of the same VRAM, and if that
+# pushes layers onto the CPU every number above shifts down.
+# Deeper drafts got Worse under that pressure when it was
+# measured, not better, so the winner still holds.
 say "measured with nothing else on the GPU. Live2D in a browser wants ~1.5GB more."
 printf '\n'

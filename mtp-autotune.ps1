@@ -1,17 +1,19 @@
 #Requires -Version 5.1
 <#
-Find the draft depth that is actually fastest on THIS machine, then write it
-into .env.
+Find the draft depth that is actually fastest on THIS machine,
+then write it into .env.
 
-Speculation only pays when checking K+1 tokens costs about what checking 1
-costs. Whether that holds depends on the card, so the only honest answer is to
-measure. Measured on a 3060 with the 12B: depth 1 gave +25%, depth 2 +16%,
-depth 3 broke even, depth 4 came out Slower than no drafter at all. A bigger
-card can afford a deeper draft. Yours might not.
+Speculation only pays when checking K+1 tokens costs about what
+checking 1 costs. Whether that holds depends on the card, so
+the only honest answer is to measure. Measured on a 3060 with
+the 12B: depth 1 gave +25%, depth 2 +16%, depth 3 broke even,
+depth 4 came out Slower than no drafter at all. A bigger card
+can afford a deeper draft. Yours might not.
 
-Needs the stack running and the models pulled. Safe to re-run any time. After a
-GPU change you don't have to remember to, start.ps1 sees the card this was
-measured on is gone and runs it for you.
+Needs the stack running and the models pulled. Safe to re-run
+any time. After a GPU change you don't have to remember to,
+start.ps1 sees the card this was measured on is gone and runs
+it for you.
 
   .\mtp-autotune.ps1
 #>
@@ -79,25 +81,27 @@ function Set-GpuStamp {
     if ($sig) { Set-EnvKey 'MTP_TUNED_GPU' $sig }
 }
 
-# Two in-character turns, no code. A coding prompt makes any drafter look
-# great, Gemma's assistants were tuned on code, and then the number you tuned
-# against is one Jun's traffic NEVER sees. Prose is what she actually writes.
+# Two in-character turns, no code. A coding prompt makes any
+# drafter look great, Gemma's assistants were tuned on code, and
+# then the number you tuned against is one Jun's traffic NEVER
+# sees. Prose is what she actually writes.
 $Prompts = @(
     'You have been quiet all evening. Talk to me, properly.',
     'Tell me what you remember about the day we met.'
 )
 
-# 2 prompts x 80 tokens is 160 per row, five rows, so the whole ollama sweep
-# lands near half a minute on a normal card. Short rows are noisier, that is
-# what $Margin below is for, a depth that only ties inside the noise doesn't
-# get to win anyway.
+# 2 prompts x 80 tokens is 160 per row, five rows, so the whole
+# ollama sweep lands near half a minute on a normal card. Short
+# rows are noisier, that is what $Margin below is for, a depth
+# that only ties inside the noise doesn't get to win anyway.
 $Tokens = 80
 
-# Her real system prompt goes in front of every one of those, because it goes in
-# front of every real message too. Measured bare, depth 2 came out on top by 1%,
-# measured with the prompt in place depth 1 won by 6% - same box, same drafter,
-# same afternoon. Tuning without it picks the winner for a regime the app never
-# runs in.
+# Her real system prompt goes in front of every one of those,
+# because it goes in front of every real message too. Measured
+# bare, depth 2 came out on top by 1%, measured with the prompt
+# in place depth 1 won by 6% - same box, same drafter, same
+# afternoon. Tuning without it picks the winner for a regime the
+# app never runs in.
 $SystemPrompt = ''
 if (Test-Path 'webapp/system_prompt.txt') {
     $SystemPrompt = Get-Content 'webapp/system_prompt.txt' -Raw
@@ -110,17 +114,18 @@ function Get-Messages([string]$prompt) {
     return @(@{ role = 'user'; content = $prompt })
 }
 
-# Anything under this much is noise on a warm box, and a deeper draft that only
-# ties costs VRAM and gets worse the moment layers spill to the CPU. So a deeper
-# one has to actually earn the spot, not tie for it.
+# Anything under this much is noise on a warm box, and a deeper
+# draft that only ties costs VRAM and gets worse the moment
+# layers spill to the CPU. So a deeper one has to actually earn
+# the spot, not tie for it.
 $Margin = 1.02
 
 function Test-Better([double]$a, [double]$b) { return ($a -gt ($b * $Margin)) }
 
-# The drafter that goes with a chat model is the same repo with -MTP
-# in the name, so Jun-LoRA-12B-GGUF drafts off Jun-LoRA-12B-MTP-GGUF.
-# The quant tag rides along untouched. A repo that doesn't end in
-# -GGUF just gets -MTP on the end.
+# The drafter that goes with a chat model is the same repo with
+# -MTP in the name, so Jun-LoRA-12B-GGUF drafts off
+# Jun-LoRA-12B-MTP-GGUF. The quant tag rides along untouched. A
+# repo that doesn't end in -GGUF just gets -MTP on the end.
 function Get-MtpRepo([string]$ref) {
     $tag = ''
     $repo = $ref
@@ -132,8 +137,8 @@ function Get-MtpRepo([string]$ref) {
 }
 
 # tok/s pooled over both prompts. Ollama reports eval_count and
-# eval_duration per request, so this counts generation only and leaves prompt
-# processing out of it.
+# eval_duration per request, so this counts generation only and
+# leaves prompt processing out of it.
 function Measure-Ollama([string]$model, [string]$url) {
     $tok = 0; $ns = 0.0
     foreach ($p in $Prompts) {
@@ -173,9 +178,9 @@ function Tune-Ollama {
         Set-EnvKey 'OLLAMA_MTP' $drafter
     }
 
-    # DRAFT wants a path to a gguf, a model name is rejected. For a gguf-only
-    # pull the blob ollama landed it in IS the gguf, and the modelfile is where
-    # it admits which blob that was.
+    # DRAFT wants a path to a gguf, a model name is rejected. For a
+    # gguf-only pull the blob ollama landed it in IS the gguf, and
+    # the modelfile is where it admits which blob that was.
     $blob = (& ollama show --modelfile $drafter 2>$null |
         Where-Object { $_ -match '^FROM ' } | Select-Object -First 1) -replace '^FROM\s+', ''
     if (-not $blob -or -not (Test-Path $blob)) { Die "could not find the drafter blob for $drafter - is it pulled?" }
@@ -184,9 +189,10 @@ function Tune-Ollama {
     Write-Host "     ${B}measuring${R} ${DIM}(a few seconds per row)${R}"
     $base = Measure-Ollama $chat $url
     Write-Host "       ${DIM}no drafter${R}   $base tok/s"
-    # A baseline of zero means every request failed, not that she is infinitely
-    # slow. Carrying on from here would read the silence as "drafting never
-    # helps" and switch the feature off on the strength of nothing.
+    # A baseline of zero means every request failed, not that she is
+    # infinitely slow. Carrying on from here would read the silence
+    # as "drafting never helps" and switch the feature off on the
+    # strength of nothing.
     if ($base -le 0) { Die "could not measure a baseline - is $chat pulled and ollama running?" }
 
     $bestN = 0; $best = $base
@@ -239,10 +245,10 @@ function Measure-Llamacpp([string]$url) {
     return [math]::Round($tok / ($ms / 1000), 2)
 }
 
-# start.ps1 re-runs this script when the GPU stamp is stale, and the
-# stamp stays stale until the sweep ends. so every restart in here
-# has to say "already tuning", otherwise the first one starts a
-# second sweep inside this one.
+# start.ps1 re-runs this script when the GPU stamp is stale, and
+# the stamp stays stale until the sweep ends. so every restart in
+# here has to say "already tuning", otherwise the first one
+# starts a second sweep inside this one.
 function Restart-Llamacpp([string]$url) {
     $prev = $env:MTP_AUTOTUNE_RUNNING
     $env:MTP_AUTOTUNE_RUNNING = '1'
@@ -264,9 +270,10 @@ function Restart-Llamacpp([string]$url) {
     return $false
 }
 
-# llama-server takes the draft depth as a startup flag, so unlike ollama there
-# is no way to swap it on a live server. Every row down here is a full restart,
-# which is why this half is the slow one.
+# llama-server takes the draft depth as a startup flag, so unlike
+# ollama there is no way to swap it on a live server. Every row
+# down here is a full restart, which is why this half is the slow
+# one.
 function Tune-Llamacpp {
     $url = Get-EnvKey 'LLAMACPP_URL'
     if (-not $url) { $url = 'http://127.0.0.1:8081' }
@@ -327,9 +334,10 @@ switch ((Get-EnvKey 'AI_PROVIDER')) {
     default    { Die 'AI_PROVIDER is not ollama or llamacpp - MTP does not apply.' }
 }
 
-# The sweep runs on an idle card. Once a browser is drawing Live2D it takes
-# about 1.5GB of the same VRAM, and if that pushes layers onto the CPU every
-# number above shifts down. Deeper drafts got Worse under that pressure when it
-# was measured, not better, so the winner still holds.
+# The sweep runs on an idle card. Once a browser is drawing
+# Live2D it takes about 1.5GB of the same VRAM, and if that
+# pushes layers onto the CPU every number above shifts down.
+# Deeper drafts got Worse under that pressure when it was
+# measured, not better, so the winner still holds.
 Say 'measured with nothing else on the GPU. Live2D in a browser wants ~1.5GB more.'
 Write-Host ''

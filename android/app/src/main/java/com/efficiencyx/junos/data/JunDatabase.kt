@@ -14,6 +14,8 @@ import androidx.room.Room
 import androidx.room.RoomDatabase
 import androidx.room.Transaction
 import androidx.room.Update
+import androidx.room.migration.Migration
+import androidx.sqlite.db.SupportSQLiteDatabase
 
 @Entity(tableName = "conversations")
 data class ConversationEntity(
@@ -67,6 +69,13 @@ data class RelationshipEntity(
 data class WardrobePresetEntity(
     @PrimaryKey(autoGenerate = true) val id: Long = 0,
     val name: String,
+    val data: String,
+    val updatedAt: Long,
+)
+
+@Entity(tableName = "wardrobe_state")
+data class WardrobeStateEntity(
+    @PrimaryKey val id: Int = 1,
     val data: String,
     val updatedAt: Long,
 )
@@ -149,6 +158,12 @@ abstract class JunDao {
     @Query("DELETE FROM wardrobe_presets WHERE id = :id")
     abstract suspend fun deleteWardrobePreset(id: Long): Int
 
+    @Query("SELECT * FROM wardrobe_state WHERE id = 1")
+    abstract suspend fun wardrobeState(): WardrobeStateEntity?
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    abstract suspend fun putWardrobeState(value: WardrobeStateEntity)
+
     @Query("SELECT * FROM memory_consolidation WHERE id = 1")
     abstract suspend fun consolidation(): ConsolidationEntity?
 
@@ -175,9 +190,10 @@ abstract class JunDao {
         PreferenceEntity::class,
         RelationshipEntity::class,
         WardrobePresetEntity::class,
+        WardrobeStateEntity::class,
         ConsolidationEntity::class,
     ],
-    version = 1,
+    version = 2,
     exportSchema = true,
 )
 abstract class JunDatabase : RoomDatabase() {
@@ -188,6 +204,12 @@ abstract class JunDatabase : RoomDatabase() {
             context.applicationContext,
             JunDatabase::class.java,
             "jun.db",
-        ).build()
+        ).addMigrations(MIGRATION_1_2).build()
+
+        private val MIGRATION_1_2 = object : Migration(1, 2) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL("CREATE TABLE IF NOT EXISTS `wardrobe_state` (`id` INTEGER NOT NULL, `data` TEXT NOT NULL, `updatedAt` INTEGER NOT NULL, PRIMARY KEY(`id`))")
+            }
+        }
     }
 }

@@ -33,7 +33,8 @@ function chat_request_headers(?string $provider = null): array {
     return $h;
 }
 
-// the MTP model when speculative decoding is on, empty when it's off
+// the MTP model when speculative decoding is on, empty when it's
+// off
 function ollama_mtp_model(): string {
     if (env_str('OLLAMA_MTP') === '') return '';
     return env_str('OLLAMA_MTP_MODEL', 'jun-mtp');
@@ -46,18 +47,20 @@ function ollama_base_chat_model(): string {
     return '';
 }
 
-// what the picker offers. jun-mtp is plumbing, it's the model below it with a
-// drafter bolted on, so people pick the model they actually pulled and the
-// swap happens down here where nobody has to think about it.
+// what the picker offers. jun-mtp is plumbing, it's the model
+// below it with a drafter bolted on, so people pick the model
+// they actually pulled and the swap happens down here where
+// nobody has to think about it.
 function display_chat_model(): string {
     $base = ollama_base_chat_model();
     if (ai_provider() === 'ollama' && ollama_mtp_model() !== '' && $base !== '') return $base;
     return default_chat_model();
 }
 
-// so the name coming back from the browser is the plain one. swap it RIGHT
-// before we talk to ollama, otherwise she answers from the twin with no
-// drafter attached and the speedup just quietly evaporates.
+// so the name coming back from the browser is the plain one. swap
+// it RIGHT before we talk to ollama, otherwise she answers from
+// the twin with no drafter attached and the speedup just quietly
+// evaporates.
 function ollama_resolve_chat_model(string $model): string {
     if (ai_provider() !== 'ollama') return $model;
     $mtp = ollama_mtp_model();
@@ -65,13 +68,11 @@ function ollama_resolve_chat_model(string $model): string {
     return $model === ollama_base_chat_model() ? $mtp : $model;
 }
 
-// the MTP twin is the base weights with a drafter bolted on. when the runner
-// behind it dies - and it does, speculative decoding plus a long prompt is
-// how - ollama answers 500 for that model and keeps answering 500, so every
-// message in the conversation comes back as an error until somebody
-// reinstalls. the base model is the same fine-tune minus the drafter, so
-// falling back to it costs speed and nothing else. empty when we're not on
-// the twin or there's nothing under it.
+// speculative decoding with a long prompt can kill the MTP runner
+// and leave Ollama returning 500 on every retry. the base
+// fine-tune has the same weights without drafting, so fallback
+// costs speed only. return empty unless this is the twin and a
+// base exists.
 function ollama_mtp_fallback_model(string $model): string {
     if (ai_provider() !== 'ollama') return '';
     $mtp = ollama_mtp_model();
@@ -133,27 +134,41 @@ function ollama_api_json(string $path, ?array $post = null, int $timeout = 3): a
     return is_array($data) ? $data : [];
 }
 
+// ollama reports a model we created as jun-mtp:latest, we ask for
+// jun-mtp. compare without the implied tag or nothing matches.
+function ollama_model_name(string $name): string {
+    return preg_replace('/:latest$/', '', $name);
+}
+
 function ollama_model_weights_mb(string $model): int {
     static $cache = [];
     if (isset($cache[$model])) return $cache[$model];
     foreach ((ollama_api_json('/api/tags')['models'] ?? []) as $entry) {
-        if ((string)($entry['name'] ?? '') !== $model) continue;
+        if (ollama_model_name((string)($entry['name'] ?? '')) !== ollama_model_name($model)) continue;
         return $cache[$model] = (int)round(((int)($entry['size'] ?? 0)) / 1048576);
     }
     return $cache[$model] = 0;
 }
 
-// how many MiB the KV cache (the model's memory of the prompt it already
-// read) takes per token at q8_0 on the models we ship. read straight off
-// llama.cpp's own kv_cache size line. rounded UP on purpose, guessing high
-// costs us some context, guessing low costs a partial offload.
+// how many MiB the KV cache (the model's memory of the prompt it
+// already read) takes per token at q8_0 on the models we ship.
+// read straight off llama.cpp's own kv_cache size line. rounded
+// UP on purpose, guessing high costs us some context, guessing
+// low costs a partial offload.
 const KV_MIB_PER_TOKEN = 0.2;
 const VRAM_RESERVE_MB = 2048;
 const CTX_TIERS = [6144, 8192, 12288, 16384];
 
-// what's left on the card once the weights and a bit of working room are
-// gone. zero when we don't know the GPU size, see OMEGA_GPU_VRAM_MB in
-// start.sh.
+// a thinking turn used to go out with num_predict -1, meaning "no
+// limit". the client picks think, so any logged-in user could
+// park the runner for the full 600s nginx timeout (or burn
+// openrouter credit) on every turn. 16k is more than any real
+// trace needs and still a ceiling.
+const THINK_MAX_TOKENS = 16384;
+
+// what's left on the card once the weights and a bit of working
+// room are gone. zero when we don't know the GPU size, see
+// OMEGA_GPU_VRAM_MB in start.sh.
 function gpu_ctx_headroom_mb(): int {
     $vram = (int)env_str('OMEGA_GPU_VRAM_MB', '0');
     if ($vram <= 0) return 0;
@@ -168,10 +183,11 @@ function default_num_ctx(): int {
     $override = (int)env_str('OMEGA_NUM_CTX', '0');
     if ($override > 0) return $ctx = $override;
 
-    // VRAM is what ACTUALLY limits the KV cache, so use it when the card size
-    // made it here from start.sh. under 4 GiB of room the answer would be a
-    // context too small to hold a conversation anyway, so fall back to the RAM
-    // tiers and let Ollama spill instead of cutting the window to nothing.
+    // VRAM is what ACTUALLY limits the KV cache, so use it when the
+    // card size made it here from start.sh. under 4 GiB of room the
+    // answer would be a context too small to hold a conversation
+    // anyway, so fall back to the RAM tiers and let Ollama spill
+    // instead of cutting the window to nothing.
     $headroom = gpu_ctx_headroom_mb();
     if ($headroom >= 4096) {
         $fits = (int)($headroom / KV_MIB_PER_TOKEN);
@@ -188,10 +204,11 @@ function default_num_ctx(): int {
         $gib = (int)$m[1] / (1024 * 1024);
     }
     if ($gib <= 0) return $ctx = 16384;
-    // MemTotal always comes in a bit under the number on the box, so the tiers
-    // sit just above it. system RAM is only a stand in, VRAM is the real limit
-    // on the KV cache, so just set OMEGA_NUM_CTX yourself on a machine where
-    // the two don't line up.
+    // MemTotal always comes in a bit under the number on the box, so
+    // the tiers sit just above it. system RAM is only a stand in,
+    // VRAM is the real limit on the KV cache, so just set
+    // OMEGA_NUM_CTX yourself on a machine where the two don't line
+    // up.
     if ($gib <= 17) return $ctx = 6144;
     if ($gib <= 25) return $ctx = 8192;
     if ($gib <= 33) return $ctx = 12288;
@@ -208,14 +225,15 @@ function ollama_evict_if_partially_offloaded(string $model): void {
     if ($done || ai_provider() !== 'ollama') return;
     $done = true;
 
-    // only worth doing when the weights plus a bit of working room ACTUALLY
-    // fit on the card. when they don't, a partial offload is the best it can
-    // do and evicting just reloads it badly once per message.
+    // only worth doing when the weights plus a bit of working room
+    // ACTUALLY fit on the card. when they don't, a partial offload is
+    // the best it can do and evicting just reloads it badly once per
+    // message.
     if (gpu_ctx_headroom_mb() <= 0) return;
 
     $loaded = null;
     foreach ((ollama_api_json('/api/ps')['models'] ?? []) as $entry) {
-        if ((string)($entry['name'] ?? '') === $model) { $loaded = $entry; break; }
+        if (ollama_model_name((string)($entry['name'] ?? '')) === ollama_model_name($model)) { $loaded = $entry; break; }
     }
     if ($loaded === null) return;
 
@@ -224,8 +242,8 @@ function ollama_evict_if_partially_offloaded(string $model): void {
     if ($size <= 0 || $vram / $size >= 0.9) return;
 
     // one eviction per cooldown. if it comes back just as badly then
-    // something we don't control has the VRAM, and reloading every single
-    // turn is worse than just being slow.
+    // something we don't control has the VRAM, and reloading every
+    // single turn is worse than just being slow.
     $stamp = state_dir() . '/ollama-refit.stamp';
     $last = is_file($stamp) ? (int)@file_get_contents($stamp) : 0;
     if (time() - $last < 600) return;
@@ -240,9 +258,9 @@ function ollama_evict_if_partially_offloaded(string $model): void {
     ollama_api_json('/api/generate', ['model' => $model, 'keep_alive' => 0], 10);
 }
 
-// fails closed. no answer from Ollama, a timeout, an old build with no
-// capabilities list, all of it means no audio and the turn goes through
-// whisper instead.
+// fails closed. no answer from Ollama, a timeout, an old build
+// with no capabilities list, all of it means no audio and the
+// turn goes through whisper instead.
 function ollama_model_supports_audio(string $model): bool {
     static $cache = [];
     if (isset($cache[$model])) return $cache[$model];
@@ -262,9 +280,9 @@ function provider_chat_payload(
             'model' => $model,
             'messages' => $messages,
             'stream' => true,
-            // unpinned, she's the first thing Ollama Drops when VRAM gets
-            // tight while the embedder just sits there, and every eviction
-            // takes the KV prompt cache with it.
+            // keep her loaded between turns. an eviction takes the
+            // KV prompt cache with it, so the next reply has to read
+            // the whole prefix again.
             'keep_alive' => -1,
             'options' => [
                 'reasoning_effort' => $reasoning,
@@ -274,7 +292,7 @@ function provider_chat_payload(
                 'min_p' => 0.01,
                 'presence_penalty' => 0,
                 'num_ctx' => default_num_ctx(),
-                'num_predict' => $think ? -1 : 128,
+                'num_predict' => $think ? THINK_MAX_TOKENS : 128,
             ],
         ];
         if (!$think) $payload['think'] = false;
@@ -291,7 +309,7 @@ function provider_chat_payload(
         'min_p' => 0.01,
         'stream_options' => ['include_usage' => true],
     ];
-    if (!$think) $payload['max_tokens'] = 128;
+    $payload['max_tokens'] = $think ? THINK_MAX_TOKENS : 128;
     if ($provider === 'openrouter' && $think) {
         $payload['reasoning'] = ['effort' => $reasoning];
     }
@@ -308,9 +326,9 @@ function generate_chat_title(string $userMessage): ?string {
     if ($msg === '') return null;
     $msg = substr($msg, 0, 500);
 
-    // num_gpu=0 keeps it on the CPU, keep_alive=-1 keeps it loaded. it must
-    // NEVER take VRAM or a GPU slot off the chat model, which has no pin. see
-    // OLLAMA_MAX_LOADED_MODELS in compose.
+    // num_gpu=0 keeps it on the CPU, keep_alive=-1 keeps it loaded.
+    // it must NEVER take VRAM or a GPU slot off the pinned chat
+    // model. see OLLAMA_MAX_LOADED_MODELS in compose.
     $result = ollama_api_json('/api/chat', [
         'model' => $model,
         'messages' => [
@@ -319,12 +337,10 @@ function generate_chat_title(string $userMessage): ?string {
             // the loudest thing in a short context, so "hi" gets you a chat
             // called "Title Generation". amazing.
             ['role' => 'user', 'content' => $msg],
-            // Qwen3 base. left alone it burns the ENTIRE budget thinking and
-            // hands back empty content. its template drops the <|im_end|>
-            // after a trailing assistant turn, so this fills in a closed empty
-            // think block and the model goes straight to the title. neither
-            // `think: false` nor a /no_think system suffix does anything. tried
-            // both.
+            // Qwen3 spends the title budget thinking and returns empty
+            // content. its template leaves off <|im_end|> after a trailing
+            // assistant turn, so prefill a closed think block. think: false
+            // and /no_think do not work here.
             ['role' => 'assistant', 'content' => "<think>\n\n</think>\n\n"],
         ],
         'stream' => false,
@@ -342,18 +358,54 @@ function generate_chat_title(string $userMessage): ?string {
     $title = trim($title, " \t\n\r\0\x0B\"'");
     $title = trim(preg_replace('/\s+/', ' ', $title));
     $title = preg_replace('/^Title:\s*/i', '', $title);
-    if (strlen($title) > 60) {
-        $title = substr($title, 0, 60);
-        $lastSpace = strrpos($title, ' ');
-        if ($lastSpace !== false) $title = substr($title, 0, $lastSpace);
+    if (mb_strlen($title) > 60) {
+        $title = mb_substr($title, 0, 60);
+        $lastSpace = mb_strrpos($title, ' ');
+        if ($lastSpace !== false) $title = mb_substr($title, 0, $lastSpace);
         $title = rtrim($title);
     }
     if ($title === '' || !preg_match('/[a-zA-Z]/', $title)) return null;
     return $title;
 }
 
+// one non-streaming chat call, decoded. null + $error on failure.
+// same MTP fallback chat.php has: jun-mtp failing to load (the
+// drafter wants its own VRAM even when the main weights got
+// fitted to CPU) retries on the base tag. without it every
+// consolidation and title call asked ollama to load the twin
+// again, and a second 7 GB runner in the 16 GB container took
+// the working one down with it.
+function provider_post_chat(string $provider, array $payload, ?string &$error = null): ?array {
+    $error = null;
+    for ($attempt = 0; $attempt < 2; $attempt++) {
+        $ch = curl_init(provider_chat_endpoint($provider));
+        curl_setopt_array($ch, [
+            CURLOPT_POST => true,
+            CURLOPT_HTTPHEADER => chat_request_headers($provider),
+            CURLOPT_POSTFIELDS => json_encode($payload, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES),
+            CURLOPT_RETURNTRANSFER => true,
+            CURLOPT_TIMEOUT => 120,
+            CURLOPT_CONNECTTIMEOUT => 10,
+        ]);
+        $resp = curl_exec($ch);
+        $status = (int)curl_getinfo($ch, CURLINFO_RESPONSE_CODE);
+        $error = $resp === false ? curl_error($ch) : ($status >= 300 ? 'http_' . $status : null);
+        curl_close($ch);
+        if ($error === null) {
+            $obj = json_decode($resp, true);
+            if (is_array($obj)) return $obj;
+            $error = 'invalid_response';
+            return null;
+        }
+        $fallback = $status >= 400 ? ollama_mtp_fallback_model((string)($payload['model'] ?? '')) : '';
+        if ($fallback === '') return null;
+        log_event(['msg' => 'mtp_fallback', 'from' => $payload['model'], 'to' => $fallback, 'err' => $error]);
+        $payload['model'] = $fallback;
+    }
+    return null;
+}
+
 function provider_complete_once(string $provider, string $model, array $messages, int $maxTokens = 512, bool $think = false, string $reasoning = 'medium'): ?string {
-    $endpoint = provider_chat_endpoint($provider);
     if (provider_uses_openai_protocol($provider)) {
         $payload = ['model' => $model, 'messages' => $messages, 'stream' => false,
                     'temperature' => 0.3, 'max_tokens' => $maxTokens];
@@ -364,32 +416,17 @@ function provider_complete_once(string $provider, string $model, array $messages
                     'options' => ['reasoning_effort' => $reasoning, 'temperature' => 0.3,
                                   'num_ctx' => default_num_ctx(), 'num_predict' => $maxTokens]];
         // same shape as provider_chat_payload(). you ask for thinking by
-        // LEAVING `think` out and letting reasoning_effort drive the template.
-        // send think:true and Ollama runs a capability check the Jun GGUFs
-        // fail, then 400s in your face.
+        // LEAVING `think` out and letting reasoning_effort drive the
+        // template. send think:true and Ollama runs a capability check
+        // the Jun GGUFs fail, then 400s in your face.
         if (!$think) $payload['think'] = false;
     }
 
-    $ch = curl_init($endpoint);
-    curl_setopt_array($ch, [
-        CURLOPT_POST => true,
-        CURLOPT_HTTPHEADER => chat_request_headers($provider),
-        CURLOPT_POSTFIELDS => json_encode($payload, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES),
-        CURLOPT_RETURNTRANSFER => true,
-        CURLOPT_TIMEOUT => 120,
-        CURLOPT_CONNECTTIMEOUT => 10,
-    ]);
-    $resp = curl_exec($ch);
-    $status = (int)curl_getinfo($ch, CURLINFO_RESPONSE_CODE);
-    if ($resp === false || $status >= 300) {
-        log_event(['msg' => 'complete_once_error', 'err' => $resp === false ? curl_error($ch) : 'http_' . $status]);
-        curl_close($ch);
+    $obj = provider_post_chat($provider, $payload, $error);
+    if ($obj === null) {
+        log_event(['msg' => 'complete_once_error', 'err' => $error]);
         return null;
     }
-    curl_close($ch);
-
-    $obj = json_decode($resp, true);
-    if (!is_array($obj)) return null;
     $text = provider_uses_openai_protocol($provider)
         ? ($obj['choices'][0]['message']['content'] ?? null)
         : ($obj['message']['content'] ?? null);
@@ -399,7 +436,6 @@ function provider_complete_once(string $provider, string $model, array $messages
 }
 
 function provider_complete_tools(string $provider, string $model, array $messages, array $tools, int $maxTokens = 1024, bool $think = false, string $reasoning = 'medium'): array {
-    $endpoint = provider_chat_endpoint($provider);
     if (provider_uses_openai_protocol($provider)) {
         $payload = [
             'model' => $model,
@@ -427,27 +463,11 @@ function provider_complete_tools(string $provider, string $model, array $message
         if (!$think) $payload['think'] = false;
     }
 
-    $ch = curl_init($endpoint);
-    curl_setopt_array($ch, [
-        CURLOPT_POST => true,
-        CURLOPT_HTTPHEADER => chat_request_headers($provider),
-        CURLOPT_POSTFIELDS => json_encode($payload, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES),
-        CURLOPT_RETURNTRANSFER => true,
-        CURLOPT_TIMEOUT => 120,
-        CURLOPT_CONNECTTIMEOUT => 10,
-    ]);
-    $resp = curl_exec($ch);
-    $status = (int)curl_getinfo($ch, CURLINFO_RESPONSE_CODE);
-    if ($resp === false || $status >= 300) {
-        $error = $resp === false ? curl_error($ch) : 'http_' . $status;
+    $obj = provider_post_chat($provider, $payload, $error);
+    if ($obj === null) {
         log_event(['msg' => 'complete_tools_error', 'provider' => $provider, 'err' => $error]);
-        curl_close($ch);
         return ['content' => '', 'tool_calls' => [], 'error' => $error];
     }
-    curl_close($ch);
-
-    $obj = json_decode($resp, true);
-    if (!is_array($obj)) return ['content' => '', 'tool_calls' => [], 'error' => 'invalid_response'];
     $message = provider_uses_openai_protocol($provider)
         ? ($obj['choices'][0]['message'] ?? null)
         : ($obj['message'] ?? null);
@@ -474,6 +494,7 @@ function provider_stream_state(): array {
         'error_body' => '',
         'stream_error' => false,
         'curl_error' => '',
+        'aborted' => '',
         'duration_ns' => 0,
         'think_open' => false,
         'think_hold' => '',
@@ -509,7 +530,8 @@ function provider_route_think_token(string $token, array &$state, callable $emit
 
     if ($buf === '') return;
 
-    // a tag can straddle two stream chunks, so hold back the start of one
+    // a tag can straddle two stream chunks, so hold back the start of
+    // one
     $tag = $state['think_open'] ? '</think>' : '<think>';
     $hold = 0;
     for ($n = min(strlen($tag) - 1, strlen($buf)); $n > 0; $n--) {
@@ -668,6 +690,24 @@ function provider_finish_openai_tool_calls(array $toolAcc, array &$state, int $r
     }
 }
 
+// the ceilings on one upstream stream. a turn is every tool
+// round of one chat.php request, so the deadline is shared and
+// each round gets what's left. idle is curl's low speed check:
+// under 1 byte/s for that many seconds and it hangs up. that has
+// to cover a cold load plus prompt eval on a big context, which
+// is minutes on CPU, so it's long. the byte caps are for a
+// provider that streams garbage: a frame that never ends, a
+// reply that never stops, an error page the size of a novel.
+const STREAM_ERROR_BODY_MAX = 64 * 1024;
+const STREAM_PENDING_MAX = 1024 * 1024;
+const STREAM_CONTENT_MAX = 4 * 1024 * 1024;
+
+function stream_turn_deadline(): float {
+    static $deadline = null;
+    if ($deadline === null) $deadline = microtime(true) + max(30, (int)env_str('OMEGA_TURN_TIMEOUT_S', '900'));
+    return $deadline;
+}
+
 function provider_stream_round(string $provider, array $payload, callable $emit, int $round = 0): array {
     $openai = provider_uses_openai_protocol($provider);
     $state = provider_stream_state();
@@ -680,11 +720,28 @@ function provider_stream_round(string $provider, array $payload, callable $emit,
     curl_setopt($ch, CURLOPT_HTTPHEADER, chat_request_headers($provider));
     curl_setopt($ch, CURLOPT_POSTFIELDS, json_encode($payload, JSON_UNESCAPED_UNICODE));
     curl_setopt($ch, CURLOPT_RETURNTRANSFER, false);
-    curl_setopt($ch, CURLOPT_TIMEOUT, 0);
+    curl_setopt($ch, CURLOPT_TIMEOUT_MS, max(1000, (int)((stream_turn_deadline() - $started) * 1000)));
+    curl_setopt($ch, CURLOPT_LOW_SPEED_LIMIT, 1);
+    curl_setopt($ch, CURLOPT_LOW_SPEED_TIME, max(10, (int)env_str('OMEGA_STREAM_IDLE_S', '300')));
     curl_setopt($ch, CURLOPT_CONNECTTIMEOUT, 10);
 
+    // returning anything but strlen($chunk) makes curl drop the
+    // transfer. that's how every cap below hangs up on upstream.
+    $abort = function (string $why) use (&$state, $emit): int {
+        $state['aborted'] = $why;
+        if ($why !== 'client_gone') {
+            $state['stream_error'] = true;
+            $emit(['error' => $why]);
+        }
+        return -1;
+    };
+    $overflowed = function () use (&$buf, &$state): bool {
+        return strlen($buf) > STREAM_PENDING_MAX || strlen($state['content']) > STREAM_CONTENT_MAX;
+    };
+
     if (!$openai) {
-        curl_setopt($ch, CURLOPT_WRITEFUNCTION, function ($ch, $chunk) use (&$buf, &$state, $emit) {
+        curl_setopt($ch, CURLOPT_WRITEFUNCTION, function ($ch, $chunk) use (&$buf, &$state, $emit, $abort, $overflowed) {
+            if (connection_aborted()) return $abort('client_gone');
             if ($state['http_status'] === 0) {
                 $state['http_status'] = (int)curl_getinfo($ch, CURLINFO_RESPONSE_CODE);
             }
@@ -693,28 +750,36 @@ function provider_stream_round(string $provider, array $payload, callable $emit,
             // before chat.php gets a say. hold it here so the caller can
             // decide to retry somewhere else first.
             if ($state['http_status'] >= 400) {
+                if (strlen($state['error_body']) > STREAM_ERROR_BODY_MAX) return $abort('upstream_error');
                 $state['error_body'] .= $chunk;
                 return strlen($chunk);
             }
             provider_parse_ollama_chunk($chunk, $buf, $state, $emit);
+            if ($overflowed()) return $abort('upstream_overflow');
             return strlen($chunk);
         });
     } else {
-        curl_setopt($ch, CURLOPT_WRITEFUNCTION, function ($ch, $chunk) use (&$buf, &$toolAcc, &$state, $emit) {
+        curl_setopt($ch, CURLOPT_WRITEFUNCTION, function ($ch, $chunk) use (&$buf, &$toolAcc, &$state, $emit, $abort, $overflowed) {
+            if (connection_aborted()) return $abort('client_gone');
             if ($state['http_status'] === 0) {
                 $state['http_status'] = (int)curl_getinfo($ch, CURLINFO_RESPONSE_CODE);
             }
             if ($state['http_status'] >= 400) {
+                if (strlen($state['error_body']) > STREAM_ERROR_BODY_MAX) return $abort('upstream_error');
                 $state['error_body'] .= $chunk;
                 return strlen($chunk);
             }
 
             provider_parse_openai_chunk($chunk, $buf, $toolAcc, $state, $emit);
+            if ($overflowed()) return $abort('upstream_overflow');
             return strlen($chunk);
         });
     }
 
-    if (curl_exec($ch) === false) $state['curl_error'] = curl_error($ch);
+    if (curl_exec($ch) === false && $state['aborted'] === '') {
+        $state['curl_error'] = curl_errno($ch) === CURLE_OPERATION_TIMEDOUT
+            ? 'timeout: ' . curl_error($ch) : curl_error($ch);
+    }
     if ($state['http_status'] === 0) {
         $state['http_status'] = (int)curl_getinfo($ch, CURLINFO_RESPONSE_CODE);
     }
@@ -736,25 +801,19 @@ function provider_tool_message(string $provider, string $name, string $callId, s
     return $message;
 }
 
-// how many tokens the window holds, before anything is put in it. zero for
-// openrouter - the model behind it is whatever the user picked and we don't
-// know its window.
+// how many tokens the window holds, before anything is put in it.
+// zero for openrouter - the model behind it is whatever the user
+// picked and we don't know its window.
 function provider_window_tokens(string $provider): int {
     if ($provider === 'llamacpp') return 16384;
     if ($provider === 'openrouter') return 0;
     return default_num_ctx();
 }
 
-// ollama and llama.cpp both cut a prompt that doesn't fit the window, and the
-// end they cut from is the FRONT - which here is the system frame, every rule
-// she has. so a long enough conversation quietly turns her into a stock model
-// that says it changed clothes and then doesn't. we drop whole old turns
-// ourselves instead, oldest first, and the system frame and the newest turns
-// stay.
-//
-// 4 bytes per token is the rough latin ratio and it's deliberately generous,
-// real gemma tokens run nearer 3.7. reserve is what we leave for the reply
-// plus the tool results that get appended to this same window mid-turn.
+// overflow drops the FRONT of the prompt, including the system
+// rules. discard whole oldest turns ourselves, keeping the system
+// and newest turns. budget 4 bytes/token against Gemma's ~3.7,
+// reserving space for the reply and tool results added mid-turn.
 function fit_messages_to_context(array $messages, int $numCtx, int $reserve = 1024): array {
     $budget = $numCtx - $reserve;
     if ($numCtx <= 0 || $budget <= 0 || count($messages) <= 5) return $messages;

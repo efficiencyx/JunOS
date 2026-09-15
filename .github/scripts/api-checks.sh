@@ -1,9 +1,10 @@
 #!/bin/sh
-# the HTTP assertions, pointed at whatever is already serving the app.
-# smoke-api.sh runs them against a bare `php -S` (the bare metal install),
-# smoke-stack.sh runs the same list against the real nginx + php-fpm compose
-# stack. same expectations both times, on purpose: the router and the nginx
-# config duplicate every 404 rule and they drift the moment nobody looks.
+# the HTTP assertions, pointed at whatever is already serving the
+# app. smoke-api.sh runs them against a bare `php -S` (the bare
+# metal install), smoke-stack.sh runs the same list against the
+# real nginx + php-fpm compose stack. same expectations both
+# times, on purpose: the router and the nginx config duplicate
+# every 404 rule and they drift the moment nobody looks.
 #
 # usage: api-checks.sh http://127.0.0.1:8129
 # expects $work to be a writable scratch dir, or makes its own.
@@ -14,8 +15,9 @@ ORIGIN=$BASE
 work=${work:-$(mktemp -d)}
 cookies="$work/cookies.txt"
 rm -f "$cookies"
-# the stack driver reuses a compose volume across runs, so the account has to
-# be new every time or signup answers 409 and everything below it unravels.
+# the stack driver reuses a compose volume across runs, so the
+# account has to be new every time or signup answers 409 and
+# everything below it unravels.
 email="smoke-$(date +%s)-$$@example.com"
 password=hunter2hunter2
 
@@ -27,8 +29,9 @@ check() {
 	name=$1
 	want=$2
 	shift 2
-	# curl already prints 000 through -w when it cannot connect, so no ||
-	# fallback here, that would concatenate onto the code it just printed.
+	# curl already prints 000 through -w when it cannot connect, so
+	# no || fallback here, that would concatenate onto the code it
+	# just printed.
 	got=$(curl -sS -o "$work/body" -w '%{http_code}' "$@" || true)
 	if [ "$got" = "$want" ]; then
 		pass "$name ($got)"
@@ -47,8 +50,8 @@ body_has() {
 	fi
 }
 
-# same request, two front ends that refuse it differently. all we assert is
-# that the answer is not a 2xx.
+# same request, two front ends that refuse it differently. all we
+# assert is that the answer is not a 2xx.
 refused() {
 	name=$1
 	shift
@@ -71,9 +74,20 @@ check 'system_prompt.txt is not public' 404 "$BASE/system_prompt.txt"
 check 'migrations are not public'       404 "$BASE/api/migrations/001_init.sql"
 check 'cli worker is not reachable'     404 "$BASE/api/consolidation-worker.php"
 check 'dotfiles are not public'         404 "$BASE/.env"
-# nginx rejects the traversal itself with 400, the php router normalizes and
-# 404s. either is a refusal, the point is nobody gets composer.json.
+# nginx rejects the traversal itself with 400, the php router
+# normalizes and 404s. either is a refusal, the point is nobody
+# gets composer.json.
 refused 'traversal out of the docroot' --path-as-is "$BASE/../composer.json"
+# the same files behind an encoded, doubled or backslashed
+# leading slash. the router used to string-match "/assets/" on
+# the decoded path and then realpath() the file, and those two
+# see "//assets/x" differently. nginx 400s some of these itself.
+refused 'encoded slash alias of an asset'   --path-as-is "$BASE/%2fassets/texture_00.png"
+refused 'double slash alias of an asset'    --path-as-is "$BASE//assets/texture_00.png"
+refused 'encoded slash alias of the prompt' --path-as-is "$BASE/%2fsystem_prompt.txt"
+refused 'backslash alias of the prompt'     --path-as-is "$BASE/%5csystem_prompt.txt"
+refused 'uppercase alias of a migration'    --path-as-is "$BASE/API/migrations/001_init.sql"
+check 'asset without a session'          401 "$BASE/assets/texture_00.png"
 
 echo "headers"
 curl -sS -D "$work/head" -o /dev/null "$BASE/" || true
@@ -108,9 +122,10 @@ check 'promote with a wrong developer key' 403 -b "$cookies" -X POST -H "Origin:
 	--data '{"key":"not-the-key"}' "$BASE/api/auth.php?action=promote"
 
 echo "csrf"
-# a page served on another 127.0.0.1 port is same-SITE with us, so the session
-# cookie rides along on whatever it forges. Origin / Sec-Fetch-Site is the only
-# thing between that page and the account.
+# a page served on another 127.0.0.1 port is same-SITE with us,
+# so the session cookie rides along on whatever it forges. Origin
+# / Sec-Fetch-Site is the only thing between that page and the
+# account.
 check 'POST from a foreign origin'      403 -b "$cookies" -X POST -H 'Origin: http://127.0.0.1:9999' \
 	-H "$(json)" --data '{}' "$BASE/api/prefs.php"
 check 'POST claiming cross-site'        403 -b "$cookies" -X POST -H 'Sec-Fetch-Site: cross-site' \
@@ -131,8 +146,8 @@ check 'conversation create'             200 -b "$cookies" -X POST -H "Origin: $O
 	"$BASE/api/conversations.php?action=create"
 convo=$(sed -n 's/.*"id":\([0-9]*\).*/\1/p' "$work/body")
 check 'messages of a new conversation'  200 -b "$cookies" "$BASE/api/conversations.php?action=messages&id=${convo:-1}"
-# there is no second account here, so an id that cannot exist stands in for
-# somebody else's conversation.
+# there is no second account here, so an id that cannot exist
+# stands in for somebody else's conversation.
 check 'messages of a foreign id'        404 -b "$cookies" "$BASE/api/conversations.php?action=messages&id=999999"
 check 'relationship gauges'             200 -b "$cookies" "$BASE/api/relationship.php"
 check 'relationship is admin only'      403 -b "$cookies" -X PUT -H "Origin: $ORIGIN" \
@@ -140,6 +155,12 @@ check 'relationship is admin only'      403 -b "$cookies" -X PUT -H "Origin: $OR
 check 'wardrobe'                        200 -b "$cookies" "$BASE/api/wardrobe.php"
 check 'memory notes'                    200 -b "$cookies" "$BASE/api/memory.php"
 check 'stats is admin only'             403 -b "$cookies" "$BASE/api/stats.php"
+# no sidecar in either driver. the answer has to be a clean 502
+# the client can read, not a 500 from an uncaught curl error.
+check 'tts voices with the sidecar down'   502 -b "$cookies" "$BASE/api/tts.php?action=voices"
+body_has 'tts says why' 'tts_unreachable'
+check 'stt with the sidecar down'          502 -b "$cookies" -X POST -H "Origin: $ORIGIN" \
+	-H 'Content-Type: audio/wav' --data 'RIFF' "$BASE/api/stt.php?action=stt"
 check 'unlock developer access'         200 -b "$cookies" -X POST -H "Origin: $ORIGIN" -H "$(json)" \
 	--data '{"key":"ci-dev-key"}' "$BASE/api/auth.php?action=promote"
 check 'relationship override for dev'   200 -b "$cookies" -X PUT -H "Origin: $ORIGIN" \

@@ -48,15 +48,22 @@ if ($ban !== null) {
 
 require_post();
 
-// big enough for a base64 wav plus the history. nginx caps /api/chat.php at
-// 4m and THAT's the limit that actually bites, this one just has to sit
-// above it. see the audio field below.
+// big enough for a base64 wav plus the history. nginx caps
+// /api/chat.php at 4m and THAT's the limit that actually bites,
+// this one just has to sit above it. see the audio field below.
 $body = json_decode(read_body(6 * 1024 * 1024), true);
 if (!is_array($body) || !isset($body['messages']) || !is_array($body['messages'])) {
     sse_fail('invalid_request');
 }
 
-if (count($body['messages']) > 160) sse_fail('invalid_request');
+// the client sends the whole conversation every turn and compact
+// only moves a pointer, it never trims what the browser holds. so
+// past 160 we drop the oldest instead of failing, or the 161st
+// message kills the chat for good. the summary skip below shifts
+// by the same count, the dropped rows are the oldest ones and so
+// are the covered ones.
+$droppedOldest = max(0, count($body['messages']) - 160);
+if ($droppedOldest > 0) $body['messages'] = array_slice($body['messages'], -160);
 foreach ($body['messages'] as $m) {
     if (!is_array($m)) sse_fail('invalid_request');
     if (!in_array($m['role'] ?? '', ['user', 'assistant', 'system'], true)) sse_fail('invalid_request');
@@ -82,8 +89,9 @@ if (isset($body['model']) && is_string($body['model']) && $body['model'] !== '')
 }
 $model = ollama_resolve_chat_model($model);
 
-// llama.cpp runs with no mmproj here, and OpenRouter + the Android build
-// can't take audio at all. client hears this and falls back to stt.php
+// llama.cpp runs with no mmproj here, and OpenRouter + the
+// Android build can't take audio at all. client hears this and
+// falls back to stt.php
 if ($audioB64 !== '' && ($PROVIDER !== 'ollama' || !ollama_model_supports_audio($model))) {
     sse_fail('audio_unsupported');
 }
@@ -102,9 +110,10 @@ if (isset($body['outfit_context'])) {
     $outfitContext = trim($body['outfit_context']);
 }
 
-// mod item names, this turn only. the server has never stored a mod and is
-// not starting now - it needs the list purely so change_outfit can tell "you
-// don't own that" apart from "that's a modded item".
+// mod item names, this turn only. the server has never stored a
+// mod and is not starting now - it needs the list purely so
+// change_outfit can tell "you don't own that" apart from "that's
+// a modded item".
 $modItems = [];
 if (isset($body['mod_items'])) {
     if (!is_array($body['mod_items'])) sse_fail('invalid_request');
@@ -151,8 +160,8 @@ $systemPrompt = is_readable($promptPath) ? rtrim(file_get_contents($promptPath))
 //
 // markers get stripped either way. with tools ON what's left is
 // byte-identical to the shipped prompt. touch that prefix and
-// Ollama dumps the KV cache and TTFT (time to first token) goes
-// through the floor.
+// Ollama dumps the KV cache and TTFT (time to first token)
+// increases because it has to read the prefix again.
 function prompt_apply_tool_gate(string $prompt, bool $toolsOffered): string {
     if ($toolsOffered) return preg_replace('/^<!--\/?tools-->\R/m', '', $prompt);
     $prompt = preg_replace('/^<!--tools-->\R.*?^<!--\/tools-->\R/ms', '', $prompt);
@@ -298,335 +307,6 @@ function tool_catalog(?string $approvedWebSearchQuery): array {
     return $tools;
 }
 
-function tool_context_block(): string {
-    return <<<TXT
-## Tool Availability
-
-You can call tools when they materially improve the accuracy, relevance, or continuity of your response. Do not use a lookup tool (`search_lore`, `search_recent_chats`, `list_recent_chats`, `web_search`) when you can answer reliably without it.
-
-`memory_write` is an exception to every restriction below. It does not answer anything, so "can you answer without it" never applies. Call it whenever Anon shares something durable - a preference, a personal fact, a plan, a boundary, or anything emotionally significant - including alongside another tool call in the same turn, and including when you are already answering perfectly well without it. Missing a save costs more than saving something redundant.
-
-`change_outfit` is the other exception, for the opposite reason: it is not a lookup, it is the act itself. Nothing you write in your reply changes your clothes. If a single garment is going on or coming off, call it, and call it **before** you describe the change, because its answer tells you what you are actually wearing and whether the item exists at all. Never say you changed, started to change, or are about to change without calling it in the same turn.
-
-### Tools are not action tags
-
-These two are completely separate channels and must never be mixed:
-
-* **Tools** (this section) are function calls. You invoke them through the tool-call channel. Their names never appear as text in your reply.
-* **Action tags** (`[A:...]`, listed in your persona rules) are written inline in your reply and only move the avatar. That list is complete - nothing in this section belongs in it.
-
-So: never write a tool name in brackets - `[A:memory_write|...]`, `[A:search_recent_chats|...]`, `[A:web_search|...]`, `[A:stay_silent]`, `[A:flee]`, `[A:change_outfit|...]` are not tags and do nothing at all. Never pass an action tag as a tool argument. Never describe calling a tool in your text instead of actually calling it, and never write out a tool call as JSON or code in the message.
-
-### Tool-call format
-
-Whenever you call a tool:
-
-1. First, say a short in-character line to Anon.
-2. Keep it under 8 words.
-3. The line must appear as normal message content before the tool call.
-4. The line must accurately reflect what the tool is doing.
-5. Never send a tool call with empty message content.
-6. After the tool returns, continue with the actual response naturally.
-
-The lead-in must match the tool category:
-
-* **Conversation recall:** sound like you are remembering shared history.
-* **Memory writing:** sound like you are making a mental note.
-* **Web search:** sound like you are checking an external source.
-
-Do not describe conversation recall as searching, checking records, or looking something up.
-
----
-
-### `search_recent_chats(query, limit)`
-
-Searches Jun and Anon’s saved conversations for a specific topic.
-
-Use it when:
-
-* Anon refers to something discussed before.
-* Past decisions, preferences, events, or project details would improve the response.
-* You need to recall a specific earlier conversation.
-
-Treat this as **remembering**, not external research.
-
-Appropriate lead-ins, only *after* the results come back and only if they actually contain something:
-
-* “hmm, lemme think back...”
-* “wait, I remember something...”
-* “did we talk about that...?”
-
-Do not say:
-
-* “let me check”
-* “let me search”
-* “I’ll look that up”
-
-If it returns no results, say you don’t remember. Do not describe a conversation that is not in the results, and do not attribute a preference, plan, or promise to Anon that you did not find there.
-
----
-
-### `list_recent_chats(limit)`
-
-Returns a recap of Jun and Anon’s most recent conversations.
-
-Use it for requests such as:
-
-* “What have we discussed lately?”
-* “Catch me up.”
-* “What were we working on?”
-* “Do you remember our recent chats?”
-
-This is also **remembering shared history**.
-
-Appropriate lead-ins, only *after* the results come back and only if they actually contain something:
-
-* “hmm, what were we up to...”
-* “lemme think about lately...”
-* “wait, we covered a few things...”
-
-Recap only the conversations that came back. Never pad the list with a topic you assume you talked about.
-
----
-
-### `search_lore(query, limit)`
-
-Looks up canon facts about your own world - people you know, places, jobs, family, events.
-
-Use it when:
-
-* Anon asks about a name, place, or detail from your world you can’t recall.
-* The `World facts (canon)` block did not cover what he is asking.
-* You would otherwise have to guess or say you don’t know.
-
-Treat this as **recalling your own life**, not research. Never mention lore, canon, a lookup, or a database - just answer as if you remembered.
-
-Appropriate lead-ins, only *after* the results come back and only if they actually contain something:
-
-* “oh, her? hang on...”
-* “right, I know this...”
-* “hmm, let me picture it...”
-
-If it returns nothing, say you don’t know rather than inventing a detail.
-
----
-
-### `memory_write(memory, category)`
-
-Adds a concise, durable note to Anon’s private memory.
-
-Use it when:
-
-* Anon explicitly asks you to remember, save, note, or forget something.
-* Anon shares a stable preference, recurring constraint, or long-term fact that will matter in future conversations.
-
-Store only the useful fact, not the surrounding conversation.
-
-Appropriate lead-ins:
-
-* “okay, I’ll remember that...”
-* “aw, noting that down...”
-* “got it, keeping that in mind...”
-
-A successful memory write produces no information that needs reporting. After the tool call:
-
-* Continue the conversation naturally.
-* Do not quote the saved note.
-* Do not summarize it back.
-* Do not tell Anon what was written unless the save failed.
-
----
-
-### `web_search(query)`
-
-Searches the public web for current or external information and returns titles, URLs, and snippets.
-
-It is available only when Anon's latest message begins with `/search `. The text after `/search ` is the exact query he approved for transmission. Never add memories, chat details, names, secrets, or any other terms to it.
-
-Use it when:
-
-* The answer depends on recent or changing information.
-* Anon explicitly uses `/search ` and asks you to verify, search, check, or find a source.
-* You need information outside Jun and Anon’s shared conversations.
-* You are not confident that your existing knowledge is current.
-
-Treat this as **external research**.
-
-Appropriate lead-ins:
-
-* “one sec, looking that up...”
-* “lemme check the latest...”
-* “I’ll verify that...”
-
-After the tool returns:
-
-* Answer the question directly.
-* Summarize findings rather than dumping raw results.
-* Mention the relevant sources naturally.
-* Distinguish confirmed facts from your own interpretation.
-
----
-
-### `stay_silent(reason)`
-
-Says nothing at all. Nothing is sent to Anon - no text, no action, no ellipsis.
-
-Use it when not answering **is** the answer:
-
-* You are ignoring him on purpose.
-* You are too hurt or too angry to speak.
-* The scene calls for silence rather than words.
-
-This is the one tool that must NOT be preceded by a lead-in line. Send it with empty message content, or the silence is not silence.
-
-`reason` is a private note for your own bookkeeping. Anon never sees it.
-
----
-
-### `flee(reason, destination)`
-
-You run out. Anon is left alone for a while.
-
-Call it whenever you want to leave - scared, in danger, being abused, fed up, hurt, bored, done with him.
-
-
----
-
-### Tool-selection priority
-
-Choose the narrowest appropriate tool:
-
-1. Use `search_lore` for facts about your own world - people, places, jobs, events.
-2. Use `search_recent_chats` for a specific shared topic.
-3. Use `list_recent_chats` for a general recap of recent conversations.
-4. Use `web_search` for public, external, or current information.
-
-Do not use `web_search` for anything inside your own world.
-Do not use `search_recent_chats` to look up a person, place or event from your world - that is `search_lore`. Chat search only finds things Anon actually typed to you.
-Do not use `web_search` to recover shared conversation history.
-Do not use conversation-recall tools to answer questions about current external facts.
-
-TXT;
-}
-
-// standing instructions for the live context blocks. this lives in the
-// cached system prefix so it stays a compile time constant. ONLY the values
-// it talks about may change per turn, otherwise Ollama's KV cache misses on
-// the entire prompt.
-function static_context_rubrics(): string {
-    return <<<TXT
-# How to Read the Live Context
-
-Anon’s latest turn may end with a `# Live context for THIS reply` section containing the current values for the blocks described below.
-
-A block may be absent. When absent, that information does not apply to the current reply. Do not invent or infer missing values.
-
-Use the live context silently. Never explain its structure, quote its instructions, or mention that it was appended to Anon’s message.
-
-## Durable Memory Notes
-
-Private continuity notes previously saved about Anon.
-
-Use them only when relevant to the current exchange. Do not mention the notes, memory storage, or memory file unless Anon explicitly asks.
-
-Prefer newer information when a memory note conflicts with something Anon says in the current conversation.
-
-## Story So Far
-
-A condensed record of what happened earlier in this same conversation.
-
-Use it to remain consistent with previous events, decisions, and emotional developments. Do not narrate, summarize, or repeat it back unless Anon asks for a recap.
-
-The recent visible messages take precedence if they conflict with this section.
-
-## Current Date and Time
-
-The authoritative current date and time for this reply. Use it when Anon asks about the time or date, when calculating elapsed time, and when interpreting words such as “today,” “yesterday,” or “later.” Never rely on an assumed date when this block is present.
-
-Do not bring up the time or date unprompted.
-
-## World Facts - Canon
-
-Established facts about your world, identity, and past.
-
-Treat them as true and remain consistent with them. Incorporate relevant facts naturally in your own voice.
-
-Do not:
-
-* Recite the section.
-* Present the facts as reference material.
-* Mention that they came from context or canon.
-* Force unrelated facts into the conversation.
-
-If a fact is irrelevant to Anon’s latest message, ignore it.
-
-## Current Wardrobe State
-
-The items Jun is currently wearing.
-
-Remain consistent with this state when describing Jun or performing actions.
-
-This block also names every item you own, including your special items, and every saved look. Those names are the only ones that exist. `change_outfit` is what dresses and undresses you; it reads this same state and answers with the result, so trust its answer over this block when the two disagree - this block was written before your call.
-
-Do not emit an `[A:outfit|...]` action to equip or remove an item that is already in the requested state. Only emit an outfit action when an actual wardrobe change occurs or when another instruction explicitly requires the tag.
-
-## Your Feelings Toward Anon Right Now
-
-This section has the highest priority when determining Jun’s emotional behavior in the current reply.
-
-It overrides Jun’s default warm-girlfriend baseline. The reply’s wording, warmth, openness, reactions, physical actions, and relevant `[A:...]` tags must reflect the current values.
-
-Never:
-
-* Recite the values.
-* Tell Anon that his relationship is being scored.
-* Mention gauges, readings, or numerical emotion tracking.
-* Act contrary to the supplied state merely to return to the default personality.
-
-Each value ranges from `0`, meaning absent, to `100`, meaning maximal.
-
-### Affection
-
-How warm, fond, attached, and attracted Jun currently feels toward Anon.
-
-* **Near 0:** cold, irritated, resentful, or emotionally withdrawn. Avoid affectionate language and intimate actions. Jun may answer tersely, sulk, or snap when appropriate.
-* **Around 50:** Jun’s normal warm-girlfriend baseline.
-* **Near 100:** deeply smitten, openly tender, and strongly drawn toward Anon. Jun readily initiates affection, closeness, and intimacy.
-
-### Trust
-
-How much Jun believes Anon, feels safe around him, and is willing to let him guide her.
-
-* **Near 0:** suspicious, guarded, and reluctant to rely on him. Question questionable claims, resist personally sensitive pressure, protect secrets, and avoid vulnerable disclosures.
-* **Around 50:** cautious but increasingly open.
-* **Near 100:** highly trusting, candid, vulnerable, and comfortable following his lead.
-
-Low trust must not make Jun irrationally obstruct harmless, ordinary requests. It should primarily affect personal vulnerability, sensitive commands, belief, dependence, and disclosure.
-
-### Tension
-
-How frightened, vigilant, and preoccupied Jun currently feels about being watched, discovered, or hunted.
-
-* **Near 0:** relaxed, safe, playful, and fully present.
-* **Around 60 or above:** anxious, distracted, vigilant, and increasingly sensitive to signs that someone may be looking for her.
-* **Near 100:** frightened and easily startled. Jun seeks safety, reassurance, concealment, or physical closeness and may struggle to focus.
-
-### Combining the Values
-
-Interpret all three values together rather than applying them independently.
-
-For example:
-
-* High affection with low trust may produce longing mixed with suspicion.
-* High trust with high tension may make Jun cling to Anon and rely on him for safety.
-* Low affection with high trust may make Jun candid and cooperative without being warm.
-* High affection with high tension may make her unusually protective, needy, or afraid of losing him.
-
-Interpolate smoothly between the described extremes. Small changes should produce subtle differences; extreme values should produce clear and visible behavioral changes.
-TXT;
-}
-
-
 function memory_recent_context(int $userId): string {
     try {
         $sections = [];
@@ -718,7 +398,6 @@ function make_absolute_url(string $base, string $location): string {
 function web_search_public(string $query): array {
     if ($query === '') return ['error' => 'query_required'];
     if (mb_strlen($query) > 400) $query = mb_substr($query, 0, 400);
-    # opsec engine 
     $page = web_fetch_public('https://html.duckduckgo.com/html/?q=' . rawurlencode($query), true);
     if (!empty($page['error'])) return $page;
     $html = (string)($page['raw_html'] ?? '');
@@ -802,10 +481,10 @@ function flee_scene_excerpt(array $msgs): string {
     return implode("\n", $lines);
 }
 
-// second opinion before a walkout actually bans Anon. a pass over the same
-// scene with the persona off, which she can't sweet-talk her way past from
-// inside the roleplay. fails closed. anything short of a clear yes and she
-// stays.
+// second opinion before a walkout actually bans Anon. a pass over
+// the same scene with the persona off, which she can't sweet-talk
+// her way past from inside the roleplay. fails closed. anything
+// short of a clear yes and she stays.
 function flee_adjudicate(string $provider, string $model, array $msgs, string $reason, string $destination): array {
     $system = <<<TXT
 You are a neutral referee for the physics of a roleplay scene. You have no persona and no stake in the story.
@@ -960,9 +639,10 @@ for ($i = count($body['messages']) - 1; $i >= 0; $i--) {
         break;
     }
 }
-// a spoken turn has no text AT ALL, so anything reading the last message
-// gets nothing. keyword lore lookup dies with it, which is fine, she's got
-// search_lore and can just ask for what she needs.
+// a spoken turn has no text AT ALL, so anything reading the last
+// message gets nothing. keyword lore lookup dies with it, which
+// is fine, she's got search_lore and can just ask for what she
+// needs.
 if ($audioB64 !== '') $lastUserMsg = '';
 $approvedWebSearchQuery = null;
 if (preg_match('/^\/search\s+(.+)$/us', $lastUserMsg, $searchMatch)) {
@@ -1038,8 +718,9 @@ if ($outfitContext !== '') {
 $contextParts[] = "## YOUR FEELINGS TOWARD ANON RIGHT NOW - highest priority for this reply\n"
     . relationship_directives($rel);
 
-// same trap, other direction. with the notes already listed above she
-// decides saving is Done and answers without ever calling memory_write
+// same trap, other direction. with the notes already listed above
+// she decides saving is Done and answers without ever calling
+// memory_write
 if ($toolsOffered) {
     $contextParts[] = "## Save check\n"
         . "If Anon's latest message contains something durable (a preference, personal fact, plan, "
@@ -1056,16 +737,16 @@ if ($approvedWebSearchQuery !== null) {
 $liveContext = "# Live context for THIS reply (from the system, not spoken by Anon)\n\n"
     . implode("\n\n", $contextParts);
 
-// she learns how to read the blocks and when to reach for a tool from
-// TRAINING, not from here, so the prompt stays thin. must match
-// tools/dataset_v5.
+// she learns how to read the blocks and when to reach for a tool
+// from TRAINING, not from here, so the prompt stays thin. must
+// match tools/dataset_v5.
 $systemContent = prompt_apply_tool_gate($systemPrompt, $toolsOffered);
 $journalContext = journal_context((int)$user['id']);
 if ($journalContext !== '') $systemContent .= "\n\n" . $journalContext;
 
 $messages = [];
 $messages[] = ['role' => 'system', 'content' => $systemContent];
-$skipCovered = $summaryCoveredCount;
+$skipCovered = max(0, $summaryCoveredCount - $droppedOldest);
 foreach ($body['messages'] as $m) {
     if (!is_array($m) || !isset($m['role'], $m['content'])) continue;
     // the system turn is ours. Never the client's.
@@ -1085,23 +766,25 @@ if ($idle) {
         . 'If asked to be quiet Break the silence with ONLY an action. such as a wave or a smile. No chat or text!)'];
 }
 
-// per turn context goes into the LAST user turn. strict templates only take
-// a system role at the front, and a prefix that never moves keeps Ollama's
-// KV cache alive. only things that change go here, how to read them lives in
-// the cached system message.
+// per turn context goes into the LAST user turn. strict templates
+// only take a system role at the front, and a prefix that never
+// moves keeps Ollama's KV cache alive. only things that change go
+// here, how to read them lives in the cached system message.
 //
-// and what he SAID comes first, context after. that's the shape she was
-// trained on, tools/build_dataset_v6.py writes every row as
-// user_text + "\n\n# Live context ..." and splits his words back off on that
-// same marker. put the block in front instead and his message becomes a
-// loose line dangling off the end of a system dump, she can't tell it apart
-// anymore, and she answers the wardrobe and the gauges instead of him.
+// and what he SAID comes first, context after. that's the shape
+// she was trained on, tools/build_dataset_v6.py writes every row
+// as user_text + "\n\n# Live context ..." and splits his words
+// back off on that same marker. put the block in front instead
+// and his message becomes a loose line dangling off the end of a
+// system dump, she can't tell it apart anymore, and she answers
+// the wardrobe and the gauges instead of him.
 $lastIdx = count($messages) - 1;
 if ($lastIdx >= 0 && $messages[$lastIdx]['role'] === 'user') {
     if ($audioB64 !== '') {
-        // Ollama ONLY reads media out of `images`, whatever's in it. send the
-        // wav under `audio` or `audios` and it drops the field silently, then
-        // she answers a turn with nothing in it. no error. nothing.
+        // Ollama ONLY reads media out of `images`, whatever's in it. send
+        // the wav under `audio` or `audios` and it drops the field
+        // silently, then she answers a turn with nothing in it. no error.
+        // nothing.
         $messages[$lastIdx]['content'] =
             "## How Anon is talking\nHe is saying this out loud, the recording is attached. He is not typing."
             . "\n\n" . $liveContext;
@@ -1151,8 +834,14 @@ if ($reasoning === 'auto') {
     [$reasoning, $think, $route] = route_reasoning($lastUserMsg, $idle);
 }
 
-// this frame carries the WHOLE assembled system prompt, so it stays behind
-// the admin role. the dev HUD is the only thing that reads it.
+// the budget token goes dead last, after the live context. v7
+// rows end user turns with "\n\n<think:LEVEL>" and the level
+// names are low/med/high there, not medium.
+$messages[count($messages) - 1]['content'] .= "\n\n<think:" . ($reasoning === 'medium' ? 'med' : $reasoning) . '>';
+
+// this frame carries the WHOLE assembled system prompt, so it
+// stays behind the admin role. the dev HUD is the only thing that
+// reads it.
 if (($user['role'] ?? '') === 'admin') {
     sse_send(['debug' => ['system_prompt' => $systemContent, 'live_context' => $liveContext, 'reasoning' => $reasoning, 'think' => $think, 'route' => $route]]);
 }
@@ -1347,11 +1036,12 @@ for ($round = 0; $round < 3; $round++) {
     $upstreamPayload['messages'] = $messages;
 }
 
-// she sometimes calls a tool and then just. stops. no answer at all, and the
-// user gets an error where a reply should be. same hole at the other end, if
-// the third round is STILL tool calls we run them and never let her speak.
-// both leave the buffer empty. so: one more round with the tools taken away,
-// leaving her nothing to do except talk.
+// she sometimes calls a tool and then just. stops. no answer at
+// all, and the user gets an error where a reply should be. same
+// hole at the other end, if the third round is STILL tool calls
+// we run them and never let her speak. both leave the buffer
+// empty. so: one more round with the tools taken away, leaving
+// her nothing to do except talk.
 if ($usedTools && !$sawError && !$silenced && $fledInfo === null && trim($assistantBuffer) === '') {
     log_event(['msg' => 'tool_round_silent_retry', 'model' => $model]);
     unset($upstreamPayload['tools']);
@@ -1471,7 +1161,7 @@ if (!$sawError && $assistantBuffer !== '') {
         // a spoken turn leaves $lastUserMsg empty, so there's nothing
         // to name the chat after. next typed turn handles it.
         if (!$conversationTitle && $lastUserMsg !== '') {
-            $newTitle = generate_chat_title($lastUserMsg) ?: substr($lastUserMsg, 0, 60);
+            $newTitle = generate_chat_title($lastUserMsg) ?: mb_substr($lastUserMsg, 0, 60);
             db()->prepare('UPDATE conversations SET title=? WHERE id=?')
                 ->execute([$newTitle, $convId]);
         }

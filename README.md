@@ -37,9 +37,10 @@ In short it's an AI wrapper
 </details>
 <details>
 <summary>Videos</summary>
-|:---:|Karaoke, Ignore The user singing|
-| <video src="https://github.com/user-attachments/assets/f27859ad-9fee-467b-84a8-4f7630d2e2b6" width="512" controls></video> | <img src="docs/screenshots/wardrobe.png" alt="Chat Interface" width="512"> |
-|:---:|:---:|
+
+**Karaoke** (ignore the user singing)
+
+https://github.com/user-attachments/assets/f27859ad-9fee-467b-84a8-4f7630d2e2b6
 
 </details>
 
@@ -49,11 +50,10 @@ In short it's an AI wrapper
 - **She reacts as she talks.** Gestures and expressions land on the word, not two seconds later.
 - **She has a voice**, and her mouth actually follows it.
 - **You can talk back.** Turn on the mic and it's a hands-free conversation.
-- **She has feelings about you.** Affection, trust and tension move with every exchange, and she treats you accordingly.
+- **She has feelings about you.** Affection, trust and tension move with every exchange, and she treats you accordingly. Push her far enough and she goes quiet, or walks out - and the door stays shut for a few minutes.
+- **She can think before she answers.** A reasoning knob (auto / low / medium / high) and a toggle to watch the chain of thought stream by.
 - **She remembers.** She'll bring up things you said in other chats, and quietly keeps notes and a journal between sessions.
-- **She knows her lore.** Ask her a
-
-bout the game's world and she stays in canon.
+- **She knows her lore.** Ask her about the game's world and she stays in canon.
 - **She'll sing with you.** 🎤 Load a song, get timed lyrics, and see how close you got.
 - **Dress her up.** A whole wardrobe to toggle and recolor - she'll tell you what she thinks of it.
 - **Bring your mods.** Game-mod zips load straight into the browser.
@@ -83,7 +83,7 @@ She runs directly on Windows, no Docker (Docker on Windows is a pain). Pick **on
 With a window and buttons:
 
 ```powershell
-powershell irm https://raw.githubusercontent.com/efficiencyx/JunOS/main/installer-gui.ps1 -OutFile installer-gui.ps1; powershell -ExecutionPolicy Bypass -File .\install.ps1
+powershell irm https://raw.githubusercontent.com/efficiencyx/JunOS/main/installer-gui.ps1 -OutFile installer-gui.ps1; powershell -ExecutionPolicy Bypass -File .\installer-gui.ps1
 ```
 
 Or plain text scrolling by:
@@ -109,13 +109,13 @@ The step-by-step commands for it, every provider, and the manual compose invocat
 Exactly one question: **Express** or **Custom**.
 
 - **Express** - press Enter and forget about it. It figures out your hardware on its own and rebuilds her Live2D model from your game copy. The only thing it might still ask is *where* the game is, and only if it can't find it by itself.
-- **Custom** - walks you through which provider, which model, which voice.
+- **Custom** - walks you through which provider, which model, which voice, and whether to turn on [MTP](#faster-tokens-mtp).
 
 Installing on a machine you can't sit in front of? `JUN_YES=1` (on Windows, `$env:JUN_YES='1'`) skips the question entirely.
 
 ### Then say hi 🎉
 
-Open your browser at **<https://localhost>** - or **<https://127.0.0.1:8080>** if you're on Windows.
+Open your browser at **<https://localhost>** - or **<http://127.0.0.1:8080>** if you're on Windows (bare metal, no TLS).
 
 ### Managing Her
 
@@ -129,7 +129,7 @@ Stop her: `./Jun/start.sh stop`
 
 ### Why the first start is slow
 
-The very first boot downloads her brain - whatever model is listed in `OLLAMA_MODELS_TO_PULL`, by default `hf.co/efficiencyx/Jun-LoRA-E2B-GGUF:Q4_K_M`, which is the one that runs fine without a fancy graphics card. It's a big file. Watch it crawl in with `./start.sh logs ollama`.
+The very first boot downloads her brain - whatever model is listed in `OLLAMA_MODELS_TO_PULL`, by default `hf.co/efficiencyx/Jun-LoRA-E2B-GGUF:Q4_K_M`, which is the one that runs fine without a fancy graphics card. It's a big file. On Ollama it also grabs the tiny model that names your chats (`TITLE_MODEL`, ~1.2 GB, lives on the CPU) and, if you said yes to MTP, the drafter. Watch it all crawl in with `./start.sh logs ollama`.
 
 She's ready once everything reports **healthy**. After that first download it's usually 30-90 seconds. 💤
 
@@ -184,7 +184,7 @@ BIND_ADDR=0.0.0.0
 OMEGA_ALLOW_INSECURE_PUBLIC_HTTP=1
 ```
 
-The launcher works out this machine's address on the network by itself and prints it - `reachable as: 192.168.X.X` on Linux, `on your phone: https://192.168.X.X:8080` on Windows - and that's the URL you type into the phone. On Windows it also adds a firewall rule for the port on **private** networks only (it needs an admin PowerShell to do it, otherwise it prints the one-liner for you to run). One request at a time on Windows, so the phone and the desktop take turns.
+The launcher works out this machine's address on the network by itself and prints it - `reachable as: 192.168.X.X` on Linux, `on your phone: http://192.168.X.X:8080` on Windows - and that's the URL you type into the phone. On Windows it also adds a firewall rule for the port on **private** networks only (it needs an admin PowerShell to do it, otherwise it prints the one-liner for you to run). One request at a time on Windows, so the phone and the desktop take turns.
 
 The second line is not decoration: there's no TLS here, so your password and every word she says cross the wifi in the clear. Fine on your own network, **never** on one you don't control, and never port-forwarded to the internet - that's what the certbot setup above is for. 🔒 DHCP moves addresses around, so if she stops answering after a few days, restart the launcher and read the new one.
 
@@ -200,12 +200,17 @@ The fine-tune comes in 12B, E4B and E2B on Hugging Face. The installer picks a c
 |---:|---|---|
 | 4 GB | E2B Q4_K_M | E2B Q6_K |
 | 6 GB | E2B Q6_K | E2B Q8_0 |
-| 8 GB | E4B Q4_K_M | E4B Q6_K |
-| 10 GB | E4B Q6_K | E4B Q8_0 |
-| 12 GB | E4B Q8_0 | 12B Q4_K_M |
+| 8 GB | E4B Q4_K_M | E4B Q8_0 |
+| 10 GB | E4B Q8_0 | 12B Q4_K_M |
+| 12 GB | 12B Q4_K_M | 12B Q6_K |
 | 16 GB | 12B Q6_K | 12B Q8_0 |
+| 24 GB | 12B Q8_0 | - |
 
 `JUN_MODEL=12b|e4b|e2b` picks a family at Q4_K_M; a full Ollama reference picks an exact quant. The frontend lists whatever's actually installed.
+
+### Faster tokens: MTP
+
+Gemma 4 ships a tiny *drafter* that guesses the next few tokens; Jun checks the whole batch in one pass and keeps the ones she agrees with, so those came almost free. Nothing she says changes - rejected guesses are thrown away - only the speed does. The installer offers it (`JUN_MTP=on|off`, on under Express) and then runs `./mtp-autotune.sh` (`mtp-autotune.ps1` on Windows) once she's up, measuring depths 1-4 against plain decoding *with the real system prompt in front* and writing the winner into `.env`. If nothing beats plain decoding it turns MTP back off and says so. Swap the GPU and the launcher notices (`MTP_TUNED_GPU`) and re-tunes on the next start; `MTP_AUTOTUNE=off` skips that. Budget the model, the drafter, *and* ~1.5 GB for the browser drawing Live2D on the same card. Knobs and the measurements behind the defaults: [`docs/configuration.md`](docs/configuration.md#7b-multi-token-prediction-experimental).
 
 ### Where the thinking happens
 
@@ -217,7 +222,7 @@ The fine-tune comes in 12B, E4B and E2B on Hugging Face. The installer picks a c
 
 llama.cpp can also serve a GGUF straight off your disk (`LLAMACPP_MODELS_DIR` + `LLAMACPP_MODEL_FILE`), and `LLAMACPP_TOOLS=off` exists for fine-tunes whose tool-call syntax llama-server can't parse.
 
-**No second model needed:** lore lookup and cross-chat recall are plain text matching - keyword/IDF over the corpus, SQL `LIKE` over your history - so a non-Ollama provider costs you no features and drags no local model along.
+**No retrieval model:** lore lookup and cross-chat recall are plain text matching - keyword/IDF over the corpus, SQL `LIKE` over your history - so a non-Ollama provider costs you no features and drags no embedder along. The only extra model in the stack is the Ollama-only chat titler (`TITLE_MODEL`, a 0.6B fine-tune pinned to the CPU so it never fights her for VRAM; set it empty and titles fall back to your first message).
 
 ### Picking your GPU
 
@@ -243,8 +248,11 @@ Everything is environment variables in `.env` - the full reference is [`docs/con
 | `AI_PROVIDER` | `ollama` \| `llamacpp` \| `openrouter` | `ollama` |
 | `OLLAMA_MODELS_TO_PULL` | Pulled on first boot; the **first** one is pre-warmed | `hf.co/efficiencyx/Jun-LoRA-E2B-GGUF:Q4_K_M` |
 | `LLAMACPP_MODEL_HF` / `LLAMACPP_MODEL_FILE` | Model for the managed llama-server: pull from HF, or serve one off disk | `efficiencyx/Jun-LoRA-E2B-GGUF:Q4_K_M` |
-| `COMPOSE_PROFILES` | Optional containers: `ollama`, `llamacpp`, `karaoke`, `prod` | `ollama` |
-| `VOICE` | Bare-metal Windows only - under Docker the voice sidecar always runs | `on` |
+| `TITLE_MODEL` | Ollama only. The little CPU-pinned model that names new chats; empty disables it | `hf.co/efficiencyx/Titlewen-GGUF:F16` |
+| `OLLAMA_MTP` / `LLAMACPP_MTP` | HF repo of the [MTP](#faster-tokens-mtp) drafter; empty = off. `MTP_AUTOTUNE=off` stops the re-tune after a GPU change | *(empty)* · `on` |
+| `COMPOSE_PROFILES` | Optional containers: `ollama`, `llamacpp`, `voice`, `karaoke`, `prod`. `start.sh` derives them from the knobs below, you only set this by hand for `prod` | `ollama` |
+| `VOICE` | `off` skips the voice sidecar: the `tts` container under Docker (`voice` profile), the sidecar process on bare-metal Windows. Chat degrades to text-only | `on` |
+| `FLEE_BANS` | When she walks out of a scene, `on` locks that account out of chat for 5 min, doubling per repeat up to 30. `off` lets her leave without the lockout | `on` |
 | `TTS_DEVICE` | Voice synthesis device. Keep it on CPU: both engines are real-time there, and a GPU copy parks ~2 GB your LLM wants more | `cpu` |
 | `KARAOKE` / `SEP_DEVICE` | Karaoke sidecar on/off, and where stem separation runs. *This* is the audio job that wants a GPU - minutes on CPU, seconds on a card, VRAM handed back after | `on` · `auto` |
 | `STT_MODEL` / `STT_LANG` | Whisper size and language; blank lang = per-utterance auto-detect | `base` · *(auto)* |
@@ -255,7 +263,7 @@ Everything is environment variables in `.env` - the full reference is [`docs/con
 
 ### Who gets in 🔑
 
-**The registration key** is written into `.env` by the installer and printed when it finishes. Every account, including the first one, has to type it; that is what stops whoever reaches a fresh install first from claiming it. Don't want the lock? Empty the value (`OMEGA_REGISTRATION_KEY=`) and sign-ups are open to whoever can reach the page. 🔑 Lost it? It's sitting in plain text in your own `.env` - read it back, or change it to whatever you like and restart.
+**The registration key** is written into `.env` by the installer and printed when it finishes. The very first account on a fresh install skips it (it's your box, you just ran the installer); every account after that has to type it, so nobody who reaches the page later can make themselves a login. Don't want the lock? Empty the value (`OMEGA_REGISTRATION_KEY=`) and sign-ups are open to whoever can reach the page. 🔑 Lost it? It's sitting in plain text in your own `.env` - read it back, or change it to whatever you like and restart.
 
 Normal accounts get **Factory Reset** in the same panel - one button that erases every conversation, memory and setting and hands the account back the way it came.
 
@@ -274,11 +282,11 @@ Browser ──HTTP/SSE──▶ nginx ──FastCGI──▶ php-fpm ──HTTP�
 **What happens when you hit send:**
 
 1. The browser `POST`s to `/api/chat.php`.
-2. PHP assembles the prompt in two halves. The cached half - `system_prompt.txt`, the standing rubrics, her journal - stays byte-identical between turns so the KV prompt cache keeps hitting. Everything that moves goes in a trailing live-context block: clock, matched lore facts, durable notes, outfit, relationship gauges.
-3. The model streams back (NDJSON from Ollama, OpenAI-style SSE from the others); `providers.php` normalizes both and PHP re-frames each token as an SSE event and flushes it immediately.
-4. `js/app.js` watches the stream for `[A:` markers, holds back any half-typed marker so it never renders, and fires the action the instant its `]` arrives.
+2. PHP assembles the prompt in two halves. The cached half - `system_prompt.txt` and her journal - stays byte-identical between turns so the KV prompt cache keeps hitting. Everything that moves goes in a live-context block glued *after* your question in the last user turn: clock, matched lore facts, durable notes, outfit, relationship gauges. Dead last comes a `<think:low|med|high>` marker telling her how hard to think this turn.
+3. The model streams back (NDJSON from Ollama, OpenAI-style SSE from the others); `providers.php` normalizes both and PHP re-frames each token as an SSE event and flushes it immediately. If she reaches for a tool (search her notes, change outfit, look something up, walk out) PHP runs it and streams another round, up to three.
+4. `js/app/stream-filters.js` watches the stream for `[A:` markers, holds back any half-typed marker so it never renders, and fires the action the instant its `]` arrives.
 5. `js/live2d.js` lerps the model toward the new pose; if voice is on, `js/tts.js` fetches audio per sentence and drives `ParamMouthOpen` from the analyser's RMS.
-6. Bookkeeping happens only *after* `[DONE]`, so nothing can delay a token. Wander off and the consolidation worker rewrites her notes and journal.
+6. Bookkeeping happens only *after* `[DONE]`, so nothing can delay a token: her hidden `[A:mood_shift|...]` tag moves the gauges, a new chat gets its title. Wander off and the consolidation worker rewrites her notes and journal.
 
 The gory version - the action state machine, the tick loop, the memory pipeline - is in [`docs/architecture.md`](docs/architecture.md).
 
@@ -288,6 +296,7 @@ The gory version - the action state machine, the tick loop, the memory pipeline 
 
 > 🎨 **Her art isn't in here** and won't be - see the NOTICE in [LICENSE](LICENSE). `tools/recover_assets.py` rebuilds `webapp/assets/` from your own copy of the game, which is the only way it's allowed to work. Fresh clone looks a bit naked until you run it.
 
+The house rules, the invariants you can break without noticing, and what CI checks are in [`CONTRIBUTING.md`](CONTRIBUTING.md). Stuck rather than hacking? [`SUPPORT.md`](SUPPORT.md). Found a hole? [`SECURITY.md`](SECURITY.md).
 
 Editing anything under `webapp/`? Run **`./sync-webapp.sh`** - it pushes the files into the running containers and restarts php-fpm (opcache won't notice otherwise). `-s` for static-only.
 
@@ -322,7 +331,13 @@ Open the console - a missing texture shows up as a 404. Confirm `webapp/assets/*
 <details>
 <summary><b>No voice</b></summary>
 
-`./start.sh logs tts`. The first run downloads ~300 MB of weights. From inside the stack, `docker compose exec nginx wget -qO- http://tts:8001/health` should return `{"ok":true}` - the sidecar's port is deliberately not published to the host.
+First check `VOICE` in `.env` - `off` means the `tts` container was never started (`./start.sh` lists the compose profiles it resolved). Then `./start.sh logs tts`. The first run downloads ~300 MB of weights. From inside the stack, `docker compose exec nginx wget -qO- http://tts:8001/health` should return `{"ok":true}` - the sidecar's port is deliberately not published to the host, and everything but `/health` wants the `X-Sidecar-Secret` header PHP adds.
+</details>
+
+<details>
+<summary><b>She walked out and now every message is refused</b></summary>
+
+That's the flee lockout, not a bug: the stream answers `user_fled` with a countdown, and the chat UI shows it. 5 minutes the first time, doubling per repeat up to 30, reset after a day of good behaviour. `FLEE_BANS=off` in `.env` lets her leave a scene without locking the account. A referee pass has to agree she could physically leave and had a reason, so "I told her to test the flee tool" doesn't count.
 </details>
 
 <details>
@@ -334,7 +349,7 @@ Karaoke is its own container, so it needs `KARAOKE=on` in `.env` (`./start.sh` p
 <details>
 <summary><b>Getting 429s while chatting</b></summary>
 
-The rate limiter tripped, and there are two layers: `limit_req_zone` in the nginx template and `rate_limit('chat', ...)` in `webapp/api/chat.php`. The stricter one wins, so raise both.
+The rate limiter tripped, and there are two layers: `limit_req` / `limit_conn` per location in the nginx template (`/api/chat.php` allows 2 open streams per IP) and `rate_limit('chat', 30, 60)` in `webapp/api/chat.php`. The stricter one wins, so raise both.
 </details>
 
 <details>
@@ -346,19 +361,20 @@ Everything ships from her own origin, so a clean install produces none - if you 
 <details>
 <summary><b>Running compose by hand and nothing starts</b></summary>
 
-The model-server containers are profile-gated. `./start.sh` derives `COMPOSE_PROFILES` from your `.env`; a bare `docker compose up -d` needs `COMPOSE_PROFILES=ollama` (or `llamacpp`) set in `.env` or the shell.
+The model-server and voice containers are profile-gated. `./start.sh` derives `COMPOSE_PROFILES` from your `.env`; a bare `docker compose up -d` needs `COMPOSE_PROFILES=ollama,voice` (or `llamacpp,voice`, plus `karaoke` if you want it) set in `.env` or the shell.
 </details>
 
 ## Where everything lives
 
 ```
 .
-├── docker/           Dockerfiles, nginx templates, entrypoints
+├── docker/           Dockerfiles, nginx templates + security-headers snippet, entrypoints
 ├── tts/              Audio sidecar: TTS + STT + karaoke separation (FastAPI, server.py)
-├── tools/            Lore builder + dataset, critical-CSS inliner, asset recovery
-├── docs/             architecture.md, configuration.md, screenshots/
+├── tools/            Lore builder, critical-CSS inliner, asset recovery, the bare-metal php router
+├── docs/             architecture.md, configuration.md, wiki/ (the GitHub wiki source), screenshots/
+├── android/          Same webapp on a phone: Ktor server + LiteRT-LM on-device, its own Gradle project
 ├── webapp/           Everything nginx and php-fpm serve
-│   ├── api/          chat.php, providers.php, auth.php, memory.php, karaoke.php, migrations/, …
+│   ├── api/          chat.php, providers.php, auth.php, memory.php, outfit.php, karaoke.php, migrations/, …
 │   ├── js/           app/, live2d/, actions.js, voice.js, wardrobe.js, mods.js, karaoke.js, …
 │   ├── css/          base, shell, chat, stage, sidebar, settings, widgets, responsive
 │   ├── vendor/       PIXI, Cubism core, pixi-live2d-display, marked, DOMPurify (no CDN)
@@ -367,10 +383,13 @@ The model-server containers are profile-gated. `./start.sh` derives `COMPOSE_PRO
 │   └── system_prompt.txt
 ├── install.sh · install.ps1     One-line bootstrap (Docker · bare metal)
 ├── installer-gui.ps1            The Windows click-through window (ships as JunSetup.exe)
+├── uninstall.ps1                Takes her off a Windows box again
 ├── start.sh · start.ps1         Launchers, and the stop/status/logs control panel
+├── mtp-autotune.sh · .ps1       Measures the MTP draft depth and writes the winner to .env
 ├── sync-webapp.sh               The dev loop
 ├── colab.ipynb                  The free-GPU notebook
-└── docker-compose*.yml          Base (CPU) + nvidia / amd / llamacpp overlays
+├── .github/workflows/           CI (syntax, stream-buffer tests, a chat turn against a fake Ollama) + the JunSetup.exe release
+└── docker-compose*.yml          Base (CPU) + nvidia / amd overlays, llamacpp-local / llamacpp-mtp add-ons
 ```
 
 ## Standing on the shoulders of

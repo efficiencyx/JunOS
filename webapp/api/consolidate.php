@@ -29,7 +29,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'GET' && $action === 'status') {
 // absence it is measuring is already written over with "just now".
 if ($_SERVER['REQUEST_METHOD'] === 'GET' && $action === 'welcome') {
     if (($user['role'] ?? '') !== 'admin') {
-        foreach (['preview', 'away', 'tier', 'hour'] as $param) {
+        foreach (['preview', 'away', 'tier'] as $param) {
             if (isset($_GET[$param])) fail(403, 'forbidden');
         }
     }

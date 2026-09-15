@@ -34,7 +34,6 @@ window.Voice = (function () {
   // bump the threshold per unit of Jun's output. louder she is,
   // more echo comes back
   const ECHO_COEFF = 1.8;
-  // 700ms of quiet ends the default turn
   const SILENCE_MS = 700;
   // under 250ms is a cough or a click, not a turn
   const MIN_SPEECH_MS = 250;
@@ -70,8 +69,11 @@ window.Voice = (function () {
   let ttsWasSpeaking = false;
 
   function setOnTranscript(fn) { onTranscript = fn || (() => {}); }
-  // set this and the wav goes straight to the chat model. return false from
-  // it and that turn falls back to whisper. one turn at a time, not a latch
+  // set this and the wav goes straight to the chat model. return
+  // false from it and that turn falls back to whisper. one turn at
+  // a time, not a latch. the second arg is a retry, call it when
+  // the server refuses the wav after the fact and the same
+  // utterance goes through whisper instead of getting lost
   function setOnAudio(fn) { onAudio = fn || null; }
   function setOnState(fn) { onState = fn || (() => {}); }
   function setOnBargeIn(fn) { onBargeIn = fn || (() => {}); }
@@ -87,11 +89,12 @@ window.Voice = (function () {
     onState(s);
   }
 
-  // getUserMedia ONLY works in a secure context. localhost counts so your
-  // dev box is fine, but we ship TLS_MODE=off on :80, and over a LAN IP
-  // `navigator.mediaDevices` is just straight up undefined. doesn't throw.
-  // doesn't warn. nothing. so it gets its own case, because telling
-  // somebody to "click allow" when no prompt ever appears helps NOBODY.
+  // getUserMedia ONLY works in a secure context. localhost counts
+  // so your dev box is fine, but we ship TLS_MODE=off on :80, and
+  // over a LAN IP `navigator.mediaDevices` is just straight up
+  // undefined. doesn't throw. doesn't warn. nothing. so it gets its
+  // own case, because telling somebody to "click allow" when no
+  // prompt ever appears helps NOBODY.
   function support() {
     if (!window.isSecureContext) return { ok: false, reason: 'insecure_context' };
     if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
@@ -170,9 +173,9 @@ window.Voice = (function () {
   }
 
   function startCalibration() {
-    // NEVER calibrate over Jun's voice. we'd take her voice as the room
-    // noise, park the threshold above her, and stay deaf for the rest of
-    // the session. ask me how i know
+    // NEVER calibrate over Jun's voice. we'd take her voice as the
+    // room noise, park the threshold above her, and stay deaf for the
+    // rest of the session. ask me how i know
     if (window.TTS && TTS.isSpeaking()) { setTimeout(startCalibration, 200); return; }
     calibSamples = [];
     calibUntil = performance.now() + CALIBRATE_MS;
@@ -206,16 +209,17 @@ window.Voice = (function () {
 
     const speakingNow = !!(window.TTS && TTS.isSpeaking());
 
-    // she just stopped talking but her echo is still bouncing around the
-    // room and the thresholds are still raised for it. drop any half
-    // started detection or her own tail counts as the Start of your turn
+    // she just stopped talking but her echo is still bouncing around
+    // the room and the thresholds are still raised for it. drop any
+    // half started detection or her own tail counts as the Start of
+    // your turn
     if (ttsWasSpeaking && !speakingNow) { aboveCount = 0; if (state === 'maybe') setState('listening'); }
     ttsWasSpeaking = speakingNow;
 
-    // half-duplex. mic is off while she talks, full stop.
-    // and DROP what's in progress, don't just refuse to start. a turn
-    // that was already mid speech when she began skips the silence check
-    // below and hangs until she stops, or until the worklet's 30s cap
+    // half-duplex. mic is off while she talks, full stop. and DROP
+    // what's in progress, don't just refuse to start. a turn that was
+    // already mid speech when she began skips the silence check below
+    // and hangs until she stops, or until the worklet's 30s cap
     // fires. neither is a good time.
     if (speakingNow && !bargeIn) {
       if (state === 'speech') node.port.postMessage({ type: 'stop', discard: true });
@@ -286,11 +290,8 @@ window.Voice = (function () {
     node.port.postMessage({ type: 'stop', discard: false });
   }
 
-  async function onPcm(pcm) {
-    if (!pcm || !pcm.length) { resume(); return; }
-    const wav = encodeWav(pcm, SAMPLE_RATE);
+  async function transcribe(wav) {
     try {
-      if (onAudio && onAudio(base64Of(wav)) !== false) return;
       const res = await fetch(`${STT_URL}?action=stt`, {
         method: 'POST',
         headers: { 'Content-Type': 'audio/wav' },
@@ -306,6 +307,15 @@ window.Voice = (function () {
       if (text) onTranscript(text);
     } catch (e) {
       onLog('warn', `Voice: ${e.message}`);
+    }
+  }
+
+  async function onPcm(pcm) {
+    if (!pcm || !pcm.length) { resume(); return; }
+    const wav = encodeWav(pcm, SAMPLE_RATE);
+    try {
+      if (onAudio && onAudio(base64Of(wav), () => transcribe(wav)) !== false) return;
+      await transcribe(wav);
     } finally {
       // ALWAYS. every path. on the whisper path we go deaf for the
       // ~500ms of the STT fetch on purpose, you just stopped talking
@@ -326,10 +336,11 @@ window.Voice = (function () {
     setState('listening');
   }
 
-  // 16kHz mono PCM16 WAV. ~20 lines, less work than a library and less
-  // work than MediaRecorder, because webm/opus can't carry the pre-roll
-  // unless we glue an EBML header onto clusters that aren't even next
-  // to each other. no thanks. 32KB/s over loopback costs nothing.
+  // 16kHz mono PCM16 WAV. ~20 lines, less work than a library and
+  // less work than MediaRecorder, because webm/opus can't carry the
+  // pre-roll unless we glue an EBML header (WebM container
+  // structure) onto clusters that aren't even next to each other.
+  // no thanks. 32KB/s over loopback costs nothing.
   function encodeWav(samples, rate) {
     const buf = new ArrayBuffer(44 + samples.length * 2);
     const v = new DataView(buf);
@@ -354,8 +365,8 @@ window.Voice = (function () {
     return buf;
   }
 
-  // in 32KB chunks. spread a 1MB byte array in one go and you blow the
-  // argument limit, String.fromCharCode just throws
+  // in 32KB chunks. spread a 1MB byte array in one go and you blow
+  // the argument limit, String.fromCharCode just throws
   function base64Of(buf) {
     const bytes = new Uint8Array(buf);
     let s = '';

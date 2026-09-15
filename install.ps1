@@ -6,9 +6,10 @@ try {
     $OutputEncoding = [Text.Encoding]::UTF8
 } catch {}
 
-# windows PowerShell 5.1 still opens with TLS 1.0/1.1 enabled on plenty of
-# boxes. everything this script downloads (PHP, the CA bundle, PSGallery) is
-# https, so ask for 1.2 and up and nothing older.
+# windows PowerShell 5.1 still opens with TLS 1.0/1.1 enabled on
+# plenty of boxes. everything this script downloads (PHP, the CA
+# bundle, PSGallery) is https, so ask for 1.2 and up and nothing
+# older.
 try {
     [Net.ServicePointManager]::SecurityProtocol =
         [Net.SecurityProtocolType]::Tls12 -bor [Net.SecurityProtocolType]::Tls13
@@ -21,8 +22,8 @@ $repo = if ($env:JUN_REPO) { $env:JUN_REPO } else { $repoUpstream }
 $dir  = if ($env:JUN_DIR)  { $env:JUN_DIR }  else { 'Jun' }
 $ref  = if ($env:JUN_REF)  { $env:JUN_REF }  else { 'main' }
 
-# windows terminal, VS Code and modern conhost all handle VT sequences.
-# detect support and fall back to unstyled text.
+# windows terminal, VS Code and modern conhost all handle VT
+# sequences. detect support and fall back to unstyled text.
 $VTSupported = $false
 if ($Host.UI.SupportsVirtualTerminal -or $env:WT_SESSION -or
     $env:TERM_PROGRAM -eq 'vscode' -or $PSVersionTable.PSVersion.Major -ge 7) {
@@ -47,8 +48,7 @@ if ($VTSupported) {
     $DANGER = ''; $WARN = ''; $DIM = ''; $MUTED = ''; $FRAME = ''
 }
 
-$UI_W = 54   # interior width of the card frame
-
+$UI_W = 54
 function _Rule([string]$ch) { $ch * $UI_W }
 
 function Show-Banner {
@@ -57,12 +57,9 @@ function Show-Banner {
     Write-Host ''
     Write-Host "  ${FRAME}╔${bar}╗${R}"
     Write-Host "  ${FRAME}║${R}${blank}${FRAME}║${R}"
-    # the omega + JUN OS line = 13 visible chars
     Write-Host "  ${FRAME}║${R}    ${B}${BLUE}Ω${R}  ${B}${ACCENT}JUN OS${R}$(' ' * ($UI_W - 13))${FRAME}║${R}"
     Write-Host "  ${FRAME}║${R}${blank}${FRAME}║${R}"
-    # the welcome + omega build line = 35 visible chars
     Write-Host "  ${FRAME}║${R}    ${MUTED}Welcome to Jun OS${R} ${DIM}·${R} ${DIM}omega build${R}$(' ' * ($UI_W - 35))${FRAME}║${R}"
-    # "    Windows installer" = 21 visible chars
     Write-Host "  ${FRAME}║${R}    ${DIM}Windows installer${R}$(' ' * ($UI_W - 21))${FRAME}║${R}"
     Write-Host "  ${FRAME}║${R}${blank}${FRAME}║${R}"
     Write-Host "  ${FRAME}╚${bar}╝${R}"
@@ -75,14 +72,17 @@ function Note([string]$msg)    { Write-Host "    ${DIM}ℹ ${msg}${R}" }
 function Warn_([string]$msg)   { Write-Host "    ${WARN}⚠${R} ${WARN}${msg}${R}" }
 function Fail_([string]$msg)   { Write-Host "    ${DANGER}✗${R} ${DANGER}${msg}${R}" }
 
-# read a line after our own prompt. Read-Host would stick a ': ' on the end.
+# read a line after our own prompt. Read-Host would stick a ': '
+# on the end.
 function Read-Styled([string]$prompt) {
     Write-Host -NoNewline $prompt
     try { return [Console]::ReadLine() }
     catch { return (Read-Host) }
 }
 
-$wingetIds = @{ git = 'Git.Git'; ollama = 'Ollama.Ollama'; python = 'Python.Python.3.11'; llamacpp = 'ggml.llamacpp' }
+# ollama isn't here on purpose, Install-Ollama fetches it
+# straight from ollama.com. see there for why.
+$wingetIds = @{ git = 'Git.Git'; python = 'Python.Python.3.11'; llamacpp = 'ggml.llamacpp' }
 $manualUrls = @{
     git      = 'https://git-scm.com/download/win'
     ollama   = 'https://ollama.com/download/windows'
@@ -105,21 +105,19 @@ function Resolve-Model([string]$a) {
     }
 }
 
-# a drafter has to come off the SAME Gemma 4 the model was fine-tuned from,
-# QAT branch included. mismatched, it still loads and still drafts, it just
-# guesses wrong far more often (2.10 accepted tokens per pass against 2.74 for
-# the matching one) and nothing anywhere tells you why. so this map is by size,
-# and the QAT repos are NOT interchangeable with the plain ones.
+# match the drafter to the SAME Gemma 4 size and QAT branch. a
+# mismatch still runs but accepted tokens dropped from 2.74 to
+# 2.10 per pass. QAT and plain repos are not interchangeable.
 $mtpDrafters = @{
     '12b' = 'hf.co/Janvitos/gemma-4-12B-it-qat-assistant-MTP-Q8_0-GGUF:Q8_0'
     'e4b' = 'hf.co/amaranus/Gemma-4-E4B-it-qat-assistant-MTP-Q8_0-GGUF:Q8_0'
     'e2b' = 'hf.co/amaranus/Gemma-4-E2B-it-qat-assistant-MTP-Q8_0-GGUF:Q8_0'
 }
 
-# Live2D is drawn by the browser on the same card Jun sits on, and it wants
-# about this much while a chat is open. leave it out of the budget and the
-# install looks fine right up until she spills onto the CPU the moment somebody
-# opens the tab.
+# Live2D is drawn by the browser on the same card Jun sits on,
+# and it wants about this much while a chat is open. leave it out
+# of the budget and the install looks fine right up until she
+# spills onto the CPU the moment somebody opens the tab.
 $LIVE2D_VRAM_MB = 1500
 
 function Get-MtpDrafter([string]$modelRef) {
@@ -131,8 +129,9 @@ function Get-MtpDrafter([string]$modelRef) {
     }
 }
 
-# roughly what each model weighs once it's resident, drafter included. close
-# enough to tell "fits" from "doesn't", which is all we use it for.
+# roughly what each model weighs once it's resident, drafter
+# included. close enough to tell "fits" from "doesn't", which is
+# all we use it for.
 function Get-MtpBudgetMb([string]$modelRef) {
     switch -Regex ($modelRef) {
         'Jun-LoRA-12B.*Q8_0' { return 13500 }
@@ -146,10 +145,11 @@ function Get-MtpBudgetMb([string]$modelRef) {
     }
 }
 
-# no nvidia-smi equivalent on the AMD side, so we ask Windows. AdapterRAM is a
-# 32 bit field and anything past 4GB comes back wrong, which is why the
-# registry's qwMemorySize goes first and AdapterRAM is only the fallback. same
-# order and same keys as installer-gui.ps1.
+# no nvidia-smi equivalent on the AMD side, so we ask Windows.
+# AdapterRAM is a 32 bit field and anything past 4GB comes back
+# wrong, which is why the registry's qwMemorySize goes first and
+# AdapterRAM is only the fallback. same order and same keys as
+# installer-gui.ps1.
 function Get-AmdMemoryMb {
     try {
         $controllers = @(Get-CimInstance Win32_VideoController -ErrorAction Stop |
@@ -237,19 +237,21 @@ function New-AccessKey {
     return (($bytes | ForEach-Object { $_.ToString('x2') }) -join '')
 }
 
-# ONLY when the line is missing altogether. an empty OMEGA_REGISTRATION_KEY=
-# is the operator saying "off", and every upgrade run comes back through here,
-# so filling that in would silently turn the gate back on behind their back.
+# ONLY when the line is missing altogether. an empty
+# OMEGA_REGISTRATION_KEY= is the operator saying "off", and every
+# upgrade run comes back through here, so filling that in would
+# silently turn the gate back on behind their back.
 function Add-EnvKeyIfMissing([string]$key) {
     if ((Test-Path .env) -and (Get-Content .env | Where-Object { $_ -match "^$key=" })) { return }
     Set-EnvKey $key (New-AccessKey)
 }
 
 $interactive = [Environment]::UserInteractive -and ($env:JUN_YES -ne '1')
-# true only when a person picked Express at the keyboard. JUN_YES on its own can
-# mean an unattended run - CI, or installer-gui.ps1 driving this script with its
-# output redirected - and the two want opposite things the moment something
-# needs asking.
+# true only when a person picked Express at the keyboard. JUN_YES
+# on its own can mean an unattended run - CI, or
+# installer-gui.ps1 driving this script with its output
+# redirected - and the two want opposite things the moment
+# something needs asking.
 $script:expressInteractive = $false
 
 function Test-Sha256([string]$path, [string]$expected) {
@@ -257,11 +259,9 @@ function Test-Sha256([string]$path, [string]$expected) {
     return (Get-FileHash -Algorithm SHA256 -LiteralPath $path).Hash -ieq $expected.Trim()
 }
 
-# JUN_REPO exists so a fork can install itself, but it also means one edited
-# character in a copy-pasted install line points the clone at somebody else's
-# code. https only, and anything that isn't upstream has to be said out loud.
-# $env:JUN_ALLOW_FORK='1' is the non-interactive way to say it. JUN_YES does
-# NOT cover this one. "install with defaults" is not "install from a stranger".
+# JUN_REPO permits forks, so require HTTPS and explicit consent
+# for non-upstream code. $env:JUN_ALLOW_FORK='1' permits it
+# unattended. JUN_YES does not.
 function Confirm-RepoSource {
     if ($repo -notmatch '^https://') {
         Fail_ "JUN_REPO must be an https:// URL - refusing to clone $repo"
@@ -284,9 +284,10 @@ function Confirm-RepoSource {
     if ($a -notmatch '^(y|yes)$') { Fail_ 'aborted.'; exit 1 }
 }
 
-# .env holds the OpenRouter key once somebody types one in. windows hands new
-# files the folder's inherited ACL, which on a shared box can mean every local
-# account reads it. so break inheritance, then owner + SYSTEM only.
+# .env holds the OpenRouter key once somebody types one in.
+# windows hands new files the folder's inherited ACL, which on a
+# shared box can mean every local account reads it. so break
+# inheritance, then owner + SYSTEM only.
 function Protect-EnvFile {
     if (-not (Test-Path .env)) { return }
     $failed = $false
@@ -304,9 +305,10 @@ function Protect-EnvFile {
     }
 }
 
-# the first thing someone non technical sees. Express installs the lot with
-# what we detected and asks nothing else, same as JUN_YES=1. Custom walks the
-# prompts. JUN_EXPRESS=1 picks Express before we even ask.
+# the first thing someone non technical sees. Express installs
+# the lot with what we detected and asks nothing else, same as
+# JUN_YES=1. Custom walks the prompts. JUN_EXPRESS=1 picks
+# Express before we even ask.
 function Choose-InstallMode {
     if ($env:JUN_YES -eq '1') { return }
     if ($env:JUN_EXPRESS -match '^(1|on|yes|true)$') {
@@ -373,8 +375,9 @@ function Ask-TensorParallel {
     return $(if ($v -match '^(y|yes)$') { 'on' } else { 'off' })
 }
 
-# JUN_KARAOKE first, then KARAOKE, same order install.sh takes. keep both
-# spellings working, people copy install lines between the two scripts.
+# JUN_KARAOKE first, then KARAOKE, same order install.sh takes.
+# keep both spellings working, people copy install lines between
+# the two scripts.
 function Ask-Karaoke([string]$voice) {
     $preset = if ($env:JUN_KARAOKE) { $env:JUN_KARAOKE } else { $env:KARAOKE }
     if ($preset) {
@@ -386,13 +389,10 @@ function Ask-Karaoke([string]$voice) {
     return $(if ($v -match '^(n|no)$') { 'off' } else { 'on' })
 }
 
-# a small drafter model guesses a few tokens ahead and Jun checks the guesses
-# in one pass, so the ones she agrees with came cheap. nothing gets said that
-# she wouldn't have said anyway. experimental because whether it's faster AT
-# ALL depends on the card, hence the depth question right after. on under
-# Express: that depth question answers itself with a real measurement, so the
-# risky half of "experimental" is already handled.
-# without a prompt: JUN_MTP=on|off, JUN_MTP_DEPTH=auto|1|2|3|4.
+# Jun checks every drafted token, so MTP changes speed, not
+# accepted output. speed depends on the card. Express enables it
+# and measures depth. unattended: JUN_MTP=on|off,
+# JUN_MTP_DEPTH=auto|1|2|3|4.
 function Ask-Mtp {
     if ($env:JUN_MTP) {
         return $(if ($env:JUN_MTP.ToLower() -match '^(on|1|true|yes|y)$') { 'on' } else { 'off' })
@@ -402,9 +402,10 @@ function Ask-Mtp {
     return $(if ($v -match '^(y|yes)$') { 'on' } else { 'off' })
 }
 
-# auto measures instead of guessing, and it's the right answer for almost
-# everybody. the best depth swings wildly with the card. on a 3060 the gain is
-# gone by 3 and depth 4 is slower than not drafting at all.
+# auto measures instead of guessing, and it's the right answer
+# for almost everybody. the best depth swings wildly with the
+# card. on a 3060 the gain is gone by 3 and depth 4 is slower
+# than not drafting at all.
 function Ask-MtpDepth {
     if ($env:JUN_MTP_DEPTH) {
         return $(if ($env:JUN_MTP_DEPTH -match '^[1-4]$') { $env:JUN_MTP_DEPTH } else { 'auto' })
@@ -420,13 +421,14 @@ function Ask-MtpDepth {
     return 'auto'
 }
 
-# ask, then write whichever pair of keys this provider reads. returns $true
-# when the depth still has to be measured, which can only happen once the stack
-# is up and the models are pulled.
+# ask, then write whichever pair of keys this provider reads.
+# returns $true when the depth still has to be measured, which
+# can only happen once the stack is up and the models are pulled.
 function Configure-Mtp([string]$provider, [string]$modelRef) {
     $drafter = Get-MtpDrafter $modelRef
-    # ONLY Gemma 4 ships an MTP head, and only for the sizes mapped above. on
-    # anything else there's no drafter to pair, so there's no question to ask.
+    # ONLY Gemma 4 ships an MTP head, and only for the sizes mapped
+    # above. on anything else there's no drafter to pair, so there's
+    # no question to ask.
     if (-not $drafter) { return $false }
 
     if ((Ask-Mtp) -ne 'on') { Ok 'multi-token prediction off'; return $false }
@@ -443,18 +445,18 @@ function Configure-Mtp([string]$provider, [string]$modelRef) {
     }
 
     $autotune = ($depth -eq 'auto')
-    # .env only ever holds a NUMBER. the entrypoint bakes this straight into a
-    # Modelfile as draft_num_predict, and "auto" in there is a broken model,
-    # not a default. 1 is the provisional pick, the autotune overwrites it with
-    # whatever actually won.
+    # .env only ever holds a NUMBER. the entrypoint bakes this
+    # straight into a Modelfile as draft_num_predict, and "auto" in
+    # there is a broken model, not a default. 1 is the provisional
+    # pick, the autotune overwrites it with whatever actually won.
     $written = if ($autotune) { '1' } else { $depth }
 
     if ($provider -eq 'ollama') {
         Set-EnvKey 'OLLAMA_MTP' $drafter
         Set-EnvKey 'OLLAMA_MTP_N_MAX' $written
     } else {
-        # llama-server's -hfd takes a bare repo. no hf.co in front, no quant
-        # tag. these drafter repos hold a single gguf each.
+        # llama-server's -hfd takes a bare repo. no hf.co in front, no
+        # quant tag. these drafter repos hold a single gguf each.
         Set-EnvKey 'LLAMACPP_MTP' (($drafter -replace '^hf\.co/', '') -replace ':.*$', '')
         Set-EnvKey 'LLAMACPP_MTP_N_MAX' $written
     }
@@ -493,8 +495,8 @@ function Configure-Jun {
 
     Step 'configure'
 
-    # we ask this BEFORE the model question. splitting across cards changes
-    # how much VRAM we get to assume when recommending one.
+    # we ask this BEFORE the model question. splitting across cards
+    # changes how much VRAM we get to assume when recommending one.
     $script:tensorParallel = if ($provider -eq 'openrouter') { 'off' } else { Ask-TensorParallel }
 
     $needsOllama = ($provider -eq 'ollama')
@@ -572,26 +574,29 @@ function Configure-Jun {
     Set-EnvKey 'VOICE' $voice
     Ok "voice $voice"
 
-    # the voice sidecar stays on the CPU ON PURPOSE. both engines keep up in
-    # real time there, and a GPU copy would squat on VRAM she wants for her own
-    # layers.
+    # the voice sidecar stays on the CPU ON PURPOSE. both engines
+    # keep up in real time there, and a GPU copy would squat on VRAM
+    # she wants for her own layers.
     if ($voice -eq 'on') {
         Set-EnvKey 'TTS_DEVICE' 'cpu'
     }
 
-    # on bare metal one process does both jobs, so karaoke is just a second pip
-    # install into the same venv, not a service of its own. it stays on the CPU,
-    # the windows venv is built against the CPU torch wheel.
+    # on bare metal one process does both jobs, so karaoke is just a
+    # second pip install into the same venv, not a service of its
+    # own. it stays on the CPU, the windows venv is built against the
+    # CPU torch wheel.
     $karaoke = Ask-Karaoke $voice
     Set-EnvKey 'KARAOKE' $karaoke
     if ($karaoke -eq 'on') {
-        # no JUN_KARAOKE_GPU question here, unlike install.sh. SEP_DEVICE=auto
-        # would go looking for cuda and there is none in a CPU torch venv.
+        # no JUN_KARAOKE_GPU question here, unlike install.sh.
+        # SEP_DEVICE=auto would go looking for cuda and there is none in
+        # a CPU torch venv.
         Set-EnvKey 'SEP_DEVICE' 'cpu'
     }
     Ok "karaoke $karaoke"
 
     Add-EnvKeyIfMissing 'OMEGA_REGISTRATION_KEY'
+    Add-EnvKeyIfMissing 'SIDECAR_SECRET'
     Ok 'registration key ready'
 
     return @{ provider = $provider; voice = $voice; karaoke = $karaoke
@@ -604,11 +609,10 @@ function Refresh-Path {
     $env:Path = (($machine, $user, $env:Path) | Where-Object { $_ }) -join ';'
 }
 
-# winget (App Installer) is missing on some clean/LTSC/Server images. we can
-# bootstrap it, but that means pulling a module off PSGallery and letting it
-# install a machine-wide package manager, so we ask first instead of doing it
-# behind your back. $env:JUN_BOOTSTRAP_WINGET='1' answers yes ahead of time,
-# '0' answers no and you install App Installer yourself.
+# clean/LTSC/Server images may lack winget. bootstrapping
+# installs a machine-wide package manager through PSGallery, so
+# ask first. $env:JUN_BOOTSTRAP_WINGET='1' accepts, '0' leaves
+# App Installer installation to the user.
 function Ensure-Winget {
     if (Get-Command winget -ErrorAction SilentlyContinue) { return $true }
 
@@ -641,8 +645,59 @@ function Ensure-Winget {
     return [bool](Get-Command winget -ErrorAction SilentlyContinue)
 }
 
-# install the named tools with winget, after warning that these are the ONLY
-# machine-wide pieces. each keeps its own uninstaller in Settings > Apps.
+# fetch OllamaSetup.exe from ollama.com and verify Ollama Inc.
+# signing. winget can fail with "Failed in attempting to update
+# the source" or a bare exit code during the 1.5 GB download. the
+# Inno installer is per-user: PrivilegesRequired=lowest,
+# %LocalAppData%\Programs\Ollama, user PATH. keep winget's silent
+# switches.
+function Install-Ollama {
+    $url = 'https://ollama.com/download/OllamaSetup.exe'
+    $tmp = Join-Path $env:TEMP ('jun-ollama-' + [guid]::NewGuid().ToString('N') + '.exe')
+    try {
+        Note 'downloading OllamaSetup.exe (about 1.5 GB, this takes a while)'
+        # WebClient streams to disk. Invoke-WebRequest on 5.1 holds the
+        # whole body in memory before it writes the file. all 1.5 GB of
+        # it.
+        $task = (New-Object Net.WebClient).DownloadFileTaskAsync($url, $tmp)
+        while (-not $task.IsCompleted) {
+            Start-Sleep -Seconds 3
+            if (Test-Path -LiteralPath $tmp) {
+                Write-Host -NoNewline ("`r    ${DIM}  {0:N0} MB${R}" -f ((Get-Item -LiteralPath $tmp).Length / 1MB))
+            }
+        }
+        Write-Host ''
+        if ($task.IsFaulted) { throw ("download failed: {0}" -f $task.Exception.GetBaseException().Message) }
+
+        # authenticode, so the check is on who signed it, not on a digest
+        # served by the same host as the file.
+        $sig = Get-AuthenticodeSignature -LiteralPath $tmp
+        if ($sig.Status -ne 'Valid' -or $sig.SignerCertificate.Subject -notmatch 'CN=Ollama Inc') {
+            throw ("OllamaSetup.exe isn't signed by Ollama Inc. (signature {0}) - not running it." -f $sig.Status)
+        }
+
+        Step 'run OllamaSetup.exe'
+        # WaitForExit, not Start-Process -Wait. -Wait also waits for
+        # every descendant, and the installer ends by launching the
+        # ollama tray app (nowait), which never exits. so -Wait never
+        # returns.
+        $p = Start-Process -FilePath $tmp -ArgumentList '/VERYSILENT', '/SUPPRESSMSGBOXES', '/NORESTART' -PassThru
+        $p.WaitForExit()
+        if ($p.ExitCode -ne 0) { throw ("OllamaSetup.exe exited with code {0}" -f $p.ExitCode) }
+        Ok 'ollama installed'
+    } catch {
+        Fail_ $_.Exception.Message
+        Note ("install it yourself from {0} and re-run this installer." -f $manualUrls.ollama)
+        exit 1
+    } finally {
+        Remove-Item -LiteralPath $tmp -Force -ErrorAction SilentlyContinue
+    }
+}
+
+# install the named tools, after warning that these are the ONLY
+# machine-wide pieces. each keeps its own uninstaller in Settings
+# > Apps. anything with a winget id goes through winget, ollama
+# goes through Install-Ollama.
 function Install-MachineTools([string[]]$missing, [switch]$Optional) {
     if ($missing.Count -eq 0) { return }
 
@@ -651,7 +706,7 @@ function Install-MachineTools([string[]]$missing, [switch]$Optional) {
     Note 'they are the only machine-wide installs Jun needs; everything else stays'
     Note 'inside the Jun folder. Each gets a normal uninstaller under Settings > Apps.'
 
-    if (-not (Ensure-Winget)) {
+    if (($missing | Where-Object { $wingetIds[$_] }) -and -not (Ensure-Winget)) {
         Fail_ "winget (App Installer) isn't available - install them manually and re-run:"
         foreach ($c in $missing) { Write-Host ("       ${ACCENT}{0,-7}${R} ${DIM}{1}${R}" -f $c, $manualUrls[$c]) }
         if ($Optional) { return } else { exit 1 }
@@ -663,7 +718,7 @@ function Install-MachineTools([string[]]$missing, [switch]$Optional) {
             Note "re-run in an interactive terminal (or set `$env:JUN_YES='1') to install them."
             if ($Optional) { return } else { exit 1 }
         }
-        $answer = Read-Styled ("     ${OK}▸${R} install {0} now with winget? ${DIM}[y/N]${R} ${ACCENT}›${R} " -f ($missing -join ' and '))
+        $answer = Read-Styled ("     ${OK}▸${R} install {0} now? ${DIM}[y/N]${R} ${ACCENT}›${R} " -f ($missing -join ' and '))
         $proceed = $answer -match '^(y|yes)$'
     }
     if (-not $proceed) {
@@ -673,6 +728,7 @@ function Install-MachineTools([string[]]$missing, [switch]$Optional) {
 
     foreach ($c in $missing) {
         Step ("install {0}" -f $c)
+        if ($c -eq 'ollama') { Install-Ollama; continue }
         # --source winget ON PURPOSE. without it the id can resolve out of
         # msstore or any private source somebody added to this machine, and
         # we'd install whatever answers to that name over there.
@@ -687,19 +743,21 @@ function Install-MachineTools([string[]]$missing, [switch]$Optional) {
     Refresh-Path
 }
 
-# every interpreter this box has, PATH ones first. the py launcher matters
-# here: winget can install 3.11 and leave 3.14 sitting first on PATH, and
-# then the only way to reach the one we asked for is `py -3.11`.
+# every interpreter this box has, PATH ones first. the py
+# launcher matters here: winget can install 3.11 and leave 3.14
+# sitting first on PATH, and then the only way to reach the one
+# we asked for is `py -3.11`.
 function Get-PythonCandidates {
     $paths = @()
     foreach ($c in @(
         Get-Command python -ErrorAction SilentlyContinue
         Get-Command python3 -ErrorAction SilentlyContinue
     )) {
-        # skip the windows store alias stub outright. probing it writes to
-        # stderr, which $ErrorActionPreference='Stop' turns into a terminating
-        # NativeCommandError on PowerShell 5.1. run every probe through cmd so
-        # any other stderr output never reaches PowerShell either.
+        # skip the windows store alias stub outright. probing it writes
+        # to stderr, which $ErrorActionPreference='Stop' turns into a
+        # terminating NativeCommandError on PowerShell 5.1. run every
+        # probe through cmd so any other stderr output never reaches
+        # PowerShell either.
         if ($c -and $c.Source -and $c.Source -notlike '*\WindowsApps\*') { $paths += $c.Source }
     }
     $launcher = Get-Command py -ErrorAction SilentlyContinue
@@ -712,8 +770,9 @@ function Get-PythonCandidates {
     $paths | Where-Object { $_ } | Select-Object -Unique
 }
 
-# returns a path to an interpreter, or $null. $Below is an exclusive upper
-# bound like '3.13' - the voice venv needs one because kokoro 0.9.4 declares
+# returns a path to an interpreter, or $null. $Below is an
+# exclusive upper bound like '3.13' - the voice venv needs one
+# because kokoro 0.9.4 declares
 # Requires-Python <3.13 and pip on a 3.13+ interpreter just says "no matching
 # distribution" and takes voice down with it.
 function Get-UsablePython([string]$Min = '3.9', [string]$Below) {
@@ -731,9 +790,10 @@ function Install-Php {
     $phpDir = Join-Path (Get-Location) 'runtime\php'
     $phpExe = Join-Path $phpDir 'php.exe'
 
-    # the windows.php.net builds link against the VC++ runtime, which fresh
-    # windows installs often just don't have (php.exe then dies with a missing
-    # VCRUNTIME140.dll dialog). tiny, standard, machine-wide MS component.
+    # the windows.php.net builds link against the VC++ runtime, which
+    # fresh windows installs often just don't have (php.exe then dies
+    # with a missing VCRUNTIME140.dll dialog). tiny, standard,
+    # machine-wide MS component.
     if (-not (Test-Path (Join-Path $env:SystemRoot 'System32\vcruntime140.dll'))) {
         if (-not (Ensure-Winget)) {
             throw 'The Microsoft Visual C++ 2015-2022 Redistributable (x64) is required for PHP, but winget could not be installed.'
@@ -772,9 +832,10 @@ function Install-Php {
     try {
         $zip = Join-Path $tmpDir 'php.zip'
         Invoke-WebRequest -Uri $zipUrl -OutFile $zip -UseBasicParsing
-        # the digest and the zip come from the same host, so this catches a
-        # mangled CDN copy or a half finished download, NOT a windows.php.net
-        # that's itself owned. it's the strongest check php.net offers.
+        # the digest and the zip come from the same host, so this catches
+        # a mangled CDN copy or a half finished download, NOT a
+        # windows.php.net that's itself owned. it's the strongest check
+        # php.net offers.
         if (-not (Test-Sha256 $zip $zipSha)) {
             throw ("PHP download doesn't match the sha256 in releases.json (wanted {0}, got {1})." -f
                 $zipSha, (Get-FileHash -Algorithm SHA256 -LiteralPath $zip).Hash)
@@ -790,9 +851,10 @@ function Install-Php {
             throw 'The verified PHP archive did not contain php.exe.'
         }
 
-        # a half extracted php must never be visible in $phpDir. so we unpack
-        # next door and rename in one shot. staging sits under the same parent
-        # on purpose, [IO.Directory]::Move across volumes just throws.
+        # a half extracted php must never be visible in $phpDir. so we
+        # unpack next door and rename in one shot. staging sits under the
+        # same parent on purpose, [IO.Directory]::Move across volumes
+        # just throws.
         if (Test-Path $phpDir) {
             Remove-Item -LiteralPath $phpDir -Recurse -Force
         }
@@ -800,9 +862,9 @@ function Install-Php {
         $phpStage = $null
 
         # curl.se publishes the digest next to the bundle. a tampered CA
-        # bundle is WORSE than none at all, it makes PHP trust a CA you never
-        # chose, so on a mismatch we install nothing and PHP falls back to the
-        # OS store.
+        # bundle is WORSE than none at all, it makes PHP trust a CA you
+        # never chose, so on a mismatch we install nothing and PHP falls
+        # back to the OS store.
         $cacert = Join-Path $phpDir 'cacert.pem'
         try {
             $caTmp = Join-Path $tmpDir 'cacert.pem'
@@ -839,8 +901,8 @@ function Install-Php {
     }
     $ini | Set-Content (Join-Path $phpDir 'php.ini')
 
-    # capture BEFORE piping. Select-Object -First stops the pipeline early,
-    # leaving $LASTEXITCODE stale from some previous command.
+    # capture BEFORE piping. Select-Object -First stops the pipeline
+    # early, leaving $LASTEXITCODE stale from some previous command.
     $phpVersionOut = cmd /c "`"$phpExe`" -v 2>&1"
     $phpRan = ($LASTEXITCODE -eq 0)
     $phpVersionOut | Select-Object -First 1 | Write-Host
@@ -873,8 +935,9 @@ function Install-Tts([string]$Karaoke = 'off') {
         Step 'set up TTS voice engine (a few GB, one-time)'
         & $python -m venv $venv
         & $py -m pip install --upgrade pip
-        # CPU torch wheel first so the resolver doesn't drag CUDA builds in as
-        # a transitive dep. both voice models hit real-time on CPU anyway.
+        # CPU torch wheel first so the resolver doesn't drag CUDA builds
+        # in as a transitive dep. both voice models hit real-time on CPU
+        # anyway.
         & $py -m pip install torch --index-url https://download.pytorch.org/whl/cpu
         & $py -m pip install -r (Join-Path (Get-Location) 'tts\requirements.txt')
         if ($LASTEXITCODE -ne 0) {
@@ -887,11 +950,12 @@ function Install-Tts([string]$Karaoke = 'off') {
     }
 
     if ($Karaoke -ne 'on') { return }
-    # bare metal serves both roles from one process, so karaoke is an extra
-    # layer on the same venv. docker splits them into two containers instead,
-    # which is where GPU separation lives. this venv is CPU-only.
-    # probe through cmd, a failed import writes a traceback to stderr and
-    # $ErrorActionPreference='Stop' would turn that into a terminating error.
+    # bare metal serves both roles from one process, so karaoke is an
+    # extra layer on the same venv. docker splits them into two
+    # containers instead, which is where GPU separation lives. this
+    # venv is CPU-only. probe through cmd, a failed import writes a
+    # traceback to stderr and $ErrorActionPreference='Stop' would
+    # turn that into a terminating error.
     cmd /c "`"$py`" -c `"import demucs`" >nul 2>nul"
     if ($LASTEXITCODE -eq 0) { return }
 
@@ -909,8 +973,8 @@ function Install-Tts([string]$Karaoke = 'off') {
 function Install-AssetRecovery {
     $python = Get-UsablePython
     if (-not $python) {
-        # the user explicitly asked for extraction, so python is REQUIRED here
-        # instead of being treated as an optional voice dependency.
+        # the user explicitly asked for extraction, so python is REQUIRED
+        # here instead of being treated as an optional voice dependency.
         Install-MachineTools @('python')
         $python = Get-UsablePython
         if (-not $python) {
@@ -920,9 +984,10 @@ function Install-AssetRecovery {
 
     $venv = Join-Path (Get-Location) 'runtime\asset-recovery-venv'
     $recoveryPython = Join-Path $venv 'Scripts\python.exe'
-    # a venv whose pip never bootstrapped is worse than no venv: python.exe is
-    # there so a Test-Path check passes, and the install dies on "No module
-    # named pip" one line later. check for pip, rebuild when it's missing.
+    # a venv whose pip never bootstrapped is worse than no venv:
+    # python.exe is there so a Test-Path check passes, and the
+    # install dies on "No module named pip" one line later. check for
+    # pip, rebuild when it's missing.
     $hasPip = $false
     if (Test-Path $recoveryPython) {
         & $recoveryPython -m pip --version *> $null
@@ -953,13 +1018,10 @@ function Install-AssetRecovery {
         return
     }
 
-    # a supplied path is deliberate, and unattended installs must NEVER wait for
-    # input. Express is NOT unattended: somebody pressed Enter half a minute ago
-    # and is watching this scroll, so it gets the same drag-the-folder-here
-    # fallback Custom does. JUN_YES without $expressInteractive is the actual
-    # headless case - installer-gui.ps1 spawns us with stdout redirected and no
-    # window, and a Read-Host there hangs the GUI with nothing on screen to say
-    # why - and still bails.
+    # honor supplied paths. interactive Express and Custom can ask
+    # for a fallback. JUN_YES without $expressInteractive is
+    # headless: installer-gui.ps1 redirects stdout with no window, so
+    # Read-Host would hang invisibly. fail instead.
     if ($env:JUN_GAME_DIR -or (-not $interactive -and -not $script:expressInteractive)) {
         Warn_ "Couldn't extract - she'll use placeholder art for now. Set JUN_GAME_DIR to the game folder and re-run with JUN_EXTRACT=1 for her real model."
         return
@@ -973,8 +1035,9 @@ function Install-AssetRecovery {
             return
         }
 
-        # windows terminals wrap drag-and-drop paths in quotes. a file input
-        # means its containing folder, a folder input is used as-is.
+        # windows terminals wrap drag-and-drop paths in quotes. a file
+        # input means its containing folder, a folder input is used
+        # as-is.
         $path = $selection.Trim().Trim('"').Trim("'")
         try {
             $item = Get-Item -LiteralPath $path -ErrorAction Stop
@@ -999,8 +1062,8 @@ function Install-AssetRecovery {
 }
 
 
-# markers, not the folder name - JUN_DIR lets people call it whatever they
-# want, and "Jun" on its own could be anything.
+# markers, not the folder name - JUN_DIR lets people call it
+# whatever they want, and "Jun" on its own could be anything.
 function Test-JunCheckout([string]$path) {
     if (-not $path) { return $false }
     return (Test-Path (Join-Path $path 'start.ps1')) -and
@@ -1008,10 +1071,11 @@ function Test-JunCheckout([string]$path) {
            (Test-Path (Join-Path $path 'webapp'))
 }
 
-# people re-run the install line from inside the checkout they already have
-# (or from webapp\ two levels down). without this we clone Jun\Jun next to it
-# and set up a second copy fighting the first one for :80. so: look at $dir,
-# then walk up from here. an explicit JUN_DIR is a decision, it wins.
+# people re-run the install line from inside the checkout they
+# already have (or from webapp\ two levels down). without this we
+# clone Jun\Jun next to it and set up a second copy fighting the
+# first one for :80. so: look at $dir, then walk up from here. an
+# explicit JUN_DIR is a decision, it wins.
 function Find-JunInstall {
     if (Test-JunCheckout $dir) { return (Resolve-Path -LiteralPath $dir).Path }
     if ($env:JUN_DIR) { return $null }
@@ -1026,8 +1090,8 @@ function Find-JunInstall {
 Show-Banner
 Choose-InstallMode
 $existing = Find-JunInstall
-# nothing gets cloned when she's already here, so the fork warning has nothing
-# to warn about.
+# nothing gets cloned when she's already here, so the fork
+# warning has nothing to warn about.
 if (-not $existing) { Confirm-RepoSource }
 
 Step 'check dependencies'
@@ -1069,8 +1133,9 @@ if ($existing) {
 
 Set-Location -LiteralPath $dir
 if (-not (Test-Path .env)) { Copy-Item .env.example .env }
-# EVERY run, not just the first. an .env from an older install is exactly the
-# one still sitting there with the folder's inherited ACL on it.
+# EVERY run, not just the first. an .env from an older install is
+# exactly the one still sitting there with the folder's inherited
+# ACL on it.
 Protect-EnvFile
 
 $cfg = Configure-Jun
@@ -1100,12 +1165,10 @@ Warn_ 'My Dystopian Robot Girlfriend. tools/recover_assets.py rebuilds'
 Warn_ 'them from YOUR game copy, for personal use only - do NOT'
 Warn_ 'republish them (public fork, release, mirror). See NOTICE in LICENSE.'
 
-# extraction of the Live2D assets from the user's OWN game install, nothing is
-# downloaded and nothing leaves the box. Express does it, because a placeholder
-# avatar is not "everything with recommended settings" and she is the whole
-# point of the app. Custom asks. JUN_EXTRACT=1 forces it, JUN_EXTRACT=0 opts
-# out of the Express one. no game on this machine and recover_assets.py just
-# says so and the install carries on with placeholders.
+# extract only from the user's own game install. nothing
+# downloads or leaves the box. Express enables it, Custom asks.
+# JUN_EXTRACT=1 forces it, 0 opts out. no game means
+# recover_assets.py leaves placeholders and install continues.
 $extract = $false
 switch -Regex ($env:JUN_EXTRACT) {
     '^(1|on|yes|true)$'  { $extract = $true }
@@ -1120,10 +1183,8 @@ switch -Regex ($env:JUN_EXTRACT) {
     }
 }
 if ($extract) {
-    # every throw in there is "no python", "venv died", "pip died" - all of
-    # them survivable, she just wears the placeholders. before Express turned
-    # this on the throw took the whole install down with it, which is a rough
-    # way to lose a stack that was otherwise about to boot.
+    # Missing Python, venv creation errors and pip failures are
+    # nonfatal here. Continue with placeholder assets.
     try {
         Install-AssetRecovery
     } catch {
@@ -1156,14 +1217,16 @@ if ($regKey) {
 }
 Write-Host ''
 Write-Host "  ${OK}▸${R} ${B}${OK}starting${R} ${DIM}-${R} launching start.ps1"
-# re-launch via the same PowerShell with Bypass so the machine's execution
-# policy can't block start.ps1. this script may have arrived through `iex`.
+# re-launch via the same PowerShell with Bypass so the machine's
+# execution policy can't block start.ps1. this script may have
+# arrived through `iex`.
 $psExe = (Get-Process -Id $PID).MainModule.FileName
 & $psExe -NoProfile -ExecutionPolicy Bypass -File (Resolve-Path './start.ps1').Path
 $startCode = $LASTEXITCODE
 
-# has to run HERE and not in Configure-Jun. every row of it is a real
-# generation, so the models have to be pulled and the stack has to be up.
+# has to run HERE and not in Configure-Jun. every row of it is a
+# real generation, so the models have to be pulled and the stack
+# has to be up.
 if ($script:mtpAutotune -and $startCode -eq 0) {
     Step 'tune multi-token prediction'
     & $psExe -NoProfile -ExecutionPolicy Bypass -File (Resolve-Path './mtp-autotune.ps1').Path
@@ -1172,9 +1235,6 @@ if ($script:mtpAutotune -and $startCode -eq 0) {
     }
 }
 exit $startCode
-
-
-# Well done you read the installer, You are a responsible user! I like you
 
 #                                 -                                 
 #                                 ==:                               

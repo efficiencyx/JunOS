@@ -1,5 +1,5 @@
-import { logAction } from './logging.js?v=9';
-import { noteEmotionTint } from './mood.js?v=9';
+import { logAction } from './logging.js?v=10';
+import { noteEmotionTint } from './mood.js?v=10';
 
 const MARK_RE = /\[\s*(?:A(?:CTIONS?)?|TOOL)\s*:/i;
 const PARTIAL_RE = /\[\s*(?:A(?:C(?:T(?:I(?:O(?:N(?:S)?)?)?)?)?)?|T(?:O(?:O(?:L)?)?)?)?\s*$/i;
@@ -10,10 +10,11 @@ function findMark(s, from = 0) {
   return m ? from + m.index : -1;
 }
 
-// the tool markers carry a JSON argument, and a ']' can absolutely sit inside
-// one of its strings. close on the FIRST ']' and you cut the blob in half and
-// the rest streams straight into the bubble. so only a ']' outside any brace
-// or string counts.
+// the tool markers carry a JSON argument, and a ']' can
+// absolutely sit inside one of its strings. close on the FIRST
+// ']' and you cut the blob in half and the rest streams straight
+// into the bubble. so only a ']' outside any brace or string
+// counts.
 function findClose(s) {
   let depth = 0, inStr = false, esc = false;
   for (let i = 0; i < s.length; i++) {

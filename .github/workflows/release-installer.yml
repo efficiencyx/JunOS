@@ -21,8 +21,12 @@ jobs:
         # powershell (5.1), not pwsh: ps2exe emits a .NET Framework WPF binary
         # and targets the framework host.
         shell: powershell
+        # the ref goes in through the environment, not the script text.
+        # a tag name can hold $( ) and powershell would run it.
+        env:
+          JUN_RELEASE_REF: ${{ github.ref_name }}
         run: |
-          $tag = "${{ github.ref_name }}" -replace '^v', ''
+          $tag = $env:JUN_RELEASE_REF -replace '^v', ''
           # ps2exe wants a 4 part numeric version and a tag like v1.2 is not
           # one. pad it, and fall back for workflow_dispatch where ref_name is
           # a branch.

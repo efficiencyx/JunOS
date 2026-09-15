@@ -1,9 +1,9 @@
 FROM nginx:1.30.4-alpine
 
-# curl for the healthcheck, openssl for the self signed localhost cert
+# curl for the healthcheck, openssl for the self signed localhost
+# cert
 RUN apk add --no-cache curl openssl
 
-# bin the stock welcome page config so only ours gets loaded
 RUN rm -f /etc/nginx/conf.d/default.conf
 
 COPY webapp/ /var/www/omega/

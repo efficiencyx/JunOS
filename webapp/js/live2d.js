@@ -1,23 +1,21 @@
-// same version rule as app.js. this file's <script type="module"> tags in
-// wardrobe.html and karaoke.html, app.js's await import(), and every ?v=
-// inside js/live2d/ ALL have to match, or the browser builds a second copy
-// of the graph and everything goes sideways.
+// same version rule as app.js. this file's <script type="module">
+// tags in wardrobe.html and karaoke.html, app.js's await
+// import(), and every ?v= inside js/live2d/ ALL have to match, or
+// the browser builds a second copy of the graph and everything
+// goes sideways.
 
-import { renderIfDirty, resetIdle, setFidgetsEnabled, setMood, setMouthOverride, startIdle, stopIdle, tick } from './live2d/anim.js?v=9';
-import { cameraPreset, cameraStates, captureCameraState, currentCameraMode, fitModel, loadPos, measureStage, rendererResolution, savePos, setCameraPreset, watchStageSize, writeCameraStates } from './live2d/camera.js?v=9';
-import { clamp, drawableAt, drawableThumb, faceAnchor, findDrawables, hitTest, isInteractiveTarget, isOverModel } from './live2d/geometry.js?v=9';
-import { S } from './live2d/state.js?v=9';
-import { getDrawableTint, installVariantCompositor, listDrawables, opacityByPattern, screenByPattern, setDrawableOpacity, setDrawableOrderBelow, setDrawableScreen, setDrawableTexture, setDrawableTextures, setDrawableTint, texturesSettled, tintByPattern } from './live2d/textures.js?v=9';
+import { renderIfDirty, resetIdle, setFidgetsEnabled, setMood, setMouthOverride, startIdle, stopIdle, tick } from './live2d/anim.js?v=10';
+import { cameraPreset, cameraStates, captureCameraState, currentCameraMode, fitModel, loadPos, measureStage, rendererResolution, savePos, setCameraPreset, watchStageSize, writeCameraStates } from './live2d/camera.js?v=10';
+import { clamp, drawableAt, drawableThumb, faceAnchor, findDrawables, hitTest, isInteractiveTarget, isOverModel } from './live2d/geometry.js?v=10';
+import { S } from './live2d/state.js?v=10';
+import { getDrawableTint, installVariantCompositor, listDrawables, opacityByPattern, screenByPattern, setDrawableOpacity, setDrawableOrderBelow, setDrawableScreen, setDrawableTexture, setDrawableTextures, setDrawableTint, texturesSettled, tintByPattern } from './live2d/textures.js?v=10';
 
 const { Live2DModel, Cubism4ModelSettings } = PIXI.live2d;
 
-// tau is the exponential smoothing time constant
+// tau, the smoothing time constant: how fast params approach
+// targets
 export const LERP_TAU_MS = 150;
 
-// motion, physics, breath and pose are ALL off on the internal model, so
-// between a blink and a fidget the frame is identical to the one before. rAF
-// with no cap happily redraws it at the screen's refresh rate anyway. these
-// put a stop to that.
 export let app = null;
 export let model = null;
 // the Cubism core model, its parts, parameters and drawables
@@ -113,8 +111,9 @@ async function init({ stageEl, onStatus, ignoreSavedPos }) {
   S.cameraPersistenceEnabled = !ignoreSavedPos;
   const initialSize = measureStage();
 
-  // drawing above 1x is already supersampling, which is what the soft edged
-  // art wants. MSAA on top of that buys a multisampled backbuffer for nothing.
+  // drawing above 1x is already supersampling, which is what the
+  // soft edged art wants. MSAA on top of that buys a multisampled
+  // backbuffer for nothing.
   const resolution = rendererResolution();
 
   app = new PIXI.Application({
@@ -127,7 +126,8 @@ async function init({ stageEl, onStatus, ignoreSavedPos }) {
   });
   stageEl.appendChild(app.view);
 
-  // pixi-live2d-display 0.4 just ignores drawable colors, so we push uniforms
+  // pixi-live2d-display 0.4 just ignores drawable colors, so we
+  // push uniforms
   installColorShaderPatch(app.renderer.gl);
 
   onStatus('Loading Live2D assets...');
@@ -161,9 +161,9 @@ async function init({ stageEl, onStatus, ignoreSavedPos }) {
   });
 
   onStatus('Building model...');
-  // autoUpdate hangs the model's delta accumulator off PIXI.Ticker.shared,
-  // a second rAF loop we can't set the pace for. no thanks. tick() feeds it
-  // instead.
+  // autoUpdate hangs the model's delta accumulator off
+  // PIXI.Ticker.shared, a second rAF loop we can't set the pace
+  // for. no thanks. tick() feeds it instead.
   model = await Live2DModel.from(settings, { autoInteract: false, autoUpdate: false });
   for (const texture of model.textures) {
     const baseTexture = texture.baseTexture;
@@ -272,10 +272,13 @@ async function init({ stageEl, onStatus, ignoreSavedPos }) {
   window.addEventListener('pointerup', endDrag);
   window.addEventListener('pointercancel', endDrag);
 
-  // Application shoves its own render in at UPDATE_PRIORITY.LOW, so swap it
-  // for one that works out whether the frame is worth drawing at all. SAME
-  // priority, so the camera tween still lands before the draw and not a frame
-  // after it.
+  // motion, physics, breath and pose are off. between animations
+  // the frame doesn't change, but rAF redraws it at screen refresh
+  // rate anyway. renderIfDirty skips those identical frames.
+  // Application shoves its own render in at UPDATE_PRIORITY.LOW, so
+  // swap it for one that works out whether the frame is worth
+  // drawing at all. SAME priority, so the camera tween still lands
+  // before the draw and not a frame after it.
   app.ticker.remove(app.render, app);
   app.ticker.add(tick);
   app.ticker.add(renderIfDirty, null, PIXI.UPDATE_PRIORITY.LOW);
@@ -338,7 +341,8 @@ async function init({ stageEl, onStatus, ignoreSavedPos }) {
       }
     };
 
-    // Cubism binds its shader inside drawMesh, so set the uniforms there
+    // Cubism binds its shader inside drawMesh, so set the uniforms
+    // there
     const origDrawElements = gl.drawElements;
     gl.drawElements = function (mode, count, type, offset) {
       const prog = gl.getParameter(gl.CURRENT_PROGRAM);
@@ -491,17 +495,19 @@ export function scheduleSequence(steps) {
   }
 }
 
-// how tall the model is rendered for a bake, in pixels. the model's bounds run
-// several times taller than anything drawn inside them, so one garment lands on
-// maybe a tenth of this - 2400 is what keeps a cropped tile above 256px and
-// sharp. the extract never reaches the screen, so this has nothing to do with
-// the camera, and it's transient: ~23MB of pixels, one shot at a time.
+// how tall the model is rendered for a bake, in pixels. the
+// model's bounds run several times taller than anything drawn
+// inside them, so one garment lands on maybe a tenth of this -
+// 2400 is what keeps a cropped tile above 256px and sharp. the
+// extract never reaches the screen, so this has nothing to do
+// with the camera, and it's transient: ~23MB of pixels, one shot
+// at a time.
 const BAKE_HEIGHT = 2400;
 
-// pixi's extract crops to the display object's BOUNDS, and a Cubism model's
-// bounds are its whole rect no matter which drawables are actually on. so find
-// the ink ourselves: walk the alpha channel for the tightest box holding
-// anything visible.
+// pixi's extract crops to the display object's BOUNDS, and a
+// Cubism model's bounds are its whole rect no matter which
+// drawables are actually on. so find the ink ourselves: walk the
+// alpha channel for the tightest box holding anything visible.
 function alphaBounds(ctx, w, h) {
   const data = ctx.getImageData(0, 0, w, h).data;
   let x0 = w, y0 = h, x1 = -1, y1 = -1;
@@ -518,12 +524,13 @@ function alphaBounds(ctx, w, h) {
   return { x: x0, y: y0, w: x1 - x0 + 1, h: y1 - y0 + 1 };
 }
 
-// drawableThumb crops the texture atlas by one drawable's UV rect, which is
-// why a skirt tile came out as a single wedge of cloth: a garment is a pile of
-// drawables and the atlas doesn't assemble them. this renders the actual model
-// with everything but the garment forced to zero opacity, and pixi's extract
-// crops to what's left over. so the tile is the item, layered and deformed the
-// way she really wears it.
+// drawableThumb crops the texture atlas by one drawable's UV
+// rect, which is why a skirt tile came out as a single wedge of
+// cloth: a garment is a pile of drawables and the atlas doesn't
+// assemble them. this renders the actual model with everything
+// but the garment forced to zero opacity, and pixi's extract
+// crops to what's left over. so the tile is the item, layered and
+// deformed the way she really wears it.
 export function bakeThumb(keepIds, maxSize = 192) {
   if (!app || !model || !raw) return null;
   const keep = keepIds instanceof Set ? keepIds : new Set(keepIds);
@@ -531,29 +538,31 @@ export function bakeThumb(keepIds, maxSize = 192) {
   const savedOpacity = new Map(forcedDrawableOpacity);
   const savedScale = model.scale.x;
   try {
-    // hide the rest and DON'T touch the keepers, in either direction. forcing
-    // them to 1 drags in whatever the pattern match over-caught - 'dress' also
-    // matches Dress1's meshes, so the alt dress turned up in the plain dress's
-    // shot and both tiles came out identical. clearing them instead is just as
-    // wrong: half the wardrobe (bikini, stockings, ears, hair) is shown BY a
-    // forced opacity, so dropping it hides the very thing being photographed.
+    // hide the rest and DON'T touch the keepers, in either direction.
+    // forcing them to 1 drags in whatever the pattern match
+    // over-caught - 'dress' also matches Dress1's meshes, so the alt
+    // dress turned up in the plain dress's shot and both tiles came
+    // out identical. clearing them instead is just as wrong: half the
+    // wardrobe (bikini, stockings, ears, hair) is shown BY a forced
+    // opacity, so dropping it hides the very thing being
+    // photographed.
     for (const id of raw.drawables.ids) {
       if (!keep.has(id)) forcedDrawableOpacity.set(id, 0);
     }
     const unscaled = model.height / (model.scale.y || 1);
     if (unscaled > 0) model.scale.set(BAKE_HEIGHT / unscaled);
     model.updateTransform();
-    // every item param eases toward its target over LERP_TAU_MS, and a bake is
-    // ONE frame. so jump the smoothing to the target first, otherwise the
-    // garment is still fading up when the shot goes off and most tiles come
-    // back empty.
+    // every item param eases toward its target over LERP_TAU_MS, and
+    // a bake is ONE frame. so jump the smoothing to the target first,
+    // otherwise the garment is still fading up when the shot goes off
+    // and most tiles come back empty.
     for (const [id, target] of targetParams) {
       currentValues.set(id, target);
       const idx = paramIndex.get(id);
       if (idx !== undefined) raw.parameters.values[idx] = target;
     }
-    // forced opacities land in doDrawModel, but the parameters only reach the
-    // drawables when update() gets a nonzero dt
+    // forced opacities land in doDrawModel, but the parameters only
+    // reach the drawables when update() gets a nonzero dt
     model.update(16);
     const extract = app.renderer.plugins ? app.renderer.plugins.extract : app.renderer.extract;
     const src = extract.canvas(model);
@@ -589,7 +598,8 @@ function debugParam(param) {
   };
 }
 
-// the classic scripts loader.js pulls in reach the renderer through this
+// the classic scripts loader.js pulls in reach the renderer
+// through this
 window.Live2D = {
   init,
   setTarget,

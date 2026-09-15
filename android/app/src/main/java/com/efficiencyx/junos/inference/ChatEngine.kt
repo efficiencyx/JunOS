@@ -8,8 +8,11 @@ import com.efficiencyx.junos.data.ConsolidationEntity
 import com.efficiencyx.junos.data.JunDatabase
 import com.efficiencyx.junos.data.MessageEntity
 import com.efficiencyx.junos.data.RelationshipEntity
+import com.efficiencyx.junos.data.WardrobeStateEntity
 import com.efficiencyx.junos.lore.LoreIndex
 import com.efficiencyx.junos.memory.MemoryStore
+import com.efficiencyx.junos.wardrobe.Wardrobe
+import com.efficiencyx.junos.wardrobe.WardrobeState
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.cancelAndJoin
@@ -45,6 +48,7 @@ data class ChatRequest(
     val ephemeral: Boolean = false,
     @SerialName("client_time") val clientTime: String? = null,
     val audio: String? = null,
+    @SerialName("mod_items") val modItems: List<String> = emptyList(),
 )
 
 internal fun ChatRequest.validate() {
@@ -52,7 +56,7 @@ internal fun ChatRequest.validate() {
     // LiteRT has no audio input here, so refuse BEFORE writing
     // anything down and let the client retry through whisper.
     if (audio != null) error("audio_unsupported")
-    require(messages.size <= 160 && messages.all {
+    require(messages.all {
         it.role in setOf("user", "assistant", "system") && it.content.length <= 16 * 1024
     }) { "invalid_request" }
 }
@@ -74,8 +78,13 @@ class ChatEngine(
             .replace(TOOL_MARKER_LINE, "")
     }
 
-    suspend fun stream(request: ChatRequest, emit: suspend (JsonElement) -> Unit) {
-        request.validate()
+    suspend fun stream(incoming: ChatRequest, emit: suspend (JsonElement) -> Unit) {
+        incoming.validate()
+        val request = incoming.copy(messages = incoming.messages.takeLast(160))
+        val modItems = request.modItems.take(60)
+            .map { it.replace(CONTROL_CHARS, " ").trim() }
+            .filter { it.isNotEmpty() }
+            .map { it.take(80) }
         val conversation = dao.conversation(request.conversationId) ?: error("forbidden")
         dao.ensureDefaults(now())
         val lastUser = request.messages.lastOrNull { it.role == "user" }?.content.orEmpty()
@@ -168,7 +177,8 @@ class ChatEngine(
                 if (lead.isNotBlank()) messages += ChatMessage("assistant", lead)
                 for (call in calls.take(4)) {
                     emit(toolStatus(call.name, "running"))
-                    val result = executeTool(call, request.conversationId)
+                    val result = if (call.name == "change_outfit") changeOutfit(call.args, modItems, emit)
+                        else executeTool(call, request.conversationId)
                     emit(toolStatus(call.name, "done", result))
                     if (call.name == "stay_silent" && !request.idle) silenced = true
                     if (call.name == "flee") fled = buildJsonObject {
@@ -314,6 +324,19 @@ class ChatEngine(
         else -> json.encodeToString(mapOf("error" to "unknown_tool"))
     }
 
+    // the browser owns what's on screen, so it gets the change as its
+    // own frame instead of parsing it back out of the tool result
+    private suspend fun changeOutfit(args: JsonObject, modItems: List<String>, emit: suspend (JsonElement) -> Unit): String {
+        val stored = dao.wardrobeState()?.let { runCatching { json.decodeFromString<WardrobeState>(it.data) }.getOrNull() }
+        val presets = dao.wardrobePresets().sortedBy { it.name.lowercase() }
+            .mapNotNull { row -> (runCatching { json.parseToJsonElement(row.data) }.getOrNull() as? JsonObject)?.let { row.name to it } }
+            .toMap()
+        val outcome = Wardrobe.toolChange(Wardrobe.toolState(stored), args, modItems, presets)
+        outcome.state?.let { dao.putWardrobeState(WardrobeStateEntity(data = json.encodeToString(it), updatedAt = now())) }
+        outcome.apply?.let { emit(buildJsonObject { put("outfit", it) }) }
+        return outcome.reply.toString()
+    }
+
     private fun statusEvent(phase: String, progress: Float) = buildJsonObject {
         put("status", buildJsonObject { put("phase", phase); put("progress", progress) })
     }
@@ -370,11 +393,12 @@ class ChatEngine(
         private val MOOD_TAG = Regex("\\[\\s*A(?:CTIONS?)?\\s*:\\s*mood_shift\\b([^]]*)]", RegexOption.IGNORE_CASE)
         private val EXIT_TAG = Regex("\\[\\s*A(?:CTIONS?)?\\s*:\\s*(?:flee|stay_silent)\\b[^]]*]", RegexOption.IGNORE_CASE)
         private val TOOL_MARKER_LINE = Regex("(?m)^<!--/?tools-->\\R")
+        private val CONTROL_CHARS = Regex("[\\x00-\\x1F\\x7F]+")
         private const val PROMPT_TOKEN_BUDGET = 3300
         private const val TOOL_PROTOCOL = """
 
 ## Local tool-call protocol
-When a tool is necessary, write exactly `[TOOL:name|{"argument":"value"}]` after a short natural lead-in. The application removes the marker, executes it, and returns a tool message. Available names are search_recent_chats, list_recent_chats, search_lore, memory_write, web_search, stay_silent, and flee. Never invent another tool.
+When a tool is necessary, write exactly `[TOOL:name|{"argument":"value"}]` after a short natural lead-in. The application removes the marker, executes it, and returns a tool message. Available names are search_recent_chats, list_recent_chats, search_lore, memory_write, web_search, change_outfit, stay_silent, and flee. Never invent another tool.
 """
     }
 }

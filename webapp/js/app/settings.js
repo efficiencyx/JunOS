@@ -1,17 +1,16 @@
-import { abortFn, currentConversationId, sendMessage } from '../app.js?v=9';
-import { cancelIdleNudge } from './consolidation.js?v=9';
-import { closeSettingsBtn, devNoIdleChk, drawerBackdrop, modelSelect, openSettingsBtn, reasoningSelect, sendBtn, siteVolumeInput, thinkChk, ttsChk, ttsSpeedInput, voiceChk, voiceSilenceInput } from './dom.js?v=9';
-import { logAction } from './logging.js?v=9';
-import { loadMood, setMoodEditingEnabled } from './mood.js?v=9';
-import { loadConversation, setSidebarOpen } from './sidebar.js?v=9';
+import { abortFn, currentConversationId, sendMessage } from '../app.js?v=10';
+import { cancelIdleNudge } from './consolidation.js?v=10';
+import { closeSettingsBtn, devNoIdleChk, drawerBackdrop, modelSelect, openSettingsBtn, reasoningSelect, sendBtn, siteVolumeInput, thinkChk, ttsChk, ttsSpeedInput, voiceChk, voiceSilenceInput } from './dom.js?v=10';
+import { logAction } from './logging.js?v=10';
+import { loadMood, setMoodEditingEnabled } from './mood.js?v=10';
+import { loadConversation, setSidebarOpen } from './sidebar.js?v=10';
 
 export function syncThinkToggle() {
   thinkChk.disabled = reasoningSelect.value === 'auto';
 }
 
-// On device LiteRT-LM takes neither of these, it always generates the same way.
-// Showing them cost a tester a whole round of "auto answers, hard doesn't" when
-// the setting had never done anything.
+// on-device LiteRT-LM ignores these settings, so hide controls
+// that can't change how she replies.
 export function applyProviderCapabilities(provider) {
   if (provider !== 'litertlm-android') return;
   for (const id of ['reasoningRow', 'thinkRow']) {
@@ -47,8 +46,9 @@ export function wireNameSettings() {
     if (playerInput) playerInput.value = Names.getPlayer();
     if (botInput) botInput.value = Names.getBot();
     if (window.Prefs) Prefs.pushToServer();
-    // decorate only ever rewrites Jun/Anon, so renaming her twice in one
-    // session leaves the first name sitting in the markup. reload for that.
+    // decorate only ever rewrites Jun/Anon, so renaming her twice in
+    // one session leaves the first name sitting in the markup. reload
+    // for that.
     Names.decorate();
     if (!abortFn && currentConversationId != null) loadConversation(currentConversationId);
   }
@@ -199,11 +199,13 @@ let isAdmin = false;
 export function applyRoleGates(user) {
   isAdmin = user?.role === 'admin';
   setMoodEditingEnabled(isAdmin);
-  // Hidden, never taken out of the page. logging.js grabs the buttons inside
-  // the developer panel at import time and would throw on a missing node.
+  // Hidden, never taken out of the page. logging.js grabs the
+  // buttons inside the developer panel at import time and would
+  // throw on a missing node.
   const devTab = document.querySelector('.settings-navitem[data-panel="developer"]');
   if (devTab) devTab.hidden = !isAdmin;
-  // Everyone else wipes memories through Factory Reset, the DELETE is admin only.
+  // Everyone else wipes memories through Factory Reset, the DELETE
+  // is admin only.
   if (memoryClearBtn) memoryClearBtn.hidden = !isAdmin;
   const devBadge = document.getElementById('devBadge');
   if (devBadge) devBadge.hidden = !isAdmin;
