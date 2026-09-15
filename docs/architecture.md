@@ -334,7 +334,7 @@ lexical matching over SQLite and a text corpus:
 The fine-tune gives Jun her voice but blurs or invents specific world details, so
 canon facts are retrieved instead of baked in.
 
-The corpus is `tools/lore_dataset.jsonl`: curated game-lore Q&A in neutral wiki
+The corpus is `tools/lore_dataset.jsonl` (kept local, not in the repo): curated game-lore Q&A in neutral wiki
 voice, with out-of-universe meta (developer, platform, version, etc.) filtered out
 so Jun never breaks the fourth wall. `tools/build_lore_index.php` flattens each
 Q&A into a question→answer pair and writes `webapp/lore_corpus.txt` (the answers,
