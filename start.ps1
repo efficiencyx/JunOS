@@ -111,7 +111,6 @@ if (Test-Path .env) {
     }
 }
 $SidecarSecret = if ($env:SIDECAR_SECRET) { $env:SIDECAR_SECRET } else { '' }
-}
 
 $Port      = if ($env:JUN_PORT) { $env:JUN_PORT } else { '8080' }
 $OllamaUrl = if ($env:OLLAMA_URL) { $env:OLLAMA_URL } else { 'http://127.0.0.1:11434' }
