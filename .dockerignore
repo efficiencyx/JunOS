@@ -1,5 +1,11 @@
 .git
 .gitignore
+.env
+.env.local
+.env.bak-*
+runtime/
+.venv/
+android/
 .editorconfig
 .github/
 Junk/
@@ -8,6 +14,7 @@ live2d_raw/raw_sources/
 tools/
 docs/
 webapp/api/review.php
+webapp/api/review.js
 tts/.venv/
 **/__pycache__/
 **/*.pyc

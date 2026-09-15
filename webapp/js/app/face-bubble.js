@@ -1,6 +1,6 @@
-import { currentConversationTitle, setConversationTitle } from '../app.js?v=9';
-import { mobileConversationTitle, mobileReplyStatus, sidebarBackground, stageEl } from './dom.js?v=9';
-import { phoneMode, visualRect } from './util.js?v=9';
+import { currentConversationTitle, setConversationTitle } from '../app.js?v=10';
+import { mobileConversationTitle, mobileReplyStatus, sidebarBackground, stageEl } from './dom.js?v=10';
+import { phoneMode, visualRect } from './util.js?v=10';
 
 export let latestAssistantReply = '';
 export const faceBubble = (() => {
@@ -117,9 +117,10 @@ export function showFaceBubble(html, source = 'ephemeral') {
   scheduleFaceBubblePosition();
 }
 
-// showFaceBubble only plays the open animation if the card was hidden, so a
-// second line just swaps the text with no movement. callers putting several
-// lines in a row use this to make each one open again.
+// showFaceBubble only plays the open animation if the card was
+// hidden, so a second line just swaps the text with no movement.
+// callers putting several lines in a row use this to make each
+// one open again.
 export function replayFaceBubbleIntro() {
   faceBubble.classList.remove('intro');
   void faceBubble.offsetWidth;

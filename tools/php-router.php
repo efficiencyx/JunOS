@@ -113,7 +113,19 @@ header("Content-Security-Policy: default-src 'self'; script-src 'self' 'unsafe-e
 $path = parse_url($_SERVER['REQUEST_URI'] ?? '/', PHP_URL_PATH);
 if (!is_string($path)) router_fail(400, 'invalid request');
 $path = rawurldecode($path);
-if (str_contains($path, "\0")) router_fail(400, 'invalid request');
+// the route checks below are plain string tests on the decoded
+// path, but the filesystem lookup at the bottom is realpath().
+// those two disagree on "//assets/x" (an encoded %2f slips it
+// past the /assets/ prefix and realpath still finds the file),
+// on backslashes and, on windows, on case. so every spelling
+// that isn't the one canonical form gets refused up front, and
+// the routes match case-insensitively so ntfs can't alias past
+// them. linux pays nothing for that, a wrong-case path 404s on
+// disk anyway.
+if (str_contains($path, "\0") || str_contains($path, '\\') || str_contains($path, '//')
+    || !str_starts_with($path, '/')) {
+    router_fail(404, 'not found');
+}
 
 $segments = explode('/', trim($path, '/'));
 foreach ($segments as $segment) {
@@ -122,15 +134,16 @@ foreach ($segments as $segment) {
     }
 }
 
-if ($path === '/system_prompt.txt' || str_starts_with($path, '/api/migrations/')
-    || $path === '/api/consolidation-worker.php') {
+$route = strtolower($path);
+if ($route === '/system_prompt.txt' || str_starts_with($route, '/api/migrations/')
+    || $route === '/api/consolidation-worker.php') {
     router_fail(404, 'not found');
 }
 
-$isApi = preg_match('#^/api/[^/]+\.php$#', $path) === 1;
+$isApi = preg_match('#^/api/[^/]+\.php$#', $route) === 1;
 $method = strtoupper($_SERVER['REQUEST_METHOD'] ?? 'GET');
 if (!$isApi && $method !== 'GET' && $method !== 'HEAD') router_fail(405, 'method not allowed');
-if (str_starts_with($path, '/assets/')) {
+if (str_starts_with($route, '/assets/')) {
     $_SERVER['OMEGA_ASSET_PATH'] = $path;
     require rtrim((string)($_SERVER['DOCUMENT_ROOT'] ?? ''), '/\\') . '/api/assets.php';
     return true;

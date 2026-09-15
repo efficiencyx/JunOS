@@ -1,8 +1,8 @@
-import { LERP_TAU_MS, app, currentValues, forcedPartOpacity, loops, markDirty, model, paramDefault, paramIndex, paramMax, paramMin, pendingSequences, raw, scheduleSequence, startLoop, stopLoop, targetParams } from '../live2d.js?v=9';
-import { daypart, moodFactors, moodTier } from '../mood-tier.js?v=9';
-import { cameraTween } from './camera.js?v=9';
-import { clamp } from './geometry.js?v=9';
-import { S } from './state.js?v=9';
+import { LERP_TAU_MS, app, currentValues, forcedPartOpacity, loops, markDirty, model, paramDefault, paramIndex, paramMax, paramMin, pendingSequences, raw, scheduleSequence, startLoop, stopLoop, targetParams } from '../live2d.js?v=10';
+import { daypart, moodFactors, moodTier } from '../mood-tier.js?v=10';
+import { cameraTween } from './camera.js?v=10';
+import { clamp } from './geometry.js?v=10';
+import { S } from './state.js?v=10';
 
 const ACTIVE_FPS = 60;
 const IDLE_FPS = 30;
@@ -12,10 +12,8 @@ let animating = false;
 let wasAnimating = false;
 let tickDeltaMs = 0;
 
-// some visual state never goes through the parameter array at all. tints,
-// drawable opacity and order, rebuilt atlases, the camera transform. nothing
-// else tells us the canvas is stale, so everything that touches those comes
-// through here.
+// tints, opacity, order, atlases and camera changes bypass
+// parameters. mark them dirty here or the canvas stays stale.
 const STATEFUL_PARAMS = new Set([
   'ParamShirtEnabled', 'ParamBraEnabled', 'ParamPantiesEnabled',
   'ParamSkirtEnabled', 'ParamHoodieEnabled', 'ParamPantsEnabled',
@@ -60,11 +58,8 @@ export function setMood(m) {
   if (idleActive) applyMoodBaseline();
 }
 
-// multiplies the fidget delay we get from mood. she calms down at night and
-// after midnight she barely moves. evening is when she's got energy to burn.
 const DAYPART_PACE = { night: 2.1, morning: 1.35, day: 1, evening: 0.85 };
 
-// stacks on top of the mood baseline, so a happy 2am still looks tired
 const DAYPART_BASELINE = {
   night:   { eyeOpen: -0.28, browY: -0.15, breath: 1.5, ear: -0.4 },
   morning: { eyeOpen: -0.12, browY: -0.05, breath: 1.2, ear: -0.15 },
@@ -79,7 +74,6 @@ function trySet(param, value) {
 function applyMoodBaseline() {
   const { warmth, fear } = moodFactors(mood);
   const hour = DAYPART_BASELINE[daypart()];
-  // fear beats tired. she's not sleepy while she's scared.
   const drowsy = 1 - Math.min(1, fear / 0.4);
 
   trySet('ParamMouthForm', warmth > 0 ? warmth * 0.6 : warmth * 0.4);
@@ -133,8 +127,8 @@ function tryLoop(param, amplitude, period_ms) {
 
 function triggerBlink() {
   if (!paramIndex.has('ParamEyeOpen')) return;
-  // a yawn or a doze keeps the eyes shut the Whole time. a blink underneath
-  // would pop them open right in the middle of it.
+  // a yawn or a doze keeps the eyes shut the Whole time. a blink
+  // underneath would pop them open right in the middle of it.
   if (pendingSequences.some(s => s.param === 'ParamEyeOpen')) return;
   blinkPhase = { startMs: performance.now(), closeMs: 70, holdMs: 50, openMs: 120 };
 }
@@ -255,10 +249,10 @@ const FIDGET_DELAYS = {
 function runFidget(f) {
   if (f.kind === 'seq') {
     scheduleSequence(f.steps);
-    // the last step of a sequence is a fixed value, so anything it touched
-    // that the baseline also owns (eyes, brows, mouth form) just stays where
-    // the sequence left it until the gauges move again. so put it back once
-    // the sequence is done.
+    // the last step of a sequence is a fixed value, so anything it
+    // touched that the baseline also owns (eyes, brows, mouth form)
+    // just stays where the sequence left it until the gauges move
+    // again. so put it back once the sequence is done.
     const total = f.steps.reduce((sum, s) => sum + s.dt_ms, 0);
     setTimeout(() => { if (idleActive) applyMoodBaseline(); }, total + 200);
     return;
@@ -290,8 +284,9 @@ function runFidget(f) {
 let lastDaypart = '';
 let fidgetsEnabled = true;
 
-// blinking keeps going ON PURPOSE. a scripted scene wants the arms and head
-// left alone, but a model that stops blinking for ten seconds looks dead.
+// blinking keeps going ON PURPOSE. a scripted scene wants the
+// arms and head left alone, but a model that stops blinking for
+// ten seconds looks dead.
 export function setFidgetsEnabled(on) {
   fidgetsEnabled = !!on;
   if (fidgetsEnabled && idleActive) scheduleFidget();
@@ -306,11 +301,11 @@ function scheduleFidget() {
   const delay = (lo + Math.random() * (hi - lo)) * pace;
   fidgetTimeout = setTimeout(() => {
     if (!idleActive) return;
-    // setFidgetsEnabled restarts the loop when it comes back
     if (!fidgetsEnabled) return;
     const now = daypart();
-    // the hour changes during a long session, and otherwise we only redo the
-    // baseline when the gauges move, which could be hours away
+    // the hour changes during a long session, and otherwise we only
+    // redo the baseline when the gauges move, which could be hours
+    // away
     if (now !== lastDaypart) {
       lastDaypart = now;
       applyMoodBaseline();
@@ -321,7 +316,6 @@ function scheduleFidget() {
       if (f.moods && !f.moods.includes(tier)) continue;
       if (f.parts && !f.parts.includes(now)) continue;
       candidates.push(f);
-      // fidgets tied to mood and to the hour get double weight so both show
       if (f.moods || f.parts) candidates.push(f);
     }
     if (candidates.length) {
@@ -345,36 +339,26 @@ export function stopIdle() {
   if (fidgetTimeout) { clearTimeout(fidgetTimeout); fidgetTimeout = null; }
 }
 
-// the tail. ParamTailWiggle is a physics INPUT, same family as
-// ParamHairPhysicsBaseToShort and ParamPhysicsBoobXL, and the game feeds it
-// through a physics3.json we don't have. so on its own it moves absolutely
-// nothing and every [A:tail_wag] and tail fidget we ever wrote was a no-op -
-// that's why she came with a tail that just hangs there.
-// what the physics WOULD have written is these nine rotation params, root to
-// tip. so we write them ourselves: one sine going down the segments, each one
-// behind the one above it, which is what a tail looks like. it isn't real
-// physics, it's a sine, and at this amplitude nobody can tell.
+// ParamTailWiggle, ParamHairPhysicsBaseToShort and
+// ParamPhysicsBoobXL need the missing physics3.json. drive the
+// nine tail rotation params root-to-tip with a delayed sine so
+// [A:tail_wag] and fidgets actually move it.
 const TAIL_SEGMENTS = Array.from({ length: 9 }, (_, i) => `Param_Angle_Rotation_${i + 1}_TailMain`);
-// fractions of each segment's own range, because these are angle params and
-// their range is whatever the rigger picked. 0.18 is a resting sway, the
-// wiggle on top is what the fidgets and [A:tail_wag] actually buy you now.
+// fractions of each segment's own range, because these are angle
+// params and their range is whatever the rigger picked. 0.18 is a
+// resting sway, the wiggle on top is what the fidgets and
+// [A:tail_wag] actually buy you now.
 const TAIL_IDLE_AMP = 0.18;
 const TAIL_WAG_AMP = 0.7;
-// one full sway takes this long at rest. a cat at rest is SLOW, and the whole
-// point of this sine is that you shouldn't be able to catch it doing it.
 const TAIL_PERIOD_MS = 5200;
 // how far behind the segment above each one runs, in periods
 const TAIL_LAG = 0.1;
-/* the phase has to ACCUMULATE, and this is not a style thing.
-   it used to be now / period. period moves with the wiggle EVERY FRAME, and
-   now is milliseconds since the page loaded, so a period dropping 2800 -> 1260
-   at now = 100000 slides the phase by 43 whole cycles in one frame. worked out
-   to the tail spinning something like 1.7 cycles per frame while a wiggle loop
-   was running, i.e. always, and it got worse the longer the tab had been open
-   because the error scales with now. it did not read as a wag. it read as a
-   tail having a seizure.
-   integrating dt / period instead means a period change alters the SPEED and
-   nothing else, which is what "faster wag" was supposed to mean all along. */
+/* phase has to ACCUMULATE. now / period jumps when wiggle
+   changes period. dropping 2800 -> 1260 at now = 100000 moves
+   phase by 43 whole cycles in one frame. during a wiggle loop
+   this was ~1.7 cycles per frame, and the error grows with time
+   since page load. integrating dt / period changes only the
+   speed when period moves, keeping phase continuous. */
 let tailPhase = 0;
 let tailLastMs = performance.now();
 
@@ -382,9 +366,9 @@ function driveTail(ps, now) {
   const wiggleIdx = paramIndex.get('ParamTailWiggle');
   const wiggle = wiggleIdx === undefined ? 0 : Math.min(1, Math.abs(ps.values[wiggleIdx]));
   const amp = TAIL_IDLE_AMP + wiggle * TAIL_WAG_AMP;
-  // a wag is faster than a resting sway, not just wider
   const period = TAIL_PERIOD_MS * (1 - 0.55 * wiggle);
-  // cap the step or a backgrounded tab comes back and skips half a sway
+  // cap the step or a backgrounded tab comes back and skips half a
+  // sway
   tailPhase += Math.min(100, Math.max(0, now - tailLastMs)) / period;
   tailLastMs = now;
   for (let i = 0; i < TAIL_SEGMENTS.length; i++) {
@@ -392,7 +376,6 @@ function driveTail(ps, now) {
     const idx = paramIndex.get(id);
     if (idx === undefined) continue;
     const span = Math.min(Math.abs(paramMax.get(id) ?? 1), Math.abs(paramMin.get(id) ?? 1)) || 1;
-    // the tip swings widest, the root barely moves
     const reach = (i + 1) / TAIL_SEGMENTS.length;
     const phase = tailPhase - i * TAIL_LAG;
     ps.values[idx] = clamp(id, Math.sin(2 * Math.PI * phase) * amp * reach * span);
@@ -492,14 +475,16 @@ export function tick() {
 
 export function renderIfDirty() {
   if (!raw) return;
-  // wasAnimating buys us one more frame. the tick that settles a parameter or
-  // ends a blink writes the last value FIRST, then reports idle.
+  // wasAnimating buys us one more frame. the tick that settles a
+  // parameter or ends a blink writes the last value FIRST, then
+  // reports idle.
   const draw = animating || wasAnimating || S.needsRender;
   wasAnimating = animating;
   if (!draw) return;
   S.needsRender = false;
-  // _render only pushes parameters into the drawables when deltaTime isn't
-  // zero, so we have to feed the accumulator on every frame we draw
+  // _render only pushes parameters into the drawables when
+  // deltaTime isn't zero, so we have to feed the accumulator on
+  // every frame we draw
   model.update(tickDeltaMs);
   app.render();
 }

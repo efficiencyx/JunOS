@@ -16,8 +16,8 @@ window.Actions = (function () {
 
   const ACTION_RE = /\[\s*A(?:CTIONS?)?\s*:\s*([a-zA-Z_][\w]*)\s*((?:\|[^\]|]*)*)\s*\]/gi;
 
-  // touching Jun is something ONLY Anon starts. these actions come from
-  // touch.js, never from a tag the model wrote.
+  // touching Jun is something ONLY Anon starts. these actions come
+  // from touch.js, never from a tag the model wrote.
   const USER_ONLY = new Set(['receive_headpat', 'nuzzle', 'handhold']);
 
   const POS_KEYS = {
@@ -79,10 +79,10 @@ window.Actions = (function () {
           kwargs[posKeys[pos++]] = p.replace(/^["']|["']$/g, '');
         }
       }
-      // the model fuses item and state about HALF the time ("skirt_off",
-      // "dress_on") which matches no _resolve key and silently no-ops. so we
-      // split it back apart. real pose items end in _up/_aside, never
-      // _on/_off.
+      // Jun fuses item and state about HALF the time ("skirt_off",
+      // "dress_on") which matches no _resolve key and silently no-ops.
+      // so we split it back apart. real pose items end in _up/_aside,
+      // never _on/_off.
       if (name === 'outfit' && kwargs.item) {
         const fused = /^(.+)_(on|off)$/.exec(kwargs.item);
         if (fused) { kwargs.item = fused[1]; kwargs.state = fused[2]; }
@@ -224,9 +224,10 @@ window.Actions = (function () {
       }
     }
 
-    // _param sets one named parameter to the scale value. _relative is a
-    // no-op right now, without param read-back there's nothing to add a delta
-    // to, so relative and absolute do the exact same thing here.
+    // _param sets one named parameter to the scale value. _relative
+    // is a no-op right now, without param read-back there's nothing
+    // to add a delta to, so relative and absolute do the exact same
+    // thing here.
     if (node._param) {
       Live2D.setTarget(node._param, scale);
     }
@@ -248,7 +249,6 @@ window.Actions = (function () {
       Live2D.scheduleSequence(steps);
     }
 
-    // _loop + _repeats: expand the loop body into one long sequence (mouth speak etc)
     if (Array.isArray(node._loop)) {
       const repeats = node._repeats || 3;
       const steps = [];
@@ -285,8 +285,8 @@ window.Actions = (function () {
       return;
     }
     applyNode(node, kwargs, 0);
-    // the map already knew this one, so it is vanilla and Outfit must not go
-    // looking for a mod called "skirt up"
+    // the map already knew this one, so it is vanilla and Outfit must
+    // not go looking for a mod called "skirt up"
     if (window.Outfit && Outfit.syncFromAction) Outfit.syncFromAction(name, kwargs, true);
     const k = Object.keys(kwargs).map(x => `${x}=${kwargs[x]}`).join('|');
     log('ok', `▶ ${name}${k ? '|' + k : ''}`);

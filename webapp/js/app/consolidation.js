@@ -1,8 +1,8 @@
-import { abortFn, currentConversationId, runChat } from '../app.js?v=9';
-import { chatInput, consolidationBanner, consolidationSub, consolidationTitle, devNoIdleChk, fleeEtaEl, fleeOverlay, fleeReasonEl, sendBtn, voiceChk } from './dom.js?v=9';
-import { showFaceBubble } from './face-bubble.js?v=9';
-import { logAction } from './logging.js?v=9';
-import { escapeHtml, formatElapsed } from './util.js?v=9';
+import { abortFn, currentConversationId, runChat } from '../app.js?v=10';
+import { chatInput, consolidationBanner, consolidationSub, consolidationTitle, devNoIdleChk, fleeEtaEl, fleeOverlay, fleeReasonEl, sendBtn, voiceChk } from './dom.js?v=10';
+import { showFaceBubble } from './face-bubble.js?v=10';
+import { logAction } from './logging.js?v=10';
+import { escapeHtml, formatElapsed } from './util.js?v=10';
 
 const BUSY_LINES = [
   "Hang on, ${p}, I'm defragging my SSD.",
@@ -76,8 +76,9 @@ let previousBusyLine = -1;
 let idleNudgeStreak = 0;
 export let cancelActiveIdleNudge = null;
 
-// app.js owns the per turn cancel hook but the idle timer lives in here, so
-// we hand it over instead of exporting something you can write to.
+// app.js owns the per turn cancel hook but the idle timer lives
+// in here, so we hand it over instead of exporting something you
+// can write to.
 export function setCancelActiveIdleNudge(fn) { cancelActiveIdleNudge = fn; }
 export function cancelIdleNudge() {
   if (idleTimer) { clearTimeout(idleTimer); idleTimer = null; }
@@ -156,8 +157,9 @@ export function startFleeLock(untilMs, reason) {
   syncComposerLock();
 }
 
-// the SERVER owns the deadline. a lock the server drops has to vanish here on
-// the next status poll, it doesn't get to sit out its own countdown.
+// the SERVER owns the deadline. a lock the server drops has to
+// vanish here on the next status poll, it doesn't get to sit out
+// its own countdown.
 function syncFleeLock(status) {
   const ban = status && status.ban;
   if (ban && ban.until) startFleeLock(ban.until * 1000, ban.reason || '');
@@ -219,10 +221,10 @@ export function setConsolidating(locked, status) {
       consolidationOutcomeTimer = null;
     }
     if (status && status.phase) consolidationPhase = status.phase;
-    // tie the ticker to the elapsed the server hands us, so a tab that only
-    // hears about the run from a 418, or joins half way through, still counts
-    // from the real Start. we only re-tie when it's actually drifted, keeps
-    // the display off the 1s rounding.
+    // tie the ticker to the elapsed the server hands us, so a tab
+    // that only hears about the run from a 418, or joins half way
+    // through, still counts from the real Start. we only re-tie when
+    // it's actually drifted, keeps the display off the 1s rounding.
     if (status && Number.isFinite(status.elapsed)) {
       const anchor = Date.now() - status.elapsed * 1000;
       if (!consolidationStartedAt || Math.abs(anchor - consolidationStartedAt) > 2000) {
@@ -272,8 +274,8 @@ export async function syncConsolidationStatus() {
   } catch (e) {
     setConsolidating(false);
   }
-  // only keep asking while she's actually busy. a tab with no lock finds out
-  // about a new one from the 418 on its next send.
+  // only keep asking while she's actually busy. a tab with no lock
+  // finds out about a new one from the 418 on its next send.
   if (consolidating || fleeActive()) consolidationStatusTimer = setTimeout(syncConsolidationStatus, 3000);
 }
 
@@ -303,7 +305,8 @@ export function scheduleIdleNudge(delayMs) {
   }, delayMs);
 }
 
-// start the idle timer once TTS is DONE, not when the text stops streaming
+// start the idle timer once TTS is DONE, not when the text stops
+// streaming
 export function armIdleAfterReply() {
   if (window.TTS && TTS.isSpeaking && TTS.isSpeaking()) return;
   scheduleIdleNudge(IDLE_AFTER_REPLY_MS);

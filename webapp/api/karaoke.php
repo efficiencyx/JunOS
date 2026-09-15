@@ -4,19 +4,22 @@ require_once __DIR__ . '/_lib.php';
 
 $user = require_user();
 
-// Separation gets its own sidecar so it can hold a GPU torch while the voice
-// one stays on the CPU. a bare metal install runs both roles in one process,
-// so fall back to the voice sidecar's URL, and to KOKORO_URL, its old name.
+// Separation gets its own sidecar so it can hold a GPU torch
+// while the voice one stays on the CPU. a bare metal install runs
+// both roles in one process, so fall back to the voice sidecar's
+// URL, and to KOKORO_URL, its old name.
 $sepUrl = rtrim(env_str('KARAOKE_URL', env_str('TTS_URL', env_str('KOKORO_URL', 'http://localhost:8001'))), '/');
 $action = $_GET['action'] ?? '';
 
-// Splitting a song is heavy and slow, and one request throws the chat model
-// out first, so 30/60s is plenty for any real karaoke session.
+// Splitting a song is heavy and slow, and one request throws the
+// chat model out first, so 30/60s is plenty for any real karaoke
+// session.
 rate_limit('karaoke', 30, 60);
 
-// 30MB is a few minutes of compressed audio, well past one song. keep it in
-// step with nginx client_max_body_size, PHP post_max_size and the sidecar's
-// own upload cap, all of them have to let it through.
+// 30MB is a few minutes of compressed audio, well past one song.
+// keep it in step with nginx client_max_body_size, PHP
+// post_max_size and the sidecar's own upload cap, all of them
+// have to let it through.
 const KARAOKE_MAX_BYTES = 30 * 1024 * 1024;
 const KARAOKE_JOB_TTL = 15 * 60;
 
@@ -24,10 +27,11 @@ function karaoke_purge_jobs(PDO $db): void {
     $db->prepare('DELETE FROM karaoke_jobs WHERE expires_at <= ?')->execute([time()]);
 }
 
-// Give the LLM's VRAM back before demucs starts, so the two don't fight over
-// the GPU. we try and move on, and it is Ollama only, /api/ps and keep_alive:0
-// are Ollama things. a failed eviction must never stop the separation, worst
-// case they both want the card.
+// Give the LLM's VRAM back before demucs starts, so the two don't
+// fight over the GPU. we try and move on, and it is Ollama only,
+// /api/ps and keep_alive:0 are Ollama things. a failed eviction
+// must never stop the separation, worst case they both want the
+// card.
 function evict_chat_model(): void {
     if (ai_provider() !== 'ollama') return;
 
@@ -60,6 +64,7 @@ if ($action === 'health') {
     header('Content-Type: application/json');
 
     $ch = curl_init($sepUrl . '/health');
+    curl_setopt($ch, CURLOPT_HTTPHEADER, sidecar_headers());
     curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
     curl_setopt($ch, CURLOPT_CONNECTTIMEOUT, 5);
     curl_setopt($ch, CURLOPT_TIMEOUT, 10);
@@ -80,21 +85,25 @@ if ($action === 'health') {
 if ($action === 'separate') {
     require_post();
 
-    evict_chat_model();
-
     $rawBody = read_body(KARAOKE_MAX_BYTES);
     if ($rawBody === '') fail(400, 'invalid_request');
+
+    // only now. an empty or oversized upload used to kick the chat
+    // model out of VRAM first and then 400.
+    evict_chat_model();
 
     $ch = curl_init($sepUrl . '/separate');
     curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
     curl_setopt($ch, CURLOPT_POST, true);
     curl_setopt($ch, CURLOPT_POSTFIELDS, $rawBody);
-    // "Expect:" for the same reason as api/stt.php: a megabyte body would
-    // otherwise stall a full second on libcurl's 100-continue handshake.
-    curl_setopt($ch, CURLOPT_HTTPHEADER, ['Content-Type: application/octet-stream', 'Expect:']);
+    // "Expect:" for the same reason as api/stt.php: a megabyte body
+    // would otherwise stall a full second on libcurl's 100-continue
+    // handshake.
+    curl_setopt($ch, CURLOPT_HTTPHEADER, sidecar_headers(['Content-Type: application/octet-stream', 'Expect:']));
     curl_setopt($ch, CURLOPT_CONNECTTIMEOUT, 5);
-    // Demucs on the CPU is slower than realtime, so a whole song can take well
-    // over five minutes. keep it in step with fastcgi_read_timeout here.
+    // Demucs on the CPU is slower than realtime, so a whole song can
+    // take well over five minutes. keep it in step with
+    // fastcgi_read_timeout here.
     curl_setopt($ch, CURLOPT_TIMEOUT, 900);
     $res = curl_exec($ch);
     $code = curl_getinfo($ch, CURLINFO_HTTP_CODE);
@@ -104,7 +113,7 @@ if ($action === 'separate') {
 
     if ($res === false) {
         http_response_code(502);
-        echo json_encode(['error' => 'tts_unreachable']);
+        echo json_encode(['error' => 'karaoke_unreachable']);
         exit;
     }
 
@@ -165,7 +174,7 @@ if ($action === 'stem') {
     curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
     curl_setopt($ch, CURLOPT_POST, true);
     curl_setopt($ch, CURLOPT_POSTFIELDS, json_encode(['token' => $sidecarToken, 'which' => $which]));
-    curl_setopt($ch, CURLOPT_HTTPHEADER, ['Content-Type: application/json']);
+    curl_setopt($ch, CURLOPT_HTTPHEADER, sidecar_headers(['Content-Type: application/json']));
     curl_setopt($ch, CURLOPT_CONNECTTIMEOUT, 5);
     curl_setopt($ch, CURLOPT_TIMEOUT, 60);
     $res = curl_exec($ch);
@@ -175,7 +184,7 @@ if ($action === 'stem') {
     if ($res === false) {
         http_response_code(502);
         header('Content-Type: application/json');
-        echo json_encode(['error' => 'tts_unreachable']);
+        echo json_encode(['error' => 'karaoke_unreachable']);
         exit;
     }
 
@@ -211,7 +220,7 @@ if ($action === 'transcribe') {
     curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
     curl_setopt($ch, CURLOPT_POST, true);
     curl_setopt($ch, CURLOPT_POSTFIELDS, $rawBody);
-    curl_setopt($ch, CURLOPT_HTTPHEADER, ['Content-Type: application/octet-stream', 'Expect:']);
+    curl_setopt($ch, CURLOPT_HTTPHEADER, sidecar_headers(['Content-Type: application/octet-stream', 'Expect:']));
     curl_setopt($ch, CURLOPT_CONNECTTIMEOUT, 5);
     curl_setopt($ch, CURLOPT_TIMEOUT, 300);
     $res = curl_exec($ch);
@@ -222,7 +231,7 @@ if ($action === 'transcribe') {
 
     if ($res === false) {
         http_response_code(502);
-        echo json_encode(['error' => 'tts_unreachable']);
+        echo json_encode(['error' => 'karaoke_unreachable']);
         exit;
     }
 
@@ -263,7 +272,7 @@ if ($action === 'lyrics') {
     $base = 'https://lrclib.net/api';
     $result = null;
 
-    // Try the exact match first, LRCLIB wants artist, track, album, duration.
+    // LRCLIB exact matches need artist, track, album and duration.
     if ($artist !== '' && $duration > 0) {
         $q = http_build_query([
             'artist_name' => $artist,
@@ -278,7 +287,6 @@ if ($action === 'lyrics') {
         }
     }
 
-    // Otherwise search loosely and take the first hit that has synced lyrics.
     if ($result === null) {
         $q = http_build_query(['track_name' => $title, 'artist_name' => $artist]);
         [$res, $code] = $fetch("$base/search?$q");

@@ -1,9 +1,11 @@
-// Groups load together, one group after the other. there is only one real
-// order left, cubism4 needs PIXI and the Cubism core first, so this stays two
-// deep instead of putting seventeen files in a row.
+// Groups load together, one group after the other. there is only
+// one real order left, cubism4 needs PIXI and the Cubism core
+// first, so this stays two deep instead of putting seventeen
+// files in a row.
 //
-// Classic scripts only. a module needs type="module", and s.async = false
-// doesn't order it against these anyway, so app.js imports live2d.js itself.
+// Classic scripts only. a module needs type="module", and s.async
+// = false doesn't order it against these anyway, so app.js
+// imports live2d.js itself.
 
 window.loadScripts = function (groups) {
   const load = (src) => new Promise((resolve, reject) => {

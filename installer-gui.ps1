@@ -9,12 +9,14 @@ if ([Environment]::OSVersion.Platform -ne [PlatformID]::Win32NT) {
     throw 'The Jun OS graphical installer can only run on Windows.'
 }
 
-# when this file is compiled with tools/build-installer-exe.ps1 the host process
-# is JunSetup.exe, NOT powershell.exe. so MainModule is useless for "give me a
-# shell to run install.ps1 in" - it would relaunch the installer inside itself.
-# resolve the real powershell.exe off SystemRoot instead. Sysnative is the
-# door a 32 bit process uses to reach the 64 bit System32, and it only exists
-# for such a process, so try it first and fall back.
+# when this file is compiled with tools/build-installer-exe.ps1
+# the host process is JunSetup.exe, NOT powershell.exe. so
+# MainModule is useless for "give me a shell to run install.ps1
+# in" - it would relaunch the installer inside itself. resolve
+# the real powershell.exe off SystemRoot instead. Sysnative is
+# the door a 32 bit process uses to reach the 64 bit System32,
+# and it only exists for such a process, so try it first and fall
+# back.
 $script:PowerShellExe = @(
     (Join-Path $env:SystemRoot 'Sysnative\WindowsPowerShell\v1.0\powershell.exe'),
     (Join-Path $env:SystemRoot 'System32\WindowsPowerShell\v1.0\powershell.exe')
@@ -23,14 +25,16 @@ if (-not $script:PowerShellExe) { $script:PowerShellExe = 'powershell.exe' }
 
 $script:IsCompiled = $PSCommandPath -and $PSCommandPath.EndsWith('.exe', 'OrdinalIgnoreCase')
 
-# tools/build-installer-exe.ps1 rewrites the next line, and ONLY that line, to
-# base64 of install.ps1. leave the marker comment and the exact assignment
-# shape alone or the build stops embedding and says nothing about it.
+# tools/build-installer-exe.ps1 rewrites the next line, and ONLY
+# that line, to base64 of install.ps1. leave the marker comment
+# and the exact assignment shape alone or the build stops
+# embedding and says nothing about it.
 $script:EmbeddedInstaller = '' # JUN_EMBEDDED_INSTALLER
 
-# install.ps1 git clones the repo itself, so the exe doesn't have to carry one.
-# embedding that single script is the whole difference between "double click"
-# and "download the repo first".
+# install.ps1 git clones the repo itself, so the exe doesn't have
+# to carry one. embedding that single script is the whole
+# difference between "double click" and "download the repo
+# first".
 function Resolve-InstallerScript {
     if (-not $script:EmbeddedInstaller) {
         $beside = Join-Path $PSScriptRoot 'install.ps1'
@@ -49,9 +53,10 @@ $script:tempInstaller = $null
 
 if ([Threading.Thread]::CurrentThread.GetApartmentState() -ne [Threading.ApartmentState]::STA) {
     if (-not $PSCommandPath) { throw 'Run installer-gui.ps1 from a file so it can start in STA mode.' }
-    # a compiled build can't relaunch itself here, it would just spawn another
-    # non-STA copy forever. ps2exe -STA is what makes this branch unreachable,
-    # so an exe landing in it means the build dropped the flag.
+    # a compiled build can't relaunch itself here, it would just
+    # spawn another non-STA copy forever. ps2exe -STA is what makes
+    # this branch unreachable, so an exe landing in it means the
+    # build dropped the flag.
     if ($script:IsCompiled) { throw 'This build was compiled without -STA. Rebuild with tools/build-installer-exe.ps1.' }
     $restart = [Diagnostics.ProcessStartInfo]::new()
     $restart.FileName = $script:PowerShellExe
@@ -67,7 +72,8 @@ Add-Type -AssemblyName PresentationCore
 Add-Type -AssemblyName WindowsBase
 Add-Type -AssemblyName System.Windows.Forms
 
-# Process output callbacks run without a PowerShell runspace; WPF drains this queue on its dispatcher thread.
+# process output callbacks have no PowerShell runspace. WPF
+# drains this queue on its dispatcher thread instead.
 if (-not ('InstallerProcessOutput' -as [type])) {
     Add-Type -TypeDefinition @'
 using System.Collections.Concurrent;
@@ -558,7 +564,7 @@ public sealed class InstallerProcessOutput
                         <TextBlock x:Name="ReviewText" TextWrapping="Wrap" FontFamily="Consolas" LineHeight="24" />
                     </Border>
                     <CheckBox x:Name="DependencyAgreement" Margin="0,18,0,0">
-                        <TextBlock Text="Install missing machine-wide prerequisites with winget. These may include Git, Ollama or llama.cpp, Python, and the Microsoft Visual C++ runtime." TextWrapping="Wrap" MaxWidth="690" />
+                        <TextBlock Text="Install missing machine-wide prerequisites. Git, llama.cpp, Python and the Microsoft Visual C++ runtime come through winget, Ollama straight from ollama.com." TextWrapping="Wrap" MaxWidth="690" />
                     </CheckBox>
                     <TextBlock Text="Everything else stays inside the selected Jun folder and can be removed with uninstall.ps1." TextWrapping="Wrap" Foreground="#8D95A5" FontSize="12" Margin="22,8,0,0" />
                 </StackPanel>
@@ -1007,9 +1013,10 @@ function Start-Installation {
     $info = [Diagnostics.ProcessStartInfo]::new()
     $info.FileName = $script:PowerShellExe
     $info.Arguments = "-NoProfile -ExecutionPolicy Bypass -File `"$installer`""
-    # NOT $PSScriptRoot: a compiled build can sit on a read only stick or in
-    # Downloads, and install.ps1 writes next to its working dir. the parent of
-    # the chosen folder is the one place we already know is writable.
+    # NOT $PSScriptRoot: a compiled build can sit on a read only
+    # stick or in Downloads, and install.ps1 writes next to its
+    # working dir. the parent of the chosen folder is the one place
+    # we already know is writable.
     $info.WorkingDirectory = $installParent
     $info.UseShellExecute = $false
     $info.CreateNoWindow = $true

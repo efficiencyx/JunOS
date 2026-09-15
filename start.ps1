@@ -41,8 +41,9 @@ function Ok([string]$msg)      { Write-Host "    ${OK}✓${R} ${MUTED}${msg}${R}
 function Note([string]$msg)    { Write-Host "    ${DIM}ℹ ${msg}${R}" }
 function Warn_([string]$msg)   { Write-Host "    ${WARN}⚠${R} ${WARN}${msg}${R}" }
 function Fail_([string]$msg)   { Write-Host "    ${DANGER}✗${R} ${DANGER}${msg}${R}" }
-# UUIDs, NOT indices. nvidia-smi enumerates by PCI bus order while CUDA sorts
-# by speed, so the same index means different cards to the two of them. great.
+# UUIDs, NOT indices. nvidia-smi enumerates by PCI bus order
+# while CUDA sorts by speed, so the same index means different
+# cards to the two of them. great.
 function Get-GpuOrder {
     if (-not (Get-Command nvidia-smi -ErrorAction SilentlyContinue)) { return $null }
     $rows = & nvidia-smi --query-gpu=memory.total,uuid --format=csv,noheader,nounits 2>$null
@@ -83,8 +84,8 @@ $LogDir   = Join-Path $Runtime 'logs'
 $PidFile  = Join-Path $Runtime 'pids.json'
 $StateDir = Join-Path $Runtime 'state'
 
-# read KEY=VALUE pairs in as env vars, but ONLY when they aren't set already,
-# so you can still override one for a single run.
+# read KEY=VALUE pairs in as env vars, but ONLY when they aren't
+# set already, so you can still override one for a single run.
 if (Test-Path .env) {
     foreach ($line in Get-Content .env) {
         if ($line -match '^\s*([A-Za-z_][A-Za-z0-9_]*)\s*=\s*(.*)$') {
@@ -97,20 +98,34 @@ if (Test-Path .env) {
             }
         }
     }
+    # the header php shows the tts sidecar. install.ps1 writes
+    # one, but a .env from before that has no line at all, and
+    # the sidecar survives across runs so a per-run value would
+    # lock php out of it on the second start. same rule as
+    # start.sh, only when the line is MISSING.
+    if (-not (Get-Content .env | Where-Object { $_ -match '^SIDECAR_SECRET=' })) {
+        $bytes = [byte[]]::new(32)
+        [Security.Cryptography.RandomNumberGenerator]::Create().GetBytes($bytes)
+        $env:SIDECAR_SECRET = ($bytes | ForEach-Object { $_.ToString('x2') }) -join ''
+        Add-Content .env "SIDECAR_SECRET=$env:SIDECAR_SECRET"
+    }
+}
+$SidecarSecret = if ($env:SIDECAR_SECRET) { $env:SIDECAR_SECRET } else { '' }
 }
 
 $Port      = if ($env:JUN_PORT) { $env:JUN_PORT } else { '8080' }
 $OllamaUrl = if ($env:OLLAMA_URL) { $env:OLLAMA_URL } else { 'http://127.0.0.1:11434' }
-# SiteUrl stays loopback whatever we bind to. it is what the health probe
-# polls, what the browser opens and what CORS_ORIGIN gets, and all three of
+# SiteUrl stays loopback whatever we bind to. it is what the
+# health probe polls and what the browser opens, and both of
 # those are this machine talking to itself.
 $SiteUrl   = "http://127.0.0.1:$Port"
 $BindAddr  = if ($env:BIND_ADDR) { $env:BIND_ADDR.Trim() } else { '127.0.0.1' }
 $LanHosts  = @()
 
-# this box's own addresses on the home network. skips the virtual adapters
-# Hyper-V, WSL and Docker Desktop leave lying around, those aren't reachable
-# from a phone and naming them just widens the Host allowlist for nothing.
+# this box's own addresses on the home network. skips the virtual
+# adapters Hyper-V, WSL and Docker Desktop leave lying around,
+# those aren't reachable from a phone and naming them just widens
+# the Host allowlist for nothing.
 function Get-PrivateIPv4 {
     try {
         @(Get-NetIPAddress -AddressFamily IPv4 -ErrorAction Stop |
@@ -128,10 +143,10 @@ function Test-Elevated {
     } catch { return $false }
 }
 
-# binding to 0.0.0.0 is only half of it on windows. the firewall drops the
-# inbound connection before php ever sees it, so the phone just hangs with no
-# error anywhere. Private profile ONLY - this must not follow you onto cafe
-# wifi. delete it with:
+# binding to 0.0.0.0 is only half of it on windows. the firewall
+# drops the inbound connection before php ever sees it, so the
+# phone just hangs with no error anywhere. Private profile ONLY -
+# this must not follow you onto cafe wifi. delete it with:
 #   Remove-NetFirewallRule -DisplayName "Jun OS (<port>)"
 function Confirm-FirewallRule([string]$port) {
     $ruleName = "Jun OS ($port)"
@@ -163,9 +178,10 @@ function Confirm-FirewallRule([string]$port) {
 }
 
 if ($Action -eq 'start' -and $BindAddr -notin @('127.0.0.1', 'localhost', '::1')) {
-    # bare metal has no TLS at all - no nginx, no certs, php -S speaks plain
-    # HTTP and nothing else. so this is the same refusal the docker path makes,
-    # except here there is no TLS_MODE=on to offer as the way out.
+    # bare metal has no TLS at all - no nginx, no certs, php -S
+    # speaks plain HTTP and nothing else. so this is the same refusal
+    # the docker path makes, except here there is no TLS_MODE=on to
+    # offer as the way out.
     if ($env:OMEGA_ALLOW_INSECURE_PUBLIC_HTTP -ne '1') {
         Fail_ "refusing to serve login and chat over plain HTTP on $BindAddr."
         Note 'bare metal has no TLS. set OMEGA_ALLOW_INSECURE_PUBLIC_HTTP=1 in .env if your'
@@ -174,10 +190,11 @@ if ($Action -eq 'start' -and $BindAddr -notin @('127.0.0.1', 'localhost', '::1')
     }
     Warn_ 'OMEGA_ALLOW_INSECURE_PUBLIC_HTTP=1 - passwords, sessions and chats are not encrypted.'
     $LanHosts = @(Get-PrivateIPv4)
-    # php's built-in server is single-worker on windows (PHP_CLI_SERVER_WORKERS
-    # is a unix-only knob), so the phone and the desktop are not two users, they
-    # are one queue. whoever asks second waits out the first reply's whole
-    # stream. docker doesn't have this problem, php-fpm forks.
+    # php's built-in server is single-worker on windows
+    # (PHP_CLI_SERVER_WORKERS is a unix-only knob), so the phone and
+    # the desktop are not two users, they are one queue. whoever asks
+    # second waits out the first reply's whole stream. docker doesn't
+    # have this problem, php-fpm forks.
     Note 'one request at a time on windows - a second device waits for the first reply to finish'
     Confirm-FirewallRule $Port
 }
@@ -193,8 +210,9 @@ if (-not $GpuDevices -or $GpuDevices -eq 'auto') {
 } elseif ($GpuDevices -eq 'all') {
     $GpuDevices = ''
 }
-# an empty CUDA_VISIBLE_DEVICES means NO GPUs, not all of them, so only set it
-# when we actually have a list. the model servers pick it up from here.
+# an empty CUDA_VISIBLE_DEVICES means NO GPUs, not all of them,
+# so only set it when we actually have a list. the model servers
+# pick it up from here.
 if ($GpuDevices) { $env:CUDA_VISIBLE_DEVICES = $GpuDevices }
 $TensorParallel = $env:TENSOR_PARALLEL -match '^(on|1|true|yes)$'
 
@@ -354,12 +372,13 @@ function Start-Tracked([string]$name, [string]$exe, [string[]]$exeArgs) {
     return $p
 }
 
-# if an Ollama server is already up (the desktop app autostarts one) just use
-# it. otherwise launch `ollama serve` ourselves, with the model store inside
-# the install folder so the weights go away with it on uninstall.
+# if an Ollama server is already up (the desktop app autostarts
+# one) just use it. otherwise launch `ollama serve` ourselves,
+# with the model store inside the install folder so the weights
+# go away with it on uninstall.
 if ($Provider -eq 'ollama') {
 if (-not (Get-Command ollama -ErrorAction SilentlyContinue)) {
-    throw 'ollama is not installed. Run install.ps1 first (it installs Ollama via winget).'
+    throw 'ollama is not installed. Run install.ps1 first (it installs Ollama for you).'
 }
 
 $ownOllama = $false
@@ -367,15 +386,16 @@ if (-not (Test-Http "$OllamaUrl/api/tags")) {
     Step 'start ollama serve'
     $env:OLLAMA_HOST   = '127.0.0.1:11434'
     $env:OLLAMA_MODELS = Join-Path $Runtime 'ollama-models'
-    # memory caps, same reasoning as the docker setup. one slot, two models,
-    # 8-bit KV cache. needs flash attention, falls back to f16 elsewhere.
+    # one slot, two models. the KV cache, memory of the prompt
+    # already read, uses 8 bits. needs flash attention, falls
+    # back to f16 elsewhere.
     if (-not $env:OLLAMA_NUM_PARALLEL)      { $env:OLLAMA_NUM_PARALLEL = '1' }
     if (-not $env:OLLAMA_MAX_LOADED_MODELS) { $env:OLLAMA_MAX_LOADED_MODELS = '2' }
     if (-not $env:OLLAMA_KEEP_ALIVE)        { $env:OLLAMA_KEEP_ALIVE = '5m' }
     if (-not $env:OLLAMA_FLASH_ATTENTION)   { $env:OLLAMA_FLASH_ATTENTION = '1' }
     if (-not $env:OLLAMA_KV_CACHE_TYPE)     { $env:OLLAMA_KV_CACHE_TYPE = 'q8_0' }
-    # Ollama has no real tensor parallelism. spreading the layers is as close
-    # as it gets.
+    # Ollama has no real tensor parallelism. spreading the layers is
+    # as close as it gets.
     if ($TensorParallel -and -not $env:OLLAMA_SCHED_SPREAD) { $env:OLLAMA_SCHED_SPREAD = '1' }
     Start-Tracked 'ollama' 'ollama' @('serve') | Out-Null
     $ownOllama = $true
@@ -414,9 +434,10 @@ if ($env:OLLAMA_MODELS_TO_PULL) {
     }
 }
 
-# pre-warm. an empty-prompt generate makes ollama load the chat model NOW, so
-# the first real message doesn't eat the cold-load cost. fire and forget, the
-# short timeout aborts OUR wait, not the server-side load.
+# pre-warm. an empty-prompt generate makes ollama load the chat
+# model NOW, so the first real message doesn't eat the cold-load
+# cost. fire and forget, the short timeout aborts OUR wait, not
+# the server-side load.
 if ($chatModel -and $Provider -eq 'ollama') {
     Step "pre-warm $chatModel"
     Note 'loading model in the background'
@@ -427,9 +448,10 @@ if ($chatModel -and $Provider -eq 'ollama') {
 }
 }
 
-# only when AI_PROVIDER=llamacpp and LLAMACPP_URL points at this machine. a
-# remote/custom URL means the user runs their own server. weights cache under
-# runtime\llama-cache so they go away with the folder on uninstall.
+# only when AI_PROVIDER=llamacpp and LLAMACPP_URL points at this
+# machine. a remote/custom URL means the user runs their own
+# server. weights cache under runtime\llama-cache so they go away
+# with the folder on uninstall.
 if ($Provider -eq 'llamacpp' -and $LlamacppUrl -match '://(127\.0\.0\.1|localhost)\b') {
     if (Test-Http "$LlamacppUrl/health") {
         Ok "using already-running llama-server at $LlamacppUrl"
@@ -445,18 +467,20 @@ if ($Provider -eq 'llamacpp' -and $LlamacppUrl -match '://(127\.0\.0\.1|localhos
         $env:LLAMA_CACHE = Join-Path $Runtime 'llama-cache'
         $llamaArgs = @('-hf', $hfRef, '--host', '127.0.0.1', '--port', $LlamaPort, '-c', '16384', '--jinja')
         if ($TensorParallel) { $llamaArgs += @('-sm', 'row') }
-        # Gemma 4's multi-token prediction. the assistant model guesses the
-        # next few tokens, the real model checks them all in one pass, and the
-        # ones it got right came almost free. LLAMACPP_MTP holds the drafter's
-        # HF repo, the first run downloads that one too.
+        # Gemma 4's multi-token prediction. the assistant model guesses
+        # the next few tokens, the real model checks them all in one
+        # pass, and the ones it got right came almost free. LLAMACPP_MTP
+        # holds the drafter's HF repo, the first run downloads that one
+        # too.
         if ($env:LLAMACPP_MTP) {
             $nMax = if ($env:LLAMACPP_MTP_N_MAX) { $env:LLAMACPP_MTP_N_MAX } else { '4' }
             $llamaArgs += @('--spec-type', 'draft-mtp', '-hfd', $env:LLAMACPP_MTP, '--spec-draft-n-max', $nMax)
         }
         $llamaProc = Start-Tracked 'llamacpp' 'llama-server' $llamaArgs
 
-        # generous deadline, the first boot downloads the GGUF before /health
-        # goes green. a dead process fails fast instead of waiting it out.
+        # generous deadline, the first boot downloads the GGUF before
+        # /health goes green. a dead process fails fast instead of
+        # waiting it out.
         $deadline = (Get-Date).AddMinutes(15)
         while (-not (Test-Http "$LlamacppUrl/health")) {
             if ($llamaProc.HasExited) { throw "llama-server exited (code $($llamaProc.ExitCode)) - see runtime\logs\llamacpp.err.log" }
@@ -479,7 +503,7 @@ if (-not $voiceOff -and (Test-Path $ttsPython)) {
         Note 'first run downloads voice models'
         $env:TTS_HOST    = '127.0.0.1'
         $env:TTS_PORT    = '8001'
-        $env:CORS_ORIGIN = $SiteUrl
+        $env:SIDECAR_SECRET = $SidecarSecret
         $env:HF_HOME     = Join-Path $Runtime 'hf-cache'
         Start-Tracked 'tts' $ttsPython @((Join-Path $PSScriptRoot 'tts\server.py')) | Out-Null
     }
@@ -497,9 +521,10 @@ if (-not (Test-Path $phpExe)) {
 $old = Get-TrackedProcess $oldPids 'php'
 if ($old) { Stop-Process -Id $old.Id -Force -ErrorAction SilentlyContinue }
 
-# sanity-check php.exe before launching it hidden. a missing VC++ runtime
-# kills it with NO visible error (NTSTATUS 0xC0000135 = missing DLL).
-# run through cmd so PHP warnings on stderr can't trip ErrorActionPreference.
+# sanity-check php.exe before launching it hidden. a missing VC++
+# runtime kills it with NO visible error (NTSTATUS 0xC0000135 =
+# missing DLL). run through cmd so PHP warnings on stderr can't
+# trip ErrorActionPreference.
 cmd /c "`"$phpExe`" -v >nul 2>&1"
 if ($LASTEXITCODE -ne 0) {
     if ($LASTEXITCODE -eq -1073741515) {
@@ -514,14 +539,16 @@ $env:AI_PROVIDER            = $Provider
 $env:OLLAMA_URL             = $OllamaUrl
 $env:LLAMACPP_URL           = $LlamacppUrl
 $env:TTS_URL                = 'http://127.0.0.1:8001'
-# one sidecar process serves both roles here, unlike docker where karaoke gets
-# its own (GPU-capable) container.
+$env:SIDECAR_SECRET         = $SidecarSecret
+# one sidecar process serves both roles here, unlike docker where
+# karaoke gets its own (GPU-capable) container.
 $env:KARAOKE_URL            = 'http://127.0.0.1:8001'
 $env:OMEGA_STATE_DIR        = $StateDir
-# php-router.php refuses any Host that isn't in here with a 421, so a phone
-# opening http://192.168.1.42:8080 needs that exact address listed. filled in
-# from this machine's own private addresses, plus OMEGA_EXTRA_HOSTS for what we
-# can't guess (an mDNS name, a tailscale address).
+# php-router.php refuses any Host that isn't in here with a 421,
+# so a phone opening http://192.168.1.42:8080 needs that exact
+# address listed. filled in from this machine's own private
+# addresses, plus OMEGA_EXTRA_HOSTS for what we can't guess (an
+# mDNS name, a tailscale address).
 $env:OMEGA_ALLOWED_HOSTS    = (@('127.0.0.1', 'localhost', '::1') + $LanHosts +
     @($env:OMEGA_EXTRA_HOSTS -split '[,\s]+' | Where-Object { $_ })) -join ','
 $env:OMEGA_ALLOWED_ORIGINS  = $SiteUrl
@@ -531,9 +558,10 @@ if ($LASTEXITCODE -ne 0) { throw 'database migration failed' }
 $oldMemory = Get-TrackedProcess $oldPids 'memory'
 if ($oldMemory) { Stop-Process -Id $oldMemory.Id -Force -ErrorAction SilentlyContinue }
 Start-Tracked 'memory' $phpExe @((Join-Path $PSScriptRoot 'webapp\api\consolidation-worker.php')) | Out-Null
-# PHP honors this on unix ONLY. on windows the built-in server stays
-# single-worker, so requests made while a chat reply is streaming (TTS, say)
-# just queue until it finishes. fine for a single local user.
+# PHP honors this on unix ONLY. on windows the built-in server
+# stays single-worker, so requests made while a chat reply is
+# streaming (TTS, say) just queue until it finishes. fine for a
+# single local user.
 $env:PHP_CLI_SERVER_WORKERS = '8'
 $phpProc = Start-Tracked 'php' $phpExe @(
     '-S', "${BindAddr}:$Port",

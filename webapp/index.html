@@ -298,7 +298,6 @@ html, body {
   100% { transform: scale(2.4);  opacity: 0; }
 }
 
-/* boot, age gate and auth panels all use this animation. */
 @keyframes bootCardIn {
   from { opacity: 0; transform: translateY(12px) scale(.98); }
   to   { opacity: 1; transform: none; }
@@ -604,9 +603,10 @@ html[data-pre-auth] #app { visibility: hidden; }
 }
 </style>
 
-<!-- Fetched during parse but applied by boot-gate.js: the CSP forbids the
-     usual media="print" onload= trick, and blocking on the full sheet would
-     cost a round trip the auth screen does not need. -->
+<!-- Fetched during parse but applied by boot-gate.js: the CSP
+   forbids the usual media="print" onload= trick, and blocking on
+   the full sheet would cost a round trip the auth screen does not
+   need. -->
 <link rel="preload" as="style" href="styles.css?v=3">
 <link rel="preload" as="style" href="trip-loader.css?v=2">
 <noscript><link rel="stylesheet" href="styles.css?v=3"></noscript>
@@ -624,7 +624,7 @@ html[data-pre-auth] #app { visibility: hidden; }
 <script defer src="js/history.js?v=2"></script>
 <script defer src="js/boot-fx.js?v=2"></script>
 <script defer src="js/memory-graph.js?v=2"></script>
-<script type="module" src="js/app.js?v=9"></script>
+<script type="module" src="js/app.js?v=10"></script>
 </head>
 <body>
 

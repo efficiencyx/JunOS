@@ -1,22 +1,25 @@
 #!/usr/bin/env python3
-"""Recover webapp/assets from the game's Unity data files.
+"""rebuild webapp/assets straight from the game install.
 
-Rebuilds everything the webapp needs straight from the game install
-(no intermediate dumps required):
+no intermediate dumps. these are the files the webapp needs:
 
   interaction_model.moc3        CubismMoc blob in resources.assets
-  interaction_model.model3.json generated (moc + the three atlases)
-  texture_00/01/02.png          base atlases, resolved through each
-                                drawable's CubismRenderer main texture
-  variants/*.png                clothing variants: alpha-composite of the
-                                layer textures listed in each item's
-                                PackedTexturesContainer, plus the four
-                                standalone logo textures
-  variants/game_items.json      every packed item layer and ColorIndex
-  variants/hair/**              separately colorable native hair strands
-  variants/limbs/**             per-drawable crops of the packed variant
-                                textures (Experimental limbs + High-Tech
-                                skin), with mapping.json for outfit.js
+  interaction_model.model3.json generated moc + three atlases
+  texture_00/01/02.png          base atlases, resolved through
+                               each drawable's CubismRenderer
+                               main texture
+  variants/*.png               clothing variants: alpha-composite
+                               of layer textures listed in each
+                               item's PackedTexturesContainer,
+                               plus four standalone logo textures
+  variants/game_items.json     every packed item layer and
+                               ColorIndex
+  variants/hair/**             separately colorable native hair
+                               strands
+  variants/limbs/**            per-drawable crops of packed variant
+                               textures (Experimental limbs +
+                               High-Tech skin), with mapping.json
+                               for outfit.js
 
 Usage:
   python3 tools/recover_assets.py [--game DIR] [--out DIR]
@@ -38,8 +41,9 @@ from PIL import Image
 import UnityPy
 
 REPO = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-# linux and windows builds ship identical unity data. the folder is named
-# factorial-omega-<platform>-64 either way and holds this marker directory.
+# linux and windows builds ship identical unity data. the folder
+# is named factorial-omega-<platform>-64 either way and holds
+# this marker directory.
 GAME_GLOB = "factorial-omega-*-64"
 GAME_MARKER = "My Dystopian Robot Girlfriend_Data"
 DEFAULT_OUT = os.path.join(REPO, "webapp", "assets")
@@ -265,9 +269,8 @@ def parse_container(raw):
     return name, sections
 
 
-# UnityPy 1.10 renamed NamedObject.name to m_Name. android is
-# pinned to 1.7.43, the last build without UnityPyBoost, so this
-# file has to handle BOTH.
+# UnityPy 1.10 renamed NamedObject.name to m_Name. keep both
+# shapes working for older recovery environments.
 def obj_name(obj):
     name = getattr(obj, "m_Name", None)
     return name if name is not None else getattr(obj, "name", None)
@@ -288,6 +291,36 @@ def safe_component(value):
     clean = re.sub(r"[^a-z0-9]+", "_", value.lower()).strip("_") or "item"
     digest = hashlib.sha1(value.encode()).hexdigest()[:8]
     return f"{clean[:72]}_{digest}"
+
+
+# drawable names go into output filenames as-is (outfit.js keys
+# on them, so they can't be rewritten). the real ones are plain
+# [A-Za-z0-9_-]. anything else came out of a doctored archive
+# and would walk out of the output dir, so refuse it.
+DRAWABLE_NAME = re.compile(r"[A-Za-z0-9_\-]{1,120}")
+WINDOWS_RESERVED = {"con", "prn", "aux", "nul"} | {
+    f"{d}{n}" for d in ("com", "lpt") for n in range(1, 10)}
+
+
+def checked_name(value):
+    if not DRAWABLE_NAME.fullmatch(value) or value.lower() in WINDOWS_RESERVED:
+        raise ValueError(f"unsafe drawable name {value!r}")
+    return value
+
+
+# the rect comes straight out of the serialized container, so a
+# doctored archive can put anything in it. Pillow's crop takes
+# the box on trust, and up to 12.2 a box that overflows int is a
+# heap write (CVE-2026-59199). android is stuck on 11.0.0 (no
+# chaquopy wheel past it), so the bounds get checked HERE, before
+# any Pillow call, on every platform.
+def crop_box(img, rect):
+    x, y, w, h = rect
+    width, height = img.size
+    if w <= 0 or h <= 0 or x < 0 or y < 0 or x + w > width or y + h > height:
+        raise ValueError(f"crop {rect} outside {width}x{height} texture")
+    # unity rectangles start at the BOTTOM left
+    return (x, height - y - h, x + w, height - y)
 
 
 class Recovery:
@@ -339,6 +372,9 @@ class Recovery:
 
     def save(self, img, rel):
         path = os.path.join(self.out, rel)
+        root = os.path.realpath(self.out)
+        if os.path.commonpath([root, os.path.realpath(path)]) != root:
+            raise ValueError(f"refusing to write outside the output dir: {rel}")
         os.makedirs(os.path.dirname(path), exist_ok=True)
         img.save(path, "PNG")
         print("  wrote", rel)
@@ -513,11 +549,9 @@ class Recovery:
             for cname in cnames:
                 for sec in self.containers[cname]:
                     img = self.tex_by_path(sec["path"]).convert("RGBA")
-                    _, H = img.size
                     for en, entry in sec["entries"].items():
-                        x, y, w, h = entry["rect"]
-                        # unity rectangles start at the BOTTOM left
-                        crop = img.crop((x, H - y - h, x + w, H - y))
+                        checked_name(en)
+                        crop = img.crop(crop_box(img, entry["rect"]))
                         # an all transparent crop is the item saying "get rid
                         # of this drawable" - hightechHypercamoSkin_interact
                         # does it to barcode and lines, her chest barcode and
@@ -544,10 +578,9 @@ class Recovery:
             mapping[key] = []
             for sec_index, sec in enumerate(self.containers[cname]):
                 img = self.tex_by_path(sec["path"]).convert("RGBA")
-                _, height = img.size
                 for drawable, entry in sec["entries"].items():
-                    x, y, w, h = entry["rect"]
-                    crop = img.crop((x, height - y - h, x + w, height - y))
+                    checked_name(drawable)
+                    crop = img.crop(crop_box(img, entry["rect"]))
                     rel = f"variants/hair/{key}/{drawable}.png"
                     self.save(crop, rel)
                     mapping[key].append({

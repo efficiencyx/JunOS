@@ -34,9 +34,14 @@ case 'signup':
 
     $db = db();
 
-    // empty users table = fresh install, so the very first signup skips the key.
-    // otherwise whoever just ran install.sh has to go dig the generated key out
-    // of .env to make their own account, on their own box. no.
+    // empty users table = fresh install, so the very first signup
+    // skips the key. otherwise whoever just ran install.sh has to go
+    // dig the generated key out of .env to make their own account, on
+    // their own box. no.
+    // BEGIN IMMEDIATE takes the write lock before the check, so two
+    // signups racing on a fresh box can't both see an empty table
+    // and both walk past the key. fail() exits, sqlite rolls back.
+    $db->exec('BEGIN IMMEDIATE');
     $regKey = env_str('OMEGA_REGISTRATION_KEY');
     if ($regKey !== '' && !no_users_yet()) {
         $given = (string)($body['registration_key'] ?? '');
@@ -52,6 +57,7 @@ case 'signup':
     $db->prepare('INSERT INTO users (email, password_hash, role, adult_consent_at, created_at) VALUES (?, ?, ?, ?, ?)')
        ->execute([$email, password_hash($password, PASSWORD_DEFAULT), 'user', $now, $now]);
     $userId = (int)$db->lastInsertId();
+    $db->exec('COMMIT');
 
     start_session($userId);
     echo json_encode(['user' => ['id' => $userId, 'email' => $email, 'role' => 'user']]);

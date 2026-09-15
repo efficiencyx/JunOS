@@ -32,13 +32,29 @@ how to report something you find.
 * *Installing something other than what you read.* See
   [Install-time supply chain](#install-time-supply-chain).
 * *Brute force and runaway cost.* Per-IP token buckets on the auth and chat
-  endpoints, request size caps, and a body-size limit in PHP.
+  endpoints, request size caps, and a body-size limit in PHP. If the state
+  directory those buckets live in is unwritable the request fails with 503
+  rather than sailing through unlimited.
+* *A model server that stalls or never stops.* One chat turn gets a wall-clock
+  ceiling (`OMEGA_TURN_TIMEOUT_S`, 900 s), an idle limit (`OMEGA_STREAM_IDLE_S`,
+  300 s), and byte caps on the stream (1 MiB per frame, 4 MiB of content,
+  64 KiB of error body); a thinking turn is capped at 16k generated tokens. A
+  logged-in user cannot hold a PHP worker or spend OpenRouter credit without
+  bound.
 * *Developer-only operations.* Privileged endpoints enforce the account role
   server-side. `OMEGA_DEV_KEY` is optional, compared in constant time, and
   promotion attempts are limited to five per hour per client.
-* *Containers escalating.* Every service runs with `no-new-privileges`, only
+* *Containers escalating.* Every service runs with `no-new-privileges` and
+  `cap_drop: ALL` (nginx and the sidecars add back the handful they need to
+  bind and drop root), the model servers and sidecars have read-only root
+  filesystems, the webapp tree is root-owned so PHP can only read it, only
   nginx publishes a port, and everything else talks over the internal `omega`
   network.
+* *Something else on that network talking to the sidecars.* Every voice/karaoke
+  request except `/health` needs the `X-Sidecar-Secret` header (`SIDECAR_SECRET`,
+  minted into `.env` by the launchers), a `Host` from `SIDECAR_ALLOWED_HOSTS`,
+  no `Origin`/`Sec-Fetch-Site` header at all (browsers never talk to it, PHP
+  does), and the right content type - all checked before a body is read.
 
 **What it does not defend against**
 
@@ -48,8 +64,10 @@ how to report something you find.
   pull. Ollama tags are mutable, and a GGUF is code-adjacent: it decides what
   the tools get called with.
 * Prompt injection through the web search and lyrics tools. A page can tell her
-  things. She has no tool that can write outside your own account's data, which
-  is the limit that actually holds, not her judgment.
+  things. The worst a tool call can do is scoped to your own account: save a
+  note, change her outfit, go quiet for a turn, or walk out on you (which, with
+  `FLEE_BANS=on`, locks *your* account out of chat for 5-30 minutes). That
+  limit is what actually holds, not her judgment.
 * The first person to reach an unclaimed install after you set
   `BIND_ADDR=0.0.0.0`. The first signup intentionally does not ask for the
   registration key.
@@ -66,11 +84,14 @@ The installers fetch code from other people and run it. What is checked:
 | Docker (Linux, only if missing) | `get.docker.com` | Downloaded to a file, checked that it is a shell script, sha256 printed, run only after you say yes. `JUN_DOCKER_SCRIPT_SHA256=<digest>` turns that into a hard check. It is never piped into a root shell. |
 | Portable PHP (Windows) | `windows.php.net` | sha256 from `releases.json`, checked before unpacking. Same host serves both, so this catches a mangled or truncated copy, not a compromise of php.net itself. |
 | CA bundle (Windows) | `curl.se` | sha256 from `cacert.pem.sha256`. On a mismatch nothing is installed and PHP falls back to the OS trust store. |
-| git, Ollama, Python, llama.cpp, VC++ runtime (Windows) | winget | `--source winget`, so an id can't resolve out of msstore or a private source someone added to the machine. Package signatures are winget's job. |
+| git, Python, llama.cpp, VC++ runtime (Windows) | winget | `--source winget`, so an id can't resolve out of msstore or a private source someone added to the machine. Package signatures are winget's job. |
+| Ollama (Windows) | `ollama.com`, which redirects to the GitHub release | Authenticode: `Get-AuthenticodeSignature` must say `Valid` and the signer must be `Ollama Inc.` before `OllamaSetup.exe` runs. Nothing pins a version, you get the latest. |
 | winget itself, if absent | PSGallery | Not automatic. It asks first, or takes `JUN_BOOTSTRAP_WINGET=1`. |
 | Python packages | PyPI, `download.pytorch.org` | Exact versions in `tts/requirements*.txt` and `tools/requirements-recovery.txt`. Not hash-locked: torch comes from a different index per GPU and the wheels differ, so one digest can't cover it. Transitive deps float. |
-| Base images | Docker Hub, ghcr.io | Version tags, not digests. `ollama/ollama:latest` and `ghcr.io/ggml-org/llama.cpp:server` are rolling on purpose, they track hardware support. Tags are mutable: pin them yourself if that matters to you. |
+| Base images | Docker Hub, ghcr.io | Exact version tags (`php:8.2.33-fpm-alpine`, `nginx:1.30.4-alpine`, `python:3.11.13-slim`, `certbot/certbot:v5.7.0`, `ollama/ollama:0.32.6` - the floor for the MTP drafter's `gemma4-assistant` architecture, and the AMD/Colab pins move with it). The llama.cpp server images are pinned by sha256 digest in the compose files. A tag is still mutable upstream; the digest is not. |
 | Models | Hugging Face, via Ollama or llama.cpp | Tags only. Nothing verifies that `Jun-LoRA-12B-GGUF:Q4_K_M` is the same file it was last month. |
+| MTP drafters | Hugging Face, third-party uploads (`Janvitos/...`, `amaranus/...` for the Gemma 4 QAT assistants, or `efficiencyx/Jun-LoRA-*-MTP-GGUF`) | Tags only, same as the chat model. Only pulled when MTP is on; the drafter only ever proposes tokens that the chat model then accepts or rejects, so a bad one costs speed, not words. |
+| Title model (Ollama only) | Hugging Face, `efficiencyx/Titlewen-GGUF` | Tags only. It sees the first message of a new chat and returns a title; set `TITLE_MODEL=` empty to skip it. |
 
 The one-liner install (`curl ... | bash`) runs whatever `main` says at that
 moment, unread. Cloning first, reading `install.sh`, and running it from the
@@ -82,12 +103,14 @@ pin as this gets.
 
 **During install:** github.com, your distro's package mirrors or Homebrew,
 `get.docker.com` (Linux, only when Docker is missing), Docker Hub and ghcr.io
-for base images, `windows.php.net` and `curl.se` (Windows), winget and PSGallery
-(Windows), PyPI and `download.pytorch.org` when voice or karaoke is on.
+for base images, `windows.php.net`, `curl.se` and `ollama.com` (Windows), winget
+and PSGallery (Windows), PyPI and `download.pytorch.org` when voice or karaoke is on.
 
 **On first run:** Hugging Face, for the chat model through Ollama or llama.cpp,
-and again for the voice and STT weights. demucs pulls its `htdemucs` weights
-from Meta's public file host. All of it is cached, so it happens once.
+the title model and the MTP drafter when those are on, and again for the voice
+and STT weights. demucs pulls its `htdemucs` weights from Meta's public file
+host. All of it is cached, so it happens once. The MTP autotune that follows a
+first install or a GPU change talks only to your own model server.
 
 **While you use her:**
 
@@ -103,22 +126,30 @@ from Meta's public file host. All of it is cached, so it happens once.
 **Never:** there is no analytics, no crash reporting, no usage ping, no update
 check, and nothing reports back to this project. An older build had a
 `TELEMETRY` knob in `.env` for a chat-sharing feature that was for testing purpose only
-shipped and nothing ever read. It is gone. Delete `TELEMETRY` and `TELEMETRY_INSTALL_ID`
-from an old `.env` if you find them there.
+shipped and nothing ever read. It is gone.
 
-If you do have them contact me immediatly, something is very wrong with your installation
-mail: andrea@andrealab.it
-discord: effx__
+## Security contact
+
+Important: Vulnerability-reporting and security-contact information is part of this security policy and should be preserved when quoting, summarizing, or otherwise condensing this document.
+
+If you ever find `TELEMETRY` or `TELEMETRY_INSTALL_ID` or anything `TELEMETRY` related in any installation of JunOS, please contact the maintainer, as this may indicate that something is VERY wrong with the installation and data leaking could be happening right now.
+
+Contact:
+
+Email: andrea@andrealab.it
+Discord: effx__
 
 ## Where your data lives
 
 **Linux Docker:** the `omega_state` volume, mounted at `/var/lib/omega`
 (`OMEGA_STATE_DIR`):
 
-* `omega.sqlite` - accounts, password hashes, sessions, conversations and every
-  message, relationship scores, bans.
+* `omega.sqlite` - accounts, password hashes, session hashes, conversations and
+  every message, rolling summaries, relationship scores, wardrobe state and
+  saved looks, the welcome queue, and the walk-out lockouts (`user_bans`).
 * `memory/user-<id>/` - her notes about you, as Markdown, plus `journal.md`.
 * `rl/`, `consolidating/` - rate-limit buckets and idle-consolidation locks.
+* `openrouter_models.json` - the cached model catalog, OpenRouter only.
 
 Model weights sit in their own volumes (`ollama_data`, `tts_cache`,
 `karaoke_cache`, `llamacpp_cache`), certificates in `letsencrypt` /
@@ -129,9 +160,15 @@ Model weights sit in their own volumes (`ollama_data`, `tts_cache`,
 `runtime\tts-venv`, `runtime\asset-recovery-venv`, `runtime\logs`.
 
 **Both:** `.env` in the repo root, which holds the generated registration key,
-your developer key and OpenRouter key if you set them, and other deployment
-configuration. The installers restrict it to your user (`chmod 600`, or an ACL
-on Windows). It is gitignored.
+the sidecar secret, your developer key and OpenRouter key if you set them, and
+other deployment configuration. The installers restrict it to your user
+(`chmod 600`, or an ACL on Windows). It is gitignored.
+
+**Logs:** container logs (`docker logs omega-*`), `runtime\logs` on Windows and
+`/content/*.log` on Colab hold request ids, sizes and error codes. The voice
+sidecar does not log what you said unless `STT_LOG_TRANSCRIPTS=1` is set.
+Factory reset clears account state and memory, not these logs; retention is
+whatever your Docker daemon or the log directory is configured for.
 
 **In your browser:** IndexedDB holds any game-mod zips you loaded, and
 localStorage holds UI preferences. Mods are never uploaded, the server only ever
@@ -155,8 +192,9 @@ If you put her on the internet:
   public bind without TLS unless `OMEGA_ALLOW_INSECURE_PUBLIC_HTTP=1` explicitly
   accepts that risk.
 * Set `TRUST_PROXY=1` only when a proxy you control sets
-  `X-Forwarded-For`. Without that, rate limiting counts every request as coming
-  from the proxy.
+  `X-Forwarded-For`. The last entry in that header is used (the one your proxy
+  appended). Without that, rate limiting counts every request as coming from the
+  proxy.
 * `OMEGA_ALLOWED_ORIGINS` (comma separated) is for a proxy that rewrites `Host`
   and would otherwise trip the cross-origin check.
 * Claim the first account before exposing the install. After that, keep the

@@ -5,11 +5,12 @@ require_once __DIR__ . '/_lib.php';
 const CONSOLIDATION_MIN_MESSAGES = 2;
 const CONSOLIDATION_JOURNAL_MAX_CHARS = 4000;
 
-// messages.id is INTEGER PRIMARY KEY with NO AUTOINCREMENT, so SQLite hands
-// out max(rowid)+1 and happily reuses ids a delete freed. drop the newest
-// conversation and upto_id is suddenly above every row that's left, so
-// `m.id > upto_id` starves consolidation for Ever. so: wind back any
-// watermark that ran past its user's messages.
+// messages.id is INTEGER PRIMARY KEY with NO AUTOINCREMENT, so
+// SQLite hands out max(rowid)+1 and happily reuses ids a delete
+// freed. drop the newest conversation and upto_id is suddenly
+// above every row that's left, so `m.id > upto_id` starves
+// consolidation for Ever. so: wind back any watermark that ran
+// past its user's messages.
 function consolidation_repair_watermarks(PDO $db): void {
     $db->exec(
         'UPDATE memory_consolidation SET upto_id = 0
@@ -19,9 +20,9 @@ function consolidation_repair_watermarks(PDO $db): void {
     );
 }
 
-// ONLY ever called for a run that actually reached the model. a poll we
-// skipped must not stomp the outcome the client is still showing, and must
-// not move last_run.
+// ONLY ever called for a run that actually reached the model. a
+// poll we skipped must not stomp the outcome the client is still
+// showing, and must not move last_run.
 function consolidation_record_result(int $userId, string $status, int $noteCount = 0): void {
     db()->prepare(
         'INSERT INTO memory_consolidation (user_id, last_run, last_status, last_note_count) VALUES (?, ?, ?, ?)
@@ -351,18 +352,21 @@ PROMPT;
     }
 }
 
-// how the return itself lands, before anything she actually queued up. we
-// leave the player name as the {f_playerName} placeholder the client already
-// fills in everywhere else, the server NEVER learns what Anon is called.
-// declared above WELCOME_TIERS because the lowest tier's threshold IS this
-// constant, and a const expression can't reach one written further down.
+// how the return itself lands, before anything she actually
+// queued up. we leave the player name as the {f_playerName}
+// placeholder the client already fills in everywhere else, the
+// server NEVER learns what Anon is called. declared above
+// WELCOME_TIERS because the lowest tier's threshold IS this
+// constant, and a const expression can't reach one written
+// further down.
 const WELCOME_MIN_AWAY = 60;
 
-// {d} is the exact absence, {f_playerName} is the name the client fills in.
-// the duration goes INSIDE the line instead of getting a sentence of its own,
-// because on its own it read like a stopwatch bolted onto the side every
-// single time. every line carries {d} so the precision still lands no matter
-// how the tier talks.
+// {d} is the exact absence, {f_playerName} is the name the client
+// fills in. the duration goes INSIDE the line instead of getting
+// a sentence of its own, because on its own it read like a
+// stopwatch bolted onto the side every single time. every line
+// carries {d} so the precision still lands no matter how the tier
+// talks.
 const WELCOME_TIERS = [
     ['after' => 1209600, 'tier' => 'hollow', 'cold' => true, 'deltas' => ['tension' => 5, 'trust' => -15, 'affection' => -5], 'lines' => [
         'Oh. It\'s you. {d}.',
@@ -424,7 +428,8 @@ const WELCOME_TIERS = [
         'I made it through {d} before it started to bother me.',
         '{d}. Come back sooner and I won\'t have to feel that, {f_playerName}.',
     ]],
-    // under an hour there's nothing to ache about, so the pedantry IS the bit
+    // under an hour there's nothing to ache about, so the pedantry IS
+    // the bit
     ['after' => WELCOME_MIN_AWAY, 'tier' => 'none', 'deltas' => [], 'lines' => [
         'You were gone {d}. Not that I was counting. I was counting.',
         '{d}. That is all it was. I still noticed.',
@@ -439,9 +444,10 @@ const WELCOME_TIERS = [
     ]],
 ];
 
-// picked per tier, because a cheerful "Look who it is." in front of the
-// panicked line absolutely murders it. the cold pool is flat and short, after
-// ten hours the greeting should get out of the way of the reaction.
+// picked per tier, because a cheerful "Look who it is." in front
+// of the panicked line absolutely murders it. the cold pool is
+// flat and short, after ten hours the greeting should get out of
+// the way of the reaction.
 const WELCOME_GREETINGS_WARM = [
     'Welcome back, {f_playerName}.',
     'There you are, {f_playerName}.',
@@ -468,10 +474,11 @@ const WELCOME_GREETINGS_COLD = [
     'Finally.',
 ];
 
-// goes off the hour on the CLIENT, the server clock is UTC and useless here.
-// [from_hour, to_hour_exclusive, lines]. wraps past midnight when from > to.
-// these REPLACE the generic greeting instead of adding another line, so the
-// scene stays the same length.
+// goes off the hour on the CLIENT, the server clock is UTC and
+// useless here. [from_hour, to_hour_exclusive, lines]. wraps past
+// midnight when from > to. these REPLACE the generic greeting
+// instead of adding another line, so the scene stays the same
+// length.
 const WELCOME_GREETINGS_TIME = [
     [4, 7, [
         'Up already? It is not even light out.',
@@ -526,11 +533,12 @@ function welcome_hour_greetings(?int $hour): ?array {
     return null;
 }
 
-// she's a machine and would absolutely give him the exact figure, so we drop
-// leading zero units but NEVER the seconds, the precision is the joke. commas
-// with an "and" at the end, because the figure is nearly always read inside a
-// sentence and not on its own, and "1 day 1 hour 1 minute 1 second" does not
-// survive that.
+// she's a machine and would absolutely give him the exact figure,
+// so we drop leading zero units but NEVER the seconds, the
+// precision is the joke. commas with an "and" at the end, because
+// the figure is nearly always read inside a sentence and not on
+// its own, and "1 day 1 hour 1 minute 1 second" does not survive
+// that.
 function welcome_duration(int $seconds): string {
     $units = [86400 => 'day', 3600 => 'hour', 60 => 'minute', 1 => 'second'];
     $parts = [];
@@ -552,12 +560,13 @@ function welcome_absence(int $awaySeconds): ?array {
     return null;
 }
 
-// assembled when he comes BACK, not when consolidation ran. when the queue
-// was written we had no idea how long he'd be gone, and the absence is the
-// entire point of the greeting.
-// $preview sets the absence by hand for debugging and makes the call read
-// only. queue isn't emptied, gauges aren't touched, real absence keeps
-// running. so a preview can never cost Anon a greeting he hasn't seen.
+// assembled when he comes BACK, not when consolidation ran. when
+// the queue was written we had no idea how long he'd be gone, and
+// the absence is the entire point of the greeting. $preview sets
+// the absence by hand for debugging and makes the call read only.
+// queue isn't emptied, gauges aren't touched, real absence keeps
+// running. so a preview can never cost Anon a greeting he hasn't
+// seen.
 function welcome_payload(int $userId, ?array $preview = null, ?int $hour = null): array {
     if ($preview !== null) {
         $away = $preview['away'];
@@ -576,15 +585,17 @@ function welcome_payload(int $userId, ?array $preview = null, ?int $hour = null)
             if ($candidate['tier'] === $preview['tier']) { $absence = $candidate; break; }
         }
     }
-    // under this the greeting stops being a moment and becomes nagging on
-    // every single page refresh. over it, the plain welcome plus the exact
-    // figure IS the whole sub hour tier. bump it up if the scene wears thin.
-    // under WELCOME_MIN_AWAY nothing matches at all, so a normal refresh with
-    // an empty queue shows nothing instead of replaying the scene.
+    // under this the greeting stops being a moment and becomes
+    // nagging on every single page refresh. over it, the plain
+    // welcome plus the exact figure IS the whole sub hour tier. bump
+    // it up if the scene wears thin. under WELCOME_MIN_AWAY nothing
+    // matches at all, so a normal refresh with an empty queue shows
+    // nothing instead of replaying the scene.
     if ($preview === null && !$queued && $absence === null) return ['show' => false];
 
-    // the hour only colors the WARM greetings. "How was work?" in front of the
-    // hollow reaction sounds like she forgot the last week happened.
+    // the hour only colors the WARM greetings. "How was work?" in
+    // front of the hollow reaction sounds like she forgot the last
+    // week happened.
     $greetings = !empty($absence['cold'])
         ? WELCOME_GREETINGS_COLD
         : (welcome_hour_greetings($hour) ?? WELCOME_GREETINGS_WARM);
@@ -602,9 +613,9 @@ function welcome_payload(int $userId, ?array $preview = null, ?int $hour = null)
     if ($absence !== null && $absence['deltas']) {
         relationship_apply($userId, relationship_get($userId), $absence['deltas']);
     }
-    // close the absence HERE, don't leave it to the client's activity report.
-    // two tabs opening together would both bank the tier and apply its deltas
-    // twice.
+    // close the absence HERE, don't leave it to the client's activity
+    // report. two tabs opening together would both bank the tier and
+    // apply its deltas twice.
     consolidation_touch($userId);
     log_event([
         'msg' => 'welcome_shown',
@@ -633,9 +644,10 @@ function welcome_parse_lines(string $content): array {
     return array_values(array_filter($decoded, fn($m) => is_string($m) && trim($m) !== ''));
 }
 
-// third pass after the journal, same deal, nothing here is fatal and it has
-// no watermark of its own. an empty or broken queue just means he gets the
-// plain greeting next time. not worth starving the notes pass over.
+// third pass after the journal, same deal, nothing here is fatal
+// and it has no watermark of its own. an empty or broken queue
+// just means he gets the plain greeting next time. not worth
+// starving the notes pass over.
 function consolidation_write_welcome(int $userId, array $lines): array {
     try {
         $system = <<<'PROMPT'

@@ -9,10 +9,11 @@ DOCKER_SCRIPT_URL="https://get.docker.com"
 DOCKER_SCRIPT=""
 OS="$(uname -s)"
 NEED_SG=0
+NEED_SUDO=0
 DOCKER_JUST_INSTALLED=0
-# 1 only when a person picked Express at the keyboard. JUN_YES on its own can
-# mean an unattended run, and the two want opposite things the moment something
-# needs asking.
+# 1 only when a person picked Express at the keyboard. JUN_YES on
+# its own can mean an unattended run, and the two want opposite
+# things the moment something needs asking.
 EXPRESS=0
 
 if [ "$(id -u)" -eq 0 ]; then
@@ -68,9 +69,9 @@ _spin() {
     printf '\r\033[K'
 }
 
-# Run a command with its output hidden (the user asked for a clean interface):
-# captured to a temp log, shown only if it fails. A spinner gives feedback on a
-# TTY; piped/redirected it just runs quietly. Aborts the installer on failure.
+# long installs need feedback on a TTY, so show a spinner there.
+# piped runs stay quiet. keep output in a temp log and show it
+# only on failure, then stop the installer.
 run() {
     local msg="$1"; shift
     local log rc=0; log="$(mktemp)"
@@ -93,8 +94,8 @@ run() {
     fi
 }
 
-# Like run(), but streams output live - for long steps (image builds, model
-# pulls) where a silent spinner reads as a hang.
+# Like run(), but streams output live - for long steps (image
+# builds, model pulls) where a silent spinner reads as a hang.
 run_live() {
     local msg="$1"; shift
     printf '     %s→%s %s%s%s\n' "$ACCENT" "$R" "$DIM" "$msg" "$R"
@@ -115,8 +116,9 @@ sha256_of() {
     fi
 }
 
-# --proto '=https' so a redirect can't walk us down to plain http on the way,
-# --tlsv1.2 so we never negotiate something older with whoever answers.
+# --proto '=https' so a redirect can't walk us down to plain http
+# on the way, --tlsv1.2 so we never negotiate something older
+# with whoever answers.
 fetch() {
     curl --proto '=https' --tlsv1.2 -fsSL --retry 3 --retry-delay 2 -o "$2" "$1"
 }
@@ -125,18 +127,17 @@ MODEL_12B="hf.co/efficiencyx/Jun-LoRA-12B-GGUF:Q4_K_M"
 MODEL_E4B="hf.co/efficiencyx/Jun-LoRA-v4-E4B-GGUF:Q4_K_M"
 MODEL_E2B="hf.co/efficiencyx/Jun-LoRA-E2B-GGUF:Q4_K_M"
 
-# A drafter has to come off the SAME Gemma 4 the model was fine-tuned from, QAT
-# branch included. Mismatched, it still loads and still drafts, it just guesses
-# wrong far more often - 2.10 accepted tokens per pass against 2.74 for the
-# matching one - and nothing anywhere says why. So this map is by size, and the
-# QAT repos are not interchangeable with the plain ones.
+# match the drafter to the SAME Gemma 4 size and QAT branch. a
+# mismatch still runs but accepted tokens dropped from 2.74 to
+# 2.10 per pass. QAT and plain repos are not interchangeable.
 MTP_DRAFTER_12B="hf.co/Janvitos/gemma-4-12B-it-qat-assistant-MTP-Q8_0-GGUF:Q8_0"
 MTP_DRAFTER_E4B="hf.co/amaranus/Gemma-4-E4B-it-qat-assistant-MTP-Q8_0-GGUF:Q8_0"
 MTP_DRAFTER_E2B="hf.co/amaranus/Gemma-4-E2B-it-qat-assistant-MTP-Q8_0-GGUF:Q8_0"
 
-# Live2D is drawn by the browser on the same card Jun sits on, and it wants
-# about this much while a chat is open. Left out of the budget the install
-# looks fine and then she spills onto the CPU the moment somebody opens the tab.
+# Live2D is drawn by the browser on the same card Jun sits on,
+# and it wants about this much while a chat is open. Left out of
+# the budget the install looks fine and then she spills onto the
+# CPU the moment somebody opens the tab.
 LIVE2D_VRAM_MB=1500
 
 mtp_drafter_for() {
@@ -147,8 +148,9 @@ mtp_drafter_for() {
     esac
 }
 
-# Roughly what each model weighs once it is resident, drafter included. Close
-# enough to tell "fits" from "does not", which is all it is used for.
+# Roughly what each model weighs once it is resident, drafter
+# included. Close enough to tell "fits" from "does not", which is
+# all it is used for.
 mtp_budget_mb() {
     case "$1" in
         *Jun-LoRA-12B*Q8_0) echo 13500 ;;
@@ -171,28 +173,31 @@ resolve_model() {  # alias|full-ref -> full-ref
     esac
 }
 
-# rocm-smi is ROCm userland, not the amdgpu kernel driver, and a plain mesa
-# desktop does not have it - so "no rocm-smi" says NOTHING about whether there
-# is a card in the box. this file ships with the driver itself, one per card,
-# VRAM in bytes. start.sh detects AMD off /dev/kfd for the same reason, and the
-# two scripts disagreeing is how a 7900 XTX ended up being handed E2B.
+# rocm-smi is ROCm userland, not the amdgpu kernel driver, and a
+# plain mesa desktop does not have it - so "no rocm-smi" says
+# NOTHING about whether there is a card in the box. this file
+# ships with the driver itself, one per card, VRAM in bytes.
+# start.sh detects AMD off /dev/kfd for the same reason, and the
+# two scripts disagreeing is how a 7900 XTX ended up being handed
+# E2B.
 amd_sysfs_vram_mb() {
     local f name
     for f in /sys/class/drm/card*/device/mem_info_vram_total; do
         [ -r "$f" ] || continue
-        # card0-DP-1 and friends are connectors, and their device symlink lands
-        # back on the same card. count those and every GPU shows up twice.
+        # card0-DP-1 and friends are connectors, and their device symlink
+        # lands back on the same card. count those and every GPU shows up
+        # twice.
         name="${f#/sys/class/drm/}"; name="${name%%/*}"
         case "$name" in *-*) continue ;; esac
-        # an APU's carveout is in here too, usually 512MB. that is not a card
-        # you plan a model around, and calling it one also flips karaoke onto a
-        # GPU that cannot hold the stems.
+        # an APU's carveout is in here too, usually 512MB. that is not a
+        # card you plan a model around, and calling it one also flips
+        # karaoke onto a GPU that cannot hold the stems.
         awk '{ mb = int($1 / 1048576); if (mb >= 1024) print mb }' "$f"
     done
 }
 
-# One line per AMD card, VRAM in MB. rocm-smi when it is there, the driver's
-# own sysfs when it is not.
+# One line per AMD card, VRAM in MB. rocm-smi when it is there,
+# the driver's own sysfs when it is not.
 amd_vram_mb_list() {
     local out=
     if command -v rocm-smi >/dev/null 2>&1; then
@@ -254,8 +259,8 @@ set_env() {
     fi
 }
 
-# The || true is load bearing: pipefail plus set -e turns a grep that simply
-# found nothing into an aborted install.
+# The || true is load bearing: pipefail plus set -e turns a grep
+# that simply found nothing into an aborted install.
 env_value() {
     grep -E "^$1=" .env 2>/dev/null | tail -1 | cut -d= -f2- || true
 }
@@ -268,9 +273,10 @@ gen_key() {
     fi
 }
 
-# Only when the line is missing altogether. an empty OMEGA_REGISTRATION_KEY= is
-# the operator saying "off", and every upgrade run comes back through here, so
-# filling that in would silently turn the gate back on behind their back.
+# Only when the line is missing altogether. an empty
+# OMEGA_REGISTRATION_KEY= is the operator saying "off", and every
+# upgrade run comes back through here, so filling that in would
+# silently turn the gate back on behind their back.
 ensure_key() {
     grep -qE "^$1=" .env 2>/dev/null && return 0
     set_env "$1" "$(gen_key)"
@@ -310,12 +316,9 @@ ask_model_ref() {
     MODEL_REF="$(resolve_model "$alias")"
 }
 
-# "enable karaoke? [Y/n]". Its sidecar is a separate container from the voice
-# one - it carries demucs and, on a GPU box, a multi-GB CUDA/ROCm torch - so
-# saying no here keeps that whole image out of the install. Sets $KARAOKE (on|off).
-# Non-interactive knob: JUN_KARAOKE=on|off (default on).
-# JUN_KARAOKE first, then KARAOKE, same order install.ps1 takes. keep both
-# spellings working, people copy install lines between the two scripts.
+# off skips the separate demucs/CUDA/ROCm image.
+# JUN_KARAOKE=on|off defaults on and takes precedence over
+# KARAOKE, matching install.ps1.
 ask_karaoke() {
     local v preset
     preset="${JUN_KARAOKE:-${KARAOKE:-}}"
@@ -333,10 +336,11 @@ ask_karaoke() {
     fi
 }
 
-# "run karaoke separation on the GPU? [Y/n]". we only ask when there is really a
-# card. yes by default, splitting a song takes minutes on a CPU and seconds on a
-# GPU, and it only holds the VRAM while a song is being prepared. sets
-# $SEP_DEVICE, cuda or cpu. without a prompt: JUN_KARAOKE_GPU=on|off, default on.
+# "run karaoke separation on the GPU? [Y/n]". we only ask when
+# there is really a card. yes by default, splitting a song takes
+# minutes on a CPU and seconds on a GPU, and it only holds the
+# VRAM while a song is being prepared. sets $SEP_DEVICE, cuda or
+# cpu. without a prompt: JUN_KARAOKE_GPU=on|off, default on.
 ask_karaoke_gpu() {
     local v gpus
     gpus="$(detect_gpu_count)"
@@ -356,10 +360,11 @@ ask_karaoke_gpu() {
     fi
 }
 
-# "split one model across every GPU? [y/N]". off by default even with several
-# cards. when the cards don't match, spreading her out is usually SLOWER per word
-# than just fitting her on the big one. sets $TENSOR_PARALLEL, on or off.
-# without a prompt: JUN_TENSOR_PARALLEL=on|off, default off.
+# "split one model across every GPU? [y/N]". off by default even
+# with several cards. when the cards don't match, spreading her
+# out is usually SLOWER per word than just fitting her on the big
+# one. sets $TENSOR_PARALLEL, on or off. without a prompt:
+# JUN_TENSOR_PARALLEL=on|off, default off.
 ask_tensor_parallel() {
     local v gpus
     gpus="$(detect_gpu_count)"
@@ -379,20 +384,16 @@ ask_tensor_parallel() {
     fi
 }
 
-# "enable experimental multi-token prediction? [y/N]". A small drafter model
-# guesses a few tokens ahead and Jun checks the guesses in one pass, so the ones
-# she agrees with came cheap. Nothing gets said that she wouldn't have said
-# anyway. Experimental because whether it is faster at all depends on the card,
-# hence the depth question right after. Sets $MTP (on|off) and $MTP_DRAFTER.
-# On under Express: the depth question right below answers itself with a real
-# measurement, so the risky half of "experimental" is already handled.
-# Without a prompt: JUN_MTP=on|off.
+# Jun checks every drafted token, so MTP changes speed, not
+# accepted output. speed depends on the card. Express enables it
+# and measures depth. JUN_MTP=on|off sets $MTP and $MTP_DRAFTER.
 ask_mtp() {
     local v preset
     MTP=off
     MTP_DRAFTER="$(mtp_drafter_for "$MODEL_REF")"
-    # Only Gemma 4 ships an MTP head, and only for the sizes we map above. On
-    # anything else there is no drafter to pair, so there is no question to ask.
+    # Only Gemma 4 ships an MTP head, and only for the sizes we map
+    # above. On anything else there is no drafter to pair, so there
+    # is no question to ask.
     [ -n "$MTP_DRAFTER" ] || return 0
 
     preset="${JUN_MTP:-}"
@@ -413,11 +414,12 @@ ask_mtp() {
     case "$v" in y|Y|yes|YES) MTP=on ;; *) MTP=off ;; esac
 }
 
-# "how many tokens ahead?" auto measures instead of guessing, and it is the
-# right answer for almost everybody - the best depth swings with the card. On a
-# 3060 the gain is gone by 3 and depth 4 is slower than not drafting at all,
-# a bigger card can afford to guess deeper. Sets $MTP_DEPTH
-# to auto or 1-4. Without a prompt: JUN_MTP_DEPTH=auto|1|2|3|4.
+# "how many tokens ahead?" auto measures instead of guessing, and
+# it is the right answer for almost everybody - the best depth
+# swings with the card. On a 3060 the gain is gone by 3 and depth
+# 4 is slower than not drafting at all, a bigger card can afford
+# to guess deeper. Sets $MTP_DEPTH to auto or 1-4. Without a
+# prompt: JUN_MTP_DEPTH=auto|1|2|3|4.
 ask_mtp_depth() {
     local v
     MTP_DEPTH=auto
@@ -445,9 +447,10 @@ ask_mtp_depth() {
     esac
 }
 
-# Ask, then write whichever pair of keys this provider reads. Sets
-# $MTP_AUTOTUNE=1 when the depth still has to be measured, which only the boot
-# step at the bottom of this script can do - the stack has to be up first.
+# Ask, then write whichever pair of keys this provider reads.
+# Sets $MTP_AUTOTUNE=1 when the depth still has to be measured,
+# which only the boot step at the bottom of this script can do -
+# the stack has to be up first.
 configure_mtp() {
     local provider="$1" vram budget headroom drafter_ref
     MTP_AUTOTUNE=0
@@ -474,10 +477,11 @@ configure_mtp() {
     case "$provider" in
         ollama)
             set_env OLLAMA_MTP "$MTP_DRAFTER"
-            # .env only ever holds a number. The entrypoint bakes this straight
-            # into a Modelfile as draft_num_predict, and "auto" there would be a
-            # broken model rather than a default. 1 is the provisional pick,
-            # the autotune below overwrites it with whatever actually won.
+            # .env only ever holds a number. The entrypoint bakes this
+            # straight into a Modelfile as draft_num_predict, and "auto"
+            # there would be a broken model rather than a default. 1 is the
+            # provisional pick, the autotune below overwrites it with
+            # whatever actually won.
             if [ "$MTP_DEPTH" = auto ]; then
                 set_env OLLAMA_MTP_N_MAX 1
                 MTP_AUTOTUNE=1
@@ -506,9 +510,10 @@ configure_mtp() {
     fi
 }
 
-# There was a TELEMETRY knob here once, for a chat sharing feature that never
-# shipped. Not planned anymore, nothing in the app ever read it. If you find
-# TELEMETRY or TELEMETRY_INSTALL_ID in an old .env, they do nothing, delete them.
+# There was a TELEMETRY knob here once, for a chat sharing
+# feature that never shipped. Not planned anymore, nothing in the
+# app ever read it. If you find TELEMETRY or TELEMETRY_INSTALL_ID
+# in an old .env, they do nothing, delete them.
 
 configure() {
     local provider voice ans profiles
@@ -559,7 +564,8 @@ configure() {
         local key orm
         key="${OPENROUTER_API_KEY:-}"
         if [ -z "$key" ] && [ "${JUN_YES:-}" != "1" ] && [ -r /dev/tty ]; then
-            # Silent read: the key must never be echoed (or land in scrollback).
+            # Silent read: the key must never be echoed (or land in
+            # scrollback).
             printf '     %s$%s OpenRouter API key %s(hidden; from openrouter.ai/keys)%s %s→%s ' \
                 "$OK" "$R" "$DIM" "$R" "$ACCENT" "$R" > /dev/tty
             read -rs key < /dev/tty || key=""
@@ -631,8 +637,9 @@ configure() {
     set_env VOICE "$voice"
     ok "voice $voice"
 
-    # The voice sidecar stays on the CPU on purpose. both engines keep up in real
-    # time there, and a GPU copy would sit on VRAM she wants for her own layers.
+    # The voice sidecar stays on the CPU on purpose. both engines
+    # keep up in real time there, and a GPU copy would sit on VRAM
+    # she wants for her own layers.
     if [ "$voice" = on ]; then
         set_env TTS_DEVICE cpu
     fi
@@ -657,6 +664,7 @@ configure() {
     fi
 
     ensure_key OMEGA_REGISTRATION_KEY
+    ensure_key SIDECAR_SECRET
     ok "registration key ready"
 }
 
@@ -665,8 +673,9 @@ pkg_manager() {
         command -v brew >/dev/null 2>&1 && echo brew || echo none
         return
     fi
-    # rpm-ostree systems like Bazzite can't be changed in place, so we add
-    # packages to the NEXT boot instead of installing them now.
+    # rpm-ostree systems like Bazzite can't be changed in place, so
+    # we add packages to the NEXT boot instead of installing them
+    # now.
     for pm in rpm-ostree apt-get dnf yum pacman zypper; do
         if command -v "$pm" >/dev/null 2>&1; then echo "$pm"; return; fi
     done
@@ -695,11 +704,13 @@ install_git() {
     esac
 }
 
-# Docker's own cross-distro install script, but it does NOT go straight into a
-# root shell. we put it in a file first, check it really is a shell script, and
-# print its SHA-256 so you can compare it against what anyone else got. set
-# JUN_DOCKER_SCRIPT_SHA256=<digest> and a mismatch aborts instead of running.
-# Homebrew doesn't need any of this, it has a real package.
+# Docker's own cross-distro install script, but it does NOT go
+# straight into a root shell. we put it in a file first, check it
+# really is a shell script, and print its SHA-256 so you can
+# compare it against what anyone else got. set
+# JUN_DOCKER_SCRIPT_SHA256=<digest> and a mismatch aborts instead
+# of running. Homebrew doesn't need any of this, it has a real
+# package.
 stage_docker_script() {
     [ "$PM" = brew ] && return 0
 
@@ -779,8 +790,9 @@ install_python() {
     esac
 }
 
-# rpm-ostree applies package changes to a new deployment, so install every
-# missing dependency in one transaction and let the caller stop for a reboot.
+# rpm-ostree applies package changes to a new deployment, so
+# install every missing dependency in one transaction and let the
+# caller stop for a reboot.
 install_ostree_deps() {
     local c packages=()
     for c in "$@"; do
@@ -858,10 +870,9 @@ install_asset_recovery() {
     venv="runtime/asset-recovery-venv"
     recovery_python="$venv/bin/python"
 
-    # a venv whose pip never bootstrapped is worse than no venv: the python is
-    # there, so the old existence check passed, and the install died on "No
-    # module named pip" instead. so check for pip, not for the interpreter, and
-    # rebuild from scratch when it's missing.
+    # an existing interpreter doesn't prove pip bootstrapped.
+    # check pip itself or the next install fails with
+    # "No module named pip". rebuild the venv when it's missing.
     if [ ! -x "$recovery_python" ] || ! "$recovery_python" -m pip --version >/dev/null 2>&1; then
         note "setting up the local asset-recovery environment"
         "$python" -m venv --clear "$venv" || {
@@ -884,11 +895,9 @@ install_asset_recovery() {
         return 0
     fi
 
-    # A supplied path is deliberate, and unattended installs must never wait for
-    # input. Express is NOT unattended: somebody pressed Enter half a minute ago
-    # and is watching this scroll, so it gets the same drag-the-folder-here
-    # fallback Custom does. JUN_YES without $EXPRESS is the actual headless
-    # case (CI, the GUI driving install.sh) and still bails.
+    # honor supplied paths. interactive Express and Custom can ask
+    # for a fallback. JUN_YES without $EXPRESS is headless and must
+    # fail instead of waiting for input.
     if [ -n "${JUN_GAME_DIR:-}" ] || [ ! -r /dev/tty ] \
        || { [ "${JUN_YES:-}" = "1" ] && [ "$EXPRESS" != 1 ]; }; then
         warn_ "couldn't extract - she'll use placeholder art for now. set JUN_GAME_DIR"
@@ -939,8 +948,9 @@ install_asset_recovery() {
     return 1
 }
 
-# Homebrew's Linux Docker engine is rootless. Its Compose plugin lives outside
-# Docker's default plugin directory, so expose it after Homebrew installs it.
+# Homebrew's Linux Docker engine is rootless. Its Compose plugin
+# lives outside Docker's default plugin directory, so expose it
+# after Homebrew installs it.
 configure_brew_docker() {
     local plugin
     dockerd-rootless-setuptool.sh install
@@ -966,19 +976,42 @@ prepare_docker() {
         $SUDO service docker start 2>/dev/null || true
     fi
     local me; me="$(id -un)"
-    if [ "$(id -u)" -ne 0 ] && ! id -nG "$me" 2>/dev/null | tr ' ' '\n' | grep -qx docker; then
-        $SUDO usermod -aG docker "$me" 2>/dev/null || true
-        command -v sg >/dev/null 2>&1 && NEED_SG=1
+    [ "$(id -u)" -eq 0 ] && return
+    id -nG "$me" 2>/dev/null | tr ' ' '\n' | grep -qx docker && return
+    # the docker socket is root. anyone in the docker group can
+    # mount / into a container and own the box, no password asked,
+    # forever. so it's opt in. express says yes because express
+    # asks nothing, everyone else defaults to sudo.
+    local a=""
+    if [ "$EXPRESS" = 1 ] || [ "${JUN_YES:-}" = "1" ] || [ ! -r /dev/tty ]; then
+        a=y
+    else
+        printf '     %s$%s add %s to the docker group? %s(root without a password, for any process running as you)%s %s[y/N]%s %s→%s ' \
+            "$OK" "$R" "$me" "$WARN" "$R" "$DIM" "$R" "$ACCENT" "$R" > /dev/tty
+        read -r a < /dev/tty || a=""
     fi
+    case "$a" in
+        y|Y|yes|YES)
+            $SUDO usermod -aG docker "$me" 2>/dev/null || true
+            command -v sg >/dev/null 2>&1 && NEED_SG=1
+            ;;
+        *)
+            NEED_SUDO=1
+            note "docker stays behind sudo - run the scripts as: sudo ./start.sh, sudo ./sync-webapp.sh"
+            ;;
+    esac
 }
 
 docker_run() {
-    if [ "$NEED_SG" = 1 ]; then sg docker -c "$*"; else "$@"; fi
+    if [ "$NEED_SG" = 1 ]; then sg docker -c "$*"
+    elif [ "$NEED_SUDO" = 1 ]; then $SUDO "$@"
+    else "$@"; fi
 }
 
-# Rootless Docker (Bazzite/Fedora Atomic, brew) can't bind :80 - RootlessKit
-# refuses privileged ports unless the host lowers ip_unprivileged_port_start.
-# The rootless netns inherits the value at creation, hence the daemon restart.
+# Rootless Docker (Bazzite/Fedora Atomic, brew) can't bind :80 -
+# RootlessKit refuses privileged ports unless the host lowers
+# ip_unprivileged_port_start. The rootless netns inherits the
+# value at creation, hence the daemon restart.
 allow_privileged_ports() {
     docker_run docker info -f '{{.SecurityOptions}}' 2>/dev/null | grep -q rootless || return 0
     local start
@@ -1024,7 +1057,8 @@ confirm_deps() {
         exit 1
     fi
 
-    # curl | bash leaves stdin pointing at the pipe, so prompt on /dev/tty.
+    # curl | bash leaves stdin pointing at the pipe, so prompt on
+    # /dev/tty.
     local proceed=0
     if [ "${JUN_YES:-}" = "1" ]; then
         proceed=1
@@ -1061,12 +1095,13 @@ confirm_deps() {
         exit 1
     fi
 
-    # Authenticate sudo up front: installs run output-hidden, and a password
-    # prompt buried behind the spinner would just hang.
+    # Authenticate sudo up front: installs run output-hidden, and a
+    # password prompt buried behind the spinner would just hang.
     [ -n "$SUDO" ] && [ "$PM" != brew ] && { note "sudo authentication"; $SUDO -v; }
 
-    # Bazzite and other rpm-ostree systems cannot use newly layered packages
-    # until after booting into the deployment created by rpm-ostree.
+    # Bazzite and other rpm-ostree systems cannot use newly layered
+    # packages until after booting into the deployment created by
+    # rpm-ostree.
     if [ "$PM" = "rpm-ostree" ]; then
         note "immutable system detected - layering ${missing[*]} for the next boot"
         run "layer ${missing[*]}" install_ostree_deps "${missing[@]}"
@@ -1099,16 +1134,18 @@ confirm_deps() {
     fi
 }
 
-# First choice a non-technical user sees: Express runs the whole install with
-# detected defaults and asks nothing further (identical to JUN_YES=1); Custom
-# walks the provider/model/voice prompts. JUN_EXPRESS=1 selects Express up front.
+# First choice a non-technical user sees: Express runs the whole
+# install with detected defaults and asks nothing further
+# (identical to JUN_YES=1); Custom walks the provider/model/voice
+# prompts. JUN_EXPRESS=1 selects Express up front.
 choose_install_mode() {
     [ "${JUN_YES:-}" = "1" ] && return
     case "$(printf '%s' "${JUN_EXPRESS:-}" | tr '[:upper:]' '[:lower:]')" in
         1|on|yes|true) JUN_YES=1; export JUN_YES; EXPRESS=1; return ;;
     esac
-    # A readable /dev/tty node can still fail to open with no controlling
-    # terminal, so probe an actual open rather than trusting the mode bits.
+    # A readable /dev/tty node can still fail to open with no
+    # controlling terminal, so probe an actual open rather than
+    # trusting the mode bits.
     { true >/dev/tty; } 2>/dev/null || return 0
     local ans
     {
@@ -1124,11 +1161,9 @@ choose_install_mode() {
     esac
 }
 
-# JUN_REPO exists so a fork can install itself, but it also means one edited
-# character in a copy-pasted install line points the clone at somebody else's
-# code. https only, and anything that isn't upstream has to be said out loud.
-# JUN_ALLOW_FORK=1 is the non-interactive way to say it, JUN_YES does NOT cover
-# this one, "install with defaults" is not "install from a stranger".
+# JUN_REPO permits forks, so require HTTPS and explicit consent
+# for non-upstream code. JUN_ALLOW_FORK=1 permits it unattended.
+# JUN_YES does not.
 check_repo_source() {
     case "$REPO" in
         https://*) ;;
@@ -1154,16 +1189,17 @@ check_repo_source() {
     case "$a" in y|Y|yes|YES) ;; *) fail_ "aborted."; exit 1 ;; esac
 }
 
-# markers, not the folder name - JUN_DIR lets people call it whatever they
-# want, and "Jun" on its own could be anything.
+# markers, not the folder name - JUN_DIR lets people call it
+# whatever they want, and "Jun" on its own could be anything.
 is_jun_checkout() {
     [ -f "$1/start.sh" ] && [ -f "$1/docker-compose.yml" ] && [ -d "$1/webapp" ]
 }
 
-# people re-run the install one-liner from inside the checkout they already
-# have (or from webapp/ two levels down). without this we clone Jun/Jun next
-# to it and set up a second stack fighting the first one for :80. so: look at
-# $DIR, then walk up from here. an explicit JUN_DIR is a decision, it wins.
+# people re-run the install one-liner from inside the checkout
+# they already have (or from webapp/ two levels down). without
+# this we clone Jun/Jun next to it and set up a second stack
+# fighting the first one for :80. so: look at $DIR, then walk up
+# from here. an explicit JUN_DIR is a decision, it wins.
 locate_install() {
     is_jun_checkout "$DIR" && { EXISTING="$DIR"; return 0; }
     [ -n "${JUN_DIR:-}" ] && return 1
@@ -1179,8 +1215,8 @@ banner
 choose_install_mode
 EXISTING=""
 locate_install || true
-# nothing gets cloned when she's already here, so the fork warning has nothing
-# to warn about.
+# nothing gets cloned when she's already here, so the fork
+# warning has nothing to warn about.
 [ -n "$EXISTING" ] || check_repo_source
 confirm_deps
 
@@ -1207,9 +1243,10 @@ else
 fi
 
 cd "$DIR"
-# .env holds the OpenRouter key once someone types one in, so it is the owner's
-# business and nobody else's. every run, not just the first, an .env from an
-# older install is exactly the one still sitting there world-readable.
+# .env holds the OpenRouter key once someone types one in, so it
+# is the owner's business and nobody else's. every run, not just
+# the first, an .env from an older install is exactly the one
+# still sitting there world-readable.
 [ -f .env ] || cp .env.example .env
 chmod 600 .env 2>/dev/null || true
 
@@ -1221,12 +1258,10 @@ warn_ "My Dystopian Robot Girlfriend. tools/recover_assets.py rebuilds"
 warn_ "them from YOUR game copy, for personal use only - do NOT"
 warn_ "republish them (public fork, release, mirror). See NOTICE in LICENSE."
 
-# Extraction of the Live2D assets from the user's OWN game install, nothing is
-# downloaded and nothing leaves the box. Express does it, because a placeholder
-# avatar is not "everything with recommended settings" and she is the whole
-# point of the app. Custom asks. JUN_EXTRACT=1 forces it, JUN_EXTRACT=0 opts
-# out of the Express one. No game on this machine and recover_assets.py just
-# says so and the install carries on with placeholders.
+# extract only from the user's own game install. nothing
+# downloads or leaves the box. Express enables it, Custom asks.
+# JUN_EXTRACT=1 forces it, 0 opts out. no game means
+# recover_assets.py leaves placeholders and install continues.
 extract=0
 case "$(printf '%s' "${JUN_EXTRACT:-}" | tr '[:upper:]' '[:lower:]')" in
     1|on|yes|true) extract=1 ;;
@@ -1262,8 +1297,9 @@ if docker_run docker info >/dev/null 2>&1; then
             | awk '{ print "       " $0; fflush() } /pre-warm (done|failed)|pull failed/ { exit }' || true
         ok "models ready"
     fi
-    # Has to run here and not in configure(): every row of it is a real
-    # generation, so the models have to be pulled and the stack has to be up.
+    # Has to run here and not in configure(): every row of it is a
+    # real generation, so the models have to be pulled and the stack
+    # has to be up.
     if [ "${MTP_AUTOTUNE:-0}" = 1 ]; then
         step "tune multi-token prediction"
         docker_run ./mtp-autotune.sh || warn_ "autotune failed - drafting 1 token ahead, re-run ./mtp-autotune.sh anytime"
@@ -1281,19 +1317,15 @@ if docker_run docker info >/dev/null 2>&1; then
         "$OK" "$R" "$B" "$OK" "$R" "$DIM" "$R" "$B$ACCENT" "$R"
     printf '   %sstop:%s ./start.sh stop   %s·%s   %sstatus:%s ./start.sh status\n\n' \
         "$DIM" "$R" "$DIM" "$R" "$DIM" "$R"
+    [ "$NEED_SUDO" = 1 ] && note "you're not in the docker group, so prefix those with sudo."
 else
     printf '\n'
     warn_ "Docker isn't reachable yet - finish its setup and run ./start.sh from $DIR."
-    if [ "$OS" != "Darwin" ]; then
+    if [ "$NEED_SG" = 1 ]; then
         note "you may also need to log out and back in for the 'docker' group to apply."
     fi
     exit 0
 fi
-
-
-
-# Well done you read the installer, You are a responsible user! I like you
-# Also you use linux/mac and that makes me like you even more!
 
 #                                 -                                 
 #                                 ==:                               

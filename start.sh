@@ -16,9 +16,10 @@ detect_gpu() {
   fi
 }
 
-# Sort by VRAM so the biggest card ends up as device 0. it has to be UUIDs and
-# NOT indices, nvidia-smi counts cards in slot order while CUDA sorts them
-# fastest first, so index 1 means a different card to each of them.
+# Sort by VRAM so the biggest card ends up as device 0. it has to
+# be UUIDs and NOT indices, nvidia-smi counts cards in slot order
+# while CUDA sorts them fastest first, so index 1 means a
+# different card to each of them.
 nvidia_visible() {
   nvidia-smi --query-gpu=memory.total,uuid --format=csv,noheader,nounits 2>/dev/null \
     | sort -t, -k1 -nr | cut -d, -f2 | tr -d ' \r' | paste -sd, - || true
@@ -28,8 +29,9 @@ nvidia_count() {
   nvidia-smi --query-gpu=uuid --format=csv,noheader 2>/dev/null | grep -c . || true
 }
 
-# VRAM on the biggest card, in MiB. php has no GPU device of its own so this is
-# the ONLY way it finds out, see default_num_ctx() in api/providers.php.
+# VRAM on the biggest card, in MiB. php has no GPU device of its
+# own so this is the ONLY way it finds out, see default_num_ctx()
+# in api/providers.php.
 nvidia_vram_mb() {
   nvidia-smi --query-gpu=memory.total --format=csv,noheader,nounits 2>/dev/null \
     | sort -nr | head -n1 | tr -d ' \r' || true
@@ -73,11 +75,12 @@ gpu_signature() {
 }
 
 
-# The model servers sit behind compose profiles, `ollama` runs the Ollama one
-# and `llamacpp` the llama.cpp one. we MERGE with whatever is already set in the
-# shell, like COMPOSE_PROFILES=prod ./start.sh, and in .env, we never replace it,
-# then add what AI_PROVIDER implies. that way an old .env from before providers
-# existed still boots ollama.
+# The model servers sit behind compose profiles, `ollama` runs
+# the Ollama one and `llamacpp` the llama.cpp one. we MERGE with
+# whatever is already set in the shell, like
+# COMPOSE_PROFILES=prod ./start.sh, and in .env, we never replace
+# it, then add what AI_PROVIDER implies. that way an old .env
+# from before providers existed still boots ollama.
 env_get() { sed -n "s/^$1=//p" .env 2>/dev/null | tail -n1 || true; }
 add_profile() {
   case ",${profiles}," in *,"$1",*) ;; *) profiles="${profiles:+$profiles,}$1" ;; esac
@@ -141,9 +144,10 @@ case ",${profiles}," in
   *) echo "karaoke: off (set KARAOKE=on in .env to build its sidecar)" ;;
 esac
 
-# Compose publishes on BIND_ADDR, loopback unless somebody changed it. Say which
-# it is, out loud, every start. "it's only on my machine" is the kind of thing
-# people believe long after it stopped being true.
+# Compose publishes on BIND_ADDR, loopback unless somebody
+# changed it. Say which it is, out loud, every start. "it's only
+# on my machine" is the kind of thing people believe long after
+# it stopped being true.
 bind_addr="${BIND_ADDR:-$(env_get BIND_ADDR)}"
 bind_addr="${bind_addr:-127.0.0.1}"
 export BIND_ADDR="$bind_addr"
@@ -152,16 +156,35 @@ case "$bind_addr" in
   *) echo "listening on: $bind_addr - anything that can reach this box can open Jun" ;;
 esac
 
-# nginx and php both refuse a Host they don't know (444 and 421), so opening
-# the phone at http://192.168.1.42 needs that exact address in the allowlist.
-# the containers can't work it out themselves, all they see is the docker
-# bridge, so we read the host's own private v4 addresses here and hand them
-# down. only when BIND_ADDR is off loopback: on the default install nothing
-# outside this box can connect anyway, so widening the list buys nothing.
-# 10.*, 172.16-31.* and 192.168.* only, and never the docker bridges, or we'd
-# be naming addresses that aren't ours to answer for. DHCP moves these, so a
-# new lease means a restart. OMEGA_EXTRA_HOSTS stays for anything we can't
-# guess: an mDNS name, a tailscale address, whatever the proxy calls you.
+# install.sh and install.ps1 both write this on first run, but
+# cp .env.example .env && ./start.sh never went through either,
+# and that box has open signup until someone notices. same rule
+# as the installers, only when the line is MISSING. an empty
+# OMEGA_REGISTRATION_KEY= is the operator saying "off".
+if [ -f .env ] && ! grep -qE '^OMEGA_REGISTRATION_KEY=' .env; then
+  reg_key="$(openssl rand -hex 16 2>/dev/null || head -c16 /dev/urandom | od -An -tx1 | tr -d ' \n')"
+  printf 'OMEGA_REGISTRATION_KEY=%s\n' "$reg_key" >> .env
+  echo "registration key: $reg_key (written to .env, the first account skips it, everyone after needs it)"
+fi
+# same shape for the header php shows the tts/karaoke sidecars.
+# an empty SIDECAR_SECRET= is honoured too, the sidecar then runs
+# on its Host allowlist alone and warns about it at startup.
+if [ -f .env ] && ! grep -qE '^SIDECAR_SECRET=' .env; then
+  printf 'SIDECAR_SECRET=%s\n' "$(openssl rand -hex 32 2>/dev/null || head -c32 /dev/urandom | od -An -tx1 | tr -d ' \n')" >> .env
+fi
+
+# nginx and php both refuse a Host they don't know (444 and 421),
+# so opening the phone at http://192.168.1.42 needs that exact
+# address in the allowlist. the containers can't work it out
+# themselves, all they see is the docker bridge, so we read the
+# host's own private v4 addresses here and hand them down. only
+# when BIND_ADDR is off loopback: on the default install nothing
+# outside this box can connect anyway, so widening the list buys
+# nothing. 10.*, 172.16-31.* and 192.168.* only, and never the
+# docker bridges, or we'd be naming addresses that aren't ours to
+# answer for. DHCP moves these, so a new lease means a restart.
+# OMEGA_EXTRA_HOSTS stays for anything we can't guess: an mDNS
+# name, a tailscale address, whatever the proxy calls you.
 lan_hosts() {
   command -v ip >/dev/null 2>&1 || return 0
   ip -4 -o addr show scope global up 2>/dev/null | awk '
@@ -174,8 +197,9 @@ case "$bind_addr" in
   *)
     extra_hosts="${OMEGA_EXTRA_HOSTS:-$(env_get OMEGA_EXTRA_HOSTS)}"
     detected="$(lan_hosts | tr '\n' ' ')"
-    # commas out FIRST. php takes either, nginx's server_name only takes
-    # spaces and would happily register a host called "jun.local,".
+    # commas out FIRST. php takes either, nginx's server_name only
+    # takes spaces and would happily register a host called
+    # "jun.local,".
     extra_hosts="$(printf '%s %s' "$extra_hosts" "$detected" | tr ',' ' ' | tr -s ' ' | sed 's/^ //; s/ $//')"
     export OMEGA_EXTRA_HOSTS="$extra_hosts"
     [ -z "$detected" ] || echo "reachable as: $(printf '%s' "$detected" | sed 's/ $//')"
@@ -209,9 +233,10 @@ export TLS_MODE="${tls_mode:-off}"
 tts_device="${TTS_DEVICE:-$(env_get TTS_DEVICE)}"
 export TTS_DEVICE="${tts_device:-cpu}"
 
-# The GPU overlays build the karaoke sidecar with a CUDA or ROCm torch. when
-# separation is set to run on the CPU we pin the CPU index instead, so we don't
-# pull down a multi-GB wheel for hardware nobody asked to use.
+# The GPU overlays build the karaoke sidecar with a CUDA or ROCm
+# torch. when separation is set to run on the CPU we pin the CPU
+# index instead, so we don't pull down a multi-GB wheel for
+# hardware nobody asked to use.
 sep_device="${SEP_DEVICE:-$(env_get SEP_DEVICE)}"
 sep_device="${sep_device:-auto}"
 karaoke_torch_index="${KARAOKE_TORCH_INDEX:-$(env_get KARAOKE_TORCH_INDEX)}"
@@ -242,7 +267,8 @@ case "$gpu" in
     ;;
   amd)
     files+=(-f docker-compose.amd.yml)
-    # The container must join the host groups that own the GPU device nodes.
+    # The container must join the host groups that own the GPU device
+    # nodes.
     vgid="$(getent group video | cut -d: -f3 || true)"
     rgid="$(stat -c '%g' /dev/dri/renderD* 2>/dev/null | head -n1 || true)"
     [ -n "$rgid" ] || rgid="$(getent group render | cut -d: -f3 || true)"
@@ -252,8 +278,9 @@ case "$gpu" in
     ;;
 esac
 
-# A hand-set value always wins: probing reports the whole card, which is wrong
-# when something else on the machine permanently owns part of it.
+# A hand-set value always wins: probing reports the whole card,
+# which is wrong when something else on the machine permanently
+# owns part of it.
 vram_mb="${OMEGA_GPU_VRAM_MB:-$(env_get OMEGA_GPU_VRAM_MB)}"
 vram_mb="${vram_mb:-${probed_vram_mb:-}}"
 [ -z "$vram_mb" ] || export OMEGA_GPU_VRAM_MB="$vram_mb"
@@ -303,10 +330,12 @@ if [ -n "${OMEGA_GPU_VRAM_MB:-}" ]; then
   echo "  vram: ${OMEGA_GPU_VRAM_MB} MiB"
 fi
 
-# Ollama's layer split is decided at load time and then pinned (see
-# default_num_ctx() and the keep_alive=-1 pin in api/providers.php), so a model
-# that loads while the karaoke sidecar's CUDA torch is initialising stays mostly
-# on the CPU - ~1000x on prefill. Hold karaoke back until the model server answers.
+# Ollama's layer split is decided at load time and then pinned
+# (see default_num_ctx() and the keep_alive=-1 pin in
+# api/providers.php), so a model that loads while the karaoke
+# sidecar's CUDA torch is initialising stays mostly on the CPU -
+# ~1000x on prefill. Hold karaoke back until the model server
+# answers.
 wait_for_ollama() {
   local i status
   for i in $(seq 1 90); do
@@ -317,13 +346,14 @@ wait_for_ollama() {
   echo "warning: omega-ollama did not report healthy; starting karaoke anyway" >&2
 }
 
-# "is she even on the right card" is the first thing anyone asks after an
-# install, and the only thing that actually knows is ollama's own startup
-# log. a box with an iGPU next to a real one is where this bites: we hand
-# down a device list sorted biggest VRAM first, ollama picks from it, and
-# nothing has ever said out loud which one it took. so say it.
-# waits up to 20s for the line, then gives up without a word - the model
-# server pulling an 8 GB fine-tune on first boot is not an error.
+# "is she even on the right card" is the first thing anyone asks
+# after an install, and the only thing that actually knows is
+# ollama's own startup log. a box with an iGPU next to a real one
+# is where this bites: we hand down a device list sorted biggest
+# VRAM first, ollama picks from it, and nothing has ever said out
+# loud which one it took. so say it. waits up to 20s for the
+# line, then gives up without a word - the model server pulling
+# an 8 GB fine-tune on first boot is not an error.
 report_gpu_placement() {
   local i line
   [ "$gpu" != cpu ] || return 0
@@ -445,8 +475,9 @@ staged_up() {
   [ "$#" -eq 0 ]
 }
 
-# A bare first word is a lifecycle subcommand; anything else (a flag like
-# --build, or service names) is forwarded to `up -d` exactly as before.
+# A bare first word is a lifecycle subcommand; anything else (a
+# flag like --build, or service names) is forwarded to `up -d`
+# exactly as before.
 case "${1:-up}" in
   stop|down)  shift; set -x; exec docker compose "${files[@]}" down "$@" ;;
   restart)    shift; docker compose "${files[@]}" down

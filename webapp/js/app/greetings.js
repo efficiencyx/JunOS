@@ -1,16 +1,16 @@
-import { daypart, moodTier } from '../mood-tier.js?v=9';
-import { emptySub, promptChips } from './dom.js?v=9';
+import { daypart, moodTier } from '../mood-tier.js?v=10';
+import { emptySub, promptChips } from './dom.js?v=10';
 
-// the empty state used to say "How can I help you today?", which is a
-// customer support ticket, not Jun. so the line comes off the gauges
-// instead: her tier picks the mood, the hour picks the flavour. 2am at
-// high tension should read nothing like a warm tuesday afternoon.
+// her tier picks the empty state's mood, the hour picks its
+// flavour. high tension at 2am needs different lines from a warm
+// tuesday afternoon.
 //
 // register is MOOD_PHRASES in mood.js, not the comment voice.
 // lowercase, first person, short. she is talking, we are not.
 //
-// {f_playerName} only shows up in the happy pools. using someone's name is
-// warmth, and a cold tier that still calls you by name reads like sarcasm.
+// {f_playerName} only shows up in the happy pools. using
+// someone's name is warmth, and a cold tier that still calls you
+// by name reads like sarcasm.
 const EMPTY_LINES = {
   happy: {
     morning: [
@@ -124,9 +124,10 @@ const EMPTY_LINES = {
   },
 };
 
-// tier only, no daypart. twenty chip sets would be insane and the chips are
-// about what you want to say, which does not really change at 3pm.
-// order matches the three icons in the markup: spark, heart, speech bubble.
+// tier only, no daypart. twenty chip sets would be insane and the
+// chips are about what you want to say, which does not really
+// change at 3pm. order matches the three icons in the markup:
+// spark, heart, speech bubble.
 const CHIP_SETS = {
   happy: [
     { label: 'tell me something about you', prompt: 'Tell me something about yourself.' },
@@ -164,11 +165,12 @@ export function renderGreeting(state) {
   const tier = moodTier(state);
   const part = daypart();
   const key = tier + '|' + part;
-  // renderMood runs after EVERY reply, and re-rolling on each one would
-  // reshuffle the copy behind the hidden empty state, so you would get a
-  // different line every time you opened a new chat. keying the pick means
-  // it only moves when she changes tier or the clock rolls into the next
-  // daypart, which is exactly when it should move.
+  // renderMood runs after EVERY reply, and re-rolling on each one
+  // would reshuffle the copy behind the hidden empty state, so you
+  // would get a different line every time you opened a new chat.
+  // keying the pick means it only moves when she changes tier or
+  // the clock rolls into the next daypart, which is exactly when it
+  // should move.
   if (key === shownKey) return;
   shownKey = key;
 
@@ -178,9 +180,10 @@ export function renderGreeting(state) {
   const els = promptChips ? promptChips.querySelectorAll('.chip[data-prompt]') : [];
   els.forEach((el, i) => {
     if (!chips[i]) return;
-    // the prompt is what actually reaches her and she is a fine-tune trained
-    // on the literal strings Jun and Anon. so it stays canonical, and only
-    // the label a human reads gets the custom names.
+    // the prompt is what actually reaches her and she is a fine-tune
+    // trained on the literal strings Jun and Anon. so it stays
+    // canonical, and only the label a human reads gets the custom
+    // names.
     el.dataset.prompt = chips[i].prompt;
     const label = el.querySelector('span');
     if (label) label.textContent = named(chips[i].label);
