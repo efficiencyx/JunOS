@@ -36,7 +36,7 @@ conditional requirement is `OPENROUTER_API_KEY`, needed only when
 | `OMEGA_EXTRA_HOSTS` | *(empty)* | `start.sh`, `start.ps1`, nginx `server_name` (both templates), `OMEGA_ALLOWED_HOSTS` for `php` | Extra `Host` values this install answers to, beyond `DOMAIN`, `localhost` and `127.0.0.1`. An unknown Host is a 444 at nginx and a 421 at `require_allowed_host()` in `webapp/api/_lib.php`. When `BIND_ADDR` is off loopback, `start.sh` appends the host's own RFC1918 IPv4 addresses (docker bridges excluded) and prints them as `reachable as:`, so a LAN client normally needs nothing here. `start.ps1` does the same with `Get-NetIPAddress`, skipping the Hyper-V/WSL/VirtualBox/VMware adapters. Space or comma separated; `start.sh` normalizes commas to spaces because `server_name` does not accept them. |
 | `OMEGA_ALLOWED_HOSTS` | `localhost,127.0.0.1,::1` | `webapp/api/_lib.php`, `tools/php-router.php` | The allowlist itself, assembled from `DOMAIN` and `OMEGA_EXTRA_HOSTS` by `docker-compose.yml`. Set it directly only for a bare-metal install with no compose. |
 | `OMEGA_ALLOW_INSECURE_PUBLIC_HTTP` | *(empty)* | `start.sh`, `start.ps1`, `nginx` startup | Set to `1` only to override the public-HTTP refusal. This deliberately allows unencrypted credentials, sessions and chats and should not be used on the internet. |
-| `COMPOSE_PROFILES` | `ollama` | `docker compose` itself (not forwarded into any container) | Picks which model-server containers run: `ollama`, `llamacpp`, `prod` (certbot). `start.sh` derives it from `AI_PROVIDER` when unset; `install.sh` writes it for you. |
+| `COMPOSE_PROFILES` | `ollama` | `docker compose` itself (not forwarded into any container) | Picks which optional containers run: `ollama`, `llamacpp`, `voice`, `karaoke`, `prod` (certbot). `start.sh` merges whatever is set here with what it derives from `AI_PROVIDER`, `VOICE` and `KARAOKE`, so by hand you only ever need it for `prod`; `install.sh` writes it for you. |
 
 ## 1b. Accounts & access
 
@@ -76,13 +76,13 @@ closing summary. An **empty** value is left alone: that is the operator saying
 
 ## 3. Audio sidecars
 
-Two containers off one `tts/server.py`: `tts` (voice, always CPU) and `karaoke`
-(stem separation, GPU by default, profile-gated). Bare-metal installs run a
-single process in both roles.
+Two containers off one `tts/server.py`: `tts` (voice, always CPU, `voice`
+profile) and `karaoke` (stem separation, GPU by default, `karaoke` profile).
+Bare-metal installs run a single process in both roles.
 
 | Variable | Default | Consumed by | What it does |
 |---|---|---|---|
-| `VOICE` | `on` | `start.ps1` only | **Bare-metal Windows only.** `off` skips launching the TTS/STT sidecar process. Under Docker the `tts` service always runs (no compose `voice` profile exists); `php`/frontend degrade to text-only when it's unreachable or unhealthy. |
+| `VOICE` | `on` | `start.sh` (adds the `voice` compose profile), `start.ps1` | `off` skips the voice sidecar: under Docker the `tts` service sits behind `profiles: [voice]` and is never started, on bare-metal Windows the TTS/STT process is not launched. `php`/frontend degrade to text-only when it's absent, unreachable or unhealthy. |
 | `TTS_URL` | `http://tts:8001` (Docker) / `http://localhost:8001` (PHP fallback) | `webapp/api/tts.php`, `stt.php` | Base URL of the voice sidecar. The pre-rename name `KOKORO_URL` is still honored as a fallback for existing `.env` files. |
 | `TTS_DEVICE` | `cpu` | `start.sh`, `docker/tts.Dockerfile` ENV → `tts/server.py` | `cpu` \| `cuda` \| `auto`. Torch device for TTS synthesis. The image ships a CPU torch, so `auto` resolves to CPU there and `cuda` only means something on bare metal or after a `TTS_TORCH_INDEX` override. Both engines are real-time on CPU; GPU TTS holds ~2GB VRAM, which costs more in LLM layer offload than it buys in synthesis speed. |
 | `TTS_TORCH_INDEX` | `https://download.pytorch.org/whl/cpu` | `docker-compose.yml` → `docker/tts.Dockerfile` | Advanced override for the PyTorch wheel index the voice image builds against. No GPU overlay touches it any more - that plumbing moved to `KARAOKE_TORCH_INDEX`. Normally leave this unset. |
