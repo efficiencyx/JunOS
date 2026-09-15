@@ -4,7 +4,7 @@
 # fixed in 12.3.0). recover_assets.py bounds every crop before
 # Pillow sees it, so this stays safe as long as that check does.
 # bump the moment a 12.3+ arm64 wheel shows up.
-Pillow==11.0.0
+Pillow==12.3.0
 lz4==4.3.2
 Brotli==1.1.0
 attrs==26.1.0
