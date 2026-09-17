@@ -383,7 +383,7 @@ The model-server and voice containers are profile-gated. `./start.sh` derives `C
 │   └── system_prompt.txt
 ├── install.sh · install.ps1     One-line bootstrap (Docker · bare metal)
 ├── installer-gui.ps1            The Windows click-through window (ships as JunSetup.exe)
-├── uninstall.ps1                Takes her off a Windows box again
+├── uninstall.sh · uninstall.ps1 Takes her off the box again
 ├── start.sh · start.ps1         Launchers, and the stop/status/logs control panel
 ├── mtp-autotune.sh · .ps1       Measures the MTP draft depth and writes the winner to .env
 ├── sync-webapp.sh               The dev loop

@@ -221,14 +221,7 @@ Every start prints which card she landed on, like `ollama is running on: NVIDIA 
 
 ### Uninstalling on Linux
 
-```sh
-cd JunOS
-./start.sh stop
-cd ..
-rm -rf Jun
-```
-
-That leaves your chats and the downloaded model in Docker's storage so a reinstall picks them back up. To also wipe those, run `docker volume rm omega_omega_state omega_ollama_data` - this deletes every account and every chat, there is no undo.
+From the folder above `JunOS`, run `./JunOS/uninstall.sh` (with `sudo` in front if you said no to the docker group). It asks before every step: whether to delete the Docker volumes (every account, every chat, the downloaded model; your accounts, chats and memory notes are saved to `~/jun-backup-<date>.tar.gz` first, the model is not), whether to remove the Docker images, and finally the `JunOS` folder itself. Nothing is deleted without a yes. Say no to the volumes and a reinstall picks your chats and the model back up.
 
 ---
 
