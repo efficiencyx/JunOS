@@ -376,7 +376,7 @@ The model-server and voice containers are profile-gated. `./start.sh` derives `C
 ├── webapp/           Everything nginx and php-fpm serve
 │   ├── api/          chat.php, providers.php, auth.php, memory.php, outfit.php, karaoke.php, migrations/, …
 │   ├── js/           app/, live2d/, actions.js, voice.js, wardrobe.js, mods.js, karaoke.js, …
-│   ├── css/          base, shell, chat, stage, sidebar, settings, widgets, responsive
+│   ├── css/          base, shell, chat, stage, sidebar, settings, widgets, welcome, voice-karaoke, responsive
 │   ├── vendor/       PIXI, Cubism core, pixi-live2d-display, marked, DOMPurify (no CDN)
 │   ├── assets/       Live2D model files - you generate these, gitignored
 │   ├── boot.css      Critical CSS, inlined into index.html at sync time
