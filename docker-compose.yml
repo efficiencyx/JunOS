@@ -84,6 +84,7 @@ services:
 # own.
       OMEGA_GPU_VRAM_MB: "${OMEGA_GPU_VRAM_MB:-}"
       LLAMACPP_TOOLS: "${LLAMACPP_TOOLS:-}"
+      FLEE_BANS: "${FLEE_BANS:-on}"
 # KOKORO_URL is the old name, kept so existing .env files still
 # work.
       TTS_URL: "${TTS_URL:-}"
