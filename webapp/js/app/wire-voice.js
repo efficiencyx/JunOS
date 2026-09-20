@@ -9,14 +9,26 @@ export async function wireVoice() {
     Voice.setLogger(logAction);
     Voice.setOnTranscript(sendFromVoice);
 
+    const sup = Voice.support();
+    const sttOk = await sttAvailable();
+
     // she hears the wav herself when the backend can take it. the FIRST
     // refusal turns this off for the rest of the page, we never ask the
     // server up front. the refused utterance goes through whisper
-    // right away, not the next one
+    // right away, not the next one. no whisper either = that turn is
+    // gone and we say so, voice is NOT gated on the sidecar anymore
     let audioTurns = true;
     Voice.setOnAudio((b64, transcribe) => {
       if (!audioTurns) return false;
-      sendAudioFromVoice(b64, () => { audioTurns = false; transcribe(); });
+      sendAudioFromVoice(b64, () => {
+        audioTurns = false;
+        if (sttOk) {
+          ui.toast('⚠ This model can\'t hear - falling back to transcription', 'error');
+          transcribe();
+        } else {
+          ui.toast('⚠ This model can\'t hear and speech-to-text is not running - voice needs one of the two', 'error');
+        }
+      });
       return true;
     });
 
@@ -35,28 +47,24 @@ export async function wireVoice() {
 
     if (window.VoiceMode) {
       VoiceMode.init({
-        sttAvailable,
         onEnter: hideFaceBubble,
         onExitMidStream: () => { if (renderVoiceDraft) renderVoiceDraft(); },
       });
     }
 
-    const sup = Voice.support();
-    const sttOk = await sttAvailable();
-    if (!sup.ok || !sttOk) {
+    if (!sup.ok) {
       voiceChk.disabled = true;
-      const why = !sup.ok
-        ? (sup.reason === 'insecure_context'
-            ? 'needs HTTPS (or localhost) - see TLS_MODE in .env'
-            : sup.reason === 'no_getusermedia'
-              ? 'no microphone API in this browser'
-              : 'no AudioWorklet in this browser')
-        : 'sidecar has no speech-to-text (rebuild the tts image)';
+      const why = sup.reason === 'insecure_context'
+        ? 'needs HTTPS (or localhost) - see TLS_MODE in .env'
+        : sup.reason === 'no_getusermedia'
+          ? 'no microphone API in this browser'
+          : 'no AudioWorklet in this browser';
       if (voiceState) voiceState.textContent = 'unavailable';
       const voiceModeBtn = document.getElementById('voiceModeBtn');
       if (voiceModeBtn) { voiceModeBtn.disabled = true; voiceModeBtn.title = `Voice mode unavailable: ${why}`; }
       logAction('warn', `Voice mode unavailable: ${why}`);
     } else {
+      if (!sttOk) logAction('warn', 'No speech-to-text on the sidecar - voice works only while the chat model can hear (Ollama + audio capability)');
       const savedBarge = localStorage.getItem('voice.bargein') !== '0';
       const savedSilence = parseInt(localStorage.getItem('voice.silence_ms') || '700', 10);
       Voice.setBargeIn(savedBarge);
