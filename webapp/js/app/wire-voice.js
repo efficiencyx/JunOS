@@ -18,8 +18,7 @@ export async function wireVoice() {
     // turns audio turns off for the rest of the page, we never ask the
     // server up front. the refused utterance goes through whisper right
     // away, not the next one, same call, not a second one. no whisper
-    // either = that turn is gone and we say so, voice is NOT gated on
-    // the sidecar anymore
+    // either = that turn is gone and we say so
     let audioTurns = true;
     Voice.setOnAudio((b64, stt) => {
       if (!audioTurns) return false;
@@ -78,8 +77,6 @@ export async function wireVoice() {
       if (voiceSilenceInput) voiceSilenceInput.value = String(savedSilence);
       updateVoiceSilenceLabel();
 
-      // one state, two controls. the settings toggle and the button on
-      // the voice overlay both land here so they can't disagree
       const hearAllBtn = document.getElementById('voiceOverlayHearAll');
       const voiceOverlay = document.getElementById('voiceOverlay');
       const applyHearAll = (on, save) => {
