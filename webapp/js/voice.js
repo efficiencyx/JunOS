@@ -43,6 +43,10 @@ window.Voice = (function () {
   let enabled = false;
   let bargeIn = true;
   let silenceMs = SILENCE_MS;
+  // on = every utterance is for her, chat.php skips the side-talk
+  // judgement. not capture state, it rides along here because it
+  // is a voice pref like bargeIn and app.js reads it per request
+  let hearAll = false;
 
   let stream = null;
   let micCtx = null;
@@ -81,6 +85,8 @@ window.Voice = (function () {
   function isEnabled() { return enabled; }
   function getState() { return state; }
   function setBargeIn(v) { bargeIn = !!v; }
+  function setHearAll(v) { hearAll = !!v; }
+  function getHearAll() { return hearAll; }
   function setSilenceMs(v) { silenceMs = Math.max(300, Math.min(2000, v | 0)); }
 
   function setState(s) {
@@ -383,7 +389,7 @@ window.Voice = (function () {
 
   return {
     support, enable, disable, isEnabled, getState, resume,
-    setBargeIn, setSilenceMs,
+    setBargeIn, setSilenceMs, setHearAll, hearAll: getHearAll,
     setOnTranscript, setOnAudio, setOnState, setOnBargeIn, setLogger,
   };
 })();
