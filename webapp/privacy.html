@@ -26,11 +26,11 @@
       Jun OS
     </div>
     <h1>Privacy notice</h1>
-    <p class="privacy-lede">Nothing leaves your machine. Here is what that means in
-    practice, and the bits the law wants said out loud.</p>
+    <p class="privacy-lede">Jun runs locally by default. Here is what is stored,
+    which optional services receive data, and what stays under your control.</p>
     <div class="privacy-badges">
-      <span class="privacy-badge">Version 2026-08-03.2</span>
-      <span class="privacy-badge">≈2 min read</span>
+      <span class="privacy-badge">Version 2026-09-20</span>
+      <span class="privacy-badge">≈3 min read</span>
     </div>
   </header>
 
@@ -40,7 +40,7 @@
       <li>
         <span class="privacy-tick" aria-hidden="true">✓</span>
         <span><strong>With the bundled local AI, Jun runs on your machine.</strong> Your
-        account, chats, her memory and every setting stay in a database there. A hosted AI
+        account, chats, her memory and settings are stored in local files and your browser. A hosted AI
         provider is a separate choice described below.</span>
       </li>
       <li>
@@ -50,8 +50,9 @@
       </li>
       <li>
         <span class="privacy-tick" aria-hidden="true">✓</span>
-        <span><strong>Deleting is deleting.</strong> Remove the app and its state directory and
-        the data is gone; there is no copy anywhere else.</span>
+        <span><strong>Backups are separate copies.</strong> Removing the app or resetting an account
+        does not delete backups, browser data or logs. The Linux uninstaller saves a state backup
+        before deleting Docker volumes.</span>
       </li>
     </ul>
   </section>
@@ -76,6 +77,17 @@
         machine. Your account, your conversations, Jun’s memory notes and journal, the
         relationship gauges, the wardrobe and every setting are written to a database and a state
         directory on that machine and stay there. The app does not upload that stored data on its own.</p>
+        <p>The PHP application encrypts stored chat text, conversation titles and summaries,
+        saved preferences, welcome messages, and Jun's memory files with a key for your account.
+        Save the recovery code shown at signup or your first login after the encryption upgrade.
+        It lets you reset a forgotten password; losing both password and code means a state backup
+        alone cannot unlock encrypted content. Older accounts are encrypted when they log in,
+        and interrupted encryption is retried on the next password login.</p>
+        <p>This does not encrypt all stored data: account details, timestamps, relationship and
+        wardrobe state, logs, browser preferences and cached audio remain outside that protection.
+        Running processes and the selected AI provider receive plaintext, and the browser stores
+        a cookie containing the data key. Old backups may still contain unencrypted content.
+        The separate Android client uses its own storage.</p>
         <p>Whoever controls the machine controls the data: if you run Jun for other people, their
         chats are on your box and it is on you to keep it, and its backups, to yourself.</p>
       </section>
@@ -122,7 +134,7 @@
 
       <footer class="privacy-footer">
         <a href="index.html">← Back to Jun</a>
-        <span>Version 2026-08-03.2</span>
+        <span>Version 2026-09-20</span>
       </footer>
 
     </main>

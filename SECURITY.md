@@ -23,7 +23,7 @@ how to report something you find.
 * *Being reachable by accident.* nginx publishes on `127.0.0.1` only, unless
   you set `BIND_ADDR` (see [Exposing it on purpose](#exposing-it-on-purpose)).
   On Windows every process binds `127.0.0.1` too.
-* *A request forged by another page.* The session cookie is `HttpOnly`,
+* *A request forged by another page.* The session and data-key cookies are `HttpOnly`,
   `SameSite=Strict`, and every write checks `Sec-Fetch-Site` / `Origin` and
   refuses anything that isn't this exact origin. That last check matters more
   than it looks: to a browser, `localhost` is a single site whatever the port,
@@ -58,14 +58,17 @@ how to report something you find.
 
 **What it does not defend against**
 
-* An attacker who already runs code as you. The SQLite DB, the memory notes and
-  `.env` are files your user can read, by design.
+* An attacker who already runs code as you or controls the running server.
+  Encryption of stored content does not stop them reading browser cookies,
+  process memory or plaintext sent to the model, or changing the application.
+  Account metadata and `.env` also remain readable on disk.
 * A malicious model, or a fine-tune someone swapped for the one you meant to
   pull. Ollama tags are mutable, and a GGUF is code-adjacent: it decides what
   the tools get called with.
 * Prompt injection through the web search and lyrics tools. A page can tell her
   things. The worst a tool call can do is scoped to your own account: save a
-  note, change her outfit, go quiet for a turn, or walk out on you (which, with
+  note, change her outfit, open the shop or karaoke page after a reply,
+  go quiet for a turn, or walk out on you (which, with
   `FLEE_BANS=on`, locks *your* account out of chat for 5-30 minutes). That
   limit is what actually holds, not her judgment.
 * The first person to reach an unclaimed install after you set
@@ -147,7 +150,9 @@ Discord: effx__
 * `omega.sqlite` - accounts, password hashes, session hashes, conversations and
   every message, rolling summaries, relationship scores, wardrobe state and
   saved looks, the welcome queue, and the walk-out lockouts (`user_bans`).
-* `memory/user-<id>/` - her notes about you, as Markdown, plus `journal.md`.
+* `memory/user-<id>/` - encrypted category notes, `journal.md` and `meta.json`.
+  The filenames keep their Markdown/JSON extensions; their stored contents
+  are ciphertext after encryption, not directly editable documents.
 * `rl/`, `consolidating/` - rate-limit buckets and idle-consolidation locks.
 * `openrouter_models.json` - the cached model catalog, OpenRouter only.
 
@@ -177,8 +182,46 @@ sees item names.
 **Extracted game assets** land in `webapp/assets/`, are gitignored, and are for
 your own use only - see the NOTICE in [LICENSE](LICENSE).
 
-Nothing here is encrypted at rest. Encrypt the disk if that matters, and
-remember your backups have all of it too. Consider encrypting them too.
+## Encryption and recovery
+
+The PHP application encrypts message content, conversation titles and summaries,
+saved preferences, welcome messages and memory files with a random 32-byte key
+per account. Stored values use `v1:` followed by base64-encoded nonce and sodium
+secretbox ciphertext. This is application-level encryption of selected content,
+not whole-database or end-to-end encryption, and does not describe the separate
+Android client's local storage.
+
+The database stores the data key wrapped under an Argon2id-derived password key
+and separately under a hash of the recovery code. Signup shows the code once;
+accounts created before migration 016 receive it on their first upgraded login.
+The code has 20 characters chosen from 31 symbols (about 99 bits of entropy).
+Password recovery needs the account email and code, keeps the same data key,
+invalidates existing sessions and leaves the recovery code valid. Losing both
+password and code means a state backup alone cannot unlock encrypted content.
+
+Migration 016 invalidates old sessions. Each password login binds the account's
+key and scans its backlog before starting a session, encrypting remaining
+plaintext rows and memory files, including legacy archives. The scan runs even
+when the key already exists, so a failed pass is retried at the next login.
+Accounts that have not logged in since the upgrade can still contain plaintext.
+This conversion does not scrub deleted SQLite pages, old backups or logs.
+
+The open key is carried in the `omega_key` cookie alongside `omega_session`;
+both are HttpOnly and SameSite=Strict, with Secure enabled when HTTPS is detected.
+The browser may persist cookies. PHP decrypts content while serving requests,
+and the consolidation worker receives the key over localhost and keeps it in
+memory until that user's run succeeds. A copied browser profile, live server
+compromise or unencrypted HTTP can therefore expose the key or plaintext.
+
+Emails, password/session hashes, IDs, timestamps, relationship and wardrobe
+state, rate-limit files, logs, karaoke caches and `.env` are outside this content
+encryption. The literal `<audio>` placeholder also remains plaintext until its
+transcript replaces it. Disk and backup encryption still protect data that this
+layer does not cover. Keep recovery codes and cookies out of support reports.
+
+The Linux uninstaller saves the state volume to `~/jun-backup-<date>.tar.gz`
+before deleting volumes. Removing the app or using factory reset does not erase
+that archive or any other backup. Handle old plaintext backups separately.
 
 ## Exposing it on purpose
 

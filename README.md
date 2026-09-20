@@ -49,7 +49,7 @@ https://github.com/user-attachments/assets/f27859ad-9fee-467b-84a8-4f7630d2e2b6
 
 - **She reacts as she talks.** Gestures and expressions land on the word, not two seconds later.
 - **She has a voice**, and her mouth actually follows it.
-- **You can talk back.** Turn on the mic and it's a hands-free conversation.
+- **You can talk back.** Turn on the mic and it's a hands-free conversation. She can hear audio directly with a compatible Ollama model, or use local speech-to-text. The **Hear everything** switch skips her attempt to ignore side-talk.
 - **She has feelings about you.** Affection, trust and tension move with every exchange, and she treats you accordingly. Push her far enough and she goes quiet, or walks out - and the door stays shut for a few minutes.
 - **She can think before she answers.** A reasoning knob (auto / low / medium / high) and a toggle to watch the chain of thought stream by.
 - **She remembers.** She'll bring up things you said in other chats, and quietly keeps notes and a journal between sessions.
@@ -57,7 +57,7 @@ https://github.com/user-attachments/assets/f27859ad-9fee-467b-84a8-4f7630d2e2b6
 - **She'll sing with you.** 🎤 Load a song, get timed lyrics, and see how close you got.
 - **Dress her up.** A whole wardrobe to toggle and recolor - she'll tell you what she thinks of it.
 - **Bring your mods.** Game-mod zips load straight into the browser.
-- **It's yours.** She runs on your machine. No account, no cloud inference, no analytics, nothing reporting back to us - the only things that leave your box are the ones you ask for: a model download, a lyrics lookup, a web search she runs for you, and OpenRouter if you *choose* that provider. [The full list](SECURITY.md#what-talks-to-the-internet).
+- **It's yours.** She runs on your machine. No external account, no cloud inference by default, no analytics, nothing reporting back to us - the only things that leave your box are the ones you ask for: a model download, a lyrics lookup, a web search she runs for you, and OpenRouter if you *choose* that provider. [The full list](SECURITY.md#what-talks-to-the-internet).
 
 Curious how any of it works? [Under the hood](#under-the-hood).
 
@@ -222,7 +222,7 @@ Gemma 4 ships a tiny *drafter* that guesses the next few tokens; Jun checks the 
 
 llama.cpp can also serve a GGUF straight off your disk (`LLAMACPP_MODELS_DIR` + `LLAMACPP_MODEL_FILE`), and `LLAMACPP_TOOLS=off` exists for fine-tunes whose tool-call syntax llama-server can't parse.
 
-**No retrieval model:** lore lookup and cross-chat recall are plain text matching - keyword/IDF over the corpus, SQL `LIKE` over your history - so a non-Ollama provider costs you no features and drags no embedder along. The only extra model in the stack is the Ollama-only chat titler (`TITLE_MODEL`, a 0.6B fine-tune pinned to the CPU so it never fights her for VRAM; set it empty and titles fall back to your first message).
+**No retrieval model:** lore lookup and cross-chat recall are plain text matching - keyword/IDF over the corpus, case-insensitive substring matching over your decrypted history - so lore and recall need no embedding model, whichever provider you choose. The only extra model in the stack is the Ollama-only chat titler (`TITLE_MODEL`, a 0.6B fine-tune pinned to the CPU so it never fights her for VRAM; set it empty and titles fall back to your first message).
 
 ### Picking your GPU
 
@@ -262,6 +262,8 @@ Everything is environment variables in `.env` - the full reference is [`docs/con
 | `OMEGA_DEV_KEY` | Optional developer access key | *(unset)* |
 
 ### Who gets in 🔑
+
+**Save your recovery code.** 🔐 Signup shows it once; older accounts get one on their first login after the encryption upgrade. Chats, saved preferences and her memory are encrypted under your account's data key. If you forget your password, use **forgot password?** with your email and recovery code. Lose both and a backup alone cannot unlock encrypted data. This protects stored content, not a compromised running machine; [the security notes](SECURITY.md#encryption-and-recovery) spell out the limits.
 
 **The registration key** is written into `.env` by the installer and printed when it finishes. The very first account on a fresh install skips it (it's your box, you just ran the installer); every account after that has to type it, so nobody who reaches the page later can make themselves a login. Don't want the lock? Empty the value (`OMEGA_REGISTRATION_KEY=`) and sign-ups are open to whoever can reach the page. 🔑 Lost it? It's sitting in plain text in your own `.env` - read it back, or change it to whatever you like and restart.
 

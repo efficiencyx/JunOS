@@ -267,7 +267,7 @@ The analyser uses FFT size 1024 and smoothing constant 0.4. The RMS-to-mouth map
 
 ## Voice input and barge-in
 
-`webapp/js/voice.js` captures 16 kHz mono PCM through an `AudioWorklet`, calibrates a noise floor, and sends complete turns as WAV uploads to `/api/stt.php`. The voice sidecar transcribes those uploads with faster-whisper. Automatic gain control stays disabled because it would make the calibrated voice-activity threshold drift during silence.
+`webapp/js/voice.js` captures 16 kHz mono PCM through an `AudioWorklet` and calibrates a noise floor. Complete WAV turns go to `chat.php` as base64 audio when the Ollama model supports audio input. When available, faster-whisper transcribes the same turn through `/api/stt.php` in parallel; the transcript replaces the client and stored `<audio>` placeholder through `conversations.php?action=set_audio_text`. The first audio refusal switches to text turns for the rest of the page, reusing the pending transcription. If neither direct audio nor speech-to-text works, the turn fails with a visible error. Microphone controls require browser support, not an available STT sidecar. Automatic gain control stays disabled because it would make the calibrated voice-activity threshold drift during silence.
 
 When barge-in is enabled, browser echo cancellation removes most of Jun's playback from the microphone, while the client also raises its speech threshold in proportion to the current TTS output and confirms a detected interruption before stopping playback. This protects against speaker echo. Audio routed away from the default output device, loud or distorted speakers, Bluetooth latency, and clock drift can still trigger false detections. Use headphones or turn off barge-in for a fully half-duplex conversation.
 
@@ -334,6 +334,35 @@ Endpoint-specific caps:
 Signup takes a `registration_key` matched against `OMEGA_REGISTRATION_KEY`, except for the very first account on an empty `users` table (`no_users_yet()`), which is the installer's own owner claiming the instance. An empty/absent variable intentionally enables public signup. `auth.php?action=signup_info` is the unauthenticated read that returns `{registration_key_required}` so the signup form can show the field when needed.
 
 `auth.php?action=factory_reset` (POST, 3/hour) is the user's own wipe, and needs no role: inside one transaction it deletes the caller's rows from `messages` (via their conversations), `conversations`, `preferences`, `relationship`, `memory_consolidation`, `user_bans`, `wardrobe_presets` and `welcome_queue`, plus every session but the current one; then `memory_wipe_user()` in `_lib.php` removes the per-user memory directory, the legacy flat files and their `.migrated` copies. The `users` row, its role and the live session survive, so the account comes back empty rather than gone. A failure on either half returns `factory_reset_incomplete`.
+
+### Account encryption and recovery
+
+The PHP backend requires sodium. Each account has a random 32-byte data key;
+`users.wrapped_dek` wraps it under Argon2id(password, `kdf_salt`) and
+`recovery_wrapped_dek` under a hash of the recovery code. `enc()` and `dec()`
+store/open `v1:` + base64(nonce + secretbox ciphertext) for messages, titles,
+summaries, preferences, welcome messages and memory files. Account IDs, timestamps and the
+literal `<audio>` placeholder remain plain. See [the security boundary](../SECURITY.md#encryption-and-recovery).
+
+Migration 016 removes old sessions. Login creates missing keys or unwraps the
+existing key, binds it, then calls `crypt_encrypt_backlog()` before starting a
+session. Every password login scans rows and files, skipping prefixed values,
+so a failed pass is retried even when the key was saved already. Rows are updated
+in a transaction; memory files are handled afterwards under the user lock.
+This adds a backlog scan to each login and does not scrub old disk remnants.
+
+`start_session()` sends `omega_session` and `omega_key` as HttpOnly,
+SameSite=Strict cookies. `current_user()` rejects a session without a usable
+data-key cookie. Signup and the first legacy-account login show a recovery code
+once. `auth.php?action=recover` accepts email, recovery code and a new password,
+rewraps the same data key, deletes existing sessions and starts a new one; the
+recovery code stays valid. Losing both password and code leaves encrypted
+content inaccessible from the state backup alone.
+
+The consolidation worker has no browser cookie. `consolidation_touch()` calls
+`key_push()` to send the key over `127.0.0.1:OMEGA_KEY_PORT` (default 9099).
+The worker binds it for each user's run and drops its stored copy after success.
+Users without a key are skipped until a subsequent activity touch supplies one.
 
 ### Sidecar/Ollama isolation
 
@@ -412,8 +441,9 @@ conversations is something the model decides to do, as a tool call, and both
 tools are ordinary SQLite queries scoped to the calling user with the current
 conversation excluded:
 
-- `search_recent_chats(query, limit)` - a `content LIKE '%query%'` scan over the
-  user's messages, newest first, up to 8 hits. Each hit comes back as date,
+- `search_recent_chats(query, limit)` - reads the user's messages newest first,
+  decrypts each and applies `mb_stripos` substring matching, stopping at up to
+  8 hits. SQL `LIKE` cannot search the stored ciphertext. Each hit comes back as date,
   conversation id, title, role, and the message collapsed to one line and
   truncated at 500 characters. Substring matching means it is exact on names and
   distinctive phrases and blind to paraphrase; the model is expected to pick the
@@ -438,7 +468,7 @@ Chat tool calls run in a bounded loop of up to 3 rounds. Each result is appended
 
 `web_search` is offered only when the latest user message begins with `/search `. The server ignores the model's query argument and transmits the exact user-approved text after that prefix, once. It then goes through `web_search_public()` → DuckDuckGo's HTML results page, parsed for result links/snippets. It and redirect hops (`web_fetch_public()`, up to 3 redirects, 512 KB cap) are guarded by `resolve_public_http_url()`: DNS A/AAAA records must all be public, userinfo and non-standard ports are rejected, and only `http`/`https` are allowed.
 
-Durable memories live under `MEMORY_DIR` (default `<state dir>/memory`, i.e. `/var/lib/omega/memory`) in an Obsidian-compatible per-user directory:
+Durable memories live under `MEMORY_DIR` (default `<state dir>/memory`, i.e. `/var/lib/omega/memory`) in a per-user directory whose filenames retain the Markdown/JSON layout:
 
 ```text
 user-{id}/
@@ -448,7 +478,9 @@ user-{id}/
   meta.json
 ```
 
-Each category file has a Markdown heading and one bullet per fact. PHP appends a stable five-character `^blockid` to every bullet; optional `[[category]]` wikilinks become cross-category graph edges. `meta.json` maps block ids to created/updated timestamps so note files remain clean and hand-editable. Mutations serialize through a per-user write lock, and each file replacement uses backup → temporary file → rename. A separately locked lazy migration triggers when either legacy artifact exists, groups former `user-{id}.jsonl` entries into category files, preserves their timestamps, moves the journal, and renames the legacy files to `*.migrated`.
+After decryption, each category file has a Markdown heading and one bullet per fact. PHP appends a stable five-character `^blockid` to every bullet; optional `[[category]]` wikilinks become cross-category graph edges. `meta.json` maps block ids to created/updated timestamps without adding dates to each fact. These files are encrypted on disk; use the memory API to edit them. Mutations serialize through a per-user write lock, and each file replacement uses backup → temporary file → rename. A separately locked lazy migration triggers when either legacy artifact exists, groups former `user-{id}.jsonl` entries into category files, preserves their timestamps, moves the journal, and renames the legacy files to `*.migrated`.
+
+A scored karaoke take also posts an `events` note through `memory.php`, containing the song, artist when available, singing mode, score, matched-word count and a spelled-out date. This makes the take available to later chat context; an unscored take adds no note.
 
 `memory_recent_context()` renders the complete compacted note set under category headings, unwraps wikilinks, and caps the live-context block at 2500 characters by dropping the least recently updated categories first. It remains in the trailing live-context message, preserving the static prompt prefix and Ollama KV-cache reuse.
 
@@ -489,7 +521,7 @@ The `flee(reason, destination)` tool is how she leaves a scene, and the tag form
 Four parity decisions are worth carrying, because each of them looks like a bug from the other side:
 
 - **The tool markers.** `system_prompt.txt` wraps its tool paragraph in `<!--tools-->` / `<!--/tools-->`, and php strips either the markers or the whole block per request depending on whether the provider offers tools. Android always offers them, so `ChatEngine` only ever removes the marker lines.
-- **Audio turns are refused.** `ChatRequest` carries `audio`, and `validate()` fails it with `audio_unsupported` before anything is written down. LiteRT has no audio input here, and the webapp reads that refusal as "record it again through whisper" rather than answering an empty turn.
+- **Audio turns are refused.** `ChatRequest` carries `audio`, and `validate()` fails it with `audio_unsupported` before anything is written down. LiteRT has no audio input here, and the webapp reads that refusal as "transcribe the same recording through whisper when available" rather than answering an empty turn.
 - **Memory dates.** `memory/MemoryDates.kt` is `memory_note_render()` / `memory_note_stamp()` from `_lib.php` ported to Kotlin, used by `MemoryStore.recentContext()` under the same `## Durable memory notes` header, word for word. The two prompts have to say the same thing, so they change together.
 - **The wardrobe.** `wardrobe/Wardrobe.kt` is `_wardrobe.php` ported to Kotlin: the same item/variant/conflict/alias tables in the same order, `canonicalState()` returning null where php `fail()`s with `invalid_wardrobe`, and `toolChange()` producing the same `change_outfit` reply keys and note strings byte for byte, because the model reads them. `LocalServer` serves `api/outfit.php` (GET/PUT) off a one-row `wardrobe_state` table, and `ChatEngine` runs `change_outfit` beside the other tools and emits the same `outfit` SSE frame. Two things are deliberately not ported: the per-asset check against the worn state (the phone serves `/assets/` ungated, so the `assets` list is only echoed back to the browser, never enforced) and the 2/s rate limit on the PUT (the browser already throttles itself to one write per 500ms). `_wardrobe.php` and `Wardrobe.kt` change together, same as the memory dates.
 

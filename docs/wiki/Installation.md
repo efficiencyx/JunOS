@@ -112,7 +112,7 @@ It's also saved in the `JunOS\.env` file if you lose it.
 
 ### Step 7 - Create your account and say hi
 
-Click the **signup** tab, type an email and a password, press **create account**, and you're in. The account is local only and the email is never sent anywhere, so if you still don't trust us use a mock one like `youc@nusethis.too`. We highly suggest yall to not reuse the same password.
+Click the **signup** tab, type an email and a password, press **create account**, and save the recovery code before entering. The account is local only and the email is never sent anywhere, so if you still don't trust us use a mock one like `youc@nusethis.too`. We highly suggest yall to not reuse the same password.
 The first message can take a minute while the model warms up.
 
 ### Starting and stopping her later
@@ -212,7 +212,7 @@ The terminal printed a `registration  ...` line just above the `ready` line. Tha
 
 ### Step 8 - Create your account and say hi
 
-Click the **signup** tab, type an email and a password, press **create account**. The account is local only and the email is never sent anywhere, so a made-up one like `you@example.com` is fine. Don't reuse a password you care about. The first reply takes a moment while the model loads.
+Click the **signup** tab, type an email and a password, press **create account**, and save the recovery code before entering. The account is local only and the email is never sent anywhere, so a made-up one like `you@example.com` is fine. Don't reuse a password you care about. The first reply takes a moment while the model loads.
 
 ### Starting and stopping her later
 
@@ -403,6 +403,10 @@ The next start prints the address to type on the phone (`reachable as: 192.168.x
 PLEASE Do **not** forward that port on your router or run her behind a reverse proxy unless you know what you are doing and you are following the following instructions. She's built for your living room, not the open internet.
 
 > Hosting her for other people? Their chats now live on your box and you're responsible for them. Encrypt the machine and its backups, don't hand the database around, and edit [webapp/privacy.html](https://github.com/efficiencyx/JunOS/blob/main/webapp/privacy.html) to say what you actually store. In the EU that also makes you a deployer under the AI Act (art. 50 transparency, in force since 2 August 2026) - Jun ships the disclosure side already (age gate, permanent AI badge, provenance metadata on generated speech), so please don't strip it out of your fork.
+
+### Password recovery
+
+Signup shows a recovery code once. Keep it somewhere private, separate from your state backups. Use **forgot password?** on the login screen with your email and code to set a new password. Losing both the password and code means encrypted chats and memory cannot be recovered from a backup alone. Existing accounts receive a code on their first login after the encryption upgrade.
 
 ### Updating her
 
