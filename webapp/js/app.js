@@ -488,9 +488,8 @@ export function runChat({ idle, ephemeral, audio, onAudioUnsupported }) {
           startFleeLock((info.until || 0) * 1000, info.reason);
         } else if (err.message === 'audio_unsupported') {
           // refused before anything was written, so the turn leaves no trace
-          // here either. wire-voice sends the same wav through whisper
+          // here either. wire-voice decides what happens to the wav
           if (onAudioUnsupported) onAudioUnsupported();
-          ui.toast('⚠ This model can\'t hear - falling back to transcription', 'error');
         } else if (err.status === 418) {
           setConsolidating(true);
           showConsolidatingBubble();
