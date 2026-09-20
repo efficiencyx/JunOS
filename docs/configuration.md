@@ -156,7 +156,10 @@ raised, a 12B on the card does not.
 | Variable | Default | Consumed by | What it does |
 |---|---|---|---|
 | `OMEGA_STATE_DIR` | `/var/lib/omega` | `webapp/api/_lib.php` (`state_dir()`) | Directory for the SQLite DB and rate-limit flat files. Under Docker this is fixed at the default (mounted as the `omega_state` named volume) - the var is not forwarded into the `php` container's environment, so this is effectively **bare-metal only** (`start.ps1` points it at `runtime\state`). |
-| `MEMORY_DIR` | `<state dir>/memory` (i.e. `/var/lib/omega/memory` under Docker) | `webapp/api/_lib.php` (`memory_dir()`, `memory_user_dir()`) | Root for per-user Markdown memory directories (`user-{id}/*.md` plus `meta.json`). Legacy `user-{id}.jsonl` and journal files migrate lazily and are retained as `*.migrated`. Same Docker/bare-metal split as `OMEGA_STATE_DIR` above. **Older-default note:** builds before 2026-07 used `/var/lib/jun/memory`, which was not mounted under Docker and did not survive container recreation; the current default is inside the persisted `omega_state` volume. |
+| `MEMORY_DIR` | `<state dir>/memory` (i.e. `/var/lib/omega/memory` under Docker) | `webapp/api/_lib.php` (`memory_dir()`, `memory_user_dir()`) | Root for per-user encrypted memory directories (`user-{id}/*.md` plus `meta.json`). Legacy `user-{id}.jsonl` and journal files migrate lazily and are retained as `*.migrated`. Same Docker/bare-metal split as `OMEGA_STATE_DIR` above. **Older-default note:** builds before 2026-07 used `/var/lib/jun/memory`, which was not mounted under Docker and did not survive container recreation; the current default is inside the persisted `omega_state` volume. |
+| `OMEGA_KEY_PORT` | `9099` | `webapp/api/_lib.php` (`key_push_port()`), `consolidation-worker.php` | Loopback TCP port used to pass per-user data keys to the consolidation worker. Both PHP and the worker must use the same value. Useful for a bare-metal port conflict; Compose does not forward this variable, so Docker uses the internal default. |
+
+Memory filenames retain `.md` and `.json` extensions, but encrypted contents cannot be edited directly. Backups need the account password or recovery code to unlock encrypted content; see [encryption and recovery](../SECURITY.md#encryption-and-recovery).
 
 ## 6. Bare-metal Windows only
 

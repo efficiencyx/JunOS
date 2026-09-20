@@ -9,7 +9,7 @@ body:
       value: |
         Thanks for helping make Jun OS better. Please search existing issues first.
 
-        Do not post passwords, API or registration keys, private chat content, recovered game assets, or other copyrighted game files. Report security vulnerabilities through the private advisory link instead.
+        Do not post passwords, API or registration keys, recovery codes, session/data-key cookies, private chat content, recovered game assets, or other copyrighted game files. Report security vulnerabilities through the private advisory link instead.
 
   - type: checkboxes
     id: checks

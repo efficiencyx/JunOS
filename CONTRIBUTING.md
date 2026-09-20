@@ -19,7 +19,7 @@ The source code is MIT licensed, but the original game's art and other assets ar
 - files recovered into `webapp/assets/`;
 - raw game archives, Live2D source assets, or screenshots that redistribute those assets;
 - model weights or private training data;
-- `.env` files, API keys, registration keys, passwords, chat history, memory notes, or journals.
+- `.env` files, API keys, registration keys, recovery codes, session/data-key cookies, passwords, chat history, memory notes, or journals.
 
 The complete asset terms are in the NOTICE section of [LICENSE](LICENSE). Use synthetic or self-created fixtures when a test needs media.
 
@@ -45,7 +45,7 @@ Some choices that look incidental are required for correctness:
 - Treat streamed response markers as arbitrarily split across network chunks. Action and bookkeeping tags must never flash in the visible chat.
 - Keep `webapp/js` as plain, dependency-free ES modules. If a module cache-buster changes, update every import of that module.
 - Make voice and karaoke features degrade gracefully when their sidecars are unavailable.
-- Do not add embeddings to lore or memory retrieval; the repository intentionally uses keyword/IDF and SQL text matching.
+- Do not add embeddings to lore or memory retrieval; the repository intentionally uses keyword/IDF and substring matching over decrypted chat history.
 - Do not upload client-side mod assets to the server. Only item metadata may leave the browser.
 - Preserve the optional Compose profiles and account for Docker, bare-metal Windows, and Colab when a shared path changes.
 

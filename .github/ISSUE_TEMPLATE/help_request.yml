@@ -7,7 +7,7 @@ body:
       value: |
         Please check the README's **When things go sideways** section and `docs/configuration.md` first.
 
-        Do not post `.env` files, passwords, API or registration keys, private chat content, or recovered game assets. This form is public. Use a private security advisory for vulnerabilities.
+        Do not post `.env` files, passwords, API or registration keys, recovery codes, session/data-key cookies, private chat content, or recovered game assets. This form is public. Use a private security advisory for vulnerabilities.
 
   - type: checkboxes
     id: checks
