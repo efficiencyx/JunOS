@@ -238,24 +238,44 @@ export function sendFromVoice(text) {
 // bubble says "spoken", history says <audio>. that string is ALSO
 // what the server stores for the turn, both sides have to match
 // or the next request replays a different conversation than the
-// one on disk.
+// one on disk. setTranscript swaps both for whisper's text once it
+// lands, she heard the wav live, everything after reads words.
 export function sendAudioFromVoice(b64, onUnsupported) {
   if (stopActiveStream) stopActiveStream();
   resetIdleNudge();
   reportActivity();
   const bubble = appendMsg('user', '🎤 spoken message');
-  messages.push({ role: 'user', content: '<audio>' });
+  const entry = { role: 'user', content: '<audio>' };
+  const convId = currentConversationId;
+  messages.push(entry);
   runChat({
     idle: false,
     audio: b64,
     onAudioUnsupported: () => {
       bubble.remove();
-      const last = messages[messages.length - 1];
-      if (last && last.content === '<audio>') messages.pop();
+      if (messages[messages.length - 1] === entry) messages.pop();
       updateEmptyState();
       if (onUnsupported) onUnsupported();
     },
   });
+  return {
+    setTranscript(text) {
+      if (!messages.includes(entry)) return;
+      entry.content = text;
+      bubble.textContent = '🎤 ' + text;
+      if (convId == null) return;
+      // chat.php inserts the <audio> row before it starts streaming,
+      // whisper on CPU is slower than that, but a 404 here just means
+      // it wasn't yet. one retry covers it.
+      const post = () => fetch(`api/conversations.php?action=set_audio_text&id=${encodeURIComponent(convId)}`, {
+        method: 'POST',
+        credentials: 'same-origin',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ text }),
+      });
+      post().then(r => { if (r.status === 404) setTimeout(post, 1500); }).catch(() => {});
+    },
+  };
 }
 
 export function runChat({ idle, ephemeral, audio, onAudioUnsupported }) {

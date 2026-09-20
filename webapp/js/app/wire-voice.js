@@ -12,23 +12,28 @@ export async function wireVoice() {
     const sup = Voice.support();
     const sttOk = await sttAvailable();
 
-    // she hears the wav herself when the backend can take it. the FIRST
-    // refusal turns this off for the rest of the page, we never ask the
-    // server up front. the refused utterance goes through whisper
-    // right away, not the next one. no whisper either = that turn is
-    // gone and we say so, voice is NOT gated on the sidecar anymore
+    // she hears the wav herself when the backend can take it, and
+    // whisper runs NEXT to her, not instead: the transcript backfills
+    // the <audio> placeholder so history reads words. the FIRST refusal
+    // turns audio turns off for the rest of the page, we never ask the
+    // server up front. the refused utterance goes through whisper right
+    // away, not the next one, same call, not a second one. no whisper
+    // either = that turn is gone and we say so, voice is NOT gated on
+    // the sidecar anymore
     let audioTurns = true;
-    Voice.setOnAudio((b64, transcribe) => {
+    Voice.setOnAudio((b64, stt) => {
       if (!audioTurns) return false;
-      sendAudioFromVoice(b64, () => {
+      const text = sttOk ? stt() : Promise.resolve('');
+      const turn = sendAudioFromVoice(b64, () => {
         audioTurns = false;
         if (sttOk) {
           ui.toast('⚠ This model can\'t hear - falling back to transcription', 'error');
-          transcribe();
+          text.then(t => { if (t) sendFromVoice(t); });
         } else {
           ui.toast('⚠ This model can\'t hear and speech-to-text is not running - voice needs one of the two', 'error');
         }
       });
+      text.then(t => { if (t) turn.setTranscript(t); });
       return true;
     });
 

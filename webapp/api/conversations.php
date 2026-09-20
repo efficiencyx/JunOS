@@ -87,6 +87,29 @@ switch ($action) {
         echo json_encode(['ok' => true]);
         break;
 
+    case 'set_audio_text':
+        if ($method !== 'POST') fail(405, 'method_not_allowed');
+        $id = (int)($_GET['id'] ?? 0);
+        if (!$id) fail(400, 'invalid_request');
+        $body = json_decode(read_body(16 * 1024), true);
+        $text = trim((string)($body['text'] ?? ''));
+        if ($text === '') fail(400, 'invalid_request');
+        $own = $db->prepare('SELECT 1 FROM conversations WHERE id=? AND user_id=?');
+        $own->execute([$id, $user['id']]);
+        if (!$own->fetchColumn()) fail(404, 'not_found');
+        // ponytail: newest <audio> row. wrong row only if whisper takes
+        // longer than a whole voice turn (speak again + 700ms silence),
+        // upgrade is chat.php sending the inserted id and matching on it
+        $stmt = $db->prepare(
+            "UPDATE messages SET content=? WHERE id = (
+               SELECT id FROM messages WHERE conversation_id=? AND role='user' AND content='<audio>'
+               ORDER BY id DESC LIMIT 1)"
+        );
+        $stmt->execute([$text, $id]);
+        if (!$stmt->rowCount()) fail(404, 'not_found');
+        echo json_encode(['ok' => true]);
+        break;
+
     case 'delete_last_assistant':
         if ($method !== 'POST') fail(405, 'method_not_allowed');
         $id = (int)($_GET['id'] ?? 0);
