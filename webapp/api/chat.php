@@ -562,23 +562,27 @@ function run_tool_call(string $name, array $args, array $user, int $convId, ?str
             $query = trim((string)($args['query'] ?? ''));
             $limit = max(1, min(8, (int)($args['limit'] ?? 5)));
             if ($query === '') return json_encode(['error' => 'query_required']);
-            $like = '%' . str_replace(['%', '_'], ['\\%', '\\_'], $query) . '%';
+            // ponytail: rows are ciphertext so LIKE can't see them. walk
+            // his messages newest first, open each, stop at $limit hits.
+            // one person's chats, fine. an index would need a plaintext
+            // copy somewhere, which is the exact thing we don't keep.
             $st = db()->prepare(
                 'SELECT m.role, m.content, m.created_at, c.title, c.id AS conversation_id
                    FROM messages m JOIN conversations c ON c.id = m.conversation_id
-                  WHERE c.user_id = ? AND c.id != ? AND m.content LIKE ? ESCAPE \'\\\'
-                  ORDER BY m.created_at DESC, m.id DESC LIMIT ?'
+                  WHERE c.user_id = ? AND c.id != ?
+                  ORDER BY m.created_at DESC, m.id DESC'
             );
-            $st->bindValue(1, (int)$user['id'], PDO::PARAM_INT);
-            $st->bindValue(2, $convId, PDO::PARAM_INT);
-            $st->bindValue(3, $like, PDO::PARAM_STR);
-            $st->bindValue(4, $limit, PDO::PARAM_INT);
-            $st->execute();
-            $rows = array_map(function ($r) {
-                $content = trim(preg_replace('/\s+/', ' ', (string)$r['content']));
+            $st->execute([(int)$user['id'], $convId]);
+            $rows = [];
+            while ($r = $st->fetch()) {
+                $content = (string)dec($r['content']);
+                if (mb_stripos($content, $query) === false) continue;
+                $content = trim(preg_replace('/\s+/', ' ', $content));
                 if (mb_strlen($content) > 500) $content = mb_substr($content, 0, 497) . '…';
-                return ['date' => date('Y-m-d H:i', (int)$r['created_at']), 'conversation_id' => (int)$r['conversation_id'], 'title' => (string)($r['title'] ?? ''), 'role' => (string)$r['role'], 'content' => $content];
-            }, $st->fetchAll());
+                $rows[] = ['date' => date('Y-m-d H:i', (int)$r['created_at']), 'conversation_id' => (int)$r['conversation_id'], 'title' => (string)dec($r['title'] ?? null), 'role' => (string)$r['role'], 'content' => $content];
+                if (count($rows) >= $limit) break;
+            }
+            $st->closeCursor();
             if (!$rows) {
                 // the fine-tune only ever saw THIS tool name, so a lore
                 // question lands here first. hand it the right tool instead
@@ -610,7 +614,7 @@ function run_tool_call(string $name, array $args, array $user, int $convId, ?str
                 $snip->execute([(int)$c['id']]);
                 $lines = [];
                 foreach (array_reverse($snip->fetchAll()) as $r) {
-                    $txt = preg_replace('/\[\s*A(?:CTIONS?)?\s*:[^\]]*\]/i', '', (string)$r['content']);
+                    $txt = preg_replace('/\[\s*A(?:CTIONS?)?\s*:[^\]]*\]/i', '', (string)dec($r['content']));
                     $txt = trim(preg_replace('/\s+/', ' ', $txt));
                     if ($txt === '') continue;
                     if (mb_strlen($txt) > 160) $txt = mb_substr($txt, 0, 157) . '…';
@@ -618,7 +622,7 @@ function run_tool_call(string $name, array $args, array $user, int $convId, ?str
                 }
                 $out[] = [
                     'conversation_id' => (int)$c['id'],
-                    'title' => (string)($c['title'] ?? ''),
+                    'title' => (string)dec($c['title'] ?? null),
                     'date' => date('Y-m-d H:i', (int)$c['updated_at']),
                     'recap' => $lines,
                 ];
@@ -688,7 +692,7 @@ if ($convId > 0) {
     $sq = db()->prepare('SELECT summary, summary_upto_id FROM conversations WHERE id=? AND user_id=?');
     $sq->execute([$convId, (int)$user['id']]);
     if ($srow = $sq->fetch()) {
-        $convSummary = trim((string)($srow['summary'] ?? ''));
+        $convSummary = trim((string)dec($srow['summary'] ?? null));
         $uptoId = (int)$srow['summary_upto_id'];
         if ($convSummary !== '' && $uptoId > 0) {
             $cc = db()->prepare('SELECT COUNT(*) FROM messages WHERE conversation_id=? AND id<=?');
@@ -876,8 +880,11 @@ $now = time();
 $db = db();
 
 if (!$idle && !$ephemeral) {
+    // <audio> stays plaintext on purpose. conversations.php
+    // set_audio_text finds the row by that literal and swaps the
+    // transcript in, sealed. it can't match a ciphertext.
     $db->prepare('INSERT INTO messages (conversation_id, role, content, created_at) VALUES (?, ?, ?, ?)')
-       ->execute([$convId, 'user', $audioB64 !== '' ? '<audio>' : $lastUserMsg, $now]);
+       ->execute([$convId, 'user', $audioB64 !== '' ? '<audio>' : enc($lastUserMsg), $now]);
 }
 
 ollama_evict_if_partially_offloaded($model);
@@ -1194,20 +1201,20 @@ if (!$sawError && $assistantBuffer !== '') {
 
     $now = time();
     db()->prepare('INSERT INTO messages (conversation_id, role, content, created_at) VALUES (?, ?, ?, ?)')
-        ->execute([$convId, 'assistant', $assistantBuffer, $now]);
+        ->execute([$convId, 'assistant', enc($assistantBuffer), $now]);
     db()->prepare('UPDATE conversations SET updated_at=? WHERE id=?')->execute([$now, $convId]);
 
     if (!$idle && !$ephemeral) {
         $titleRow = db()->prepare('SELECT title FROM conversations WHERE id=?');
         $titleRow->execute([$convId]);
-        $conversationTitle = $titleRow->fetchColumn();
+        $conversationTitle = dec($titleRow->fetchColumn() ?: null);
         $titleRow->closeCursor();
         // a spoken turn leaves $lastUserMsg empty, so there's nothing
         // to name the chat after. next typed turn handles it.
         if (!$conversationTitle && $lastUserMsg !== '') {
             $newTitle = generate_chat_title($lastUserMsg) ?: mb_substr($lastUserMsg, 0, 60);
             db()->prepare('UPDATE conversations SET title=? WHERE id=?')
-                ->execute([$newTitle, $convId]);
+                ->execute([enc($newTitle), $convId]);
         }
     }
 }

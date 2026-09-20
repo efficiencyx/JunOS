@@ -38,7 +38,10 @@ switch ($action) {
              WHERE user_id=? ORDER BY updated_at DESC LIMIT 100'
         );
         $stmt->execute([$user['id']]);
-        echo json_encode($stmt->fetchAll());
+        $rows = $stmt->fetchAll();
+        foreach ($rows as &$row) $row['title'] = dec($row['title']);
+        unset($row);
+        echo json_encode($rows);
         break;
 
     case 'create':
@@ -61,7 +64,10 @@ switch ($action) {
             'SELECT role, content, created_at FROM messages WHERE conversation_id=? ORDER BY id'
         );
         $stmt->execute([$id]);
-        echo json_encode($stmt->fetchAll());
+        $rows = $stmt->fetchAll();
+        foreach ($rows as &$row) $row['content'] = dec($row['content']);
+        unset($row);
+        echo json_encode($rows);
         break;
 
     case 'rename':
@@ -72,7 +78,7 @@ switch ($action) {
         $title = mb_substr(trim((string)($body['title'] ?? '')), 0, 120);
         if ($title === '') fail(400, 'invalid_request');
         $stmt = $db->prepare('UPDATE conversations SET title=? WHERE id=? AND user_id=?');
-        $stmt->execute([$title, $id, $user['id']]);
+        $stmt->execute([enc($title), $id, $user['id']]);
         if (!$stmt->rowCount()) fail(404, 'not_found');
         echo json_encode(['ok' => true]);
         break;
@@ -105,7 +111,7 @@ switch ($action) {
                SELECT id FROM messages WHERE conversation_id=? AND role='user' AND content='<audio>'
                ORDER BY id DESC LIMIT 1)"
         );
-        $stmt->execute([$text, $id]);
+        $stmt->execute([enc($text), $id]);
         if (!$stmt->rowCount()) fail(404, 'not_found');
         echo json_encode(['ok' => true]);
         break;
@@ -135,11 +141,13 @@ switch ($action) {
         if (!$conv) fail(404, 'not_found');
 
         $uptoId = (int)$conv['summary_upto_id'];
-        $oldSummary = trim((string)($conv['summary'] ?? ''));
+        $oldSummary = trim((string)dec($conv['summary'] ?? null));
 
         $tailStmt = $db->prepare('SELECT id, role, content FROM messages WHERE conversation_id=? AND id>? ORDER BY id');
         $tailStmt->execute([$id, $uptoId]);
         $tail = $tailStmt->fetchAll();
+        foreach ($tail as &$m) $m['content'] = dec($m['content']);
+        unset($m);
 
         $ctxTokens = default_num_ctx();
         $budgetChars = (int)($ctxTokens * 4 * 0.5);
@@ -168,7 +176,7 @@ switch ($action) {
         if ($newSummary === null) { echo json_encode(['compacted' => false, 'error' => 'summarize_failed']); break; }
 
         $db->prepare('UPDATE conversations SET summary=?, summary_upto_id=? WHERE id=? AND user_id=?')
-           ->execute([$newSummary, $lastFoldedId, $id, $user['id']]);
+           ->execute([enc($newSummary), $lastFoldedId, $id, $user['id']]);
         echo json_encode(['compacted' => true, 'upto_id' => $lastFoldedId]);
         break;
 
