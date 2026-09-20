@@ -13,7 +13,7 @@ if ($method === 'GET') {
     $stmt->execute([$user['id']]);
     $row = $stmt->fetch();
     if (!$row) { echo '{}'; exit; }
-    $parsed = json_decode((string)$row['data'], true);
+    $parsed = json_decode((string)dec($row['data']), true);
     echo json_encode(is_array($parsed) ? $parsed : new stdClass());
     exit;
 }
@@ -26,7 +26,7 @@ if ($method === 'PUT') {
     $db->prepare(
         'INSERT INTO preferences (user_id, data) VALUES (?, ?)
          ON CONFLICT(user_id) DO UPDATE SET data=excluded.data'
-    )->execute([$user['id'], $canonical]);
+    )->execute([$user['id'], enc($canonical)]);
     echo json_encode(['ok' => true]);
     exit;
 }

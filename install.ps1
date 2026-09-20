@@ -805,7 +805,7 @@ function Install-Php {
 
     $phpReady = $true
     foreach ($required in 'php.exe', 'php.ini', 'ext\php_curl.dll', 'ext\php_mbstring.dll',
-            'ext\php_openssl.dll', 'ext\php_pdo_sqlite.dll', 'ext\php_sqlite3.dll') {
+            'ext\php_openssl.dll', 'ext\php_pdo_sqlite.dll', 'ext\php_sqlite3.dll', 'ext\php_sodium.dll') {
         if (-not (Test-Path (Join-Path $phpDir $required))) {
             $phpReady = $false
             break
@@ -888,6 +888,7 @@ function Install-Php {
         'extension=openssl'
         'extension=pdo_sqlite'
         'extension=sqlite3'
+        'extension=sodium'
         'post_max_size=512K'
         'upload_max_filesize=1M'
         'memory_limit=128M'

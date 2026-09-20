@@ -616,7 +616,7 @@ html[data-pre-auth] #app { visibility: hidden; }
 <script src="js/boot-gate.js?v=3"></script>
 
 <script defer src="js/loader.js?v=2"></script>
-<script defer src="js/auth.js?v=3"></script>
+<script defer src="js/auth.js?v=4"></script>
 <script defer src="js/prefs.js?v=3"></script>
 <script defer src="js/names.js?v=4"></script>
 <script defer src="js/chat-api.js?v=4"></script>
@@ -682,7 +682,34 @@ html[data-pre-auth] #app { visibility: hidden; }
         </label>
         <div class="auth-error" id="loginError" hidden></div>
         <button type="submit" class="auth-submit" id="loginBtn">authenticate</button>
+        <button type="button" class="auth-link" id="authShowRecover">forgot password? use your recovery code</button>
       </form>
+
+      <form id="authFormRecover" class="auth-form" hidden>
+        <div class="auth-motd-line auth-dim">your chats are sealed under your password. the recovery code from signup is the only other way in.</div>
+        <label class="auth-field">
+          <span class="auth-flabel"><span class="auth-ps" aria-hidden="true"></span> email</span>
+          <input type="email" id="recoverEmail" autocomplete="email" spellcheck="false" required>
+        </label>
+        <label class="auth-field">
+          <span class="auth-flabel"><span class="auth-ps" aria-hidden="true"></span> recovery code</span>
+          <input type="text" id="recoverCode" autocomplete="off" spellcheck="false" required placeholder="xxxxx-xxxxx-xxxxx-xxxxx">
+        </label>
+        <label class="auth-field">
+          <span class="auth-flabel"><span class="auth-ps" aria-hidden="true"></span> new password <small>(min 8 chars)</small></span>
+          <input type="password" id="recoverPassword" autocomplete="new-password" required minlength="8">
+        </label>
+        <div class="auth-error" id="recoverError" hidden></div>
+        <button type="submit" class="auth-submit" id="recoverBtn">reset password</button>
+        <button type="button" class="auth-link" id="authHideRecover">back to login</button>
+      </form>
+
+      <div id="authRecoveryCode" class="auth-form" hidden>
+        <div class="auth-motd-line">this is your recovery code. it is shown ONCE.</div>
+        <div class="auth-code" id="authRecoveryCodeValue"></div>
+        <div class="auth-motd-line auth-dim">your chats and her memory of you are encrypted with a key only your password and this code can open. lose both and nobody, not even this server, can get them back.</div>
+        <button type="button" class="auth-submit" id="authRecoveryDone">saved it, let me in</button>
+      </div>
 
       <form id="authFormSignup" class="auth-form" hidden aria-labelledby="authTabSignup">
         <label class="auth-field">
