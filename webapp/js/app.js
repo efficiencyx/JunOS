@@ -278,6 +278,20 @@ export function sendAudioFromVoice(b64, onUnsupported) {
   };
 }
 
+// she called enter_shop / enter_karaoke. the page flips once her
+// line is done playing, so the trip doesn't guillotine her
+// mid-sentence. the floor is for TTS off, so the line is at least
+// readable before it's gone.
+function leaveFor(where) {
+  const href = where === 'karaoke' ? 'karaoke.html' : 'wardrobe.html';
+  const t0 = Date.now();
+  const tick = () => {
+    if ((window.TTS && TTS.isSpeaking()) || Date.now() - t0 < 1500) return setTimeout(tick, 250);
+    location.href = href;
+  };
+  tick();
+}
+
 export function runChat({ idle, ephemeral, audio, onAudioUnsupported }) {
   if (abortFn) return;
   cancelIdleNudge();
@@ -325,6 +339,7 @@ export function runChat({ idle, ephemeral, audio, onAudioUnsupported }) {
   let visible = '';
   let shown = '';
   let silenced = false;
+  let trip = '';
   const bubbleSource = ephemeral ? 'ephemeral' : 'phone';
   const bubbleEnabled = () => !(window.VoiceMode && VoiceMode.isActive()) && (ephemeral || phoneMode());
   const renderBubble = () => {
@@ -437,6 +452,7 @@ export function runChat({ idle, ephemeral, audio, onAudioUnsupported }) {
       // another chat leaves the model wearing one thing and the
       // database saying another.
       onOutfit: (change) => Outfit.applyToolChange(change),
+      onGo: (where) => { trip = where; },
       onSilence: () => {
         if (!isCurrent()) return;
         // she decided to say nothing, so whatever leaked into the bubble
@@ -495,6 +511,7 @@ export function runChat({ idle, ephemeral, audio, onAudioUnsupported }) {
           History.compact(currentConversationId).catch(() => {});
         }
         if (window.History) await refreshSidebar();
+        if (trip) leaveFor(trip);
       },
       onError: async (err) => {
         if (!isCurrent()) return;

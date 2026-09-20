@@ -4,11 +4,7 @@ require_once __DIR__ . '/_lib.php';
 
 $user = require_user();
 
-// Separation gets its own sidecar so it can hold a GPU torch
-// while the voice one stays on the CPU. a bare metal install runs
-// both roles in one process, so fall back to the voice sidecar's
-// URL, and to KOKORO_URL, its old name.
-$sepUrl = rtrim(env_str('KARAOKE_URL', env_str('TTS_URL', env_str('KOKORO_URL', 'http://localhost:8001'))), '/');
+$sepUrl = karaoke_url();
 $action = $_GET['action'] ?? '';
 
 // Splitting a song is heavy and slow, and one request throws the
@@ -62,23 +58,7 @@ function evict_chat_model(): void {
 
 if ($action === 'health') {
     header('Content-Type: application/json');
-
-    $ch = curl_init($sepUrl . '/health');
-    curl_setopt($ch, CURLOPT_HTTPHEADER, sidecar_headers());
-    curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
-    curl_setopt($ch, CURLOPT_CONNECTTIMEOUT, 5);
-    curl_setopt($ch, CURLOPT_TIMEOUT, 10);
-    $res = curl_exec($ch);
-    $code = curl_getinfo($ch, CURLINFO_HTTP_CODE);
-    curl_close($ch);
-
-    if ($res === false || $code >= 500) {
-        echo json_encode(['ok' => false, 'sep' => false]);
-        exit;
-    }
-
-    http_response_code($code);
-    echo $res;
+    echo json_encode(karaoke_health() ?? ['ok' => false, 'sep' => false]);
     exit;
 }
 

@@ -297,6 +297,32 @@ function tool_catalog(?string $approvedWebSearchQuery): array {
                 ],
             ],
         ],
+        [
+            'type' => 'function',
+            'function' => [
+                'name' => 'enter_shop',
+                'description' => 'Go to Annalie\'s clothes shop together with Anon to browse and try things on. Call it once the two of you agree to go, then say your line - you both leave for the shop when you finish talking.',
+                'parameters' => [
+                    'type' => 'object',
+                    'properties' => [
+                        'reason' => ['type' => 'string', 'description' => 'Why you two are going (private).'],
+                    ],
+                ],
+            ],
+        ],
+        [
+            'type' => 'function',
+            'function' => [
+                'name' => 'enter_karaoke',
+                'description' => 'Start a karaoke date with Anon: you two pick a song and sing it together. Call it once the two of you agree to sing, then say your line - the karaoke starts when you finish talking. It tells you if the karaoke room is closed.',
+                'parameters' => [
+                    'type' => 'object',
+                    'properties' => [
+                        'reason' => ['type' => 'string', 'description' => 'Why you two are going (private).'],
+                    ],
+                ],
+            ],
+        ],
     ];
     if ($approvedWebSearchQuery === null) {
         $tools = array_values(array_filter(
@@ -1014,6 +1040,24 @@ for ($round = 0; $round < 3; $round++) {
                         'note' => 'You cannot leave right now. Stay in the scene and respond to what is actually happening.',
                     ], JSON_UNESCAPED_UNICODE);
                 }
+            }
+        } elseif ($name === 'enter_shop' || $name === 'enter_karaoke') {
+            $where = $name === 'enter_shop' ? 'shop' : 'karaoke';
+            // the browser navigates away on this frame, so an idle
+            // nudge must never send it. Anon isn't even there.
+            if ($idle) {
+                $toolResult = json_encode(['error' => 'not_available_on_idle']);
+            } elseif ($where === 'karaoke' && empty(karaoke_health()['sep'])) {
+                $toolResult = json_encode([
+                    'started' => false,
+                    'note' => 'The karaoke room is closed right now (the karaoke service is not running). Tell Anon plainly, do not pretend to sing.',
+                ]);
+            } else {
+                sse_send(['go' => $where]);
+                $toolResult = json_encode([
+                    'going' => $where,
+                    'note' => 'Say one short line about heading out together. The trip starts the moment you finish talking.',
+                ]);
             }
         } else {
             $toolResult = run_tool_call($name, $args, $user, $convId, $approvedWebSearchQuery);
