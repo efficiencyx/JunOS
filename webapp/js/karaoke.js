@@ -845,18 +845,20 @@ window.Karaoke = (function () {
 
   // nothing on the chat side knows this page exists, so a scored
   // take gets written into her durable notes like any other event
-  // and rides the live context from the next reply on. "today" is
-  // deliberate, memory_note_stamp() turns it into the real date.
+  // and rides the live context from the next reply on. the date
+  // goes in spelled out, never "today", she can't do relative time
+  // at all.
   function rememberTake(r) {
     if (!r.scored || !track) return;
     const m = track.meta || {};
+    const day = new Date().toLocaleDateString('en-GB', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' });
     const song = `"${m.title || 'a song'}"` + (m.artist ? ` by ${m.artist}` : '');
     const how = {
       solo: 'solo relay, he sang it through then I did',
       duo: 'a duet, both of us singing the whole song',
       split: 'lines split between us',
     }[mode];
-    const memory = `Karaoke today with Anon: ${song} (${how}). He scored ${r.score}/100, ${r.matched} of ${r.total} of his words landed in time.`;
+    const memory = `Karaoke with Anon on ${day}: ${song} (${how}). He scored ${r.score}/100, ${r.matched} of ${r.total} of his words landed in time.`;
     fetch('/api/memory.php', {
       method: 'POST',
       credentials: 'same-origin',
