@@ -368,7 +368,10 @@ report_gpu_placement() {
   printf '%s\n' "$line" | awk '{
     lib = ""; nm = ""; tot = "";
     if (match($0, /library=[^ ]+/))  lib = substr($0, RSTART + 8,  RLENGTH - 8);
-    if (match($0, /name="[^"]*"/))   nm  = substr($0, RSTART + 6,  RLENGTH - 7);
+    # 0.32 moved the card name to description= and left name=CUDA0
+    # unquoted. older builds only have name="...". take either.
+    if (match($0, /description="[^"]*"/)) nm = substr($0, RSTART + 13, RLENGTH - 14);
+    else if (match($0, /name="[^"]*"/))   nm = substr($0, RSTART + 6,  RLENGTH - 7);
     if (match($0, /total="[^"]*"/))  tot = substr($0, RSTART + 7,  RLENGTH - 8);
     if (nm != "") printf "  %s (%s%s)\n", nm, lib, (tot != "" ? ", " tot : "");
   }'

@@ -625,8 +625,8 @@ $modelChoices = @(
     @{ Label = 'Jun 12B — Q8_0, highest quality and largest'; Ref = 'hf.co/efficiencyx/Jun-LoRA-12B-GGUF:Q8_0' },
     @{ Label = 'Jun 12B — Q6_K, high quality'; Ref = 'hf.co/efficiencyx/Jun-LoRA-12B-GGUF:Q6_K' },
     @{ Label = 'Jun 12B — Q4_K_M'; Ref = 'hf.co/efficiencyx/Jun-LoRA-12B-GGUF:Q4_K_M' },
-    @{ Label = 'Jun E4B — Q8_0, balanced'; Ref = 'hf.co/efficiencyx/Jun-LoRA-v4-E4B-GGUF:Q8_0' },
-    @{ Label = 'Jun E4B — Q4_K_M, balanced'; Ref = 'hf.co/efficiencyx/Jun-LoRA-v4-E4B-GGUF:Q4_K_M' },
+    @{ Label = 'Jun E4B — Q8_0, balanced'; Ref = 'hf.co/efficiencyx/Jun-LoRA-E4B-GGUF:Q8_0' },
+    @{ Label = 'Jun E4B — Q4_K_M, balanced'; Ref = 'hf.co/efficiencyx/Jun-LoRA-E4B-GGUF:Q4_K_M' },
     @{ Label = 'Jun E2B — Q6_K, lightweight'; Ref = 'hf.co/efficiencyx/Jun-LoRA-E2B-GGUF:Q6_K' },
     @{ Label = 'Jun E2B — Q4_K_M, CPU-friendly'; Ref = 'hf.co/efficiencyx/Jun-LoRA-E2B-GGUF:Q4_K_M' }
 )
@@ -698,8 +698,8 @@ function Get-RecommendedModel([bool]$allGpus) {
     if ($mb -ge 23500) { return 'hf.co/efficiencyx/Jun-LoRA-12B-GGUF:Q8_0' }
     if ($mb -ge 15500) { return 'hf.co/efficiencyx/Jun-LoRA-12B-GGUF:Q6_K' }
     if ($mb -ge 11500) { return 'hf.co/efficiencyx/Jun-LoRA-12B-GGUF:Q4_K_M' }
-    if ($mb -ge 9500) { return 'hf.co/efficiencyx/Jun-LoRA-v4-E4B-GGUF:Q8_0' }
-    if ($mb -ge 7500) { return 'hf.co/efficiencyx/Jun-LoRA-v4-E4B-GGUF:Q4_K_M' }
+    if ($mb -ge 9500) { return 'hf.co/efficiencyx/Jun-LoRA-E4B-GGUF:Q8_0' }
+    if ($mb -ge 7500) { return 'hf.co/efficiencyx/Jun-LoRA-E4B-GGUF:Q4_K_M' }
     if ($mb -ge 5500) { return 'hf.co/efficiencyx/Jun-LoRA-E2B-GGUF:Q6_K' }
     return 'hf.co/efficiencyx/Jun-LoRA-E2B-GGUF:Q4_K_M'
 }
@@ -740,7 +740,7 @@ $TensorParallelHint.Visibility = $TensorParallelCheck.Visibility
 $defaultLocation = if (Test-Path (Join-Path $PSScriptRoot '.git')) {
     $PSScriptRoot
 } else {
-    Join-Path ([Environment]::GetFolderPath('UserProfile')) 'Jun'
+    Join-Path ([Environment]::GetFolderPath('UserProfile')) 'JunOS'
 }
 $InstallLocation.Text = $defaultLocation
 

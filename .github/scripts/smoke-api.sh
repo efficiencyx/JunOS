@@ -19,6 +19,10 @@ php -m | grep -qx pdo_sqlite || {
 	echo "smoke-api: php has no pdo_sqlite, every endpoint is a 500 without it" >&2
 	exit 1
 }
+php -m | grep -qx sodium || {
+	echo "smoke-api: php has no sodium, signup cannot mint a data key without it" >&2
+	exit 1
+}
 
 PORT=${SMOKE_PORT:-8129}
 OLLAMA_PORT=$((PORT + 1))
@@ -196,6 +200,23 @@ else
 fi
 curl -sS -b "$cookies" "$BASE/api/conversations.php?action=list" >"$work/body"
 if grep -q '"title":"Fake Title"' "$work/body"; then pass 'the title came from the model'; else fail 'no generated title'; fi
+
+# rows are sealed under the user's key (migration 016). the
+# question and the title reading back in clear from the file means
+# enc() got dropped somewhere and the volume is plaintext again.
+if command -v sqlite3 >/dev/null; then
+	if [ "$(sqlite3 "$db" "SELECT COUNT(*) FROM messages WHERE content NOT LIKE 'v1:%' AND content != '<audio>'")" = "0" ] \
+		&& [ "$(sqlite3 "$db" "SELECT COUNT(*) FROM conversations WHERE title IS NOT NULL AND title NOT LIKE 'v1:%'")" = "0" ]; then
+		pass 'messages and titles are ciphertext on disk'
+	else
+		fail 'a message or title is sitting in omega.sqlite in clear'
+	fi
+	if [ "$(sqlite3 "$db" "SELECT COUNT(*) FROM users WHERE wrapped_dek IS NULL OR recovery_wrapped_dek IS NULL")" = "0" ]; then
+		pass 'every account has a wrapped data key'
+	else
+		fail 'an account has no wrapped data key'
+	fi
+fi
 
 echo "php log"
 if grep -Ei 'PHP (Warning|Notice|Fatal|Parse|Deprecated)' "$work/server.log"; then

@@ -43,6 +43,10 @@ window.Voice = (function () {
   let enabled = false;
   let bargeIn = true;
   let silenceMs = SILENCE_MS;
+  // on = every utterance is for her, chat.php skips the side-talk
+  // judgement. not capture state, it rides along here because it
+  // is a voice pref like bargeIn and app.js reads it per request
+  let hearAll = false;
 
   let stream = null;
   let micCtx = null;
@@ -71,9 +75,9 @@ window.Voice = (function () {
   function setOnTranscript(fn) { onTranscript = fn || (() => {}); }
   // set this and the wav goes straight to the chat model. return
   // false from it and that turn falls back to whisper. one turn at
-  // a time, not a latch. the second arg is a retry, call it when
-  // the server refuses the wav after the fact and the same
-  // utterance goes through whisper instead of getting lost
+  // a time, not a latch. the second arg runs whisper on the same
+  // utterance and resolves to the text, nothing else, so the caller
+  // can transcribe next to the model or after it refused the wav
   function setOnAudio(fn) { onAudio = fn || null; }
   function setOnState(fn) { onState = fn || (() => {}); }
   function setOnBargeIn(fn) { onBargeIn = fn || (() => {}); }
@@ -81,6 +85,8 @@ window.Voice = (function () {
   function isEnabled() { return enabled; }
   function getState() { return state; }
   function setBargeIn(v) { bargeIn = !!v; }
+  function setHearAll(v) { hearAll = !!v; }
+  function getHearAll() { return hearAll; }
   function setSilenceMs(v) { silenceMs = Math.max(300, Math.min(2000, v | 0)); }
 
   function setState(s) {
@@ -290,7 +296,10 @@ window.Voice = (function () {
     node.port.postMessage({ type: 'stop', discard: false });
   }
 
-  async function transcribe(wav) {
+  // resolves to '' on any failure, never throws. whisper hands back
+  // "" for a breath, a key press, a door closing, callers drop those
+  // quietly or she Answers nothing, over and over, forever
+  async function stt(wav) {
     try {
       const res = await fetch(`${STT_URL}?action=stt`, {
         method: 'POST',
@@ -300,21 +309,23 @@ window.Voice = (function () {
       });
       if (!res.ok) throw new Error(`STT http ${res.status}`);
       const data = await res.json();
-      const text = (data.text || '').trim();
-      // drop empties quietly. whisper hands back "" for a breath, a key
-      // press, a door closing. send those and she Answers nothing, over
-      // and over, forever
-      if (text) onTranscript(text);
+      return (data.text || '').trim();
     } catch (e) {
       onLog('warn', `Voice: ${e.message}`);
+      return '';
     }
+  }
+
+  async function transcribe(wav) {
+    const text = await stt(wav);
+    if (text) onTranscript(text);
   }
 
   async function onPcm(pcm) {
     if (!pcm || !pcm.length) { resume(); return; }
     const wav = encodeWav(pcm, SAMPLE_RATE);
     try {
-      if (onAudio && onAudio(base64Of(wav), () => transcribe(wav)) !== false) return;
+      if (onAudio && onAudio(base64Of(wav), () => stt(wav)) !== false) return;
       await transcribe(wav);
     } finally {
       // ALWAYS. every path. on the whisper path we go deaf for the
@@ -378,7 +389,7 @@ window.Voice = (function () {
 
   return {
     support, enable, disable, isEnabled, getState, resume,
-    setBargeIn, setSilenceMs,
+    setBargeIn, setSilenceMs, setHearAll, hearAll: getHearAll,
     setOnTranscript, setOnAudio, setOnState, setOnBargeIn, setLogger,
   };
 })();

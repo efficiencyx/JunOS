@@ -15,5 +15,11 @@ window.Auth = {
       headers: { 'content-type': 'application/json' },
       body: JSON.stringify({ email, password }),
     }),
+  recover: (email, recovery_code, password) =>
+    fetch('/api/auth.php?action=recover', {
+      method: 'POST', credentials: 'same-origin',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ email, recovery_code, password }),
+    }),
   logout: () => fetch('/api/auth.php?action=logout', { method: 'POST', credentials: 'same-origin' }),
 };

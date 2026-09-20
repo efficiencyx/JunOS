@@ -6,9 +6,9 @@
 // avoid example version numbers that a bulk renumber could
 // rewrite.
 
-import { showAuthScreen } from './app/auth-screen.js?v=10';
+import { showAuthScreen } from './app/auth-screen.js?v=11';
 import { IDLE_AFTER_REPLY_MS, TYPING_POLL_MS, armIdleAfterReply, cancelActiveIdleNudge, cancelAutoReset, cancelIdleNudge, composerPlaceholder, consolidating, fleeActive, reportActivity, resetIdleNudge, scheduleAutoReset, scheduleIdleNudge, setCancelActiveIdleNudge, setConsolidating, showConsolidatingBubble, startFleeLock, syncConsolidationStatus } from './app/consolidation.js?v=10';
-import { chatInput, debugSystemPromptEl, devNoIdleChk, messagesEl, messagesEmpty, missingParamsEl, mobileConversationTitle, modelSelect, narrowSidebarQuery, reasoningSelect, sendBtn, sendButtonIdleMarkup, sendButtonStopMarkup, siteVolumeInput, stageEl, thinkChk } from './app/dom.js?v=10';
+import { chatInput, debugSystemPromptEl, devNoIdleChk, messagesEl, messagesEmpty, missingParamsEl, mobileConversationTitle, modelSelect, narrowSidebarQuery, reasoningSelect, sendBtn, sendButtonIdleMarkup, sendButtonStopMarkup, siteVolumeInput, stageEl, thinkChk } from './app/dom.js?v=11';
 import { announceMobileReply, faceBubble, hideFaceBubble, latestAssistantReply, restartFaceBubbleHide, scheduleFaceBubbleHide, scheduleFaceBubblePosition, setLatestAssistantReply, showFaceBubble } from './app/face-bubble.js?v=10';
 import { appendRaw, logAction, logMissing, logToolStatus, setStageStatus } from './app/logging.js?v=10';
 import { loadMood } from './app/mood.js?v=10';
@@ -17,7 +17,7 @@ import { loadConversation, refreshSidebar, setSidebarOpen } from './app/sidebar.
 import { makeNameFilter, makeStreamBuffer } from './app/stream-filters.js?v=10';
 import { escapeHtml, localTimeString, phoneMode } from './app/util.js?v=10';
 import { wireTts } from './app/wire-tts.js?v=10';
-import { wireVoice } from './app/wire-voice.js?v=10';
+import { wireVoice } from './app/wire-voice.js?v=11';
 import { WELCOME_TIERS, fetchWelcome, playWelcome, previewWelcome } from './app/welcome.js?v=10';
 
 export const messages = [];
@@ -177,7 +177,10 @@ export function updateEmptyState() {
   }
 }
 
-export function sendMessage() {
+// the button handler passes the click event here, so anything
+// that isn't {voice:true} is a typed turn
+export function sendMessage(opts) {
+  const voice = !!(opts && opts.voice === true);
   if (fleeActive()) {
     ui.toast('⚠ ' + composerPlaceholder(), 'error');
     return;
@@ -195,9 +198,19 @@ export function sendMessage() {
   resetIdleNudge();
   reportActivity();
   chatInput.value = '';
-  appendMsg('user', text);
-  messages.push({ role: 'user', content: window.Names ? Names.canonicalize(text) : text });
-  runChat({ idle: false });
+  const bubble = appendMsg('user', text);
+  const entry = { role: 'user', content: window.Names ? Names.canonicalize(text) : text };
+  messages.push(entry);
+  runChat({ idle: false, voice, onOverheard: voice ? () => dropUserTurn(bubble, entry) : null });
+}
+
+// she heard him talk to someone else. the turn never happened,
+// on screen or in history, the server already dropped its row
+function dropUserTurn(bubble, entry) {
+  bubble.remove();
+  const i = messages.indexOf(entry);
+  if (i !== -1) messages.splice(i, 1);
+  updateEmptyState();
 }
 
 function sendTouchEvent(text) {
@@ -232,33 +245,66 @@ export async function sttAvailable() {
 export function sendFromVoice(text) {
   if (stopActiveStream) stopActiveStream();
   chatInput.value = text;
-  sendMessage();
+  sendMessage({ voice: true });
 }
 
 // bubble says "spoken", history says <audio>. that string is ALSO
 // what the server stores for the turn, both sides have to match
 // or the next request replays a different conversation than the
-// one on disk.
+// one on disk. setTranscript swaps both for whisper's text once it
+// lands, she heard the wav live, everything after reads words.
 export function sendAudioFromVoice(b64, onUnsupported) {
   if (stopActiveStream) stopActiveStream();
   resetIdleNudge();
   reportActivity();
   const bubble = appendMsg('user', '🎤 spoken message');
-  messages.push({ role: 'user', content: '<audio>' });
+  const entry = { role: 'user', content: '<audio>' };
+  const convId = currentConversationId;
+  messages.push(entry);
   runChat({
     idle: false,
     audio: b64,
+    onOverheard: () => dropUserTurn(bubble, entry),
     onAudioUnsupported: () => {
-      bubble.remove();
-      const last = messages[messages.length - 1];
-      if (last && last.content === '<audio>') messages.pop();
-      updateEmptyState();
+      dropUserTurn(bubble, entry);
       if (onUnsupported) onUnsupported();
     },
   });
+  return {
+    setTranscript(text) {
+      if (!messages.includes(entry)) return;
+      entry.content = text;
+      bubble.textContent = '🎤 ' + text;
+      if (convId == null) return;
+      // chat.php inserts the <audio> row before it starts streaming,
+      // whisper on CPU is slower than that, but a 404 here just means
+      // it wasn't yet. one retry covers it.
+      const post = () => fetch(`api/conversations.php?action=set_audio_text&id=${encodeURIComponent(convId)}`, {
+        method: 'POST',
+        credentials: 'same-origin',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ text }),
+      });
+      post().then(r => { if (r.status === 404) setTimeout(post, 1500); }).catch(() => {});
+    },
+  };
 }
 
-export function runChat({ idle, ephemeral, audio, onAudioUnsupported }) {
+// she called enter_shop / enter_karaoke. the page flips once her
+// line is done playing, so the trip doesn't guillotine her
+// mid-sentence. the floor is for TTS off, so the line is at least
+// readable before it's gone.
+function leaveFor(where) {
+  const href = where === 'karaoke' ? 'karaoke.html' : 'wardrobe.html';
+  const t0 = Date.now();
+  const tick = () => {
+    if ((window.TTS && TTS.isSpeaking()) || Date.now() - t0 < 1500) return setTimeout(tick, 250);
+    location.href = href;
+  };
+  tick();
+}
+
+export function runChat({ idle, ephemeral, audio, voice, onOverheard, onAudioUnsupported }) {
   if (abortFn) return;
   cancelIdleNudge();
   cancelAutoReset();
@@ -305,6 +351,8 @@ export function runChat({ idle, ephemeral, audio, onAudioUnsupported }) {
   let visible = '';
   let shown = '';
   let silenced = false;
+  let overheard = false;
+  let trip = '';
   const bubbleSource = ephemeral ? 'ephemeral' : 'phone';
   const bubbleEnabled = () => !(window.VoiceMode && VoiceMode.isActive()) && (ephemeral || phoneMode());
   const renderBubble = () => {
@@ -391,7 +439,8 @@ export function runChat({ idle, ephemeral, audio, onAudioUnsupported }) {
       mod_items: window.Mods && Mods.itemNames ? Mods.itemNames() : [],
       conversation_id: currentConversationId,
       idle: !!idle, ephemeral: !!ephemeral, client_time: localTimeString(),
-      audio },
+      audio, voice: !!voice,
+      hear_all: !!(window.Voice && Voice.hearAll && Voice.hearAll()) },
     {
       onDebug: (dbg) => {
         if (!isCurrent()) return;
@@ -417,7 +466,8 @@ export function runChat({ idle, ephemeral, audio, onAudioUnsupported }) {
       // another chat leaves the model wearing one thing and the
       // database saying another.
       onOutfit: (change) => Outfit.applyToolChange(change),
-      onSilence: () => {
+      onGo: (where) => { trip = where; },
+      onSilence: (s) => {
         if (!isCurrent()) return;
         // she decided to say nothing, so whatever leaked into the bubble
         // first never happened. drop it and mark the turn instead.
@@ -427,6 +477,14 @@ export function runChat({ idle, ephemeral, audio, onAudioUnsupported }) {
         visible = '';
         shown = '';
         typing.remove();
+        // overheard = he wasn't talking to her. no marker either, the
+        // whole exchange goes, his bubble included
+        if (s && s.overheard && onOverheard) {
+          overheard = true;
+          draft.remove();
+          onOverheard();
+          return;
+        }
         draft.className = 'msg silence';
         draft.textContent = (window.Names ? Names.getBot() : 'Jun') + ' says nothing.';
       },
@@ -460,7 +518,7 @@ export function runChat({ idle, ephemeral, audio, onAudioUnsupported }) {
           visible = '';
           shown = '';
           if (window.TTS) TTS.stop();
-          messages.push({ role: 'assistant', content: '...' });
+          if (!overheard) messages.push({ role: 'assistant', content: '...' });
         } else if (visible.trim()) {
           messages.push({ role: 'assistant', content: visible });
           if (!ephemeral) addRatingControls(draft);
@@ -475,6 +533,7 @@ export function runChat({ idle, ephemeral, audio, onAudioUnsupported }) {
           History.compact(currentConversationId).catch(() => {});
         }
         if (window.History) await refreshSidebar();
+        if (trip) leaveFor(trip);
       },
       onError: async (err) => {
         if (!isCurrent()) return;
@@ -488,9 +547,8 @@ export function runChat({ idle, ephemeral, audio, onAudioUnsupported }) {
           startFleeLock((info.until || 0) * 1000, info.reason);
         } else if (err.message === 'audio_unsupported') {
           // refused before anything was written, so the turn leaves no trace
-          // here either. wire-voice sends the same wav through whisper
+          // here either. wire-voice decides what happens to the wav
           if (onAudioUnsupported) onAudioUnsupported();
-          ui.toast('⚠ This model can\'t hear - falling back to transcription', 'error');
         } else if (err.status === 418) {
           setConsolidating(true);
           showConsolidatingBubble();
@@ -631,7 +689,7 @@ function showBoot() {
     ['vendor/pixi.min.js', 'vendor/live2dcubismcore.min.js',
      'vendor/marked.min.js', 'vendor/purify.min.js?v=4',
      'js/actions.js?v=4', 'js/outfit.js?v=21', 'js/touch.js?v=3',
-     'js/mods.js?v=14', 'js/tts.js?v=3', 'js/voice.js?v=9',
+     'js/mods.js?v=14', 'js/tts.js?v=3', 'js/voice.js?v=10',
      'js/voicemode.js?v=3', 'js/trip-loader.js?v=3',
      ...(currentUser?.role === 'admin' ? ['js/devhud.js?v=3'] : []),
      'js/wardrobe-open-lines.js?v=3', 'js/wardrobe-reactions.js?v=4',
@@ -881,9 +939,9 @@ function showBoot() {
     'hf.co/efficiencyx/Jun-LoRA-12B-GGUF:Q8_0',
     'hf.co/efficiencyx/Jun-LoRA-12B-GGUF:Q6_K',
     'hf.co/efficiencyx/Jun-LoRA-12B-GGUF:Q4_K_M',
-    'hf.co/efficiencyx/Jun-LoRA-v4-E4B-GGUF:Q8_0',
-    'hf.co/efficiencyx/Jun-LoRA-v4-E4B-GGUF:Q6_K',
-    'hf.co/efficiencyx/Jun-LoRA-v4-E4B-GGUF:Q4_K_M',
+    'hf.co/efficiencyx/Jun-LoRA-E4B-GGUF:Q8_0',
+    'hf.co/efficiencyx/Jun-LoRA-E4B-GGUF:Q6_K',
+    'hf.co/efficiencyx/Jun-LoRA-E4B-GGUF:Q4_K_M',
     'hf.co/efficiencyx/Jun-LoRA-E2B-GGUF:Q8_0',
     'hf.co/efficiencyx/Jun-LoRA-E2B-GGUF:Q6_K',
     'hf.co/efficiencyx/Jun-LoRA-E2B-GGUF:Q4_K_M',

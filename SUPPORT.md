@@ -15,7 +15,7 @@ Include your installation method, OS, relevant hardware, provider and model, ena
 
 Issues are public. Never post:
 
-- `.env` files, passwords, API keys, registration keys, or session data;
+- `.env` files, passwords, API keys, registration keys, recovery codes, or session/data-key cookies;
 - private chat history, memory notes, journals, or database contents;
 - recovered game assets, game archives, or copyrighted source files;
 - a complete log when a small redacted excerpt shows the problem.
@@ -28,5 +28,5 @@ Do not use a public support or bug issue for an exploitable vulnerability. Follo
 
 ## Project boundaries
 
-Support is best-effort. The project cannot provide original game assets, debug modified or pirated game files, guarantee compatibility with every model or unsupported GPU, or recover lost local state. Back up the `omega_state` volume or `runtime/state` before making risky local changes.
+Support is best-effort. The project cannot provide original game assets, debug modified or pirated game files, guarantee compatibility with every model or unsupported GPU, or recover lost local state. Back up the `omega_state` volume or `runtime/state` before making risky local changes. Keep your recovery code separately: a backup alone cannot unlock encrypted content if you lose both the password and code.
 

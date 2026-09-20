@@ -57,6 +57,7 @@ export const siteVolumeInput = document.getElementById('siteVolume');
 export const voiceChk = document.getElementById('voiceChk');
 export const voiceState = document.getElementById('voiceState');
 export const voiceBargeChk = document.getElementById('voiceBargeChk');
+export const voiceHearAllChk = document.getElementById('voiceHearAllChk');
 export const voiceSilenceInput = document.getElementById('voiceSilence');
 export const messagesEmpty = document.getElementById('messagesEmpty');
 export const emptySub = document.getElementById('emptySub');

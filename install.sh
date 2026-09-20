@@ -3,7 +3,7 @@ set -euo pipefail
 
 REPO_UPSTREAM="https://github.com/efficiencyx/JunOS.git"
 REPO="${JUN_REPO:-$REPO_UPSTREAM}"
-DIR="${JUN_DIR:-Jun}"
+DIR="${JUN_DIR:-JunOS}"
 REF="${JUN_REF:-main}"
 DOCKER_SCRIPT_URL="https://get.docker.com"
 DOCKER_SCRIPT=""
@@ -124,7 +124,7 @@ fetch() {
 }
 
 MODEL_12B="hf.co/efficiencyx/Jun-LoRA-12B-GGUF:Q4_K_M"
-MODEL_E4B="hf.co/efficiencyx/Jun-LoRA-v4-E4B-GGUF:Q4_K_M"
+MODEL_E4B="hf.co/efficiencyx/Jun-LoRA-E4B-GGUF:Q4_K_M"
 MODEL_E2B="hf.co/efficiencyx/Jun-LoRA-E2B-GGUF:Q4_K_M"
 
 # match the drafter to the SAME Gemma 4 size and QAT branch. a
@@ -240,7 +240,7 @@ recommend_model() {
     if   [ "$mb" -ge 23500 ]; then echo "hf.co/efficiencyx/Jun-LoRA-12B-GGUF:Q8_0"
     elif [ "$mb" -ge 15500 ]; then echo "hf.co/efficiencyx/Jun-LoRA-12B-GGUF:Q6_K"
     elif [ "$mb" -ge 11500 ]; then echo "$MODEL_12B"
-    elif [ "$mb" -ge 9500 ]; then echo "hf.co/efficiencyx/Jun-LoRA-v4-E4B-GGUF:Q8_0"
+    elif [ "$mb" -ge 9500 ]; then echo "hf.co/efficiencyx/Jun-LoRA-E4B-GGUF:Q8_0"
     elif [ "$mb" -ge 7500 ]; then echo "$MODEL_E4B"
     elif [ "$mb" -ge 5500 ]; then echo "hf.co/efficiencyx/Jun-LoRA-E2B-GGUF:Q6_K"
     else                               echo "$MODEL_E2B"

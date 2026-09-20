@@ -81,6 +81,17 @@ if (isset($body['audio'])) {
     $audioB64 = $body['audio'];
     unset($wav);
 }
+// a whisper turn arrives as plain text and looks typed. the flag
+// is what earns it the "who is he talking to" block below, an
+// audio turn gets it for free
+$spoken = $audioB64 !== '' || !empty($body['voice']);
+// the "hear everything" switch. she still hears it as spoken, but
+// no side-talk block and overheard is ignored. there for anyone
+// alone at the desk, and for the languages her audio encoder
+// half hears: italian speech with the block on went silent on
+// 14/24 lines that WERE for her, whisper text of the same lines
+// held 21/24
+if (!empty($body['hear_all'])) $spoken = false;
 
 $model = default_chat_model();
 if (isset($body['model']) && is_string($body['model']) && $body['model'] !== '') {
@@ -274,11 +285,12 @@ function tool_catalog(?string $approvedWebSearchQuery): array {
             'type' => 'function',
             'function' => [
                 'name' => 'stay_silent',
-                'description' => 'Say nothing at all this turn - ignoring him, too hurt/angry, or the scene calls for silence. Sends no message.',
+                'description' => 'Say nothing at all this turn - ignoring him, too hurt/angry, the scene calls for silence, or he wasn\'t talking to you at all (someone else in the room, a phone call, the TV). Sends no message.',
                 'parameters' => [
                     'type' => 'object',
                     'properties' => [
                         'reason' => ['type' => 'string', 'description' => 'Why (private).'],
+                        'overheard' => ['type' => 'boolean', 'description' => 'true when what he said was aimed at someone else, not you.'],
                     ],
                 ],
             ],
@@ -293,6 +305,32 @@ function tool_catalog(?string $approvedWebSearchQuery): array {
                     'properties' => [
                         'reason' => ['type' => 'string', 'description' => 'Why you are leaving.'],
                         'destination' => ['type' => 'string', 'description' => 'Where you\'re going, if anywhere.'],
+                    ],
+                ],
+            ],
+        ],
+        [
+            'type' => 'function',
+            'function' => [
+                'name' => 'enter_shop',
+                'description' => 'Go to Annalie\'s clothes shop together with Anon to browse and try things on. Call it once the two of you agree to go, then say your line - you both leave for the shop when you finish talking.',
+                'parameters' => [
+                    'type' => 'object',
+                    'properties' => [
+                        'reason' => ['type' => 'string', 'description' => 'Why you two are going (private).'],
+                    ],
+                ],
+            ],
+        ],
+        [
+            'type' => 'function',
+            'function' => [
+                'name' => 'enter_karaoke',
+                'description' => 'Start a karaoke date with Anon: you two pick a song and sing it together. Call it once the two of you agree to sing, then say your line - the karaoke starts when you finish talking. It tells you if the karaoke room is closed.',
+                'parameters' => [
+                    'type' => 'object',
+                    'properties' => [
+                        'reason' => ['type' => 'string', 'description' => 'Why you two are going (private).'],
                     ],
                 ],
             ],
@@ -536,23 +574,27 @@ function run_tool_call(string $name, array $args, array $user, int $convId, ?str
             $query = trim((string)($args['query'] ?? ''));
             $limit = max(1, min(8, (int)($args['limit'] ?? 5)));
             if ($query === '') return json_encode(['error' => 'query_required']);
-            $like = '%' . str_replace(['%', '_'], ['\\%', '\\_'], $query) . '%';
+            // ponytail: rows are ciphertext so LIKE can't see them. walk
+            // his messages newest first, open each, stop at $limit hits.
+            // one person's chats, fine. an index would need a plaintext
+            // copy somewhere, which is the exact thing we don't keep.
             $st = db()->prepare(
                 'SELECT m.role, m.content, m.created_at, c.title, c.id AS conversation_id
                    FROM messages m JOIN conversations c ON c.id = m.conversation_id
-                  WHERE c.user_id = ? AND c.id != ? AND m.content LIKE ? ESCAPE \'\\\'
-                  ORDER BY m.created_at DESC, m.id DESC LIMIT ?'
+                  WHERE c.user_id = ? AND c.id != ?
+                  ORDER BY m.created_at DESC, m.id DESC'
             );
-            $st->bindValue(1, (int)$user['id'], PDO::PARAM_INT);
-            $st->bindValue(2, $convId, PDO::PARAM_INT);
-            $st->bindValue(3, $like, PDO::PARAM_STR);
-            $st->bindValue(4, $limit, PDO::PARAM_INT);
-            $st->execute();
-            $rows = array_map(function ($r) {
-                $content = trim(preg_replace('/\s+/', ' ', (string)$r['content']));
+            $st->execute([(int)$user['id'], $convId]);
+            $rows = [];
+            while ($r = $st->fetch()) {
+                $content = (string)dec($r['content']);
+                if (mb_stripos($content, $query) === false) continue;
+                $content = trim(preg_replace('/\s+/', ' ', $content));
                 if (mb_strlen($content) > 500) $content = mb_substr($content, 0, 497) . '…';
-                return ['date' => date('Y-m-d H:i', (int)$r['created_at']), 'conversation_id' => (int)$r['conversation_id'], 'title' => (string)($r['title'] ?? ''), 'role' => (string)$r['role'], 'content' => $content];
-            }, $st->fetchAll());
+                $rows[] = ['date' => date('Y-m-d H:i', (int)$r['created_at']), 'conversation_id' => (int)$r['conversation_id'], 'title' => (string)dec($r['title'] ?? null), 'role' => (string)$r['role'], 'content' => $content];
+                if (count($rows) >= $limit) break;
+            }
+            $st->closeCursor();
             if (!$rows) {
                 // the fine-tune only ever saw THIS tool name, so a lore
                 // question lands here first. hand it the right tool instead
@@ -584,7 +626,7 @@ function run_tool_call(string $name, array $args, array $user, int $convId, ?str
                 $snip->execute([(int)$c['id']]);
                 $lines = [];
                 foreach (array_reverse($snip->fetchAll()) as $r) {
-                    $txt = preg_replace('/\[\s*A(?:CTIONS?)?\s*:[^\]]*\]/i', '', (string)$r['content']);
+                    $txt = preg_replace('/\[\s*A(?:CTIONS?)?\s*:[^\]]*\]/i', '', (string)dec($r['content']));
                     $txt = trim(preg_replace('/\s+/', ' ', $txt));
                     if ($txt === '') continue;
                     if (mb_strlen($txt) > 160) $txt = mb_substr($txt, 0, 157) . '…';
@@ -592,7 +634,7 @@ function run_tool_call(string $name, array $args, array $user, int $convId, ?str
                 }
                 $out[] = [
                     'conversation_id' => (int)$c['id'],
-                    'title' => (string)($c['title'] ?? ''),
+                    'title' => (string)dec($c['title'] ?? null),
                     'date' => date('Y-m-d H:i', (int)$c['updated_at']),
                     'recap' => $lines,
                 ];
@@ -662,7 +704,7 @@ if ($convId > 0) {
     $sq = db()->prepare('SELECT summary, summary_upto_id FROM conversations WHERE id=? AND user_id=?');
     $sq->execute([$convId, (int)$user['id']]);
     if ($srow = $sq->fetch()) {
-        $convSummary = trim((string)($srow['summary'] ?? ''));
+        $convSummary = trim((string)dec($srow['summary'] ?? null));
         $uptoId = (int)$srow['summary_upto_id'];
         if ($convSummary !== '' && $uptoId > 0) {
             $cc = db()->prepare('SELECT COUNT(*) FROM messages WHERE conversation_id=? AND id<=?');
@@ -672,6 +714,27 @@ if ($convId > 0) {
         }
     }
     $sq->closeCursor();
+}
+
+// FIRST block, on purpose. measured on the 12B with a 30 line
+// side-talk set: this text at the bottom of the live context
+// silences 12/20, at the top 25/30 with 4/24 false positives.
+// the "unless it is clearly for you" default is what moves
+// recall, the soft version caps at ~40% wherever it sits. and
+// NEVER put any of this after his words in the user text, that
+// flips her default and she goes quiet on "did you eat today".
+// don't bolt a "but a line that says you IS for you" clause on
+// either, tried it, the false positives stayed and recall dropped
+// to 20/30
+if ($spoken) {
+    $contextParts[] = "## Who he is talking to\n"
+        . "He said this out loud and he is not alone in the room. Before you answer, check that the line fits "
+        . "as something said TO YOU, following what you two were just saying. A line with no question or remark "
+        . "for you, about objects, food, a game on TV, chores, or another person, is him talking to someone else "
+        . "in the room. Talking about you in the third person (she, her, the girl) is also not for you."
+        . ($audioB64 !== '' ? " A voice that is not his is someone else in the room, not for you either." : '')
+        . " Unless it is clearly for you, call stay_silent with overheard=true. Staying quiet costs nothing, "
+        . "answering a conversation you are not part of is embarrassing.";
 }
 
 $nowStr = $clientTime !== '' ? $clientTime : date('l, F j, Y \a\t g:i A T');
@@ -849,9 +912,14 @@ if (($user['role'] ?? '') === 'admin') {
 $now = time();
 $db = db();
 
+$userRowId = 0;
 if (!$idle && !$ephemeral) {
+    // <audio> stays plaintext on purpose. conversations.php
+    // set_audio_text finds the row by that literal and swaps the
+    // transcript in, sealed. it can't match a ciphertext.
     $db->prepare('INSERT INTO messages (conversation_id, role, content, created_at) VALUES (?, ?, ?, ?)')
-       ->execute([$convId, 'user', $audioB64 !== '' ? '<audio>' : $lastUserMsg, $now]);
+       ->execute([$convId, 'user', $audioB64 !== '' ? '<audio>' : enc($lastUserMsg), $now]);
+    $userRowId = (int)$db->lastInsertId();
 }
 
 ollama_evict_if_partially_offloaded($model);
@@ -870,6 +938,9 @@ $stats = null;
 $doneReason = '';
 $silenced = false;
 $silenceReason = '';
+// only a spoken turn can be for someone else. typed, the flag is
+// just a normal stay_silent, we're not deleting what he wrote
+$overheard = false;
 $fledInfo = null;
 $fleeDecided = false;
 
@@ -981,6 +1052,7 @@ for ($round = 0; $round < 3; $round++) {
             } else {
                 $silenced = true;
                 $silenceReason = trim((string)($args['reason'] ?? ''));
+                $overheard = $spoken && !empty($args['overheard']);
                 $toolResult = json_encode(['silent' => true]);
             }
         } elseif ($name === 'change_outfit') {
@@ -1014,6 +1086,24 @@ for ($round = 0; $round < 3; $round++) {
                         'note' => 'You cannot leave right now. Stay in the scene and respond to what is actually happening.',
                     ], JSON_UNESCAPED_UNICODE);
                 }
+            }
+        } elseif ($name === 'enter_shop' || $name === 'enter_karaoke') {
+            $where = $name === 'enter_shop' ? 'shop' : 'karaoke';
+            // this queues navigation after the reply and TTS finish.
+            // an idle nudge must never send it, Anon isn't even there.
+            if ($idle) {
+                $toolResult = json_encode(['error' => 'not_available_on_idle']);
+            } elseif ($where === 'karaoke' && empty(karaoke_health()['sep'])) {
+                $toolResult = json_encode([
+                    'started' => false,
+                    'note' => 'The karaoke room is closed right now (the karaoke service is not running). Tell Anon plainly, do not pretend to sing.',
+                ]);
+            } else {
+                sse_send(['go' => $where]);
+                $toolResult = json_encode([
+                    'going' => $where,
+                    'note' => 'Say one short line about heading out together. The trip starts the moment you finish talking.',
+                ]);
             }
         } else {
             $toolResult = run_tool_call($name, $args, $user, $convId, $approvedWebSearchQuery);
@@ -1066,9 +1156,15 @@ if ($usedTools && !$sawError && !$silenced && $fledInfo === null && trim($assist
 // tool, so send them down the same path. flee_adjudicate() still
 // has to approve a flee tag, the tag itself proves nothing.
 if (!$sawError && $assistantBuffer !== '') {
-    if (!$silenced && !$idle && preg_match('/\[\s*A(?:CTIONS?)?\s*:\s*stay_silent\b([^\]]*)\]/i', $assistantBuffer, $sm)) {
+    // the second form is the call itself, unparsed. about 1 turn in
+    // 6 with the overheard hint on she writes `stay_silent{overheard:true,...}`
+    // or `stay_silent(overheard=true)` as plain text and ollama's
+    // parser lets it through. Anon would read that on screen.
+    if (!$silenced && !$idle && (preg_match('/\[\s*A(?:CTIONS?)?\s*:\s*stay_silent\b([^\]]*)\]/i', $assistantBuffer, $sm)
+            || preg_match('/^\s*stay_silent\s*[({](.*)$/is', $assistantBuffer, $sm))) {
         $silenced = true;
         if (preg_match('/\breason\s*=\s*([^|\]]+)/i', $sm[1], $sr)) $silenceReason = trim($sr[1]);
+        $overheard = $spoken && (bool)preg_match('/\boverheard\s*[:=]\s*true\b/i', $sm[1]);
     }
     if (!$silenced && $fledInfo === null && !$fleeDecided
         && preg_match('/\[\s*A(?:CTIONS?)?\s*:\s*flee\b([^\]]*)\]/i', $assistantBuffer, $fm)) {
@@ -1094,7 +1190,7 @@ if ($silenced) {
     // transcript still needs an assistant turn. strict templates
     // reject a dangling user turn on the next request.
     $assistantBuffer = '...';
-    sse_send(['silence' => ['reason' => $silenceReason]]);
+    sse_send(['silence' => ['reason' => $silenceReason, 'overheard' => $overheard]]);
 } elseif ($fledInfo !== null) {
     if (trim($assistantBuffer) === '') $assistantBuffer = '...';
     sse_send(['fled' => [
@@ -1148,22 +1244,33 @@ if (!$sawError && $assistantBuffer !== '') {
 
     if ($ephemeral) { sse_done(); exit; }
 
+    // not his turn with her, so it never happened. the user row went
+    // in before the stream, pull it back out and store no reply.
+    // otherwise two people chatting for ten minutes leaves thirty
+    // <audio>/... pairs eating context
+    if ($overheard) {
+        if ($userRowId) db()->prepare('DELETE FROM messages WHERE id=? AND conversation_id=?')->execute([$userRowId, $convId]);
+        log_event(['msg' => 'overheard', 'conversation_id' => $convId, 'audio' => $audioB64 !== '']);
+        sse_done();
+        exit;
+    }
+
     $now = time();
     db()->prepare('INSERT INTO messages (conversation_id, role, content, created_at) VALUES (?, ?, ?, ?)')
-        ->execute([$convId, 'assistant', $assistantBuffer, $now]);
+        ->execute([$convId, 'assistant', enc($assistantBuffer), $now]);
     db()->prepare('UPDATE conversations SET updated_at=? WHERE id=?')->execute([$now, $convId]);
 
     if (!$idle && !$ephemeral) {
         $titleRow = db()->prepare('SELECT title FROM conversations WHERE id=?');
         $titleRow->execute([$convId]);
-        $conversationTitle = $titleRow->fetchColumn();
+        $conversationTitle = dec($titleRow->fetchColumn() ?: null);
         $titleRow->closeCursor();
         // a spoken turn leaves $lastUserMsg empty, so there's nothing
         // to name the chat after. next typed turn handles it.
         if (!$conversationTitle && $lastUserMsg !== '') {
             $newTitle = generate_chat_title($lastUserMsg) ?: mb_substr($lastUserMsg, 0, 60);
             db()->prepare('UPDATE conversations SET title=? WHERE id=?')
-                ->execute([$newTitle, $convId]);
+                ->execute([enc($newTitle), $convId]);
         }
     }
 }

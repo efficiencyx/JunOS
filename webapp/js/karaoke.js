@@ -663,7 +663,7 @@ window.Karaoke = (function () {
       }
 
       const built = buildSections(rec.lyrics || [], duration);
-      track = { hash, duration, instrBuf, guideBuf, sections: built.sections, lyricsSrc: built.src };
+      track = { hash, duration, instrBuf, guideBuf, sections: built.sections, lyricsSrc: built.src, meta };
       setLyricsSrc(built.src);
       setStatus('');
 
@@ -830,7 +830,9 @@ window.Karaoke = (function () {
       });
       if (!r.ok) throw new Error(`transcribe http ${r.status}`);
       const data = await r.json();
-      renderScore(scoreTake(sections, data.words || []));
+      const result = scoreTake(sections, data.words || []);
+      renderScore(result);
+      rememberTake(result);
     } catch (e) {
       console.error(e);
       ui.toast('⚠ Scoring failed: ' + e.message, 'error');
@@ -839,6 +841,30 @@ window.Karaoke = (function () {
         ? "Jun's solo…"
         : '');
     }
+  }
+
+  // nothing on the chat side knows this page exists, so a scored
+  // take gets written into her durable notes like any other event
+  // and rides the live context from the next reply on. the date
+  // goes in spelled out, never "today", she can't do relative time
+  // at all.
+  function rememberTake(r) {
+    if (!r.scored || !track) return;
+    const m = track.meta || {};
+    const day = new Date().toLocaleDateString('en-GB', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' });
+    const song = `"${m.title || 'a song'}"` + (m.artist ? ` by ${m.artist}` : '');
+    const how = {
+      solo: 'solo relay, he sang it through then I did',
+      duo: 'a duet, both of us singing the whole song',
+      split: 'lines split between us',
+    }[mode];
+    const memory = `Karaoke with Anon on ${day}: ${song} (${how}). He scored ${r.score}/100, ${r.matched} of ${r.total} of his words landed in time.`;
+    fetch('/api/memory.php', {
+      method: 'POST',
+      credentials: 'same-origin',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ memory, category: 'events' }),
+    }).catch(() => {});
   }
 
   function scoreTake(sections, user) {

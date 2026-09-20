@@ -1,7 +1,7 @@
 window.VoiceMode = (function () {
   let active = false;
   let muted = false;
-  let hooks = { onEnter: null, onExitMidStream: null, sttAvailable: null };
+  let hooks = { onEnter: null, onExitMidStream: null };
 
   const overlay = () => document.getElementById('voiceOverlay');
 
@@ -13,10 +13,6 @@ window.VoiceMode = (function () {
     if (!sup.ok) {
       ui.toast('⚠ Voice mode unavailable: ' + (sup.reason === 'insecure_context'
         ? 'needs HTTPS or localhost' : sup.reason), 'error');
-      return;
-    }
-    if (hooks.sttAvailable && !(await hooks.sttAvailable())) {
-      ui.toast('⚠ Voice mode unavailable: speech-to-text is not running', 'error');
       return;
     }
     try {

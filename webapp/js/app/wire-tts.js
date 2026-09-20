@@ -1,5 +1,5 @@
 import { IDLE_AFTER_REPLY_MS, scheduleIdleNudge } from './consolidation.js?v=10';
-import { ttsChk, ttsEngineSelect, ttsLangRow, ttsLangSelect, ttsSpeedInput, ttsVoiceSelect } from './dom.js?v=10';
+import { ttsChk, ttsEngineSelect, ttsLangRow, ttsLangSelect, ttsSpeedInput, ttsVoiceSelect } from './dom.js?v=11';
 import { finishPendingFaceBubbleHide } from './face-bubble.js?v=10';
 import { logAction } from './logging.js?v=10';
 import { syncVoiceDeps, updateTtsSpeedLabel } from './settings.js?v=10';

@@ -1,5 +1,5 @@
 import { daypart, moodTier } from '../mood-tier.js?v=10';
-import { emptySub, promptChips } from './dom.js?v=10';
+import { emptySub, promptChips } from './dom.js?v=11';
 
 // her tier picks the empty state's mood, the hour picks its
 // flavour. high tension at 2am needs different lines from a warm

@@ -607,24 +607,24 @@ html[data-pre-auth] #app { visibility: hidden; }
    forbids the usual media="print" onload= trick, and blocking on
    the full sheet would cost a round trip the auth screen does not
    need. -->
-<link rel="preload" as="style" href="styles.css?v=3">
+<link rel="preload" as="style" href="styles.css?v=4">
 <link rel="preload" as="style" href="trip-loader.css?v=2">
-<noscript><link rel="stylesheet" href="styles.css?v=3"></noscript>
+<noscript><link rel="stylesheet" href="styles.css?v=4"></noscript>
 
 <script defer src="js/viewport.js?v=3"></script>
 <script defer src="js/pwa.js?v=2"></script>
 <script src="js/boot-gate.js?v=3"></script>
 
 <script defer src="js/loader.js?v=2"></script>
-<script defer src="js/auth.js?v=3"></script>
-<script defer src="js/prefs.js?v=3"></script>
+<script defer src="js/auth.js?v=4"></script>
+<script defer src="js/prefs.js?v=4"></script>
 <script defer src="js/names.js?v=4"></script>
-<script defer src="js/chat-api.js?v=3"></script>
+<script defer src="js/chat-api.js?v=6"></script>
 <script defer src="js/ui.js?v=3"></script>
 <script defer src="js/history.js?v=2"></script>
 <script defer src="js/boot-fx.js?v=2"></script>
 <script defer src="js/memory-graph.js?v=2"></script>
-<script type="module" src="js/app.js?v=10"></script>
+<script type="module" src="js/app.js?v=12"></script>
 </head>
 <body>
 
@@ -682,7 +682,34 @@ html[data-pre-auth] #app { visibility: hidden; }
         </label>
         <div class="auth-error" id="loginError" hidden></div>
         <button type="submit" class="auth-submit" id="loginBtn">authenticate</button>
+        <button type="button" class="auth-submit" id="authShowRecover">forgot password? use your recovery code</button>
       </form>
+
+      <form id="authFormRecover" class="auth-form" hidden>
+        <div class="auth-motd-line auth-dim">your chats are sealed under your password. the recovery code from signup is the only other way in.</div>
+        <label class="auth-field">
+          <span class="auth-flabel"><span class="auth-ps" aria-hidden="true"></span> email</span>
+          <input type="email" id="recoverEmail" autocomplete="email" spellcheck="false" required>
+        </label>
+        <label class="auth-field">
+          <span class="auth-flabel"><span class="auth-ps" aria-hidden="true"></span> recovery code</span>
+          <input type="text" id="recoverCode" autocomplete="off" spellcheck="false" required placeholder="xxxxx-xxxxx-xxxxx-xxxxx">
+        </label>
+        <label class="auth-field">
+          <span class="auth-flabel"><span class="auth-ps" aria-hidden="true"></span> new password <small>(min 8 chars)</small></span>
+          <input type="password" id="recoverPassword" autocomplete="new-password" required minlength="8">
+        </label>
+        <div class="auth-error" id="recoverError" hidden></div>
+        <button type="submit" class="auth-submit" id="recoverBtn">reset password</button>
+        <button type="button" class="auth-submit" id="authHideRecover">back to login</button>
+      </form>
+
+      <div id="authRecoveryCode" class="auth-form" hidden>
+        <div class="auth-motd-line">this is your recovery code. it is shown ONCE.</div>
+        <div class="auth-code" id="authRecoveryCodeValue"></div>
+        <div class="auth-motd-line auth-dim">your chats and her memory of you are encrypted with a key only your password and this code can open. lose both and nobody, not even this server, can get them back.</div>
+        <button type="button" class="auth-submit" id="authRecoveryDone">saved it, let me in</button>
+      </div>
 
       <form id="authFormSignup" class="auth-form" hidden aria-labelledby="authTabSignup">
         <label class="auth-field">
@@ -914,6 +941,13 @@ html[data-pre-auth] #app { visibility: hidden; }
             <div class="set-row-desc">Talking over her cuts her off. Turn off if she keeps interrupting herself.</div>
           </div>
           <label class="set-row-control"><input type="checkbox" id="voiceBargeChk" class="toggle" checked aria-label="Allow interrupting"></label>
+        </div>
+        <div class="set-row" data-dep="mic">
+          <div class="set-row-text">
+            <div class="set-row-title">Hear everything</div>
+            <div class="set-row-desc">Off, she stays quiet when you talk to someone else in the room. On, she answers every word the mic picks up.</div>
+          </div>
+          <label class="set-row-control"><input type="checkbox" id="voiceHearAllChk" class="toggle" aria-label="Hear everything"></label>
         </div>
         <div class="set-row" data-dep="mic">
           <div class="set-row-text">
@@ -1255,6 +1289,9 @@ html[data-pre-auth] #app { visibility: hidden; }
       <svg class="ico-mic-off" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="display:none"><line x1="1" y1="1" x2="23" y2="23"/><path d="M9 9v3a3 3 0 0 0 5.12 2.12M15 9.34V4a3 3 0 0 0-5.94-.6"/><path d="M17 16.95A7 7 0 0 1 5 12v-2m14 0v2a7 7 0 0 1-.11 1.23"/><line x1="12" y1="19" x2="12" y2="23"/><line x1="8" y1="23" x2="16" y2="23"/></svg>
     </button>
     <div class="voice-overlay-status" id="voiceOverlayStatus">…</div>
+    <button id="voiceOverlayHearAll" class="voice-overlay-btn voice-overlay-hear" type="button" aria-label="Hear everything" title="She ignores side-talk - click so she hears everything">
+      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
+    </button>
   </div>
 </div>
 

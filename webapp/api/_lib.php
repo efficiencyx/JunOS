@@ -40,6 +40,31 @@ function sidecar_headers(array $headers = []): array {
     return $headers;
 }
 
+// separation gets its own sidecar so it can hold a GPU torch
+// while the voice one stays on the CPU. a bare metal install runs
+// both roles in one process, so fall back to the voice sidecar's
+// URL, and to KOKORO_URL, its old name.
+function karaoke_url(): string {
+    return rtrim(env_str('KARAOKE_URL', env_str('TTS_URL', env_str('KOKORO_URL', 'http://localhost:8001'))), '/');
+}
+
+// the sidecar's own /health json, or null when it's down. `sep`
+// in there is the only flag that means karaoke actually works,
+// the voice sidecar answers /health too and says sep=false.
+function karaoke_health(): ?array {
+    $ch = curl_init(karaoke_url() . '/health');
+    curl_setopt($ch, CURLOPT_HTTPHEADER, sidecar_headers());
+    curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
+    curl_setopt($ch, CURLOPT_CONNECTTIMEOUT, 5);
+    curl_setopt($ch, CURLOPT_TIMEOUT, 10);
+    $res = curl_exec($ch);
+    $code = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+    curl_close($ch);
+    if ($res === false || $code >= 500) return null;
+    $data = json_decode((string)$res, true);
+    return is_array($data) ? $data : null;
+}
+
 // somewhere we can actually write, for the SQLite DB and the rate
 // limit files. docker keeps the default. a bare metal install on
 // Windows points OMEGA_STATE_DIR at the install folder so the
@@ -293,7 +318,11 @@ function current_user(): ?array {
          WHERE s.token = ? AND s.expires_at > ? LIMIT 1'
     );
     $stmt->execute([session_token_hash($token), time()]);
-    return $user = $stmt->fetch() ?: null;
+    $user = $stmt->fetch() ?: null;
+    // a session without its omega_key cookie can't read a single
+    // row, so it counts as signed out. re-login mints the cookie.
+    if ($user !== null && crypt_key() === null) $user = null;
+    return $user;
 }
 
 function memory_dir(): string {
@@ -417,6 +446,7 @@ function memory_category_note_slug(string $category): string {
 
 function memory_atomic_write(string $path, string $text, string $prefix = '.memory-'): array {
     try {
+        $text = enc($text);
         if (is_file($path) && !copy($path, $path . '.bak')) {
             return ['error' => 'memory_backup_failed'];
         }
@@ -448,7 +478,7 @@ function memory_atomic_write(string $path, string $text, string $prefix = '.memo
 function memory_meta_load(int $userId): array {
     $path = memory_user_dir($userId) . '/meta.json';
     $raw = is_readable($path) ? @file_get_contents($path) : false;
-    $data = $raw === false ? null : json_decode($raw, true);
+    $data = $raw === false ? null : json_decode((string)dec($raw), true);
     return is_array($data) && is_array($data['notes'] ?? null) ? $data : ['notes' => []];
 }
 
@@ -594,7 +624,7 @@ function memory_notes_load_unlocked(int $userId): array {
         $notes = [];
         $rewrite = false;
         $mtime = (int)(filemtime($path) ?: time());
-        foreach (preg_split('/\R/', (string)@file_get_contents($path)) as $line) {
+        foreach (preg_split('/\R/', (string)dec((string)@file_get_contents($path))) as $line) {
             if (preg_match('/^\s*#\s+(.+?)\s*$/u', $line, $heading)) {
                 $name = trim($heading[1]);
                 continue;
@@ -648,7 +678,7 @@ function memory_journal_read(int $userId): string {
         return '';
     }
     if (!is_readable($path)) return '';
-    return (string)@file_get_contents($path);
+    return (string)dec((string)@file_get_contents($path));
 }
 
 function memory_journal_write_unlocked(int $userId, string $text): array {
@@ -974,6 +1004,7 @@ function consolidation_status(int $userId): array {
 }
 
 function consolidation_touch(int $userId, ?bool $enabled = null): void {
+    key_push($userId);
     if ($enabled === null) {
         db()->prepare(
             'INSERT INTO memory_consolidation (user_id, last_activity) VALUES (?, ?)
@@ -1006,7 +1037,7 @@ function welcome_queue_set(int $userId, array $messages): void {
     db()->prepare(
         'INSERT INTO welcome_queue (user_id, messages, generated_at) VALUES (?, ?, ?)
          ON CONFLICT(user_id) DO UPDATE SET messages = excluded.messages, generated_at = excluded.generated_at'
-    )->execute([$userId, json_encode($clean, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES), time()]);
+    )->execute([$userId, enc(json_encode($clean, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES)), time()]);
 }
 
 function welcome_queue_read(int $userId, bool $drain = true): array {
@@ -1016,7 +1047,7 @@ function welcome_queue_read(int $userId, bool $drain = true): array {
         $raw = $stmt->fetchColumn();
         if ($raw === false) return [];
         if ($drain) db()->prepare('DELETE FROM welcome_queue WHERE user_id = ?')->execute([$userId]);
-        $messages = json_decode((string)$raw, true);
+        $messages = json_decode((string)dec((string)$raw), true);
         if (!is_array($messages)) return [];
         return array_values(array_filter($messages, fn($m) => is_string($m) && trim($m) !== ''));
     } catch (Throwable $e) {
@@ -1041,7 +1072,7 @@ function require_admin(): array {
     return $user;
 }
 
-function start_session(int $userId): string {
+function start_session(int $userId, string $dek): string {
     $token = bin2hex(random_bytes(32));
     $now = time();
     $expires = $now + 30 * 86400;
@@ -1053,18 +1084,191 @@ function start_session(int $userId): string {
     // there's no cross-site navigation that needs the cookie, and Lax
     // would still send it on a top level GET some other page shoved
     // us into.
-    setcookie('omega_session', $token, [
+    $attrs = [
         'expires' => $expires,
         'path' => '/',
         'httponly' => true,
         'samesite' => 'Strict',
         'secure' => $secure,
-    ]);
+    ];
+    setcookie('omega_session', $token, $attrs);
+    setcookie('omega_key', base64_encode($dek), $attrs);
     return $token;
 }
 
 function session_token_hash(string $token): string {
     return hash('sha256', $token);
+}
+
+// per-user data key. 32 random bytes minted at signup and stored
+// ONLY wrapped, once under Argon2id(password, kdf_salt) and once
+// under the recovery code. the open key rides in the omega_key
+// cookie next to the session and never touches disk, so the
+// volume, a backup tarball, or .env on their own read as noise.
+// the flip side: lose the password AND the recovery code and the
+// chats are gone, there is nothing on the server to reset them
+// with. that is the whole point, not a bug.
+const CRYPT_PREFIX = 'v1:';
+
+function crypt_kdf(string $password, string $salt): string {
+    return sodium_crypto_pwhash(
+        SODIUM_CRYPTO_SECRETBOX_KEYBYTES, $password, $salt,
+        SODIUM_CRYPTO_PWHASH_OPSLIMIT_INTERACTIVE,
+        SODIUM_CRYPTO_PWHASH_MEMLIMIT_INTERACTIVE,
+        SODIUM_CRYPTO_PWHASH_ALG_ARGON2ID13
+    );
+}
+
+// 20 chars from 31 symbols, grouped by 5, ~99 bits of entropy.
+// the random code needs one generichash, not the slower Argon2id
+// password derivation.
+function crypt_recovery_code_new(): string {
+    $alphabet = 'abcdefghjkmnpqrstuvwxyz23456789';
+    $code = '';
+    for ($i = 0; $i < 20; $i++) $code .= $alphabet[random_int(0, strlen($alphabet) - 1)];
+    return implode('-', str_split($code, 5));
+}
+
+function crypt_recovery_key(string $code): string {
+    $clean = strtolower(preg_replace('/[^a-z0-9]/i', '', $code));
+    return sodium_crypto_generichash($clean, '', SODIUM_CRYPTO_SECRETBOX_KEYBYTES);
+}
+
+function crypt_seal(string $plain, string $key): string {
+    $nonce = random_bytes(SODIUM_CRYPTO_SECRETBOX_NONCEBYTES);
+    return CRYPT_PREFIX . base64_encode($nonce . sodium_crypto_secretbox($plain, $nonce, $key));
+}
+
+function crypt_open(string $stored, string $key): ?string {
+    if (!str_starts_with($stored, CRYPT_PREFIX)) return null;
+    $raw = base64_decode(substr($stored, strlen(CRYPT_PREFIX)), true);
+    $n = SODIUM_CRYPTO_SECRETBOX_NONCEBYTES;
+    if ($raw === false || strlen($raw) < $n + SODIUM_CRYPTO_SECRETBOX_MACBYTES) return null;
+    $plain = sodium_crypto_secretbox_open(substr($raw, $n), substr($raw, 0, $n), $key);
+    return $plain === false ? null : $plain;
+}
+
+// the key for whoever we're working for right now. php-fpm reads
+// it off the cookie, one user per request so a static is fine.
+// the consolidation worker has no cookie, it binds the key it got
+// pushed (key_push below) before each user's run and unbinds after.
+function crypt_bind(?string $dek): void {
+    crypt_key($dek, true);
+}
+
+function crypt_key(?string $dek = null, bool $bind = false): ?string {
+    static $key = null;
+    if ($bind) {
+        if ($key !== null) sodium_memzero($key);
+        $key = $dek;
+        return null;
+    }
+    if ($key === null && isset($_COOKIE['omega_key'])) {
+        $raw = base64_decode((string)$_COOKIE['omega_key'], true);
+        if ($raw !== false && strlen($raw) === SODIUM_CRYPTO_SECRETBOX_KEYBYTES) $key = $raw;
+    }
+    return $key;
+}
+
+// enc/dec for anything with his words in it: message content,
+// titles, summaries, prefs, the welcome queue, every memory file.
+// dec passes a value without the v1: prefix straight through, that
+// is how rows from before migration 016 keep reading until
+// crypt_encrypt_backlog rewrites them, and how the <audio>
+// placeholder chat.php stores unencrypted stays matchable by
+// conversations.php set_audio_text. a v1: value that won't open
+// under the bound key throws instead of coming back as garbage, a
+// wrong key must never turn into a blank prompt.
+function enc(?string $plain): ?string {
+    if ($plain === null) return null;
+    $key = crypt_key();
+    if ($key === null) throw new RuntimeException('no_data_key');
+    return crypt_seal($plain, $key);
+}
+
+function dec(?string $stored): ?string {
+    if ($stored === null || !str_starts_with($stored, CRYPT_PREFIX)) return $stored;
+    $key = crypt_key();
+    if ($key === null) throw new RuntimeException('no_data_key');
+    $plain = crypt_open($stored, $key);
+    if ($plain === null) throw new RuntimeException('data_key_mismatch');
+    return $plain;
+}
+
+// the consolidation worker is a seperate process with no cookie,
+// so every activity touch hands it this user's key over localhost.
+// it keeps the key in RAM until the idle run for that user is
+// done, then drops it. no worker listening = nothing happens, he
+// gets consolidated after the next touch that finds one. any
+// local process can connect and push junk, which only makes that
+// user's next run fail to open his rows until a real touch
+// overwrites it seconds later. nothing can be read back out.
+function key_push_port(): int {
+    return (int)env_str('OMEGA_KEY_PORT', '9099');
+}
+
+function key_push(int $userId): void {
+    if (PHP_SAPI === 'cli') return;
+    $key = crypt_key();
+    if ($key === null) return;
+    $sock = @stream_socket_client('tcp://127.0.0.1:' . key_push_port(), $errno, $errstr, 0.2);
+    if ($sock === false) return;
+    fwrite($sock, json_encode(['user_id' => $userId, 'dek' => base64_encode($key)]) . "\n");
+    fclose($sock);
+}
+
+// every login retries the backlog pass in case migration 016's
+// first sign-in failed after saving the key. values with the v1:
+// prefix stay as they are.
+function crypt_encrypt_backlog(int $userId): void {
+    $db = db();
+    $db->beginTransaction();
+    try {
+        $rows = $db->prepare(
+            'SELECT m.id, m.content FROM messages m JOIN conversations c ON c.id = m.conversation_id WHERE c.user_id = ?'
+        );
+        $rows->execute([$userId]);
+        $up = $db->prepare('UPDATE messages SET content = ? WHERE id = ?');
+        foreach ($rows->fetchAll() as $r) {
+            if ($r['content'] === '<audio>' || str_starts_with((string)$r['content'], CRYPT_PREFIX)) continue;
+            $up->execute([enc((string)$r['content']), (int)$r['id']]);
+        }
+
+        $rows = $db->prepare('SELECT id, title, summary FROM conversations WHERE user_id = ?');
+        $rows->execute([$userId]);
+        $up = $db->prepare('UPDATE conversations SET title = ?, summary = ? WHERE id = ?');
+        foreach ($rows->fetchAll() as $r) {
+            $seal = fn(?string $v) => ($v === null || str_starts_with($v, CRYPT_PREFIX)) ? $v : enc($v);
+            $up->execute([$seal($r['title']), $seal($r['summary']), (int)$r['id']]);
+        }
+
+        foreach (['preferences' => 'data', 'welcome_queue' => 'messages'] as $table => $col) {
+            $row = $db->prepare("SELECT $col FROM $table WHERE user_id = ?");
+            $row->execute([$userId]);
+            $v = $row->fetchColumn();
+            if ($v === false || $v === null || str_starts_with((string)$v, CRYPT_PREFIX)) continue;
+            $db->prepare("UPDATE $table SET $col = ? WHERE user_id = ?")->execute([enc((string)$v), $userId]);
+        }
+        $db->commit();
+    } catch (Throwable $e) {
+        $db->rollBack();
+        throw $e;
+    }
+
+    $res = memory_with_user_lock($userId, function () use ($userId): void {
+        memory_migrate_legacy($userId);
+        $root = memory_dir();
+        $files = array_merge(glob($root . '/user-' . $userId . '/*') ?: [], glob($root . '/user-' . $userId . '.*') ?: []);
+        foreach ($files as $path) {
+            if (!is_file($path)) continue;
+            $raw = (string)@file_get_contents($path);
+            if ($raw === '' || str_starts_with($raw, CRYPT_PREFIX)) continue;
+            if (@file_put_contents($path, enc($raw), LOCK_EX) === false) {
+                throw new RuntimeException('memory_backlog_write_failed');
+            }
+        }
+    });
+    if (isset($res['error'])) throw new RuntimeException((string)$res['error']);
 }
 
 // the lockout we slap on when Jun walks out of a conversation
