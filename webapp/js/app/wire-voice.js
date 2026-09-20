@@ -1,5 +1,5 @@
-import { VOICE_STATE_LABELS, renderVoiceDraft, sendAudioFromVoice, sendFromVoice, stopActiveStream, sttAvailable } from '../app.js?v=11';
-import { voiceBargeChk, voiceChk, voiceSilenceInput, voiceState } from './dom.js?v=10';
+import { VOICE_STATE_LABELS, renderVoiceDraft, sendAudioFromVoice, sendFromVoice, stopActiveStream, sttAvailable } from '../app.js?v=12';
+import { voiceBargeChk, voiceChk, voiceHearAllChk, voiceSilenceInput, voiceState } from './dom.js?v=11';
 import { hideFaceBubble } from './face-bubble.js?v=10';
 import { logAction } from './logging.js?v=10';
 import { syncVoiceDeps, updateVoiceSilenceLabel } from './settings.js?v=10';
@@ -77,6 +77,27 @@ export async function wireVoice() {
       if (voiceBargeChk) voiceBargeChk.checked = savedBarge;
       if (voiceSilenceInput) voiceSilenceInput.value = String(savedSilence);
       updateVoiceSilenceLabel();
+
+      // one state, two controls. the settings toggle and the button on
+      // the voice overlay both land here so they can't disagree
+      const hearAllBtn = document.getElementById('voiceOverlayHearAll');
+      const voiceOverlay = document.getElementById('voiceOverlay');
+      const applyHearAll = (on, save) => {
+        Voice.setHearAll(on);
+        if (voiceHearAllChk) voiceHearAllChk.checked = on;
+        if (voiceOverlay) voiceOverlay.classList.toggle('hear-all', on);
+        if (hearAllBtn) {
+          hearAllBtn.title = hearAllBtn.ariaLabel = on
+            ? 'She hears everything - click so she ignores side-talk'
+            : 'She ignores side-talk - click so she hears everything';
+        }
+        if (!save) return;
+        localStorage.setItem('voice.hear_all', on ? '1' : '0');
+        if (window.Prefs) Prefs.pushToServer();
+      };
+      applyHearAll(localStorage.getItem('voice.hear_all') === '1', false);
+      if (voiceHearAllChk) voiceHearAllChk.addEventListener('change', () => applyHearAll(voiceHearAllChk.checked, true));
+      if (hearAllBtn) hearAllBtn.addEventListener('click', () => applyHearAll(!Voice.hearAll(), true));
 
       // a live mic is a per session choice. Never a synced setting.
       voiceChk.checked = false;

@@ -13,6 +13,7 @@ window.Prefs = (function () {
     'tts.speed',
     'audio.volume',
     'voice.bargein',
+    'voice.hear_all',
     'voice.silence_ms',
     'model',
     'reasoning_level',

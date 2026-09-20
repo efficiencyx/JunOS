@@ -85,6 +85,13 @@ if (isset($body['audio'])) {
 // is what earns it the "who is he talking to" block below, an
 // audio turn gets it for free
 $spoken = $audioB64 !== '' || !empty($body['voice']);
+// the "hear everything" switch. she still hears it as spoken, but
+// no side-talk block and overheard is ignored. there for anyone
+// alone at the desk, and for the languages her audio encoder
+// half hears: italian speech with the block on went silent on
+// 14/24 lines that WERE for her, whisper text of the same lines
+// held 21/24
+if (!empty($body['hear_all'])) $spoken = false;
 
 $model = default_chat_model();
 if (isset($body['model']) && is_string($body['model']) && $body['model'] !== '') {

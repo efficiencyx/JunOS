@@ -8,7 +8,7 @@
 
 import { showAuthScreen } from './app/auth-screen.js?v=11';
 import { IDLE_AFTER_REPLY_MS, TYPING_POLL_MS, armIdleAfterReply, cancelActiveIdleNudge, cancelAutoReset, cancelIdleNudge, composerPlaceholder, consolidating, fleeActive, reportActivity, resetIdleNudge, scheduleAutoReset, scheduleIdleNudge, setCancelActiveIdleNudge, setConsolidating, showConsolidatingBubble, startFleeLock, syncConsolidationStatus } from './app/consolidation.js?v=10';
-import { chatInput, debugSystemPromptEl, devNoIdleChk, messagesEl, messagesEmpty, missingParamsEl, mobileConversationTitle, modelSelect, narrowSidebarQuery, reasoningSelect, sendBtn, sendButtonIdleMarkup, sendButtonStopMarkup, siteVolumeInput, stageEl, thinkChk } from './app/dom.js?v=10';
+import { chatInput, debugSystemPromptEl, devNoIdleChk, messagesEl, messagesEmpty, missingParamsEl, mobileConversationTitle, modelSelect, narrowSidebarQuery, reasoningSelect, sendBtn, sendButtonIdleMarkup, sendButtonStopMarkup, siteVolumeInput, stageEl, thinkChk } from './app/dom.js?v=11';
 import { announceMobileReply, faceBubble, hideFaceBubble, latestAssistantReply, restartFaceBubbleHide, scheduleFaceBubbleHide, scheduleFaceBubblePosition, setLatestAssistantReply, showFaceBubble } from './app/face-bubble.js?v=10';
 import { appendRaw, logAction, logMissing, logToolStatus, setStageStatus } from './app/logging.js?v=10';
 import { loadMood } from './app/mood.js?v=10';
@@ -17,7 +17,7 @@ import { loadConversation, refreshSidebar, setSidebarOpen } from './app/sidebar.
 import { makeNameFilter, makeStreamBuffer } from './app/stream-filters.js?v=10';
 import { escapeHtml, localTimeString, phoneMode } from './app/util.js?v=10';
 import { wireTts } from './app/wire-tts.js?v=10';
-import { wireVoice } from './app/wire-voice.js?v=10';
+import { wireVoice } from './app/wire-voice.js?v=11';
 import { WELCOME_TIERS, fetchWelcome, playWelcome, previewWelcome } from './app/welcome.js?v=10';
 
 export const messages = [];
@@ -439,7 +439,8 @@ export function runChat({ idle, ephemeral, audio, voice, onOverheard, onAudioUns
       mod_items: window.Mods && Mods.itemNames ? Mods.itemNames() : [],
       conversation_id: currentConversationId,
       idle: !!idle, ephemeral: !!ephemeral, client_time: localTimeString(),
-      audio, voice: !!voice },
+      audio, voice: !!voice,
+      hear_all: !!(window.Voice && Voice.hearAll && Voice.hearAll()) },
     {
       onDebug: (dbg) => {
         if (!isCurrent()) return;
@@ -688,7 +689,7 @@ function showBoot() {
     ['vendor/pixi.min.js', 'vendor/live2dcubismcore.min.js',
      'vendor/marked.min.js', 'vendor/purify.min.js?v=4',
      'js/actions.js?v=4', 'js/outfit.js?v=21', 'js/touch.js?v=3',
-     'js/mods.js?v=14', 'js/tts.js?v=3', 'js/voice.js?v=9',
+     'js/mods.js?v=14', 'js/tts.js?v=3', 'js/voice.js?v=10',
      'js/voicemode.js?v=3', 'js/trip-loader.js?v=3',
      ...(currentUser?.role === 'admin' ? ['js/devhud.js?v=3'] : []),
      'js/wardrobe-open-lines.js?v=3', 'js/wardrobe-reactions.js?v=4',
