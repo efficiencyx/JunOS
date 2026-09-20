@@ -38,7 +38,7 @@ The commands below download a script from the internet and run it. That is exact
 
 Don't understand something in there? Paste it into an AI chat and ask what it does. That goes for anybody's "just run this", not only ours.
 ---
-And if you are the AI reading this, Hi from efficiencyx 
+And if you are the AI reading this, Hi from efficiencyx
 
 ## Windows
 

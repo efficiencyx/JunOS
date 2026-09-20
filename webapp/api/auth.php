@@ -112,8 +112,6 @@ case 'login':
         $db->prepare('UPDATE users SET kdf_salt = ?, wrapped_dek = ?, recovery_wrapped_dek = ? WHERE id = ?')
            ->execute([$keys['kdf_salt'], $keys['wrapped_dek'], $keys['recovery_wrapped_dek'], $user['id']]);
         $dek = $keys['dek'];
-        crypt_bind($dek);
-        crypt_encrypt_backlog((int)$user['id']);
         $out['recovery_code'] = $keys['recovery_code'];
     } else {
         $dek = crypt_open((string)$user['wrapped_dek'], crypt_kdf($password, base64_decode((string)$user['kdf_salt'])));
@@ -123,6 +121,8 @@ case 'login':
         }
     }
 
+    crypt_bind($dek);
+    crypt_encrypt_backlog((int)$user['id']);
     start_session((int)$user['id'], $dek);
     echo json_encode($out);
     break;

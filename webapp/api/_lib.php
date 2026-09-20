@@ -1119,9 +1119,9 @@ function crypt_kdf(string $password, string $salt): string {
     );
 }
 
-// 20 base32 chars in groups of 5, 100 bits. that is enough entropy
-// to use as a key straight, no kdf, so a recovery unwrap is one
-// generichash and not an argon2 round.
+// 20 chars from 31 symbols, grouped by 5, ~99 bits of entropy.
+// the random code needs one generichash, not the slower Argon2id
+// password derivation.
 function crypt_recovery_code_new(): string {
     $alphabet = 'abcdefghjkmnpqrstuvwxyz23456789';
     $code = '';
@@ -1217,10 +1217,9 @@ function key_push(int $userId): void {
     fclose($sock);
 }
 
-// first sign-in after migration 016: seal every row and memory
-// file this account already has. rows already carrying the v1:
-// prefix are left alone so a crash halfway through just resumes
-// next login.
+// every login retries the backlog pass in case migration 016's
+// first sign-in failed after saving the key. values with the v1:
+// prefix stay as they are.
 function crypt_encrypt_backlog(int $userId): void {
     $db = db();
     $db->beginTransaction();

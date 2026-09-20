@@ -1089,8 +1089,8 @@ for ($round = 0; $round < 3; $round++) {
             }
         } elseif ($name === 'enter_shop' || $name === 'enter_karaoke') {
             $where = $name === 'enter_shop' ? 'shop' : 'karaoke';
-            // the browser navigates away on this frame, so an idle
-            // nudge must never send it. Anon isn't even there.
+            // this queues navigation after the reply and TTS finish.
+            // an idle nudge must never send it, Anon isn't even there.
             if ($idle) {
                 $toolResult = json_encode(['error' => 'not_available_on_idle']);
             } elseif ($where === 'karaoke' && empty(karaoke_health()['sep'])) {
