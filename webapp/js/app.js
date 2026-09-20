@@ -177,7 +177,10 @@ export function updateEmptyState() {
   }
 }
 
-export function sendMessage() {
+// the button handler passes the click event here, so anything
+// that isn't {voice:true} is a typed turn
+export function sendMessage(opts) {
+  const voice = !!(opts && opts.voice === true);
   if (fleeActive()) {
     ui.toast('⚠ ' + composerPlaceholder(), 'error');
     return;
@@ -195,9 +198,19 @@ export function sendMessage() {
   resetIdleNudge();
   reportActivity();
   chatInput.value = '';
-  appendMsg('user', text);
-  messages.push({ role: 'user', content: window.Names ? Names.canonicalize(text) : text });
-  runChat({ idle: false });
+  const bubble = appendMsg('user', text);
+  const entry = { role: 'user', content: window.Names ? Names.canonicalize(text) : text };
+  messages.push(entry);
+  runChat({ idle: false, voice, onOverheard: voice ? () => dropUserTurn(bubble, entry) : null });
+}
+
+// she heard him talk to someone else. the turn never happened,
+// on screen or in history, the server already dropped its row
+function dropUserTurn(bubble, entry) {
+  bubble.remove();
+  const i = messages.indexOf(entry);
+  if (i !== -1) messages.splice(i, 1);
+  updateEmptyState();
 }
 
 function sendTouchEvent(text) {
@@ -232,7 +245,7 @@ export async function sttAvailable() {
 export function sendFromVoice(text) {
   if (stopActiveStream) stopActiveStream();
   chatInput.value = text;
-  sendMessage();
+  sendMessage({ voice: true });
 }
 
 // bubble says "spoken", history says <audio>. that string is ALSO
@@ -251,10 +264,9 @@ export function sendAudioFromVoice(b64, onUnsupported) {
   runChat({
     idle: false,
     audio: b64,
+    onOverheard: () => dropUserTurn(bubble, entry),
     onAudioUnsupported: () => {
-      bubble.remove();
-      if (messages[messages.length - 1] === entry) messages.pop();
-      updateEmptyState();
+      dropUserTurn(bubble, entry);
       if (onUnsupported) onUnsupported();
     },
   });
@@ -292,7 +304,7 @@ function leaveFor(where) {
   tick();
 }
 
-export function runChat({ idle, ephemeral, audio, onAudioUnsupported }) {
+export function runChat({ idle, ephemeral, audio, voice, onOverheard, onAudioUnsupported }) {
   if (abortFn) return;
   cancelIdleNudge();
   cancelAutoReset();
@@ -339,6 +351,7 @@ export function runChat({ idle, ephemeral, audio, onAudioUnsupported }) {
   let visible = '';
   let shown = '';
   let silenced = false;
+  let overheard = false;
   let trip = '';
   const bubbleSource = ephemeral ? 'ephemeral' : 'phone';
   const bubbleEnabled = () => !(window.VoiceMode && VoiceMode.isActive()) && (ephemeral || phoneMode());
@@ -426,7 +439,7 @@ export function runChat({ idle, ephemeral, audio, onAudioUnsupported }) {
       mod_items: window.Mods && Mods.itemNames ? Mods.itemNames() : [],
       conversation_id: currentConversationId,
       idle: !!idle, ephemeral: !!ephemeral, client_time: localTimeString(),
-      audio },
+      audio, voice: !!voice },
     {
       onDebug: (dbg) => {
         if (!isCurrent()) return;
@@ -453,7 +466,7 @@ export function runChat({ idle, ephemeral, audio, onAudioUnsupported }) {
       // database saying another.
       onOutfit: (change) => Outfit.applyToolChange(change),
       onGo: (where) => { trip = where; },
-      onSilence: () => {
+      onSilence: (s) => {
         if (!isCurrent()) return;
         // she decided to say nothing, so whatever leaked into the bubble
         // first never happened. drop it and mark the turn instead.
@@ -463,6 +476,14 @@ export function runChat({ idle, ephemeral, audio, onAudioUnsupported }) {
         visible = '';
         shown = '';
         typing.remove();
+        // overheard = he wasn't talking to her. no marker either, the
+        // whole exchange goes, his bubble included
+        if (s && s.overheard && onOverheard) {
+          overheard = true;
+          draft.remove();
+          onOverheard();
+          return;
+        }
         draft.className = 'msg silence';
         draft.textContent = (window.Names ? Names.getBot() : 'Jun') + ' says nothing.';
       },
@@ -496,7 +517,7 @@ export function runChat({ idle, ephemeral, audio, onAudioUnsupported }) {
           visible = '';
           shown = '';
           if (window.TTS) TTS.stop();
-          messages.push({ role: 'assistant', content: '...' });
+          if (!overheard) messages.push({ role: 'assistant', content: '...' });
         } else if (visible.trim()) {
           messages.push({ role: 'assistant', content: visible });
           if (!ephemeral) addRatingControls(draft);
