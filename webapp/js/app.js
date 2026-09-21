@@ -12,7 +12,7 @@ import { chatInput, debugSystemPromptEl, devNoIdleChk, messagesEl, messagesEmpty
 import { announceMobileReply, faceBubble, hideFaceBubble, latestAssistantReply, restartFaceBubbleHide, scheduleFaceBubbleHide, scheduleFaceBubblePosition, setLatestAssistantReply, showFaceBubble } from './app/face-bubble.js?v=10';
 import { appendRaw, logAction, logMissing, logToolStatus, setStageStatus } from './app/logging.js?v=10';
 import { loadMood } from './app/mood.js?v=10';
-import { applyProviderCapabilities, applyRoleGates, setSiteVolume, syncThinkToggle, updateSiteVolumeLabel, wireNameSettings } from './app/settings.js?v=10';
+import { applyProviderCapabilities, applyRoleGates, setSiteVolume, syncThinkToggle, updateSiteVolumeLabel, wireNameSettings } from './app/settings.js?v=11';
 import { loadConversation, refreshSidebar, setSidebarOpen } from './app/sidebar.js?v=10';
 import { makeNameFilter, makeStreamBuffer } from './app/stream-filters.js?v=10';
 import { escapeHtml, localTimeString, phoneMode } from './app/util.js?v=10';
