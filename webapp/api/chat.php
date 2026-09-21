@@ -148,6 +148,7 @@ if (isset($body['client_time']) && is_string($body['client_time'])) {
 
 $idle = isset($body['idle']) && $body['idle'] === true;
 $ephemeral = !empty($body['ephemeral']);
+$invite = isset($body['invite']) && in_array($body['invite'], TRIP_TOOLS, true) ? (string)$body['invite'] : '';
 if (!$idle) consolidation_touch((int)$user['id']);
 
 $convId = isset($body['conversation_id']) ? (int)$body['conversation_id'] : 0;
@@ -823,6 +824,17 @@ if ($toolsOffered && !$ephemeral && $approvedWebSearchQuery === null
         . "going to Annalie's shop together, karaoke, a game of blackjack, going out for lunch or dinner, or something "
         . "small that fits the moment (a headpat, hearing about his day, him changing your outfit, a compliment, a promise). "
         . "Do not call enter_shop, enter_karaoke, play_cards or go_out_to_eat yet - only once he says yes.";
+}
+
+// the drawer's "ask her out" buttons. she says yes in prose and
+// never calls the tool, so the page never opens and Anon sits
+// there. name the tool, and the rule that yes means calling it
+if ($toolsOffered && !$idle && $invite !== '') {
+    $tool = array_search($invite, TRIP_TOOLS, true);
+    $contextParts[] = "## Anon just asked you out\n"
+        . "Anon's latest message is an invitation. Saying yes or no is yours to decide. "
+        . "But if you accept, you MUST call {$tool} in this reply, before your line - "
+        . "answering yes without calling it means nothing happens and you two stay here.";
 }
 
 // same trap, other direction. with the notes already listed above
