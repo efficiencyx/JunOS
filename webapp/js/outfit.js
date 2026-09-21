@@ -463,6 +463,11 @@ window.Outfit = (function () {
   }
 
   function queueWardrobe(mutator, after) {
+    const change = () => updateWardrobe(mutator, after);
+    return window.WardrobeCurtains ? WardrobeCurtains.change(change) : change();
+  }
+
+  function updateWardrobe(mutator, after) {
     const items = { ...state };
     const variants = { ...variantState };
     mutator(items, variants);
@@ -605,12 +610,13 @@ window.Outfit = (function () {
   }
 
   function applyItems(onlyItems) {
+    const setParam = window.WardrobeCurtains ? Live2D.setNow : Live2D.setTarget;
     const onlyKeys = onlyItems ? new Set(onlyItems) : null;
     const textureMap = {};
     for (const it of ITEMS) {
       if (onlyKeys && !onlyKeys.has(it.key)) continue;
       const on = state[it.key] && (!it.requires || state[it.requires]);
-      if (it.param) Live2D.setTarget(it.param, on || moddedItems.has(it.key) ? 1 : 0);
+      if (it.param) setParam(it.param, on || moddedItems.has(it.key) ? 1 : 0);
       if (it.visibilityPatterns && Live2D.setDrawableOpacity) {
         const visOn  = it.visOn  !== undefined ? it.visOn  : null;
         const visOff = it.visOff !== undefined ? it.visOff : 0;
@@ -1496,6 +1502,7 @@ window.Outfit = (function () {
 
   function applyPreset(preset) {
     clearTimeout(previewTimer);
+    previewVersion++;
     const clean = canonicalPreset(preset);
     previewBase = null;
     const wardrobeChanged = ITEMS.some(it => state[it.key] !== clean.items[it.key])
@@ -1518,7 +1525,15 @@ window.Outfit = (function () {
   // previewBase restores the saved look when hover ends. previews
   // never write storage.
   let previewBase = null;
+  let previewVersion = 0;
   function previewPreset(preset) {
+    const version = ++previewVersion;
+    const change = () => { if (version === previewVersion) applyPreview(preset); };
+    if (window.WardrobeCurtains) WardrobeCurtains.change(change);
+    else change();
+  }
+
+  function applyPreview(preset) {
     if (!preset) return;
     const items = { ...state, ...(preset.items || {}) };
     const variants = { ...variantState, ...(preset.variants || {}) };
@@ -1535,10 +1550,16 @@ window.Outfit = (function () {
   }
   function endPreview() {
     clearTimeout(previewTimer);
+    const version = ++previewVersion;
     if (!previewBase) return;
-    const base = previewBase;
-    previewBase = null;
-    applyChanged(loadPresetState(base));
+    const change = () => {
+      if (version !== previewVersion || !previewBase) return;
+      const base = previewBase;
+      previewBase = null;
+      applyChanged(loadPresetState(base));
+    };
+    if (window.WardrobeCurtains) WardrobeCurtains.change(change);
+    else change();
   }
 
   const Presets = (function () {

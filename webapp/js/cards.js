@@ -156,7 +156,13 @@ window.Cards = (function () {
   function cardEl(c, down) {
     const el = document.createElement('div');
     el.className = 'card' + (down ? ' down' : '') + (c.s === '♥' || c.s === '♦' ? ' red' : '');
-    el.textContent = down ? '' : c.r + c.s;
+    el.setAttribute('role', 'img');
+    el.setAttribute('aria-label', down ? 'Face-down card' : c.r + c.s);
+    if (!down) {
+      el.innerHTML = `<span class="card-corner" aria-hidden="true">${c.r}<small>${c.s}</small></span>
+        <span class="card-suit" aria-hidden="true">${c.s}</span>
+        <span class="card-corner card-corner-bottom" aria-hidden="true">${c.r}<small>${c.s}</small></span>`;
+    }
     return el;
   }
 
@@ -182,11 +188,15 @@ window.Cards = (function () {
       <button class="voice-overlay-btn cards-close" type="button" aria-label="Leave the table" title="Leave the table">
         <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
       </button>
-      <div class="cards-tally"></div>
+      <header class="cards-heading"><span>JUN OS · CARD ROOM</span><h1>Blackjack<span aria-hidden="true"> ♠</span></h1></header>
+      <div class="cards-tally" aria-live="polite"></div>
       <div class="cards-hand cards-her"><div class="cards-label"><span class="cards-who"></span> <span class="cards-val"></span></div><div class="cards-row"></div></div>
       <div class="cards-felt">
+        <div class="cards-table-mark" aria-hidden="true">BLACKJACK<span>♠ &nbsp; ♥ &nbsp; ♣ &nbsp; ♦</span></div>
+        <div class="cards-deck" aria-hidden="true"></div>
+        <div class="cards-chips" aria-hidden="true"><i></i><i></i><i></i></div>
         <div class="cards-hand cards-you"><div class="cards-label">You <span class="cards-val"></span></div><div class="cards-row"></div></div>
-        <div class="cards-status"></div>
+        <div class="cards-status" role="status" aria-live="polite"></div>
         <div class="cards-actions">
           <button class="secondary cards-hit" type="button">Hit</button>
           <button class="secondary cards-stand" type="button">Stand</button>

@@ -8,12 +8,29 @@
 <link rel="icon" type="image/png" href="favicon.png?v=1">
 <link rel="stylesheet" href="boot.css?v=1">
 <link rel="stylesheet" href="styles.css?v=1">
-<link rel="stylesheet" href="karaoke-page.css?v=1">
+<link rel="stylesheet" href="karaoke-page.css?v=3">
+<link rel="stylesheet" href="trip-loader.css?v=1">
 <script defer src="js/viewport.js?v=3"></script>
 </head>
 <body>
-<a id="karaokeBackLink" class="karaoke-page-back" href="index.html" aria-label="Back to chat">← Chat</a>
+<div class="music-room" aria-hidden="true">
+  <div class="music-wall"></div>
+  <div class="music-curtain music-curtain-left"></div><div class="music-curtain music-curtain-right"></div>
+  <div class="lighting-rig"><i></i><i></i><i></i><i></i></div>
+  <div class="light-beam light-beam-left"></div><div class="light-beam light-beam-right"></div>
+  <div class="neon-sign">after hours<span>KARAOKE LOUNGE</span></div>
+  <div class="music-floor"></div>
+  <div class="stage-platform"></div>
+  <div class="speaker speaker-left"><div class="speaker-tweeter"></div><div class="speaker-cone"></div><div class="speaker-port"></div><i class="speaker-led"></i></div>
+  <div class="speaker speaker-right"><div class="speaker-tweeter"></div><div class="speaker-cone"></div><div class="speaker-port"></div><i class="speaker-led"></i></div>
+  <div class="stage-monitor stage-monitor-left"></div><div class="stage-monitor stage-monitor-right"></div>
+  <div class="music-cable"></div>
+</div>
+<a id="karaokeBackLink" class="karaoke-page-back" href="index.html" aria-label="Back to chat">← Back to chat</a>
+<header class="music-heading"><span class="music-eyebrow">Just us &amp; the music</span><h1>The night is <em>yours.</em></h1></header>
 <div id="stage" aria-label="Live2D stage"></div>
+<div id="karaokeMic" class="stage-microphone" aria-hidden="true" hidden><div class="mic-head"></div><div class="mic-collar"></div><div class="mic-stem"></div><div class="mic-base"></div></div>
+<div class="room-session"><span id="karaokeRoomBadge">Soundcheck</span><div class="room-equalizer" aria-hidden="true"><i></i><i></i><i></i><i></i><i></i><i></i><i></i></div></div>
 <div id="karaokePageStatus" class="karaoke-page-status" role="status" aria-live="polite">Loading Jun…</div>
 <div id="toasts" aria-live="polite" aria-atomic="false"></div>
 
@@ -163,9 +180,10 @@
 <script defer src="js/prefs.js?v=4"></script>
 <script defer src="js/ui.js?v=3"></script>
 <script type="module" src="js/live2d.js?v=10"></script>
-<script defer src="js/mods.js?v=14"></script>
-<script defer src="js/outfit.js?v=21"></script>
-<script defer src="js/karaoke.js?v=5"></script>
-<script defer src="js/karaoke-page.js?v=4"></script>
+<script defer src="js/mods.js?v=15"></script>
+<script defer src="js/outfit.js?v=22"></script>
+<script defer src="js/karaoke.js?v=7"></script>
+<script defer src="js/trip-loader.js?v=3"></script>
+<script defer src="js/karaoke-page.js?v=7"></script>
 </body>
 </html>

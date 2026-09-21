@@ -707,9 +707,9 @@ function showBoot() {
   await loadScripts([
     ['vendor/pixi.min.js', 'vendor/live2dcubismcore.min.js',
      'vendor/marked.min.js', 'vendor/purify.min.js?v=4',
-     'js/actions.js?v=4', 'js/outfit.js?v=21', 'js/touch.js?v=3',
-     'js/mods.js?v=14', 'js/tts.js?v=3', 'js/voice.js?v=10',
-     'js/voicemode.js?v=3', 'js/trip-loader.js?v=3', 'js/cards.js?v=4',
+     'js/actions.js?v=4', 'js/outfit.js?v=22', 'js/touch.js?v=3',
+     'js/mods.js?v=15', 'js/tts.js?v=3', 'js/voice.js?v=10',
+     'js/voicemode.js?v=3', 'js/trip-loader.js?v=3', 'js/cards.js?v=5',
      ...(currentUser?.role === 'admin' ? ['js/devhud.js?v=3'] : []),
      'js/wardrobe-open-lines.js?v=3', 'js/wardrobe-reactions.js?v=5',
      'js/wardrobe-return-lines.js?v=3'],
@@ -738,7 +738,7 @@ function showBoot() {
   // coming back from the shop or a date, the return cutscene
   // REPLACES the boot terminal. skipping BootFX.start also makes
   // BootFX.finish a no-op later.
-  const fromTrip = ['wardrobe', 'date'].includes(new URLSearchParams(location.search).get('from'));
+  const fromTrip = ['wardrobe', 'date', 'karaoke'].includes(new URLSearchParams(location.search).get('from'));
   if (fromTrip) {
     history.replaceState(null, '', location.pathname);
     TripLoader.mount({ reverse: true });

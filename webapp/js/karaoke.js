@@ -1002,9 +1002,11 @@ window.Karaoke = (function () {
     const si = sectionAt(elapsed);
     const owner = si >= 0 ? secs[si].owner : (secs[0] ? secs[0].owner : 'both');
 
+    const level = computeRms();
+    if (hooks.onLevel) hooks.onLevel(level);
     if (window.Live2D && Live2D.setMouthOverride) {
       if (owner === 'you') Live2D.setMouthOverride(0);
-      else Live2D.setMouthOverride(Math.pow(Math.min(1, computeRms() * 3.5), 0.7));
+      else Live2D.setMouthOverride(Math.pow(Math.min(1, level * 3.5), 0.7));
     }
 
     updateTurn(si, owner);
@@ -1082,6 +1084,7 @@ window.Karaoke = (function () {
       setStatus(mode === 'solo' ? 'Solo relay complete' : 'Take complete');
     };
 
+    if (hooks.onPlaybackChange) hooks.onPlaybackChange(true);
     if (mode !== 'solo' || soloPhase === 'you') startRecording();
     if (!rafId) rafId = requestAnimationFrame(loop);
     setStatus(mode === 'solo'
@@ -1090,6 +1093,8 @@ window.Karaoke = (function () {
   }
 
   function stopPlayback() {
+    if (hooks.onPlaybackChange) hooks.onPlaybackChange(false);
+    if (hooks.onLevel) hooks.onLevel(0);
     for (const s of [instrSource, guideSource]) {
       if (!s) continue;
       try { s.onended = null; s.stop(); } catch (e) {}
@@ -1161,7 +1166,7 @@ window.Karaoke = (function () {
     resetPanels();
     const hint = $('karaokeDeviceHint');
     if (hint) hint.textContent = h.device === 'cpu' ? 'CPU - separation is slow' : 'GPU ⚡';
-    if (window.Live2D) Live2D.setCameraPreset('face');
+    if (window.Live2D) Live2D.setCameraPreset(hooks.cameraPreset || 'face');
     if (hooks.onEnter) hooks.onEnter();
     return true;
   }
