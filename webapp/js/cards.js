@@ -1,16 +1,20 @@
-// blackjack. she deals, the table is a panel over the chat, and
-// every settled hand goes out as an ephemeral stage direction so
-// she can gloat or sulk in the face bubble.
+// blackjack. she deals, and she also PLAYS: her hit or stand is
+// one ephemeral turn with the hands in an OOC direction, the word
+// she answers with is the move. no dealer rule, she can stand on
+// 12 or bust on 19, that's her problem. the table is a full-page
+// mode like voice mode, chat chrome hidden, stage stays up so her
+// lines land in the face bubble.
 window.Cards = (function () {
   const SUITS = ['♠', '♥', '♦', '♣'];
   const RANKS = ['A', '2', '3', '4', '5', '6', '7', '8', '9', '10', 'J', 'Q', 'K'];
 
   let sendEvent = null;
   let isBusy = () => false;
-  let panel = null, herRow, youRow, herVal, youVal, tallyEl, noteEl, hitBtn, standBtn, nextBtn;
+  let overlay = null, herRow, youRow, herVal, youVal, tallyEl, statusEl, hitBtn, standBtn, nextBtn;
   let deck = [], her = [], you = [];
   let hand = 0, score = { you: 0, her: 0 };
   let phase = 'idle';
+  let active = false;
 
   const bot = () => (window.Names ? Names.getBot() : 'Jun');
 
@@ -47,6 +51,23 @@ window.Cards = (function () {
     return score.you > score.her ? `Anon leads ${score.you}-${score.her}` : `${bot()} leads ${score.her}-${score.you}`;
   }
 
+  // ponytail: sendTouchEvent drops the event while she's still
+  // talking, so wait her out. 30 s is longer than any reply. a
+  // refused send (fled, or gave up waiting) answers null so the
+  // caller can fall back.
+  function send(text) {
+    return new Promise((resolve) => {
+      if (!sendEvent || !active) return resolve(null);
+      const t0 = Date.now();
+      const tick = () => {
+        if (!active) return resolve(null);
+        if (isBusy() && Date.now() - t0 < 30000) return setTimeout(tick, 500);
+        if (!sendEvent(text, resolve)) resolve(null);
+      };
+      tick();
+    });
+  }
+
   function deal() {
     her = [draw(), draw()];
     you = [draw(), draw()];
@@ -54,11 +75,9 @@ window.Cards = (function () {
     phase = 'player';
     render();
     const yv = value(you), hv = value(her);
-    if (yv === 21 || hv === 21) {
-      if (yv === 21 && hv === 21) settle('push', 'both of you were dealt blackjack, push');
-      else if (yv === 21) settle('you', 'Anon was dealt blackjack');
-      else settle('her', `${bot()} was dealt blackjack`);
-    }
+    if (yv === 21 && hv === 21) settle('push', 'both of you were dealt blackjack, push');
+    else if (yv === 21) settle('you', 'Anon was dealt blackjack');
+    else if (hv === 21) settle('her', `${bot()} was dealt blackjack`);
   }
 
   function hit() {
@@ -70,8 +89,35 @@ window.Cards = (function () {
 
   function stand() {
     if (phase !== 'player') return;
-    while (value(her) < 17) her.push(draw());
-    const yv = value(you), hv = value(her);
+    phase = 'dealer';
+    render();
+    herTurn();
+  }
+
+  // HIT or STAND is the first of the two words she says. no word
+  // at all (error, stopped, a line that dodges the question) and
+  // the plain dealer rule stands in, hit under 17, so the hand
+  // still ends.
+  function readMove(reply) {
+    const m = (reply || '').match(/\b(hit|stand|stay|stop)\b/i);
+    if (m) return m[1].toLowerCase() === 'hit' ? 'hit' : 'stand';
+    return value(her) < 17 ? 'hit' : 'stand';
+  }
+
+  async function herTurn() {
+    const yv = value(you);
+    while (active && phase === 'dealer') {
+      const hv = value(her);
+      if (hv >= 21) break;
+      setStatus(`${bot()} is thinking…`);
+      const reply = await send(`(Card table, hand ${hand}, your move as the dealer: you hold ${show(her)} = ${hv}. Anon stood on ${yv} with ${show(you)}. Say HIT to take another card or STAND to stop, that word first, then one short line.)`);
+      if (!active || phase !== 'dealer') return;
+      if (readMove(reply) === 'stand') break;
+      her.push(draw());
+      render();
+    }
+    if (!active || phase !== 'dealer') return;
+    const hv = value(her);
     if (hv > 21) settle('you', `Anon stood on ${yv}, ${bot()} drew to ${hv} and busted (${show(her)})`);
     else if (yv > hv) settle('you', `Anon stood on ${yv}, ${bot()} stopped at ${hv}`);
     else if (hv > yv) settle('her', `Anon stood on ${yv}, ${bot()} made ${hv}`);
@@ -84,21 +130,12 @@ window.Cards = (function () {
     if (winner === 'her') score.her++;
     render();
     const won = winner === 'push' ? 'Nobody wins the hand.' : (winner === 'you' ? 'Anon wins the hand.' : `${bot()} wins the hand.`);
+    setStatus(won);
     send(`(Card table, hand ${hand}: ${how}. ${won} Score: ${tallyText()}.)`);
   }
 
-  // ponytail: sendTouchEvent drops the event while she's still
-  // talking, so wait her out. 30 s is longer than any reply.
-  function send(text) {
-    if (!sendEvent) return;
-    nextBtn.disabled = true;
-    const t0 = Date.now();
-    const tick = () => {
-      if (isBusy() && Date.now() - t0 < 30000) return setTimeout(tick, 500);
-      sendEvent(text);
-      nextBtn.disabled = false;
-    };
-    tick();
+  function setStatus(text) {
+    if (statusEl) statusEl.textContent = text;
   }
 
   function cardEl(c, down) {
@@ -116,60 +153,81 @@ window.Cards = (function () {
     tallyEl.textContent = `hand ${hand} · ${tallyText()}`;
     hitBtn.disabled = standBtn.disabled = phase !== 'player';
     nextBtn.hidden = phase !== 'done';
+    if (phase === 'player') setStatus('your move');
   }
 
   function build() {
-    if (panel) return;
-    panel = document.createElement('section');
-    panel.className = 'card-table';
-    panel.hidden = true;
-    panel.setAttribute('aria-label', 'Blackjack table');
-    panel.innerHTML = `
-      <header><span class="ct-title">Blackjack</span><span class="ct-tally"></span><button class="icon-btn ct-leave" title="Leave the table" aria-label="Leave the table">×</button></header>
-      <div class="ct-hand"><div class="ct-label"><span class="ct-who"></span> <span class="ct-val"></span></div><div class="ct-cards ct-her"></div></div>
-      <div class="ct-hand"><div class="ct-label">You <span class="ct-val"></span></div><div class="ct-cards ct-you"></div></div>
-      <div class="ct-actions">
-        <button class="secondary ct-hit">Hit</button>
-        <button class="secondary ct-stand">Stand</button>
-        <button class="ct-next" hidden>Next hand</button>
+    if (overlay) return;
+    overlay = document.createElement('div');
+    overlay.className = 'cards-overlay';
+    overlay.hidden = true;
+    overlay.setAttribute('aria-label', 'Blackjack table');
+    overlay.innerHTML = `
+      <button class="voice-overlay-btn cards-close" type="button" aria-label="Leave the table" title="Leave the table">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+      </button>
+      <div class="cards-tally"></div>
+      <div class="cards-hand cards-her"><div class="cards-label"><span class="cards-who"></span> <span class="cards-val"></span></div><div class="cards-row"></div></div>
+      <div class="cards-felt">
+        <div class="cards-hand cards-you"><div class="cards-label">You <span class="cards-val"></span></div><div class="cards-row"></div></div>
+        <div class="cards-status"></div>
+        <div class="cards-actions">
+          <button class="secondary cards-hit" type="button">Hit</button>
+          <button class="secondary cards-stand" type="button">Stand</button>
+          <button class="cards-next" type="button" hidden>Next hand</button>
+        </div>
       </div>`;
-    document.body.appendChild(panel);
-    herRow = panel.querySelector('.ct-her');
-    youRow = panel.querySelector('.ct-you');
-    [herVal, youVal] = panel.querySelectorAll('.ct-val');
-    tallyEl = panel.querySelector('.ct-tally');
-    hitBtn = panel.querySelector('.ct-hit');
-    standBtn = panel.querySelector('.ct-stand');
-    nextBtn = panel.querySelector('.ct-next');
-    panel.querySelector('.ct-who').textContent = bot();
+    document.body.appendChild(overlay);
+    herRow = overlay.querySelector('.cards-her .cards-row');
+    youRow = overlay.querySelector('.cards-you .cards-row');
+    herVal = overlay.querySelector('.cards-her .cards-val');
+    youVal = overlay.querySelector('.cards-you .cards-val');
+    tallyEl = overlay.querySelector('.cards-tally');
+    statusEl = overlay.querySelector('.cards-status');
+    hitBtn = overlay.querySelector('.cards-hit');
+    standBtn = overlay.querySelector('.cards-stand');
+    nextBtn = overlay.querySelector('.cards-next');
     hitBtn.addEventListener('click', hit);
     standBtn.addEventListener('click', stand);
     nextBtn.addEventListener('click', deal);
-    panel.querySelector('.ct-leave').addEventListener('click', close);
+    overlay.querySelector('.cards-close').addEventListener('click', close);
+    document.addEventListener('keydown', (e) => { if (e.key === 'Escape' && active) close(); });
   }
 
   function open() {
     build();
-    if (!panel.hidden) return;
+    if (active) return;
+    active = true;
+    overlay.querySelector('.cards-who').textContent = bot();
     score = { you: 0, her: 0 };
     hand = 0;
     deck = newDeck();
-    panel.hidden = false;
+    overlay.hidden = false;
+    void overlay.offsetHeight;
+    document.body.classList.add('cards-mode');
     deal();
   }
 
   function close() {
-    if (!panel || panel.hidden) return;
-    panel.hidden = true;
-    const final = phase === 'player' ? ' Anon folded the last hand.' : '';
+    if (!active) return;
+    const folded = phase === 'player' || phase === 'dealer' ? ' Anon left the last hand unfinished.' : '';
+    const played = hand;
+    const tally = tallyText();
+    active = false;
     phase = 'idle';
-    if (hand > 0) send(`(Card table: Anon gets up after ${hand} hand${hand === 1 ? '' : 's'}, final score ${tallyText()}.${final})`);
+    document.body.classList.remove('cards-mode');
+    setTimeout(() => { if (!active) overlay.hidden = true; }, 300);
+    if (played > 0 && sendEvent) {
+      sendEvent(`(Card table: Anon gets up after ${played} hand${played === 1 ? '' : 's'}, final score ${tally}.${folded})`);
+    }
   }
+
+  function isActive() { return active; }
 
   function init(opts) {
     sendEvent = opts.sendEvent || null;
     isBusy = opts.isBusy || isBusy;
   }
 
-  return { init, open, close };
+  return { init, open, close, isActive };
 })();

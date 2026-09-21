@@ -213,12 +213,15 @@ function dropUserTurn(bubble, entry) {
   updateEmptyState();
 }
 
-function sendTouchEvent(text) {
-  if (abortFn || fleeActive()) return;
+// onReply gets her visible text once the turn settles (empty on
+// error or stop). the card table reads its hit/stand off it
+function sendTouchEvent(text, onReply) {
+  if (abortFn || fleeActive()) return false;
   resetIdleNudge();
   reportActivity();
   messages.push({ role: 'user', content: text });
-  runChat({ idle: false, ephemeral: true });
+  runChat({ idle: false, ephemeral: true, onReply });
+  return true;
 }
 
 export const VOICE_STATE_LABELS = {
@@ -304,7 +307,7 @@ function leaveFor(where) {
   tick();
 }
 
-export function runChat({ idle, ephemeral, audio, voice, onOverheard, onAudioUnsupported }) {
+export function runChat({ idle, ephemeral, audio, voice, onOverheard, onAudioUnsupported, onReply }) {
   if (abortFn) return;
   cancelIdleNudge();
   cancelAutoReset();
@@ -353,6 +356,12 @@ export function runChat({ idle, ephemeral, audio, voice, onOverheard, onAudioUns
   let silenced = false;
   let overheard = false;
   let trip = '';
+  let replied = false;
+  const reply = (text) => {
+    if (replied || !onReply) return;
+    replied = true;
+    onReply(text);
+  };
   const bubbleSource = ephemeral ? 'ephemeral' : 'phone';
   const bubbleEnabled = () => !(window.VoiceMode && VoiceMode.isActive()) && (ephemeral || phoneMode());
   const renderBubble = () => {
@@ -394,6 +403,7 @@ export function runChat({ idle, ephemeral, audio, voice, onOverheard, onAudioUns
     if (!discard && visible.trim()) messages.push({ role: 'assistant', content: visible });
     else draft.remove();
     finalize(!discard);
+    reply(discard ? '' : visible);
     ui.setStatus('idle', 'idle');
     updateEmptyState();
     if (!discard) {
@@ -532,6 +542,7 @@ export function runChat({ idle, ephemeral, audio, voice, onOverheard, onAudioUns
         if (window.History && !ephemeral && currentConversationId) {
           History.compact(currentConversationId).catch(() => {});
         }
+        reply(silenced ? '' : visible);
         if (window.History) await refreshSidebar();
         if (trip === 'cards') { if (window.Cards) Cards.open(); }
         else if (trip) leaveFor(trip);
@@ -560,6 +571,7 @@ export function runChat({ idle, ephemeral, audio, voice, onOverheard, onAudioUns
         if (err.status === 418) ui.setStatus('idle', 'idle');
         else ui.setStatus('error', 'error');
         finalize();
+        reply('');
         updateEmptyState();
         scheduleAutoReset();
         armIdleAfterReply();
@@ -696,7 +708,7 @@ function showBoot() {
      'vendor/marked.min.js', 'vendor/purify.min.js?v=4',
      'js/actions.js?v=4', 'js/outfit.js?v=21', 'js/touch.js?v=3',
      'js/mods.js?v=14', 'js/tts.js?v=3', 'js/voice.js?v=10',
-     'js/voicemode.js?v=3', 'js/trip-loader.js?v=3', 'js/cards.js?v=1',
+     'js/voicemode.js?v=3', 'js/trip-loader.js?v=3', 'js/cards.js?v=2',
      ...(currentUser?.role === 'admin' ? ['js/devhud.js?v=3'] : []),
      'js/wardrobe-open-lines.js?v=3', 'js/wardrobe-reactions.js?v=5',
      'js/wardrobe-return-lines.js?v=3'],
