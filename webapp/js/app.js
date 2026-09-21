@@ -202,7 +202,7 @@ export function sendMessage(opts) {
   const bubble = appendMsg('user', text);
   const entry = { role: 'user', content: window.Names ? Names.canonicalize(text) : text };
   messages.push(entry);
-  runChat({ idle: false, voice, onOverheard: voice ? () => dropUserTurn(bubble, entry) : null });
+  runChat({ idle: false, voice, invite, onOverheard: voice ? () => dropUserTurn(bubble, entry) : null });
 }
 
 // she heard him talk to someone else. the turn never happened,
@@ -308,7 +308,7 @@ function leaveFor(where) {
   tick();
 }
 
-export function runChat({ idle, ephemeral, audio, voice, onOverheard, onAudioUnsupported, onReply }) {
+export function runChat({ idle, ephemeral, audio, voice, invite = '', onOverheard, onAudioUnsupported, onReply }) {
   if (abortFn) return;
   cancelIdleNudge();
   cancelAutoReset();
