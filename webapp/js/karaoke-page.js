@@ -6,6 +6,13 @@
     location.replace('index.html');
     return;
   }
+  // same rule as wardrobe.js: she agreed, or the gate is off
+  const trip = await fetch('api/trip.php', { credentials: 'same-origin' })
+    .then(r => r.ok ? r.json() : null).catch(() => null);
+  if (trip && trip.gated && trip.where !== 'karaoke') {
+    location.replace('index.html');
+    return;
+  }
 
   if (window.Prefs) await Prefs.pullFromServer();
   const storedVolume = parseFloat(localStorage.getItem('audio.volume') || '1');

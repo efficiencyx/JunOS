@@ -13,3 +13,9 @@ indent_size = 4
 
 [Makefile]
 indent_style = tab
+
+[*.{w8k,cu,ptx}]
+indent_size = 4
+
+[distro/**.nix]
+indent_size = 2

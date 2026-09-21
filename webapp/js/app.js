@@ -7,18 +7,18 @@
 // rewrite.
 
 import { showAuthScreen } from './app/auth-screen.js?v=11';
-import { IDLE_AFTER_REPLY_MS, TYPING_POLL_MS, armIdleAfterReply, cancelActiveIdleNudge, cancelAutoReset, cancelIdleNudge, composerPlaceholder, consolidating, fleeActive, reportActivity, resetIdleNudge, scheduleAutoReset, scheduleIdleNudge, setCancelActiveIdleNudge, setConsolidating, showConsolidatingBubble, startFleeLock, syncConsolidationStatus } from './app/consolidation.js?v=10';
+import { IDLE_AFTER_REPLY_MS, TYPING_POLL_MS, armIdleAfterReply, cancelActiveIdleNudge, cancelAutoReset, cancelIdleNudge, composerPlaceholder, consolidating, fleeActive, reportActivity, resetIdleNudge, scheduleAutoReset, scheduleIdleNudge, setCancelActiveIdleNudge, setConsolidating, showConsolidatingBubble, startFleeLock, syncConsolidationStatus } from './app/consolidation.js?v=12';
 import { chatInput, debugSystemPromptEl, devNoIdleChk, messagesEl, messagesEmpty, missingParamsEl, mobileConversationTitle, modelSelect, narrowSidebarQuery, reasoningSelect, sendBtn, sendButtonIdleMarkup, sendButtonStopMarkup, siteVolumeInput, stageEl, thinkChk } from './app/dom.js?v=11';
-import { announceMobileReply, faceBubble, hideFaceBubble, latestAssistantReply, restartFaceBubbleHide, scheduleFaceBubbleHide, scheduleFaceBubblePosition, setLatestAssistantReply, showFaceBubble } from './app/face-bubble.js?v=10';
+import { announceMobileReply, faceBubble, hideFaceBubble, latestAssistantReply, restartFaceBubbleHide, scheduleFaceBubbleHide, scheduleFaceBubblePosition, setLatestAssistantReply, showFaceBubble } from './app/face-bubble.js?v=12';
 import { appendRaw, logAction, logMissing, logToolStatus, setStageStatus } from './app/logging.js?v=10';
-import { loadMood } from './app/mood.js?v=10';
-import { applyProviderCapabilities, applyRoleGates, setSiteVolume, syncThinkToggle, updateSiteVolumeLabel, wireNameSettings } from './app/settings.js?v=10';
-import { loadConversation, refreshSidebar, setSidebarOpen } from './app/sidebar.js?v=10';
-import { makeNameFilter, makeStreamBuffer } from './app/stream-filters.js?v=10';
+import { loadMood } from './app/mood.js?v=12';
+import { applyProviderCapabilities, applyRoleGates, setSiteVolume, syncThinkToggle, updateSiteVolumeLabel, wireNameSettings } from './app/settings.js?v=13';
+import { loadConversation, refreshSidebar, setSidebarOpen } from './app/sidebar.js?v=12';
+import { makeNameFilter, makeStreamBuffer } from './app/stream-filters.js?v=12';
 import { escapeHtml, localTimeString, phoneMode } from './app/util.js?v=10';
-import { wireTts } from './app/wire-tts.js?v=10';
-import { wireVoice } from './app/wire-voice.js?v=11';
-import { WELCOME_TIERS, fetchWelcome, playWelcome, previewWelcome } from './app/welcome.js?v=10';
+import { wireTts } from './app/wire-tts.js?v=12';
+import { wireVoice } from './app/wire-voice.js?v=13';
+import { WELCOME_TIERS, fetchWelcome, playWelcome, previewWelcome } from './app/welcome.js?v=12';
 
 export const messages = [];
 export let abortFn = null;
@@ -213,12 +213,15 @@ function dropUserTurn(bubble, entry) {
   updateEmptyState();
 }
 
-function sendTouchEvent(text) {
-  if (abortFn || fleeActive()) return;
+// onReply gets her visible text once the turn settles (empty on
+// error or stop). the card table reads its hit/stand off it
+function sendTouchEvent(text, onReply) {
+  if (abortFn || fleeActive()) return false;
   resetIdleNudge();
   reportActivity();
   messages.push({ role: 'user', content: text });
-  runChat({ idle: false, ephemeral: true });
+  runChat({ idle: false, ephemeral: true, onReply });
+  return true;
 }
 
 export const VOICE_STATE_LABELS = {
@@ -295,7 +298,7 @@ export function sendAudioFromVoice(b64, onUnsupported) {
 // mid-sentence. the floor is for TTS off, so the line is at least
 // readable before it's gone.
 function leaveFor(where) {
-  const href = where === 'karaoke' ? 'karaoke.html' : 'wardrobe.html';
+  const href = { karaoke: 'karaoke.html', date: 'date.html' }[where] || 'wardrobe.html';
   const t0 = Date.now();
   const tick = () => {
     if ((window.TTS && TTS.isSpeaking()) || Date.now() - t0 < 1500) return setTimeout(tick, 250);
@@ -304,7 +307,7 @@ function leaveFor(where) {
   tick();
 }
 
-export function runChat({ idle, ephemeral, audio, voice, onOverheard, onAudioUnsupported }) {
+export function runChat({ idle, ephemeral, audio, voice, onOverheard, onAudioUnsupported, onReply }) {
   if (abortFn) return;
   cancelIdleNudge();
   cancelAutoReset();
@@ -353,6 +356,12 @@ export function runChat({ idle, ephemeral, audio, voice, onOverheard, onAudioUns
   let silenced = false;
   let overheard = false;
   let trip = '';
+  let replied = false;
+  const reply = (text) => {
+    if (replied || !onReply) return;
+    replied = true;
+    onReply(text);
+  };
   const bubbleSource = ephemeral ? 'ephemeral' : 'phone';
   const bubbleEnabled = () => !(window.VoiceMode && VoiceMode.isActive()) && (ephemeral || phoneMode());
   const renderBubble = () => {
@@ -394,6 +403,7 @@ export function runChat({ idle, ephemeral, audio, voice, onOverheard, onAudioUns
     if (!discard && visible.trim()) messages.push({ role: 'assistant', content: visible });
     else draft.remove();
     finalize(!discard);
+    reply(discard ? '' : visible);
     ui.setStatus('idle', 'idle');
     updateEmptyState();
     if (!discard) {
@@ -532,8 +542,10 @@ export function runChat({ idle, ephemeral, audio, voice, onOverheard, onAudioUns
         if (window.History && !ephemeral && currentConversationId) {
           History.compact(currentConversationId).catch(() => {});
         }
+        reply(silenced ? '' : visible);
         if (window.History) await refreshSidebar();
-        if (trip) leaveFor(trip);
+        if (trip === 'cards') { if (window.Cards) Cards.open(); }
+        else if (trip) leaveFor(trip);
       },
       onError: async (err) => {
         if (!isCurrent()) return;
@@ -559,6 +571,7 @@ export function runChat({ idle, ephemeral, audio, voice, onOverheard, onAudioUns
         if (err.status === 418) ui.setStatus('idle', 'idle');
         else ui.setStatus('error', 'error');
         finalize();
+        reply('');
         updateEmptyState();
         scheduleAutoReset();
         armIdleAfterReply();
@@ -683,6 +696,11 @@ function showBoot() {
   currentUser = me.user || null;
   applyRoleGates(currentUser);
 
+  // not awaited here, it's off the boot path. read at the dates
+  // panel further down
+  const tripStateP = fetch('api/trip.php', { credentials: 'same-origin' })
+    .then(r => r.ok ? r.json() : null).catch(() => null);
+
   // load avatar features after auth. devhud.js owns Ctrl+Shift+D,
   // so only admins get that script.
   await loadScripts([
@@ -690,9 +708,9 @@ function showBoot() {
      'vendor/marked.min.js', 'vendor/purify.min.js?v=4',
      'js/actions.js?v=4', 'js/outfit.js?v=21', 'js/touch.js?v=3',
      'js/mods.js?v=14', 'js/tts.js?v=3', 'js/voice.js?v=10',
-     'js/voicemode.js?v=3', 'js/trip-loader.js?v=3',
+     'js/voicemode.js?v=3', 'js/trip-loader.js?v=3', 'js/cards.js?v=4',
      ...(currentUser?.role === 'admin' ? ['js/devhud.js?v=3'] : []),
-     'js/wardrobe-open-lines.js?v=3', 'js/wardrobe-reactions.js?v=4',
+     'js/wardrobe-open-lines.js?v=3', 'js/wardrobe-reactions.js?v=5',
      'js/wardrobe-return-lines.js?v=3'],
     ['vendor/cubism4.min.js', 'vendor/pixi-unsafe-eval.min.js'],
   ]);
@@ -714,12 +732,13 @@ function showBoot() {
       scheduleIdleNudge(IDLE_AFTER_REPLY_MS);
     },
   });
+  if (window.Cards) Cards.init({ sendEvent: sendTouchEvent, isBusy: () => !!abortFn });
 
-  // coming back from the wardrobe, the return cutscene REPLACES the
-  // boot terminal. skipping BootFX.start also makes BootFX.finish a
-  // no-op later.
-  const fromWardrobe = new URLSearchParams(location.search).get('from') === 'wardrobe';
-  if (fromWardrobe) {
+  // coming back from the shop or a date, the return cutscene
+  // REPLACES the boot terminal. skipping BootFX.start also makes
+  // BootFX.finish a no-op later.
+  const fromTrip = ['wardrobe', 'date'].includes(new URLSearchParams(location.search).get('from'));
+  if (fromTrip) {
     history.replaceState(null, '', location.pathname);
     TripLoader.mount({ reverse: true });
     const bo = document.getElementById('bootOverlay');
@@ -774,9 +793,8 @@ function showBoot() {
   chatInput.disabled = true;
   sendBtn.disabled = true;
   await syncConsolidationStatus();
-  // the wardrobe is the same session. time in there is NOT an
-  // absence.
-  if (!fromWardrobe) await fetchWelcome();
+  // a trip is the same session. time out there is NOT an absence.
+  if (!fromTrip) await fetchWelcome();
   reportActivity(true);
   // fetch gauges before Live2D.init so the empty-state greeting
   // does not wait on .moc3 with neutral values. setMood can park
@@ -790,10 +808,10 @@ function showBoot() {
   try {
     const live2dInfo = await Live2D.init({ stageEl, onStatus: (m) => {
       setStageStatus(m);
-      if (fromWardrobe) TripLoader.setStage(m);
+      if (fromTrip) TripLoader.setStage(m);
     } });
     setTimeout(() => setStageStatus(null), 1500);
-    if (fromWardrobe) {
+    if (fromTrip) {
       TripLoader.setStage('Home again');
       TripLoader.finish();
     }
@@ -806,35 +824,9 @@ function showBoot() {
 
     await Outfit.load();
     Outfit.applyAll();
-    const wBtn = document.getElementById('wardrobeBtn');
-    let shopPrefetched = false;
-    const prefetchShop = () => {
-      if (shopPrefetched) return;
-      shopPrefetched = true;
-      for (const [href, as] of [['wardrobe.html', 'document'], ['wardrobe-cutscene.webm', 'video']]) {
-        const link = document.createElement('link');
-        link.rel = 'prefetch';
-        link.as = as;
-        link.href = href;
-        document.head.appendChild(link);
-      }
-    };
-    if (wBtn) {
-      wBtn.addEventListener('pointerenter', prefetchShop);
-      wBtn.addEventListener('focus', prefetchShop);
-    }
-    if (wBtn) wBtn.addEventListener('click', async () => {
-      prefetchShop();
-      ui.toggleDrawer(false);
-      if (window.WardrobeReactions && !wBtn.disabled) {
-        wBtn.disabled = true;
-        try { await WardrobeReactions.playIntro(); } catch (e) {}
-      }
-      location.href = 'wardrobe.html';
-    });
   } catch (e) {
     console.error(e);
-    if (fromWardrobe) TripLoader.fail('Live2D load error: ' + e.message);
+    if (fromTrip) TripLoader.fail('Live2D load error: ' + e.message);
     setStageStatus('Live2D load error: ' + e.message, true);
     ui.toast('Live2D load error: ' + e.message, 'error');
     ui.setStatus('error', 'error');
@@ -843,39 +835,13 @@ function showBoot() {
   await wireTts();
 
   await wireVoice();
-  const karaokeBtn = document.getElementById('karaokeOpenBtn');
-  if (karaokeBtn) {
-    let karaokePrefetched = false;
-    const prefetchKaraoke = () => {
-      if (karaokePrefetched) return;
-      karaokePrefetched = true;
-      const link = document.createElement('link');
-      link.rel = 'prefetch';
-      link.as = 'document';
-      link.href = 'karaoke.html';
-      document.head.appendChild(link);
-    };
-    karaokeBtn.addEventListener('pointerenter', prefetchKaraoke, { once: true });
-    karaokeBtn.addEventListener('focus', prefetchKaraoke, { once: true });
-    karaokeBtn.addEventListener('click', () => {
-      ui.toggleDrawer(false);
-      location.href = 'karaoke.html';
-    });
-    try {
-      const response = await fetch('/api/karaoke.php?action=health', { credentials: 'same-origin' });
-      const health = response.ok ? await response.json() : null;
-      if (health && health.sep) {
-        karaokeBtn.disabled = false;
-        karaokeBtn.title = health.device === 'cpu'
-          ? 'Sing together (CPU - separation is slow)'
-          : 'Sing together';
-      } else {
-        karaokeBtn.title = 'Unavailable: the karaoke sidecar is not running';
-      }
-    } catch (e) {
-      karaokeBtn.title = 'Unavailable: could not reach the karaoke sidecar';
-    }
+  // whatever she granted is spent the moment you're back on this
+  // page, walked home or typed the URL, same thing
+  const tripState = await tripStateP;
+  if (tripState && tripState.where) {
+    fetch('api/trip.php?action=home', { method: 'POST', credentials: 'same-origin' }).catch(() => {});
   }
+  wireDatesPanel(!!(tripState && tripState.can_force));
 
   const bootOverlay = document.getElementById('bootOverlay');
   const bootStatusLabel = document.querySelector('#bootStatus .boot-status-label');
@@ -971,6 +937,122 @@ function showBoot() {
     }
   }
 })();
+
+// Settings > Dates. "Ask her" is just a chat line, she decides and
+// calls the tool. "Force her" is the old direct jump, admin only
+// (or FREE_ROAM=on), and it still has to write the grant first or
+// the page bounces straight back here.
+// same cutoff as date.js, the page decides the menu off the same
+// clock
+const mealNow = () => new Date().getHours() < 16 ? 'lunch' : 'dinner';
+const ASK_LINES = {
+  shop: "Wanna go to Annalie's shop with me?",
+  karaoke: 'Sing with me? Karaoke, tonight.',
+  cards: 'Deal me in. One game of blackjack?',
+  date: () => mealNow() === 'lunch' ? 'Wanna go out for lunch? My treat.' : 'Wanna go out for dinner tonight? My treat.',
+};
+
+function prefetchOnce(hrefs) {
+  let done = false;
+  return () => {
+    if (done) return;
+    done = true;
+    for (const [href, as] of hrefs) {
+      const link = document.createElement('link');
+      link.rel = 'prefetch';
+      link.as = as;
+      link.href = href;
+      document.head.appendChild(link);
+    }
+  };
+}
+
+async function wireDatesPanel(canForce) {
+  const dateTitle = document.getElementById('dateRowTitle');
+  if (dateTitle) {
+    const label = () => { dateTitle.textContent = mealNow() === 'lunch' ? 'Lunch out' : 'Dinner out'; };
+    label();
+    setInterval(label, 60000);
+  }
+  for (const [where, line] of Object.entries(ASK_LINES)) {
+    const ask = document.getElementById('ask' + where[0].toUpperCase() + where.slice(1) + 'Btn');
+    if (!ask) continue;
+    ask.addEventListener('click', () => {
+      ui.toggleDrawer(false);
+      chatInput.value = typeof line === 'function' ? line() : line;
+      sendMessage();
+    });
+  }
+  if (!canForce) return;
+  document.querySelectorAll('.force-btn').forEach(b => { b.hidden = false; });
+
+  const grant = (where) => fetch('api/trip.php?action=go', {
+    method: 'POST', credentials: 'same-origin',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ where, conversation_id: currentConversationId }),
+  }).catch(() => {});
+
+  const wBtn = document.getElementById('wardrobeBtn');
+  if (wBtn) {
+    const prefetchShop = prefetchOnce([['wardrobe.html', 'document'], ['wardrobe-cutscene.webm', 'video']]);
+    wBtn.addEventListener('pointerenter', prefetchShop);
+    wBtn.addEventListener('focus', prefetchShop);
+    wBtn.addEventListener('click', async () => {
+      prefetchShop();
+      ui.toggleDrawer(false);
+      if (wBtn.disabled) return;
+      wBtn.disabled = true;
+      await grant('shop');
+      if (window.WardrobeReactions) {
+        try { await WardrobeReactions.playIntro(); } catch (e) {}
+      }
+      location.href = 'wardrobe.html';
+    });
+  }
+
+  const dateBtn = document.getElementById('forceDateBtn');
+  if (dateBtn) {
+    const prefetchDate = prefetchOnce([['date.html', 'document'], ['wardrobe-cutscene.webm', 'video']]);
+    dateBtn.addEventListener('pointerenter', prefetchDate);
+    dateBtn.addEventListener('focus', prefetchDate);
+    dateBtn.addEventListener('click', async () => {
+      ui.toggleDrawer(false);
+      await grant('date');
+      location.href = 'date.html';
+    });
+  }
+
+  const cardsBtn = document.getElementById('forceCardsBtn');
+  if (cardsBtn) cardsBtn.addEventListener('click', () => {
+    ui.toggleDrawer(false);
+    if (window.Cards) Cards.open();
+  });
+
+  const karaokeBtn = document.getElementById('karaokeOpenBtn');
+  if (!karaokeBtn) return;
+  const prefetchKaraoke = prefetchOnce([['karaoke.html', 'document']]);
+  karaokeBtn.addEventListener('pointerenter', prefetchKaraoke, { once: true });
+  karaokeBtn.addEventListener('focus', prefetchKaraoke, { once: true });
+  karaokeBtn.addEventListener('click', async () => {
+    ui.toggleDrawer(false);
+    await grant('karaoke');
+    location.href = 'karaoke.html';
+  });
+  try {
+    const response = await fetch('/api/karaoke.php?action=health', { credentials: 'same-origin' });
+    const health = response.ok ? await response.json() : null;
+    if (health && health.sep) {
+      karaokeBtn.disabled = false;
+      karaokeBtn.title = health.device === 'cpu'
+        ? 'Sing together (CPU - separation is slow)'
+        : 'Sing together';
+    } else {
+      karaokeBtn.title = 'Unavailable: the karaoke sidecar is not running';
+    }
+  } catch (e) {
+    karaokeBtn.title = 'Unavailable: could not reach the karaoke sidecar';
+  }
+}
 
 function validateActionMap(modelParamIds) {
   const known = new Set(modelParamIds);

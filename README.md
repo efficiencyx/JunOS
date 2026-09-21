@@ -253,6 +253,7 @@ Everything is environment variables in `.env` - the full reference is [`docs/con
 | `COMPOSE_PROFILES` | Optional containers: `ollama`, `llamacpp`, `voice`, `karaoke`, `prod`. `start.sh` derives them from the knobs below, you only set this by hand for `prod` | `ollama` |
 | `VOICE` | `off` skips the voice sidecar: the `tts` container under Docker (`voice` profile), the sidecar process on bare-metal Windows. Chat degrades to text-only | `on` |
 | `FLEE_BANS` | When she walks out of a scene, `on` locks that account out of chat for 5 min, doubling per repeat up to 30. `off` lets her leave without the lockout | `on` |
+| `FREE_ROAM` | Going out is her call: the shop, karaoke and date pages bounce home unless she agreed in chat. `on` drops that gate and gives everyone the "Force her" buttons (admins have them regardless) | `off` |
 | `TTS_DEVICE` | Voice synthesis device. Keep it on CPU: both engines are real-time there, and a GPU copy parks ~2 GB your LLM wants more | `cpu` |
 | `KARAOKE` / `SEP_DEVICE` | Karaoke sidecar on/off, and where stem separation runs. *This* is the audio job that wants a GPU - minutes on CPU, seconds on a card, VRAM handed back after | `on` · `auto` |
 | `STT_MODEL` / `STT_LANG` | Whisper size and language; blank lang = per-utterance auto-detect | `base` · *(auto)* |

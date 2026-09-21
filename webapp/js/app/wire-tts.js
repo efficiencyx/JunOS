@@ -1,8 +1,8 @@
-import { IDLE_AFTER_REPLY_MS, scheduleIdleNudge } from './consolidation.js?v=10';
+import { IDLE_AFTER_REPLY_MS, scheduleIdleNudge } from './consolidation.js?v=12';
 import { ttsChk, ttsEngineSelect, ttsLangRow, ttsLangSelect, ttsSpeedInput, ttsVoiceSelect } from './dom.js?v=11';
-import { finishPendingFaceBubbleHide } from './face-bubble.js?v=10';
+import { finishPendingFaceBubbleHide } from './face-bubble.js?v=12';
 import { logAction } from './logging.js?v=10';
-import { syncVoiceDeps, updateTtsSpeedLabel } from './settings.js?v=10';
+import { syncVoiceDeps, updateTtsSpeedLabel } from './settings.js?v=13';
 import { escapeHtml } from './util.js?v=10';
 
 export async function wireTts() {

@@ -607,13 +607,13 @@ html[data-pre-auth] #app { visibility: hidden; }
    forbids the usual media="print" onload= trick, and blocking on
    the full sheet would cost a round trip the auth screen does not
    need. -->
-<link rel="preload" as="style" href="styles.css?v=4">
+<link rel="preload" as="style" href="styles.css?v=7">
 <link rel="preload" as="style" href="trip-loader.css?v=2">
-<noscript><link rel="stylesheet" href="styles.css?v=4"></noscript>
+<noscript><link rel="stylesheet" href="styles.css?v=7"></noscript>
 
 <script defer src="js/viewport.js?v=3"></script>
 <script defer src="js/pwa.js?v=2"></script>
-<script src="js/boot-gate.js?v=3"></script>
+<script src="js/boot-gate.js?v=5"></script>
 
 <script defer src="js/loader.js?v=2"></script>
 <script defer src="js/auth.js?v=4"></script>
@@ -624,7 +624,7 @@ html[data-pre-auth] #app { visibility: hidden; }
 <script defer src="js/history.js?v=2"></script>
 <script defer src="js/boot-fx.js?v=2"></script>
 <script defer src="js/memory-graph.js?v=2"></script>
-<script type="module" src="js/app.js?v=12"></script>
+<script type="module" src="js/app.js?v=17"></script>
 </head>
 <body>
 
@@ -965,16 +965,42 @@ html[data-pre-auth] #app { visibility: hidden; }
         <div class="set-row">
           <div class="set-row-text">
             <div class="set-row-title">Annalie's shop</div>
-            <div class="set-row-desc">Take Jun shopping - clothing layers, colors and decals.</div>
+            <div class="set-row-desc">Ask Jun to go shopping - clothing layers, colors and decals. Her call.</div>
           </div>
-          <div class="set-row-control"><button class="secondary" id="wardrobeBtn" title="Walk to Annalie's shop">Visit the shop</button></div>
+          <div class="set-row-control">
+            <button class="secondary" id="askShopBtn" title="Ask her in chat">Ask her</button>
+            <button class="secondary force-btn" id="wardrobeBtn" hidden title="Walk to Annalie's shop">Force her</button>
+          </div>
         </div>
         <div class="set-row">
           <div class="set-row-text">
             <div class="set-row-title">Karaoke night</div>
             <div class="set-row-desc">Bring a song - Jun sings the guide while you take the mic, then she scores your take.</div>
           </div>
-          <div class="set-row-control"><button class="secondary" id="karaokeOpenBtn" disabled title="Checking availability…">Start karaoke</button></div>
+          <div class="set-row-control">
+            <button class="secondary" id="askKaraokeBtn" title="Ask her in chat">Ask her</button>
+            <button class="secondary force-btn" id="karaokeOpenBtn" hidden disabled title="Checking availability…">Force her</button>
+          </div>
+        </div>
+        <div class="set-row">
+          <div class="set-row-text">
+            <div class="set-row-title">Blackjack</div>
+            <div class="set-row-desc">A few hands at the table, Jun deals. She reacts to every one.</div>
+          </div>
+          <div class="set-row-control">
+            <button class="secondary" id="askCardsBtn" title="Ask her in chat">Ask her</button>
+            <button class="secondary force-btn" id="forceCardsBtn" hidden title="Open the table">Force her</button>
+          </div>
+        </div>
+        <div class="set-row">
+          <div class="set-row-text">
+            <div class="set-row-title" id="dateRowTitle">Dinner out</div>
+            <div class="set-row-desc">Take her out to eat - you order for both, she has opinions.</div>
+          </div>
+          <div class="set-row-control">
+            <button class="secondary" id="askDateBtn" title="Ask her in chat">Ask her</button>
+            <button class="secondary force-btn" id="forceDateBtn" hidden title="Walk to the restaurant">Force her</button>
+          </div>
         </div>
       </section>
 
@@ -1179,8 +1205,8 @@ html[data-pre-auth] #app { visibility: hidden; }
     <div class="header-right">
       <a class="ai-badge" href="privacy.html#ai-system" target="_blank" rel="noopener" title="Jun is an AI system - her replies and voice are generated">AI<span class="sr-only">: you are interacting with an AI system, not a person</span></a>
       <span class="dev-badge" id="devBadge" hidden title="Developer account">DEV</span>
-      <span id="statusPill" class="status-pill status-idle">idle</span>
-      <button class="ghost" id="resetLive2DBtn" title="Reset to idle pose" aria-label="Reset pose">reset pose</button>
+      <span id="statusPill" class="status-pill status-idle" hidden>idle</span>
+      <button class="ghost" id="resetLive2DBtn" title="Reset to idle pose" aria-label="Reset pose" hidden>reset pose</button>
       <button class="ghost icon-btn" id="openSettingsBtn" title="Open settings" aria-label="Open settings">
         <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
       </button>

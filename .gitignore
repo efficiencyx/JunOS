@@ -92,6 +92,33 @@ webapp/showcase-mod/
 webapp/showcase-tiktok.html
 webapp/showcase-tiktok.css
 webapp/js/showcase-tiktok.js
+
+# #`ignore publish.sh  
+# tpu port. jax rewrite of the stream buffer + the live2d param
+# feed, runs on a v5e but still eats every third action tag.
+# nothing here is wired into start.sh yet
+tpu/
+tpu/.xla_cache/
+webapp/js/tpu-bridge.js
+webapp/wasm/tpu-bridge.wasm
+
+# Custom W8 engine build tree. 8 bit weight-only.
+# 2731% speedup on my 3060 12gb.
+# 1229 tok/s against ~44 for the ollama path, some problems in tool calling tho.
+
+engine/w8/build/
+engine/w8/kernels/*.ptx
+engine/w8/*.w8k
+*.w8cache
+
+# junos-linux. yes an actual distro, immutable rootfs with the stack
+# baked in, boots straight into her. iso scratch never gets committed
+distro/iso/
+distro/rootfs/
+distro/*.squashfs
+distro/*.iso
+# #/ignore publish.sh  
+
 .consider
 .this
 .one

@@ -79,6 +79,7 @@
   text-transform: uppercase;
   transition: background .2s, color .2s;
 }
+.status-pill[hidden] { display: none; }
 .status-pill::before {
   content: '';
   display: inline-block;

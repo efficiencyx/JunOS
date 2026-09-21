@@ -1,6 +1,6 @@
-import { abortFn, currentConversationId, runChat } from '../app.js?v=12';
+import { abortFn, currentConversationId, runChat } from '../app.js?v=17';
 import { chatInput, consolidationBanner, consolidationSub, consolidationTitle, devNoIdleChk, fleeEtaEl, fleeOverlay, fleeReasonEl, sendBtn, voiceChk } from './dom.js?v=11';
-import { showFaceBubble } from './face-bubble.js?v=10';
+import { showFaceBubble } from './face-bubble.js?v=12';
 import { logAction } from './logging.js?v=10';
 import { escapeHtml, formatElapsed } from './util.js?v=10';
 

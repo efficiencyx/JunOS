@@ -1,0 +1,82 @@
+/* the table is a mode like voice mode: chrome hidden, stage up on
+   the face preset (she's centered, zoomed to the head), overlay
+   above the stage at 40 and below drawers and toasts. her hand sits
+   above her head, yours in the felt under her chin. */
+.cards-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 50;
+  pointer-events: none;
+  opacity: 0;
+  transition: opacity .25s ease;
+}
+.cards-overlay[hidden] { display: none; }
+body.cards-mode .cards-overlay { opacity: 1; }
+body.cards-mode .chat-panel,
+body.cards-mode .conv-sidebar,
+body.cards-mode .app-header { visibility: hidden; }
+
+.cards-close {
+  position: absolute;
+  top: calc(16px + env(safe-area-inset-top, 0px));
+  right: calc(16px + env(safe-area-inset-right, 0px));
+}
+.cards-tally {
+  position: absolute;
+  top: calc(24px + env(safe-area-inset-top, 0px));
+  left: 50%;
+  transform: translateX(-50%);
+  padding: 8px 16px;
+  border-radius: var(--radius-pill);
+  font-size: 13px;
+  background: var(--bg-2);
+  border: 1px solid var(--border);
+  color: var(--muted);
+}
+.cards-hand { display: flex; flex-direction: column; align-items: center; gap: var(--space-2); }
+.cards-label { color: var(--muted); font-size: 14px; }
+.cards-val { color: var(--fg); font-weight: 700; }
+.cards-row { display: flex; justify-content: center; flex-wrap: wrap; gap: var(--space-2); min-height: 120px; }
+.cards-her {
+  position: absolute;
+  top: calc(80px + env(safe-area-inset-top, 0px));
+  left: 50%;
+  transform: translateX(-50%);
+}
+.cards-felt {
+  pointer-events: auto;
+  position: absolute;
+  left: 0; right: 0;
+  bottom: 0;
+  padding: var(--space-4) var(--space-4) calc(var(--space-5) + env(safe-area-inset-bottom, 0px));
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--space-3);
+  background: linear-gradient(180deg, transparent, rgba(18, 60, 40, .55) 30%, rgba(12, 44, 30, .85));
+  border-top: 1px solid rgba(255, 255, 255, .08);
+}
+.cards-status { color: var(--muted); font-size: 14px; min-height: 1.4em; }
+.cards-actions { display: flex; gap: var(--space-2); }
+.cards-actions button { min-width: 96px; }
+
+.card {
+  width: 84px; height: 120px;
+  display: grid; place-items: center;
+  background: #f4f1ea;
+  color: #1c1c1c;
+  border-radius: 10px;
+  font-weight: 700;
+  font-size: 30px;
+  box-shadow: 0 4px 12px rgba(0,0,0,.45);
+}
+.card.red { color: #c0262f; }
+.card.down {
+  background: repeating-linear-gradient(45deg, var(--accent) 0 5px, var(--accent-2) 5px 10px);
+}
+
+@media (max-width: 700px) {
+  .cards-her { top: calc(72px + env(safe-area-inset-top, 0px)); }
+  .card { width: 60px; height: 86px; font-size: 22px; }
+  .cards-row { min-height: 86px; }
+}

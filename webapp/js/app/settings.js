@@ -1,9 +1,9 @@
-import { abortFn, currentConversationId, sendMessage } from '../app.js?v=12';
-import { cancelIdleNudge } from './consolidation.js?v=10';
+import { abortFn, currentConversationId, sendMessage } from '../app.js?v=17';
+import { cancelIdleNudge } from './consolidation.js?v=12';
 import { closeSettingsBtn, devNoIdleChk, drawerBackdrop, modelSelect, openSettingsBtn, reasoningSelect, sendBtn, siteVolumeInput, thinkChk, ttsChk, ttsSpeedInput, voiceChk, voiceSilenceInput } from './dom.js?v=11';
 import { logAction } from './logging.js?v=10';
-import { loadMood, setMoodEditingEnabled } from './mood.js?v=10';
-import { loadConversation, setSidebarOpen } from './sidebar.js?v=10';
+import { loadMood, setMoodEditingEnabled } from './mood.js?v=12';
+import { loadConversation, setSidebarOpen } from './sidebar.js?v=12';
 
 export function syncThinkToggle() {
   thinkChk.disabled = reasoningSelect.value === 'auto';
@@ -207,8 +207,10 @@ export function applyRoleGates(user) {
   // Everyone else wipes memories through Factory Reset, the DELETE
   // is admin only.
   if (memoryClearBtn) memoryClearBtn.hidden = !isAdmin;
-  const devBadge = document.getElementById('devBadge');
-  if (devBadge) devBadge.hidden = !isAdmin;
+  for (const id of ['devBadge', 'statusPill', 'resetLive2DBtn']) {
+    const el = document.getElementById(id);
+    if (el) el.hidden = !isAdmin;
+  }
   if (isAdmin && devAccessRow) {
     devAccessRow.hidden = false;
     if (devAccessDesc) devAccessDesc.textContent = 'Developer access is enabled on this account.';

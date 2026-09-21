@@ -11,6 +11,9 @@ android/
 Junk/
 live2d_raw/
 live2d_raw/raw_sources/
+tpu/
+engine/w8/
+distro/
 tools/
 docs/
 webapp/api/review.php

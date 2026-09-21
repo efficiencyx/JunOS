@@ -1,9 +1,9 @@
-import { appendMsg, currentConversationId, discardActiveResponse, messages, renderMarkdown, setConversationTitle, setCurrentConversationId, updateEmptyState } from '../app.js?v=12';
-import { IDLE_AFTER_JOIN_MS, cancelAutoReset, reportActivity, resetIdleNudge, scheduleIdleNudge } from './consolidation.js?v=10';
+import { appendMsg, currentConversationId, discardActiveResponse, messages, renderMarkdown, setConversationTitle, setCurrentConversationId, updateEmptyState } from '../app.js?v=17';
+import { IDLE_AFTER_JOIN_MS, cancelAutoReset, reportActivity, resetIdleNudge, scheduleIdleNudge } from './consolidation.js?v=12';
 import { conversationSidebar, messagesEl, mobileConversationTitle, mobileMenuBtn, narrowSidebarQuery, reloadPromptBtn, resetLive2DBtn, sidebarBackdrop, sidebarBackground } from './dom.js?v=11';
-import { announceMobileReply, faceBubble, hideFaceBubble, latestAssistantReply, scheduleFaceBubbleHide, setLatestAssistantReply, showFaceBubble } from './face-bubble.js?v=10';
+import { announceMobileReply, faceBubble, hideFaceBubble, latestAssistantReply, scheduleFaceBubbleHide, setLatestAssistantReply, showFaceBubble } from './face-bubble.js?v=12';
 import { logAction } from './logging.js?v=10';
-import { makeStreamBuffer } from './stream-filters.js?v=10';
+import { makeStreamBuffer } from './stream-filters.js?v=12';
 import { escapeHtml, phoneMode } from './util.js?v=10';
 
 const conversationTitles = new Map();

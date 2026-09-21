@@ -142,7 +142,7 @@
   padding: 7px 10px;
   font-size: 13px;
 }
-#devAccessRow .set-row-control { gap: var(--space-2); }
+#devAccessRow .set-row-control, [data-panel="dates"] .set-row-control { gap: var(--space-2); }
 #devKeyInput { width: 150px; }
 .set-row-control.range-control { gap: 10px; }
 .set-row-control.range-control input[type="range"] {
