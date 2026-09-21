@@ -313,7 +313,7 @@ HSTS (`Strict-Transport-Security: max-age=31536000`) is added only when `TLS_MOD
 - **`fail($code, $key)`**: emits `{error, code, request_id}`. Never echoes `curl_error` output, exception messages, or file paths. Real errors are logged to stderr via `log_event()` and surfaced through `docker logs`.
 
 Endpoint-specific caps:
-- `chat.php`: nginx caps the body at 4 MB (a spoken turn ships its WAV base64'd inside the JSON; PHP's own `read_body` ceiling is 6 MB and the decoded WAV ≤ 4 MB), each message content ≤ 16 KB, past 160 messages the oldest are dropped rather than the turn rejected, rate limit 30/min, `fastcgi_read_timeout` 600 s
+- `chat.php`: nginx caps the body at 4 MB (a spoken turn ships its WAV base64'd inside the JSON; PHP's own `read_body` ceiling is 6 MB and the decoded WAV ≤ 4 MB), each message content ≤ 16 KB, past 160 messages the oldest are dropped rather than the turn rejected, rate limit 90/min (the card table is one turn per move), `fastcgi_read_timeout` 600 s
 - `tts.php`: body ≤ 8 KB, text ≤ 2000 chars, rate limit 60/min
 - `stt.php`: body ≤ 4 MB, 30/min; `karaoke.php`: uploads ≤ 30 MB, 30/min, 900 s read timeout for separation
 - `models.php`: rate limit 30/min, `Cache-Control: public, max-age=10` (5 min for the OpenRouter catalog)

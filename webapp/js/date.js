@@ -13,17 +13,28 @@
 
   const MENU = {
     lunch: [
-      ['\u{1F96A}', 'a club sandwich'], ['\u{1F35C}', 'a bowl of ramen'], ['\u{1F373}', 'omurice'],
-      ['\u{1F35B}', 'a katsu curry'], ['\u{1F957}', 'a big salad'], ['\u{1F355}', 'a slice of pizza'],
-      ['\u{1F9CA}', 'an iced coffee'], ['\u{1F34B}', 'a lemonade'],
+      ['🥪', 'a club sandwich', 'The club sandwich', 'Toasted layers, crisp lettuce & golden fries', 'From the kitchen'],
+      ['🍜', 'a bowl of ramen', 'Ramen', 'A warming bowl of broth, noodles & greens', 'From the kitchen'],
+      ['🍳', 'omurice', 'Omurice', 'Soft omelette, seasoned rice & a little nostalgia', 'From the kitchen'],
+      ['🍛', 'a katsu curry', 'Katsu curry', 'Crisp golden cutlet, fragrant curry & rice', 'From the kitchen'],
+      ['🥗', 'a big salad', 'Garden salad', 'Seasonal leaves with a bright house dressing', 'From the kitchen'],
+      ['🍕', 'a slice of pizza', 'Pizza by the slice', 'Tomato, melted cheese & a crisp crust', 'From the kitchen'],
+      ['🧊', 'an iced coffee', 'Iced coffee', 'Freshly brewed, poured over ice', 'Something to sip'],
+      ['🍋', 'a lemonade', 'Cloudy lemonade', 'Fresh lemon, a little sweetness & lots of ice', 'Something to sip'],
     ],
     dinner: [
-      ['\u{1F969}', 'a steak'], ['\u{1F35D}', 'pasta carbonara'], ['\u{1F363}', 'a sushi platter'],
-      ['\u{1F35A}', 'mushroom risotto'], ['\u{1F41F}', 'grilled fish'], ['\u{1F377}', 'a glass of red wine'],
-      ['\u{1F370}', 'tiramisu'], ['\u{1F9C1}', 'cheesecake'],
+      ['🥩', 'a steak', 'Steak frites', 'Seared steak, golden fries & herb butter', 'The main affair'],
+      ['🍝', 'pasta carbonara', 'Carbonara', 'Silky pasta, pecorino & cracked black pepper', 'The main affair'],
+      ['🍣', 'a sushi platter', 'Sushi selection', 'A delicate assortment, freshly prepared', 'The main affair'],
+      ['🍚', 'mushroom risotto', 'Mushroom risotto', 'Creamy arborio rice & earthy mushrooms', 'The main affair'],
+      ['🐟', 'grilled fish', 'Grilled fish', 'Lightly charred, with lemon & seasonal greens', 'The main affair'],
+      ['🍷', 'a glass of red wine', 'House red', 'A mellow glass to take your time over', 'By the glass'],
+      ['🍰', 'tiramisu', 'Tiramisu', 'Coffee-soaked layers & a dusting of cocoa', 'A sweet ending'],
+      ['🧁', 'cheesecake', 'Cheesecake', 'A creamy slice with a buttery biscuit base', 'A sweet ending'],
     ],
   };
   const meal = new Date().getHours() < 16 ? 'lunch' : 'dinner';
+  document.body.dataset.meal = meal;
   const FALLBACK = {
     arrive: "Okay. It's nicer than I expected. Don't make it weird.",
     order: "...You ordered for me. Fine. Let's see if you were paying attention.",
@@ -31,6 +42,8 @@
   };
 
   const picks = { me: '', her: '' };
+  let ready = false;
+  let ordered = false;
   let history = [];
   let conversationId = 0;
 
@@ -87,37 +100,65 @@
   }
 
   function renderMenu() {
-    document.getElementById('menuTitle').textContent = meal === 'lunch' ? 'Lunch menu' : 'Dinner menu';
-    document.getElementById('pageTitle').innerHTML = meal === 'lunch' ? 'Out to <b>lunch</b>' : 'Out to <b>dinner</b>';
+    document.getElementById('menuTitle').textContent = meal === 'lunch' ? 'The lunch menu' : 'The dinner menu';
+    document.getElementById('menuSubtitle').textContent = meal === 'lunch' ? 'A slow afternoon, a table for two' : 'A little candlelight. Something delicious.';
+    document.getElementById('mealLabel').textContent = meal === 'lunch' ? 'Lunch · A sunny little corner' : 'Dinner · Just the two of you';
+    document.title = meal === 'lunch' ? 'Lunch for two' : 'Dinner for two';
     const her = window.Names ? Names.getBot() : 'Jun';
-    for (const [emoji, name] of MENU[meal]) {
+    document.getElementById('herLabel').textContent = 'For ' + her;
+    let category = '';
+    for (const [, name, title, description, section] of MENU[meal]) {
+      if (section !== category) {
+        category = section;
+        const heading = document.createElement('h3');
+        heading.className = 'menu-category';
+        heading.textContent = section;
+        list.appendChild(heading);
+      }
       const row = document.createElement('div');
       row.className = 'dish';
-      const e = document.createElement('span'); e.className = 'dish-emoji'; e.textContent = emoji;
-      const n = document.createElement('span'); n.className = 'dish-name'; n.textContent = name;
-      row.append(e, n);
+      const copy = document.createElement('div');
+      copy.className = 'dish-copy';
+      const n = document.createElement('span'); n.className = 'dish-name'; n.textContent = title;
+      const d = document.createElement('span'); d.className = 'dish-description'; d.textContent = description;
+      copy.append(n, d);
+      const choices = document.createElement('div');
+      choices.className = 'dish-choices';
       for (const who of ['me', 'her']) {
         const b = document.createElement('button');
-        b.textContent = who === 'me' ? 'for me' : 'for ' + her;
+        b.type = 'button';
+        b.textContent = who === 'me' ? 'You' : her;
+        b.setAttribute('aria-label', `${title} for ${who === 'me' ? 'you' : her}`);
+        b.setAttribute('aria-pressed', 'false');
         b.dataset.who = who;
         b.dataset.name = name;
         b.addEventListener('click', () => pick(who, name));
-        row.appendChild(b);
+        choices.appendChild(b);
       }
+      row.append(copy, choices);
       list.appendChild(row);
     }
   }
 
   function pick(who, name) {
+    if (ordered) return;
     picks[who] = picks[who] === name ? '' : name;
-    list.querySelectorAll(`button[data-who="${who}"]`).forEach(b => b.classList.toggle('on', b.dataset.name === picks[who]));
-    const her = window.Names ? Names.getBot() : 'Jun';
-    summary.textContent = [picks.me && `you: ${picks.me}`, picks.her && `${her}: ${picks.her}`].filter(Boolean).join(' · ');
-    orderBtn.disabled = !(picks.me && picks.her);
+    list.querySelectorAll(`button[data-who="${who}"]`).forEach(b => {
+      const selected = b.dataset.name === picks[who];
+      b.classList.toggle('on', selected);
+      b.setAttribute('aria-pressed', String(selected));
+    });
+    const dish = MENU[meal].find(item => item[1] === picks[who]);
+    document.getElementById(who === 'me' ? 'pickMe' : 'pickHer').textContent = dish ? dish[2] : 'Still deciding…';
+    const count = Number(!!picks.me) + Number(!!picks.her);
+    summary.textContent = count === 2 ? 'Two lovely choices. Ready when you are.' : count === 1 ? 'One more choice for the table.' : 'Pick one item each to order.';
+    orderBtn.disabled = !(ready && picks.me && picks.her);
   }
 
   async function goHome() {
     billBtn.disabled = true;
+    billBtn.textContent = 'Heading home…';
+    document.getElementById('tableCaption').textContent = 'Until next time.';
     await say('leave');
     try {
       await fetch('api/trip.php?action=home', {
@@ -130,6 +171,7 @@
   }
 
   TripLoader.mount();
+  TripLoader.setStage('Finding your table');
   const me = await Auth.me().catch(() => null);
   if (!me) { location.replace('index.html'); return; }
   // she has to have agreed in chat. a dead endpoint (android has
@@ -155,9 +197,20 @@
   }
 
   orderBtn.addEventListener('click', async () => {
+    if (!ready || ordered || !picks.me || !picks.her) return;
+    ordered = true;
     orderBtn.disabled = true;
+    orderBtn.textContent = 'Placing your order…';
+    summary.textContent = 'Something good is on its way.';
     list.querySelectorAll('button').forEach(b => { b.disabled = true; });
+    for (const who of ['me', 'her']) {
+      document.getElementById(who === 'me' ? 'plateMe' : 'plateHer').textContent = MENU[meal].find(item => item[1] === picks[who])[0];
+    }
+    document.body.classList.add('served');
+    document.getElementById('tableCaption').textContent = 'A little moment, just for you two.';
     await say('order');
+    summary.textContent = 'Enjoy your time together. Leave whenever you’re ready.';
+    orderBtn.hidden = true;
     billBtn.hidden = false;
   });
   billBtn.addEventListener('click', goHome);
@@ -174,10 +227,13 @@
     await Outfit.load();
     Outfit.applyAll();
     Live2D.startIdle();
+    Live2D.setCameraPreset('face');
     TripLoader.setStage(meal === 'lunch' ? 'Lunch, finally' : 'Table for two');
     await TripLoader.finish();
     status.textContent = '';
     await say('arrive');
+    ready = true;
+    orderBtn.disabled = !(picks.me && picks.her);
   } catch (e) {
     console.error(e);
     status.textContent = 'Load error: ' + e.message;
