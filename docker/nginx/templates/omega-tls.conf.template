@@ -135,7 +135,9 @@ server {
     # demucs runtime.
     location = /api/karaoke.php {
         limit_req zone=api burst=5 nodelay;
-        limit_conn conns 1;
+        # js/karaoke.js pulls both stems in parallel after a split,
+        # at 1 the second one is a 429 every single time.
+        limit_conn conns 2;
         client_max_body_size 30m;
         fastcgi_read_timeout 300s;
 
