@@ -1,4 +1,4 @@
-import { abortFn, currentConversationId, sendMessage } from '../app.js?v=13';
+import { abortFn, currentConversationId, sendMessage } from '../app.js?v=14';
 import { cancelIdleNudge } from './consolidation.js?v=10';
 import { closeSettingsBtn, devNoIdleChk, drawerBackdrop, modelSelect, openSettingsBtn, reasoningSelect, sendBtn, siteVolumeInput, thinkChk, ttsChk, ttsSpeedInput, voiceChk, voiceSilenceInput } from './dom.js?v=11';
 import { logAction } from './logging.js?v=10';
