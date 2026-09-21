@@ -159,7 +159,9 @@ $ownsConversation = (bool)$owns->fetchColumn();
 $owns->closeCursor();
 if (!$ownsConversation) sse_fail('forbidden');
 
-rate_limit('chat', 30, 60);
+// 90 not 30. the card table is one chat turn per move and a fast
+// hand is 5-8 of them, three hands in a minute tripped the old cap.
+rate_limit('chat', 90, 60);
 
 // keep this byte-identical between turns or Ollama throws away
 // the KV cache, the work it already did on the prefix. persona,

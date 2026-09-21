@@ -352,7 +352,7 @@ Karaoke is its own container, so it needs `KARAOKE=on` in `.env` (`./start.sh` p
 <details>
 <summary><b>Getting 429s while chatting</b></summary>
 
-The rate limiter tripped, and there are two layers: `limit_req` / `limit_conn` per location in the nginx template (`/api/chat.php` allows 2 open streams per IP) and `rate_limit('chat', 30, 60)` in `webapp/api/chat.php`. The stricter one wins, so raise both.
+The rate limiter tripped, and there are two layers: `limit_req` / `limit_conn` per location in the nginx template (`/api/chat.php` allows 2 open streams per IP) and `rate_limit('chat', 90, 60)` in `webapp/api/chat.php`. The stricter one wins, so raise both.
 </details>
 
 <details>
