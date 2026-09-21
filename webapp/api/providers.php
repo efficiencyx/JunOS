@@ -166,6 +166,16 @@ const CTX_TIERS = [6144, 8192, 12288, 16384];
 // trace needs and still a ceiling.
 const THINK_MAX_TOKENS = 16384;
 
+// this used to be 128, and 128 was fine before v7. now every row
+// carries a trace, even at <think:low>, so she thinks on EVERY
+// turn. think:false only makes ollama throw the trace away, the
+// tokens still come out of num_predict (a low trace is ~115
+// tokens p50, ~165 max, and it ends with the reply so the reply
+// is paid twice). past the cap she never gets to speak and the
+// browser sees reply_truncated_in_thinking. 512 fits worst-case
+// low plus a long answer and is still a ceiling.
+const PLAIN_MAX_TOKENS = 512;
+
 // what's left on the card once the weights and a bit of working
 // room are gone. zero when we don't know the GPU size, see
 // OMEGA_GPU_VRAM_MB in start.sh.
@@ -292,7 +302,7 @@ function provider_chat_payload(
                 'min_p' => 0.01,
                 'presence_penalty' => 0,
                 'num_ctx' => default_num_ctx(),
-                'num_predict' => $think ? THINK_MAX_TOKENS : 128,
+                'num_predict' => $think ? THINK_MAX_TOKENS : PLAIN_MAX_TOKENS,
             ],
         ];
         if (!$think) $payload['think'] = false;
@@ -309,7 +319,7 @@ function provider_chat_payload(
         'min_p' => 0.01,
         'stream_options' => ['include_usage' => true],
     ];
-    $payload['max_tokens'] = $think ? THINK_MAX_TOKENS : 128;
+    $payload['max_tokens'] = $think ? THINK_MAX_TOKENS : PLAIN_MAX_TOKENS;
     if ($provider === 'openrouter' && $think) {
         $payload['reasoning'] = ['effort' => $reasoning];
     }
