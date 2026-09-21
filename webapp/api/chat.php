@@ -804,7 +804,7 @@ function relationship_directives(array $r): string {
     return "- Affection: {$a}/100\n- Trust: {$t}/100\n- Tension: {$x}/100";
 }
 
-$loreBlock = lore_retrieve($lastUserMsg);
+$loreBlock = $invite === '' ? lore_retrieve($lastUserMsg) : '';
 if ($loreBlock !== '') $contextParts[] = $loreBlock;
 
 $rel = relationship_get((int)$user['id']);
@@ -813,13 +813,30 @@ if ($outfitContext !== '') {
     $contextParts[] = "## Current Wardrobe State\n" . $outfitContext;
 }
 
-$contextParts[] = "## YOUR FEELINGS TOWARD ANON RIGHT NOW - highest priority for this reply\n"
+$feelingsBlock = "## YOUR FEELINGS TOWARD ANON RIGHT NOW - highest priority for this reply\n"
     . relationship_directives($rel);
+$contextParts[] = $feelingsBlock;
+
+// the drawer's "ask her out" buttons. she says yes in prose and
+// never calls the tool, so the page never opens and Anon sits
+// there. name the tool, and the rule that yes means calling it.
+// and THROW AWAY everything else (clock, notes, lore, wardrobe,
+// save check). a 4 line invitation does not need canon facts
+// about the shop, they just pull her off the question
+if ($toolsOffered && !$idle && $invite !== '') {
+    $tool = array_search($invite, TRIP_TOOLS, true);
+    $contextParts = [$feelingsBlock, "## Anon just asked you out\n"
+        . "Anon's latest message is an invitation. Saying yes or no is yours to decide. "
+        . "But if you accept, you MUST call {$tool} in this reply, before your line - "
+        . "answering yes without calling it means nothing happens and you two stay here."];
+} else {
+    $invite = '';
+}
 
 // she only reaches for tools something in the context named, so
 // the block names them. and tells her NOT to call them yet, on an
 // idle nudge they'd answer not_available_on_idle anyway
-if ($toolsOffered && !$ephemeral && $approvedWebSearchQuery === null
+if ($toolsOffered && !$ephemeral && $invite === '' && $approvedWebSearchQuery === null
     && random_int(1, $idle ? INITIATIVE_ODDS_IDLE : INITIATIVE_ODDS_REPLY) === 1) {
     $contextParts[] = "## Take the initiative\n"
         . "Right now YOU want something from Anon. Pick ONE and actually ask for it in this reply, in your own words: "
@@ -828,21 +845,10 @@ if ($toolsOffered && !$ephemeral && $approvedWebSearchQuery === null
         . "Do not call enter_shop, enter_karaoke, play_cards or go_out_to_eat yet - only once he says yes.";
 }
 
-// the drawer's "ask her out" buttons. she says yes in prose and
-// never calls the tool, so the page never opens and Anon sits
-// there. name the tool, and the rule that yes means calling it
-if ($toolsOffered && !$idle && $invite !== '') {
-    $tool = array_search($invite, TRIP_TOOLS, true);
-    $contextParts[] = "## Anon just asked you out\n"
-        . "Anon's latest message is an invitation. Saying yes or no is yours to decide. "
-        . "But if you accept, you MUST call {$tool} in this reply, before your line - "
-        . "answering yes without calling it means nothing happens and you two stay here.";
-}
-
 // same trap, other direction. with the notes already listed above
 // she decides saving is Done and answers without ever calling
 // memory_write
-if ($toolsOffered) {
+if ($toolsOffered && $invite === '') {
     $contextParts[] = "## Save check\n"
         . "If Anon's latest message contains something durable (a preference, personal fact, plan, "
         . "boundary, health/safety matter, or something emotionally significant), call memory_write "
