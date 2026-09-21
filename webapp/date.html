@@ -7,7 +7,7 @@
 <title>Out to eat</title>
 <link rel="icon" type="image/png" href="jun_os.png">
 <link rel="stylesheet" href="trip-loader.css?v=1">
-<link rel="stylesheet" href="date.css?v=2">
+<link rel="stylesheet" href="date.css?v=3">
 </head>
 <body>
 <main class="date-layout">
@@ -57,33 +57,31 @@
         <text id="plateMe" x="405" y="333" text-anchor="middle" font-size="57"></text>
       </svg>
     </div>
-    <div class="table-caption"><span class="caption-rule"></span><span id="tableCaption">Good food. Better company.</span><span class="caption-rule"></span></div>
     <div id="stageStatus" role="status">Loading…</div>
   </section>
 
-  <section class="menu" aria-labelledby="menuTitle">
-    <div class="menu-paper">
-      <header class="menu-head">
-        <div class="menu-kicker"><span>Seasonal kitchen</span><span>Table 02</span></div>
-        <svg class="menu-sprig" viewBox="0 0 100 45" aria-hidden="true"><g fill="none" stroke="currentColor" stroke-width="1.2"><path d="M18 36Q48 13 83 10M39 23Q23 25 24 12Q38 10 39 23ZM53 17Q43 9 49 3Q61 5 53 17ZM55 17Q60 30 72 23Q71 13 55 17ZM70 12Q73 2 84 3Q86 12 70 12Z"/></g></svg>
-        <h2 id="menuTitle">The menu</h2>
-        <p class="menu-subtitle" id="menuSubtitle">Made for a little time together</p>
-        <div class="menu-divider"><span>✦</span></div>
-        <p class="menu-hint" id="menuHint">Choose something for each of you.</p>
-      </header>
+  <section class="menu-card" id="menuCard" aria-labelledby="menuTitle">
+    <div class="page page-left">
+      <p class="page-names" id="menuNames">Anon &amp; Jun</p>
+      <p class="page-date" id="menuDate"></p>
+      <p class="page-place" id="menuPlace"></p>
+    </div>
+    <div class="page page-right">
+      <h2 class="menu-title" id="menuTitle"><svg class="flourish" viewBox="0 0 60 20" aria-hidden="true"><path d="M2 12Q14 2 30 10T58 8M18 12Q22 4 30 10" fill="none" stroke="currentColor" stroke-width="1.1"/></svg>Menu<svg class="flourish mirror" viewBox="0 0 60 20" aria-hidden="true"><path d="M2 12Q14 2 30 10T58 8M18 12Q22 4 30 10" fill="none" stroke="currentColor" stroke-width="1.1"/></svg></h2>
       <div class="menu-list" id="menuList" aria-describedby="menuHint"></div>
-      <footer class="menu-foot">
-        <div class="order-selections">
-          <div><span class="selection-label">For you</span><span id="pickMe">Still deciding…</span></div>
-          <div><span class="selection-label" id="herLabel">For Jun</span><span id="pickHer">Still deciding…</span></div>
-        </div>
-        <div class="menu-summary" id="menuSummary" role="status">Pick one item each to order.</div>
-        <button class="menu-order" id="orderBtn" disabled>Order for the table <span aria-hidden="true">→</span></button>
-        <button class="menu-bill" id="billBtn" hidden>Ask for the bill &amp; walk home <span aria-hidden="true">↗</span></button>
-        <div class="menu-signoff">Stay a little longer.</div>
-      </footer>
+      <p class="menu-hint" id="menuHint"></p>
     </div>
   </section>
+
+  <form class="composer" id="composer" autocomplete="off">
+    <p class="last-line" id="lastLine" aria-live="polite"></p>
+    <div class="composer-row">
+      <input id="sayInput" type="text" maxlength="500" placeholder="Say something…" aria-label="Say something" disabled>
+      <button type="submit" id="sendBtn" disabled>Say</button>
+      <button type="button" id="orderBtn" disabled>Call the waiter</button>
+      <button type="button" id="billBtn" hidden>Ask for the bill</button>
+    </div>
+  </form>
 </main>
 
 <script defer src="vendor/live2dcubismcore.min.js"></script>
@@ -95,11 +93,11 @@
 <script defer src="js/names.js?v=4"></script>
 <script defer src="js/chat-api.js?v=6"></script>
 <script type="module" src="js/live2d.js?v=10"></script>
-<script defer src="js/mods.js?v=14"></script>
-<script defer src="js/outfit.js?v=21"></script>
+<script defer src="js/mods.js?v=15"></script>
+<script defer src="js/outfit.js?v=22"></script>
 <script defer src="js/tts.js?v=3"></script>
 <script defer src="js/wardrobe-reactions.js?v=5"></script>
 <script defer src="js/trip-loader.js?v=3"></script>
-<script defer src="js/date.js?v=2"></script>
+<script defer src="js/date.js?v=3"></script>
 </body>
 </html>
