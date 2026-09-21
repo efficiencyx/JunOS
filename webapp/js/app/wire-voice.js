@@ -2,7 +2,7 @@ import { VOICE_STATE_LABELS, renderVoiceDraft, sendAudioFromVoice, sendFromVoice
 import { voiceBargeChk, voiceChk, voiceHearAllChk, voiceSilenceInput, voiceState } from './dom.js?v=11';
 import { hideFaceBubble } from './face-bubble.js?v=10';
 import { logAction } from './logging.js?v=10';
-import { syncVoiceDeps, updateVoiceSilenceLabel } from './settings.js?v=10';
+import { syncVoiceDeps, updateVoiceSilenceLabel } from './settings.js?v=11';
 
 export async function wireVoice() {
   if (window.Voice && voiceChk) {

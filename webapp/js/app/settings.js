@@ -207,8 +207,10 @@ export function applyRoleGates(user) {
   // Everyone else wipes memories through Factory Reset, the DELETE
   // is admin only.
   if (memoryClearBtn) memoryClearBtn.hidden = !isAdmin;
-  const devBadge = document.getElementById('devBadge');
-  if (devBadge) devBadge.hidden = !isAdmin;
+  for (const id of ['devBadge', 'statusPill', 'resetLive2DBtn']) {
+    const el = document.getElementById(id);
+    if (el) el.hidden = !isAdmin;
+  }
   if (isAdmin && devAccessRow) {
     devAccessRow.hidden = false;
     if (devAccessDesc) devAccessDesc.textContent = 'Developer access is enabled on this account.';
