@@ -1,9 +1,9 @@
-import { abortFn, currentConversationId, sendMessage } from '../app.js?v=16';
-import { cancelIdleNudge } from './consolidation.js?v=11';
+import { abortFn, currentConversationId, sendMessage } from '../app.js?v=17';
+import { cancelIdleNudge } from './consolidation.js?v=12';
 import { closeSettingsBtn, devNoIdleChk, drawerBackdrop, modelSelect, openSettingsBtn, reasoningSelect, sendBtn, siteVolumeInput, thinkChk, ttsChk, ttsSpeedInput, voiceChk, voiceSilenceInput } from './dom.js?v=11';
 import { logAction } from './logging.js?v=10';
-import { loadMood, setMoodEditingEnabled } from './mood.js?v=11';
-import { loadConversation, setSidebarOpen } from './sidebar.js?v=11';
+import { loadMood, setMoodEditingEnabled } from './mood.js?v=12';
+import { loadConversation, setSidebarOpen } from './sidebar.js?v=12';
 
 export function syncThinkToggle() {
   thinkChk.disabled = reasoningSelect.value === 'auto';

@@ -1,9 +1,11 @@
-// blackjack. she deals, and she also PLAYS: her hit or stand is
-// one ephemeral turn with the hands in an OOC direction, the word
-// she answers with is the move. no dealer rule, she can stand on
-// 12 or bust on 19, that's her problem. the table is a full-page
-// mode like voice mode, chat chrome hidden, stage stays up so her
-// lines land in the face bubble.
+// blackjack, turn based. Anon hits or stands, then she gets one
+// move, then Anon again, until both stand or somebody busts.
+// standing is final. her move is one ephemeral turn with the
+// hands in an OOC direction, the word she answers with is the
+// move. no dealer rule, she can stand on 12 or bust on 19,
+// that's her problem. the table is a full-page mode like voice
+// mode, chat chrome hidden, stage stays up on the face preset so
+// her lines land in the face bubble.
 window.Cards = (function () {
   const SUITS = ['♠', '♥', '♦', '♣'];
   const RANKS = ['A', '2', '3', '4', '5', '6', '7', '8', '9', '10', 'J', 'Q', 'K'];
@@ -13,6 +15,7 @@ window.Cards = (function () {
   let overlay = null, herRow, youRow, herVal, youVal, tallyEl, statusEl, hitBtn, standBtn, nextBtn;
   let deck = [], her = [], you = [];
   let hand = 0, score = { you: 0, her: 0 };
+  let youStood = false, herStood = false;
   let phase = 'idle';
   let active = false;
 
@@ -71,6 +74,7 @@ window.Cards = (function () {
   function deal() {
     her = [draw(), draw()];
     you = [draw(), draw()];
+    youStood = herStood = false;
     hand++;
     phase = 'player';
     render();
@@ -84,13 +88,12 @@ window.Cards = (function () {
     if (phase !== 'player') return;
     you.push(draw());
     if (value(you) > 21) settle('her', `Anon hit and busted at ${value(you)} (${show(you)})`);
-    else render();
+    else herTurn();
   }
 
   function stand() {
     if (phase !== 'player') return;
-    phase = 'dealer';
-    render();
+    youStood = true;
     herTurn();
   }
 
@@ -104,22 +107,34 @@ window.Cards = (function () {
     return value(her) < 17 ? 'hit' : 'stand';
   }
 
+  // one card per turn while Anon is still playing. once Anon
+  // stands she keeps going on her own until she stands or busts.
   async function herTurn() {
+    phase = 'her';
+    render();
     const yv = value(you);
-    while (active && phase === 'dealer') {
+    while (active && phase === 'her' && !herStood) {
       const hv = value(her);
-      if (hv >= 21) break;
+      if (hv >= 21) { herStood = true; break; }
       setStatus(`${bot()} is thinking…`);
-      const reply = await send(`(Card table, hand ${hand}, your move as the dealer: you hold ${show(her)} = ${hv}. Anon stood on ${yv} with ${show(you)}. Say HIT to take another card or STAND to stop, that word first, then one short line.)`);
-      if (!active || phase !== 'dealer') return;
-      if (readMove(reply) === 'stand') break;
+      const anon = youStood ? `Anon is standing on ${yv} with ${show(you)}` : `Anon holds ${show(you)} = ${yv} and is still playing`;
+      const reply = await send(`(Card table, hand ${hand}, your move: you hold ${show(her)} = ${hv}. ${anon}. Say HIT to take another card or STAND to stop, that word first, then one short line.)`);
+      if (!active || phase !== 'her') return;
+      if (readMove(reply) === 'stand') { herStood = true; break; }
       her.push(draw());
       render();
+      if (value(her) > 21) return settle('you', `${bot()} hit and busted at ${value(her)} (${show(her)})`);
+      if (!youStood) break;
     }
-    if (!active || phase !== 'dealer') return;
-    const hv = value(her);
-    if (hv > 21) settle('you', `Anon stood on ${yv}, ${bot()} drew to ${hv} and busted (${show(her)})`);
-    else if (yv > hv) settle('you', `Anon stood on ${yv}, ${bot()} stopped at ${hv}`);
+    if (!active || phase !== 'her') return;
+    if (youStood && herStood) return showdown();
+    phase = 'player';
+    render();
+  }
+
+  function showdown() {
+    const yv = value(you), hv = value(her);
+    if (yv > hv) settle('you', `Anon stood on ${yv}, ${bot()} stopped at ${hv}`);
     else if (hv > yv) settle('her', `Anon stood on ${yv}, ${bot()} made ${hv}`);
     else settle('push', `both on ${yv}, push`);
   }
@@ -146,14 +161,15 @@ window.Cards = (function () {
   }
 
   function render() {
-    herRow.replaceChildren(...her.map((c, i) => cardEl(c, phase === 'player' && i === 1)));
+    const hole = phase !== 'done';
+    herRow.replaceChildren(...her.map((c, i) => cardEl(c, hole && i === 1)));
     youRow.replaceChildren(...you.map(c => cardEl(c, false)));
-    herVal.textContent = phase === 'player' ? String(value([her[0]])) + ' + ?' : String(value(her));
+    herVal.textContent = hole ? String(value([her[0]])) + ' + ?' : String(value(her));
     youVal.textContent = String(value(you));
     tallyEl.textContent = `hand ${hand} · ${tallyText()}`;
     hitBtn.disabled = standBtn.disabled = phase !== 'player';
     nextBtn.hidden = phase !== 'done';
-    if (phase === 'player') setStatus('your move');
+    if (phase === 'player') setStatus(herStood ? `${bot()} is standing. your move` : 'your move');
   }
 
   function build() {
@@ -205,18 +221,20 @@ window.Cards = (function () {
     overlay.hidden = false;
     void overlay.offsetHeight;
     document.body.classList.add('cards-mode');
+    if (window.Live2D) Live2D.setCameraPreset('face');
     deal();
   }
 
   function close() {
     if (!active) return;
-    const folded = phase === 'player' || phase === 'dealer' ? ' Anon left the last hand unfinished.' : '';
+    const folded = phase === 'player' || phase === 'her' ? ' Anon left the last hand unfinished.' : '';
     const played = hand;
     const tally = tallyText();
     active = false;
     phase = 'idle';
     document.body.classList.remove('cards-mode');
     setTimeout(() => { if (!active) overlay.hidden = true; }, 300);
+    if (window.Live2D && !(window.VoiceMode && VoiceMode.isActive())) Live2D.setCameraPreset('default');
     if (played > 0 && sendEvent) {
       sendEvent(`(Card table: Anon gets up after ${played} hand${played === 1 ? '' : 's'}, final score ${tally}.${folded})`);
     }
