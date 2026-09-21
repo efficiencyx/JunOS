@@ -930,11 +930,14 @@ function showBoot() {
 // calls the tool. "Force her" is the old direct jump, admin only
 // (or FREE_ROAM=on), and it still has to write the grant first or
 // the page bounces straight back here.
+// same cutoff as date.js, the page decides the menu off the same
+// clock
+const mealNow = () => new Date().getHours() < 16 ? 'lunch' : 'dinner';
 const ASK_LINES = {
   shop: "Wanna go to Annalie's shop with me?",
   karaoke: 'Sing with me? Karaoke, tonight.',
   cards: 'Deal me in. One game of blackjack?',
-  date: () => new Date().getHours() < 16 ? 'Wanna go out for lunch? My treat.' : 'Wanna go out for dinner tonight? My treat.',
+  date: () => mealNow() === 'lunch' ? 'Wanna go out for lunch? My treat.' : 'Wanna go out for dinner tonight? My treat.',
 };
 
 function prefetchOnce(hrefs) {
@@ -953,6 +956,12 @@ function prefetchOnce(hrefs) {
 }
 
 async function wireDatesPanel(canForce) {
+  const dateTitle = document.getElementById('dateRowTitle');
+  if (dateTitle) {
+    const label = () => { dateTitle.textContent = mealNow() === 'lunch' ? 'Lunch out' : 'Dinner out'; };
+    label();
+    setInterval(label, 60000);
+  }
   for (const [where, line] of Object.entries(ASK_LINES)) {
     const ask = document.getElementById('ask' + where[0].toUpperCase() + where.slice(1) + 'Btn');
     if (!ask) continue;
