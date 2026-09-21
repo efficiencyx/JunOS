@@ -148,6 +148,11 @@ if ($action === 'stem') {
     );
     $job->execute([$tokenHash, $user['id'], time()]);
     $sidecarToken = $job->fetchColumn();
+    // NOT optional. an unfinished SELECT pins a WAL read snapshot,
+    // and the other stem request writes the same row in the
+    // meantime. the UPDATE below then gets "database is locked"
+    // straight away, busy_timeout does not retry a stale snapshot.
+    $job->closeCursor();
     if (!is_string($sidecarToken) || $sidecarToken === '') fail(404, 'stem_failed');
 
     $ch = curl_init($sepUrl . '/separate/stem');
