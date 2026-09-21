@@ -34,7 +34,7 @@ h1 { margin: 6px 0 11px; font: 400 clamp(32px, 3.5vw, 54px)/1.15 var(--serif); l
 h1 em { color: #dec39a; font-weight: 400; }
 .scene-detail { display: flex; align-items: center; gap: 8px; color: #c1b8a4; letter-spacing: .1em; }
 .ambience-dot { width: 5px; height: 5px; border-radius: 50%; background: #ddbd87; box-shadow: 0 0 9px #ddbd8780; }
-#stage { position: absolute; inset: 6% 0 0; }
+#stage { position: absolute; inset: -16% 0 0; }
 #stage canvas { display: block; }
 .table { position: absolute; z-index: 2; pointer-events: none; left: -9%; right: -9%; top: 68%; bottom: -3%; filter: drop-shadow(0 -10px 20px #1a100e33); }
 .table svg { display: block; width: 100%; height: 100%; overflow: visible; }
@@ -100,7 +100,7 @@ body[data-meal="lunch"] .table { filter: brightness(1.12) drop-shadow(0 -10px 20
   h1 { font-size: 30px; margin: 3px 0 7px; }
   .scene-detail { font-size: 8px; }
   .window { top: 8%; height: 68%; width: 42%; left: 29%; }
-  #stage { inset: 0; }
+  #stage { inset: -12% 0 0; }
   .table { top: 70%; left: -2%; right: -2%; bottom: -9%; }
   .table-caption { display: none; }
   .menu { padding: 0 10px max(10px, env(safe-area-inset-bottom)); background: #201c19; }
@@ -132,4 +132,5 @@ body[data-meal="lunch"] .table { filter: brightness(1.12) drop-shadow(0 -10px 20
 }
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { animation: none !important; transition: none !important; }
+  #stage .wardrobe-reaction-text span { opacity: 1; }
 }
