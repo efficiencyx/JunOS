@@ -467,6 +467,17 @@ window.WardrobeReactions = (function () {
     hide();
   }
 
+  // a line somebody else wrote (the date page gets hers from the
+  // model), through the same card, face and TTS as the canned ones
+  async function say(line) {
+    buildCard();
+    await Promise.race([fetchGauges(), new Promise(r => setTimeout(r, 700))]);
+    await Promise.race([
+      present(line, openMood(tier(affection), tier(trust), tier(tension))),
+      new Promise(r => setTimeout(r, 30000)),
+    ]);
+  }
+
   function sample(arr) {
     return arr[Math.floor(Math.random() * arr.length)];
   }
@@ -602,7 +613,10 @@ window.WardrobeReactions = (function () {
       if (line !== lastLine[id]) break;
     }
     lastLine[id] = line;
-    const mood = openMood(tier(affection), tier(trust), tier(tension));
+    return present(line, openMood(tier(affection), tier(trust), tier(tension)));
+  }
+
+  function present(line, mood) {
     const token = ++currentToken;
     hide();
     buildCard();
@@ -669,5 +683,5 @@ window.WardrobeReactions = (function () {
     });
   }
 
-  return { activate, deactivate, react, playIntro, playOutro };
+  return { activate, deactivate, react, playIntro, playOutro, say };
 })();

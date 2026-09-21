@@ -4,6 +4,12 @@ require_once __DIR__ . '/_lib.php';
 require_once __DIR__ . '/lore.php';
 require_once __DIR__ . '/_wardrobe.php';
 
+const TRIP_TOOLS = ['enter_shop' => 'shop', 'enter_karaoke' => 'karaoke', 'go_out_to_eat' => 'date', 'play_cards' => 'cards'];
+// 1 in N turns she asks Anon for something. an idle streak is 3
+// nudges long, so 1 in 3 is about one ask per streak
+const INITIATIVE_ODDS_IDLE = 3;
+const INITIATIVE_ODDS_REPLY = 12;
+
 const MEMORY_CONTEXT_MAX_CHARS = 2500;
 
 @ini_set('output_buffering', 'off');
@@ -327,6 +333,32 @@ function tool_catalog(?string $approvedWebSearchQuery): array {
             'function' => [
                 'name' => 'enter_karaoke',
                 'description' => 'Start a karaoke date with Anon: you two pick a song and sing it together. Call it once the two of you agree to sing, then say your line - the karaoke starts when you finish talking. It tells you if the karaoke room is closed.',
+                'parameters' => [
+                    'type' => 'object',
+                    'properties' => [
+                        'reason' => ['type' => 'string', 'description' => 'Why you two are going (private).'],
+                    ],
+                ],
+            ],
+        ],
+        [
+            'type' => 'function',
+            'function' => [
+                'name' => 'play_cards',
+                'description' => 'Play a game of blackjack with Anon at the table, you deal. Call it once you two agree to play, then say your line - the table opens when you finish talking.',
+                'parameters' => [
+                    'type' => 'object',
+                    'properties' => [
+                        'reason' => ['type' => 'string', 'description' => 'Why you want to play (private).'],
+                    ],
+                ],
+            ],
+        ],
+        [
+            'type' => 'function',
+            'function' => [
+                'name' => 'go_out_to_eat',
+                'description' => 'Go out for lunch or dinner with Anon at a restaurant, whether he is taking you out to eat or you asked him. Call it once the two of you agree to go, then say your line - you both leave when you finish talking.',
                 'parameters' => [
                     'type' => 'object',
                     'properties' => [
@@ -781,6 +813,18 @@ if ($outfitContext !== '') {
 $contextParts[] = "## YOUR FEELINGS TOWARD ANON RIGHT NOW - highest priority for this reply\n"
     . relationship_directives($rel);
 
+// she only reaches for tools something in the context named, so
+// the block names them. and tells her NOT to call them yet, on an
+// idle nudge they'd answer not_available_on_idle anyway
+if ($toolsOffered && !$ephemeral && $approvedWebSearchQuery === null
+    && random_int(1, $idle ? INITIATIVE_ODDS_IDLE : INITIATIVE_ODDS_REPLY) === 1) {
+    $contextParts[] = "## Take the initiative\n"
+        . "Right now YOU want something from Anon. Pick ONE and actually ask for it in this reply, in your own words: "
+        . "going to Annalie's shop together, karaoke, a game of blackjack, going out for lunch or dinner, or something "
+        . "small that fits the moment (a headpat, hearing about his day, him changing your outfit, a compliment, a promise). "
+        . "Do not call enter_shop, enter_karaoke, play_cards or go_out_to_eat yet - only once he says yes.";
+}
+
 // same trap, other direction. with the notes already listed above
 // she decides saving is Done and answers without ever calling
 // memory_write
@@ -1087,8 +1131,8 @@ for ($round = 0; $round < 3; $round++) {
                     ], JSON_UNESCAPED_UNICODE);
                 }
             }
-        } elseif ($name === 'enter_shop' || $name === 'enter_karaoke') {
-            $where = $name === 'enter_shop' ? 'shop' : 'karaoke';
+        } elseif (isset(TRIP_TOOLS[$name])) {
+            $where = TRIP_TOOLS[$name];
             // this queues navigation after the reply and TTS finish.
             // an idle nudge must never send it, Anon isn't even there.
             if ($idle) {
@@ -1099,10 +1143,15 @@ for ($round = 0; $round < 3; $round++) {
                     'note' => 'The karaoke room is closed right now (the karaoke service is not running). Tell Anon plainly, do not pretend to sing.',
                 ]);
             } else {
+                // the grant is what lets the page open at all. cards is
+                // played at home, nothing to grant
+                if ($where !== 'cards') trip_set((int)$user['id'], $where, $convId);
                 sse_send(['go' => $where]);
                 $toolResult = json_encode([
                     'going' => $where,
-                    'note' => 'Say one short line about heading out together. The trip starts the moment you finish talking.',
+                    'note' => $where === 'cards'
+                        ? 'Say one short line. The table opens the moment you finish talking.'
+                        : 'Say one short line about heading out together. The trip starts the moment you finish talking.',
                 ]);
             }
         } else {

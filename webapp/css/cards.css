@@ -1,0 +1,37 @@
+.card-table {
+  position: fixed;
+  right: var(--space-4);
+  bottom: calc(var(--space-4) + 84px);
+  z-index: 50;
+  width: min(400px, calc(100vw - 2 * var(--space-4)));
+  padding: var(--space-3) var(--space-4);
+  background: var(--bg-elev);
+  border: 1px solid var(--border-2);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow-lg);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+}
+.card-table[hidden] { display: none; }
+.card-table header { display: flex; align-items: center; gap: var(--space-3); }
+.card-table .ct-title { font-weight: 700; }
+.card-table .ct-tally { color: var(--dim); font-size: 13px; flex: 1; }
+.card-table .ct-label { color: var(--muted); font-size: 13px; margin-bottom: var(--space-1); }
+.card-table .ct-val { color: var(--fg); font-weight: 700; }
+.card-table .ct-cards { display: flex; flex-wrap: wrap; gap: var(--space-2); min-height: 62px; }
+.card-table .card {
+  width: 44px; height: 62px;
+  display: grid; place-items: center;
+  background: #f4f1ea;
+  color: #1c1c1c;
+  border-radius: 6px;
+  font-weight: 700;
+  font-size: 15px;
+  box-shadow: 0 2px 6px rgba(0,0,0,.4);
+}
+.card-table .card.red { color: #c0262f; }
+.card-table .card.down {
+  background: repeating-linear-gradient(45deg, var(--accent) 0 4px, var(--accent-2) 4px 8px);
+}
+.card-table .ct-actions { display: flex; gap: var(--space-2); }
