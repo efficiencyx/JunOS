@@ -7,18 +7,18 @@
 // rewrite.
 
 import { showAuthScreen } from './app/auth-screen.js?v=11';
-import { IDLE_AFTER_REPLY_MS, TYPING_POLL_MS, armIdleAfterReply, cancelActiveIdleNudge, cancelAutoReset, cancelIdleNudge, composerPlaceholder, consolidating, fleeActive, reportActivity, resetIdleNudge, scheduleAutoReset, scheduleIdleNudge, setCancelActiveIdleNudge, setConsolidating, showConsolidatingBubble, startFleeLock, syncConsolidationStatus } from './app/consolidation.js?v=10';
+import { IDLE_AFTER_REPLY_MS, TYPING_POLL_MS, armIdleAfterReply, cancelActiveIdleNudge, cancelAutoReset, cancelIdleNudge, composerPlaceholder, consolidating, fleeActive, reportActivity, resetIdleNudge, scheduleAutoReset, scheduleIdleNudge, setCancelActiveIdleNudge, setConsolidating, showConsolidatingBubble, startFleeLock, syncConsolidationStatus } from './app/consolidation.js?v=11';
 import { chatInput, debugSystemPromptEl, devNoIdleChk, messagesEl, messagesEmpty, missingParamsEl, mobileConversationTitle, modelSelect, narrowSidebarQuery, reasoningSelect, sendBtn, sendButtonIdleMarkup, sendButtonStopMarkup, siteVolumeInput, stageEl, thinkChk } from './app/dom.js?v=11';
-import { announceMobileReply, faceBubble, hideFaceBubble, latestAssistantReply, restartFaceBubbleHide, scheduleFaceBubbleHide, scheduleFaceBubblePosition, setLatestAssistantReply, showFaceBubble } from './app/face-bubble.js?v=10';
+import { announceMobileReply, faceBubble, hideFaceBubble, latestAssistantReply, restartFaceBubbleHide, scheduleFaceBubbleHide, scheduleFaceBubblePosition, setLatestAssistantReply, showFaceBubble } from './app/face-bubble.js?v=11';
 import { appendRaw, logAction, logMissing, logToolStatus, setStageStatus } from './app/logging.js?v=10';
-import { loadMood } from './app/mood.js?v=10';
-import { applyProviderCapabilities, applyRoleGates, setSiteVolume, syncThinkToggle, updateSiteVolumeLabel, wireNameSettings } from './app/settings.js?v=11';
-import { loadConversation, refreshSidebar, setSidebarOpen } from './app/sidebar.js?v=10';
-import { makeNameFilter, makeStreamBuffer } from './app/stream-filters.js?v=10';
+import { loadMood } from './app/mood.js?v=11';
+import { applyProviderCapabilities, applyRoleGates, setSiteVolume, syncThinkToggle, updateSiteVolumeLabel, wireNameSettings } from './app/settings.js?v=12';
+import { loadConversation, refreshSidebar, setSidebarOpen } from './app/sidebar.js?v=11';
+import { makeNameFilter, makeStreamBuffer } from './app/stream-filters.js?v=11';
 import { escapeHtml, localTimeString, phoneMode } from './app/util.js?v=10';
-import { wireTts } from './app/wire-tts.js?v=10';
-import { wireVoice } from './app/wire-voice.js?v=11';
-import { WELCOME_TIERS, fetchWelcome, playWelcome, previewWelcome } from './app/welcome.js?v=10';
+import { wireTts } from './app/wire-tts.js?v=11';
+import { wireVoice } from './app/wire-voice.js?v=12';
+import { WELCOME_TIERS, fetchWelcome, playWelcome, previewWelcome } from './app/welcome.js?v=11';
 
 export const messages = [];
 export let abortFn = null;
