@@ -181,6 +181,7 @@ export function updateEmptyState() {
 // that isn't {voice:true} is a typed turn
 export function sendMessage(opts) {
   const voice = !!(opts && opts.voice === true);
+  const invite = opts && typeof opts.invite === 'string' ? opts.invite : '';
   if (fleeActive()) {
     ui.toast('⚠ ' + composerPlaceholder(), 'error');
     return;
@@ -449,7 +450,7 @@ export function runChat({ idle, ephemeral, audio, voice, onOverheard, onAudioUns
       mod_items: window.Mods && Mods.itemNames ? Mods.itemNames() : [],
       conversation_id: currentConversationId,
       idle: !!idle, ephemeral: !!ephemeral, client_time: localTimeString(),
-      audio, voice: !!voice,
+      audio, voice: !!voice, invite,
       hear_all: !!(window.Voice && Voice.hearAll && Voice.hearAll()) },
     {
       onDebug: (dbg) => {
@@ -980,7 +981,7 @@ async function wireDatesPanel(canForce) {
     ask.addEventListener('click', () => {
       ui.toggleDrawer(false);
       chatInput.value = typeof line === 'function' ? line() : line;
-      sendMessage();
+      sendMessage({ invite: where });
     });
   }
   if (!canForce) return;
