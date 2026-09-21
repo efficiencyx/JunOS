@@ -44,7 +44,7 @@ if ($action === 'home') {
         $dishes = is_array($body['dishes'] ?? null) ? $body['dishes'] : [];
         $me = trim(mb_substr((string)($dishes['me'] ?? ''), 0, 80));
         $her = trim(mb_substr((string)($dishes['her'] ?? ''), 0, 80));
-        if ($me !== '' && $her !== '') $note .= ' He ordered ' . $me . ' for himself and ' . $her . ' for me.';
+        if ($me !== '' && $her !== '') $note .= ' He had ' . $me . ', I picked ' . $her . ' for myself.';
         try { memory_note_add($userId, 'events', $note); } catch (Throwable $e) {
             log_event(['msg' => 'trip_note_error', 'err' => $e->getMessage()]);
         }

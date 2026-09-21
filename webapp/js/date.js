@@ -1,51 +1,64 @@
 // the date page. same skeleton as wardrobe.js, but her lines come
-// from the model: each phase sends one ephemeral turn (nothing
-// stored, gauges still move) with an OOC stage direction, and
+// from the model: every turn is one ephemeral turn (nothing
+// stored, gauges still move) carrying an OOC stage direction, and
 // the reply goes through WardrobeReactions.say(). the trip
 // endpoint writes the memory note on the way home, the turns
 // themselves leave nothing behind.
+//
+// she orders for herself. Anon taps his own dish on the card, hers
+// comes out of her reply as an ORDER: tag (SUGGEST: is her
+// proposing one for him). there is no button that picks for her.
 (async () => {
   const status = document.getElementById('stageStatus');
   const list = document.getElementById('menuList');
-  const summary = document.getElementById('menuSummary');
+  const input = document.getElementById('sayInput');
+  const sendBtn = document.getElementById('sendBtn');
   const orderBtn = document.getElementById('orderBtn');
   const billBtn = document.getElementById('billBtn');
+  const lastLine = document.getElementById('lastLine');
 
   const MENU = {
     lunch: [
-      ['🥪', 'a club sandwich', 'The club sandwich', 'Toasted layers, crisp lettuce & golden fries', 'From the kitchen'],
-      ['🍜', 'a bowl of ramen', 'Ramen', 'A warming bowl of broth, noodles & greens', 'From the kitchen'],
-      ['🍳', 'omurice', 'Omurice', 'Soft omelette, seasoned rice & a little nostalgia', 'From the kitchen'],
-      ['🍛', 'a katsu curry', 'Katsu curry', 'Crisp golden cutlet, fragrant curry & rice', 'From the kitchen'],
-      ['🥗', 'a big salad', 'Garden salad', 'Seasonal leaves with a bright house dressing', 'From the kitchen'],
-      ['🍕', 'a slice of pizza', 'Pizza by the slice', 'Tomato, melted cheese & a crisp crust', 'From the kitchen'],
-      ['🧊', 'an iced coffee', 'Iced coffee', 'Freshly brewed, poured over ice', 'Something to sip'],
-      ['🍋', 'a lemonade', 'Cloudy lemonade', 'Fresh lemon, a little sweetness & lots of ice', 'Something to sip'],
+      ['🥪', 'a club sandwich', 'The club sandwich', 'From the kitchen'],
+      ['🍜', 'a bowl of ramen', 'Ramen', 'From the kitchen'],
+      ['🍳', 'omurice', 'Omurice', 'From the kitchen'],
+      ['🍛', 'a katsu curry', 'Katsu curry', 'From the kitchen'],
+      ['🥗', 'a big salad', 'Garden salad', 'From the kitchen'],
+      ['🍕', 'a slice of pizza', 'Pizza by the slice', 'From the kitchen'],
+      ['🧊', 'an iced coffee', 'Iced coffee', 'Something to sip'],
+      ['🍋', 'a lemonade', 'Cloudy lemonade', 'Something to sip'],
     ],
     dinner: [
-      ['🥩', 'a steak', 'Steak frites', 'Seared steak, golden fries & herb butter', 'The main affair'],
-      ['🍝', 'pasta carbonara', 'Carbonara', 'Silky pasta, pecorino & cracked black pepper', 'The main affair'],
-      ['🍣', 'a sushi platter', 'Sushi selection', 'A delicate assortment, freshly prepared', 'The main affair'],
-      ['🍚', 'mushroom risotto', 'Mushroom risotto', 'Creamy arborio rice & earthy mushrooms', 'The main affair'],
-      ['🐟', 'grilled fish', 'Grilled fish', 'Lightly charred, with lemon & seasonal greens', 'The main affair'],
-      ['🍷', 'a glass of red wine', 'House red', 'A mellow glass to take your time over', 'By the glass'],
-      ['🍰', 'tiramisu', 'Tiramisu', 'Coffee-soaked layers & a dusting of cocoa', 'A sweet ending'],
-      ['🧁', 'cheesecake', 'Cheesecake', 'A creamy slice with a buttery biscuit base', 'A sweet ending'],
+      ['🥩', 'a steak', 'Steak frites', 'The main affair'],
+      ['🍝', 'pasta carbonara', 'Carbonara', 'The main affair'],
+      ['🍣', 'a sushi platter', 'Sushi selection', 'The main affair'],
+      ['🍚', 'mushroom risotto', 'Mushroom risotto', 'The main affair'],
+      ['🐟', 'grilled fish', 'Grilled fish', 'The main affair'],
+      ['🍷', 'a glass of red wine', 'House red', 'By the glass'],
+      ['🍰', 'tiramisu', 'Tiramisu', 'A sweet ending'],
+      ['🧁', 'cheesecake', 'Cheesecake', 'A sweet ending'],
     ],
   };
+  const PLACE = { lunch: 'Café Marigold', dinner: 'Trattoria La Lanterna' };
   const meal = new Date().getHours() < 16 ? 'lunch' : 'dinner';
+  const dishes = MENU[meal];
   document.body.dataset.meal = meal;
   const FALLBACK = {
     arrive: "Okay. It's nicer than I expected. Don't make it weird.",
-    order: "...You ordered for me. Fine. Let's see if you were paying attention.",
+    talk: "...Say that again. I was reading.",
+    order: "Fine. Let's see if the kitchen is as good as the menu makes it sound.",
     leave: 'Walk me home. And no, that was not a thank you.',
   };
 
   const picks = { me: '', her: '' };
+  let suggested = '';
+  let mentioned = '';
   let ready = false;
   let ordered = false;
+  let busy = false;
   let history = [];
   let conversationId = 0;
+  const her = () => window.Names ? Names.getBot() : 'Jun';
 
   const clientTime = () => {
     try {
@@ -56,27 +69,65 @@
     } catch (e) { return new Date().toString(); }
   };
 
-  function direction(phase) {
-    const head = '(OOC stage direction, not spoken by Anon: ';
-    if (phase === 'arrive') return head + `you and Anon just sat down at a small restaurant for ${meal}. Say one or two lines out loud, in character, as you look around and at him. No narration.)`;
-    if (phase === 'order') return head + `at the restaurant. Anon ordered ${picks.me} for himself and ${picks.her} for you. React out loud in one or two lines, in character. Whether you like it is yours to decide. No narration.)`;
-    return head + `the ${meal} is over, Anon asked for the bill and you two are getting up to walk home. Say one or two lines out loud, in character. No narration.)`;
+  // "ORDER: the carbonara, please" has to land on a menu row. score
+  // each dish by how many of its own words show up, most hits wins,
+  // ties go to menu order. the stop list is the filler both names
+  // share ("a glass of", "house", "selection")
+  const STOP = new Set(['a', 'an', 'the', 'of', 'by', 'glass', 'bowl', 'slice', 'big', 'house', 'selection', 'platter']);
+  const keys = (d) => `${d[1]} ${d[2]}`.toLowerCase().split(/\W+/).filter(w => w && !STOP.has(w));
+  function matchDish(text) {
+    const t = ' ' + text.toLowerCase().replace(/\W+/g, ' ') + ' ';
+    let best = null, bestHits = 0;
+    for (const d of dishes) {
+      const hits = keys(d).filter(k => t.includes(' ' + k + ' ')).length;
+      if (hits > bestHits) { best = d; bestHits = hits; }
+    }
+    return best;
   }
 
-  // one ephemeral turn. the [A:...] tags are stripped after the
-  // fact rather than mid-stream, the card shows the whole line at
-  // once anyway
-  function ask(phase) {
+  const TAG_RE = /\[?\b(ORDER|SUGGEST)\s*:\s*([^\n\[\]().!?,;]+)[\])]?/gi;
+  // for display the whole bracket goes, or the rest of the sentence
+  // when she wrote it bare
+  const STRIP_RE = /\[\s*(?:ORDER|SUGGEST)\s*:[^\]\n]*\]?|\b(?:ORDER|SUGGEST)\s*:[^\n.!?]*[.!?]?/gi;
+  function readTags(raw) {
+    for (const m of raw.matchAll(TAG_RE)) {
+      const d = matchDish(m[2]);
+      if (!d) continue;
+      if (m[1].toUpperCase() === 'ORDER') picks.her = d[1]; else suggested = d[1];
+    }
+    // she does not always remember the tag. "I'll have the risotto"
+    // is an order too
+    if (!picks.her) {
+      const m = raw.match(/\bI(?:['\u2019]ll|['\u2019]m| will| am) (?:have|having|take|taking|get|getting|go|going|order|ordering)\b(?: with)?([^.!?\n]{0,60})/i);
+      const d = m && matchDish(m[1]);
+      if (d) picks.her = d[1];
+    }
+    // ponytail: last dish she named at all, only used if the waiter
+    // turn comes back with no order. over-matches on chit chat
+    const d = matchDish(raw);
+    if (d) mentioned = d[1];
+  }
+
+  const OOC = '(OOC stage direction, not spoken by Anon: ';
+  const menuNote = () => `The menu: ${dishes.map(d => d[2]).join(', ')}. You choose your own food, nobody orders for you. When you have decided what you want, end your line with ORDER: <the dish as written on the menu>. To suggest a dish for Anon add SUGGEST: <dish>. Anon ${picks.me ? 'is having ' + picks.me : "hasn't picked yet"}.`;
+  function note(phase) {
+    if (phase === 'arrive') return `${OOC}you and Anon just sat down at ${PLACE[meal]} for ${meal} and opened the menu. Say one or two lines out loud, in character, as you look around and at him. No narration. ${menuNote()})`;
+    if (phase === 'talk') {
+      if (ordered) return `${OOC}at the table eating, Anon has ${picks.me} and you have ${picks.her}. Answer him out loud, in character, one to three lines. No narration.)`;
+      return `${OOC}reading the menu together. Answer him out loud, in character, one to three lines. No narration. ${menuNote()})`;
+    }
+    if (phase === 'waiter') {
+      if (picks.her) return `${OOC}the waiter takes the order: ${picks.me} for Anon, ${picks.her} for you, your own pick. React out loud in one or two lines, in character. No narration.)`;
+      return `${OOC}the waiter is at the table and Anon just ordered ${picks.me}. Tell him what you are having, ending your line with ORDER: <dish from the menu>. One or two lines, in character. No narration. ${menuNote()})`;
+    }
+    return `${OOC}the ${meal} is over, Anon asked for the bill and you two are getting up to walk home. Say one or two lines out loud, in character. No narration.)`;
+  }
+
+  function turn(content) {
     return new Promise((resolve) => {
-      if (!window.ChatAPI || !conversationId) return resolve(FALLBACK[phase]);
+      if (!window.ChatAPI || !conversationId) return resolve('');
       let text = '';
-      const finish = () => {
-        text = text.replace(/\[\s*A(?:CTIONS?)?\s*:[^\]]*\]/gi, '').replace(/\s+/g, ' ').trim();
-        if (window.Names) text = Names.apply(text);
-        resolve(text || FALLBACK[phase]);
-      };
-      const stage = { role: 'user', content: direction(phase) };
-      history.push(stage);
+      history.push({ role: 'user', content });
       ChatAPI.chat(
         { messages: [...history], conversation_id: conversationId, ephemeral: true,
           client_time: clientTime(), outfit_context: window.Outfit ? Outfit.describe() : '' },
@@ -84,82 +135,112 @@
           onToken: (t) => { text += t; },
           onDone: () => {
             if (text.trim()) history.push({ role: 'assistant', content: text });
-            finish();
+            resolve(text);
           },
-          onError: finish,
+          onError: () => resolve(text),
         }
       );
     });
   }
 
-  async function say(phase) {
+  // one ephemeral turn. the tags are stripped after the fact rather
+  // than mid-stream, the card shows the whole line at once anyway
+  async function ask(content, fallback) {
+    busy = true;
     status.textContent = '…';
-    const line = await ask(phase);
+    setComposer();
+    const raw = await turn(content);
+    readTags(raw);
+    let line = raw.replace(STRIP_RE, '').replace(/\[\s*A(?:CTIONS?)?\s*:[^\]]*\]/gi, '')
+      .replace(/\s+/g, ' ').replace(/^[\s,.;:]+/, '').trim();
+    if (window.Names) line = Names.apply(line);
+    line = line || fallback;
     status.textContent = '';
-    if (window.WardrobeReactions) await WardrobeReactions.say(line);
+    lastLine.textContent = line;
+    busy = false;
+    renderMarks();
+    return line;
+  }
+
+  const speak = (line) => window.WardrobeReactions ? WardrobeReactions.say(line) : undefined;
+
+  function setComposer() {
+    const locked = busy || !ready;
+    input.disabled = locked;
+    sendBtn.disabled = locked;
+    orderBtn.disabled = locked || ordered || !picks.me;
+    billBtn.disabled = locked;
+  }
+
+  function renderMarks() {
+    const h = her();
+    for (const b of list.querySelectorAll('.dish')) {
+      const mine = b.dataset.name === picks.me;
+      b.setAttribute('aria-pressed', String(mine));
+      const notes = [];
+      if (b.dataset.name === picks.her) notes.push(`${h}'s choice`);
+      if (b.dataset.name === suggested) notes.push(mine ? `${h} suggested it` : `${h} says try it`);
+      b.querySelector('.dish-note').textContent = notes.join(' · ');
+    }
+    setComposer();
   }
 
   function renderMenu() {
-    document.getElementById('menuTitle').textContent = meal === 'lunch' ? 'The lunch menu' : 'The dinner menu';
-    document.getElementById('menuSubtitle').textContent = meal === 'lunch' ? 'A slow afternoon, a table for two' : 'A little candlelight. Something delicious.';
-    document.getElementById('mealLabel').textContent = meal === 'lunch' ? 'Lunch · A sunny little corner' : 'Dinner · Just the two of you';
+    const h = her();
     document.title = meal === 'lunch' ? 'Lunch for two' : 'Dinner for two';
-    const her = window.Names ? Names.getBot() : 'Jun';
-    document.getElementById('herLabel').textContent = 'For ' + her;
-    let category = '';
-    for (const [, name, title, description, section] of MENU[meal]) {
-      if (section !== category) {
-        category = section;
+    document.getElementById('mealLabel').textContent = meal === 'lunch' ? 'Lunch · A sunny little corner' : 'Dinner · Just the two of you';
+    document.getElementById('menuNames').textContent = `${window.Names ? Names.getPlayer() : 'Anon'} & ${h}`;
+    document.getElementById('menuDate').textContent = new Date().toLocaleDateString(undefined, { day: 'numeric', month: 'long', year: 'numeric' });
+    document.getElementById('menuPlace').textContent = PLACE[meal];
+    document.getElementById('menuHint').textContent = `Tap what you'd like. ${h} orders for herself.`;
+    let course = '';
+    for (const d of dishes) {
+      if (d[3] !== course) {
+        course = d[3];
         const heading = document.createElement('h3');
-        heading.className = 'menu-category';
-        heading.textContent = section;
+        heading.className = 'menu-course';
+        heading.textContent = course;
         list.appendChild(heading);
       }
-      const row = document.createElement('div');
-      row.className = 'dish';
-      const copy = document.createElement('div');
-      copy.className = 'dish-copy';
-      const n = document.createElement('span'); n.className = 'dish-name'; n.textContent = title;
-      const d = document.createElement('span'); d.className = 'dish-description'; d.textContent = description;
-      copy.append(n, d);
-      const choices = document.createElement('div');
-      choices.className = 'dish-choices';
-      for (const who of ['me', 'her']) {
-        const b = document.createElement('button');
-        b.type = 'button';
-        b.textContent = who === 'me' ? 'You' : her;
-        b.setAttribute('aria-label', `${title} for ${who === 'me' ? 'you' : her}`);
-        b.setAttribute('aria-pressed', 'false');
-        b.dataset.who = who;
-        b.dataset.name = name;
-        b.addEventListener('click', () => pick(who, name));
-        choices.appendChild(b);
-      }
-      row.append(copy, choices);
-      list.appendChild(row);
+      const b = document.createElement('button');
+      b.type = 'button';
+      b.className = 'dish';
+      b.dataset.name = d[1];
+      b.setAttribute('aria-pressed', 'false');
+      const title = document.createElement('span'); title.className = 'dish-title'; title.textContent = d[2];
+      const mark = document.createElement('span'); mark.className = 'dish-note';
+      b.append(title, mark);
+      b.addEventListener('click', () => {
+        if (ordered) return;
+        picks.me = picks.me === d[1] ? '' : d[1];
+        renderMarks();
+      });
+      list.appendChild(b);
     }
   }
 
-  function pick(who, name) {
-    if (ordered) return;
-    picks[who] = picks[who] === name ? '' : name;
-    list.querySelectorAll(`button[data-who="${who}"]`).forEach(b => {
-      const selected = b.dataset.name === picks[who];
-      b.classList.toggle('on', selected);
-      b.setAttribute('aria-pressed', String(selected));
-    });
-    const dish = MENU[meal].find(item => item[1] === picks[who]);
-    document.getElementById(who === 'me' ? 'pickMe' : 'pickHer').textContent = dish ? dish[2] : 'Still deciding…';
-    const count = Number(!!picks.me) + Number(!!picks.her);
-    summary.textContent = count === 2 ? 'Two lovely choices. Ready when you are.' : count === 1 ? 'One more choice for the table.' : 'Pick one item each to order.';
-    orderBtn.disabled = !(ready && picks.me && picks.her);
+  async function callWaiter() {
+    if (busy || ordered || !picks.me) return;
+    ordered = true;
+    const line = await ask(note('waiter'), FALLBACK.order);
+    // ponytail: she dodged the waiter. whatever dish she named
+    // last is what she gets, or the kitchen picks
+    if (!picks.her) picks.her = mentioned || dishes[Math.floor(Math.random() * dishes.length)][1];
+    for (const who of ['me', 'her']) {
+      document.getElementById(who === 'me' ? 'plateMe' : 'plateHer').textContent = dishes.find(d => d[1] === picks[who])[0];
+    }
+    document.body.classList.add('ordered', 'served');
+    orderBtn.hidden = true;
+    billBtn.hidden = false;
+    setComposer();
+    await speak(line);
   }
 
   async function goHome() {
+    if (busy) return;
     billBtn.disabled = true;
     billBtn.textContent = 'Heading home…';
-    document.getElementById('tableCaption').textContent = 'Until next time.';
-    await say('leave');
+    await speak(await ask(note('leave'), FALLBACK.leave));
     try {
       await fetch('api/trip.php?action=home', {
         method: 'POST', credentials: 'same-origin',
@@ -196,23 +277,16 @@
     } catch (e) {}
   }
 
-  orderBtn.addEventListener('click', async () => {
-    if (!ready || ordered || !picks.me || !picks.her) return;
-    ordered = true;
-    orderBtn.disabled = true;
-    orderBtn.textContent = 'Placing your order…';
-    summary.textContent = 'Something good is on its way.';
-    list.querySelectorAll('button').forEach(b => { b.disabled = true; });
-    for (const who of ['me', 'her']) {
-      document.getElementById(who === 'me' ? 'plateMe' : 'plateHer').textContent = MENU[meal].find(item => item[1] === picks[who])[0];
-    }
-    document.body.classList.add('served');
-    document.getElementById('tableCaption').textContent = 'A little moment, just for you two.';
-    await say('order');
-    summary.textContent = 'Enjoy your time together. Leave whenever you’re ready.';
-    orderBtn.hidden = true;
-    billBtn.hidden = false;
+  document.getElementById('composer').addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const text = input.value.trim();
+    if (!text || busy || !ready) return;
+    input.value = '';
+    const spoken = window.Names ? Names.canonicalize(text) : text;
+    speak(await ask(`${spoken}\n\n${note('talk')}`, FALLBACK.talk));
+    input.focus();
   });
+  orderBtn.addEventListener('click', callWaiter);
   billBtn.addEventListener('click', goHome);
 
   try {
@@ -231,9 +305,8 @@
     TripLoader.setStage(meal === 'lunch' ? 'Lunch, finally' : 'Table for two');
     await TripLoader.finish();
     status.textContent = '';
-    await say('arrive');
     ready = true;
-    orderBtn.disabled = !(picks.me && picks.her);
+    speak(await ask(note('arrive'), FALLBACK.arrive));
   } catch (e) {
     console.error(e);
     status.textContent = 'Load error: ' + e.message;
