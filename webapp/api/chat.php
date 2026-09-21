@@ -960,6 +960,12 @@ $route = 'manual';
 if ($reasoning === 'auto') {
     [$reasoning, $think, $route] = route_reasoning($lastUserMsg, $idle);
 }
+// ephemeral turns are the card table and touch reactions. a hit
+// or stand behind 20 s of thinking kills the game, so no
+// thinking there whatever the picker says
+if ($ephemeral) {
+    [$reasoning, $think, $route] = ['low', false, 'ephemeral'];
+}
 
 // the budget token goes dead last, after the live context. v7
 // rows end user turns with "\n\n<think:LEVEL>" and the level
