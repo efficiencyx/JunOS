@@ -692,6 +692,11 @@ window.Mods = (function () {
   }
 
   function setEquipped(guid, index, on) {
+    const change = () => applyEquipped(guid, index, on);
+    return window.WardrobeCurtains ? WardrobeCurtains.change(change) : change();
+  }
+
+  function applyEquipped(guid, index, on) {
     const st = modState(guid);
     st.items[index] = !!on;
     const mod = mods.find(m => m.guid === guid);
@@ -704,7 +709,7 @@ window.Mods = (function () {
       }
     }
     saveState();
-    applyAll();
+    return applyAll();
   }
 
   function setColor(guid, itemIndex, slotIndex, hex) {
@@ -911,8 +916,8 @@ window.Mods = (function () {
             },
           ));
         }
-        tile.addEventListener('click', () => {
-          setEquipped(mod.guid, i, !isEquipped(mod, i));
+        tile.addEventListener('click', async () => {
+          await setEquipped(mod.guid, i, !isEquipped(mod, i));
           grid.querySelectorAll('.wd-tile').forEach((t, j) => t.classList.toggle('on', isEquipped(mod, j)));
         });
         grid.appendChild(tile);
