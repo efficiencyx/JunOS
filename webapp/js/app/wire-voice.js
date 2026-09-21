@@ -1,8 +1,8 @@
-import { VOICE_STATE_LABELS, renderVoiceDraft, sendAudioFromVoice, sendFromVoice, stopActiveStream, sttAvailable } from '../app.js?v=15';
+import { VOICE_STATE_LABELS, renderVoiceDraft, sendAudioFromVoice, sendFromVoice, stopActiveStream, sttAvailable } from '../app.js?v=16';
 import { voiceBargeChk, voiceChk, voiceHearAllChk, voiceSilenceInput, voiceState } from './dom.js?v=11';
-import { hideFaceBubble } from './face-bubble.js?v=10';
+import { hideFaceBubble } from './face-bubble.js?v=11';
 import { logAction } from './logging.js?v=10';
-import { syncVoiceDeps, updateVoiceSilenceLabel } from './settings.js?v=11';
+import { syncVoiceDeps, updateVoiceSilenceLabel } from './settings.js?v=12';
 
 export async function wireVoice() {
   if (window.Voice && voiceChk) {
