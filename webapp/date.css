@@ -18,16 +18,9 @@ button:disabled { cursor: default; }
 .restaurant { position: absolute; inset: 0; overflow: hidden; isolation: isolate; }
 .room { position: absolute; inset: 0; z-index: -1; overflow: hidden; background: #1b1d1b; }
 .room svg { display: block; width: 100%; height: 100%; }
-.scene-head { position: absolute; z-index: 5; top: max(32px, env(safe-area-inset-top)); left: 7%; pointer-events: none; }
-.eyebrow, .scene-detail { text-transform: uppercase; font-size: 10px; letter-spacing: .16em; }
-.eyebrow { color: #d4c5a7; }
-h1 { margin: 6px 0 11px; font: 400 clamp(32px, 3.5vw, 54px)/1.15 var(--serif); letter-spacing: -.04em; }
-h1 em { color: #dec39a; font-weight: 400; }
-.scene-detail { display: flex; align-items: center; gap: 8px; color: #c1b8a4; letter-spacing: .1em; }
 .date-back { position: absolute; z-index: 9; top: max(30px, env(safe-area-inset-top)); right: 20px; color: #c1b8a4; font-size: 11px; text-decoration: none; }
 .date-back:hover { color: var(--cream); }
 .date-back:focus-visible { outline: 2px solid var(--wine); outline-offset: 4px; }
-.ambience-dot { width: 5px; height: 5px; border-radius: 50%; background: #ddbd87; box-shadow: 0 0 9px #ddbd8780; }
 #stage { position: absolute; inset: -22% 0 0; }
 #stage canvas { display: block; }
 .table { position: absolute; z-index: 2; pointer-events: none; left: -9%; right: -9%; top: 68%; bottom: -3%; filter: drop-shadow(0 -10px 20px #1a100e33); }
@@ -77,10 +70,6 @@ body.ordered .menu-card { transform: translate(-50%, 70px); opacity: 0; pointer-
 #sendBtn { background: transparent; border-color: #6b5a4a; color: var(--cream); }
 #sendBtn:not(:disabled):hover { background: #3a302a; }
 @media (max-width: 760px) {
-  .scene-head { top: max(16px, env(safe-area-inset-top)); left: 20px; }
-  .eyebrow { font-size: 8px; }
-  h1 { font-size: 30px; margin: 3px 0 7px; }
-  .scene-detail { font-size: 8px; }
   #stageStatus { top: auto; bottom: calc(100px + env(safe-area-inset-bottom)); right: 12px; max-width: 60%; }
   #stage { inset: -12% 0 0; }
   .table { top: 70%; left: -2%; right: -2%; bottom: -9%; }
@@ -98,7 +87,6 @@ body.ordered .menu-card { transform: translate(-50%, 70px); opacity: 0; pointer-
   .composer button { padding: 0 11px; font-size: 11px; }
 }
 @media (max-height: 500px) and (orientation: landscape) {
-  .scene-head { display: none; }
   #stage { inset: -10% 46% 0 0; }
   .menu-card, .composer { left: auto; right: 10px; width: 54vw; transform: none; }
   .menu-card { grid-template-columns: 2fr 3fr; max-height: calc(100% - 78px - env(safe-area-inset-bottom)); bottom: calc(66px + env(safe-area-inset-bottom)); }
