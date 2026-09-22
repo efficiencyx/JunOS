@@ -54,11 +54,11 @@ async function main() {
       ['🧁', 'cheesecake', 'Cheesecake', 'A sweet ending'],
     ],
   };
-  // three rooms, and which one you walk into is seeded off the trip's
-  // start timestamp. same date keeps the same restaurant across a
-  // refresh - a reload mid-meal teleporting you somewhere else would
-  // be worse than never varying at all - and the next date is
-  // somewhere new.
+  // three rooms, and which one you walk into is seeded off the
+  // trip's start timestamp. same date keeps the same restaurant
+  // across a refresh, because a reload mid-meal that teleports you
+  // somewhere else is worse than never varying at all. next date
+  // is somewhere new.
   const VENUES = [
     { name: 'Trattoria La Lanterna', scene: 'diner-lantern.svg' },
     { name: 'Café Marigold', scene: 'diner-marigold.svg' },
@@ -283,8 +283,8 @@ async function main() {
   const trip = await api('trip.php')
     .then(r => r.ok ? r.json() : null).catch(() => null);
   if (trip && trip.gated && trip.where !== 'date') { location.replace('index.html'); return; }
-  // mount AFTER the gate. bounced users used to sit through the whole
-  // walk and get redirected at the end of it anyway
+  // mount AFTER the gate. otherwise a bounced user sits through the
+  // whole walk just to get redirected at the end of it
   TripLoader.mount();
   TripLoader.setStage('Finding your table');
   // no trip row (gate off, or the android build that has no endpoint)

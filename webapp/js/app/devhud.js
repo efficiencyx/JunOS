@@ -15,7 +15,8 @@ let gen = { t0: 0, tFirst: 0, tLast: 0, active: 0, chunks: 0, final: null };
 // a turn can just sit there for seconds between rounds while a
 // tool runs, and that time is NOT decoding. count it and the live
 // number comes out way under what the model is actually doing. so
-// only gaps short enough to be the space between tokens count.
+// every gap gets capped at this, anything longer isn't the space
+// between two tokens anyway.
 const MAX_TOKEN_GAP_MS = 400;
 
 function fmtBytes(n) {
@@ -143,7 +144,7 @@ async function poll() {
     } else {
       put('model', 'none loaded');
     }
-  } catch (e) { /* upstream down - leave stale values */ }
+  } catch (e) { /* upstream down, keep the stale values */ }
 }
 
 export function beginGen() {

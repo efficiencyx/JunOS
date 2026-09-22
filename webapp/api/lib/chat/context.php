@@ -145,12 +145,13 @@ function chat_live_context(array $req, array $user, string $lastUserMsg, string 
 
     // the drawer's "ask her out" buttons. she says yes in prose and
     // never calls the tool, so the page never opens and Anon sits
-    // there. so one flat OOC line naming the tool, same shape as the
-    // idle nudge she saw in training. the old "you MUST call X if you
-    // accept" rule was too much for a small model on <think:low>.
-    // and THROW AWAY everything else (clock, notes, lore, wardrobe,
-    // save check). a 4 line invitation does not need canon facts
-    // about the shop, they just pull her off the question
+    // there. so one flat OOC (out of character) line naming the
+    // tool, same shape as the idle nudge she saw in training. a "you
+    // MUST call X if you accept" rule is too much for a small model
+    // on <think:low>, tried it. and THROW AWAY everything but the
+    // feelings block (clock, notes, lore, wardrobe, save check). a 4
+    // line invitation does not need canon facts about the shop, they
+    // just pull her off the question
     if ($toolsOffered && !$req['idle'] && $invite !== '') {
         $tool = array_search($invite, TRIP_TOOLS, true);
         $plan = [

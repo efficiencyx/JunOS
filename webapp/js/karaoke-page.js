@@ -49,7 +49,8 @@ async function main() {
     location.replace('index.html');
     return;
   }
-  // mount AFTER the gate, same reason as date.js
+  // mount AFTER the gate, same as date.js. otherwise a bounced user
+  // sits through the whole walk just to get redirected at the end
   TripLoader.mount();
   TripLoader.setStage('Walking to the lounge');
   Scene.inject('.music-room', 'scene/lounge.svg?v=4');

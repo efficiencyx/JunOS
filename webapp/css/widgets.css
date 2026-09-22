@@ -347,8 +347,8 @@
 }
 .devhud-sep { height: 1px; background: var(--border); margin: 5px 0; }
 
-/* voice mode leaves the hidden chat frame taking up space, so the stage
-   doesn't jump. */
+/* visibility, not display: none. in voice mode the hidden chat
+   frame keeps taking up space, so the stage doesn't jump. */
 body.voice-mode .chat-panel,
 body.voice-mode .conv-sidebar,
 body.voice-mode .app-header { visibility: hidden; }

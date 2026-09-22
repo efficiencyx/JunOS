@@ -16,9 +16,10 @@ let state = {};
 let readyPromise = null;
 let appliedIds = new Set();
 
-// the game enables its ten mod slots by raising their parent part
-// from opacity 0. the rig never does it. match the outfit/catalog.js
-// show lists or ModdableFace patches stay invisible.
+// the game turns its ten mod slots on by raising their parent
+// part from opacity 0. the rig never does that. so we match the
+// outfit/catalog.js show lists, or ModdableFace patches stay
+// invisible.
 const shownSlots = new Set();
 
 function loadState() {
@@ -54,11 +55,11 @@ const rgbToHex = (rgb) => '#' + rgb
   .map(v => Math.round(Math.max(0, Math.min(1, v)) * 255).toString(16).padStart(2, '0'))
   .join('');
 
-// one multiply uniform tints the whole drawable, including mod
-// pixels. remove it and apply baseTint in textures.js to vanilla
-// and opted-in layers only. BypassColorScaler layers keep their
-// colour, including SkinBodyFront and ModdableHairFront
-// accessories.
+// one multiply uniform (a value the shader applies to every
+// pixel) tints the whole drawable, mod pixels included. so it
+// comes off and textures.js applies baseTint to vanilla and
+// opted-in layers only. BypassColorScaler layers keep their own
+// colour, SkinBodyFront and ModdableHairFront accessories too.
 function hostTintFor(id) {
   if (heldTint.has(id)) return heldTint.get(id);
   const rgb = Live2D.getDrawableTint(id);
@@ -105,7 +106,7 @@ function bakeKey(id, entries, colorsFor, tint, replaceVanilla) {
 let applyRunning = null;
 let applyQueued = null;
 
-// clicks arrive faster than a pass takes and only the LAST state
+// clicks arrive faster than a pass takes and only the last state
 // matters, so one queued pass behind the running one is all we
 // ever need.
 export function applyAll() {
@@ -144,11 +145,11 @@ async function applyPass() {
   // mod items land in vanilla drawables as often as in the
   // Moddable* slots, and the rig keeps those at zero opacity while
   // the wardrobe item that owns them is off. parameter-driven
-  // garments go back through the rig so it can choose the current
-  // pose meshes; simple slots are held up here. either way the bake
-  // replaces the vanilla art rather than layering over it. switch
-  // the vanilla item on and they layer again, which is what you'd
-  // want from a mod that only adds a decal.
+  // garments go back through the rig so it can pick the current
+  // pose meshes. simple slots we just hold up here. either way the
+  // bake replaces the vanilla art instead of layering over it.
+  // switch the vanilla item on and they layer again, which is
+  // exactly what you want from a mod that only adds a decal.
   const hiddenByOutfit = hiddenItemDrawables();
   const map = {};
   for (const id of appliedIds) map[id] = null;
@@ -158,7 +159,7 @@ async function applyPass() {
   const fresh = new Map();
   for (const [id, entries] of byDrawable) {
     const tint = entries.some(e => e.bypassColorScaler) ? hostTintFor(id) : null;
-    // ColorIndex points into the owning ITEM's ColorSlots list
+    // ColorIndex points into the owning item's ColorSlots list
     const colorsFor = (e) => ((modState(e.mod.guid).colors || {})[e.itemIndex] || [])[e.colorIndex] || null;
     const replaceVanilla = hiddenByOutfit.has(id);
     const key = bakeKey(id, entries, colorsFor, tint, replaceVanilla);
@@ -289,10 +290,10 @@ export function setColor(guid, itemIndex, slotIndex, hex) {
   applyAll();
 }
 
-// only names leave the browser via outfit_context, never mod
-// assets. include owned names so wearByName can match her
-// requests. cap at 40 because every turn carries this
-// live-context list.
+// only names leave the browser (via outfit_context), never the
+// mod assets. owned names go in too so wearByName can match what
+// she asks for. capped at 40 because this list rides the live
+// context on Every turn.
 const DESCRIBE_MAX = 40;
 export function describe() {
   const worn = [], owned = [];
@@ -307,19 +308,19 @@ export function describe() {
   return s;
 }
 
-// change_outfit needs all owned names to distinguish mods from
-// invented items. same names-only boundary as describe().
+// change_outfit needs the owned names to tell a real mod item
+// from one she made up. same names-only boundary as describe().
 export function itemNames() {
   const out = [];
   for (const mod of mods) for (const item of mod.items) out.push(item.label);
   return out.slice(0, DESCRIBE_MAX);
 }
 
-// she only ever sees LABELS, so this is how a name out of an
+// she only ever sees labels, so this is how a name out of an
 // action tag gets back to an index. exact first, then a loose
-// contains match, because she paraphrases - "bunny ears" for
-// "Bunny Ears Hat". short labels do not get the loose pass, "bow"
-// would swallow half a pack.
+// contains match, because she paraphrases ("bunny ears" for
+// "Bunny Ears Hat"). labels under 4 chars don't get the loose
+// pass, "bow" would swallow half a pack.
 export function wearByName(name, on) {
   const want = String(name || '').toLowerCase().replace(/[_\s]+/g, ' ').trim();
   if (!want) return false;
@@ -335,12 +336,12 @@ export function wearByName(name, on) {
 }
 
 const ATTACH_DRAWABLE = /^Attach/i;
-// the colour toggle overrides BypassColorScaler both ways on
-// every drawable: on follows the host, off keeps mod colours.
-// untouched defaults to off if any drawable bypasses, on
-// otherwise. limbs default on: neutral-grey replacements set
-// bypass (all 29 in Seamless Components), but need her skin
-// colour.
+// the colour toggle overrides BypassColorScaler (the game flag
+// that skips her outfit tint) both ways, on every drawable. on =
+// follow the host, off = keep the mod's colours. never touched?
+// off if any drawable bypasses, on otherwise. limbs default on
+// anyway. the neutral-grey replacements set bypass (all 29 in
+// Seamless Components) but they still need her skin colour.
 export function followsHerColors(mod, itemIndex) {
   // stored under "limbs", from when this only covered the Attach*
   // drawables. renaming the key would drop everyone's saved choice.

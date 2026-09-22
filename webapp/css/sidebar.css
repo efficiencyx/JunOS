@@ -73,9 +73,10 @@
 }
 .sidebar-toggle:hover { background: var(--bg-3); color: var(--fg); filter: none; }
 
-/* Collapsed. icons only, 56px wide.
-   Uses ONLY animatable properties (gap, padding, opacity) - never justify-content,
-   which is discrete and snaps mid-transition. */
+/* collapsed. icons only, 56px wide.
+   ONLY animatable properties here (gap, padding, opacity).
+   never justify-content, it's discrete (no in-between values)
+   so it snaps mid-transition. */
 .app-main.sidebar-collapsed .sidebar-toolbar { position: relative; min-height: 36px; padding: 4px 2px 0; justify-content: flex-start; }
 .app-main.sidebar-collapsed .sidebar-toggle { display: none; }
 .app-main.sidebar-collapsed .sidebar-brand {

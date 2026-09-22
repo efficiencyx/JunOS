@@ -87,7 +87,7 @@ function lore_index(): ?array {
     foreach ($cap as $stem => $c) {
         if ($c >= 2 && $c >= ($low[$stem] ?? 0)) $proper[$stem] = true;
     }
-    // fuzzy match ONLY distinctive proper nouns. a typo can land
+    // fuzzy match only distinctive proper nouns. a typo can land
     // on "Annalie" or "Shanice", but an ordinary word must never
     // get "corrected" into some common capitalised word.
     $fuzzy = [];

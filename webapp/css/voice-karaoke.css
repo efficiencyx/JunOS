@@ -298,9 +298,10 @@ body.karaoke-mode .karaoke-overlay {
   gap: 20px;
   width: min(720px, 92vw);
   max-height: 82vh;
-  /* the score card only shows up after you sing, and with a whole lyric line
-     per section it can outgrow what the lyrics already claim. so scroll,
-     instead of shoving the controls off the bottom. */
+  /* the score card only shows up after you sing. with a whole
+     lyric line per section it can outgrow what the lyrics
+     already claim. so scroll, don't shove the controls off
+     the bottom. */
   overflow-y: auto;
 }
 .karaoke-turn {

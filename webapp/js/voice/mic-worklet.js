@@ -1,5 +1,6 @@
-// the worklet keeps VAD (speech detection) and PCM (raw audio
-// samples) capture running in background tabs.
+// a worklet runs on the audio thread, not the page's. so VAD
+// (speech detection) and PCM (raw audio samples) capture keep
+// running in background tabs.
 
 class MicProcessor extends AudioWorkletProcessor {
   constructor(opts) {

@@ -27,8 +27,9 @@ if ($method === 'GET' && $action === 'status') {
     json_out($status);
 }
 
-// Has to be read BEFORE the client reports activity for this session, or the
-// absence it is measuring is already written over with "just now".
+// has to be read BEFORE the client reports activity for this
+// session, or the absence it's measuring already got written
+// over with "just now".
 if ($method === 'GET' && $action === 'welcome') {
     if (!is_admin($user)) {
         foreach (['preview', 'away', 'tier'] as $param) {

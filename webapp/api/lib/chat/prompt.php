@@ -45,8 +45,7 @@ function chat_build_messages(array $req, string $systemContent, string $liveCont
         if (!is_array($m) || !isset($m['role'], $m['content'])) continue;
         // the system turn is ours. Never the client's.
         if ($m['role'] === 'system') continue;
-        // these turns already live in the summary. don't send them
-        // twice.
+        // these turns already live in the summary. don't send them twice
         if ($skipCovered > 0) { $skipCovered--; continue; }
         $messages[] = ['role' => $m['role'], 'content' => (string)$m['content']];
     }

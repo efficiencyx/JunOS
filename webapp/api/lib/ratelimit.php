@@ -1,10 +1,10 @@
 <?php
 
-// token bucket per IP in a flat file. this used to let the
-// request through when it couldn't get a writable dir, which
-// made "state dir is read only" mean "login has no brute force
-// lockout". now it's a 503, same as db() below, and the state
-// dir gets fixed.
+// sliding window per bucket per IP, the hit timestamps sit in a
+// flat file. no writable dir = 503, same as db() in db.php, and
+// somebody fixes the state dir. letting the request through
+// instead would turn "state dir is read only" into "login has
+// no brute force lockout".
 function rate_limit(string $bucket, int $maxPerWindow, int $windowSec): void {
     $key = sha1($bucket . '|' . client_ip());
 

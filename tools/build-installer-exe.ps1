@@ -1,13 +1,13 @@
 #requires -Version 5.1
 
 <#
-Compiles installer-gui.ps1 into JunSetup.exe.
+compiles installer-gui.ps1 into JunSetup.exe.
 
 Windows only, and it has to be Windows PowerShell 5.1 or pwsh
-on Windows: ps2exe emits a .NET Framework WPF binary and there
-is no cross compile. Build from a checkout. The EXE embeds
-install.ps1 and runs on its own; that installer clones the
-repo.
+on Windows. ps2exe spits out a .NET Framework WPF binary and
+there's no cross compile. build from a checkout. the EXE embeds
+install.ps1 and runs on its own, install.ps1 then clones the
+repo itself.
 #>
 
 [CmdletBinding()]
@@ -37,7 +37,7 @@ $installScript = Join-Path $repoRoot 'install.ps1'
 if (-not (Test-Path -LiteralPath $installScript)) { throw "install.ps1 not found at $installScript" }
 
 # install.ps1 goes in as base64 on one line. it's the only repo
-# file the exe needs - install.ps1 git clones the rest itself -
+# file the exe needs (install.ps1 git clones the rest itself),
 # so this is what makes the build standalone. UTF8 without a BOM,
 # powershell -File chokes on a stray one.
 $payload = [Convert]::ToBase64String([IO.File]::ReadAllBytes($installScript))
@@ -58,9 +58,10 @@ Import-Module ps2exe
 $ps2exeArgs = @{
     inputFile   = $staged
     outputFile  = $OutputPath
-    # noConsole hides the console window, STA is what WPF needs and
-    # what keeps installer-gui.ps1 out of its self-restart branch
-    # (which a compiled build can't take). x64 also matters: it puts
+    # noConsole hides the console window. STA (single-threaded
+    # apartment, the COM threading mode WPF needs) is also what
+    # keeps installer-gui.ps1 out of its self-restart branch, which
+    # a compiled build can't take. x64 matters too, it puts
     # powershell.exe under System32 where the installer looks for it.
     noConsole   = $true
     STA         = $true

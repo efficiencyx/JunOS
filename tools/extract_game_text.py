@@ -1,18 +1,19 @@
 #!/usr/bin/env python3
-"""Jun's game dialogue for the V5 style corpus.
+"""pulls Jun's game dialogue for the V5 style corpus.
 
 her canonical lines and the other scripted dialogue give the V5
 generator her cadence, plus a curated set of verbatim rows.
 Personal-use only per the NOTICE in LICENSE. Outputs are
 gitignored. Do not republish game text.
 
-the IL2CPP build has no MonoBehaviour type metadata in its
-assets. I2 Localization LanguageSourceAsset tables, one per
+the game is an IL2CPP build (the C# compiled down to native
+code), so its assets carry no MonoBehaviour type metadata. which
+means the I2 Localization LanguageSourceAsset tables, one per
 language per category (Story_en, Dialogue_en, ...), can't be
-read field-by-field. so scan the raw bytes for Unity strings:
-int32 length + UTF-8, 4-byte aligned. this keeps narrative
-order. speech has inline speaker tags, "Bot:" for Jun, "You:"
-for Anon, plus NPCs.
+read field-by-field. so we scan the raw bytes for Unity strings
+instead, int32 length + UTF-8, 4-byte aligned. bonus, this keeps
+narrative order. speech has inline speaker tags, "Bot:" for Jun,
+"You:" for Anon, plus NPCs.
 
 Usage:
   python3 tools/extract_game_text.py [--game DIR] [--out DIR]

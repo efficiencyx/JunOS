@@ -29,8 +29,8 @@ function provider_route_think_token(string $token, array &$state, callable $emit
 
     if ($buf === '') return;
 
-    // a tag can straddle two stream chunks, so hold back the start of
-    // one
+    // a tag can get split across two stream chunks, so hold back
+    // the tail if it could be the start of one
     $tag = $state['think_open'] ? '</think>' : '<think>';
     $hold = 0;
     for ($n = min(strlen($tag) - 1, strlen($buf)); $n > 0; $n--) {

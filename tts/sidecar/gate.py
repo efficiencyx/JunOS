@@ -59,7 +59,7 @@ def _gate(request):
 def install(app):
     @app.middleware("http")
     async def gate(request: Request, call_next):
-        # runs BEFORE any handler reads the body, so a rejected request
+        # runs before any handler reads the body, so a rejected request
         # costs a header parse and nothing else
         why = _gate(request)
         if why is not None:
@@ -70,7 +70,7 @@ def install(app):
 
     @app.exception_handler(Exception)
     async def on_unhandled(request: Request, exc: Exception) -> JSONResponse:
-        # anything left becomes a plain 500. NEVER leak a traceback.
+        # anything left becomes a plain 500. never leak a traceback.
         log.exception("unhandled exception on %s %s", request.method, request.url.path)
         path = request.url.path
         if path in ("/stt", "/transcribe_timed"):

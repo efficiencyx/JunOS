@@ -20,8 +20,8 @@ function crypt_kdf(string $password, string $salt): string {
 }
 
 // 20 chars from 31 symbols, grouped by 5, ~99 bits of entropy.
-// the random code needs one generichash, not the slower Argon2id
-// password derivation.
+// the code is already random, so one generichash is enough to
+// turn it into a key. the slow Argon2id is for the password.
 function crypt_recovery_code_new(): string {
     $alphabet = 'abcdefghjkmnpqrstuvwxyz23456789';
     $code = '';
@@ -95,7 +95,7 @@ function dec(?string $stored): ?string {
     return $plain;
 }
 
-// the consolidation worker is a seperate process with no cookie,
+// the consolidation worker is a separate process with no cookie,
 // so every activity touch hands it this user's key over localhost.
 // it keeps the key in RAM until the idle run for that user is
 // done, then drops it. no worker listening = nothing happens, he

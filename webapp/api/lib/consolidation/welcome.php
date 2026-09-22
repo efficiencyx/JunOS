@@ -94,8 +94,9 @@ const WELCOME_TIERS = [
 
 // picked per tier, because a cheerful "Look who it is." in front
 // of the panicked line absolutely murders it. the cold pool is
-// flat and short, after ten hours the greeting should get out of
-// the way of the reaction.
+// flat and short. past a day away (the 'cold' tiers, panicked
+// and up) the greeting should get out of the way of the
+// reaction.
 const WELCOME_GREETINGS_WARM = [
     'Welcome back, {f_playerName}.',
     'There you are, {f_playerName}.',
@@ -233,10 +234,10 @@ function welcome_payload(int $userId, ?array $preview = null, ?int $hour = null)
             if ($candidate['tier'] === $preview['tier']) { $absence = $candidate; break; }
         }
     }
-    // under this the greeting stops being a moment and becomes
-    // nagging on every single page refresh. over it, the plain
-    // welcome plus the exact figure IS the whole sub hour tier. bump
-    // it up if the scene wears thin. under WELCOME_MIN_AWAY nothing
+    // under WELCOME_MIN_AWAY the greeting stops being a moment and
+    // turns into nagging on every single page refresh. over it, the
+    // plain welcome plus the exact figure IS the whole sub hour
+    // tier. bump it up if the scene wears thin. under it nothing
     // matches at all, so a normal refresh with an empty queue shows
     // nothing instead of replaying the scene.
     if ($preview === null && !$queued && $absence === null) return ['show' => false];

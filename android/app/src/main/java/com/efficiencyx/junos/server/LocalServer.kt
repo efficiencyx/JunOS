@@ -85,9 +85,10 @@ class LocalServer(
         server.start(wait = false)
         val port = server.engine.resolvedConnectors().single().port
         stopServer = { server.stop(500, 2_000) }
-        // bootstrap and currentUrl are also touched by the /__bootstrap
-        // handler, which runs on a ktor thread and knows nothing about this
-        // Mutex. same monitor on both sides or the token gets burned twice.
+        // bootstrap and currentUrl also get touched by the
+        // /__bootstrap handler. that one runs on a ktor thread and
+        // knows nothing about this Mutex. same monitor on both sides
+        // or the token gets burned twice.
         synchronized(this@LocalServer) {
             val token = bootstrap ?: randomToken().also { bootstrap = it }
             "http://$LOOPBACK:$port/__bootstrap?token=$token".also { currentUrl = it }

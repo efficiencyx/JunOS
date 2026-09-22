@@ -61,12 +61,13 @@ body.karaoke-mode #karaokeOverlay { display: block; }
 #karaokeStatus { position: absolute; bottom: -19px; left: 0; width: 100%; transform: none; text-align: center; font-size: 11px; }
 .karaoke-score { padding: 12px; }
 .karaoke-score-list { max-height: 120px; }
-/* singing is a read-the-words activity, and the words were living
-   in a 37vw side panel with a static lounge taking the other 63%.
-   once a song is loaded the panel drops to a band across the bottom
-   and the lyrics get the room. :has() so the scene can react to a
-   data-view that lives on the overlay, not on body - without it the
-   layout just stays as it was, which still works. */
+/* singing is a read-the-words activity. in the side panel the
+   words get 37vw and a static lounge takes the other 63%. so
+   once a song is loaded the panel drops to a band across the
+   bottom and the lyrics get the room. :has() so the scene can
+   react to a data-view that lives on the overlay, not on body.
+   no :has() and the layout just stays as it was, which still
+   works. */
 html #karaokeOverlay[data-view="stage"] {
   inset: auto 0 0 0;
   width: 100%;

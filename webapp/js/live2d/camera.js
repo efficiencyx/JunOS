@@ -23,8 +23,9 @@ export function currentCameraMode() {
   }
 }
 
-// fill rate goes up with the SQUARE of this, and every clipping mask gets
-// drawn at it too. phone was already capped here, desktop had no cap at all.
+// fill rate (pixels the GPU paints per frame) goes up with the
+// SQUARE of this, and every clipping mask, the meshes Cubism uses
+// as cutouts, gets drawn at it too. same cap on phone and desktop.
 const MAX_RESOLUTION = 2;
 
 export function rendererResolution() {

@@ -131,8 +131,7 @@ function applyVariantVisibility(v) {
 }
 
 // mods/engine.js calls this after it lets go of a drawable it had forced
-// visible, so whatever WE wanted showing there gets asserted
-// again.
+// visible, so whatever we wanted showing there goes back on.
 export function refreshVisibility() {
   applyItems();
   for (const v of VARIANTS) applyVariantVisibility(v);
@@ -149,7 +148,7 @@ export function setVariant(key, index) {
 }
 
 export function applyColors() {
-  // clear FIRST, or a small tint wipes out the colors of a bigger
+  // clear first, or a small tint wipes out the colors of a bigger
   // group
   const touched = new Set();
   for (const g of COLOR_GROUPS) {

@@ -124,7 +124,7 @@ function wardrobe_resolve_item(string $name): array {
 }
 
 // every clothing key, which is everything except the body and
-// hair sections. "nude" means these and only these - taking her
+// hair sections. "nude" means these and only these. taking her
 // ears and tail off is not getting undressed.
 const WARDROBE_CLOTHING = [
     'shirt', 'hoodie', 'dress', 'dress1', 'skirt', 'pants', 'bra', 'panties',
@@ -304,9 +304,10 @@ function wardrobe_presets(int $userId): array {
 
 // the stored state, with every key present and nothing outside
 // the schema. deliberately NOT wardrobe_canonical_state(): that
-// one calls fail(), which prints a json error and exits, and
-// doing that halfway through an SSE stream leaves the browser
-// holding a half-written reply.
+// one calls fail(), which prints a json error and exits. do that
+// halfway through chat.php's SSE stream (the reply going out
+// token by token) and the browser is left holding a half-written
+// reply.
 function wardrobe_tool_state(int $userId): array {
     $state = wardrobe_state($userId);
     if (!is_array($state)) $state = wardrobe_default_state();

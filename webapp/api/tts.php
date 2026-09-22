@@ -95,8 +95,8 @@ if ($action === 'warm') {
     $body = json_decode($rawBody, true);
     if (!is_array($body) || !tts_valid_id($body['lang'] ?? null)) fail(400, 'invalid_request');
 
-    // Loading a cold language checkpoint can take several seconds. the client
-    // is not waiting on this, so give the sidecar room to finish.
+    // a cold language checkpoint can take several seconds to load.
+    // the client isn't waiting on this one, so let the sidecar finish
     $res = sidecar_call(tts_url() . '/warm', $rawBody, ['Content-Type: application/json'], 120);
     sidecar_check($res, 'tts_unreachable', 'tts_failed');
     sidecar_relay($res);

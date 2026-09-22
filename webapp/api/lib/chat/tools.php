@@ -210,9 +210,9 @@ function chat_run_tool(string $name, array $args, array $ctx, array &$state): st
 
     if ($name === 'change_outfit') {
         $outfit = wardrobe_tool_change($args, (int)$ctx['user']['id'], $ctx['req']['mod_items']);
-        // the browser owns what's on screen, so it gets the change as its
-        // own frame rather than having to parse it back out of the tool
-        // result the model reads
+        // the browser owns what's on screen. so it gets the change
+        // as its own frame, instead of digging it back out of the
+        // tool result that's meant for her
         if ($outfit['apply'] !== null) sse_send(['outfit' => $outfit['apply']]);
         return json_encode($outfit['reply'], JSON_UNESCAPED_UNICODE);
     }

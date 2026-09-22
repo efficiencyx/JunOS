@@ -17,7 +17,8 @@ if [ ! -f "/etc/letsencrypt/live/$DOMAIN/fullchain.pem" ]; then
         || echo "[certbot] Initial issuance failed; nginx will start without a certificate"
 fi
 
-# The renewal loop. certbot looks every 12h and only renews when it is close
+# certbot looks every 12h and only renews when the cert is close
+# to expiry
 while :; do
     sleep 12h
     certbot renew \

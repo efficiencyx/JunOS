@@ -79,7 +79,7 @@ export function patchRenderer() {
           if (op > 0.0001) d.dynamicFlags[i] |= 0x01;
         }
       }
-      // do the overrides BEFORE our sort and Cubism's sort both run
+      // do the overrides before our sort and Cubism's sort both run
       if (d && forcedOrderBelow.length) {
         const ro = d.renderOrders;
         for (const [below, above] of forcedOrderBelow) {

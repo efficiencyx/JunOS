@@ -3,29 +3,30 @@
 // how many MiB the KV cache (the model's memory of the prompt it
 // already read) takes per token at q8_0 on the models we ship.
 // read straight off llama.cpp's own kv_cache size line. rounded
-// UP on purpose, guessing high costs us some context, guessing
-// low costs a partial offload.
+// up on purpose. too high and we lose a bit of context. too low
+// and she gets a partial offload, layers pushed onto the CPU.
 const KV_MIB_PER_TOKEN = 0.2;
 
 const VRAM_RESERVE_MB = 2048;
 
 const CTX_TIERS = [6144, 8192, 12288, 16384];
 
-// a thinking turn used to go out with num_predict -1, meaning "no
-// limit". the client picks think, so any logged-in user could
-// park the runner for the full 600s nginx timeout (or burn
-// openrouter credit) on every turn. 16k is more than any real
-// trace needs and still a ceiling.
+// NOT num_predict -1 ("no limit") on a thinking turn. the client
+// picks think, so any logged-in user could park the runner for
+// the full 600s nginx timeout (or burn openrouter credit) on
+// every turn. 16k is more than any real trace needs and still a
+// ceiling.
 const THINK_MAX_TOKENS = 16384;
 
-// this used to be 128, and 128 was fine before v7. now every row
-// carries a trace, even at <think:low>, so she thinks on EVERY
-// turn. think:false only makes ollama throw the trace away, the
-// tokens still come out of num_predict (a low trace is ~115
-// tokens p50, ~165 max, and it ends with the reply so the reply
-// is paid twice). past the cap she never gets to speak and the
-// browser sees reply_truncated_in_thinking. 512 fits worst-case
-// low plus a long answer and is still a ceiling.
+// 128 is only enough for pre-v7 models. every v7 row carries a
+// trace (her thinking text), even at <think:low>, so she thinks
+// on every turn. think:false only makes ollama throw the trace
+// away, the tokens still come out of num_predict. a low trace is
+// ~115 tokens p50 (the median), ~165 max, and it ends with the
+// reply, so the reply gets Paid twice. past the cap she never
+// gets to speak and the browser sees reply_truncated_in_thinking.
+// 512 fits worst-case low plus a long answer and is still a
+// ceiling.
 const PLAIN_MAX_TOKENS = 512;
 
 // what's left on the card once the weights and a bit of working
@@ -78,18 +79,19 @@ function default_num_ctx(): int {
 }
 
 // how many tokens the window holds, before anything is put in it.
-// zero for openrouter - the model behind it is whatever the user
-// picked and we don't know its window.
+// zero for openrouter, the model behind it is whatever the user
+// picked and we have no idea what its window is.
 function provider_window_tokens(string $provider): int {
     if ($provider === 'llamacpp') return 16384;
     if ($provider === 'openrouter') return 0;
     return default_num_ctx();
 }
 
-// overflow drops the FRONT of the prompt, including the system
-// rules. discard whole oldest turns ourselves, keeping the system
-// and newest turns. budget 4 bytes/token against Gemma's ~3.7,
-// reserving space for the reply and tool results added mid-turn.
+// overflow drops the FRONT of the prompt, system rules included.
+// so we throw out whole oldest turns ourselves and keep the
+// system message and the newest turns. budget is 4 bytes/token
+// against Gemma's ~3.7, minus a reserve for the reply and the
+// tool results that land mid-turn.
 function fit_messages_to_context(array $messages, int $numCtx, int $reserve = 1024): array {
     $budget = $numCtx - $reserve;
     if ($numCtx <= 0 || $budget <= 0 || count($messages) <= 5) return $messages;

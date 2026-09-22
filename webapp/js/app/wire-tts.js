@@ -44,9 +44,9 @@ export async function wireTts() {
     const baseLangs = info.languages || [];
     if (ttsLangRow) ttsLangRow.hidden = baseLangs.length === 0;
     if (!baseLangs.length) { TTS.setLang(''); return ''; }
-    // 'auto' is a fake language that only exists in the client. TTS works
-    // out each reply's language and sends a real id. it's the default so
-    // this just works with zero setup.
+    // 'auto' is a fake language that only exists in the client.
+    // TTS works out each reply's language and sends a real id. it's
+    // the default so this just works with zero setup.
     const langs = [{ id: 'auto', label: 'Auto-detect' }, ...baseLangs];
     const ids = langs.map(l => l.id);
     const def = (preferred && ids.includes(preferred)) ? preferred : 'auto';

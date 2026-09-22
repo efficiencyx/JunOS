@@ -6,8 +6,9 @@
   overflow: hidden;
 }
 
-/* Keep this out of flow so the sidebar and chat stay full
-   height, and the brand stays at the top. */
+/* out of flow on purpose. in flow it pushes the sidebar and
+   chat down, so they stop being full height and the brand
+   isn't at the top anymore. */
 .app-header {
   position: absolute;
   top: 0;

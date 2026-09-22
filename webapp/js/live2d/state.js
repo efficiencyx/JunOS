@@ -23,6 +23,7 @@ export const LERP_TAU_MS = 150;
 export let app = null;
 export let model = null;
 // the Cubism core model, its parts, parameters and drawables
+// (a drawable is one textured mesh of the rig)
 export let raw = null;
 export let paramIndex = null;
 export let paramMin = null;
@@ -48,4 +49,8 @@ export const pendingSequences = [];
 export const forcedPartOpacity = new Map();
 export const forcedDrawableOpacity = new Map();
 
+// tints, drawable opacity and order, rebuilt atlases and the
+// camera transform never go through the parameter array. nothing
+// else tells the renderer the canvas is stale, so everything that
+// touches those has to come through here.
 export function markDirty() { S.needsRender = true; }

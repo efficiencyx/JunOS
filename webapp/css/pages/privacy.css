@@ -1,5 +1,6 @@
-/* boot.css owns the tokens and sets `overflow: hidden` on html/body for the app
-   shell; this is a scrolling document, so it has to be handed back. */
+/* boot.css owns the tokens and sets `overflow: hidden` on
+   html/body for the app shell. this is a scrolling document,
+   so it has to be handed back. */
 html, body.privacy-page {
   height: auto;
   min-height: 100%;

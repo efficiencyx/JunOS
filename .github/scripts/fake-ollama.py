@@ -6,10 +6,10 @@
 #
 # the reply is canned and the same every time. what's under test
 # is chat.php around it: prompt assembly, the tool round trip, the
-# SSE framing, the mood_shift bookkeeping and what lands in the
-# db. every /api/chat request body gets appended to
-# FAKE_OLLAMA_LOG as one json line so the driver can read back
-# exactly what php sent.
+# SSE framing (the event stream php sends the browser), the
+# mood_shift bookkeeping and what lands in the db. every
+# /api/chat request body gets appended to FAKE_OLLAMA_LOG as one
+# json line so the driver can read back exactly what php sent.
 #
 # usage: fake-ollama.py PORT
 import json

@@ -1,14 +1,14 @@
 FROM nginx:1.30.4-alpine
 
-# curl for the healthcheck, openssl for the self signed localhost
-# cert
+# curl for the healthcheck. openssl makes the self signed
+# localhost cert
 RUN apk add --no-cache curl openssl
 
 RUN rm -f /etc/nginx/conf.d/default.conf
 
 COPY webapp/ /var/www/omega/
 
-# nginx has envsubst built in, it fills in *.template files at boot
+# the nginx image runs envsubst on *.template files at boot
 COPY docker/nginx/templates/ /etc/nginx/templates/
 
 # these get included by both templates. keeping them out of a

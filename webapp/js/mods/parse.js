@@ -10,7 +10,7 @@ const luaStr = `'((?:\\\\'|[^'])*)'|"((?:\\\\"|[^"])*)"`;
 const unesc = (s) => (s || '').replace(/\\(['"\\n])/g, (m, c) => c === 'n' ? '\n' : c);
 
 // GetPackedTexture paths tie prefabs to texture folders. folder
-// order is NOT prefab order. parse the Lua, never run it.
+// order is not prefab order. parse the Lua, never run it.
 function parseLua(src) {
   const prefabs = new Map();
   const pf = (v) => {
@@ -27,9 +27,9 @@ for (const m of src.matchAll(/(\w+)\s*\.\s*ColorSlots\s*=\s*\{([^}]*)\}/g)) {
     }
     pf(m[1]).slots = slots;
   }
-  // accept legacy PossibleEquipmentSlots and SlotData, inline or in
-  // a closure with required slots. missing either lets mutually
-  // exclusive items stack.
+  // take legacy PossibleEquipmentSlots and SlotData both, inline
+  // or in a closure with required slots. miss either one and
+  // mutually exclusive items Stack.
   for (const m of src.matchAll(/(\w+)\s*\.\s*PossibleEquipmentSlots\s*=\s*\{\s*'([^']*)'/g)) {
     pf(m[1]).equip = m[2];
   }
@@ -55,7 +55,7 @@ for (const m of src.matchAll(/(\w+)\s*\.\s*ColorSlots\s*=\s*\{([^}]*)\}/g)) {
 }
 
 // a RectInt the way the game writes it. field names change with
-// the serializer, so take x/y/width/height AND the
+// the serializer, so take x/y/width/height and the
 // xMin/yMin/xMax/yMax form.
 function rect(r) {
   if (!r) return null;
@@ -74,8 +74,8 @@ function drawableName(pd, validIds) {
   return pd.Name || pd.name || pd.DrawableName || null;
 }
 
-// only interaction containers fit this model. keep other scenes
-// in IndexedDB, but skip drawing them.
+// only interaction containers fit this model. other scenes still
+// sit in IndexedDB, we just skip drawing them.
 export function parseMod(guid, files) {
   let meta = {};
   let lua = [];
@@ -152,7 +152,7 @@ export function itemDrawables(mod, item) {
           layer: pd.Layer ?? pd.layer ?? pt.Layer ?? pt.layer ?? 0,
           colorIndex: pd.ColorIndex ?? pd.colorIndex ?? -1,
           // game rule, PackedTextureJson.DontIncludeVanillaLayers. when
-          // it's set the default "vanilla" art is NOT drawn under the mod
+          // it's set the default "vanilla" art is not drawn under the mod
           // layers, even if the mod has no layer-0 texture at all.
           dontIncludeVanilla: !!(pt.DontIncludeVanillaLayers ?? pt.dontIncludeVanillaLayers),
           // BypassColorScaler defaults off in exports. applyPass replaces

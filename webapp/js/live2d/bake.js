@@ -2,14 +2,14 @@ import { app, currentValues, forcedDrawableOpacity, markDirty, model, paramIndex
 
 // how tall the model is rendered for a bake, in pixels. the
 // model's bounds run several times taller than anything drawn
-// inside them, so one garment lands on maybe a tenth of this -
+// inside them, so one garment lands on maybe a tenth of this.
 // 2400 is what keeps a cropped tile above 256px and sharp. the
 // extract never reaches the screen, so this has nothing to do
 // with the camera, and it's transient: ~23MB of pixels, one shot
 // at a time.
 const BAKE_HEIGHT = 2400;
 
-// pixi's extract crops to the display object's BOUNDS, and a
+// pixi's extract crops to the display object's bounds, and a
 // Cubism model's bounds are its whole rect no matter which
 // drawables are actually on. so find the ink ourselves: walk the
 // alpha channel for the tightest box holding anything visible.
@@ -30,12 +30,12 @@ function alphaBounds(ctx, w, h) {
 }
 
 // drawableThumb crops the texture atlas by one drawable's UV
-// rect, which is why a skirt tile came out as a single wedge of
-// cloth: a garment is a pile of drawables and the atlas doesn't
-// assemble them. this renders the actual model with everything
-// but the garment forced to zero opacity, and pixi's extract
-// crops to what's left over. so the tile is the item, layered and
-// deformed the way she really wears it.
+// rect (its box on the atlas), so a skirt tile from it is a
+// single wedge of cloth. a garment is a pile of drawables and the
+// atlas doesn't assemble them. this renders the actual model with
+// everything but the garment forced to zero opacity, and
+// alphaBounds crops to what's left over. so the tile is the item,
+// layered and deformed the way she really wears it.
 export function bakeThumb(keepIds, maxSize = 192) {
   if (!app || !model || !raw) return null;
   const keep = keepIds instanceof Set ? keepIds : new Set(keepIds);
@@ -43,14 +43,14 @@ export function bakeThumb(keepIds, maxSize = 192) {
   const savedOpacity = new Map(forcedDrawableOpacity);
   const savedScale = model.scale.x;
   try {
-    // hide the rest and DON'T touch the keepers, in either direction.
-    // forcing them to 1 drags in whatever the pattern match
-    // over-caught - 'dress' also matches Dress1's meshes, so the alt
-    // dress turned up in the plain dress's shot and both tiles came
-    // out identical. clearing them instead is just as wrong: half the
-    // wardrobe (bikini, stockings, ears, hair) is shown BY a forced
-    // opacity, so dropping it hides the very thing being
-    // photographed.
+    // hide the rest and DON'T touch the keepers, in either
+    // direction. forcing them to 1 drags in whatever the pattern
+    // match over-caught. 'dress' also matches Dress1's meshes, so
+    // the alt dress turns up in the plain dress's shot and both
+    // tiles come out identical. clearing them instead is just as
+    // wrong: half the wardrobe (bikini, stockings, ears, hair) is
+    // shown by a forced opacity, so dropping it hides the very
+    // thing being photographed.
     for (const id of raw.drawables.ids) {
       if (!keep.has(id)) forcedDrawableOpacity.set(id, 0);
     }
@@ -58,7 +58,7 @@ export function bakeThumb(keepIds, maxSize = 192) {
     if (unscaled > 0) model.scale.set(BAKE_HEIGHT / unscaled);
     model.updateTransform();
     // every item param eases toward its target over LERP_TAU_MS, and
-    // a bake is ONE frame. so jump the smoothing to the target first,
+    // a bake is one frame. so jump the smoothing to the target first,
     // otherwise the garment is still fading up when the shot goes off
     // and most tiles come back empty.
     for (const [id, target] of targetParams) {

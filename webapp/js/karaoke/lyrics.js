@@ -50,8 +50,9 @@ function parseSylt(buf, off, size) {
   const enc = bytes[0];
   const dec = id3Decoder(enc);
   const wide = enc === 1 || enc === 2;
-  // encoding, language, timestamp format and content type take
-  // six bytes. then comes a terminated content descriptor.
+  // SYLT is ID3's synced lyrics frame. encoding, language,
+  // timestamp format and content type take six bytes, then comes
+  // a null-terminated content descriptor.
   let p = 1 + 3 + 1 + 1;
   p = id3SkipTerm(bytes, p, wide);
   const frags = [];

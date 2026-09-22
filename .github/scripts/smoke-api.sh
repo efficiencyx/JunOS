@@ -10,7 +10,8 @@
 # in CI. it talks to fake-ollama.py, which streams a canned reply
 # and dumps every request it gets, so what's checked is the
 # plumbing around the model: prompt order, the tool round trip,
-# the SSE frames, mood_shift stripping, what hits the db.
+# the SSE frames (the event stream the browser reads),
+# mood_shift stripping, what hits the db.
 set -eu
 
 cd "$(dirname "$0")/../.." || exit 1
@@ -79,8 +80,8 @@ fail() { printf '  FAIL %s\n' "$1"; fails=1; }
 
 echo "router only"
 # nginx answers a bad Host with 444 (no response at all), the
-# router answers
-# 421. same intent, different shape, so it lives here and not in api-checks.
+# router answers 421. same intent, different shape, so it lives
+# here and not in api-checks.
 check_status() {
 	got=$(curl -sS -o /dev/null -w '%{http_code}' "$@" || echo 000)
 	printf '%s' "$got"

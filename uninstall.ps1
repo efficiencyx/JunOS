@@ -8,13 +8,15 @@
 #      chat data)
 #
 # git (and Python, if voice or asset recovery installed it) are
-# left alone - they're general-purpose tools you may use
+# left alone. They are general-purpose tools you may use
 # elsewhere. Remove them yourself from Settings > Apps if you
 # want.
 #
 #   ./uninstall.ps1              # interactive
-#   ./uninstall.ps1 -Yes   # no prompts
-#     Stops services, removes Ollama and deletes this folder.
+#   ./uninstall.ps1 -Yes         # no prompts
+#     Stops services, removes llama.cpp and Ollama if present
+#     (including Ollama's %USERPROFILE%\.ollama model store),
+#     then deletes this folder.
 
 [CmdletBinding()]
 param([switch]$Yes)

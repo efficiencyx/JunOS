@@ -105,7 +105,7 @@ export function decodeOutfitCode(value) {
 
 // returns the slots that actually moved, so callers can skip the
 // expensive parts of applyAll(). a full applyVariants()
-// recomposes EVERY atlas.
+// recomposes every single atlas.
 export function loadPresetState(preset) {
   if (!preset || typeof preset !== 'object') return null;
   const { items = {}, colors: cols = {}, variants = {} } = preset;
@@ -200,8 +200,8 @@ function applyPreview(preset) {
   applyChanged(loadPresetState(preset));
 }
 
-// otherwise sliding the pointer down the list queues one full
-// re-dress per row it crosses. no thank you.
+// 90ms debounce, otherwise sliding the pointer down the list
+// queues one full re-dress per row it crosses. no thank you.
 let previewTimer = null;
 
 export function schedulePreview(preset) {

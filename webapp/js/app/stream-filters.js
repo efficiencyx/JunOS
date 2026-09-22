@@ -64,9 +64,10 @@ export function makeStreamBuffer(onCleanText) {
         const blob = buf.slice(0, end + 1);
         buf = buf.slice(end + 1);
         if (TOOL_RE.test(blob)) {
-          // android's tool protocol. never an action, never something Anon
-          // should see. swallow it here too, the stored history of the early
-          // testers still has these blobs in it and replays through us.
+          // android's tool protocol. never an action, never
+          // something Anon should see. swallow it here too, the
+          // stored history of the early testers still has these
+          // blobs in it and replays through us.
           logAction('info', 'tool marker scartato: ' + blob);
           continue;
         }

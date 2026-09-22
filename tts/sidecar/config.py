@@ -13,8 +13,8 @@ KOKORO_VOICES = [
 
 # pocket-tts voice names pick timbre, not language. each has an
 # embedding for every POCKET_LANGUAGES entry. giovanni, lola,
-# juergen, rafael and estelle retain their non-English speakers'
-# accents.
+# juergen, rafael and estelle keep the accent of their non-English
+# speakers.
 POCKET_DEFAULT = "eve"
 POCKET_VOICES = [
     "alba", "anna", "azelma", "bill_boerst", "caro_davy", "charles", "cosette",
@@ -23,9 +23,10 @@ POCKET_VOICES = [
     "giovanni", "lola", "juergen", "rafael", "estelle",
 ]
 
-# language selects weights via load_model(language=...). offer
-# upstream configs only. french, spanish and german _24l builds
-# have 24 layers. id selects the model, label is UI text.
+# language picks the weights through load_model(language=...).
+# upstream configs only. the french, spanish and german _24l
+# builds are the 24 layer ones. id picks the model, label is just
+# UI text.
 POCKET_DEFAULT_LANG = "english"
 POCKET_LANGUAGES = [
     {"id": "english", "label": "English"},
@@ -40,21 +41,21 @@ POCKET_LANG_IDS = frozenset(lang["id"] for lang in POCKET_LANGUAGES)
 DEFAULT_ENGINE = "kokoro"
 TTS_ENGINES = ("kokoro", "pockettts")
 
-# tts | karaoke. this ONLY changes the pre-warm at startup and
+# tts | karaoke. this only changes the pre-warm at startup and
 # what /health says. every route is mounted in both roles and
 # 503s when the thing it needs isn't there.
 SIDECAR_ROLE = os.environ.get("SIDECAR_ROLE", "tts").strip().lower()
 
-# "demucs" is a FAKE engine. it's not a TTS voice, but shoving it
+# "demucs" is a fake engine. it's not a TTS voice, but shoving it
 # in the same lifecycle lets a separation job kick the TTS
 # engines out while it runs, and vice versa, and it holds
 # state.inflight so the reaper can't yank a model out from under a
 # running job.
 ALL_ENGINES = TTS_ENGINES + ("demucs",)
 
-# keep one TTS engine loaded. switching drops the others. idle
-# unloading uses this timeout, 0 disables it. cold reloads from
-# HF_HOME take a few seconds.
+# one TTS engine loaded at a time, switching drops the others.
+# this is the idle unload timeout, 0 turns it off. a cold reload
+# from HF_HOME takes a few seconds.
 TTS_IDLE_UNLOAD_S = float(os.environ.get("TTS_IDLE_UNLOAD_S", "180"))
 REAP_INTERVAL_S = 20.0
 
@@ -70,7 +71,7 @@ STT_MAX_DURATION_S = float(os.environ.get("STT_MAX_DURATION_S", "120"))
 # docker/tts.Dockerfile explains the pairing.
 STT_LANG = (os.environ.get("STT_LANG", "").strip().lower() or None)
 
-# karaoke sends WHOLE SONGS, not utterances, so it gets its own
+# karaoke sends whole songs, not utterances, so it gets its own
 # much bigger cap. the stems we split out sit in a temp dir per
 # token and go away once both have been fetched, or after this
 # TTL when a client just never comes back.

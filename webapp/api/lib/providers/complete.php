@@ -109,10 +109,11 @@ function generate_chat_title(string $userMessage): ?string {
             // the loudest thing in a short context, so "hi" gets you a chat
             // called "Title Generation". amazing.
             ['role' => 'user', 'content' => $msg],
-            // Qwen3 spends the title budget thinking and returns empty
-            // content. its template leaves off <|im_end|> after a trailing
-            // assistant turn, so prefill a closed think block. think: false
-            // and /no_think do not work here.
+            // Qwen3 spends the title budget thinking and comes back
+            // with empty content. its template leaves off <|im_end|>
+            // after a trailing assistant turn, so we prefill (write the
+            // start of its answer for it) a closed think block.
+            // think: false and /no_think both do nothing here.
             ['role' => 'assistant', 'content' => "<think>\n\n</think>\n\n"],
         ],
         'stream' => false,

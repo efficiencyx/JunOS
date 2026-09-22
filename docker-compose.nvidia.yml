@@ -1,8 +1,8 @@
 services:
-# `count: all` goes through the host's CDI (Container Device
-# Interface) spec. it's written once and goes stale when you add
-# a card, then only hands over some of them. start.sh counts the
-# GPUs itself and asks for that many, taking the legacy path.
+  # `count: all` goes through the host's CDI (Container Device
+  # Interface) spec. it's written once and goes stale when you add
+  # a card, then only hands over some of them. start.sh counts the
+  # GPUs itself and asks for that many, taking the legacy path.
   ollama:
     deploy:
       resources:
@@ -30,16 +30,17 @@ services:
       - LLAMA_ARG_SPLIT_MODE
       - LLAMA_ARG_TENSOR_SPLIT
       - LLAMA_ARG_MAIN_GPU
-# Only the karaoke sidecar gets a GPU; the voice sidecar stays
-# CPU-only by design (see docker/tts.Dockerfile).
+  # only the karaoke sidecar gets a GPU. the voice sidecar stays
+  # CPU-only by design, see docker/tts.Dockerfile
   karaoke:
     build:
       args:
-        # cu124 is gone. every +cu124 torch pins
-        # nvidia-cudnn-cu12==9.1.0.70 and that wheel is off the index
-        # now, so the build dies with a wall of resolver output that
-        # reads like torch itself is missing. Override with
-        # KARAOKE_TORCH_INDEX if your driver is too old for cu128.
+        # cu124 (torch built for CUDA 12.4) is gone. every +cu124
+        # torch pins nvidia-cudnn-cu12==9.1.0.70 and that wheel is
+        # off the index now, so the build dies with a wall of
+        # resolver output that reads like torch itself is missing.
+        # Override with KARAOKE_TORCH_INDEX if your driver is too old
+        # for cu128.
         TORCH_INDEX: "${KARAOKE_TORCH_INDEX:-https://download.pytorch.org/whl/cu128}"
     deploy:
       resources:

@@ -55,11 +55,11 @@ if [ -n "${OLLAMA_MTP:-}" ] && [ -n "$CHAT_MODEL" ]; then
   if ollama pull "$OLLAMA_MTP"; then
     DRAFT_GGUF="$(ollama show --modelfile "$OLLAMA_MTP" | awk '/^FROM /{print $2; exit}')"
     if [ -n "$DRAFT_GGUF" ] && [ -f "$DRAFT_GGUF" ]; then
-      # A word here instead of a number - "auto" is the one people try
-      # - would build a model that refuses to load, so anything
-      # non-numeric falls back to drafting one token. ./mtp-autotune.sh
-      # is what turns auto into a real depth, and it writes a number
-      # into .env when it does.
+      # A word here instead of a number ("auto" is the one people
+      # try) would build a model that refuses to load. so anything
+      # non-numeric falls back to drafting one token.
+      # ./mtp-autotune.sh is what turns auto into a real depth, and
+      # it writes a number into .env when it does.
       DRAFT_N="${OLLAMA_MTP_N_MAX:-4}"
       case "$DRAFT_N" in
         ''|*[!0-9]*) DRAFT_N=1 ;;
@@ -98,12 +98,13 @@ fi
 
 # Warm it up. get the chat model into VRAM NOW so the first
 # message you send doesn't sit through the ~2 min cold load.
-# ONLY with the exact num_ctx php will send. ollama treats a
-# different num_ctx as a different runner and reloads, so a warm
-# with the default 4096 never got reused, and when you'd already
-# sent a message it evicted the runner you were on. php works the
-# context out from OMEGA_NUM_CTX or the card size, we only get the
-# first one here, so no override means no warm.
+# only with the exact num_ctx (context window size) php will
+# send. ollama treats a different num_ctx as a different runner
+# and reloads, so a warm at the default 4096 never gets reused,
+# and if you've already sent a message it evicts the runner you
+# were on. php works the context out from OMEGA_NUM_CTX or the
+# card size, we only see OMEGA_NUM_CTX here, so no override
+# means no warm.
 if [ -n "$CHAT_MODEL" ] && [ "${OMEGA_NUM_CTX:-0}" -gt 0 ] 2>/dev/null; then
   echo "[ollama-entrypoint] pre-warming $CHAT_MODEL at num_ctx $OMEGA_NUM_CTX..."
   curl -s -X POST "http://127.0.0.1:11434/api/generate" \

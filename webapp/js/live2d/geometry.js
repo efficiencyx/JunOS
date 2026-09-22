@@ -115,8 +115,8 @@ function pointInMesh(D, i, p) {
   return false;
 }
 
-// checks a point against certain drawables even when they're hidden, for the
-// model's invisible HitArea* meshes
+// hidden drawables (single meshes of the rig) count too. that's
+// the point, the model's HitArea* meshes are invisible
 export function hitTest(clientX, clientY, ids) {
   if (!model || !raw || !app) return null;
   const p = toModelPoint(clientX, clientY);

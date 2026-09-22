@@ -34,7 +34,8 @@ function chat_request_headers(?string $provider = null): array {
 }
 
 // the MTP model when speculative decoding is on, empty when it's
-// off
+// off. MTP is multi-token prediction, a small drafter guesses a
+// few tokens ahead and the big model only has to check them
 function ollama_mtp_model(): string {
     if (env_str('OLLAMA_MTP') === '') return '';
     return env_str('OLLAMA_MTP_MODEL', 'jun-mtp');
@@ -58,9 +59,9 @@ function display_chat_model(): string {
 }
 
 // so the name coming back from the browser is the plain one. swap
-// it RIGHT before we talk to ollama, otherwise she answers from
-// the twin with no drafter attached and the speedup just quietly
-// evaporates.
+// it right before we talk to ollama, otherwise she answers from
+// the twin with no drafter attached and you lose the speedup
+// without anything telling you.
 function ollama_resolve_chat_model(string $model): string {
     if (ai_provider() !== 'ollama') return $model;
     $mtp = ollama_mtp_model();
@@ -93,11 +94,11 @@ function default_chat_model(): string {
         case 'llamacpp':
             return env_str('LLAMACPP_MODEL_HF', 'efficiencyx/Jun-LoRA-E2B-GGUF:Q4_K_M');
         default:
-            // with MTP on, the ollama entrypoint derives a model carrying the
-            // drafter as a DRAFT layer and chat has to ask for THAT one. the
-            // model named in OLLAMA_MODELS_TO_PULL is the same weights with no
-            // drafter attached, so talking to it silently loses the speedup.
-            // same default name on both sides.
+            // with MTP on, the ollama entrypoint derives a model carrying
+            // the drafter as a DRAFT layer, and chat has to ask for that
+            // one. the model named in OLLAMA_MODELS_TO_PULL is the same
+            // weights with no drafter attached, so talking to it silently
+            // loses the speedup. same default name on both sides.
             $mtp = ollama_mtp_model();
             if ($mtp !== '') return $mtp;
             $configured = ollama_base_chat_model();

@@ -220,7 +220,7 @@ export function playWelcome() {
   const plains = lines.map(line => line.replaceAll('{f_playerName}', player));
 
   // lines advance when the VOICE finishes them, not on a timer. a
-  // fixed pace yanked the text away mid sentence on anything longer
+  // fixed pace yanks the text away mid sentence on anything longer
   // than a few words. with no TTS we guess from the word count
   // instead.
   function showLine(i) {

@@ -53,7 +53,7 @@ data class ChatRequest(
 
 internal fun ChatRequest.validate() {
     // the webapp sends a base64 WAV when it thinks she can hear it.
-    // LiteRT has no audio input here, so refuse BEFORE writing
+    // LiteRT has no audio input here, so refuse before writing
     // anything down and let the client retry through whisper.
     if (audio != null) error("audio_unsupported")
     require(messages.all {
@@ -104,8 +104,8 @@ class ChatEngine(
                 "(OOC stage direction: Anon has gone quiet. React naturally, or use only an avatar action if he asked for silence.)",
             )
         }
-        // context first, his question LAST. Jun is 2B int4, her
-        // weights have FOUR bits. she answers whatever she read most
+        // context first, his question last. Jun is 2B int4, her
+        // weights have four bits. she answers whatever she read most
         // recently, so context after the question gets you an answer
         // to the memories instead of to Anon.
         val tail = messages.lastIndex
@@ -130,7 +130,7 @@ class ChatEngine(
                 }
             }
         } else null
-        // loading pins gigabytes and stalls the main looper. it MUST
+        // loading pins gigabytes and stalls the main looper. it has to
         // finish before the foreground service starts, android kills
         // the process if startForeground() is more than 5s late.
         try {
@@ -186,7 +186,7 @@ class ChatEngine(
                     }
                     // NOT a "tool" turn. Jun never saw that role in training,
                     // and given one she comes back with nothing at all. put
-                    // the result in a user turn, something she DID see.
+                    // the result in a user turn, something she did see.
                     messages += ChatMessage("user", "(Tool result, ${call.name}: $result)")
                 }
                 if (silenced || fled != null) break
@@ -380,7 +380,7 @@ class ChatEngine(
     // 4096 total context, 768 reserved for her reply. the system
     // prompt and live context can eat most of the rest. past that the
     // runtime just lops the front off, so we drop whole old turns
-    // instead. system message + the turn she must answer ALWAYS stay.
+    // instead. system message + the turn she must answer always stay.
     private fun trimToBudget(messages: MutableList<ChatMessage>) {
         fun estimate() = messages.sumOf { it.content.length } / 4
         while (estimate() > PROMPT_TOKEN_BUDGET && messages.size > 2) messages.removeAt(1)
@@ -423,7 +423,7 @@ internal class ToolStreamFilter {
                 if (char == ']' && depth == 0 && !inString) reset()
             } else if (marker) {
                 held.append(char)
-                // hold ONLY while the text can still turn into "[TOOL:". her
+                // hold only while the text can still turn into "[TOOL:". her
                 // [A:emote|happy] tags go straight out, so the JS filter
                 // sees roleplay tags without stalling the stream.
                 if (!pastPrefix()) {
@@ -493,8 +493,9 @@ internal class ToolStreamFilter {
     }
 
     // fails closed ON PURPOSE. a bad marker costs one tool call. if
-    // it prints, Jun gets JSON in her mouth, Room saves it, and then
-    // every single history load replays it. forever.
+    // it prints, Jun gets JSON in her mouth, Room (the app's sqlite
+    // layer) saves it, and then every single history load replays
+    // it. forever.
     private fun dropHeld(why: String) {
         Log.w("ToolStreamFilter", "dropped $why marker: ${held.take(200)}")
         reset()

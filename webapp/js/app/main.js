@@ -125,9 +125,9 @@ export async function boot(me) {
   // devhud.js owns Ctrl+Shift+D, so only admins get that module
   if (currentUser?.role === 'admin') setDevHud(await import('./devhud.js?v=1'));
   startSkybox();
-  // both of these set up a global that loads late, so they can't
-  // run at module scope anymore. they'd just silently do nothing
-  // before the load.
+  // marked is a global and app.js's loadScripts only brings it in
+  // side by side with this module. at module scope it's not there
+  // yet, boot() runs once both are done.
   marked.setOptions({ gfm: true, breaks: true });
   ModelTouch.init({
     sendEvent: sendTouchEvent,
@@ -203,9 +203,10 @@ export async function boot(me) {
   // a trip is the same session. time out there is NOT an absence.
   if (!fromTrip) await fetchWelcome();
   reportActivity(true);
-  // fetch gauges before Live2D.init so the empty-state greeting
-  // does not wait on .moc3 with neutral values. setMood can park
-  // values before init, and startIdle applies the baseline.
+  // gauges get fetched before Live2D.init, or the empty-state
+  // greeting sits on neutral values waiting for the .moc3 (the
+  // Cubism model file) to load. setMood can park values before
+  // init, startIdle applies the baseline.
   loadMood();
 
   Actions.setLogger(logAction);

@@ -20,7 +20,8 @@ export function listDrawables() {
 }
 
 // a variant only replaces its own UV region, the patch of the
-// shared atlas this drawable reads from
+// shared atlas (the big sheet every part's texture lives on)
+// that this drawable, one mesh of the rig, reads from
 const _texOverride = new Map();
 const uvRect = new Map();
 const _baseCanvas = [];
@@ -82,7 +83,7 @@ function _loadImg(url) {
 // reads costs a flush and a pull back over the bus, ~29 of them
 // per mod recomposite. willReadFrequently keeps them in system
 // memory, where the reads are a memcpy. the option only counts on
-// the FIRST getContext for a canvas, later calls hand back the
+// the first getContext for a canvas, later calls hand back the
 // context that already exists and ignore it.
 const ctx2d = (c) => c.getContext('2d', { willReadFrequently: true });
 
@@ -251,7 +252,7 @@ function recompositeTexture(texIndex, dirtyIds) {
   for (const [id, entry] of _texOverride) {
     const r = uvRect.get(id);
     if (!r || r.tex !== texIndex || !entry) continue;
-    // Cubism counts v from the BOTTOM, so the canvas origin has to flip
+    // Cubism counts v from the bottom, so the canvas origin has to flip
     active.push({ id, entry, x: r.u0 * W, yTop: (1 - (r.v0 + r.h)) * H, w: r.w * W, h: r.h * H });
   }
   let boxes = null;
@@ -353,7 +354,7 @@ function recompositeTexture(texIndex, dirtyIds) {
 }
 
 // atlas recomposites are async and every caller fires them
-// without awaiting, which is fine on screen - the frame after the
+// without awaiting, which is fine on screen, the frame after the
 // load just looks right. it is NOT fine for anything that reads
 // pixels back, so keep a tail of the in-flight work for those
 // callers to wait on. see Live2D.bakeThumb.
@@ -400,7 +401,7 @@ async function _setDrawableTextures(map) {
       if (prev && prev.key === key && prev.overlay === overlay &&
           prev.alphaClip === alphaClip && prev.fullClear === fullClear &&
           prev.baseTint === baseTint && prev.straightAlpha === straightAlpha) return;
-      // one bad image must NOT kill the whole batch, the other overrides
+      // one bad image must not kill the whole batch, the other overrides
       // still have to land and get drawn
       let img = img0;
       if (!img) {

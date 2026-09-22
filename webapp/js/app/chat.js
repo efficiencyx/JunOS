@@ -163,9 +163,10 @@ export function sendAudioFromVoice(b64, onUnsupported) {
       entry.content = text;
       bubble.textContent = '🎤 ' + text;
       if (convId == null) return;
-      // chat.php inserts the <audio> row before it starts streaming,
-      // whisper on CPU is slower than that, but a 404 here just means
-      // it wasn't yet. one retry covers it.
+      // chat.php inserts the <audio> row before it starts
+      // streaming, and whisper on CPU is almost always slower than
+      // that. a 404 here just means the row isn't there yet, one
+      // retry covers it.
       const post = () => fetch(`api/conversations.php?action=set_audio_text&id=${encodeURIComponent(convId)}`, {
         method: 'POST',
         credentials: 'same-origin',
@@ -177,10 +178,10 @@ export function sendAudioFromVoice(b64, onUnsupported) {
   };
 }
 
-// she called enter_shop / enter_karaoke. the page flips once her
-// line is done playing, so the trip doesn't guillotine her
-// mid-sentence. the floor is for TTS off, so the line is at least
-// readable before it's gone.
+// she called enter_shop / enter_karaoke / go_out_to_eat. the page
+// flips once her line is done playing, so the trip doesn't
+// guillotine her mid-sentence. the 1.5s floor is for TTS off, so
+// the line is at least readable before it's gone.
 function leaveFor(where) {
   const href = { karaoke: 'karaoke.html', date: 'date.html' }[where] || 'wardrobe.html';
   const t0 = Date.now();

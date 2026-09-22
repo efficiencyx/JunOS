@@ -3,9 +3,9 @@
 // first, so this stays two deep instead of putting seventeen
 // files in a row.
 //
-// Classic scripts only. a module needs type="module", and s.async
-// = false doesn't order it against these anyway, so app.js
-// imports live2d.js itself.
+// Classic scripts only. a module needs type="module", and
+// `s.async = false` doesn't order it against these anyway. so
+// modules come in through import, never through here.
 
 export function loadScripts(groups) {
   const load = (src) => new Promise((resolve, reject) => {
