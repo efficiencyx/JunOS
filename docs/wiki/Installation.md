@@ -225,7 +225,7 @@ From the terminal, in the folder above `JunOS` (that's your home folder unless y
 
 Add `sudo` in front if you said no to the docker group.
 
-Every start prints which card she landed on, like `ollama is running on: NVIDIA GeForce RTX 3060 (cuda, 12.0 GiB)`. If that line says CPU and you have a card, go to the section for your card below.
+Every start prints which card she landed on, like `ollama is running on: NVIDIA GeForce RTX 3060 (cuda, 12.0 GiB)`. If it says `CPU. no GPU at all, ollama gave up on the card` and you have a card, go to the section for your card below.
 
 ### Uninstalling on Linux
 
@@ -285,6 +285,13 @@ Anything else, or something went wrong: NVIDIA's own guide is at <https://docs.n
 ```
 
 The start prints `GPU detected: nvidia` and, a few seconds later, `ollama is running on:` with your card's name. If it warns `NVIDIA selected but nvidia-smi not found`, step 1 isn't done.
+
+**`nvidia-smi` works but she still lands on the CPU?** Then the container got a stale device list. The toolkit writes one to `/etc/cdi/nvidia.yaml`, and one of the device numbers in it can change between reboots; when it's out of date CUDA fails to start inside the container and Ollama falls back to the CPU. The start prints a hint when that happens. Regenerate the file, then restart her:
+
+```sh
+sudo nvidia-ctk cdi generate --output=/etc/cdi/nvidia.yaml
+./JunOS/start.sh restart
+```
 
 **Check it stuck:** `docker exec omega-ollama ollama ps` after your first message. `100% GPU` in the `PROCESSOR` column is what you want. Anything less means part of her is on the CPU, usually because the card is too small for Jun's brain that was picked; see [Picking a smaller model](#picking-a-different-model).
 
@@ -422,7 +429,7 @@ Run the same one-liner from Step 3 / Step 4 again. It finds the existing install
 | `Docker isn't reachable yet` (Linux) | Docker was just installed, or the group change needs a new login | Log out and in, then `./JunOS/start.sh` |
 | `refusing to expose login and chat over plain HTTP` | You set `BIND_ADDR` but not the insecure-HTTP line | Add `OMEGA_ALLOW_INSECURE_PUBLIC_HTTP=1` to `.env`, or put `BIND_ADDR` back to `127.0.0.1` |
 | `NVIDIA selected but nvidia-smi not found` | Driver or container toolkit missing | [NVIDIA](#nvidia) steps 1 and 2 |
-| `ollama is running on:` names the CPU, you have a card | Docker can't see the card | NVIDIA: toolkit. AMD: `HSA_OVERRIDE_GFX_VERSION`. Then `./JunOS/start.sh restart` |
+| `ollama is running on:` says CPU, you have a card | Docker can't see the card | NVIDIA: toolkit, and if `nvidia-smi` works, [regenerate the CDI file](#on-linux). AMD: `HSA_OVERRIDE_GFX_VERSION`. Then `./JunOS/start.sh restart` |
 | `ollama ps` shows `45% GPU` or similar | The model is too big for the card | Pick a smaller row from the model table or cope with slow generation. |
 | Her body is not here! | Assets weren't extracted | ["Installing" her body later](#installing-her-body-later) |
 | The page loads, the first reply takes forever | Model still downloading or warming up | `./JunOS/start.sh logs ollama` on Linux, `JunOS\runtime\logs\ollama.err.log` on Windows. Wait for it to finish once |
