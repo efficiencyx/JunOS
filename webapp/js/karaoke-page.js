@@ -22,16 +22,14 @@ async function main() {
     const anchor = Live2D.faceAnchor();
     if (!anchor || !anchor.mouth) return;
     const bounds = room.getBoundingClientRect();
-    const width = Math.max(14, Math.min(34, anchor.modelH * .038));
-    const top = anchor.mouth.y - width * .4;
+    const height = anchor.modelH * .24;
+    const width = height * 120 / 260;
     const floor = bounds.top + bounds.height * .9;
-    mic.hidden = top < bounds.top || top > floor - width * 2
-      || anchor.mouth.x < bounds.left || anchor.mouth.x > bounds.right;
-    mic.style.left = (anchor.mouth.x + width * .15) + 'px';
-    mic.style.top = top + 'px';
+    mic.hidden = anchor.mouth.x < bounds.left || anchor.mouth.x > bounds.right;
+    mic.style.left = (anchor.mouth.x - width / 2) + 'px';
+    mic.style.top = (floor - height) + 'px';
     mic.style.width = width + 'px';
-    mic.style.height = (floor - top) + 'px';
-    mic.style.setProperty('--mic-head', (width * 1.2) + 'px');
+    mic.style.height = height + 'px';
   }
 
   document.addEventListener('visibilitychange', () => {
@@ -56,7 +54,7 @@ async function main() {
   TripLoader.setStage('Walking to the lounge');
   Scene.inject('.music-room', 'scene/lounge.svg?v=4');
   Scene.inject('.music-room-front', 'scene/lounge-front.svg?v=2');
-  Scene.inject('#karaokeMic .mic-head', 'scene/props/mic-head.svg');
+  Scene.inject('#karaokeMic', 'scene/props/desk-mic.svg?v=1');
 
   await Prefs.pullFromServer();
   const storedVolume = parseFloat(localStorage.getItem('audio.volume') || '1');
