@@ -195,9 +195,8 @@
   function renderMenu() {
     const h = her();
     document.title = meal === 'lunch' ? 'Lunch for two' : 'Dinner for two';
-    document.getElementById('mealLabel').textContent = meal === 'lunch' ? 'Lunch · A sunny little corner' : 'Dinner · Just the two of you';
     document.getElementById('menuNames').textContent = `${window.Names ? Names.getPlayer() : 'Anon'} & ${h}`;
-    document.getElementById('menuDate').textContent = new Date().toLocaleDateString(undefined, { day: 'numeric', month: 'long', year: 'numeric' });
+    document.getElementById('menuDate').textContent = `${meal === 'lunch' ? 'Lunch' : 'Dinner'} · ${new Date().toLocaleDateString(undefined, { day: 'numeric', month: 'long', year: 'numeric' })}`;
     document.getElementById('menuPlace').textContent = PLACE[meal];
     document.getElementById('menuHint').textContent = hintText();
     let course = '';

@@ -25,10 +25,6 @@ html #stage, html.phone-ui #stage { position: fixed; min-height: 0; inset: 16% v
 .mic-base { position: absolute; bottom: 0; left: -60%; width: 220%; height: 15px; border-radius: 50%; border: 1px solid #79638c; background: radial-gradient(ellipse at 50% 20%, #7e698c, #1a1223 70%); box-shadow: 4px 4px 4px #0005; }
 .karaoke-page-back { position: fixed; top: max(22px, env(safe-area-inset-top)); left: 28px; z-index: 60; color: #c8b5d8; font-size: 11px; text-decoration: none; }
 .karaoke-page-back:hover { color: #f1dcff; }
-.music-heading { position: fixed; top: 65px; left: 5%; z-index: 45; pointer-events: none; }
-.music-eyebrow { display: block; color: var(--accent); font-size: 9px; font-weight: 500; text-transform: uppercase; letter-spacing: .18em; }
-.music-heading h1 { margin: 6px 0; font: 400 clamp(28px, 3.4vw, 48px)/1.1 var(--serif); color: var(--fg); letter-spacing: -.035em; }
-.music-heading em { color: var(--accent); }
 .room-session { position: fixed; z-index: 45; bottom: 18px; width: calc(100% - var(--karaoke-panel)); display: flex; justify-content: center; align-items: center; gap: 12px; color: #bba6ce; font-size: 9px; letter-spacing: .15em; text-transform: uppercase; pointer-events: none; }
 .room-equalizer { display: flex; gap: 3px; height: 15px; align-items: center; }
 .room-equalizer i { width: 2px; height: 3px; border-radius: 2px; background: var(--accent); }
@@ -62,13 +58,39 @@ body.karaoke-mode #karaokeOverlay { display: block; }
 #karaokeStatus { position: absolute; bottom: -19px; left: 0; width: 100%; transform: none; text-align: center; font-size: 10px; }
 .karaoke-score { padding: 12px; }
 .karaoke-score-list { max-height: 120px; }
+/* singing is a read-the-words activity, and the words were living
+   in a 37vw side panel with a static lounge taking the other 63%.
+   once a song is loaded the panel drops to a band across the bottom
+   and the lyrics get the room. :has() so the scene can react to a
+   data-view that lives on the overlay, not on body - without it the
+   layout just stays as it was, which still works. */
+html #karaokeOverlay[data-view="stage"] {
+  inset: auto 0 0 0;
+  width: 100%;
+  height: auto;
+}
+[data-view="stage"] #karaokeStage {
+  height: auto;
+  max-height: 64dvh;
+  gap: 14px;
+  padding: 22px clamp(16px, 6vw, 90px) calc(16px + env(safe-area-inset-bottom));
+  border: 0;
+  border-top: 1px solid var(--border-2);
+  border-radius: 18px 18px 0 0;
+  background: linear-gradient(#19141f00, #19141ff2 16%);
+}
+[data-view="stage"] .karaoke-lyrics { text-align: center; font-size: clamp(24px, 3.2vw, 44px); }
+[data-view="stage"] .karaoke-turn { align-self: center; }
+[data-view="stage"] .karaoke-controls { width: 100%; max-width: 640px; margin: 0 auto; }
+[data-view="stage"] #karaokeStatus { bottom: auto; top: -18px; }
+body:has(#karaokeOverlay[data-view="stage"]) .music-room { right: 0; }
+body:has(#karaokeOverlay[data-view="stage"]) #karaokeOverlayClose { right: max(18px, env(safe-area-inset-right)); }
+html body:has(#karaokeOverlay[data-view="stage"]) #stage { inset: 6% 0 34% 0; }
+
 @media (max-width: 760px) {
   #karaokeOverlayClose { right: 18px; }
   .music-room { right: 0; bottom: var(--karaoke-sheet); }
   html #stage, html.phone-ui #stage { inset: 40px 0 calc(var(--karaoke-sheet) + 18px); }
-  .music-heading { top: max(42px, env(safe-area-inset-top)); left: 18px; }
-  .music-heading h1 { font-size: 24px; }
-  .music-heading .music-eyebrow { display: none; }
   .karaoke-page-back { top: max(14px, env(safe-area-inset-top)); left: 18px; font-size: 10px; }
   .room-session { display: none; }
   .karaoke-page-status { top: auto; bottom: 20%; left: 18px; right: 18px; width: auto; }
@@ -86,9 +108,6 @@ body.karaoke-mode #karaokeOverlay { display: block; }
   .music-room { right: var(--karaoke-panel); bottom: 0; }
   html #stage, html.phone-ui #stage { inset: 25px var(--karaoke-panel) 20px 0; }
   html #karaokeOverlay { inset: 8px 8px 18px auto; width: calc(var(--karaoke-panel) - 16px); height: auto; }
-  .music-heading { top: 42px; }
-  .music-heading h1 { font-size: 24px; }
-  .music-heading .music-eyebrow { display: none; }
   .karaoke-menu-body, .karaoke-assign-body { padding: 16px; gap: 14px; }
   #karaokeStage { padding: 16px; gap: 10px; }
   .karaoke-lyrics { min-height: 40px; }

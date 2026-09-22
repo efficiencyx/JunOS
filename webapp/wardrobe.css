@@ -513,13 +513,6 @@ body.wd-over-worn-item { cursor: grab; }
 .fitting-curtains.closed .curtain { width: 50.5%; }
 .fitting-curtains.closed .curtain-left { clip-path: polygon(0 0, 100% 0, 100% 41%, 100% 69%, 100% 100%, 0 100%); }
 .fitting-curtains.closed .curtain-right { clip-path: polygon(0 0, 100% 0, 100% 100%, 0 100%, 0 69%, 0 41%); }
-.fitting-title { position: fixed; z-index: 83; left: 5%; top: max(34px, env(safe-area-inset-top)); pointer-events: none; color: var(--fg); }
-.eyebrow { font-size: 9px; text-transform: uppercase; letter-spacing: .2em; color: #b9a6c9; }
-.fitting-title h1 { margin: 6px 0 8px; font: 400 clamp(32px, 3.3vw, 50px)/1.1 var(--serif); letter-spacing: -.035em; }
-.fitting-title h1 em { color: var(--accent); }
-.fitting-title p { margin: 0; font: italic 14px var(--serif); color: #b9accb; }
-.fitting-note { position: fixed; bottom: 54px; left: 0; width: calc(100% - var(--panel-w)); text-align: center; font: italic 14px var(--serif); color: #c9b5d9; pointer-events: none; }
-body.looks-open .fitting-title, body.looks-open .fitting-note { visibility: hidden; }
 #stage .wardrobe-reaction-name { background: #5d3e75; border-color: #dfc3fa; }
 #stage .wardrobe-reaction-text { background: #241a32; color: #e8e4f0; font-weight: 500; }
 .wd-section::after { content: ""; flex: 1; height: 1px; background: #c4a0f026; }
@@ -536,10 +529,6 @@ body.looks-open .fitting-title, body.looks-open .fitting-note { visibility: hidd
   .wd-title { font-size: 32px; }
 }
 @media (max-width: 900px) {
-  .fitting-title { top: max(14px, env(safe-area-inset-top)); left: 20px; }
-  .fitting-title h1 { font-size: 25px; }
-  .fitting-title p, .fitting-note { display: none; }
-  .fitting-title .eyebrow { font-size: 8px; }
   .curtain { width: 11%; }
   #stageStatus { left: 14px; font-size: 9px; }
   html.wd-portrait .fitting-room, html.wd-portrait .fitting-curtains { right: 0; bottom: var(--panel-h); }

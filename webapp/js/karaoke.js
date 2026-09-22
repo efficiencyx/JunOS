@@ -34,7 +34,6 @@ window.Karaoke = (function () {
   let pendingId3 = null;
   let pendingLrclib = null;
   let splitPicks = null;
-  let setupStep = 0;
   let sepAbort = null;
   let clockTimer = null, clockStartedAt = 0, clockEta = null;
 
@@ -113,7 +112,10 @@ window.Karaoke = (function () {
     if (load) load.disabled = b;
     const setup = $('karaokeSetup');
     if (setup) setup.setAttribute('aria-busy', b ? 'true' : 'false');
-    document.querySelectorAll('[data-karaoke-back]').forEach(button => { button.disabled = b; });
+    // everything on the one setup screen locks while a song is
+    // being separated, not just the button that started it
+    document.querySelectorAll('.karaoke-mode-chip, #karaokeLyricsBtn, #karaokeLyricsAuto')
+      .forEach(button => { button.disabled = b; });
     if (!b) stopClock();
   }
 
@@ -186,27 +188,14 @@ window.Karaoke = (function () {
     el.textContent = `${modes[mode]} · ${pendingLyrics ? pendingLyrics.name : 'automatic lyrics'}`;
   }
 
-  function setSetupStep(next) {
-    setupStep = Math.max(0, Math.min(2, next));
-    document.querySelectorAll('[data-karaoke-step]').forEach(step => {
-      step.hidden = Number(step.dataset.karaokeStep) !== setupStep;
-    });
-    document.querySelectorAll('[data-karaoke-step-dot]').forEach(dot => {
-      const index = Number(dot.dataset.karaokeStepDot);
-      dot.classList.toggle('active', index === setupStep);
-      dot.classList.toggle('done', index < setupStep);
-    });
-    if (setupStep === 2) updateSetupSummary();
-  }
-
   function setLyricsChoice(choice) {
-    const auto = $('karaokeLyricsAuto');
+    const clear = $('karaokeLyricsAuto');
     const file = $('karaokeLyricsBtn');
-    if (auto) auto.classList.toggle('selected', choice === 'auto');
+    if (clear) clear.hidden = choice !== 'file';
     if (file) file.classList.toggle('selected', choice === 'file');
     if (choice === 'auto') {
       pendingLyrics = null;
-      setLyricsSrc('automatic detection');
+      setLyricsSrc('');
     }
     updateSetupSummary();
   }
@@ -782,7 +771,6 @@ window.Karaoke = (function () {
     setStatus('');
     setBusy(false);
     setLyricsChoice('auto');
-    setSetupStep(0);
   }
 
   async function startRecording() {
@@ -1212,13 +1200,6 @@ window.Karaoke = (function () {
     const sel = $('karaokeModeSel');
     if (sel) sel.querySelectorAll('[data-mode]').forEach(b => b.addEventListener('click', () => setMode(b.dataset.mode)));
     setMode(mode);
-
-    document.querySelectorAll('[data-karaoke-next]').forEach(button => {
-      button.addEventListener('click', () => setSetupStep(setupStep + 1));
-    });
-    document.querySelectorAll('[data-karaoke-back]').forEach(button => {
-      button.addEventListener('click', () => setSetupStep(setupStep - 1));
-    });
 
     const lyricsAuto = $('karaokeLyricsAuto');
     if (lyricsAuto) lyricsAuto.addEventListener('click', () => setLyricsChoice('auto'));

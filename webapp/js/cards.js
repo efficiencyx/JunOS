@@ -192,7 +192,6 @@ window.Cards = (function () {
       <button class="voice-overlay-btn cards-close" type="button" aria-label="Leave the table" title="Leave the table">
         <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
       </button>
-      <header class="cards-heading"><span>JUN OS · CARD ROOM</span><h1>Blackjack<span aria-hidden="true"> ♠</span></h1></header>
       <div class="cards-tally"></div>
       <div class="cards-hand cards-her"><div class="cards-label"><span class="cards-who"></span> <span class="cards-val"></span></div><div class="cards-row"></div></div>
       <div class="cards-felt">
