@@ -67,7 +67,8 @@ how to report something you find.
   the tools get called with.
 * Prompt injection through the web search and lyrics tools. A page can tell her
   things. The worst a tool call can do is scoped to your own account: save a
-  note, change her outfit, open the shop or karaoke page after a reply,
+  note, change her outfit, open the shop, karaoke, restaurant or card table
+  after a reply,
   go quiet for a turn, or walk out on you (which, with
   `FLEE_BANS=on`, locks *your* account out of chat for 5-30 minutes). That
   limit is what actually holds, not her judgment.
@@ -149,7 +150,8 @@ Discord: effx__
 
 * `omega.sqlite` - accounts, password hashes, session hashes, conversations and
   every message, rolling summaries, relationship scores, wardrobe state and
-  saved looks, the welcome queue, and the walk-out lockouts (`user_bans`).
+  saved looks, the welcome queue, the walk-out lockouts (`user_bans`), and
+  the open outing grant (`trips`).
 * `memory/user-<id>/` - encrypted category notes, `journal.md` and `meta.json`.
   The filenames keep their Markdown/JSON extensions; their stored contents
   are ciphertext after encryption, not directly editable documents.
