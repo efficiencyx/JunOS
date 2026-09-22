@@ -12,6 +12,7 @@ window.Karaoke = (function () {
   const GAIN_RAMP = 0.05;
 
   let active = false;
+  let opener = null;
   let hooks = {};
   let healthCache = null;
 
@@ -1152,6 +1153,16 @@ window.Karaoke = (function () {
     updateSetupSummary();
   }
 
+  const chrome = () => document.querySelectorAll('.chat-panel, .conv-sidebar, .app-header');
+
+  function focusPanel() {
+    const ov = overlay();
+    if (!ov) return;
+    const panel = [...ov.children].find(el => !el.hidden && el.querySelector('button, [href], input'));
+    const target = panel && panel.querySelector('button:not([hidden]), [href], input:not([hidden])');
+    (target || ov.querySelector('#karaokeOverlayClose'))?.focus();
+  }
+
   async function enter() {
     if (active) return true;
     const h = await health();
@@ -1160,10 +1171,13 @@ window.Karaoke = (function () {
       return false;
     }
     active = true;
+    opener = document.activeElement;
+    for (const el of chrome()) el.setAttribute('inert', '');
     const ov = overlay();
     if (ov) { ov.hidden = false; void ov.offsetHeight; }
     document.body.classList.add('karaoke-mode');
     resetPanels();
+    focusPanel();
     const hint = $('karaokeDeviceHint');
     if (hint) hint.textContent = h.device === 'cpu' ? 'CPU - separation is slow' : 'GPU ⚡';
     if (window.Live2D) Live2D.setCameraPreset(hooks.cameraPreset || 'face');
@@ -1176,6 +1190,9 @@ window.Karaoke = (function () {
     active = false;
     stopPlayback();
     document.body.classList.remove('karaoke-mode');
+    for (const el of chrome()) el.removeAttribute('inert');
+    if (opener && opener.isConnected) opener.focus();
+    opener = null;
     const ov = overlay();
     if (ov) setTimeout(() => { if (!active) ov.hidden = true; }, 300);
     if (window.Live2D) Live2D.setCameraPreset('default');

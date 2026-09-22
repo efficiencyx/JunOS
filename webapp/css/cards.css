@@ -98,6 +98,10 @@ html body.cards-mode #stage { position: fixed; inset: -16dvh 0 16dvh; width: 100
 .cards-actions button { min-width: 104px; min-height: 44px; padding: 10px 22px; border: 1px solid #d8b8756b; border-radius: 6px; background: #12372e; color: var(--table-ink); font-size: 13px; box-shadow: 0 3px 0 #10251c; }
 .cards-actions .cards-hit, .cards-actions .cards-next { background: var(--table-accent); border-color: var(--table-accent); color: #2e2414; }
 .cards-actions button:hover:not(:disabled) { background: #47644a; color: #fff; border-color: #f4dda5; }
+/* the generic hover above outranks the gold on .cards-hit, so the
+   primary button went muted green the moment you pointed at it */
+.cards-actions .cards-hit:hover:not(:disabled),
+.cards-actions .cards-next:hover:not(:disabled) { background: #e9cd8d; color: #2e2414; border-color: #f4dda5; }
 .cards-actions button:disabled { opacity: .4; cursor: default; box-shadow: none; }
 .cards-actions button:focus-visible, .cards-close:focus-visible { outline: 2px solid #f4dda5; outline-offset: 4px; }
 .cards-actions button[hidden] { display: none; }
