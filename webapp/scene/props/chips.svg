@@ -8,9 +8,6 @@
     <stop offset="0" stop-color="#ffffff" stop-opacity=".18"/><stop offset="1" stop-color="#000000" stop-opacity=".35"/>
   </linearGradient>
 </defs>
-<g id="ch-stack">
-  <ellipse cx="0" cy="0" rx="26" ry="9"/>
-</g>
 <!-- back stack, greens -->
 <g transform="translate(40 74)">
   <g fill="#2d5f49" stroke="#173528" stroke-width="1.4">
@@ -27,9 +24,9 @@
   </g>
   <ellipse cy="-14" rx="25" ry="8.5" fill="url(#ch-edge)"/>
   <ellipse cy="-14" rx="14" ry="4.5" fill="none" stroke="#f0ddc4" stroke-width="2" stroke-dasharray="5 4"/>
-  <g transform="rotate(-24 112 -26)">
-    <ellipse cx="112" cy="-26" rx="25" ry="15" fill="#8e3b3a" stroke="#4d1b1b" stroke-width="1.4"/>
-    <ellipse cx="112" cy="-26" rx="14" ry="8" fill="none" stroke="#f0ddc4" stroke-width="2" stroke-dasharray="5 4"/>
+  <g transform="rotate(-24 18 -24)">
+    <ellipse cx="18" cy="-24" rx="25" ry="15" fill="#8e3b3a" stroke="#4d1b1b" stroke-width="1.4"/>
+    <ellipse cx="18" cy="-24" rx="14" ry="8" fill="none" stroke="#f0ddc4" stroke-width="2" stroke-dasharray="5 4"/>
   </g>
 </g>
 <!-- front, two blacks -->
