@@ -6,7 +6,12 @@
 body { background: var(--bg); overflow: hidden; }
 [hidden] { display: none !important; }
 .music-room { position: fixed; inset: 0 var(--karaoke-panel) 0 0; overflow: hidden; background: #0d0b14; --vocal-level: 0; }
-.music-room svg { display: block; width: 100%; height: 100%; }
+/* the room scales off the HEIGHT, same as Jun does. slice scaled
+   it off the width, so folding the panel away zoomed the room 1.3x
+   (1.9x at 1080p) while she stayed put, tiny girl giant tv. the
+   square box + overflow shows the art lounge.svg draws past its
+   viewBox, good to ~2.4:1 */
+.music-room svg { display: block; position: absolute; left: 50%; height: 100%; width: auto; aspect-ratio: 1; transform: translateX(-50%); overflow: visible; }
 html #stage, html.phone-ui #stage { position: fixed; min-height: 0; inset: 16% var(--karaoke-panel) 8% 0; width: auto; height: auto; z-index: 40; }
 .stage-microphone { position: fixed; z-index: 44; pointer-events: none; width: 30px; height: 300px; }
 .mic-head { position: absolute; inset: 0 0 auto; height: var(--mic-head, 40px); }
@@ -75,7 +80,7 @@ html #karaokeOverlay[data-view="stage"] {
 [data-view="stage"] #karaokeStatus { bottom: auto; top: -18px; }
 body:has(#karaokeOverlay[data-view="stage"]) .music-room { right: 0; }
 body:has(#karaokeOverlay[data-view="stage"]) #karaokeOverlayClose { right: max(18px, env(safe-area-inset-right)); }
-html body:has(#karaokeOverlay[data-view="stage"]) #stage { inset: 6% 0 34% 0; }
+html body:has(#karaokeOverlay[data-view="stage"]) #stage { inset: 16% 0 8% 0; }
 
 @media (max-width: 760px) {
   #karaokeOverlayClose { right: 18px; }
