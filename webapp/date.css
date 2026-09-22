@@ -1,11 +1,9 @@
+@import url("css/subpage.css?v=1");
 :root {
-  color-scheme: dark;
-  --serif: "Iowan Old Style", "Palatino Linotype", Palatino, Georgia, serif;
   --cream: #f3e9d5;
   --ink: #392d28;
   --wine: #773b43;
   --muted-ink: #796859;
-  --script: "Snell Roundhand", "Edwardian Script ITC", "URW Chancery L", "Brush Script MT", "Segoe Script", var(--serif);
 }
 * { box-sizing: border-box; }
 [hidden] { display: none !important; }
@@ -36,28 +34,33 @@ body.served .table text { opacity: 1; transform: translateY(0); }
 #stage .wardrobe-reaction-text { background: #f3e9d5; color: #392d28; font-weight: 500; }
 /* the menu. an open card, held low in the middle so her face
    stays above it. bottom-anchored to the composer, grows up */
-.menu-card { position: absolute; z-index: 7; left: 50%; bottom: calc(92px + env(safe-area-inset-bottom)); width: min(92vw, 760px); max-height: min(46%, 520px); transform: translateX(-50%); display: grid; grid-template-columns: 1fr 1fr; grid-template-rows: minmax(0, 1fr); color-scheme: light; color: var(--ink); background: #f3e9d5; border-radius: 3px; box-shadow: 0 22px 60px #0008, 0 2px 0 #d3c2a3; transition: transform .7s ease, opacity .7s ease; }
+.menu-card { position: absolute; z-index: 7; left: 50%; bottom: calc(92px + env(safe-area-inset-bottom)); width: min(92vw, 760px); max-height: min(46%, 520px); transform: translateX(-50%); display: flex; flex-direction: column; color-scheme: light; color: var(--ink); background: #f3e9d5; border-radius: 3px; box-shadow: 0 22px 60px #0008, 0 2px 0 #d3c2a3; transition: transform .7s ease, opacity .7s ease; }
 body.ordered .menu-card { transform: translate(-50%, 70px); opacity: 0; pointer-events: none; }
-.page { min-height: 0; overflow-y: auto; overscroll-behavior: contain; padding: 18px 22px 14px; scrollbar-width: thin; scrollbar-color: #bda989 transparent; background: linear-gradient(100deg, #f5ecd9, #f3e9d5 60%, #eee2cb); }
-.page-left { display: flex; flex-direction: column; justify-content: center; align-items: center; text-align: center; border-right: 1px solid #c9b896; box-shadow: inset -22px 0 28px -20px #6b573f66; }
-.page-right { display: flex; flex-direction: column; text-align: center; box-shadow: inset 22px 0 28px -20px #6b573f66; }
+.page { flex: 1; min-height: 0; overflow-y: auto; overscroll-behavior: contain; padding: 18px 22px 14px; scrollbar-width: thin; scrollbar-color: #bda989 transparent; background: linear-gradient(100deg, #f5ecd9, #f3e9d5 60%, #eee2cb); }
 .page p, .page h2 { margin: 0; }
-.page-names { font: italic 400 clamp(24px, 3vw, 40px)/1.15 var(--script); color: #5a4638; overflow-wrap: anywhere; }
-.page .page-date { margin-top: 26px; }
-.page-date, .page-place { font: italic 400 clamp(14px, 1.4vw, 18px)/1.5 var(--script); color: #6a5443; }
-.menu-title { display: flex; justify-content: center; align-items: center; gap: 8px; margin: 0 0 6px; font: italic 400 clamp(26px, 2.8vw, 36px)/1.1 var(--script); color: #5a4638; }
+/* names, date and place used to own the whole left page of the card -
+   half its width for three lines - while the dishes were squeezed into
+   the other half and scrolled. header strip now, dishes get the card. */
+.menu-head { flex: none; display: flex; align-items: baseline; justify-content: space-between; gap: 14px; flex-wrap: wrap; padding: 12px 22px 9px; border-bottom: 1px solid #c9b896; background: linear-gradient(100deg, #f7eedd, #f1e6cf); }
+.menu-head p { margin: 0; }
+.page-names { font: italic 400 clamp(19px, 2.1vw, 27px)/1.1 var(--serif); color: #5a4638; overflow-wrap: anywhere; }
+.page-meta { display: flex; gap: 10px; font: italic 400 13px/1.4 var(--serif); color: #6a5443; }
+.page-meta span + span::before { content: "\00b7"; margin-right: 10px; }
+.menu-title { display: flex; justify-content: center; align-items: center; gap: 8px; margin: 0 0 6px; font: italic 400 clamp(26px, 2.8vw, 36px)/1.1 var(--serif); color: #5a4638; }
 .flourish { width: 42px; height: 14px; color: #8a7455; flex: none; }
 .flourish.mirror { transform: scaleX(-1); }
 .menu-list { flex: 1; }
-.menu-course { display: flex; align-items: center; gap: 10px; margin: 8px 0 0; font: 400 9px system-ui, sans-serif; text-transform: uppercase; letter-spacing: .22em; color: var(--muted-ink); }
+.menu-course { display: flex; align-items: center; gap: 10px; margin: 8px 0 0; font: 400 11px system-ui, sans-serif; text-transform: uppercase; letter-spacing: .22em; color: var(--muted-ink); }
 .menu-course::before, .menu-course::after { content: ""; flex: 1; height: 1px; background: #967c4944; }
-.dish { display: block; width: 100%; margin: 0; padding: 3px 4px; border: 0; border-radius: 4px; background: none; color: var(--ink); font: italic 400 clamp(14px, 1.35vw, 17px)/1.35 var(--script); text-align: center; transition: background .15s; }
+.dish { display: block; width: 100%; margin: 0; padding: 3px 4px; border: 0; border-radius: 4px; background: none; color: var(--ink); font: italic 400 clamp(14px, 1.35vw, 17px)/1.35 var(--serif); text-align: center; transition: background .15s; }
 .dish:not(:disabled):hover { background: #7a664a14; }
 .dish-title { display: inline-block; padding: 1px 12px; border-radius: 48% / 55%; transition: box-shadow .15s; }
 .dish[aria-pressed="true"] .dish-title { box-shadow: 0 0 0 1.4px var(--wine); }
-.dish-note { display: block; font: 400 10px/1.4 system-ui, sans-serif; letter-spacing: .05em; color: var(--wine); }
+.dish-note { display: block; font: 400 11px/1.4 system-ui, sans-serif; letter-spacing: .05em; color: var(--wine); }
 .dish-note:empty { display: none; }
-.page .menu-hint { margin-top: 8px; font: italic 11px var(--serif); color: var(--muted-ink); }
+/* the only line that explains the mechanic, so it does not live in
+   the scroller and it does not get display:none on a phone */
+.menu-hint { flex: none; margin: 0; padding: 7px 22px 9px; border-top: 1px solid #d5c6a8; background: #efe3cb; font: italic 12px var(--serif); color: var(--muted-ink); text-align: center; }
 
 .composer { position: absolute; z-index: 8; left: 50%; bottom: calc(12px + env(safe-area-inset-bottom)); width: min(92vw, 760px); transform: translateX(-50%); margin: 0; display: flex; flex-direction: column; gap: 6px; }
 .last-line { margin: 0; min-height: 1.4em; text-align: center; font: italic 13px/1.4 var(--serif); color: #efe3cb; text-shadow: 0 1px 4px #000b; overflow-wrap: anywhere; }
@@ -74,22 +77,19 @@ body.ordered .menu-card { transform: translate(-50%, 70px); opacity: 0; pointer-
   #stage { inset: -12% 0 0; }
   .table { top: 70%; left: -2%; right: -2%; bottom: -9%; }
   .menu-card, .composer { width: calc(100vw - 20px); }
-  .menu-card { grid-template-columns: 2fr 3fr; max-height: 56%; bottom: calc(86px + env(safe-area-inset-bottom)); }
+  .menu-card { max-height: 56%; bottom: calc(86px + env(safe-area-inset-bottom)); }
   .page { padding: 14px 10px; }
   .page-names { font-size: 20px; }
-  .page .page-date { margin-top: 14px; }
-  .page-date, .page-place { font-size: 13px; }
   .menu-title { font-size: 24px; }
   .flourish { width: 28px; }
   .dish { font-size: 14px; padding: 4px 2px; min-height: 36px; }
   .dish-title { padding: 1px 8px; }
-  .menu-hint { display: none; }
   .composer button { padding: 0 11px; font-size: 11px; }
 }
 @media (max-height: 500px) and (orientation: landscape) {
   #stage { inset: -10% 46% 0 0; }
   .menu-card, .composer { left: auto; right: 10px; width: 54vw; transform: none; }
-  .menu-card { grid-template-columns: 2fr 3fr; max-height: calc(100% - 78px - env(safe-area-inset-bottom)); bottom: calc(66px + env(safe-area-inset-bottom)); }
+  .menu-card { max-height: calc(100% - 78px - env(safe-area-inset-bottom)); bottom: calc(66px + env(safe-area-inset-bottom)); }
   body.ordered .menu-card { transform: translateY(70px); }
   .page { padding: 10px 14px; }
   .page .page-date { margin-top: 8px; }

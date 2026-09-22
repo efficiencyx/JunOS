@@ -707,8 +707,8 @@ function showBoot() {
   await loadScripts([
     ['vendor/pixi.min.js', 'vendor/live2dcubismcore.min.js',
      'vendor/marked.min.js', 'vendor/purify.min.js?v=4',
-     'js/actions.js?v=4', 'js/outfit.js?v=22', 'js/touch.js?v=3',
-     'js/mods.js?v=15', 'js/tts.js?v=3', 'js/voice.js?v=10',
+     'js/actions.js?v=4', 'js/outfit.js?v=23', 'js/touch.js?v=3',
+     'js/mods.js?v=16', 'js/tts.js?v=3', 'js/voice.js?v=10',
      'js/voicemode.js?v=3', 'js/trip-loader.js?v=4', 'js/cards.js?v=7',
      'js/skybox.js?v=1', 'js/scene.js?v=1',
      ...(currentUser?.role === 'admin' ? ['js/devhud.js?v=3'] : []),
