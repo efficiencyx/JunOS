@@ -193,7 +193,6 @@ function build() {
   overlay.setAttribute('aria-modal', 'true');
   overlay.setAttribute('aria-label', 'Blackjack table');
   overlay.innerHTML = `
-    <div class="cards-room"></div>
     <button class="voice-overlay-btn cards-close" type="button" aria-label="Leave the table" title="Leave the table">
       <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
     </button>
@@ -211,8 +210,13 @@ function build() {
         <button class="cards-next" type="button" hidden>Next hand</button>
       </div>
     </div>`;
-  document.body.appendChild(overlay);
-  Scene.inject('.cards-room', 'scene/cardroom.svg');
+  // the room sits OUTSIDE the overlay on purpose. the overlay's z-index
+  // makes it its own stacking context, so a room inside it paints over
+  // #stage (z 40) whatever z it gets, and Jun ends up behind the wall
+  const room = document.createElement('div');
+  room.className = 'cards-room';
+  document.body.append(room, overlay);
+  Scene.inject(room, 'scene/cardroom.svg');
   Scene.inject('.cards-deck', 'scene/props/deck.svg');
   Scene.inject('.cards-chips', 'scene/props/chips.svg');
   herRow = overlay.querySelector('.cards-her .cards-row');
