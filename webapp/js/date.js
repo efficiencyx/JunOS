@@ -278,6 +278,8 @@
   // walk and get redirected at the end of it anyway
   TripLoader.mount();
   TripLoader.setStage('Finding your table');
+  Scene.inject('.room', 'scene/diner.svg');
+  Scene.inject('.table', 'scene/table.svg');
   conversationId = trip ? Number(trip.conversation_id) || 0 : 0;
 
   if (window.Prefs) await Prefs.pullFromServer();

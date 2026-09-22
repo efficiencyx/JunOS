@@ -43,6 +43,8 @@
   // mount AFTER the gate, same reason as date.js
   TripLoader.mount();
   TripLoader.setStage('Walking to the lounge');
+  Scene.inject('.music-room', 'scene/lounge.svg');
+  Scene.inject('#karaokeMic .mic-head', 'scene/props/mic-head.svg');
 
   if (window.Prefs) await Prefs.pullFromServer();
   const storedVolume = parseFloat(localStorage.getItem('audio.volume') || '1');

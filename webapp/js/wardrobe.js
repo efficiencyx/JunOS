@@ -81,6 +81,7 @@
   }
   // mount AFTER the gate, same reason as date.js
   TripLoader.mount();
+  Scene.inject('.fitting-room', 'scene/boutique.svg');
   if (window.Names) { Names.load(); Names.decorate(); }
 
   try {

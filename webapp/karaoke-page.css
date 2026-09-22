@@ -15,41 +15,13 @@
 }
 body { background: var(--bg); overflow: hidden; }
 [hidden] { display: none !important; }
-.music-room { position: fixed; inset: 0 var(--karaoke-panel) 0 0; overflow: hidden; background: #211529; --vocal-level: 0; }
-.music-wall { position: absolute; inset: 0 0 20%; background: radial-gradient(ellipse at 50% 35%, #6c3f7755, transparent 65%), repeating-linear-gradient(90deg, #211829 0 38px, #35223f 39px 40px); }
-.music-wall::after { content: ""; position: absolute; inset: 13% 19% 1%; border: 1px solid #b086c733; border-radius: 200px 200px 0 0; box-shadow: 0 0 35px #b17ed014, inset 0 0 25px #b17ed00a; }
-.music-curtain { position: absolute; top: 0; bottom: 18%; width: 10%; background: repeating-linear-gradient(90deg, #34203f 0, #694778 14px, #483154 27px, #261a32 41px); box-shadow: 10px 0 30px #0004; }
-.music-curtain-left { left: 0; }
-.music-curtain-right { right: 0; transform: scaleX(-1); }
-.lighting-rig { position: absolute; top: 0; left: 8%; right: 8%; height: 16px; border-block: 3px solid #514359; background: repeating-linear-gradient(45deg, transparent 0 16px, #514359 17px 20px, transparent 21px 32px); display: flex; justify-content: space-around; }
-.lighting-rig i { position: relative; top: 9px; width: 36px; height: 28px; border: 3px solid #463b4e; border-radius: 4px 4px 10px 10px; background: linear-gradient(#18111f 45%, #cbb1f2); box-shadow: 0 13px 30px #c4a0f044; transform: rotate(-15deg); }
-.lighting-rig i:nth-child(even) { transform: rotate(15deg); background: linear-gradient(#18111f 45%, #ecaad9); }
-.light-beam { position: absolute; top: 28px; height: 87%; width: 55%; clip-path: polygon(47% 0, 53% 0, 100% 100%, 0 100%); transform-origin: 50% 0; opacity: .15; background: linear-gradient(#d7bbff, #c09dff11); filter: blur(2px); }
-.light-beam-left { left: 0; transform: rotate(-14deg); }
-.light-beam-right { right: 0; transform: rotate(14deg); background: linear-gradient(#f1b6e8, #e9a0e111); }
-.is-singing .light-beam-left { animation: stage-sweep 9s ease-in-out infinite alternate; }
-.is-singing .light-beam-right { animation: stage-sweep 11s ease-in-out infinite alternate-reverse; }
-@keyframes stage-sweep { from { transform: rotate(-17deg); opacity: .13; } to { transform: rotate(17deg); opacity: .24; } }
-.neon-sign { position: absolute; top: 19%; left: 0; right: 0; text-align: center; color: #e5c5fa; font: italic clamp(28px, 4vw, 56px)/1 var(--serif); letter-spacing: -.04em; text-shadow: 0 0 4px #d7a0f6, 0 0 22px #ad61da88; }
-.neon-sign span { display: block; margin-top: 14px; font: 9px system-ui, sans-serif; letter-spacing: .4em; color: #cdb0d9; text-shadow: none; }
-.music-floor { position: absolute; inset: 79% 0 0; border-top: 1px solid #b791c844; background: repeating-linear-gradient(110deg, transparent 0 110px, #c29ab818 111px 113px), linear-gradient(#493647, #231b2b); }
-.stage-platform { position: absolute; bottom: 6%; left: 9%; right: 9%; height: 15%; border-radius: 50%; border-bottom: 12px solid #17101d; background: radial-gradient(ellipse, #71546f, #403149 70%); box-shadow: inset 0 0 0 2px #ad87c05c, 0 4px 0 #bc8bdd, 0 10px 24px #c184ed44, 0 22px 25px #0006; }
-.speaker { position: absolute; top: 49%; bottom: 17%; width: 16%; border: 2px solid #65536d; border-radius: 5px; background: repeating-linear-gradient(0deg, transparent 0 3px, #93839d0c 4px), linear-gradient(110deg, #2c2531, #17121d); box-shadow: 9px 12px 0 #0e0b14, 0 20px 24px #0005; }
-.speaker-left { left: 5%; transform: perspective(700px) rotateY(12deg); }
-.speaker-right { right: 5%; transform: perspective(700px) rotateY(-12deg); }
-.speaker-tweeter { position: absolute; width: 32%; aspect-ratio: 1; left: 34%; top: 19%; border-radius: 50%; background: radial-gradient(circle, #8c798e 0 15%, #312837 18% 47%, #100c15 49% 65%, #786383 67% 69%, #211929 71%); }
-.speaker-cone { position: absolute; width: 79%; aspect-ratio: 1; left: 10.5%; top: 42%; border-radius: 50%; background: radial-gradient(circle, #342c3e 0 17%, #110c17 19% 22%, #64536f 24%, #282031 49%, #100c16 52% 60%, #7f6093 62% 64%, #211a2a 66%); box-shadow: 0 0 15px #b684e019; transform: scale(calc(1 + var(--vocal-level) * .05)); }
-.speaker-port { position: absolute; bottom: 7%; left: 28%; width: 44%; height: 5%; border-radius: 8px; background: #0a0810; box-shadow: inset 0 1px 3px #000; }
-.speaker-led { position: absolute; bottom: 3%; right: 8%; width: 3px; height: 3px; border-radius: 50%; background: #ba97ed; box-shadow: 0 0 5px #ba97ed; }
-.stage-monitor { position: absolute; bottom: 7%; width: 17%; height: 8%; border: 2px solid #514259; background: repeating-linear-gradient(90deg, #18111f 0 3px, #33283c 4px 5px); clip-path: polygon(12% 0, 88% 0, 100% 100%, 0 100%); }
-.stage-monitor-left { left: 11%; transform: rotate(8deg); }
-.stage-monitor-right { right: 11%; transform: rotate(-8deg); }
-.music-cable { position: absolute; left: 49%; bottom: 3%; width: 27%; height: 10%; border: 3px solid #0c0911; border-top: 0; border-left-color: transparent; border-radius: 0 0 70% 30%; transform: rotate(10deg); }
+.music-room { position: fixed; inset: 0 var(--karaoke-panel) 0 0; overflow: hidden; background: #0d0b14; --vocal-level: 0; }
+.music-room svg { display: block; width: 100%; height: 100%; }
 html #stage, html.phone-ui #stage { position: fixed; min-height: 0; inset: 16% var(--karaoke-panel) 8% 0; width: auto; height: auto; z-index: 40; }
 .stage-microphone { position: fixed; z-index: 44; pointer-events: none; width: 30px; height: 300px; }
-.mic-head { position: absolute; inset: 0 0 auto; height: var(--mic-head, 40px); border: 2px solid #a092ad; border-radius: 45% 45% 38% 38%; background: repeating-linear-gradient(0deg, #9c90a8 0 1px, transparent 2px 4px), repeating-linear-gradient(90deg, #786e87 0 1px, #302939 2px 4px); box-shadow: inset 4px 0 5px #ded1e455, inset -4px 0 5px #100a1bcc, 2px 3px 5px #0007; }
-.mic-collar { position: absolute; top: calc(var(--mic-head, 40px) - 3px); left: 23%; width: 54%; height: 9px; border-radius: 3px; background: linear-gradient(90deg, #211729, #a491b4, #211729); }
-.mic-stem { position: absolute; top: calc(var(--mic-head, 40px) + 6px); bottom: 5px; left: calc(50% - 2px); width: 5px; background: linear-gradient(90deg, #201529, #bcabc9, #3d304c); box-shadow: 2px 0 2px #0005; }
+.mic-head { position: absolute; inset: 0 0 auto; height: var(--mic-head, 40px); }
+.mic-head svg { display: block; width: 100%; height: 100%; }
+.mic-stem { position: absolute; top: calc(var(--mic-head, 40px) + 2px); bottom: 5px; left: calc(50% - 2px); width: 5px; background: linear-gradient(90deg, #201529, #bcabc9, #3d304c); box-shadow: 2px 0 2px #0005; }
 .mic-base { position: absolute; bottom: 0; left: -60%; width: 220%; height: 15px; border-radius: 50%; border: 1px solid #79638c; background: radial-gradient(ellipse at 50% 20%, #7e698c, #1a1223 70%); box-shadow: 4px 4px 4px #0005; }
 .karaoke-page-back { position: fixed; top: max(22px, env(safe-area-inset-top)); left: 28px; z-index: 60; color: #c8b5d8; font-size: 11px; text-decoration: none; }
 .karaoke-page-back:hover { color: #f1dcff; }
@@ -98,14 +70,6 @@ body.karaoke-mode #karaokeOverlay { display: block; }
   .music-heading h1 { font-size: 24px; }
   .music-heading .music-eyebrow { display: none; }
   .karaoke-page-back { top: max(14px, env(safe-area-inset-top)); left: 18px; font-size: 10px; }
-  .neon-sign { top: 27%; font-size: 30px; }
-  .neon-sign span { font-size: 6px; margin-top: 8px; }
-  .lighting-rig i { width: 22px; height: 18px; }
-  .speaker { top: 51%; bottom: 15%; width: 18%; box-shadow: 4px 5px 0 #0e0b14; }
-  .speaker-left { left: 3%; }
-  .speaker-right { right: 3%; }
-  .stage-platform { left: 4%; right: 4%; border-bottom-width: 6px; }
-  .stage-monitor { bottom: 6%; height: 7%; }
   .room-session { display: none; }
   .karaoke-page-status { top: auto; bottom: 20%; left: 18px; right: 18px; width: auto; }
   html #karaokeOverlay { inset: auto 8px max(12px, env(safe-area-inset-bottom)) 8px; width: auto; height: calc(var(--karaoke-sheet) - 12px); }
@@ -132,7 +96,7 @@ body.karaoke-mode #karaokeOverlay { display: block; }
   .karaoke-page-status { top: 30%; right: 16px; left: auto; bottom: auto; width: calc(var(--karaoke-panel) - 24px); }
 }
 @media (prefers-reduced-motion: reduce) {
-  .light-beam, .room-equalizer i { animation: none !important; }
-  .speaker-cone { transform: none; }
+  .room-equalizer i { animation: none !important; }
+  .music-room .cone { transform: none; }
   .karaoke-mode-chip, .karaoke-answer, .karaoke-word { transition: none; }
 }

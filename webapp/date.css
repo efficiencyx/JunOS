@@ -16,33 +16,23 @@ button:focus-visible { outline: 2px solid var(--wine); outline-offset: 4px; }
 button:disabled { cursor: default; }
 .date-layout { position: relative; height: 100%; }
 .restaurant { position: absolute; inset: 0; overflow: hidden; isolation: isolate; }
-.room { position: absolute; inset: 0; z-index: -1; background: radial-gradient(ellipse at 50% 40%, #67513c00 15%, #171613aa 100%), linear-gradient(#3b3b30, #32352c 64%, #211c18 64%); }
-.room::after { content: ""; position: absolute; inset: 64% 0 auto; height: 9px; border-block: 1px solid #9c825c66; background: #1e211d; }
-.window { position: absolute; width: 44%; height: 53%; top: 14%; left: 28%; border: 10px solid #232922; border-radius: 160px 160px 0 0; box-shadow: 0 0 0 1px #a58d5b55, inset 0 0 25px #080e14; overflow: hidden; background: linear-gradient(#192930, #475552); }
-.window::before, .window::after { content: ""; position: absolute; z-index: 1; background: #252b24; box-shadow: 1px 0 #98865c44; }
-.window::before { width: 7px; top: 0; bottom: 0; left: 50%; }
-.window::after { height: 7px; left: 0; right: 0; top: 49%; }
-.window-lights { position: absolute; inset: 55% 0 0; opacity: .65; filter: blur(2px); background: radial-gradient(circle at 18% 65%, #f8c078 0 3px, transparent 5px), radial-gradient(circle at 72% 44%, #f8c078 0 4px, transparent 6px), radial-gradient(circle at 90% 75%, #f8c078 0 3px, transparent 5px), linear-gradient(90deg, #182723 15%, transparent 15% 25%, #182723 25% 47%, transparent 47% 55%, #182723 55% 80%, transparent 80%); }
-.wall-light { position: absolute; top: 37%; width: 32px; height: 58px; background: linear-gradient(90deg, #bbaa7a, #fff1c2 50%, #bbaa7a); border-block: 5px solid #8f744a; border-radius: 5px; box-shadow: 0 0 65px 24px #edc77e24, 0 0 15px #f9dc9b55; }
-.wall-light::after { content: ""; position: absolute; left: 14px; top: 54px; width: 4px; height: 26px; background: #967c50; }
-.wall-light-left { left: 13%; }
-.wall-light-right { right: 13%; }
-.banquette { position: absolute; top: 65%; left: 5%; right: 5%; bottom: 0; border-radius: 55px 55px 0 0; border-top: 6px solid #78534a; background: repeating-linear-gradient(90deg, transparent 0 78px, #301f1d88 79px 82px), linear-gradient(#65453f, #372923); box-shadow: 0 -10px 30px #0003; }
-.date-back { position: absolute; z-index: 9; top: max(30px, env(safe-area-inset-top)); right: 20px; color: #c1b8a4; font-size: 11px; text-decoration: none; }
-.date-back:hover { color: var(--cream); }
-.date-back:focus-visible { outline: 2px solid var(--wine); outline-offset: 4px; }
+.room { position: absolute; inset: 0; z-index: -1; overflow: hidden; background: #1b1d1b; }
+.room svg { display: block; width: 100%; height: 100%; }
 .scene-head { position: absolute; z-index: 5; top: max(32px, env(safe-area-inset-top)); left: 7%; pointer-events: none; }
 .eyebrow, .scene-detail { text-transform: uppercase; font-size: 10px; letter-spacing: .16em; }
 .eyebrow { color: #d4c5a7; }
 h1 { margin: 6px 0 11px; font: 400 clamp(32px, 3.5vw, 54px)/1.15 var(--serif); letter-spacing: -.04em; }
 h1 em { color: #dec39a; font-weight: 400; }
 .scene-detail { display: flex; align-items: center; gap: 8px; color: #c1b8a4; letter-spacing: .1em; }
+.date-back { position: absolute; z-index: 9; top: max(30px, env(safe-area-inset-top)); right: 20px; color: #c1b8a4; font-size: 11px; text-decoration: none; }
+.date-back:hover { color: var(--cream); }
+.date-back:focus-visible { outline: 2px solid var(--wine); outline-offset: 4px; }
 .ambience-dot { width: 5px; height: 5px; border-radius: 50%; background: #ddbd87; box-shadow: 0 0 9px #ddbd8780; }
 #stage { position: absolute; inset: -22% 0 0; }
 #stage canvas { display: block; }
 .table { position: absolute; z-index: 2; pointer-events: none; left: -9%; right: -9%; top: 68%; bottom: -3%; filter: drop-shadow(0 -10px 20px #1a100e33); }
 .table svg { display: block; width: 100%; height: 100%; overflow: visible; }
-.flame { transform-origin: 270px 94px; animation: candlelight 3s ease-in-out infinite; }
+.flame { transform-origin: 268px 94px; animation: candlelight 3s ease-in-out infinite; }
 @keyframes candlelight { 50% { transform: scale(.85, 1.08); opacity: .8; } }
 .table text { opacity: 0; transition: opacity .6s, transform .6s; transform: translateY(-7px); }
 body.served .table text { opacity: 1; transform: translateY(0); }
@@ -86,17 +76,12 @@ body.ordered .menu-card { transform: translate(-50%, 70px); opacity: 0; pointer-
 .composer button:disabled { opacity: .45; }
 #sendBtn { background: transparent; border-color: #6b5a4a; color: var(--cream); }
 #sendBtn:not(:disabled):hover { background: #3a302a; }
-body[data-meal="lunch"] .room { background: radial-gradient(ellipse at 45% 30%, #f2d6a533, transparent 70%), linear-gradient(#686d53, #4a533f 64%, #332c23 64%); }
-body[data-meal="lunch"] .window { background: linear-gradient(#a9c6c5, #e3d7aa); box-shadow: 0 0 0 1px #d4bc7a66, 0 0 65px #f2d6a524; }
-body[data-meal="lunch"] .window-lights { background: linear-gradient(120deg, transparent 30%, #677d5366 31% 47%, transparent 48%), linear-gradient(70deg, #45634e99 20%, transparent 21%); filter: blur(5px); }
-body[data-meal="lunch"] .table { filter: brightness(1.12) drop-shadow(0 -10px 20px #1a100e22); }
 @media (max-width: 760px) {
   .scene-head { top: max(16px, env(safe-area-inset-top)); left: 20px; }
   .eyebrow { font-size: 8px; }
   h1 { font-size: 30px; margin: 3px 0 7px; }
   .scene-detail { font-size: 8px; }
   #stageStatus { top: auto; bottom: calc(100px + env(safe-area-inset-bottom)); right: 12px; max-width: 60%; }
-  .window { top: 8%; height: 68%; width: 42%; left: 29%; }
   #stage { inset: -12% 0 0; }
   .table { top: 70%; left: -2%; right: -2%; bottom: -9%; }
   .menu-card, .composer { width: calc(100vw - 20px); }

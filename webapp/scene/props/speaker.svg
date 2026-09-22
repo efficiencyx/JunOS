@@ -1,0 +1,50 @@
+<svg xmlns="http://www.w3.org/2000/svg">
+<!-- PROP: PA speaker on a pole, karaoke booth.
+     local box 150 x 380, origin top left. the pole foot is at the
+     bottom edge, the box hangs off the top of it.
+     .cone is driven by the page: it scales with the vocal level, so
+     whatever replaces this should keep a group with that class
+     somewhere over the woofer, or the speaker stops moving. -->
+<defs>
+  <linearGradient id="sp-face" x1="0" y1="0" x2="1" y2=".25">
+    <stop offset="0" stop-color="#342e3f"/><stop offset=".42" stop-color="#221d2c"/>
+    <stop offset=".72" stop-color="#171320"/><stop offset="1" stop-color="#0d0a14"/>
+  </linearGradient>
+  <linearGradient id="sp-pole" x1="0" y1="0" x2="1" y2="0">
+    <stop offset="0" stop-color="#4a4356"/><stop offset=".35" stop-color="#2a2434"/><stop offset="1" stop-color="#15111d"/>
+  </linearGradient>
+  <radialGradient id="sp-woof" cx="38%" cy="32%" r="72%">
+    <stop offset="0" stop-color="#3d3649"/><stop offset=".55" stop-color="#1d1827"/><stop offset="1" stop-color="#0a0810"/>
+  </radialGradient>
+  <radialGradient id="sp-dust" cx="36%" cy="30%" r="70%">
+    <stop offset="0" stop-color="#5b5169"/><stop offset="1" stop-color="#241e30"/>
+  </radialGradient>
+</defs>
+
+<rect x="68" y="196" width="13" height="176" fill="url(#sp-pole)"/>
+<path d="M40 366h68v10H40z" fill="#241f2e"/>
+<path d="M28 376h92v8H28z" fill="#181423"/>
+
+<g transform="rotate(-7 75 120)">
+  <!-- cabinet. the trapezoid is what makes a PA box read as a PA
+       box instead of a hi-fi speaker -->
+  <path d="M14 12h122l-9 214H23z" fill="url(#sp-face)" stroke="#433b52" stroke-width="2"/>
+  <path d="M75 12h61l-9 214H75z" fill="#07060c" opacity=".35"/>
+  <path d="M14 12h20l-4 214h-7z" fill="#8d84a0" opacity=".16"/>
+  <!-- horn tweeter, slot not circle -->
+  <path d="M46 34h58l-6 30H52z" fill="#100d18" stroke="#4a4258" stroke-width="1.6"/>
+  <path d="M56 40h38l-3 18H59z" fill="#2b2536"/>
+  <!-- woofer. cone, surround, dust cap, all separate rings -->
+  <g class="cone">
+    <ellipse cx="74" cy="140" rx="50" ry="50" fill="#0b0912"/>
+    <ellipse cx="74" cy="140" rx="45" ry="45" fill="url(#sp-woof)" stroke="#4a4258" stroke-width="1.5"/>
+    <ellipse cx="74" cy="140" rx="35" ry="35" fill="none" stroke="#0a0810" stroke-width="5" opacity=".7"/>
+    <ellipse cx="74" cy="140" rx="15" ry="15" fill="url(#sp-dust)"/>
+    <path d="M44 118a38 38 0 0 1 24-18" fill="none" stroke="#9e93b0" stroke-width="2.5" opacity=".3"/>
+  </g>
+  <!-- port and a handle cutout -->
+  <rect x="48" y="200" width="54" height="9" rx="4" fill="#07060c"/>
+  <rect x="24" y="106" width="8" height="34" rx="4" fill="#07060c" opacity=".7"/>
+  <circle cx="122" cy="34" r="3" fill="#8ce6ff" opacity=".8"/>
+</g>
+</svg>
