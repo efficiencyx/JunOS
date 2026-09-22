@@ -2,6 +2,7 @@
 :root {
   --karaoke-panel: clamp(390px, 37vw, 540px);
   --karaoke-sheet: 57dvh;
+  --room-h: 100%;
 }
 body { background: var(--bg); overflow: hidden; }
 [hidden] { display: none !important; }
@@ -12,7 +13,16 @@ body { background: var(--bg); overflow: hidden; }
    square box + overflow shows the art lounge.svg draws past its
    viewBox, good to ~2.4:1 */
 .music-room svg { display: block; position: absolute; left: 50%; height: 100%; width: auto; aspect-ratio: 1; transform: translateX(-50%); overflow: visible; }
-html #stage, html.phone-ui #stage { position: fixed; min-height: 0; inset: 16% var(--karaoke-panel) 8% 0; width: auto; height: auto; z-index: 40; }
+/* she sits on the banquette. box starts 27.5% down the room and
+   is 95% of it tall, so it runs off the bottom on purpose and the
+   clip-path cuts it at the room's bottom edge. that's .225 of the
+   room, and inset() % is of the box itself, so .225 / .95 = 23.7%.
+   her crotch is ~60% down the model, which lands it just under the
+   seat lip lounge-front.svg draws at y 716. all three numbers hang
+   off that lip, move one and she floats or sinks. % not dvh, the
+   room is sized in % and headless chrome at least disagrees */
+html #stage, html.phone-ui #stage { position: fixed; min-height: 0; inset: calc(var(--room-h) * .275) var(--karaoke-panel) auto 0; width: auto; height: calc(var(--room-h) * .95); clip-path: inset(0 0 23.7% 0); z-index: 40; }
+.music-room-front { z-index: 45; background: none; pointer-events: none; }
 .stage-microphone { position: fixed; z-index: 44; pointer-events: none; width: 30px; height: 300px; }
 .mic-head { position: absolute; inset: 0 0 auto; height: var(--mic-head, 40px); }
 .mic-head svg { display: block; width: 100%; height: 100%; }
@@ -80,12 +90,13 @@ html #karaokeOverlay[data-view="stage"] {
 [data-view="stage"] #karaokeStatus { bottom: auto; top: -18px; }
 body:has(#karaokeOverlay[data-view="stage"]) .music-room { right: 0; }
 body:has(#karaokeOverlay[data-view="stage"]) #karaokeOverlayClose { right: max(18px, env(safe-area-inset-right)); }
-html body:has(#karaokeOverlay[data-view="stage"]) #stage { inset: 16% 0 8% 0; }
+html body:has(#karaokeOverlay[data-view="stage"]) #stage { right: 0; }
 
 @media (max-width: 760px) {
   #karaokeOverlayClose { right: 18px; }
   .music-room { right: 0; bottom: var(--karaoke-sheet); }
-  html #stage, html.phone-ui #stage { inset: 40px 0 calc(var(--karaoke-sheet) + 18px); }
+  :root { --room-h: calc(100% - var(--karaoke-sheet)); }
+  html #stage, html.phone-ui #stage { right: 0; }
   .karaoke-page-back { top: max(14px, env(safe-area-inset-top)); left: 18px; font-size: 11px; }
   .room-session { bottom: 10px; font-size: 11px; letter-spacing: .1em; }
   .karaoke-page-status { top: auto; bottom: 20%; left: 18px; right: 18px; width: auto; }
@@ -98,10 +109,9 @@ html body:has(#karaokeOverlay[data-view="stage"]) #stage { inset: 16% 0 8% 0; }
   #karaokeStatus { bottom: -12px; font-size: 11px; }
 }
 @media (max-height: 500px) and (orientation: landscape) {
-  :root { --karaoke-panel: 48vw; }
+  :root { --karaoke-panel: 48vw; --room-h: 100%; }
   #karaokeOverlayClose { right: calc(var(--karaoke-panel) + 18px); }
   .music-room { right: var(--karaoke-panel); bottom: 0; }
-  html #stage, html.phone-ui #stage { inset: 25px var(--karaoke-panel) 20px 0; }
   html #karaokeOverlay { inset: 8px 8px 18px auto; width: calc(var(--karaoke-panel) - 16px); height: auto; }
   .karaoke-menu-body, .karaoke-assign-body { padding: 16px; gap: 14px; }
   #karaokeStage { padding: 16px; gap: 10px; }
