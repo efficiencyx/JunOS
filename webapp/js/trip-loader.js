@@ -51,7 +51,7 @@
     if (!root) return;
     root.classList.add('arrived');
     setP(100);
-    await new Promise(r => setTimeout(r, reduced ? 250 : 1000));
+    await new Promise(r => setTimeout(r, reduced ? 120 : 380));
     root.classList.add('done');
   }
 

@@ -1,0 +1,130 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="100 -100 1000 1000" preserveAspectRatio="xMidYMid slice">
+<!-- karaoke booth. no window, no sky, no stage - the key light is
+     the screen on the wall and everything else falls off to nearly
+     black. cyan from the screen, hot pink from the sign, and no
+     lavender anywhere so Jun's violet still reads in front of it.
+
+     the hooks the page drives:
+       .beam       animates under body.is-singing
+       .cone       scales with the vocal-level custom property
+       .screenglow opacity follows it too -->
+<style>
+  .glow { mix-blend-mode: screen; }
+  .cone { transform-box: fill-box; transform-origin: center;
+          transform: scale(calc(1 + var(--vocal-level, 0) * .07)); }
+  .screenglow { opacity: calc(.5 + var(--vocal-level, 0) * .5); }
+</style>
+<defs>
+  <radialGradient id="lg-key" cx="34%" cy="30%" r="78%">
+    <stop offset="0" stop-color="#7fd3e8" stop-opacity=".2"/>
+    <stop offset=".3" stop-color="#3f5f82" stop-opacity=".12"/>
+    <stop offset=".68" stop-color="#171426" stop-opacity=".62"/>
+    <stop offset="1" stop-color="#07060d" stop-opacity=".93"/>
+  </radialGradient>
+  <linearGradient id="lg-screen" x1=".1" y1="0" x2=".9" y2="1">
+    <stop offset="0" stop-color="#2b6f8c"/><stop offset=".42" stop-color="#64c2d8"/>
+    <stop offset=".62" stop-color="#255a78"/><stop offset="1" stop-color="#123246"/>
+  </linearGradient>
+  <radialGradient id="lg-spill" cx="50%" cy="50%" r="50%">
+    <stop offset="0" stop-color="#8fe0f2" stop-opacity="0.42"/>
+    <stop offset=".3" stop-color="#8fe0f2" stop-opacity="0.21"/>
+    <stop offset=".62" stop-color="#8fe0f2" stop-opacity="0.067"/>
+    <stop offset="1" stop-color="#8fe0f2" stop-opacity="0.0"/>
+  </radialGradient>
+  <radialGradient id="lg-pink" cx="50%" cy="50%" r="50%">
+    <stop offset="0" stop-color="#ff5fae" stop-opacity="0.4"/>
+    <stop offset=".3" stop-color="#ff5fae" stop-opacity="0.2"/>
+    <stop offset=".62" stop-color="#ff5fae" stop-opacity="0.064"/>
+    <stop offset="1" stop-color="#ff5fae" stop-opacity="0.0"/>
+  </radialGradient>
+  <linearGradient id="lg-vinyl" x1="0" y1="0" x2="0" y2="1">
+    <stop offset="0" stop-color="#6b2340"/><stop offset=".45" stop-color="#40142a"/><stop offset="1" stop-color="#1e0a16"/>
+  </linearGradient>
+  <linearGradient id="lg-floor" x1=".2" y1="0" x2=".8" y2="1">
+    <stop offset="0" stop-color="#241b2a"/><stop offset=".6" stop-color="#15101d"/><stop offset="1" stop-color="#0a0810"/>
+  </linearGradient>
+  <linearGradient id="lg-box" x1="0" y1="0" x2="1" y2=".3">
+    <stop offset="0" stop-color="#1b1824"/><stop offset=".5" stop-color="#2d2836"/><stop offset="1" stop-color="#120f1a"/>
+  </linearGradient>
+  <linearGradient id="lg-beam" x1="0" y1="0" x2="0" y2="1">
+    <stop offset="0" stop-color="#9fe6f7" stop-opacity=".3"/><stop offset="1" stop-color="#9fe6f7" stop-opacity="0"/>
+  </linearGradient>
+  <linearGradient id="lg-beam2" x1="0" y1="0" x2="0" y2="1">
+    <stop offset="0" stop-color="#ff86c4" stop-opacity=".22"/><stop offset="1" stop-color="#ff86c4" stop-opacity="0"/>
+  </linearGradient>
+  <filter id="lg-grain" x="0" y="0" width="100%" height="100%">
+    <feTurbulence type="fractalNoise" baseFrequency="0.85" numOctaves="3" stitchTiles="stitch"/>
+    <feColorMatrix type="saturate" values="0"/>
+  </filter>
+  <filter id="lg-soft" x="-50%" y="-50%" width="200%" height="200%"><feGaussianBlur stdDeviation="22"/></filter>
+  <filter id="lg-haze" x="-30%" y="-30%" width="160%" height="160%"><feGaussianBlur stdDeviation="9"/></filter>
+</defs>
+
+<rect x="-50" y="-150" width="1300" height="1100" fill="#141120"/>
+<!-- acoustic foam, laid in a grid because that is exactly what it is,
+     but only on the wall that carries the screen -->
+<g fill="#1c1828">
+  <path d="M-50-150h750v710H-50z"/>
+</g>
+<g fill="#100d1a" opacity=".55">
+  <path d="M0 0h700v560H0zM0 0v560" opacity="0"/>
+  <path d="M34 0v560M102 0v560M170 0v560M238 0v560M306 0v560M374 0v560M442 0v560M510 0v560M578 0v560M646 0v560" stroke="#100d1a" stroke-width="10"/>
+  <path d="M0 40h700M0 108h700M0 176h700M0 244h700M0 312h700M0 380h700M0 448h700M0 516h700" stroke="#100d1a" stroke-width="10"/>
+</g>
+<path d="M700-150h550v710H700z" fill="#171325"/>
+
+<!-- the screen. this is the light in the room -->
+<g>
+  <rect x="150" y="104" width="446" height="268" rx="6" fill="#0a0912"/>
+  <rect x="162" y="116" width="422" height="244" fill="url(#lg-screen)"/>
+  <!-- a lyric block, blurred to nothing. it is a screen across the
+       room, you are not meant to read it -->
+  <g fill="#d9f6ff" opacity=".5" filter="url(#lg-haze)">
+    <rect x="212" y="268" width="230" height="14" rx="6"/>
+    <rect x="212" y="296" width="150" height="14" rx="6"/>
+  </g>
+  <g fill="#0a1a24" opacity=".35">
+    <rect x="162" y="116" width="422" height="244"/>
+  </g>
+  <rect x="162" y="116" width="422" height="244" fill="url(#lg-screen)" opacity=".8"/>
+  <g fill="#d9f6ff" opacity=".62" filter="url(#lg-haze)">
+    <rect x="212" y="268" width="230" height="13" rx="6"/>
+    <rect x="212" y="296" width="150" height="13" rx="6"/>
+  </g>
+  <!-- scanlines. a 2027 ghetto karaoke box is not running an OLED -->
+  <g stroke="#050810" stroke-opacity=".13" stroke-width="1.5">
+    <path d="M162 124h422M162 136h422M162 148h422M162 160h422M162 172h422M162 184h422M162 196h422M162 208h422M162 220h422M162 232h422M162 244h422M162 256h422M162 268h422M162 280h422M162 292h422M162 304h422M162 316h422M162 328h422M162 340h422M162 352h422"/>
+  </g>
+</g>
+<ellipse class="glow screenglow" cx="373" cy="250" rx="520" ry="380" fill="url(#lg-spill)"/>
+
+<!-- sign lives in scene/props/sign-mic.svg -->
+<g data-prop="sign-mic" transform="translate(836 92)"></g>
+<ellipse class="glow" cx="892" cy="176" rx="300" ry="240" fill="url(#lg-pink)"/>
+
+<!-- speaker lives in scene/props/speaker.svg. one, not a matched
+     pair either side of the screen -->
+<g data-prop="speaker" transform="translate(944 180)"></g>
+
+<!-- floor + banquette. the booth wraps the bottom left corner only,
+     the right side is the doorway -->
+<path d="M-50 560h1300v390H-50z" fill="url(#lg-floor)"/>
+<path d="M0 556h1200v6H0z" fill="#3b3348" opacity=".7"/>
+<g>
+  <path d="M-50 606h754q26 0 26 26v318H-50z" fill="url(#lg-vinyl)"/>
+  <g stroke="#180814" stroke-opacity=".7" stroke-width="4">
+    <path d="M78 610v190M216 610v190M354 610v190M492 610v190M630 612v188"/>
+  </g>
+  <path d="M-20 600h744v14H-20z" fill="#7c2c49"/>
+</g>
+
+<!-- table lives in scene/props/booth-table.svg -->
+<g data-prop="booth-table" transform="translate(668 626)"></g>
+
+<!-- doorway, far right, cropped. corridor light leaks under it -->
+<path d="M1124 156h76v404h-76z" fill="#0a0810"/>
+<path d="M1124 542h76v18h-76z" fill="#ffb27a" opacity=".22" filter="url(#lg-haze)"/>
+
+<rect x="-50" y="-150" width="1300" height="1100" fill="url(#lg-key)"/>
+<rect x="-50" y="-150" width="1300" height="1100" filter="url(#lg-grain)" opacity=".055"/>
+</svg>

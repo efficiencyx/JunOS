@@ -14,6 +14,7 @@ window.Cards = (function () {
   let isBusy = () => false;
   let overlay = null, herRow, youRow, herVal, youVal, tallyEl, statusEl, hitBtn, standBtn, nextBtn;
   let deck = [], her = [], you = [];
+  let opener = null;
   let hand = 0, score = { you: 0, her: 0 };
   let youStood = false, herStood = false;
   let phase = 'idle';
@@ -183,18 +184,20 @@ window.Cards = (function () {
     overlay = document.createElement('div');
     overlay.className = 'cards-overlay';
     overlay.hidden = true;
+    overlay.setAttribute('role', 'dialog');
+    overlay.setAttribute('aria-modal', 'true');
     overlay.setAttribute('aria-label', 'Blackjack table');
     overlay.innerHTML = `
+      <div class="cards-room"></div>
       <button class="voice-overlay-btn cards-close" type="button" aria-label="Leave the table" title="Leave the table">
         <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
       </button>
-      <header class="cards-heading"><span>JUN OS · CARD ROOM</span><h1>Blackjack<span aria-hidden="true"> ♠</span></h1></header>
-      <div class="cards-tally" aria-live="polite"></div>
+      <div class="cards-tally"></div>
       <div class="cards-hand cards-her"><div class="cards-label"><span class="cards-who"></span> <span class="cards-val"></span></div><div class="cards-row"></div></div>
       <div class="cards-felt">
         <div class="cards-table-mark" aria-hidden="true">BLACKJACK<span>♠ &nbsp; ♥ &nbsp; ♣ &nbsp; ♦</span></div>
         <div class="cards-deck" aria-hidden="true"></div>
-        <div class="cards-chips" aria-hidden="true"><i></i><i></i><i></i></div>
+        <div class="cards-chips" aria-hidden="true"></div>
         <div class="cards-hand cards-you"><div class="cards-label">You <span class="cards-val"></span></div><div class="cards-row"></div></div>
         <div class="cards-status" role="status" aria-live="polite"></div>
         <div class="cards-actions">
@@ -204,6 +207,9 @@ window.Cards = (function () {
         </div>
       </div>`;
     document.body.appendChild(overlay);
+    Scene.inject('.cards-room', 'scene/cardroom.svg');
+    Scene.inject('.cards-deck', 'scene/props/deck.svg');
+    Scene.inject('.cards-chips', 'scene/props/chips.svg');
     herRow = overlay.querySelector('.cards-her .cards-row');
     youRow = overlay.querySelector('.cards-you .cards-row');
     herVal = overlay.querySelector('.cards-her .cards-val');
@@ -220,9 +226,19 @@ window.Cards = (function () {
     document.addEventListener('keydown', (e) => { if (e.key === 'Escape' && active) close(); });
   }
 
+  const chrome = () => document.querySelectorAll('.chat-panel, .conv-sidebar, .app-header');
+
+  function focusTable() {
+    const actions = [...overlay.querySelectorAll('.cards-actions button')];
+    const live = actions.find(b => !b.disabled && !b.hidden);
+    (live || overlay.querySelector('.cards-close')).focus();
+  }
+
   function open() {
     build();
     if (active) return;
+    opener = document.activeElement;
+    for (const el of chrome()) el.setAttribute('inert', '');
     active = true;
     overlay.querySelector('.cards-who').textContent = bot();
     score = { you: 0, her: 0 };
@@ -233,6 +249,7 @@ window.Cards = (function () {
     document.body.classList.add('cards-mode');
     if (window.Live2D) Live2D.setCameraPreset('face');
     deal();
+    focusTable();
   }
 
   function close() {
@@ -243,6 +260,9 @@ window.Cards = (function () {
     active = false;
     phase = 'idle';
     document.body.classList.remove('cards-mode');
+    for (const el of chrome()) el.removeAttribute('inert');
+    if (opener && opener.isConnected) opener.focus();
+    opener = null;
     setTimeout(() => { if (!active) overlay.hidden = true; }, 300);
     if (window.Live2D && !(window.VoiceMode && VoiceMode.isActive())) Live2D.setCameraPreset('default');
     if (played > 0 && sendEvent) {
