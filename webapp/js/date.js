@@ -39,7 +39,17 @@
       ['🧁', 'cheesecake', 'Cheesecake', 'A sweet ending'],
     ],
   };
-  const PLACE = { lunch: 'Café Marigold', dinner: 'Trattoria La Lanterna' };
+  // three rooms, and which one you walk into is seeded off the trip's
+  // start timestamp. same date keeps the same restaurant across a
+  // refresh - a reload mid-meal teleporting you somewhere else would
+  // be worse than never varying at all - and the next date is
+  // somewhere new.
+  const VENUES = [
+    { name: 'Trattoria La Lanterna', scene: 'diner-lantern.svg' },
+    { name: 'Café Marigold', scene: 'diner-marigold.svg' },
+    { name: 'The counter on Vane Street', scene: 'diner-counter.svg' },
+  ];
+  let venue = VENUES[0];
   const meal = new Date().getHours() < 16 ? 'lunch' : 'dinner';
   const dishes = MENU[meal];
   document.body.dataset.meal = meal;
@@ -111,7 +121,7 @@
   const OOC = '(OOC stage direction, not spoken by Anon: ';
   const menuNote = () => `The menu: ${dishes.map(d => d[2]).join(', ')}. You choose your own food, nobody orders for you. When you have decided what you want, end your line with ORDER: <the dish as written on the menu>. To suggest a dish for Anon add SUGGEST: <dish>. Anon ${picks.me ? 'is having ' + picks.me : "hasn't picked yet"}.`;
   function note(phase) {
-    if (phase === 'arrive') return `${OOC}you and Anon just sat down at ${PLACE[meal]} for ${meal} and opened the menu. Say one or two lines out loud, in character, as you look around and at him. No narration. ${menuNote()})`;
+    if (phase === 'arrive') return `${OOC}you and Anon just sat down at ${venue.name} for ${meal} and opened the menu. Say one or two lines out loud, in character, as you look around and at him. No narration. ${menuNote()})`;
     if (phase === 'talk') {
       if (ordered) return `${OOC}at the table eating, Anon has ${picks.me} and you have ${picks.her}. Answer him out loud, in character, one to three lines. No narration.)`;
       return `${OOC}reading the menu together. Answer him out loud, in character, one to three lines. No narration. ${menuNote()})`;
@@ -166,14 +176,19 @@
 
   function setComposer() {
     const locked = busy || !ready;
-    input.disabled = locked;
+    // NEVER disable this while she's answering. disabling the focused
+    // input drops focus, and on a phone that shuts the keyboard and
+    // reopens it every single turn. the submit handler guards on busy
+    // instead, so a stray Enter just does nothing and keeps your text.
+    input.disabled = !ready;
     sendBtn.disabled = locked;
-    orderBtn.disabled = locked || ordered || !picks.me;
+    orderBtn.disabled = locked || ordered;
     billBtn.disabled = locked;
   }
 
   function renderMarks() {
     const h = her();
+    document.getElementById('menuHint').textContent = hintText();
     for (const b of list.querySelectorAll('.dish')) {
       const mine = b.dataset.name === picks.me;
       b.setAttribute('aria-pressed', String(mine));
@@ -185,14 +200,15 @@
     setComposer();
   }
 
+  const hintText = () => `Tap what you'd like. ${her()} orders for herself.`;
+
   function renderMenu() {
     const h = her();
     document.title = meal === 'lunch' ? 'Lunch for two' : 'Dinner for two';
-    document.getElementById('mealLabel').textContent = meal === 'lunch' ? 'Lunch · A sunny little corner' : 'Dinner · Just the two of you';
     document.getElementById('menuNames').textContent = `${window.Names ? Names.getPlayer() : 'Anon'} & ${h}`;
-    document.getElementById('menuDate').textContent = new Date().toLocaleDateString(undefined, { day: 'numeric', month: 'long', year: 'numeric' });
-    document.getElementById('menuPlace').textContent = PLACE[meal];
-    document.getElementById('menuHint').textContent = `Tap what you'd like. ${h} orders for herself.`;
+    document.getElementById('menuDate').textContent = `${meal === 'lunch' ? 'Lunch' : 'Dinner'} · ${new Date().toLocaleDateString(undefined, { day: 'numeric', month: 'long', year: 'numeric' })}`;
+    document.getElementById('menuPlace').textContent = venue.name;
+    document.getElementById('menuHint').textContent = hintText();
     let course = '';
     for (const d of dishes) {
       if (d[3] !== course) {
@@ -220,7 +236,16 @@
   }
 
   async function callWaiter() {
-    if (busy || ordered || !picks.me) return;
+    if (busy || ordered) return;
+    if (!picks.me) {
+      // dead disabled button teaches nobody anything. say what's
+      // missing and put the cursor on the thing they have to touch
+      const hint = document.getElementById('menuHint');
+      hint.textContent = `Pick something off the menu first. ${her()} orders for herself.`;
+      const first = list.querySelector('.dish');
+      if (first) first.focus();
+      return;
+    }
     ordered = true;
     const line = await ask(note('waiter'), FALLBACK.order);
     // ponytail: she dodged the waiter. whatever dish she named
@@ -251,8 +276,6 @@
     location.href = 'index.html?from=date';
   }
 
-  TripLoader.mount();
-  TripLoader.setStage('Finding your table');
   const me = await Auth.me().catch(() => null);
   if (!me) { location.replace('index.html'); return; }
   // she has to have agreed in chat. a dead endpoint (android has
@@ -260,6 +283,17 @@
   const trip = await fetch('api/trip.php', { credentials: 'same-origin' })
     .then(r => r.ok ? r.json() : null).catch(() => null);
   if (trip && trip.gated && trip.where !== 'date') { location.replace('index.html'); return; }
+  // mount AFTER the gate. bounced users used to sit through the whole
+  // walk and get redirected at the end of it anyway
+  TripLoader.mount();
+  TripLoader.setStage('Finding your table');
+  // no trip row (gate off, or the android build that has no endpoint)
+  // means no seed, so fall back to the day. at least it moves.
+  const seed = (trip && Number(trip.since)) || Math.floor(Date.now() / 864e5);
+  venue = VENUES[Math.abs(seed) % VENUES.length];
+  document.body.dataset.venue = venue.scene.replace(/^diner-|\.svg$/g, '');
+  Scene.inject('.room', 'scene/' + venue.scene);
+  Scene.inject('.table', 'scene/table.svg');
   conversationId = trip ? Number(trip.conversation_id) || 0 : 0;
 
   if (window.Prefs) await Prefs.pullFromServer();

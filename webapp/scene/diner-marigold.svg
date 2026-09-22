@@ -1,0 +1,129 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 800" preserveAspectRatio="xMidYMid slice">
+<!-- Cafe Marigold. a corner cafe: tiled wall, one big square window
+     carrying most of the light, plants on the sill, bentwood chairs.
+     the brightest of the three venues, so it reads best at lunch.
+
+     same class hooks as the other rooms - sky-*, key, lampfill, lit,
+     keyrect, daylight - so skybox.js drives it without knowing which
+     restaurant you ended up in. -->
+<style>
+  .sky-hi { stop-color: var(--sky-zenith, #0d1426); }
+  .sky-md { stop-color: var(--sky-mid, #37334f); }
+  .sky-lo { stop-color: var(--sky-horizon, #7a4a55); }
+  .sun    { stop-color: var(--sky-glow, #b0685f); }
+  .key    { stop-color: var(--key-warm, #ffb87a); }
+  .lampfill { fill: var(--key-warm, #ffb87a); }
+  .lit    { opacity: var(--city-lit, .8); }
+  .glow   { mix-blend-mode: screen; }
+  .keyrect  { opacity: calc(1.02 - var(--key-level, .5) * .46); }
+  .daylight { opacity: calc(var(--key-level, .5) * .4); mix-blend-mode: screen; }
+</style>
+<defs>
+  <linearGradient id="mg-sky" x1="0" y1="0" x2="0" y2="1">
+    <stop offset="0" class="sky-hi"/><stop offset=".56" class="sky-md"/><stop offset="1" class="sky-lo"/>
+  </linearGradient>
+  <radialGradient id="mg-sun" cx="62%" cy="76%" r="58%">
+    <stop offset="0" class="sun" stop-opacity=".9"/><stop offset="1" class="sun" stop-opacity="0"/>
+  </radialGradient>
+  <radialGradient id="mg-key" cx="62%" cy="20%" r="88%">
+    <stop offset="0" class="key" stop-opacity=".3"/>
+    <stop offset=".3" stop-color="#cbb894" stop-opacity=".1"/>
+    <stop offset=".62" stop-color="#4f5245" stop-opacity=".3"/>
+    <stop offset="1" stop-color="#1b1d18" stop-opacity=".72"/>
+  </radialGradient>
+  <linearGradient id="mg-tile" x1="0" y1="0" x2=".4" y2="1">
+    <stop offset="0" stop-color="#cfd2bd"/><stop offset=".55" stop-color="#a8ad96"/><stop offset="1" stop-color="#6d7361"/>
+  </linearGradient>
+  <linearGradient id="mg-wood" x1="0" y1="0" x2="0" y2="1">
+    <stop offset="0" stop-color="#8a5f38"/><stop offset=".5" stop-color="#5f412a"/><stop offset="1" stop-color="#36251a"/>
+  </linearGradient>
+  <linearGradient id="mg-day" x1=".8" y1=".1" x2="0" y2="1">
+    <stop offset="0" class="sky-lo" stop-opacity=".55"/>
+    <stop offset=".45" class="sky-md" stop-opacity=".2"/>
+    <stop offset="1" class="sky-md" stop-opacity="0"/>
+  </linearGradient>
+  <radialGradient id="mg-pool" cx="50%" cy="50%" r="50%">
+    <stop offset="0" class="key" stop-opacity=".22"/><stop offset=".3" class="key" stop-opacity=".11"/>
+    <stop offset=".64" class="key" stop-opacity=".03"/><stop offset="1" class="key" stop-opacity="0"/>
+  </radialGradient>
+  <filter id="mg-grain" x="0" y="0" width="100%" height="100%">
+    <feTurbulence type="fractalNoise" baseFrequency="0.85" numOctaves="3" stitchTiles="stitch"/>
+    <feColorMatrix type="saturate" values="0"/>
+  </filter>
+</defs>
+
+<rect width="1200" height="800" fill="#7e8471"/>
+<!-- subway tile. offset courses, which is the whole point of it -->
+<g stroke="#5c6152" stroke-opacity=".5" stroke-width="3">
+  <path d="M0 76h1200M0 152h1200M0 228h1200M0 304h1200M0 380h1200M0 456h1200M0 532h1200"/>
+  <path d="M0 0v76M120 0v76M240 0v76M360 0v76M480 0v76M600 0v76M720 0v76M840 0v76M960 0v76M1080 0v76"/>
+  <path d="M60 76v76M180 76v76M300 76v76M420 76v76M540 76v76M660 76v76M780 76v76M900 76v76M1020 76v76M1140 76v76"/>
+  <path d="M0 152v76M120 152v76M240 152v76M360 152v76M480 152v76M600 152v76M720 152v76M840 152v76M960 152v76M1080 152v76"/>
+  <path d="M60 228v76M180 228v76M300 228v76M420 228v76M540 228v76M660 228v76M780 228v76M900 228v76M1020 228v76M1140 228v76"/>
+  <path d="M0 304v76M120 304v76M240 304v76M360 304v76M480 304v76M600 304v76M720 304v76M840 304v76M960 304v76M1080 304v76"/>
+  <path d="M60 380v76M180 380v76M300 380v76M420 380v76M540 380v76M660 380v76M780 380v76M900 380v76M1020 380v76M1140 380v76"/>
+</g>
+<rect width="1200" height="540" fill="url(#mg-tile)" opacity=".55"/>
+
+<!-- window. square, right of centre, no arch anywhere in this one -->
+<g>
+  <rect x="612" y="96" width="470" height="404" fill="url(#mg-sky)"/>
+  <rect x="612" y="96" width="470" height="404" fill="url(#mg-sun)"/>
+  <g class="lit">
+    <path d="M612 500v-86h52v86zm70 0v-118h40v118zm58 0v-64h64v64zm84 0v-140h46v140zm64 0v-92h56v92zm74 0v-58h64v58z" fill="#0f1114" opacity=".76"/>
+    <g class="lampfill" opacity=".5">
+      <rect x="624" y="426" width="8" height="10"/><rect x="694" y="400" width="8" height="10"/>
+      <rect x="694" y="440" width="8" height="10"/><rect x="756" y="458" width="8" height="10"/>
+      <rect x="838" y="380" width="8" height="10"/><rect x="856" y="418" width="8" height="10"/>
+      <rect x="932" y="432" width="8" height="10"/><rect x="1004" y="460" width="8" height="10"/>
+    </g>
+  </g>
+  <path d="M847 96v404M612 298h470" stroke="#3f4438" stroke-width="9"/>
+  <rect x="600" y="84" width="494" height="428" fill="none" stroke="#454b3c" stroke-width="18"/>
+  <!-- the plants the place is named for -->
+  <g>
+    <path d="M636 512h58l-7 44h-44z" fill="#9a6a3c"/>
+    <path d="M636 512h58l-2 9h-54z" fill="#c08f57"/>
+    <g fill="#5c7a49">
+      <path d="M665 512q-30-10-34-42 26 2 34 42M665 512q28-14 30-46-26 4-30 46M665 512q-4-34 12-56 10 26-12 56"/>
+    </g>
+    <g fill="#d9a72f">
+      <circle cx="649" cy="474" r="7"/><circle cx="683" cy="482" r="6"/><circle cx="670" cy="460" r="6"/>
+    </g>
+  </g>
+  <g>
+    <path d="M1010 512h46l-6 44h-34z" fill="#8a5f38"/>
+    <g fill="#4e6b40">
+      <path d="M1033 512q-26-8-28-36 22 2 28 36M1033 512q24-12 26-40-22 4-26 40"/>
+    </g>
+  </g>
+</g>
+
+<!-- a pendant over the table, and a second one further off -->
+<g>
+  <path d="M300 0v104" stroke="#2f3328" stroke-width="4"/>
+  <path d="M254 104h92l-22 44h-48z" fill="#b8763a" stroke="#6c431f" stroke-width="2"/>
+  <ellipse cx="300" cy="148" rx="24" ry="6" class="lampfill" opacity=".85"/>
+</g>
+<ellipse class="glow" cx="300" cy="200" rx="270" ry="220" fill="url(#mg-pool)"/>
+<g opacity=".7">
+  <path d="M492 0v74" stroke="#2f3328" stroke-width="3"/>
+  <path d="M462 74h60l-14 30h-32z" fill="#a06a35" stroke="#6c431f" stroke-width="2"/>
+</g>
+
+<!-- counter rail and bentwood chair backs. the chairs are the only
+     curved thing in a very rectangular room -->
+<path d="M0 540h1200v260H0z" fill="url(#mg-wood)"/>
+<path d="M0 532h1200v12H0z" fill="#a9763f"/>
+<g fill="none" stroke="#2e1f15" stroke-width="10" stroke-linecap="round">
+  <path d="M120 720v-92a64 64 0 0 1 128 0v92"/>
+  <path d="M152 700v-72a32 32 0 0 1 64 0v72"/>
+  <path d="M912 726v-84a58 58 0 0 1 116 0v84"/>
+  <path d="M942 708v-66a28 28 0 0 1 56 0v66"/>
+</g>
+
+<rect class="keyrect" width="1200" height="800" fill="url(#mg-key)"/>
+<rect class="daylight" width="1200" height="800" fill="url(#mg-day)"/>
+<ellipse class="glow" cx="800" cy="520" rx="470" ry="250" fill="url(#mg-day)" opacity=".2"/>
+<rect width="1200" height="800" filter="url(#mg-grain)" opacity=".05"/>
+</svg>

@@ -71,7 +71,6 @@
     }
   }
 
-  TripLoader.mount();
   // she has to have agreed in chat. a dead endpoint (android has
   // none) counts as open, this is a story rule not a security one
   const trip = await fetch('api/trip.php', { credentials: 'same-origin' })
@@ -80,6 +79,9 @@
     location.replace('index.html');
     return;
   }
+  // mount AFTER the gate, same reason as date.js
+  TripLoader.mount();
+  Scene.inject('.fitting-room', 'scene/boutique.svg');
   if (window.Names) { Names.load(); Names.decorate(); }
 
   try {

@@ -1,11 +1,9 @@
+@import url("css/subpage.css?v=1");
 :root {
-  color-scheme: dark;
-  --serif: "Iowan Old Style", "Palatino Linotype", Palatino, Georgia, serif;
   --cream: #f3e9d5;
   --ink: #392d28;
   --wine: #773b43;
   --muted-ink: #796859;
-  --script: "Snell Roundhand", "Edwardian Script ITC", "URW Chancery L", "Brush Script MT", "Segoe Script", var(--serif);
 }
 * { box-sizing: border-box; }
 [hidden] { display: none !important; }
@@ -16,62 +14,55 @@ button:focus-visible { outline: 2px solid var(--wine); outline-offset: 4px; }
 button:disabled { cursor: default; }
 .date-layout { position: relative; height: 100%; }
 .restaurant { position: absolute; inset: 0; overflow: hidden; isolation: isolate; }
-.room { position: absolute; inset: 0; z-index: -1; background: radial-gradient(ellipse at 50% 40%, #67513c00 15%, #171613aa 100%), linear-gradient(#3b3b30, #32352c 64%, #211c18 64%); }
-.room::after { content: ""; position: absolute; inset: 64% 0 auto; height: 9px; border-block: 1px solid #9c825c66; background: #1e211d; }
-.window { position: absolute; width: 44%; height: 53%; top: 14%; left: 28%; border: 10px solid #232922; border-radius: 160px 160px 0 0; box-shadow: 0 0 0 1px #a58d5b55, inset 0 0 25px #080e14; overflow: hidden; background: linear-gradient(#192930, #475552); }
-.window::before, .window::after { content: ""; position: absolute; z-index: 1; background: #252b24; box-shadow: 1px 0 #98865c44; }
-.window::before { width: 7px; top: 0; bottom: 0; left: 50%; }
-.window::after { height: 7px; left: 0; right: 0; top: 49%; }
-.window-lights { position: absolute; inset: 55% 0 0; opacity: .65; filter: blur(2px); background: radial-gradient(circle at 18% 65%, #f8c078 0 3px, transparent 5px), radial-gradient(circle at 72% 44%, #f8c078 0 4px, transparent 6px), radial-gradient(circle at 90% 75%, #f8c078 0 3px, transparent 5px), linear-gradient(90deg, #182723 15%, transparent 15% 25%, #182723 25% 47%, transparent 47% 55%, #182723 55% 80%, transparent 80%); }
-.wall-light { position: absolute; top: 37%; width: 32px; height: 58px; background: linear-gradient(90deg, #bbaa7a, #fff1c2 50%, #bbaa7a); border-block: 5px solid #8f744a; border-radius: 5px; box-shadow: 0 0 65px 24px #edc77e24, 0 0 15px #f9dc9b55; }
-.wall-light::after { content: ""; position: absolute; left: 14px; top: 54px; width: 4px; height: 26px; background: #967c50; }
-.wall-light-left { left: 13%; }
-.wall-light-right { right: 13%; }
-.banquette { position: absolute; top: 65%; left: 5%; right: 5%; bottom: 0; border-radius: 55px 55px 0 0; border-top: 6px solid #78534a; background: repeating-linear-gradient(90deg, transparent 0 78px, #301f1d88 79px 82px), linear-gradient(#65453f, #372923); box-shadow: 0 -10px 30px #0003; }
-.scene-head { position: absolute; z-index: 5; top: max(32px, env(safe-area-inset-top)); left: 7%; pointer-events: none; }
-.eyebrow, .scene-detail { text-transform: uppercase; font-size: 10px; letter-spacing: .16em; }
-.eyebrow { color: #d4c5a7; }
-h1 { margin: 6px 0 11px; font: 400 clamp(32px, 3.5vw, 54px)/1.15 var(--serif); letter-spacing: -.04em; }
-h1 em { color: #dec39a; font-weight: 400; }
-.scene-detail { display: flex; align-items: center; gap: 8px; color: #c1b8a4; letter-spacing: .1em; }
-.ambience-dot { width: 5px; height: 5px; border-radius: 50%; background: #ddbd87; box-shadow: 0 0 9px #ddbd8780; }
+.room { position: absolute; inset: 0; z-index: -1; overflow: hidden; background: #1b1d1b; }
+.room svg { display: block; width: 100%; height: 100%; }
+/* the venues range from a near black trattoria to a pale tiled cafe,
+   so this needs its own backing or it vanishes in half of them */
+.date-back { position: absolute; z-index: 9; top: max(26px, env(safe-area-inset-top)); right: 20px; padding: 5px 10px; border-radius: 4px; background: #1d1a17b8; color: #e6ddc8; font-size: 11px; text-decoration: none; }
+.date-back:hover { background: #2c2823d9; color: var(--cream); }
+.date-back:focus-visible { outline: 2px solid var(--wine); outline-offset: 4px; }
 #stage { position: absolute; inset: -22% 0 0; }
 #stage canvas { display: block; }
 .table { position: absolute; z-index: 2; pointer-events: none; left: -9%; right: -9%; top: 68%; bottom: -3%; filter: drop-shadow(0 -10px 20px #1a100e33); }
 .table svg { display: block; width: 100%; height: 100%; overflow: visible; }
-.flame { transform-origin: 270px 94px; animation: candlelight 3s ease-in-out infinite; }
+.flame { transform-origin: 268px 94px; animation: candlelight 3s ease-in-out infinite; }
 @keyframes candlelight { 50% { transform: scale(.85, 1.08); opacity: .8; } }
 .table text { opacity: 0; transition: opacity .6s, transform .6s; transform: translateY(-7px); }
 body.served .table text { opacity: 1; transform: translateY(0); }
-#stageStatus { position: absolute; z-index: 6; top: max(32px, env(safe-area-inset-top)); right: 20px; max-width: min(46%, 360px); font-size: 12px; background: #211c19dd; border-radius: 4px; padding: 6px 10px; }
+#stageStatus { position: absolute; z-index: 6; top: calc(max(30px, env(safe-area-inset-top)) + 26px); right: 20px; max-width: min(46%, 360px); font-size: 12px; background: #211c19dd; border-radius: 4px; padding: 6px 10px; }
 #stageStatus:empty { display: none; }
 #stage .wardrobe-reaction { z-index: 4; }
 #stage .wardrobe-reaction-name { background: #713e44; border-color: #d5b784; }
 #stage .wardrobe-reaction-text { background: #f3e9d5; color: #392d28; font-weight: 500; }
 /* the menu. an open card, held low in the middle so her face
    stays above it. bottom-anchored to the composer, grows up */
-.menu-card { position: absolute; z-index: 7; left: 50%; bottom: calc(92px + env(safe-area-inset-bottom)); width: min(92vw, 760px); max-height: min(46%, 520px); transform: translateX(-50%); display: grid; grid-template-columns: 1fr 1fr; grid-template-rows: minmax(0, 1fr); color-scheme: light; color: var(--ink); background: #f3e9d5; border-radius: 3px; box-shadow: 0 22px 60px #0008, 0 2px 0 #d3c2a3; transition: transform .7s ease, opacity .7s ease; }
+.menu-card { position: absolute; z-index: 7; left: 50%; bottom: calc(92px + env(safe-area-inset-bottom)); width: min(92vw, 760px); max-height: min(46%, 520px); transform: translateX(-50%); display: flex; flex-direction: column; color-scheme: light; color: var(--ink); background: #f3e9d5; border-radius: 3px; box-shadow: 0 22px 60px #0008, 0 2px 0 #d3c2a3; transition: transform .7s ease, opacity .7s ease; }
 body.ordered .menu-card { transform: translate(-50%, 70px); opacity: 0; pointer-events: none; }
-.page { min-height: 0; overflow-y: auto; overscroll-behavior: contain; padding: 18px 22px 14px; scrollbar-width: thin; scrollbar-color: #bda989 transparent; background: linear-gradient(100deg, #f5ecd9, #f3e9d5 60%, #eee2cb); }
-.page-left { display: flex; flex-direction: column; justify-content: center; align-items: center; text-align: center; border-right: 1px solid #c9b896; box-shadow: inset -22px 0 28px -20px #6b573f66; }
-.page-right { display: flex; flex-direction: column; text-align: center; box-shadow: inset 22px 0 28px -20px #6b573f66; }
+.page { flex: 1; min-height: 0; overflow-y: auto; overscroll-behavior: contain; padding: 18px 22px 14px; scrollbar-width: thin; scrollbar-color: #bda989 transparent; background: linear-gradient(100deg, #f5ecd9, #f3e9d5 60%, #eee2cb); }
 .page p, .page h2 { margin: 0; }
-.page-names { font: italic 400 clamp(24px, 3vw, 40px)/1.15 var(--script); color: #5a4638; overflow-wrap: anywhere; }
-.page .page-date { margin-top: 26px; }
-.page-date, .page-place { font: italic 400 clamp(14px, 1.4vw, 18px)/1.5 var(--script); color: #6a5443; }
-.menu-title { display: flex; justify-content: center; align-items: center; gap: 8px; margin: 0 0 6px; font: italic 400 clamp(26px, 2.8vw, 36px)/1.1 var(--script); color: #5a4638; }
+/* names, date and place used to own the whole left page of the card -
+   half its width for three lines - while the dishes were squeezed into
+   the other half and scrolled. header strip now, dishes get the card. */
+.menu-head { flex: none; display: flex; align-items: baseline; justify-content: space-between; gap: 14px; flex-wrap: wrap; padding: 12px 22px 9px; border-bottom: 1px solid #c9b896; background: linear-gradient(100deg, #f7eedd, #f1e6cf); }
+.menu-head p { margin: 0; }
+.page-names { font: italic 400 clamp(19px, 2.1vw, 27px)/1.1 var(--serif); color: #5a4638; overflow-wrap: anywhere; }
+.page-meta { display: flex; gap: 10px; font: italic 400 13px/1.4 var(--serif); color: #6a5443; }
+.page-meta span + span::before { content: "\00b7"; margin-right: 10px; }
+.menu-title { display: flex; justify-content: center; align-items: center; gap: 8px; margin: 0 0 6px; font: italic 400 clamp(26px, 2.8vw, 36px)/1.1 var(--serif); color: #5a4638; }
 .flourish { width: 42px; height: 14px; color: #8a7455; flex: none; }
 .flourish.mirror { transform: scaleX(-1); }
 .menu-list { flex: 1; }
-.menu-course { display: flex; align-items: center; gap: 10px; margin: 8px 0 0; font: 400 9px system-ui, sans-serif; text-transform: uppercase; letter-spacing: .22em; color: var(--muted-ink); }
+.menu-course { display: flex; align-items: center; gap: 10px; margin: 8px 0 0; font: 400 11px system-ui, sans-serif; text-transform: uppercase; letter-spacing: .22em; color: var(--muted-ink); }
 .menu-course::before, .menu-course::after { content: ""; flex: 1; height: 1px; background: #967c4944; }
-.dish { display: block; width: 100%; margin: 0; padding: 3px 4px; border: 0; border-radius: 4px; background: none; color: var(--ink); font: italic 400 clamp(14px, 1.35vw, 17px)/1.35 var(--script); text-align: center; transition: background .15s; }
+.dish { display: block; width: 100%; margin: 0; padding: 3px 4px; border: 0; border-radius: 4px; background: none; color: var(--ink); font: italic 400 clamp(14px, 1.35vw, 17px)/1.35 var(--serif); text-align: center; transition: background .15s; }
 .dish:not(:disabled):hover { background: #7a664a14; }
 .dish-title { display: inline-block; padding: 1px 12px; border-radius: 48% / 55%; transition: box-shadow .15s; }
 .dish[aria-pressed="true"] .dish-title { box-shadow: 0 0 0 1.4px var(--wine); }
-.dish-note { display: block; font: 400 10px/1.4 system-ui, sans-serif; letter-spacing: .05em; color: var(--wine); }
+.dish-note { display: block; font: 400 11px/1.4 system-ui, sans-serif; letter-spacing: .05em; color: var(--wine); }
 .dish-note:empty { display: none; }
-.page .menu-hint { margin-top: 8px; font: italic 11px var(--serif); color: var(--muted-ink); }
+/* the only line that explains the mechanic, so it does not live in
+   the scroller and it does not get display:none on a phone */
+.menu-hint { flex: none; margin: 0; padding: 7px 22px 9px; border-top: 1px solid #d5c6a8; background: #efe3cb; font: italic 12px var(--serif); color: var(--muted-ink); text-align: center; }
 
 .composer { position: absolute; z-index: 8; left: 50%; bottom: calc(12px + env(safe-area-inset-bottom)); width: min(92vw, 760px); transform: translateX(-50%); margin: 0; display: flex; flex-direction: column; gap: 6px; }
 .last-line { margin: 0; min-height: 1.4em; text-align: center; font: italic 13px/1.4 var(--serif); color: #efe3cb; text-shadow: 0 1px 4px #000b; overflow-wrap: anywhere; }
@@ -83,37 +74,24 @@ body.ordered .menu-card { transform: translate(-50%, 70px); opacity: 0; pointer-
 .composer button:disabled { opacity: .45; }
 #sendBtn { background: transparent; border-color: #6b5a4a; color: var(--cream); }
 #sendBtn:not(:disabled):hover { background: #3a302a; }
-body[data-meal="lunch"] .room { background: radial-gradient(ellipse at 45% 30%, #f2d6a533, transparent 70%), linear-gradient(#686d53, #4a533f 64%, #332c23 64%); }
-body[data-meal="lunch"] .window { background: linear-gradient(#a9c6c5, #e3d7aa); box-shadow: 0 0 0 1px #d4bc7a66, 0 0 65px #f2d6a524; }
-body[data-meal="lunch"] .window-lights { background: linear-gradient(120deg, transparent 30%, #677d5366 31% 47%, transparent 48%), linear-gradient(70deg, #45634e99 20%, transparent 21%); filter: blur(5px); }
-body[data-meal="lunch"] .table { filter: brightness(1.12) drop-shadow(0 -10px 20px #1a100e22); }
 @media (max-width: 760px) {
-  .scene-head { top: max(16px, env(safe-area-inset-top)); left: 20px; }
-  .eyebrow { font-size: 8px; }
-  h1 { font-size: 30px; margin: 3px 0 7px; }
-  .scene-detail { font-size: 8px; }
   #stageStatus { top: auto; bottom: calc(100px + env(safe-area-inset-bottom)); right: 12px; max-width: 60%; }
-  .window { top: 8%; height: 68%; width: 42%; left: 29%; }
   #stage { inset: -12% 0 0; }
   .table { top: 70%; left: -2%; right: -2%; bottom: -9%; }
   .menu-card, .composer { width: calc(100vw - 20px); }
-  .menu-card { grid-template-columns: 2fr 3fr; max-height: 56%; bottom: calc(86px + env(safe-area-inset-bottom)); }
+  .menu-card { max-height: 56%; bottom: calc(86px + env(safe-area-inset-bottom)); }
   .page { padding: 14px 10px; }
   .page-names { font-size: 20px; }
-  .page .page-date { margin-top: 14px; }
-  .page-date, .page-place { font-size: 13px; }
   .menu-title { font-size: 24px; }
   .flourish { width: 28px; }
   .dish { font-size: 14px; padding: 4px 2px; min-height: 36px; }
   .dish-title { padding: 1px 8px; }
-  .menu-hint { display: none; }
   .composer button { padding: 0 11px; font-size: 11px; }
 }
 @media (max-height: 500px) and (orientation: landscape) {
-  .scene-head { display: none; }
   #stage { inset: -10% 46% 0 0; }
   .menu-card, .composer { left: auto; right: 10px; width: 54vw; transform: none; }
-  .menu-card { grid-template-columns: 2fr 3fr; max-height: calc(100% - 78px - env(safe-area-inset-bottom)); bottom: calc(66px + env(safe-area-inset-bottom)); }
+  .menu-card { max-height: calc(100% - 78px - env(safe-area-inset-bottom)); bottom: calc(66px + env(safe-area-inset-bottom)); }
   body.ordered .menu-card { transform: translateY(70px); }
   .page { padding: 10px 14px; }
   .page .page-date { margin-top: 8px; }

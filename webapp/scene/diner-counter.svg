@@ -1,0 +1,129 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 800" preserveAspectRatio="xMidYMid slice">
+<!-- the noodle counter. dark timber, a row of small bulbs over the
+     pass, a high strip window and a noren split over the kitchen
+     door. the darkest and warmest of the three, so it reads best
+     after dark - which is fine, it gets picked either way.
+
+     same class hooks as the other venues so skybox.js drives it
+     without knowing which restaurant the seed landed on. -->
+<style>
+  .sky-hi { stop-color: var(--sky-zenith, #0d1426); }
+  .sky-md { stop-color: var(--sky-mid, #37334f); }
+  .sky-lo { stop-color: var(--sky-horizon, #7a4a55); }
+  .sun    { stop-color: var(--sky-glow, #b0685f); }
+  .key    { stop-color: var(--key-warm, #ffb87a); }
+  .lampfill { fill: var(--key-warm, #ffb87a); }
+  .lit    { opacity: var(--city-lit, .8); }
+  .glow   { mix-blend-mode: screen; }
+  .keyrect  { opacity: calc(1.12 - var(--key-level, .5) * .4); }
+  .daylight { opacity: calc(var(--key-level, .5) * .26); mix-blend-mode: screen; }
+</style>
+<defs>
+  <linearGradient id="nc-sky" x1="0" y1="0" x2="0" y2="1">
+    <stop offset="0" class="sky-hi"/><stop offset=".5" class="sky-md"/><stop offset="1" class="sky-lo"/>
+  </linearGradient>
+  <radialGradient id="nc-key" cx="50%" cy="12%" r="82%">
+    <stop offset="0" class="key" stop-opacity=".4"/>
+    <stop offset=".24" stop-color="#c08a52" stop-opacity=".16"/>
+    <stop offset=".56" stop-color="#412c22" stop-opacity=".38"/>
+    <stop offset="1" stop-color="#140d0a" stop-opacity=".88"/>
+  </radialGradient>
+  <radialGradient id="nc-bulb" cx="50%" cy="50%" r="50%">
+    <stop offset="0" class="key" stop-opacity=".34"/><stop offset=".3" class="key" stop-opacity=".15"/>
+    <stop offset=".64" class="key" stop-opacity=".04"/><stop offset="1" class="key" stop-opacity="0"/>
+  </radialGradient>
+  <linearGradient id="nc-wall" x1=".2" y1="0" x2=".7" y2="1">
+    <stop offset="0" stop-color="#4a2f22"/><stop offset=".55" stop-color="#32201a"/><stop offset="1" stop-color="#1c1210"/>
+  </linearGradient>
+  <linearGradient id="nc-counter" x1="0" y1="0" x2="0" y2="1">
+    <stop offset="0" stop-color="#c08a52"/><stop offset=".18" stop-color="#8d5f33"/>
+    <stop offset=".6" stop-color="#4f341f"/><stop offset="1" stop-color="#241710"/>
+  </linearGradient>
+  <linearGradient id="nc-noren" x1="0" y1="0" x2="0" y2="1">
+    <stop offset="0" stop-color="#8d2f2a"/><stop offset="1" stop-color="#4c1614"/>
+  </linearGradient>
+  <linearGradient id="nc-day" x1=".2" y1="0" x2=".8" y2="1">
+    <stop offset="0" class="sky-lo" stop-opacity=".4"/>
+    <stop offset=".5" class="sky-md" stop-opacity=".14"/>
+    <stop offset="1" class="sky-md" stop-opacity="0"/>
+  </linearGradient>
+  <filter id="nc-grain" x="0" y="0" width="100%" height="100%">
+    <feTurbulence type="fractalNoise" baseFrequency="0.85" numOctaves="3" stitchTiles="stitch"/>
+    <feColorMatrix type="saturate" values="0"/>
+  </filter>
+  <filter id="nc-steam" x="-40%" y="-40%" width="180%" height="180%"><feGaussianBlur stdDeviation="16"/></filter>
+</defs>
+
+<rect width="1200" height="800" fill="url(#nc-wall)"/>
+<!-- board and batten, uneven spacing -->
+<g stroke="#180f0c" stroke-opacity=".55" stroke-width="6">
+  <path d="M96 0v520M254 0v520M382 0v520M566 0v520M742 0v520M886 0v520M1058 0v520"/>
+</g>
+
+<!-- strip window, high and narrow. you can see the street but not
+     much of it, which is the point of sitting at a counter -->
+<g>
+  <rect x="108" y="66" width="980" height="128" fill="url(#nc-sky)"/>
+  <g class="lit">
+    <path d="M108 194v-52h54v52zm76 0v-74h40v74zm62 0v-40h64v40zm88 0v-88h44v88zm70 0v-56h56v56zm82 0v-34h70v34zm92 0v-70h48v70zm74 0v-44h60v44zm84 0v-62h52v62z" fill="#0e1014" opacity=".8"/>
+    <g class="lampfill" opacity=".55">
+      <rect x="120" y="156" width="8" height="10"/><rect x="196" y="136" width="8" height="10"/>
+      <rect x="330" y="122" width="8" height="10"/><rect x="424" y="152" width="8" height="10"/>
+      <rect x="600" y="140" width="8" height="10"/><rect x="700" y="160" width="8" height="10"/>
+      <rect x="820" y="146" width="8" height="10"/><rect x="960" y="152" width="8" height="10"/>
+    </g>
+  </g>
+  <path d="M352 66v128M636 66v128M900 66v128" stroke="#20140f" stroke-width="8"/>
+  <rect x="98" y="56" width="1000" height="148" fill="none" stroke="#2a1a12" stroke-width="16"/>
+</g>
+
+<!-- bulbs over the pass. five, hung at different drops -->
+<g>
+  <g stroke="#1b110c" stroke-width="3">
+    <path d="M232 204v90M424 204v64M616 204v104M808 204v72M1000 204v88"/>
+  </g>
+  <g>
+    <ellipse cx="232" cy="304" rx="13" ry="16" class="lampfill"/>
+    <ellipse cx="424" cy="278" rx="13" ry="16" class="lampfill"/>
+    <ellipse cx="616" cy="318" rx="13" ry="16" class="lampfill"/>
+    <ellipse cx="808" cy="282" rx="13" ry="16" class="lampfill"/>
+    <ellipse cx="1000" cy="302" rx="13" ry="16" class="lampfill"/>
+  </g>
+</g>
+<g class="glow">
+  <ellipse cx="232" cy="318" rx="180" ry="170" fill="url(#nc-bulb)"/>
+  <ellipse cx="424" cy="292" rx="180" ry="170" fill="url(#nc-bulb)"/>
+  <ellipse cx="616" cy="332" rx="180" ry="170" fill="url(#nc-bulb)"/>
+  <ellipse cx="808" cy="296" rx="180" ry="170" fill="url(#nc-bulb)"/>
+  <ellipse cx="1000" cy="316" rx="180" ry="170" fill="url(#nc-bulb)"/>
+</g>
+
+<!-- kitchen doorway with a noren split over it, off to the right -->
+<g>
+  <rect x="854" y="330" width="250" height="196" fill="#120b09"/>
+  <path d="M846 320h266v22H846z" fill="#3c2519"/>
+  <g>
+    <path d="M854 342h78v104h-78zM940 342h78v104h-78zM1026 342h78v104h-78z" fill="url(#nc-noren)"/>
+    <path d="M854 342h266v10H854z" fill="#6d221e"/>
+  </g>
+  <ellipse cx="980" cy="470" rx="70" ry="40" fill="#e8d9c4" opacity=".1" filter="url(#nc-steam)"/>
+</g>
+
+<!-- the counter itself. one slab, running off both edges -->
+<path d="M-20 520h1240v280H-20z" fill="url(#nc-counter)"/>
+<path d="M-20 514h1240v16H-20z" fill="#d9a163"/>
+<g stroke="#1e130d" stroke-opacity=".45" stroke-width="3">
+  <path d="M-20 596h1240M-20 664h1240M-20 744h1240"/>
+</g>
+<!-- a chopstick rest and a bottle somebody left out -->
+<g>
+  <rect x="150" y="560" width="54" height="9" rx="4" fill="#2a1a12"/>
+  <path d="M1044 560h30l-4 70h-22z" fill="#2c1a14"/>
+  <path d="M1052 540h14v22h-14z" fill="#3a2418"/>
+  <path d="M1046 578h26l-3 48h-20z" fill="#7a3b1e" opacity=".8"/>
+</g>
+
+<rect class="keyrect" width="1200" height="800" fill="url(#nc-key)"/>
+<rect class="daylight" width="1200" height="800" fill="url(#nc-day)"/>
+<rect width="1200" height="800" filter="url(#nc-grain)" opacity=".055"/>
+</svg>
