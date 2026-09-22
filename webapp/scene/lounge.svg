@@ -15,7 +15,7 @@
   .screenglow { opacity: calc(.5 + var(--vocal-level, 0) * .5); }
 </style>
 <defs>
-  <radialGradient id="lg-key" cx="34%" cy="30%" r="78%">
+  <radialGradient id="lg-key" gradientUnits="userSpaceOnUse" cx="392" cy="180" r="1014" gradientTransform="translate(392 180) scale(1 .846) translate(-392 -180)">
     <stop offset="0" stop-color="#7fd3e8" stop-opacity=".2"/>
     <stop offset=".3" stop-color="#3f5f82" stop-opacity=".12"/>
     <stop offset=".68" stop-color="#171426" stop-opacity=".62"/>
@@ -40,7 +40,7 @@
   <linearGradient id="lg-vinyl" x1="0" y1="0" x2="0" y2="1">
     <stop offset="0" stop-color="#6b2340"/><stop offset=".45" stop-color="#40142a"/><stop offset="1" stop-color="#1e0a16"/>
   </linearGradient>
-  <linearGradient id="lg-floor" x1=".2" y1="0" x2=".8" y2="1">
+  <linearGradient id="lg-floor" gradientUnits="userSpaceOnUse" x1="210" y1="560" x2="990" y2="950">
     <stop offset="0" stop-color="#241b2a"/><stop offset=".6" stop-color="#15101d"/><stop offset="1" stop-color="#0a0810"/>
   </linearGradient>
   <linearGradient id="lg-box" x1="0" y1="0" x2="1" y2=".3">
@@ -60,18 +60,18 @@
   <filter id="lg-haze" x="-30%" y="-30%" width="160%" height="160%"><feGaussianBlur stdDeviation="9"/></filter>
 </defs>
 
-<rect x="-50" y="-150" width="1300" height="1100" fill="#141120"/>
+<rect x="-600" y="-150" width="2400" height="1100" fill="#141120"/>
 <!-- acoustic foam, laid in a grid because that is exactly what it is,
      but only on the wall that carries the screen -->
 <g fill="#1c1828">
-  <path d="M-50-150h750v710H-50z"/>
+  <path d="M-600-150h1300v710H-600z"/>
 </g>
 <g fill="#100d1a" opacity=".55">
   <path d="M0 0h700v560H0zM0 0v560" opacity="0"/>
-  <path d="M34 0v560M102 0v560M170 0v560M238 0v560M306 0v560M374 0v560M442 0v560M510 0v560M578 0v560M646 0v560" stroke="#100d1a" stroke-width="10"/>
-  <path d="M0 40h700M0 108h700M0 176h700M0 244h700M0 312h700M0 380h700M0 448h700M0 516h700" stroke="#100d1a" stroke-width="10"/>
+  <path d="M-578 0v560M-510 0v560M-442 0v560M-374 0v560M-306 0v560M-238 0v560M-170 0v560M-102 0v560M-34 0v560M34 0v560M102 0v560M170 0v560M238 0v560M306 0v560M374 0v560M442 0v560M510 0v560M578 0v560M646 0v560" stroke="#100d1a" stroke-width="10"/>
+  <path d="M-600 40h1300M-600 108h1300M-600 176h1300M-600 244h1300M-600 312h1300M-600 380h1300M-600 448h1300M-600 516h1300" stroke="#100d1a" stroke-width="10"/>
 </g>
-<path d="M700-150h550v710H700z" fill="#171325"/>
+<path d="M700-150h1100v710H700z" fill="#171325"/>
 
 <!-- the screen. this is the light in the room -->
 <g>
@@ -108,14 +108,14 @@
 
 <!-- floor + banquette. the booth wraps the bottom left corner only,
      the right side is the doorway -->
-<path d="M-50 560h1300v390H-50z" fill="url(#lg-floor)"/>
-<path d="M0 556h1200v6H0z" fill="#3b3348" opacity=".7"/>
+<path d="M-600 560h2400v390H-600z" fill="url(#lg-floor)"/>
+<path d="M-600 556h2400v6H-600z" fill="#3b3348" opacity=".7"/>
 <g>
-  <path d="M-50 606h754q26 0 26 26v318H-50z" fill="url(#lg-vinyl)"/>
+  <path d="M-600 606h1304q26 0 26 26v318H-600z" fill="url(#lg-vinyl)"/>
   <g stroke="#180814" stroke-opacity=".7" stroke-width="4">
-    <path d="M78 610v190M216 610v190M354 610v190M492 610v190M630 612v188"/>
+    <path d="M-474 610v190M-336 610v190M-198 610v190M-60 610v190M78 610v190M216 610v190M354 610v190M492 610v190M630 612v188"/>
   </g>
-  <path d="M-20 600h744v14H-20z" fill="#7c2c49"/>
+  <path d="M-600 600h1324v14H-600z" fill="#7c2c49"/>
 </g>
 
 <!-- table lives in scene/props/booth-table.svg -->
@@ -125,6 +125,6 @@
 <path d="M1124 156h76v404h-76z" fill="#0a0810"/>
 <path d="M1124 542h76v18h-76z" fill="#ffb27a" opacity=".22" filter="url(#lg-haze)"/>
 
-<rect x="-50" y="-150" width="1300" height="1100" fill="url(#lg-key)"/>
-<rect x="-50" y="-150" width="1300" height="1100" filter="url(#lg-grain)" opacity=".055"/>
+<rect x="-600" y="-150" width="2400" height="1100" fill="url(#lg-key)"/>
+<rect x="-600" y="-150" width="2400" height="1100" filter="url(#lg-grain)" opacity=".055"/>
 </svg>
