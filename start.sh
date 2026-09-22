@@ -373,8 +373,16 @@ report_gpu_placement() {
     if (match($0, /description="[^"]*"/)) nm = substr($0, RSTART + 13, RLENGTH - 14);
     else if (match($0, /name="[^"]*"/))   nm = substr($0, RSTART + 6,  RLENGTH - 7);
     if (match($0, /total="[^"]*"/))  tot = substr($0, RSTART + 7,  RLENGTH - 8);
-    if (nm != "") printf "  %s (%s%s)\n", nm, lib, (tot != "" ? ", " tot : "");
+    # a CPU-only line is description=cpu, unquoted, so nm stays empty
+    if (lib == "cpu") print "  CPU. no GPU at all, ollama gave up on the card";
+    else if (nm != "") printf "  %s (%s%s)\n", nm, lib, (tot != "" ? ", " tot : "");
   }'
+  if printf '%s\n' "$line" | grep -q 'library=cpu'; then
+    echo "  nvidia-smi working != CUDA working. a stale /etc/cdi/nvidia.yaml hands the" >&2
+    echo "  container the wrong nvidia-uvm major (it moves between boots) and cuInit dies" >&2
+    echo "  with 999. regen it: sudo nvidia-ctk cdi generate --output=/etc/cdi/nvidia.yaml" >&2
+    return 0
+  fi
   echo "  wrong card? pin it with GPU_DEVICES= in .env, biggest-VRAM-first is only our guess."
 }
 
