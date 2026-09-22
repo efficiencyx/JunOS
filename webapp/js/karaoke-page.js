@@ -28,8 +28,6 @@
     if (!document.hidden && window.Live2D) positionMic();
   });
   window.addEventListener('pagehide', () => cancelAnimationFrame(micFrame));
-  TripLoader.mount();
-  TripLoader.setStage('Walking to the lounge');
   const me = await Auth.me().catch(() => null);
   if (!me) {
     location.replace('index.html');
@@ -42,6 +40,9 @@
     location.replace('index.html');
     return;
   }
+  // mount AFTER the gate, same reason as date.js
+  TripLoader.mount();
+  TripLoader.setStage('Walking to the lounge');
 
   if (window.Prefs) await Prefs.pullFromServer();
   const storedVolume = parseFloat(localStorage.getItem('audio.volume') || '1');

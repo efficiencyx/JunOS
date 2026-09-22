@@ -65,7 +65,7 @@
   transform: translateX(calc(var(--trip-p, 4) * -1%));
 }
 .trip-loader.arrived .trip-trail,
-.trip-loader.arrived .trip-walker-track { transition-duration: 0.6s; }
+.trip-loader.arrived .trip-walker-track { transition-duration: 0.35s; }
 .trip-walker-pos {
   position: absolute; left: 0; bottom: 0;
   transform: translateX(-52%);
