@@ -217,8 +217,8 @@ function build() {
   room.className = 'cards-room';
   document.body.append(room, overlay);
   Scene.inject(room, 'scene/cardroom.svg');
-  Scene.inject('.cards-deck', 'scene/props/deck.svg');
-  Scene.inject('.cards-chips', 'scene/props/chips.svg');
+  Scene.inject('.cards-deck', 'scene/props/deck.svg?v=2');
+  Scene.inject('.cards-chips', 'scene/props/chips.svg?v=2');
   herRow = overlay.querySelector('.cards-her .cards-row');
   youRow = overlay.querySelector('.cards-you .cards-row');
   herVal = overlay.querySelector('.cards-her .cards-val');

@@ -1,5 +1,5 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 110 130" preserveAspectRatio="xMidYMid meet">
-<!-- PROP: the deck, card room. box 110 x 130.
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 110 150" preserveAspectRatio="xMidYMid meet">
+<!-- PROP: the deck, card room. box 110 x 150.
      face down, squared up, sitting where the dealer left it. the
      back pattern matches .cards-overlay .card.down in cards.css -
      change both or neither. -->
