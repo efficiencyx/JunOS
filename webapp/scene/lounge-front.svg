@@ -1,0 +1,17 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="100 -100 1000 1000" preserveAspectRatio="xMidYMid slice">
+<!-- the seat front of the banquette in lounge.svg, same viewBox so it
+     lines up 1:1. sits above #stage and the mic, which is the whole
+     trick: her hips land on the lip at y 716 and everything under it
+     is hidden, same as the diner table does it -->
+<defs>
+  <linearGradient id="lf-vinyl" x1="0" y1="0" x2="0" y2="1">
+    <stop offset="0" stop-color="#5a1d36"/><stop offset=".4" stop-color="#36111f"/><stop offset="1" stop-color="#140610"/>
+  </linearGradient>
+</defs>
+<path d="M-600 724h1374q26 0 26 26v200H-600z" fill="url(#lf-vinyl)"/>
+<g stroke="#180814" stroke-opacity=".7" stroke-width="4">
+  <path d="M-405 736v214M-129 736v214M147 736v214M423 736v214"/>
+</g>
+<path d="M-600 716h1374q20 0 20 12v2H-600z" fill="#8e3455"/>
+<path d="M-600 730h1400v10H-600z" fill="#0a0408" opacity=".35"/>
+</svg>
