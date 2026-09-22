@@ -1790,7 +1790,7 @@ window.Outfit = (function () {
     }
   }
 
-  let wdOverlay = null, wdTooltip = null, wdGhost = null, wdUpdateExpand = null;
+  let wdOverlay = null, wdTooltip = null, wdGhost = null;
 
   function wornDrawableMap() {
     const map = new Map();
@@ -2254,12 +2254,12 @@ window.Outfit = (function () {
     const rail = wdOverlay.querySelector('.wd-rail');
 
     const navTargets = [];
-    const addNav = (name, icon, el) => {
+    const addNav = (name, el) => {
       const b = document.createElement('button');
       b.type = 'button';
       b.className = 'wd-nav';
       b.title = name;
-      b.innerHTML = `<i>${icon}</i><span>${name}</span>`;
+      b.textContent = name;
       b.addEventListener('click', () => body.scrollTo({ top: el.offsetTop - 6, behavior: 'smooth' }));
       rail.appendChild(b);
       navTargets.push([el, b]);
@@ -2271,7 +2271,6 @@ window.Outfit = (function () {
     };
     body.addEventListener('scroll', syncNav, { passive: true });
 
-    const expandableGrids = [];
     const section = (name, sub) => {
       const t = document.createElement('div');
       t.className = sub ? 'wd-section wd-sub' : 'wd-section';
@@ -2282,32 +2281,8 @@ window.Outfit = (function () {
       const grid = document.createElement('div');
       grid.className = 'wd-grid';
       body.appendChild(grid);
-      const expand = document.createElement('button');
-      expand.type = 'button';
-      expand.className = 'wd-expand';
-      expand.title = 'Show all';
-      expand.hidden = true;
-      expand.setAttribute('aria-expanded', 'false');
-      expand.textContent = '⌄';
-      expand.addEventListener('click', () => {
-        const on = grid.classList.toggle('expanded');
-        expand.classList.toggle('on', on);
-        expand.setAttribute('aria-expanded', String(on));
-        expand.title = on ? 'Collapse' : 'Show all';
-      });
-      t.appendChild(expand);
-      expandableGrids.push([grid, expand]);
       return { title: t, grid };
     };
-    const updateExpandButtons = () => {
-      for (const [grid, expand] of expandableGrids) {
-        expand.hidden = !(grid.classList.contains('expanded') || grid.scrollWidth > grid.clientWidth + 1);
-      }
-      if (window.Mods && Mods.updateExpand) Mods.updateExpand();
-    };
-    window.addEventListener('resize', updateExpandButtons);
-    wdUpdateExpand = updateExpandButtons;
-
     const tileGroups = new Set(Object.values(ITEM_COLOR_GROUPS).flat());
     const studioKeys = COLOR_GROUPS.filter(g =>
       !tileGroups.has(g.key) &&
@@ -2338,7 +2313,7 @@ window.Outfit = (function () {
 
     for (const [sec, name, icon] of [[undefined, 'Clothing', '👗'], ['body', 'Body', '🐾'], ['hair', 'Hair', '💇']]) {
       const { title, grid } = section(name);
-      addNav(name, icon, title);
+      addNav(name, title);
       for (const it of ITEMS.filter(x => x.section === sec)) {
         const colorKeys = ITEM_COLOR_GROUPS[it.key] || [];
         const popupCfg = {
@@ -2373,7 +2348,7 @@ window.Outfit = (function () {
       Mods.buildWardrobeSection(body);
       const modTitle = anchor.nextElementSibling;
       anchor.remove();
-      if (modTitle) addNav('Mods', '🧩', modTitle);
+      if (modTitle) addNav('Mods', modTitle);
     }
     syncNav();
 
@@ -2583,7 +2558,6 @@ window.Outfit = (function () {
   function openWardrobe() {
     if (!wdOverlay) buildWardrobe();
     document.body.classList.add('wardrobe-open');
-    if (wdUpdateExpand) requestAnimationFrame(wdUpdateExpand);
     if (window.WardrobeReactions) return WardrobeReactions.activate();
   }
 

@@ -7,7 +7,7 @@
 <title>Out to eat</title>
 <link rel="icon" type="image/png" href="jun_os.png">
 <link rel="stylesheet" href="trip-loader.css?v=3">
-<link rel="stylesheet" href="date.css?v=6">
+<link rel="stylesheet" href="date.css?v=9">
 </head>
 <body>
 <main class="date-layout">
@@ -20,16 +20,15 @@
   </section>
 
   <section class="menu-card" id="menuCard" aria-labelledby="menuTitle">
-    <div class="page page-left">
+    <header class="menu-head">
       <p class="page-names" id="menuNames">Anon &amp; Jun</p>
-      <p class="page-date" id="menuDate"></p>
-      <p class="page-place" id="menuPlace"></p>
-    </div>
-    <div class="page page-right">
+      <p class="page-meta"><span id="menuDate"></span><span id="menuPlace"></span></p>
+    </header>
+    <div class="page">
       <h2 class="menu-title" id="menuTitle"><svg class="flourish" viewBox="0 0 60 20" aria-hidden="true"><path d="M2 12Q14 2 30 10T58 8M18 12Q22 4 30 10" fill="none" stroke="currentColor" stroke-width="1.1"/></svg>Menu<svg class="flourish mirror" viewBox="0 0 60 20" aria-hidden="true"><path d="M2 12Q14 2 30 10T58 8M18 12Q22 4 30 10" fill="none" stroke="currentColor" stroke-width="1.1"/></svg></h2>
       <div class="menu-list" id="menuList" aria-describedby="menuHint"></div>
-      <p class="menu-hint" id="menuHint"></p>
     </div>
+    <p class="menu-hint" id="menuHint"></p>
   </section>
 
   <form class="composer" id="composer" autocomplete="off">
@@ -52,8 +51,8 @@
 <script defer src="js/names.js?v=4"></script>
 <script defer src="js/chat-api.js?v=6"></script>
 <script type="module" src="js/live2d.js?v=10"></script>
-<script defer src="js/mods.js?v=15"></script>
-<script defer src="js/outfit.js?v=22"></script>
+<script defer src="js/mods.js?v=16"></script>
+<script defer src="js/outfit.js?v=23"></script>
 <script defer src="js/tts.js?v=3"></script>
 <script defer src="js/wardrobe-reactions.js?v=5"></script>
 <script defer src="js/skybox.js?v=1"></script>

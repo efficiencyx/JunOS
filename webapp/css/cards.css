@@ -76,7 +76,7 @@ html body.cards-mode #stage { position: fixed; inset: -16dvh 0 16dvh; width: 100
     repeating-linear-gradient(38deg, #ffffff03 0 1px, transparent 1px 4px), #174c3e;
   box-shadow: 0 -4px 0 #6b5128, inset 0 8px 30px #09261f88, 0 -22px 70px #0007;
 }
-.cards-table-mark { position: absolute; top: 14px; left: 50%; transform: translateX(-50%); color: #dac38c99; font: 10px Georgia, serif; letter-spacing: .24em; text-align: center; }
+.cards-table-mark { position: absolute; top: 14px; left: 50%; transform: translateX(-50%); color: #dac38c99; font: 11px Georgia, serif; letter-spacing: .24em; text-align: center; }
 .cards-table-mark span { display: block; margin-top: 5px; font-size: 12px; letter-spacing: .15em; }
 .cards-you { width: min(100%, 620px); }
 .cards-status { color: var(--table-ink); font-size: 13px; min-height: 1.5em; text-align: center; }
@@ -122,19 +122,19 @@ html body.cards-mode #stage { position: fixed; inset: -16dvh 0 16dvh; width: 100
 @media (max-width: 700px) {
   .cards-overlay { --card-width: 58px; --card-height: 82px; }
         .cards-close { top: calc(20px + env(safe-area-inset-top, 0px)); right: 16px; width: 40px; height: 40px; }
-  .cards-tally { top: calc(86px + env(safe-area-inset-top, 0px)); max-width: calc(100% - 36px); white-space: nowrap; padding: 6px 14px; font-size: 10px; }
+  .cards-tally { top: calc(86px + env(safe-area-inset-top, 0px)); max-width: calc(100% - 36px); white-space: nowrap; padding: 6px 14px; font-size: 11px; }
   .cards-her { top: calc(129px + env(safe-area-inset-top, 0px)); width: calc(100% - 40px); gap: 6px; }
   .cards-label { font-size: 11px; }
   .cards-row { gap: 7px; }
   .cards-felt { width: 112%; padding: 48px 8% calc(38px + env(safe-area-inset-bottom, 0px)); gap: 10px; border-width: 12px; border-top-width: 16px; }
-  .cards-table-mark { top: 10px; font-size: 8px; }
-  .cards-table-mark span { font-size: 10px; }
+  .cards-table-mark { top: 10px; font-size: 11px; }
+  .cards-table-mark span { font-size: 11px; }
   .cards-deck, .cards-chips { display: none; }
   .cards-actions { gap: 8px; }
   .cards-actions button { min-width: 78px; padding: 10px 13px; font-size: 12px; }
   .cards-status { font-size: 12px; }
   .card-corner { top: 4px; left: 5px; font-size: 14px; }
-  .card-corner small { font-size: 10px; }
+  .card-corner small { font-size: 11px; }
   .card-corner-bottom { inset: auto 5px 4px auto; }
   .card-suit { font-size: 28px; }
   .cards-overlay .card.down { border-width: 4px; }
@@ -147,7 +147,7 @@ html body.cards-mode #stage { position: fixed; inset: -16dvh 0 16dvh; width: 100
   .cards-her { top: calc(96px + env(safe-area-inset-top, 0px)); }
   .cards-her .cards-row { --card-width: 44px; --card-height: 62px; }
   .cards-her .card-corner { font-size: 11px; }
-  .cards-her .card-corner small { font-size: 8px; }
+  .cards-her .card-corner small { font-size: 11px; }
   .cards-her .card-suit { font-size: 22px; }
   .cards-felt { padding-top: 28px; padding-bottom: calc(26px + env(safe-area-inset-bottom, 0px)); gap: 6px; }
   .cards-table-mark span { display: none; }
@@ -155,7 +155,7 @@ html body.cards-mode #stage { position: fixed; inset: -16dvh 0 16dvh; width: 100
 @media (max-height: 520px) and (orientation: landscape) {
   html body.cards-mode #stage { inset: 0; }
   .cards-overlay { --card-width: 52px; --card-height: 74px; }
-      .cards-tally { top: 15px; font-size: 10px; padding: 7px 12px; }
+      .cards-tally { top: 15px; font-size: 11px; padding: 7px 12px; }
   .cards-her { top: 84px; left: 18%; width: 30%; gap: 5px; }
   .cards-felt { left: auto; right: -30px; transform: none; width: 43%; bottom: -24px; padding: 45px 44px 40px 20px; gap: 8px; border-width: 12px; border-radius: 26% 12% 0 0 / 16% 10% 0 0; }
   .cards-deck, .cards-chips { display: none; }
@@ -163,7 +163,7 @@ html body.cards-mode #stage { position: fixed; inset: -16dvh 0 16dvh; width: 100
   .cards-actions button { min-width: 66px; padding: 8px 12px; }
   .cards-label, .cards-status { font-size: 11px; }
   .card-corner { font-size: 13px; }
-  .card-corner small { font-size: 9px; }
+  .card-corner small { font-size: 11px; }
   .card-suit { font-size: 26px; }
 }
 @media (prefers-reduced-motion: reduce) {

@@ -1,18 +1,8 @@
+@import url("css/subpage.css?v=1");
 :root {
-  color-scheme: dark;
   --panel-w: clamp(400px, 39vw, 570px);
   --panel-h: 55dvh;
-  --bg-2: #16141e;
-  --bg-3: #1c1a26;
-  --bg-4: #232030;
-  --border: rgba(255,255,255,0.06);
-  --border-2: rgba(255,255,255,0.14);
-  --fg: #e8e4f0;
-  --muted: #aaa0b8;
-  --accent: #c4a0f0;
-  --accent-soft: rgba(196,160,240,0.09);
   --gold: rgba(255,255,255,0.3);
-  --serif: "Iowan Old Style", "Palatino Linotype", Palatino, Georgia, serif;
 }
 * { box-sizing: border-box; }
 [hidden] { display: none !important; }
@@ -63,7 +53,7 @@ body.wardrobe-open .wardrobe-overlay { display: flex; animation: wd-slide-in 0.3
 
 .wd-head { padding: 27px 26px 20px; border-bottom: 1px solid var(--border); }
 .wd-titles { min-width: 0; }
-.wd-kicker { display: block; margin-bottom: 12px; color: var(--accent); font-size: 9px; letter-spacing: .19em; text-transform: uppercase; }
+.wd-kicker { display: block; margin-bottom: 12px; color: var(--accent); font-size: 11px; letter-spacing: .19em; text-transform: uppercase; }
 .wd-title { display: block; margin: 0 0 10px; font: 400 37px/1.05 var(--serif); letter-spacing: -.035em; color: var(--fg); }
 .wd-hint { display: block; font-size: 11px; color: var(--muted); line-height: 1.5; }
 .wd-actions { display: flex; align-items: center; gap: 8px; padding: 16px 24px; border-top: 1px solid #c4a0f026; background: #c4a0f008; }
@@ -159,7 +149,7 @@ body.looks-open .wardrobe-overlay {
   font: inherit; font-size: 13px; text-align: left; cursor: pointer;
 }
 .wd-look-name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.wd-look-date { flex: none; font-size: 10px; color: var(--muted); }
+.wd-look-date { flex: none; font-size: 11px; color: var(--muted); }
 .wd-look-del {
   flex: none; width: 30px;
   border: 0; border-radius: 0 8px 8px 0;
@@ -168,7 +158,7 @@ body.looks-open .wardrobe-overlay {
 }
 .wd-look-del:hover { color: #e08a8a; background: rgba(255,255,255,0.04); }
 .wd-looks-empty { padding: 14px 4px; font-size: 12px; color: var(--muted); line-height: 1.5; }
-.wd-looks-hint { margin-top: 10px; font-size: 10px; color: var(--muted); letter-spacing: 0.02em; }
+.wd-looks-hint { margin-top: 10px; font-size: 11px; color: var(--muted); letter-spacing: 0.02em; }
 .wd-close { font-size: 18px; line-height: 1; width: 28px; height: 28px; padding: 0; color: var(--muted); }
 .wd-close:hover { color: var(--fg); background: rgba(255,255,255,0.05); }
 
@@ -191,7 +181,6 @@ body.looks-open .wardrobe-overlay {
   white-space: nowrap;
   transition: color 0.15s, border-color 0.15s;
 }
-.wd-nav i { display: none; }
 .wd-nav:hover { color: var(--fg); }
 .wd-nav.on { color: var(--accent); border-bottom-color: var(--accent); }
 
@@ -202,23 +191,15 @@ body.looks-open .wardrobe-overlay {
 .wd-section {
   display: flex; align-items: center; gap: 8px;
   margin: 25px 0 12px;
-  font-size: 10px; font-weight: 600;
+  font-size: 11px; font-weight: 600;
   text-transform: uppercase; letter-spacing: 0.13em;
   color: var(--muted);
 }
 
-.wd-expand {
-  border: 0; background: none; padding: 0 6px;
-  color: var(--muted); font: inherit; font-size: 12px; line-height: 1;
-  cursor: pointer;
-  transition: transform 0.15s, color 0.15s;
-}
-.wd-expand:hover { color: var(--fg); }
-.wd-expand.on { transform: rotate(180deg); }
 .wd-section:first-child { margin-top: 0; }
 .wd-section.wd-sub { margin-top: 14px; color: var(--muted); }
 
-.wd-grid, .wd-grid.expanded {
+.wd-grid {
   display: grid;
   grid-template-columns: repeat(4, minmax(0, 1fr));
   gap: 10px;
@@ -253,7 +234,7 @@ body.looks-open .wardrobe-overlay {
   content: "✓"; position: absolute; top: 6px; left: 6px;
   width: 16px; height: 16px; border-radius: 50%;
   display: flex; align-items: center; justify-content: center;
-  font-size: 9px; font-weight: 700;
+  font-size: 11px; font-weight: 700;
   background: var(--accent); color: #21152e;
   box-shadow: 0 2px 6px rgba(0,0,0,0.4);
 }
@@ -328,7 +309,7 @@ body.wd-over-worn-item { cursor: grab; }
 }
 .wd-optpop-title {
   flex: 1; min-width: 0;
-  font-size: 10px; font-weight: 600;
+  font-size: 11px; font-weight: 600;
   text-transform: uppercase; letter-spacing: 0.13em;
   color: var(--muted);
 }
@@ -370,7 +351,7 @@ body.wd-over-worn-item { cursor: grab; }
 }
 .wd-optpop-subtitle {
   flex-basis: 100%;
-  font-size: 10px; font-weight: 600;
+  font-size: 11px; font-weight: 600;
   text-transform: uppercase; letter-spacing: 0.13em;
   color: var(--muted);
 }
@@ -390,7 +371,7 @@ body.wd-over-worn-item { cursor: grab; }
   width: 44px; height: 44px; object-fit: contain; pointer-events: none;
   border-radius: 3px; background: transparent; padding: 2px;
 }
-.wd-opt span { font-size: 10px; color: var(--muted); }
+.wd-opt span { font-size: 11px; color: var(--muted); }
 .wd-opt.on span { color: var(--fg); }
 .color-preview-segment { display: block; flex: 1 1 0; height: 100%; min-width: 0; pointer-events: none; }
 .color-preview-segment + .color-preview-segment { border-left: 1px solid rgba(255,255,255,0.65); }
@@ -438,7 +419,7 @@ body.wd-over-worn-item { cursor: grab; }
 .ocp-head { display: flex; align-items: flex-start; justify-content: space-between; margin-bottom: 10px; }
 .ocp-head > div { display: flex; flex-direction: column; }
 .ocp-title { font-size: 14px; font-weight: 650; color: var(--fg); }
-.ocp-head span { font-size: 10px; color: var(--muted); text-transform: uppercase; letter-spacing: .08em; }
+.ocp-head span { font-size: 11px; color: var(--muted); text-transform: uppercase; letter-spacing: .08em; }
 .ocp-close {
   border: 0; background: transparent; color: var(--muted); cursor: pointer;
   font: 18px/1 system-ui, sans-serif; padding: 1px 4px; border-radius: 4px;
@@ -525,12 +506,12 @@ body.wd-over-worn-item { cursor: grab; }
 .wd-optpop, .omega-color-picker { color-scheme: dark; }
 
 @media (min-width: 901px) and (max-width: 1150px) {
-  .wd-grid, .wd-grid.expanded { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+  .wd-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); }
   .wd-title { font-size: 32px; }
 }
 @media (max-width: 900px) {
   .curtain { width: 11%; }
-  #stageStatus { left: 14px; font-size: 9px; }
+  #stageStatus { left: 14px; font-size: 11px; }
   html.wd-portrait .fitting-room, html.wd-portrait .fitting-curtains { right: 0; bottom: var(--panel-h); }
   html.wd-portrait #stage {
     inset: max(38px, env(safe-area-inset-top)) env(safe-area-inset-right) calc(var(--panel-h) + 18px) env(safe-area-inset-left);
@@ -570,7 +551,7 @@ body.wd-over-worn-item { cursor: grab; }
   .wd-kicker { display: none; }
   .wd-actions { padding: 9px 12px; gap: 6px; }
   .wd-actions .ghost { padding-inline: 10px; }
-  .wd-grid, .wd-grid.expanded { grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; }
+  .wd-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; }
   .wd-rail { padding: 4px 12px 0; }
   .wd-body { padding: 10px 14px calc(16px + env(safe-area-inset-bottom)); }
   .wd-section { margin-top: 12px; }
@@ -584,9 +565,8 @@ body.wd-over-worn-item { cursor: grab; }
   .wd-swatch:hover, .wd-optorb:hover { transform: none; }
   .wd-swatch { top: 4px; right: 4px; }
   .wd-optorb { right: 4px; top: 39px; }
-  .wd-actions .ghost, .wd-looks-add, .wd-looks-share button, .wd-look-main, .wd-look-del, .wd-nav, .wd-expand, .wd-opt-equip, .ocp-channel, .ocp-clear { min-height: 44px; }
-  .wd-expand { min-width: 44px; }
-  .wd-opt { min-height: 88px; }
+  .wd-actions .ghost, .wd-looks-add, .wd-looks-share button, .wd-look-main, .wd-look-del, .wd-nav, .wd-opt-equip, .ocp-channel, .ocp-clear { min-height: 44px; }
+    .wd-opt { min-height: 88px; }
   .ocp-close { width: 44px; height: 44px; }
   .ocp-hue { height: 44px; }
   .ocp-value-row { height: 44px; }
