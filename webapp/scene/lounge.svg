@@ -40,6 +40,9 @@
   <linearGradient id="lg-vinyl" x1="0" y1="0" x2="0" y2="1">
     <stop offset="0" stop-color="#6b2340"/><stop offset=".45" stop-color="#40142a"/><stop offset="1" stop-color="#1e0a16"/>
   </linearGradient>
+  <linearGradient id="lg-seat" x1="0" y1="0" x2="0" y2="1">
+    <stop offset="0" stop-color="#5a1d36"/><stop offset=".4" stop-color="#36111f"/><stop offset="1" stop-color="#140610"/>
+  </linearGradient>
   <linearGradient id="lg-floor" gradientUnits="userSpaceOnUse" x1="210" y1="560" x2="990" y2="950">
     <stop offset="0" stop-color="#241b2a"/><stop offset=".6" stop-color="#15101d"/><stop offset="1" stop-color="#0a0810"/>
   </linearGradient>
@@ -102,9 +105,9 @@
      pair either side of the screen -->
 <g data-prop="speaker" transform="translate(944 180)"></g>
 
-<!-- floor + banquette. only the backrest lives here, the seat
-     front is scene/lounge-front.svg, drawn OVER Jun so she sits on it.
-     the booth wraps the bottom left corner, right side is the doorway -->
+<!-- floor + banquette. she sits on this, the table hiding her from
+     the hips down is scene/lounge-front.svg, drawn OVER her. booth
+     wraps the bottom left corner, right side is the doorway -->
 <path d="M-600 560h2400v390H-600z" fill="url(#lg-floor)"/>
 <path d="M-600 556h2400v6H-600z" fill="#3b3348" opacity=".7"/>
 <g>
@@ -113,10 +116,11 @@
     <path d="M-474 610v110M-336 610v110M-198 610v110M-60 610v110M78 610v110M216 610v110M354 610v110M492 610v110M630 610v110"/>
   </g>
   <path d="M-600 600h1394v14H-600z" fill="#7c2c49"/>
+  <path d="M-600 724h1374q26 0 26 26v200H-600z" fill="url(#lg-seat)"/>
+  <path d="M-405 736v214M-129 736v214M147 736v214M423 736v214" stroke="#180814" stroke-opacity=".7" stroke-width="4"/>
+  <path d="M-600 716h1374q20 0 20 12v2H-600z" fill="#8e3455"/>
+  <path d="M-600 730h1400v10H-600z" fill="#0a0408" opacity=".35"/>
 </g>
-<!-- table lives in scene/props/booth-table.svg. off to her right, the
-     seat front would cut it in half otherwise -->
-<g data-prop="booth-table" transform="translate(840 700)"></g>
 <!-- doorway, far right, cropped. corridor light leaks under it -->
 <path d="M1124 156h76v404h-76z" fill="#0a0810"/>
 <path d="M1124 542h76v18h-76z" fill="#ffb27a" opacity=".22" filter="url(#lg-haze)"/>
