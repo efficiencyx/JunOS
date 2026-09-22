@@ -13,17 +13,18 @@ body { background: var(--bg); overflow: hidden; }
    square box + overflow shows the art lounge.svg draws past its
    viewBox, good to ~2.4:1 */
 .music-room svg { display: block; position: absolute; left: 50%; height: 100%; width: auto; aspect-ratio: 1; transform: translateX(-50%); overflow: visible; }
-/* she sits on the banquette. box starts 27.5% down the room and
-   is 95% of it tall, so it runs off the bottom on purpose and the
-   clip-path cuts it at the room's bottom edge. that's .225 of the
-   room, and inset() % is of the box itself, so .225 / .95 = 23.7%.
-   her crotch is ~60% down the model, which lands it just under the
-   seat lip lounge-front.svg draws at y 716. all three numbers hang
-   off that lip, move one and she floats or sinks. % not dvh, the
-   room is sized in % and headless chrome at least disagrees */
-html #stage, html.phone-ui #stage { position: fixed; min-height: 0; inset: calc(var(--room-h) * .275) var(--karaoke-panel) auto 0; width: auto; height: calc(var(--room-h) * .95); clip-path: inset(0 0 23.7% 0); z-index: 40; }
+/* she sits on the banquette, behind the table lounge-front.svg
+   draws over her (back edge at y 700, her hips). box starts
+   18.7% down the room and is 110% of it tall, so it runs off the
+   bottom on purpose and the clip-path cuts it at the room's bottom
+   edge. that's .287 of the room, and inset() % is of the box
+   itself, so .287 / 1.1 = 26.1%. her crotch is ~60% down the model,
+   which is what lands it on that edge. all of it hangs off y 700,
+   move one number and she floats or sinks. % not dvh, the room is
+   sized in % and headless chrome at least disagrees */
+html #stage, html.phone-ui #stage { position: fixed; min-height: 0; inset: calc(var(--room-h) * .187) var(--karaoke-panel) auto 0; width: auto; height: calc(var(--room-h) * 1.1); clip-path: inset(0 0 26.1% 0); z-index: 40; }
 .music-room-front { z-index: 45; background: none; pointer-events: none; }
-.stage-microphone { position: fixed; z-index: 44; pointer-events: none; width: 30px; height: 300px; }
+.stage-microphone { position: fixed; z-index: 46; pointer-events: none; width: 30px; height: 300px; }
 .mic-head { position: absolute; inset: 0 0 auto; height: var(--mic-head, 40px); }
 .mic-head svg { display: block; width: 100%; height: 100%; }
 .mic-stem { position: absolute; top: calc(var(--mic-head, 40px) + 2px); bottom: 5px; left: calc(50% - 2px); width: 5px; background: linear-gradient(90deg, #201529, #bcabc9, #3d304c); box-shadow: 2px 0 2px #0005; }

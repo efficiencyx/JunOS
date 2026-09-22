@@ -54,8 +54,8 @@ async function main() {
   // mount AFTER the gate, same reason as date.js
   TripLoader.mount();
   TripLoader.setStage('Walking to the lounge');
-  Scene.inject('.music-room', 'scene/lounge.svg?v=3');
-  Scene.inject('.music-room-front', 'scene/lounge-front.svg?v=1');
+  Scene.inject('.music-room', 'scene/lounge.svg?v=4');
+  Scene.inject('.music-room-front', 'scene/lounge-front.svg?v=2');
   Scene.inject('#karaokeMic .mic-head', 'scene/props/mic-head.svg');
 
   await Prefs.pullFromServer();
