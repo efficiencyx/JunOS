@@ -710,6 +710,7 @@ function showBoot() {
      'js/actions.js?v=4', 'js/outfit.js?v=22', 'js/touch.js?v=3',
      'js/mods.js?v=15', 'js/tts.js?v=3', 'js/voice.js?v=10',
      'js/voicemode.js?v=3', 'js/trip-loader.js?v=4', 'js/cards.js?v=6',
+     'js/skybox.js?v=1', 'js/scene.js?v=1',
      ...(currentUser?.role === 'admin' ? ['js/devhud.js?v=3'] : []),
      'js/wardrobe-open-lines.js?v=3', 'js/wardrobe-reactions.js?v=5',
      'js/wardrobe-return-lines.js?v=3'],

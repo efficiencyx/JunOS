@@ -1,0 +1,26 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 60 84" preserveAspectRatio="xMidYMin meet">
+<!-- PROP: microphone head only. the stand below it is two CSS
+     rectangles and an ellipse, which needs no help from anybody.
+     box 60 x 84, the collar is the last 10 units so the stem meets
+     it at y=80. -->
+<defs>
+  <linearGradient id="mh-body" x1="0" y1="0" x2="1" y2="0">
+    <stop offset="0" stop-color="#191221"/><stop offset=".22" stop-color="#8d8299"/>
+    <stop offset=".46" stop-color="#cfc6d8"/><stop offset=".68" stop-color="#6f6580"/>
+    <stop offset="1" stop-color="#140f1c"/>
+  </linearGradient>
+  <linearGradient id="mh-collar" x1="0" y1="0" x2="1" y2="0">
+    <stop offset="0" stop-color="#1a1322"/><stop offset=".4" stop-color="#b3a7bf"/>
+    <stop offset=".7" stop-color="#5d5369"/><stop offset="1" stop-color="#160f1e"/>
+  </linearGradient>
+</defs>
+<path d="M8 26a22 22 0 0 1 44 0v26a22 22 0 0 1-44 0z" fill="url(#mh-body)"/>
+<!-- grille mesh. crossed, not stripes, or it reads as a barrel -->
+<g stroke="#0d0913" stroke-opacity=".5" stroke-width="1.2">
+  <path d="M9 30h42M9 38h42M9 46h42M9 54h42M9 62h42"/>
+  <path d="M16 8v66M24 6v70M32 5v72M40 6v70M48 8v66"/>
+</g>
+<path d="M12 22a18 18 0 0 1 14-14l-2 60a16 16 0 0 1-12-12z" fill="#ffffff" opacity=".13"/>
+<path d="M44 20a20 20 0 0 1 6 12v22a20 20 0 0 1-8 14z" fill="#07050c" opacity=".4"/>
+<rect x="14" y="72" width="32" height="10" rx="3" fill="url(#mh-collar)"/>
+</svg>

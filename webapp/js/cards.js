@@ -188,6 +188,7 @@ window.Cards = (function () {
     overlay.setAttribute('aria-modal', 'true');
     overlay.setAttribute('aria-label', 'Blackjack table');
     overlay.innerHTML = `
+      <div class="cards-room"></div>
       <button class="voice-overlay-btn cards-close" type="button" aria-label="Leave the table" title="Leave the table">
         <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
       </button>
@@ -197,7 +198,7 @@ window.Cards = (function () {
       <div class="cards-felt">
         <div class="cards-table-mark" aria-hidden="true">BLACKJACK<span>♠ &nbsp; ♥ &nbsp; ♣ &nbsp; ♦</span></div>
         <div class="cards-deck" aria-hidden="true"></div>
-        <div class="cards-chips" aria-hidden="true"><i></i><i></i><i></i></div>
+        <div class="cards-chips" aria-hidden="true"></div>
         <div class="cards-hand cards-you"><div class="cards-label">You <span class="cards-val"></span></div><div class="cards-row"></div></div>
         <div class="cards-status" role="status" aria-live="polite"></div>
         <div class="cards-actions">
@@ -207,6 +208,9 @@ window.Cards = (function () {
         </div>
       </div>`;
     document.body.appendChild(overlay);
+    Scene.inject('.cards-room', 'scene/cardroom.svg');
+    Scene.inject('.cards-deck', 'scene/props/deck.svg');
+    Scene.inject('.cards-chips', 'scene/props/chips.svg');
     herRow = overlay.querySelector('.cards-her .cards-row');
     youRow = overlay.querySelector('.cards-you .cards-row');
     herVal = overlay.querySelector('.cards-her .cards-val');
