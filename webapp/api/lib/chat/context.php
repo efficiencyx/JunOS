@@ -145,16 +145,22 @@ function chat_live_context(array $req, array $user, string $lastUserMsg, string 
 
     // the drawer's "ask her out" buttons. she says yes in prose and
     // never calls the tool, so the page never opens and Anon sits
-    // there. name the tool, and the rule that yes means calling it.
+    // there. so one flat OOC line naming the tool, same shape as the
+    // idle nudge she saw in training. the old "you MUST call X if you
+    // accept" rule was too much for a small model on <think:low>.
     // and THROW AWAY everything else (clock, notes, lore, wardrobe,
     // save check). a 4 line invitation does not need canon facts
     // about the shop, they just pull her off the question
     if ($toolsOffered && !$req['idle'] && $invite !== '') {
         $tool = array_search($invite, TRIP_TOOLS, true);
-        $contextParts = [$feelingsBlock, "## Anon just asked you out\n"
-            . "Anon's latest message is an invitation. Saying yes or no is yours to decide. "
-            . "But if you accept, you MUST call {$tool} in this reply, before your line - "
-            . "answering yes without calling it means nothing happens and you two stay here."];
+        $plan = [
+            'shop' => "go to Annalie's shop together",
+            'karaoke' => 'go to karaoke together',
+            'date' => 'go out to eat together',
+            'cards' => 'play a game of blackjack',
+        ][$invite];
+        $contextParts = ["(OOC stage direction, not spoken by Anon: Anon wants to {$plan}. "
+            . "If you wish to go along with it, invoke the tool {$tool}.)", $feelingsBlock];
     } else {
         $invite = '';
     }
