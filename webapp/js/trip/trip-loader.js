@@ -29,10 +29,11 @@ export function mount({ reverse = false } = {}) {
   if (reduced) videoEl.pause();
   document.body.appendChild(root);
 
-  // Fake progress. a steady walk from 0 to 99 over ~4s with a CSS
-  // transition, then it sits at 99 until loading is done. the transition
-  // has to be running BEFORE Live2D.init blocks the main thread, that is
-  // what the forced reflow between the two values is for.
+  // fake progress. a steady walk from 0 to 99 over ~4s with a
+  // CSS transition, then it sits at 99 until loading is done.
+  // the transition has to be running BEFORE Live2D.init blocks
+  // the main thread. that's what the forced reflow between the
+  // two values is for.
   if (reduced) { setP(50); }
   else {
     setP(0);

@@ -38,9 +38,9 @@ def get_pipeline():
 
 
 def get_pocket_model(language=POCKET_DEFAULT_LANG):
-    # load weights into HF_HOME only when selected. changing language
-    # reloads the single checkpoint and clears its per-language voice
-    # states.
+    # weights only land in HF_HOME once somebody picks pocket-tts.
+    # one checkpoint at a time, so a language change reloads it and
+    # throws away the per-language voice states.
     with _pocket_load_lock:
         if state.pocket_model is not None and state.pocket_lang != language:
             state.pocket_model = None
@@ -50,9 +50,9 @@ def get_pocket_model(language=POCKET_DEFAULT_LANG):
             import inspect
             from pocket_tts import TTSModel
             device = get_device()
-            # not every pocket-tts release takes a `device` kwarg, so only
-            # pass it when the signature actually has one, otherwise load
-            # first and then .to(device).
+            # not every pocket-tts release takes a `device` kwarg.
+            # so pass it only when the signature actually has one,
+            # otherwise load first and .to(device) after.
             device_via_kwarg = "device" in inspect.signature(TTSModel.load_model).parameters
             kwargs = {"language": language}
             if device_via_kwarg:
@@ -191,9 +191,9 @@ def tts(req: TTSReq):
 @router.post("/warm")
 def warm(req: WarmReq):
     # the client warms pocket-tts language weights and voice state
-    # while Jun writes, hiding the multi-second reload before /tts.
-    # changing language still reloads fully. Kokoro has no language
-    # checkpoints to warm.
+    # while Jun is still writing, so the multi second reload is
+    # done before /tts asks. a language change is still a full
+    # reload. Kokoro has no language checkpoints, nothing to warm.
     if req.engine != "pockettts":
         return {"ok": True, "warmed": None}
     language = req.lang if req.lang in POCKET_LANG_IDS else POCKET_DEFAULT_LANG

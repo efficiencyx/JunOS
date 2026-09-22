@@ -62,7 +62,7 @@ export function setEngine(e) { if (e) engine = e; }
 export function setVoice(v) { if (v) voice = v; }
 // 'auto' turns detection on per reply, a real id pins that
 // language. the detector only ever hands back ids the sidecar
-// knows, so 'auto' NEVER leaves this file.
+// knows, so 'auto' never leaves this file.
 export function setLang(l) {
   if (!l) return;
   if (l === 'auto') { autoLang = true; return; }
@@ -92,13 +92,13 @@ export async function listVoices() {
   }
 }
 
-// only the FIRST chunk gets split early. audio comes out sooner
+// only the first chunk gets split early. audio comes out sooner
 // and we don't make every sentence sound like it's ending. Jun's
 // playful "~" is always a break, so each bit between tildes
 // becomes its own utterance and the voice can fall at the end
 // instead of running into the next one
 const HARD_BREAK_RE = /[.!?~\n]/;
-// only real punctuation breaks a chunk. keep dashes OUT, an ASCII
+// only real punctuation breaks a chunk. keep dashes out, an ASCII
 // hyphen lands mid-word ("co-op", Jun's "H-hey" stutters) and
 // putting it in the class between the colon and an en dash
 // silently made a range over every letter, which cut the first
@@ -157,7 +157,7 @@ function nextChunk(buf, first) {
 const ACTION_RE = /\[\s*A(?:CTIONS?)?\s*:[^\]]*\]?/gi;
 const MARKDOWN_NOISE_RE = /[*_~`#>]+/g;
 const EMOJI_RE = /[\p{Extended_Pictographic}️‍]/gu;
-// pocket-tts reads a stutter start as the NAME of the letter, so
+// pocket-tts reads a stutter start as the Name of the letter, so
 // "H-hey" comes out "aitch hey". amazing. so we drop them. same
 // letter both sides of the hyphen is a stutter, different letters
 // like T-shirt, x-ray or co-op we leave alone.
@@ -347,10 +347,11 @@ function startJob(job) {
       onLog('warn', `TTS error: ${e.message}`);
     } finally {
       inFlight = Math.max(0, inFlight - 1);
-      // open the window even when chunk 0 failed, or one error pins the
-      // whole reply at cap 1. but NOT when it was cancelled. that job
-      // belongs to a reply stop() already killed, and letting it through
-      // uncaps the *next* reply's chunk 0 and undoes the entire point.
+      // lift the cap to MAX_IN_FLIGHT even when chunk 0 failed, or
+      // one error pins the whole reply at cap 1. but not when it
+      // was cancelled. that job belongs to a reply stop() already
+      // killed, and letting it through uncaps the *next* reply's
+      // chunk 0 and undoes the entire point.
       if (job.status !== 'cancelled') firstChunkSynthed = true;
       kick();
       pump();
@@ -406,7 +407,7 @@ export function speak(text, hooks) {
 
 // the mic hears Jun too. browser AEC (echo cancellation) eats
 // most of it, but what's left scales with how loud she is right
-// NOW, so voice.js raises its speech threshold by that much
+// now, so voice.js raises its speech threshold by that much
 // instead of some fixed step.
 //
 // a ring buffer, not one value. the echo reaching the mic lags
@@ -438,13 +439,14 @@ function pushRms(rms) {
 }
 
 export function outputRms(windowMs) {
-  // take the sample HERE instead of trusting the lipsync loop to
+  // take the sample here instead of trusting the lipsync loop to
   // have done it. that loop runs on rAF and stops dead in a hidden
-  // tab. playback does not. neither does voice.js's worklet. so
-  // without this a backgrounded tab reports 0 while Jun is
-  // obviously talking, the echo threshold falls to nothing, and she
-  // cuts herself off. voice.js asks every ~32ms so the history
-  // stays thick enough for the max below.
+  // tab. playback doesn't. neither does voice.js's worklet (its mic
+  // code on the audio thread). so without this a backgrounded tab
+  // reports 0 while Jun is obviously talking, the echo threshold
+  // falls to nothing, and she cuts herself off. voice.js asks
+  // every ~32ms so the history stays thick enough for the max
+  // below.
   pushRms(computeRms());
   const cutoff = performance.now() - (windowMs || 200);
   let max = 0;

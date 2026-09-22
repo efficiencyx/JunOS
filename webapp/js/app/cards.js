@@ -1,11 +1,11 @@
 // blackjack, turn based. Anon hits or stands, then she gets one
 // move, then Anon again, until both stand or somebody busts.
 // standing is final. her move is one ephemeral turn with the
-// hands in an OOC direction, the word she answers with is the
-// move. no dealer rule, she can stand on 12 or bust on 19,
-// that's her problem. the table is a full-page mode like voice
-// mode, chat chrome hidden, stage stays up on the face preset so
-// her lines land in the face bubble.
+// hands in an OOC direction (out of character note to her), the
+// word she answers with is the move. no dealer rule, she can
+// stand on 12 or bust on 19, that's her problem. the table is a
+// full-page mode like voice mode, chat chrome hidden, stage stays
+// up on the face preset so her lines land in the face bubble.
 
 import * as Names from '../core/names.js?v=1';
 import * as Live2D from '../live2d/live2d.js?v=4';
@@ -103,7 +103,7 @@ function stand() {
   herTurn();
 }
 
-// HIT or STAND is the first of the two words she says. no word
+// the move is whichever of HIT or STAND she says first. no word
 // at all (error, stopped, a line that dodges the question) and
 // the plain dealer rule stands in, hit under 17, so the hand
 // still ends.
@@ -210,9 +210,10 @@ function build() {
         <button class="cards-next" type="button" hidden>Next hand</button>
       </div>
     </div>`;
-  // the room sits OUTSIDE the overlay on purpose. the overlay's z-index
-  // makes it its own stacking context, so a room inside it paints over
-  // #stage (z 40) whatever z it gets, and Jun ends up behind the wall
+  // the room sits OUTSIDE the overlay on purpose. the overlay's
+  // z-index makes it its own stacking context, so a room inside
+  // it paints over #stage (z 40) whatever z it gets, and Jun
+  // ends up behind the wall
   const room = document.createElement('div');
   room.className = 'cards-room';
   document.body.append(room, overlay);

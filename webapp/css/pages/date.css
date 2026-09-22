@@ -40,9 +40,10 @@ body.served .table text { opacity: 1; transform: translateY(0); }
 body.ordered .menu-card { transform: translate(-50%, 70px); opacity: 0; pointer-events: none; }
 .page { flex: 1; min-height: 0; overflow-y: auto; overscroll-behavior: contain; padding: 18px 22px 14px; scrollbar-width: thin; scrollbar-color: #bda989 transparent; background: linear-gradient(100deg, #f5ecd9, #f3e9d5 60%, #eee2cb); }
 .page p, .page h2 { margin: 0; }
-/* names, date and place used to own the whole left page of the card -
-   half its width for three lines - while the dishes were squeezed into
-   the other half and scrolled. header strip now, dishes get the card. */
+/* names, date and place get a header strip, not a page. on
+   the whole left page of the card they take half its width for
+   three lines, and the dishes get squeezed into the other half
+   and scroll. strip up top, dishes get the card. */
 .menu-head { flex: none; display: flex; align-items: baseline; justify-content: space-between; gap: 14px; flex-wrap: wrap; padding: 12px 22px 9px; border-bottom: 1px solid #c9b896; background: linear-gradient(100deg, #f7eedd, #f1e6cf); }
 .menu-head p { margin: 0; }
 .page-names { font: italic 400 clamp(19px, 2.1vw, 27px)/1.1 var(--serif); color: #5a4638; overflow-wrap: anywhere; }

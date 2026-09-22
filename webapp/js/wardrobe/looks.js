@@ -148,8 +148,8 @@ function buildLooks() {
     if (e.key === 'Escape' && !looksEl.hidden) toggleLooks(false);
   });
 
-  // move the existing Live2D stage into the preview pane to avoid a
-  // second renderer.
+  // no second renderer for the preview. the existing Live2D
+  // stage gets moved over the pane instead.
   const pane = looksEl.querySelector('.wd-looks-stage');
   if (window.ResizeObserver) new ResizeObserver(syncStageHole).observe(pane);
   window.addEventListener('resize', () => { if (!looksEl.hidden) syncStageHole(); });

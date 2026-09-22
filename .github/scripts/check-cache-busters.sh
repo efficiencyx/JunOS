@@ -1,11 +1,11 @@
 #!/bin/sh
-# Every reference to a given JS module must carry the same ?v=
-# number across the whole webapp. Modules are independent of each
-# other, so two different modules sitting at different versions
-# is normal and expected. What this catches is one module
-# referenced at two versions: the browser then fetches it twice
-# and builds two separate copies of the module. stylesheets get
-# the same treatment, a skewed one is just a wasted download.
+# every reference to one JS module has to carry the same ?v=
+# number, across the whole webapp. two different modules on two
+# different versions is normal, they're independent of each
+# other. what this catches is ONE module referenced at two
+# versions. the browser then fetches it twice and builds two
+# separate copies of the module. stylesheets get the same
+# treatment, a skewed one is just a wasted download.
 #
 # refs are keyed by basename, not by path, because resolving
 # "../x.js" in awk is misery. that only works while every

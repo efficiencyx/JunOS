@@ -30,21 +30,23 @@ def stt_available():
 
 
 def get_whisper():
-    # load whisper into HF_HOME on first use, not prewarm(), to avoid
-    # the boot healthcheck deadline. first transcription costs ~1-2s.
-    # CTranslate2 (whisper's runtime) and torch each default to one
-    # thread per core. cap cpu_threads here and torch via
-    # OMP_NUM_THREADS in tts.Dockerfile to avoid oversubscription.
+    # whisper lands in HF_HOME on first use, not in prewarm(), or
+    # boot blows the healthcheck deadline. first transcription pays
+    # ~1-2s for it. CTranslate2 (whisper's runtime) and torch each
+    # default to one thread per core, so together they want twice
+    # the cores the box has (oversubscription). cpu_threads caps
+    # it here, torch gets capped by OMP_NUM_THREADS in
+    # tts.Dockerfile.
     global _whisper
     if _whisper is None:
         from faster_whisper import WhisperModel
         model = os.environ.get("STT_MODEL", "base")
         compute = os.environ.get("STT_COMPUTE", "int8")
         threads = int(os.environ.get("OMP_NUM_THREADS", "4"))
-        # STT_DEVICE, NOT TTS_DEVICE. whisper runs on CTranslate2, so the
-        # device that suits Kokoro does not carry over.
-        # docker/tts.Dockerfile has the cuDNN/ROCm reasons it defaults to
-        # cpu.
+        # STT_DEVICE, not TTS_DEVICE. whisper runs on CTranslate2,
+        # so whatever device suits Kokoro doesn't carry over.
+        # docker/tts.Dockerfile has the cuDNN/ROCm reasons it
+        # defaults to cpu.
         device = os.environ.get("STT_DEVICE", "cpu").strip().lower()
         if device not in ("cpu", "cuda"):
             device = "cpu"
@@ -67,9 +69,9 @@ def get_whisper():
 
 @router.post("/stt")
 async def stt(request: Request):
-    # js/voice/voice.js posts raw 16kHz mono PCM16 WAV, so no
-    # python-multipart is needed. PyAV bundles ffmpeg libraries and
-    # accepts other audio containers too, without an ffmpeg binary.
+    # js/voice/voice.js posts a raw 16kHz mono PCM16 WAV, so no
+    # python-multipart. PyAV bundles the ffmpeg libraries, other
+    # audio containers open fine too and no ffmpeg binary needed.
     if not stt_available():
         return JSONResponse({"error": "stt_unavailable"}, status_code=503)
 
@@ -97,10 +99,13 @@ def _stt_sync(body):
             log.info("stt: invalid audio: %s", e)
             return JSONResponse({"error": "invalid_audio"}, status_code=400)
 
-        # beam_size=1 (greedy) is ~30% faster with little accuracy loss
-        # on short utterances. condition_on_previous_text=False prevents
-        # repetition across independent turns. vad_filter trims the 300ms
-        # pre-roll and 700ms end-of-turn silence.
+        # beam_size=1 is greedy decoding, ~30% faster and barely
+        # less accurate on short utterances.
+        # condition_on_previous_text=False because turns are
+        # independent, and feeding the last one back in makes
+        # whisper repeat itself. vad_filter (VAD, the speech
+        # detector) trims the 300ms pre-roll and the 700ms
+        # end-of-turn silence.
         segments, _info = get_whisper().transcribe(
             audio,
             language=STT_LANG,

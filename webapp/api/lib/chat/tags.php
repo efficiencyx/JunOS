@@ -6,8 +6,9 @@
 // has to approve a flee tag, the tag itself proves nothing.
 function chat_parse_action_tags(string $buffer, array $ctx, array &$state): string {
     // the second form is the call itself, unparsed. about 1 turn in
-    // 6 with the overheard hint on she writes `stay_silent{overheard:true,...}`
-    // or `stay_silent(overheard=true)` as plain text and ollama's
+    // 6 with the overheard hint on, she writes
+    // `stay_silent{overheard:true,...}` or
+    // `stay_silent(overheard=true)` as plain text and ollama's
     // parser lets it through. Anon would read that on screen.
     if (!$state['silenced'] && !$ctx['req']['idle'] && (preg_match('/\[\s*A(?:CTIONS?)?\s*:\s*stay_silent\b([^\]]*)\]/i', $buffer, $sm)
             || preg_match('/^\s*stay_silent\s*[({](.*)$/is', $buffer, $sm))) {

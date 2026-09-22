@@ -26,8 +26,10 @@ body.welcome-scene .chat-panel {
 body.welcome-scene .welcome-scene-fx { opacity: 1; }
 .welcome-scene-fx[hidden] { display: none; }
 
-/* app/mood.js paints --scene-tint off the relationship, so
-   this file doesn't need to know a thing about its tiers. */
+/* app/welcome.js sets --scene-tint per tier (TIER_TINT) and
+   drops it for the rest, which fall back to --accent, painted
+   off the relationship by app/mood.js. so this file doesn't
+   need to know a thing about the tiers. */
 .welcome-scene-fx::before {
   content: "";
   position: absolute;

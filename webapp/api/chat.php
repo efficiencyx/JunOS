@@ -18,7 +18,7 @@ $PROVIDER = ai_provider();
 
 $user = require_user();
 // 90 not 30. the card table is one chat turn per move and a fast
-// hand is 5-8 of them, three hands in a minute tripped the old cap.
+// hand is 5-8 of them, three hands in a minute tripped 30.
 rate_limit('chat', 90, 60);
 if (consolidation_locked((int)$user['id'])) fail(418, 'consolidating');
 

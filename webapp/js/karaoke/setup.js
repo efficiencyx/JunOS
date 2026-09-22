@@ -61,7 +61,7 @@ function fmtClock(seconds) {
   return Math.floor(whole / 60) + ':' + String(whole % 60).padStart(2, '0');
 }
 
-// a WIDE range on purpose, this is not a countdown. htdemucs (the
+// a wide range on purpose, this is not a countdown. htdemucs (the
 // thing that splits a song into vocals and backing) is slower
 // than realtime on a CPU and way faster on a GPU. whisper then
 // reads the vocal track back, and the very first run also has to
@@ -210,9 +210,9 @@ export async function loadFile(file) {
         ? 'Splitting the vocals off on CPU…'
         : 'Splitting the vocals off…');
       startClock(estimateSeparation(sourceDuration, h.device));
-      // aborting only stops US waiting. the sidecar carries right on to
-      // the end of the job it started, there's no cancel on the demucs
-      // side.
+      // aborting only stops US waiting. the sidecar carries right
+      // on to the end of the job it started, there's no cancel on
+      // the demucs side.
       sepAbort = new AbortController();
       setCancellable(() => sepAbort && sepAbort.abort());
       let sepRes;

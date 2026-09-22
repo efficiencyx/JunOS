@@ -5,7 +5,7 @@ import { itemPatterns } from '../outfit/apply.js?v=3';
 import { state, variantState } from '../outfit/current.js?v=1';
 
 // tiles baked by tools/bake-items.html, sitting in the gitignored
-// webapp/assets/items/. they're game art, so they never ship -
+// webapp/assets/items/. they're game art, so they never ship.
 // whoever ran the extractor bakes their own. no manifest means no
 // bake ran here and every tile falls back to the atlas crop
 // below.
@@ -60,7 +60,7 @@ function bakeShots() {
 
 // maintainer-only, driven by tools/bake-items.html. moves state
 // through loadPresetState/applyChanged rather than setItem, so it
-// never PUTs and never waits out writeWardrobe's 500ms spacing -
+// never PUTs and never waits out writeWardrobe's 500ms spacing.
 // 40 shots would otherwise be half a minute of round trips.
 export async function bakeAll(onProgress) {
   const restore = exportPreset();

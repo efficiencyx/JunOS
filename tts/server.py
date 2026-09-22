@@ -1,22 +1,22 @@
 """
 local audio sidecar on :8001. /tts takes one sentence at a time
-from js/voice/tts.js and returns a WAV for its AudioContext.
+from js/voice/tts.js and sends back a WAV for its AudioContext.
 
 `engine` picks kokoro (Kokoro-82M, the default, needs
 espeak-ng) or pockettts (kyutai-labs pocket-tts, 100M, CPU,
 English + 5 languages). /voices lists voices and pocket-tts
 languages for the picker. js/voice/voice.js sends a raw WAV
-to /stt, where faster-whisper transcribes it.
+to /stt and faster-whisper transcribes it.
 
-/separate uses htdemucs to split backing and guide vocals.
-/transcribe_timed uses whisper to time the words. Docker runs
-this half in docker/karaoke.Dockerfile with
-SIDECAR_ROLE=karaoke, so it can use GPU torch while voice stays
-on CPU. each image has only its own deps. the *_available() probes
-make missing ones return 503. bare metal runs one process for
-both roles.
+the karaoke half. /separate splits backing and guide vocals
+with htdemucs, /transcribe_timed gets whisper to time the words.
+Docker runs this half in docker/karaoke.Dockerfile with
+SIDECAR_ROLE=karaoke, so it can have GPU torch while voice stays
+on CPU. each image only has its own deps and the *_available()
+probes turn a missing one into a 503. bare metal runs one
+process for both roles.
 
-PHP uses TTS_URL to reach the `tts` compose service.
+PHP reaches the `tts` compose service through TTS_URL.
 KOKORO_URL still works for older .env files.
 
 the code lives in sidecar/, one module per job. this file only
@@ -62,10 +62,10 @@ def prewarm():
         except Exception:
             log.exception("pre-warm failed (non-fatal)")
 
-    # start the idle clock NOW, so the time prewarm took doesn't
+    # start the idle clock here, so the time prewarm took doesn't
     # count against it
     state.reset_idle_clock()
-    # ALWAYS, no condition. the reaper also clears out expired
+    # always, no condition. the reaper also clears out expired
     # separation tokens, and those need cleaning even when idle
     # unloading is off.
     threading.Thread(target=state.reaper, name="tts-reaper", daemon=True).start()
@@ -78,8 +78,8 @@ def prewarm():
 def health():
     # `stt` lets the webapp hide the mic button when this build has
     # no whisper, instead of face planting on the first thing you
-    # say. it reports whether we can IMPORT it, NOT whether the model
-    # is loaded, that happens late.
+    # say. it reports whether we can import it, not whether the
+    # model is loaded, that happens late.
     return {"ok": True, "role": SIDECAR_ROLE, "stt": stt.stt_available(),
             "sep": karaoke.sep_available(), "device": get_sep_device()}
 

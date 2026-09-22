@@ -4,8 +4,8 @@ import { mode, setStatus, track } from './setup.js?v=2';
 import { startRecording, stopRecording } from './recorder.js?v=2';
 import { clamp } from '../core/util.js?v=1';
 
-// queue both stems 0.1 seconds ahead. they start on the exact
-// same sample.
+// queue both stems (the split vocal and backing tracks) 0.1
+// seconds ahead, so they start on the exact same sample.
 const START_LEAD = 0.1;
 
 // slide the guide vocal over 0.05 seconds, or the handoff
@@ -194,7 +194,7 @@ export function start(nextSoloPhase = 'you') {
   guideSource.buffer = track.guideBuf;
   guideSource.connect(guideGain);
   guideGain.connect(masterGain);
-  // tap AFTER the gain, lipsync follows only the vocal you actually
+  // tap after the gain, lipsync follows only the vocal you actually
   // hear
   guideGain.connect(analyser);
 

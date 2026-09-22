@@ -1,13 +1,16 @@
 #Requires -Version 5.1
 <#
 Find the draft depth that is actually fastest on THIS machine,
-then write it into .env.
+then write it into .env. MTP is multi-token prediction: a small
+drafter model guesses the next few tokens and the chat model
+checks them all in one pass. The draft depth is how many it
+guesses.
 
 Speculation only pays when checking K+1 tokens costs about what
 checking 1 costs. Whether that holds depends on the card, so
 the only honest answer is to measure. Measured on a 3060 with
 the 12B: depth 1 gave +25%, depth 2 +16%, depth 3 broke even,
-depth 4 came out Slower than no drafter at all. A bigger card
+depth 4 came out slower than no drafter at all. A bigger card
 can afford a deeper draft. Yours might not.
 
 Needs the stack running and the models pulled. Safe to re-run
@@ -99,8 +102,8 @@ $Tokens = 80
 # Her real system prompt goes in front of every one of those,
 # because it goes in front of every real message too. Measured
 # bare, depth 2 came out on top by 1%, measured with the prompt
-# in place depth 1 won by 6% - same box, same drafter, same
-# afternoon. Tuning without it picks the winner for a regime the
+# in place depth 1 won by 6%. same box, same drafter, same
+# afternoon. Tuning without it picks the winner for a setup the
 # app never runs in.
 $SystemPrompt = ''
 if (Test-Path 'webapp/system_prompt.txt') {

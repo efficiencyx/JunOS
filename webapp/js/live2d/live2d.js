@@ -1,6 +1,7 @@
 // same version rule as app.js. every import of this file and
 // every ?v= inside js/live2d/ ALL have to match, or the browser
-// builds a second copy of the graph and everything goes sideways.
+// builds a second copy of the module graph, and the two copies
+// don't share state.
 
 import { resetIdle, renderIfDirty, setFidgetsEnabled, setMood, setMouthOverride, startIdle, stopIdle, tick } from './anim.js?v=2';
 import { bakeThumb } from './bake.js?v=1';
@@ -54,9 +55,10 @@ export async function init({ stageEl, onStatus, ignoreSavedPos }) {
   S.cameraPersistenceEnabled = !ignoreSavedPos;
   const initialSize = measureStage();
 
-  // drawing above 1x is already supersampling, which is what the
-  // soft edged art wants. MSAA on top of that buys a multisampled
-  // backbuffer for nothing.
+  // drawing at 2x is already supersampling, which is what the
+  // soft edged art wants. MSAA (the GPU's own edge smoothing) on
+  // top of that buys a multisampled backbuffer for nothing, so it
+  // only goes on below 2x.
   const resolution = rendererResolution();
 
   setApp(new PIXI.Application({
@@ -84,10 +86,11 @@ export async function init({ stageEl, onStatus, ignoreSavedPos }) {
   const textures = [t0, t1, t2];
   while (textures.length < 8) textures.push(TRANSPARENT);
 
-  // the atlas mixes premultiplied alpha (transparency already
-  // baked into the colours) with straight alpha where it isn't.
-  // send it as PMA and fix each sample in the shader, otherwise
-  // one kind gets a bright fringe and the other gets a dark one.
+  // the atlas (the texture sheets every part is cut from) mixes
+  // premultiplied alpha, transparency already baked into the
+  // colours, with straight alpha where it isn't. send it as PMA
+  // and fix each sample in the shader, otherwise one kind gets a
+  // bright fringe and the other gets a dark one.
   for (const url of textures) {
     PIXI.BaseTexture.from(url, {
       alphaMode: PIXI.ALPHA_MODES.PMA,
@@ -156,7 +159,7 @@ export async function init({ stageEl, onStatus, ignoreSavedPos }) {
   // rate anyway. renderIfDirty skips those identical frames.
   // Application shoves its own render in at UPDATE_PRIORITY.LOW, so
   // swap it for one that works out whether the frame is worth
-  // drawing at all. SAME priority, so the camera tween still lands
+  // drawing at all. same priority, so the camera tween still lands
   // before the draw and not a frame after it.
   app.ticker.remove(app.render, app);
   app.ticker.add(tick);

@@ -81,17 +81,19 @@ export async function unzip(buf) {
     if (names.has(name)) throw new Error('Duplicate path in mod archive');
     names.add(name);
     if (method !== 0 && method !== 8) throw new Error('Unsupported compression in mod archive');
-    // flat-colour PNGs and JSON can compress 500:1. use ENTRY_BYTES +
-    // TOTAL_BYTES for the bomb limits, not a ratio. inflateEntry
-    // stops at declared usize.
+    // flat-colour PNGs and JSON can compress 500:1, so a ratio
+    // check would flag real mods. the zip bomb limits (tiny zip,
+    // gigabytes once inflated) are ZIP_MAX_ENTRY_BYTES and
+    // ZIP_MAX_TOTAL_BYTES instead. inflateEntry stops at the
+    // declared usize.
     if (usize > ZIP_MAX_ENTRY_BYTES) throw new Error('Expanded mod file is too large');
     totalSize += usize;
     if (totalSize > ZIP_MAX_TOTAL_BYTES) throw new Error('Expanded mod archive is too large');
     if (lho + 30 > buf.byteLength || dv.getUint32(lho, true) !== 0x04034b50) {
       throw new Error('Corrupt mod archive');
     }
-    // the local header repeats the name and extra lengths, data comes
-    // after
+    // the local header has its own name and extra lengths, data
+    // comes right after them
     const lnl = dv.getUint16(lho + 26, true), lel = dv.getUint16(lho + 28, true);
     const dataOffset = lho + 30 + lnl + lel;
     if (dataOffset > buf.byteLength || csize > buf.byteLength - dataOffset) throw new Error('Corrupt mod archive');

@@ -11,8 +11,6 @@ let animating = false;
 let wasAnimating = false;
 let tickDeltaMs = 0;
 
-// tints, opacity, order, atlases and camera changes bypass
-// parameters. mark them dirty here or the canvas stays stale.
 const STATEFUL_PARAMS = new Set([
   'ParamShirtEnabled', 'ParamBraEnabled', 'ParamPantiesEnabled',
   'ParamSkirtEnabled', 'ParamHoodieEnabled', 'ParamPantsEnabled',
@@ -339,25 +337,26 @@ export function stopIdle() {
 }
 
 // ParamTailWiggle, ParamHairPhysicsBaseToShort and
-// ParamPhysicsBoobXL need the missing physics3.json. drive the
-// nine tail rotation params root-to-tip with a delayed sine so
-// [A:tail_wag] and fidgets actually move it.
+// ParamPhysicsBoobXL need the missing physics3.json (the rig's
+// physics sim file). so drive the nine tail rotation params
+// root-to-tip with a delayed sine ourselves, or [A:tail_wag] and
+// fidgets never actually move it.
 const TAIL_SEGMENTS = Array.from({ length: 9 }, (_, i) => `Param_Angle_Rotation_${i + 1}_TailMain`);
 // fractions of each segment's own range, because these are angle
 // params and their range is whatever the rigger picked. 0.18 is a
 // resting sway, the wiggle on top is what the fidgets and
-// [A:tail_wag] actually buy you now.
+// [A:tail_wag] actually buy you.
 const TAIL_IDLE_AMP = 0.18;
 const TAIL_WAG_AMP = 0.7;
 const TAIL_PERIOD_MS = 5200;
 // how far behind the segment above each one runs, in periods
 const TAIL_LAG = 0.1;
-/* phase has to ACCUMULATE. now / period jumps when wiggle
-   changes period. dropping 2800 -> 1260 at now = 100000 moves
-   phase by 43 whole cycles in one frame. during a wiggle loop
-   this was ~1.7 cycles per frame, and the error grows with time
-   since page load. integrating dt / period changes only the
-   speed when period moves, keeping phase continuous. */
+// phase has to ACCUMULATE. now / period jumps when wiggle
+// changes period. dropping 2800 -> 1260 at now = 100000 moves
+// phase by 43 whole cycles in one frame. during a wiggle loop
+// that was ~1.7 cycles per frame, and the error grows with time
+// since page load. integrating dt / period only changes the
+// speed when period moves, so phase stays continuous.
 let tailPhase = 0;
 let tailLastMs = performance.now();
 
@@ -403,8 +402,9 @@ export function tick() {
     const cur = currentValues.get(id);
     if (cur === undefined) { currentValues.set(id, target); continue; }
     let next = cur + (target - cur) * alpha;
-    // snap when it's close. params that turn drawables on and off, like
-    // ParamHeadpat, have to ACTUALLY hit 0, not creep at it for Ever.
+    // snap when it's close. params that turn drawables (single
+    // meshes of the rig) on and off, like ParamHeadpat, have to
+    // actually land on the target, not creep at it for Ever.
     if (Math.abs(target - next) < 0.001) next = target;
     else settling = true;
     currentValues.set(id, next);
@@ -475,7 +475,7 @@ export function tick() {
 export function renderIfDirty() {
   if (!raw) return;
   // wasAnimating buys us one more frame. the tick that settles a
-  // parameter or ends a blink writes the last value FIRST, then
+  // parameter or ends a blink writes the last value first, then
   // reports idle.
   const draw = animating || wasAnimating || S.needsRender;
   wasAnimating = animating;

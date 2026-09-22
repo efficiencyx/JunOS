@@ -45,16 +45,17 @@ function tintCanvas(c, hex) {
 // layers here.
 export async function bakeDrawable(id, entries, colorsFor, hostTint, replaceVanilla) {
   entries.sort((a, b) => a.layer - b.layer);
-  // keep vanilla layers as Part.AddVanilla does, unless
-  // DontIncludeVanillaLayers is set. layer 0 is only a z index: 100
-  // of 160 items in variants/game_items.json use it, including
-  // TailFluffy_common on TailMain. treating it as replacement
-  // erases tails and panties under maebari. a transparent 1x1
-  // RectInt also deletes a decal: Seamless Components uses it for
-  // barcode/lines without DontIncludeVanillaLayers, while
-  // Translucent Abs keeps a 322x126 lines crop. hidden vanilla
-  // items must stay absent under mods, even when applyPass wakes
-  // their drawables.
+  // vanilla layers stay, same as Part.AddVanilla does it, unless
+  // DontIncludeVanillaLayers is set. layer 0 is only a z index,
+  // not a replacement. 100 of 160 items in variants/game_items.json
+  // use it, TailFluffy_common on TailMain included. treat it as
+  // replacement and tails get erased, so do panties under maebari.
+  // a transparent 1x1 RectInt deletes a decal too. Seamless
+  // Components does that for barcode/lines without setting
+  // DontIncludeVanillaLayers, while Translucent Abs keeps a
+  // 322x126 lines crop.
+  // hidden vanilla items have to stay gone under mods, even when
+  // applyPass wakes their drawables up.
   const isBlank = (e) => e.r.w <= 1 && e.r.h <= 1;
   const replacesVanilla = replaceVanilla
     || entries.some(e => e.dontIncludeVanilla || isBlank(e));
@@ -71,8 +72,8 @@ export async function bakeDrawable(id, entries, colorsFor, hostTint, replaceVani
   const ctx = ctx2d(c);
   entries.forEach((e, i) => {
     const img = imgs[i];
-    // RectInt uses bottom-left Unity coordinates, canvas uses
-    // top-left.
+    // RectInt is Unity coordinates, origin bottom-left. canvas
+    // wants top-left, hence the flip
     const sy = img.naturalHeight - e.r.y - e.r.h;
     const tints = [];
     if (e.colorIndex >= 0) {
@@ -81,7 +82,7 @@ export async function bakeDrawable(id, entries, colorsFor, hostTint, replaceVani
     }
     // hostTint is the outfit colour this drawable normally gets from
     // the shader. we took that uniform away (see applyAll), so the
-    // layers that DO want it have to get it here.
+    // layers that do want it have to get it here.
     if (hostTint && !e.bypassColorScaler) tints.push(hostTint);
     if (!tints.length) {
       ctx.drawImage(img, e.r.x, sy, e.r.w, e.r.h, 0, 0, W, H);
@@ -97,15 +98,18 @@ export async function bakeDrawable(id, entries, colorsFor, hostTint, replaceVani
     for (const hex of tints) tintCanvas(t, hex);
     ctx.drawImage(t, 0, 0);
   });
-  // keep STRAIGHT alpha (colour separate from transparency).
-  // textures.js blends over vanilla before premultiplying via
-  // straightAlpha, or soft edges get darkened twice. clear the
-  // whole replacement drawable, mesh-clipped to protect neighbours:
-  // DontIncludeVanillaLayers + a transparent 1x1 texture must erase
-  // decals such as Seamless Components' barcode. pass the canvas
-  // directly to avoid PNG encode/decode on all 29 Attach* limbs.
-  // mod slots contain placeholder art, not vanilla: pad the erase
-  // box or the grey hair bob and shine diamonds show underneath.
+  // keep straight alpha, colour seperate from transparency.
+  // with straightAlpha set, textures.js blends over vanilla first
+  // and premultiplies (bakes alpha into the colours) after. do it
+  // the other way round and soft edges get darkened twice.
+  // a replacement clears the whole drawable, mesh-clipped so the
+  // neighbours survive. DontIncludeVanillaLayers + a transparent
+  // 1x1 texture has to erase decals like Seamless Components'
+  // barcode.
+  // the canvas goes in as is, no PNG encode/decode on all 29
+  // Attach* limbs.
+  // mod slots hold placeholder art, not vanilla. pad the erase box
+  // or the grey hair bob and shine diamonds show underneath.
   // outfit/composite.js does the same for glasses in ModdableFace.
   return { img: c, overlay: !replacesVanilla, straightAlpha: true, fullClear: MOD_SLOT.test(id) };
 }

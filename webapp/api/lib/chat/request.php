@@ -53,9 +53,10 @@ function chat_parse_request(string $provider): array {
     }
     $model = ollama_resolve_chat_model($model);
 
-    // llama.cpp runs with no mmproj here, and OpenRouter + the
-    // Android build can't take audio at all. client hears this and
-    // falls back to stt.php
+    // llama.cpp runs with no mmproj here (the multimodal projector,
+    // the file that lets her hear), and OpenRouter + the Android
+    // build can't take audio at all. client hears this and falls
+    // back to stt.php
     if ($audioB64 !== '' && ($provider !== 'ollama' || !ollama_model_supports_audio($model))) {
         sse_fail('audio_unsupported');
     }
@@ -75,7 +76,7 @@ function chat_parse_request(string $provider): array {
     }
 
     // mod item names, this turn only. the server has never stored a
-    // mod and is not starting now - it needs the list purely so
+    // mod and is not starting now. it needs the list purely so
     // change_outfit can tell "you don't own that" apart from "that's
     // a modded item".
     $modItems = [];

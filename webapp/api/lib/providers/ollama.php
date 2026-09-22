@@ -46,7 +46,7 @@ function ollama_evict_if_partially_offloaded(string $model): void {
     $done = true;
 
     // only worth doing when the weights plus a bit of working room
-    // ACTUALLY fit on the card. when they don't, a partial offload is
+    // actually fit on the card. when they don't, a partial offload is
     // the best it can do and evicting just reloads it badly once per
     // message.
     if (gpu_ctx_headroom_mb() <= 0) return;

@@ -1,10 +1,11 @@
-// ?v= is module identity. mismatched imports create two copies
-// and cycles fail with "can't access lexical declaration before
-// initialization". version changes must cover index.html, imports
-// here, js/app/ and js/live2d/. immutable caching lasts a year:
-// unchanged URLs keep stale imports, so renumber the whole graph.
-// avoid example version numbers that a bulk renumber could
-// rewrite.
+// ?v= is module identity. two imports of one file with different
+// ?v= and the browser builds two copies of it, then the cycles
+// die with "can't access lexical declaration before
+// initialization". a bump has to cover index.html, the imports
+// here, js/app/ and js/live2d/. everything is cached immutable
+// for a year, so a URL that didn't change keeps its stale
+// imports. renumber the whole graph. and no example version
+// numbers in comments, a bulk renumber rewrites those too.
 
 import { showAuthScreen } from './app/auth-screen.js?v=13';
 import * as Auth from './core/auth.js?v=1';

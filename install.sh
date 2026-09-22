@@ -11,9 +11,10 @@ OS="$(uname -s)"
 NEED_SG=0
 NEED_SUDO=0
 DOCKER_JUST_INSTALLED=0
-# 1 only when a person picked Express at the keyboard. JUN_YES on
-# its own can mean an unattended run, and the two want opposite
-# things the moment something needs asking.
+# 1 only when a person picked Express, at the prompt or with
+# JUN_EXPRESS=1. JUN_YES on its own can mean an unattended run,
+# and the two want opposite things the moment something needs
+# asking.
 EXPRESS=0
 
 if [ "$(id -u)" -eq 0 ]; then
@@ -94,8 +95,8 @@ run() {
     fi
 }
 
-# Like run(), but streams output live - for long steps (image
-# builds, model pulls) where a silent spinner reads as a hang.
+# run() but the output streams live. for the long steps (image
+# builds, model pulls), where a silent spinner looks like a hang.
 run_live() {
     local msg="$1"; shift
     printf '     %s→%s %s%s%s\n' "$ACCENT" "$R" "$DIM" "$msg" "$R"
@@ -127,9 +128,11 @@ MODEL_12B="hf.co/efficiencyx/Jun-LoRA-12B-GGUF:Q4_K_M"
 MODEL_E4B="hf.co/efficiencyx/Jun-LoRA-E4B-GGUF:Q4_K_M"
 MODEL_E2B="hf.co/efficiencyx/Jun-LoRA-E2B-GGUF:Q4_K_M"
 
-# match the drafter to the SAME Gemma 4 size and QAT branch. a
-# mismatch still runs but accepted tokens dropped from 2.74 to
-# 2.10 per pass. QAT and plain repos are not interchangeable.
+# the drafter, the small model that guesses her next tokens,
+# has to match the same Gemma 4 size and QAT branch (QAT is
+# quantization-aware training). a mismatch still runs but
+# accepted tokens dropped from 2.74 to 2.10 per pass. QAT and
+# plain repos are not interchangeable.
 MTP_DRAFTER_12B="hf.co/Janvitos/gemma-4-12B-it-qat-assistant-MTP-Q8_0-GGUF:Q8_0"
 MTP_DRAFTER_E4B="hf.co/amaranus/Gemma-4-E4B-it-qat-assistant-MTP-Q8_0-GGUF:Q8_0"
 MTP_DRAFTER_E2B="hf.co/amaranus/Gemma-4-E2B-it-qat-assistant-MTP-Q8_0-GGUF:Q8_0"
@@ -148,9 +151,9 @@ mtp_drafter_for() {
     esac
 }
 
-# Roughly what each model weighs once it is resident, drafter
-# included. Close enough to tell "fits" from "does not", which is
-# all it is used for.
+# roughly what each model takes in VRAM once it's loaded, drafter
+# included. close enough to tell "fits" from "does not", which is
+# all it's Used for.
 mtp_budget_mb() {
     case "$1" in
         *Jun-LoRA-12B*Q8_0) echo 13500 ;;
@@ -174,7 +177,7 @@ resolve_model() {  # alias|full-ref -> full-ref
 }
 
 # rocm-smi is ROCm userland, not the amdgpu kernel driver, and a
-# plain mesa desktop does not have it - so "no rocm-smi" says
+# plain mesa desktop does not have it. so "no rocm-smi" says
 # NOTHING about whether there is a card in the box. this file
 # ships with the driver itself, one per card, VRAM in bytes.
 # start.sh detects AMD off /dev/kfd for the same reason, and the
@@ -189,15 +192,16 @@ amd_sysfs_vram_mb() {
         # twice.
         name="${f#/sys/class/drm/}"; name="${name%%/*}"
         case "$name" in *-*) continue ;; esac
-        # an APU's carveout is in here too, usually 512MB. that is not a
-        # card you plan a model around, and calling it one also flips
-        # karaoke onto a GPU that cannot hold the stems.
+        # an APU's carveout is in here too (the slice of system RAM
+        # it keeps as VRAM), usually 512MB. that is not a card you
+        # plan a model around, and calling it one also flips karaoke
+        # onto a GPU that cannot hold the stems.
         awk '{ mb = int($1 / 1048576); if (mb >= 1024) print mb }' "$f"
     done
 }
 
-# One line per AMD card, VRAM in MB. rocm-smi when it is there,
-# the driver's own sysfs when it is not.
+# one line per AMD card, VRAM in MB. rocm-smi if it's installed,
+# else the driver's own sysfs.
 amd_vram_mb_list() {
     local out=
     if command -v rocm-smi >/dev/null 2>&1; then
@@ -259,8 +263,8 @@ set_env() {
     fi
 }
 
-# The || true is load bearing: pipefail plus set -e turns a grep
-# that simply found nothing into an aborted install.
+# the || true is load bearing. pipefail plus set -e turns a grep
+# that just found nothing into an aborted install.
 env_value() {
     grep -E "^$1=" .env 2>/dev/null | tail -1 | cut -d= -f2- || true
 }
@@ -316,9 +320,9 @@ ask_model_ref() {
     MODEL_REF="$(resolve_model "$alias")"
 }
 
-# off skips the separate demucs/CUDA/ROCm image.
-# JUN_KARAOKE=on|off defaults on and takes precedence over
-# KARAOKE, matching install.ps1.
+# off skips the seperate demucs/CUDA/ROCm image (demucs is the
+# model that splits a song into stems). JUN_KARAOKE=on|off
+# defaults on and wins over KARAOKE, same as install.ps1.
 ask_karaoke() {
     local v preset
     preset="${JUN_KARAOKE:-${KARAOKE:-}}"
@@ -384,9 +388,11 @@ ask_tensor_parallel() {
     fi
 }
 
-# Jun checks every drafted token, so MTP changes speed, not
-# accepted output. speed depends on the card. Express enables it
-# and measures depth. JUN_MTP=on|off sets $MTP and $MTP_DRAFTER.
+# MTP, multi-token prediction. Jun checks every token the drafter
+# guesses, so it only changes speed, what she accepts stays the
+# same. how much faster depends on the card. Express turns it on
+# and measures the depth. JUN_MTP=on|off sets $MTP and
+# $MTP_DRAFTER.
 ask_mtp() {
     local v preset
     MTP=off
@@ -415,10 +421,10 @@ ask_mtp() {
 }
 
 # "how many tokens ahead?" auto measures instead of guessing, and
-# it is the right answer for almost everybody - the best depth
-# swings with the card. On a 3060 the gain is gone by 3 and depth
+# it's the right answer for almost everybody. the best depth
+# swings with the card. on a 3060 the gain is gone by 3 and depth
 # 4 is slower than not drafting at all, a bigger card can afford
-# to guess deeper. Sets $MTP_DEPTH to auto or 1-4. Without a
+# to guess deeper. sets $MTP_DEPTH to auto or 1-4. without a
 # prompt: JUN_MTP_DEPTH=auto|1|2|3|4.
 ask_mtp_depth() {
     local v
@@ -447,9 +453,9 @@ ask_mtp_depth() {
     esac
 }
 
-# Ask, then write whichever pair of keys this provider reads.
-# Sets $MTP_AUTOTUNE=1 when the depth still has to be measured,
-# which only the boot step at the bottom of this script can do -
+# ask, then write whichever pair of keys this provider reads.
+# sets $MTP_AUTOTUNE=1 when the depth still has to be measured.
+# only the boot step at the bottom of this script can do that,
 # the stack has to be up first.
 configure_mtp() {
     local provider="$1" vram budget headroom drafter_ref
@@ -477,11 +483,11 @@ configure_mtp() {
     case "$provider" in
         ollama)
             set_env OLLAMA_MTP "$MTP_DRAFTER"
-            # .env only ever holds a number. The entrypoint bakes this
+            # .env only ever holds a number. the entrypoint bakes this
             # straight into a Modelfile as draft_num_predict, and "auto"
-            # there would be a broken model rather than a default. 1 is the
-            # provisional pick, the autotune below overwrites it with
-            # whatever actually won.
+            # there is a broken model, not a default. 1 is a temporary
+            # pick, the autotune below overwrites it with whatever
+            # actually won.
             if [ "$MTP_DEPTH" = auto ]; then
                 set_env OLLAMA_MTP_N_MAX 1
                 MTP_AUTOTUNE=1
@@ -490,8 +496,9 @@ configure_mtp() {
             fi
             ;;
         llamacpp)
-            # llama-server's -hfd takes a bare repo, no hf.co in front and no
-            # quant tag - these drafter repos hold a single gguf each.
+            # llama-server's -hfd takes a bare repo, no hf.co in front
+            # and no quant tag. works because these drafter repos hold
+            # a single gguf (the model file) each.
             drafter_ref="${MTP_DRAFTER#hf.co/}"
             set_env LLAMACPP_MTP "${drafter_ref%%:*}"
             if [ "$MTP_DEPTH" = auto ]; then
@@ -510,10 +517,9 @@ configure_mtp() {
     fi
 }
 
-# There was a TELEMETRY knob here once, for a chat sharing
-# feature that never shipped. Not planned anymore, nothing in the
-# app ever read it. If you find TELEMETRY or TELEMETRY_INSTALL_ID
-# in an old .env, they do nothing, delete them.
+# TELEMETRY and TELEMETRY_INSTALL_ID in an old .env do nothing,
+# delete them. they were for a chat sharing feature that never
+# shipped and isn't planned, nothing in the app ever read them.
 
 configure() {
     local provider voice ans profiles
@@ -674,7 +680,7 @@ pkg_manager() {
         return
     fi
     # rpm-ostree systems like Bazzite can't be changed in place, so
-    # we add packages to the NEXT boot instead of installing them
+    # we add packages to the next boot instead of installing them
     # now.
     for pm in rpm-ostree apt-get dnf yum pacman zypper; do
         if command -v "$pm" >/dev/null 2>&1; then echo "$pm"; return; fi
@@ -704,7 +710,7 @@ install_git() {
     esac
 }
 
-# Docker's own cross-distro install script, but it does NOT go
+# Docker's own cross-distro install script, but it does not go
 # straight into a root shell. we put it in a file first, check it
 # really is a shell script, and print its SHA-256 so you can
 # compare it against what anyone else got. set
@@ -790,9 +796,9 @@ install_python() {
     esac
 }
 
-# rpm-ostree applies package changes to a new deployment, so
-# install every missing dependency in one transaction and let the
-# caller stop for a reboot.
+# rpm-ostree puts package changes in a new deployment (the OS
+# image you Boot into next). so everything missing goes in one
+# transaction, and the caller stops for a reboot.
 install_ostree_deps() {
     local c packages=()
     for c in "$@"; do
@@ -948,9 +954,9 @@ install_asset_recovery() {
     return 1
 }
 
-# Homebrew's Linux Docker engine is rootless. Its Compose plugin
-# lives outside Docker's default plugin directory, so expose it
-# after Homebrew installs it.
+# Homebrew's Linux Docker engine is rootless, and its Compose
+# plugin lives outside Docker's default plugin directory. so it
+# gets symlinked in after Homebrew installs it.
 configure_brew_docker() {
     local plugin
     dockerd-rootless-setuptool.sh install
@@ -1008,10 +1014,11 @@ docker_run() {
     else "$@"; fi
 }
 
-# Rootless Docker (Bazzite/Fedora Atomic, brew) can't bind :80 -
+# rootless Docker (Bazzite/Fedora Atomic, brew) can't bind :80.
 # RootlessKit refuses privileged ports unless the host lowers
-# ip_unprivileged_port_start. The rootless netns inherits the
-# value at creation, hence the daemon restart.
+# ip_unprivileged_port_start. the rootless netns (its own network
+# namespace) copies the value when it's created, hence the daemon
+# restart.
 allow_privileged_ports() {
     docker_run docker info -f '{{.SecurityOptions}}' 2>/dev/null | grep -q rootless || return 0
     local start
@@ -1095,13 +1102,12 @@ confirm_deps() {
         exit 1
     fi
 
-    # Authenticate sudo up front: installs run output-hidden, and a
-    # password prompt buried behind the spinner would just hang.
+    # sudo auth up front. installs run with their output hidden, and
+    # a password prompt stuck behind the spinner just hangs there.
     [ -n "$SUDO" ] && [ "$PM" != brew ] && { note "sudo authentication"; $SUDO -v; }
 
-    # Bazzite and other rpm-ostree systems cannot use newly layered
-    # packages until after booting into the deployment created by
-    # rpm-ostree.
+    # Bazzite and other rpm-ostree systems can't use freshly layered
+    # packages until they boot into the deployment rpm-ostree made.
     if [ "$PM" = "rpm-ostree" ]; then
         note "immutable system detected - layering ${missing[*]} for the next boot"
         run "layer ${missing[*]}" install_ostree_deps "${missing[@]}"
@@ -1134,18 +1140,19 @@ confirm_deps() {
     fi
 }
 
-# First choice a non-technical user sees: Express runs the whole
-# install with detected defaults and asks nothing further
-# (identical to JUN_YES=1); Custom walks the provider/model/voice
-# prompts. JUN_EXPRESS=1 selects Express up front.
+# first thing a non-technical user sees. Express sets JUN_YES=1
+# and runs the whole install on detected defaults. the one thing
+# it still asks is the game folder, when extraction can't find
+# it. Custom walks through the provider/model/voice prompts.
+# JUN_EXPRESS=1 picks Express up front.
 choose_install_mode() {
     [ "${JUN_YES:-}" = "1" ] && return
     case "$(printf '%s' "${JUN_EXPRESS:-}" | tr '[:upper:]' '[:lower:]')" in
         1|on|yes|true) JUN_YES=1; export JUN_YES; EXPRESS=1; return ;;
     esac
-    # A readable /dev/tty node can still fail to open with no
-    # controlling terminal, so probe an actual open rather than
-    # trusting the mode bits.
+    # a readable /dev/tty node can still fail to open when there's
+    # no controlling terminal. so actually open it, the mode bits
+    # lie.
     { true >/dev/tty; } 2>/dev/null || return 0
     local ans
     {
@@ -1161,9 +1168,9 @@ choose_install_mode() {
     esac
 }
 
-# JUN_REPO permits forks, so require HTTPS and explicit consent
-# for non-upstream code. JUN_ALLOW_FORK=1 permits it unattended.
-# JUN_YES does not.
+# JUN_REPO allows forks, so non-upstream code needs HTTPS and an
+# explicit yes. JUN_ALLOW_FORK=1 is that yes for unattended runs.
+# JUN_YES is not.
 check_repo_source() {
     case "$REPO" in
         https://*) ;;
@@ -1189,7 +1196,7 @@ check_repo_source() {
     case "$a" in y|Y|yes|YES) ;; *) fail_ "aborted."; exit 1 ;; esac
 }
 
-# markers, not the folder name - JUN_DIR lets people call it
+# markers, not the folder name. JUN_DIR lets people call it
 # whatever they want, and "Jun" on its own could be anything.
 is_jun_checkout() {
     [ -f "$1/start.sh" ] && [ -f "$1/docker-compose.yml" ] && [ -d "$1/webapp" ]
@@ -1228,9 +1235,10 @@ if [ -n "$EXISTING" ]; then
         if git -C "$DIR" pull --ff-only >/dev/null 2>&1; then
             ok "repo up to date"
         else
-            # local commits, a dirty tree, a branch of their own. all fine,
-            # all reasons a pull can't fast-forward. NOT a reason to stop -
-            # the rest of the installer still fixes .env, deps and the stack.
+            # Local commits, a dirty tree or a branch of their own all
+            # stop a pull from fast-forwarding. That is not a reason to
+            # stop the install. The rest of the installer still fixes
+            # .env, deps and the stack.
             warn_ "couldn't fast-forward $DIR - keeping the code that's on disk"
             note "pull it yourself with: git -C $DIR pull"
         fi
@@ -1244,9 +1252,9 @@ fi
 
 cd "$DIR"
 # .env holds the OpenRouter key once someone types one in, so it
-# is the owner's business and nobody else's. every run, not just
-# the first, an .env from an older install is exactly the one
-# still sitting there world-readable.
+# is the owner's business and nobody else's. chmod on every run,
+# not just the first. an .env from an older install is exactly
+# the one still sitting there world-readable.
 [ -f .env ] || cp .env.example .env
 chmod 600 .env 2>/dev/null || true
 
@@ -1291,15 +1299,16 @@ if docker_run docker info >/dev/null 2>&1; then
     run_live "build & start containers" docker_run ./start.sh
     if docker_run docker ps --format '{{.Names}}' | grep -qx omega-ollama; then
         note "model pull (first run can take a while):"
-        # `logs -f` never exits on its own; awk bails once the entrypoint
-        # reports the pull/pre-warm outcome and SIGPIPE reaps the follow.
+        # `logs -f` never exits on its own. awk bails once the
+        # entrypoint reports the pull/pre-warm outcome, and SIGPIPE
+        # kills the follow.
         docker_run docker logs -f omega-ollama 2>&1 \
             | awk '{ print "       " $0; fflush() } /pre-warm (done|failed)|pull failed/ { exit }' || true
         ok "models ready"
     fi
-    # Has to run here and not in configure(): every row of it is a
-    # real generation, so the models have to be pulled and the stack
-    # has to be up.
+    # has to run here, not in configure(). every row it measures is
+    # a real generation, so the models have to be pulled and the
+    # stack has to be up.
     if [ "${MTP_AUTOTUNE:-0}" = 1 ]; then
         step "tune multi-token prediction"
         docker_run ./mtp-autotune.sh || warn_ "autotune failed - drafting 1 token ahead, re-run ./mtp-autotune.sh anytime"

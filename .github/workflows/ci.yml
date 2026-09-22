@@ -25,9 +25,9 @@ jobs:
 
       - name: JS syntax
         # node --check parses a .js file as CommonJS and rejects
-        # import/export. Node 22.7+ detects module syntax on its own, 20
-        # does not, so copy each file to .mjs and let the extension pick
-        # the ES module parser.
+        # import/export. node 22.7+ spots module syntax by itself,
+        # 20 doesn't. so each file gets copied to .mjs and the
+        # extension picks the ES module parser.
         run: |
           fail=0
           for f in $(git ls-files 'webapp/js/**/*.js' 'webapp/*.js' ':!webapp/vendor'); do
@@ -52,11 +52,11 @@ jobs:
         run: sh .github/scripts/check-consistency.sh
 
       - name: Shell scripts
-        # -S error, not warning: the tracked scripts currently trip 5
-        # warning-level findings (unused loop vars in
-        # ollama-entrypoint.sh, start.sh and install.sh, a unicode quote
-        # in install.sh, a stray space after = in sync-webapp.sh). Move
-        # this to -S warning once they are fixed.
+        # -S error, not warning. the tracked scripts trip 5
+        # warning-level findings right now: unused loop vars in
+        # ollama-entrypoint.sh, start.sh and install.sh, a unicode
+        # quote in install.sh, a stray space after = in
+        # sync-webapp.sh. go to -S warning once those are fixed.
         run: git ls-files '*.sh' | xargs -r shellcheck -S error
 
       - name: JSON
@@ -78,8 +78,8 @@ jobs:
       - name: Compile
         # the sidecar and the recovery tools import torch, demucs and
         # UnityPy, none of which we install here (torch alone is a
-        # gigabyte). compileall is the syntax half; ruff below covers the
-        # errors an import would have caught.
+        # gigabyte). compileall is the syntax half, ruff below covers
+        # the errors an import would have caught.
         run: python -m compileall -q tools tts android/app/src/main/python .github
 
       - name: Colab notebook
@@ -214,10 +214,10 @@ jobs:
           }
 
       - name: Build JunSetup.exe
-        # ps2exe emits a .NET Framework WPF binary, so this only builds
-        # on a windows runner - there is no cross compile from the linux
-        # jobs. powershell (5.1), not pwsh: ps2exe targets the framework
-        # host.
+        # ps2exe spits out a .NET Framework WPF binary, so this only
+        # builds on a windows runner. there's no cross compile from
+        # the linux jobs. powershell (5.1), not pwsh: ps2exe targets
+        # the framework host.
         shell: powershell
         run: ./tools/build-installer-exe.ps1 -Version "1.0.${{ github.run_number }}.0"
 

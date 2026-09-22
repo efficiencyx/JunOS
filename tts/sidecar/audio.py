@@ -10,8 +10,7 @@ class AudioDurationExceeded(Exception):
 
 def to_wav(audio, sample_rate):
     # some engines hand back samples over 1.0 now and then, so pull
-    # the peak back down or the WAV clips. then write a 16-bit PCM
-    # WAV into a buffer.
+    # the peak back down or the WAV clips
     peak = float(np.max(np.abs(audio))) if audio.size else 0.0
     if peak > 1.0:
         audio = audio / peak

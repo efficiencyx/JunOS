@@ -6,9 +6,9 @@ $user = require_user();
 
 $action = $_GET['action'] ?? '';
 
-// Splitting a song is heavy and slow, and one request throws the
-// chat model out first, so 30/60s is plenty for any real karaoke
-// session.
+// splitting a song is heavy and slow, and every split kicks the
+// chat model out of VRAM first. 30 per 60s is plenty for any real
+// karaoke session.
 rate_limit('karaoke', 30, 60);
 
 // 30MB is a few minutes of compressed audio, well past one song.
@@ -22,11 +22,11 @@ function karaoke_purge_jobs(PDO $db): void {
     $db->prepare('DELETE FROM karaoke_jobs WHERE expires_at <= ?')->execute([time()]);
 }
 
-// Give the LLM's VRAM back before demucs starts, so the two don't
-// fight over the GPU. we try and move on, and it is Ollama only,
-// /api/ps and keep_alive:0 are Ollama things. a failed eviction
-// must never stop the separation, worst case they both want the
-// card.
+// give the LLM's VRAM back before demucs (the vocal/instrument
+// splitter) starts, so the two don't fight over the GPU. Ollama
+// only, /api/ps and keep_alive:0 are Ollama things. we try once
+// and move on. a failed eviction must NEVER stop the separation,
+// worst case they both want the card.
 function evict_chat_model(): void {
     if (ai_provider() !== 'ollama') return;
     $name = ollama_api_json('/api/ps', null, 5)['models'][0]['name'] ?? null;
@@ -44,8 +44,9 @@ if ($action === 'separate') {
     $rawBody = read_body(KARAOKE_MAX_BYTES);
     if ($rawBody === '') fail(400, 'invalid_request');
 
-    // only now. an empty or oversized upload used to kick the chat
-    // model out of VRAM first and then 400.
+    // evict only AFTER the body checked out. otherwise an empty or
+    // oversized upload kicks the chat model out of VRAM and then
+    // fails anyway (400 empty, 413 too big).
     evict_chat_model();
 
     // "Expect:" for the same reason as api/stt.php: a megabyte body

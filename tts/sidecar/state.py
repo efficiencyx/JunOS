@@ -18,7 +18,7 @@ pocket_lang = None
 pocket_states = {}
 separator = None
 
-# lock covers everything in this module. the reaper unloads ONLY
+# lock covers everything in this module. the reaper unloads only
 # at inflight == 0. Never while a synth has the model.
 lock = threading.RLock()
 inflight = 0
@@ -27,11 +27,10 @@ last_used = time.monotonic()
 sep_tokens = {}
 stt_slots = threading.BoundedSemaphore(max(1, int(os.environ.get("STT_MAX_CONCURRENT", "1"))))
 sep_slots = threading.BoundedSemaphore(max(1, int(os.environ.get("SEP_MAX_CONCURRENT", "1"))))
-# /tts used to have no cap at all, every request got a thread and
-# they all ran the model at once. js/voice/tts.js keeps 3 in
-# flight per reply, so 2 running plus a short wait line covers
-# one user and a second user's burst gets a 429 instead of an
-# unbounded pile.
+# without a cap every /tts request gets a thread and they all run
+# the model at once. js/voice/tts.js keeps 3 in flight per reply,
+# so 2 running plus a short wait line covers one user, and a
+# second user's burst gets a 429 instead of an unbounded pile.
 tts_slots = threading.BoundedSemaphore(max(1, int(os.environ.get("TTS_MAX_CONCURRENT", "2"))))
 
 
@@ -73,8 +72,8 @@ def unload(names):
 def begin_use(engine):
     global active_engine, last_used, inflight
     with lock:
-        # only reclaim on a REAL switch with nothing running. chunks in the
-        # middle of a reply on the same engine must not trigger an unload.
+        # only reclaim on a real switch with nothing running. chunks
+        # in the middle of a reply on the same engine must not unload.
         if inflight == 0 and engine != active_engine:
             unload([e for e in ALL_ENGINES if e != engine])
         active_engine = engine

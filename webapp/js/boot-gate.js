@@ -1,5 +1,6 @@
-// Not inline. the nginx CSP has no 'unsafe-inline' for script-src, so this is
-// a blocking <script> in <head> instead.
+// not inline. the nginx CSP (Content-Security-Policy, the header
+// that says what the page may run) has no 'unsafe-inline' in
+// script-src, so this is a blocking <script> in <head> instead.
 
 document.documentElement.setAttribute('data-pre-auth', '1');
 

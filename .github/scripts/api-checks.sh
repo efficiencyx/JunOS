@@ -69,7 +69,7 @@ check 'GET / serves the app'            200 "$BASE/"
 body_has 'index.html looks like the app' '<html'
 check 'GET a module'                    200 "$BASE/js/app.js"
 check 'unknown path 404s'               404 "$BASE/nope.html"
-# the three that a plain docroot would hand straight out.
+# the four that a plain docroot would hand straight out.
 check 'system_prompt.txt is not public' 404 "$BASE/system_prompt.txt"
 check 'migrations are not public'       404 "$BASE/api/migrations/001_init.sql"
 check 'cli worker is not reachable'     404 "$BASE/api/consolidation-worker.php"
@@ -80,9 +80,10 @@ check 'dotfiles are not public'         404 "$BASE/.env"
 # gets composer.json.
 refused 'traversal out of the docroot' --path-as-is "$BASE/../composer.json"
 # the same files behind an encoded, doubled or backslashed
-# leading slash. the router used to string-match "/assets/" on
-# the decoded path and then realpath() the file, and those two
-# see "//assets/x" differently. nginx 400s some of these itself.
+# leading slash. a router that string-matches "/assets/" on the
+# decoded path and then realpath()s the file gets these wrong,
+# because those two see "//assets/x" differently. ours did.
+# nginx 400s some of these itself.
 refused 'encoded slash alias of an asset'   --path-as-is "$BASE/%2fassets/texture_00.png"
 refused 'double slash alias of an asset'    --path-as-is "$BASE//assets/texture_00.png"
 refused 'encoded slash alias of the prompt' --path-as-is "$BASE/%2fsystem_prompt.txt"

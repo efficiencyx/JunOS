@@ -39,9 +39,9 @@ function require_allowed_host(): void {
     }
 }
 
-// Host has already passed the explicit allowlist before this
-// runs. Extra origins cover a TLS-terminating reverse proxy whose
-// public origin differs.
+// Host already got through require_allowed_host() by the time
+// this runs. OMEGA_ALLOWED_ORIGINS is for a reverse proxy doing
+// TLS in front of us, whose public origin isn't the one we see.
 function allowed_origins(): array {
     $out = [];
     $host = strtolower($_SERVER['HTTP_HOST'] ?? '');

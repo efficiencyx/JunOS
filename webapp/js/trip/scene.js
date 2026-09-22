@@ -1,11 +1,9 @@
-// rooms live in scene/*.svg now, not in three hundred lines of
-// stacked div gradients.
-//
-// they get INLINED, not dropped in an <img>. an <img> svg is its own
-// document: it can't see --sky-zenith, --key-warm or any of the page
-// custom properties, so the window would never know what time it is.
-// inline it is, and the injected markup keeps working with the page's
-// css and with getElementById the way the date page's plates need.
+// rooms live in scene/*.svg and they get INLINED, not dropped in
+// an <img>. an <img> svg is its own document. it can't see
+// --sky-zenith, --key-warm or any other page custom property, so
+// the window would never know what time it is. inlined markup
+// also works with the page's css and with getElementById, which
+// the date page's plates need.
 const pending = new Map();
 
 function load(url) {
@@ -19,10 +17,10 @@ function load(url) {
 }
 
 // props live in their own files so one can be redrawn without
-// touching the room. the room leaves <g data-prop="rail"> slots,
-// we drop scene/props/rail.svg inside each one. the slot owns the
-// transform, the prop file owns nothing but its own local box -
-// which is what makes a prop a drop-in replacement.
+// touching the room. the room leaves <g data-prop="rail"> slots
+// and we drop scene/props/rail.svg inside each one. the slot owns
+// the transform, the prop file owns nothing but its own local
+// box. that's what makes a prop a drop-in replacement.
 async function fillProps(root, dir) {
   const slots = [...root.querySelectorAll('[data-prop]')];
   await Promise.all(slots.map(async (slot) => {
@@ -40,7 +38,7 @@ async function fillProps(root, dir) {
   }));
 }
 
-// a room that fails to load must not take the page with it - you
+// a room that fails to load must not take the page with it. you
 // can still shop, eat and sing in an empty one.
 export async function inject(host, url) {
   const el = typeof host === 'string' ? document.querySelector(host) : host;

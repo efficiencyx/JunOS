@@ -1,6 +1,8 @@
 #!/usr/bin/env bash
 # Find the draft depth that is actually fastest on THIS machine,
-# then write it into .env.
+# then write it into .env. MTP is multi-token prediction, a small
+# drafter model guesses the next few tokens and the chat model
+# checks them all in one pass. draft depth is how many it guesses.
 #
 # Speculation only pays when checking K+1 tokens costs about what
 # checking 1 costs. Whether that holds depends on the card, so
@@ -128,8 +130,8 @@ TOKENS=80
 # Her real system prompt goes in front of every one of those,
 # because it goes in front of every real message too. Measured
 # bare, depth 2 came out on top by 1%, measured with the prompt
-# in place depth 1 won by 6% - same box, same drafter, same
-# afternoon. Tuning without it picks the winner for a regime the
+# in place depth 1 won by 6%. same box, same drafter, same
+# afternoon. Tuning without it picks the winner for a setup the
 # app never runs in.
 SYSTEM_JSON=""
 if [ -f webapp/system_prompt.txt ]; then
@@ -174,7 +176,7 @@ ollama_exec() { docker exec -i omega-ollama sh -c "$1"; }
 # We just wrote OLLAMA_MTP into .env, but php got its copy from
 # compose the day the container was built and nothing re-reads
 # the file. Until php is recreated it still believes MTP is off,
-# so it keeps offering the raw drafter in the picker - pick that
+# so it keeps offering the raw drafter in the picker. pick that
 # one and ollama tries to load a drafter as a chat model, which
 # fails and reaches you as an empty reply.
 #

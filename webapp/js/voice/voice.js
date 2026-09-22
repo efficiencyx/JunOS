@@ -12,7 +12,7 @@ const PRE_ROLL_MS = 300;
 const MAX_UTTERANCE_MS = 30000;
 const EMA_ALPHA = 0.2;
 
-// calibration can NEVER overlap TTS. AEC, the browser's echo
+// calibration can never overlap TTS. AEC, the browser's echo
 // canceller, needs ~200-500ms to settle after TTS stops.
 const CALIBRATE_MS = 1500;
 // dead or muted mic gives floor 0, so threshold 0, so
@@ -28,9 +28,10 @@ const OPEN_MIN = 0.015;
 // Flaps mid-word like a broken relay
 const CLOSE_RATIO = 0.55;
 
-// 3 worklet frames = ~96ms at the worklet's 32ms cadence.
-// while Jun talks we wait 6, ~200ms, because a false
-// barge-in off her own echo guillotines her mid sentence.
+// 3 worklet frames = ~96ms. the worklet (mic code on the audio
+// thread) sends one level reading every 32ms. while Jun talks
+// we wait 6, ~200ms, because a false barge-in off her own echo
+// guillotines her mid sentence.
 const START_FRAMES = 3;
 const START_FRAMES_TTS = 6;
 // bump the threshold per unit of Jun's output. louder she is,
@@ -97,12 +98,12 @@ function setState(s) {
   onState(s);
 }
 
-// getUserMedia ONLY works in a secure context. localhost counts
+// getUserMedia only works in a secure context. localhost counts
 // so your dev box is fine, but we ship TLS_MODE=off on :80, and
 // over a LAN IP `navigator.mediaDevices` is just straight up
 // undefined. doesn't throw. doesn't warn. nothing. so it gets its
 // own case, because telling somebody to "click allow" when no
-// prompt ever appears helps NOBODY.
+// prompt ever appears helps nobody.
 export function support() {
   if (!window.isSecureContext) return { ok: false, reason: 'insecure_context' };
   if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
@@ -122,7 +123,7 @@ async function ensureMic() {
       // off ON PURPOSE. AGC is the mic's automatic volume, room goes
       // quiet and it cranks the gain by itself. so the same noise gets
       // a different level minute to minute, the floor we measured at
-      // startup doesn't match what the mic sends NOW, and every
+      // startup doesn't match what the mic sends now, and every
       // threshold we built off it is fiction. whisper doesn't care.
       // the VAD absolutely does.
       autoGainControl: { ideal: false },
@@ -181,7 +182,7 @@ export function disable() {
 }
 
 function startCalibration() {
-  // NEVER calibrate over Jun's voice. we'd take her voice as the
+  // never calibrate over Jun's voice. we'd take her voice as the
   // room noise, park the threshold above her, and stay deaf for the
   // rest of the session. ask me how i know
   if (TTS.isSpeaking()) { setTimeout(startCalibration, 200); return; }
@@ -192,7 +193,7 @@ function startCalibration() {
 
 function finishCalibration() {
   if (calibSamples.length) {
-    // p95, the level 95% of samples stay under. NOT the mean. a fan
+    // p95, the level 95% of samples stay under. not the mean. a fan
     // tick or a car outside barely move a mean, so the threshold you
     // get off it is too low and those exact blips cross it. lol
     const sorted = calibSamples.slice().sort((a, b) => a - b);
@@ -224,7 +225,7 @@ function onRms(rms) {
   if (ttsWasSpeaking && !speakingNow) { aboveCount = 0; if (state === 'maybe') setState('listening'); }
   ttsWasSpeaking = speakingNow;
 
-  // half-duplex. mic is off while she talks, full stop. and DROP
+  // half-duplex. mic is off while she talks, full stop. and drop
   // what's in progress, don't just refuse to start. a turn that was
   // already mid speech when she began skips the silence check below
   // and hangs until she stops, or until the worklet's 30s cap
@@ -334,7 +335,7 @@ async function onPcm(pcm) {
     // and it keeps one turn from racing the next. but stay that way
     // and we never hear you again. the audio path returns before the
     // fetch, so there the mic comes back instantly and half-duplex is
-    // the ONLY thing keeping her out of it.
+    // the only thing keeping her out of it.
     resume();
   }
 }

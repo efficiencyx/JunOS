@@ -55,10 +55,13 @@ function Get-GpuOrder {
     return ($uuids -join ',')
 }
 
-# the card the MTP tune was measured on, as one string: the vendor,
-# then every GPU's name and how much VRAM it has. sorted biggest
-# card first, so shuffling cards between slots isn't a change. only
-# a real swap is.
+# the card the MTP tune was measured on, as one string. MTP is
+# multi-token prediction, a small drafter model guesses the next
+# few tokens (how many = the draft depth) and the chat model
+# checks them all in one pass. string is the vendor, then every
+# GPU's name and how much VRAM it has. sorted biggest card first,
+# so shuffling cards between slots isn't a change. only a real
+# swap is.
 #
 # keep this in step with the copy in mtp-autotune.ps1. we compare
 # what it prints against MTP_TUNED_GPU, so the day the two print a
@@ -145,7 +148,7 @@ function Test-Elevated {
 
 # binding to 0.0.0.0 is only half of it on windows. the firewall
 # drops the inbound connection before php ever sees it, so the
-# phone just hangs with no error anywhere. Private profile ONLY -
+# phone just hangs with no error anywhere. Private profile ONLY,
 # this must not follow you onto cafe wifi. delete it with:
 #   Remove-NetFirewallRule -DisplayName "Jun OS (<port>)"
 function Confirm-FirewallRule([string]$port) {
@@ -178,7 +181,7 @@ function Confirm-FirewallRule([string]$port) {
 }
 
 if ($Action -eq 'start' -and $BindAddr -notin @('127.0.0.1', 'localhost', '::1')) {
-    # bare metal has no TLS at all - no nginx, no certs, php -S
+    # bare metal has no TLS at all. no nginx, no certs, php -S
     # speaks plain HTTP and nothing else. so this is the same refusal
     # the docker path makes, except here there is no TLS_MODE=on to
     # offer as the way out.
@@ -586,7 +589,7 @@ while (-not (Test-Http $SiteUrl)) {
 }
 
 # BEFORE the ready banner, not after. on llamacpp the sweep bounces
-# llama-server five times, so she isn't usable till it finishes and
+# llama-server six times, so she isn't usable till it finishes and
 # opening the browser first would just show a broken chat.
 Invoke-MtpRecheck
 

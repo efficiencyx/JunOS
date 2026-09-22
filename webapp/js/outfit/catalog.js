@@ -26,7 +26,8 @@ export const ITEMS = [
     colorPatterns: ['bikinitop'], visibilityPatterns: ['bikinitop'], visOn: 1, visOff: 0 },
   { key: 'bikini_bot', label: 'Bikini bottom', defaultOn: false, excludes: ['panties'],
     colorPatterns: ['bikinibot'], visibilityPatterns: ['bikinibot'], visOn: 1, visOff: 0 },
-  // in this moc3 the shoe parameters don't touch opacity AT ALL
+  // in this moc3 (the compiled Cubism rig file) the shoe
+  // parameters don't touch opacity AT ALL
   { key: 'shoe_l', label: 'Left shoe', param: 'ParamShoeLOn', defaultOn: true,
     colorPatterns: ['shoe_l'], visibilityPatterns: ['shoe_l'], visOn: 1, visOff: 0 },
   { key: 'shoe_r', label: 'Right shoe', param: 'ParamShoeROn', defaultOn: true,
@@ -106,9 +107,9 @@ export const COLOR_GROUPS = [
   { key: 'mouth_interior', label: 'Mouth interior',
     includes: ['innermouth','tounge','tongue','teeth','saliva'], excludes: [] },
 
-  // applyGlassesTexture paints these into the ModdableFace texture
-  // itself, they're not drawable tints, so there's nothing to
-  // include here
+  // applyGlassesTexture paints these into the ModdableFace
+  // texture itself. they're not drawable tints (a drawable is one
+  // mesh of the rig), so there's nothing to include here
   { key: 'glasses_frame', label: 'Glasses frame', includes: [], excludes: [] },
   { key: 'glasses_lens', label: 'Glasses lens', includes: [], excludes: [] },
 
@@ -157,9 +158,10 @@ for (const [itemKey, variantKeys] of Object.entries(ITEM_VARIANTS)) {
 }
 
 // variants/logos/ mirrors DECALS in tools/recover_assets.py.
-// garment tags retain Il2Cpp item names (BedabotsShirt,
-// MilfHunterHoodie, USBPanties) so pickers offer only matching
-// game decals.
+// the garment tags (s shirt, h hoodie, p panties) follow the
+// game's Il2Cpp item names, BedabotsShirt, MilfHunterHoodie,
+// USBPanties (Il2Cpp is Unity's compiled C#). so a picker only
+// offers the decals the game actually has on that garment.
 const LOGO_CATALOG = [
   ['aguiLogo', 'A-GUI', 'sh'],
   ['avocado', 'Avocado', 'p'],
@@ -242,7 +244,8 @@ function logoOptions(garment, drawables) {
 
 const LIMB_DIR = 'assets/variants/limbs';
 
-// these atlas regions overlap, so they need alphaClip
+// these regions overlap on the atlas (the big shared texture
+// sheet), so they need alphaClip
 const limbTex = (v, ids) => Object.fromEntries(
   ids.map(d => [d, { url: `${LIMB_DIR}/${v}/${d}.png`, alphaClip: true }]));
 
@@ -261,7 +264,7 @@ const LEG_EXP_IDS = ['AttachLegLFeet', 'AttachLegLKnee', 'AttachLegLLower', 'Att
 // cracks, so put them in hide, not the texture list.
 const HT_SKIN_IDS = ['SkinArmL', 'SkinArmR', 'SkinPelvis', 'SkinThighL', 'SkinThighR'];
 
-// mech knees have to be TOLD to draw over the calf and thigh
+// mech knees have to be told to draw over the calf and thigh
 const LEG_ORDER = [
   ['AttachLegLLower', 'AttachLegLThigh'], ['AttachLegRLower', 'AttachLegRThigh'],
 ];
@@ -300,9 +303,9 @@ export const VARIANTS = [
     drawables: HT_SKIN_IDS,
     options: [
       { name: 'Standard skin', textures: {} },
-      // alphaClip erases through patch alpha. a transparent crop erases
-      // nothing, so explicitly hide these otherwise-visible rig
-      // drawables.
+      // alphaClip erases wherever the patch has alpha. a fully
+      // transparent crop erases nothing, so these rig drawables
+      // would stay visible. hide them by name instead.
       { name: 'High-Tech Skin', textures: limbTex('hightech', HT_SKIN_IDS), hide: ['barcode', 'lines'] },
     ],
   },

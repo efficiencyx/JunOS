@@ -4,8 +4,8 @@
 // cheerfully tells you she's fine while she's sitting there
 // terrified.
 
-// warmth: -1 (cold) .. 1 (adoring); fear: 0 .. 1 once tension
-// passes 45
+// warmth goes -1 (cold) to 1 (adoring). fear goes 0 to 1 once
+// tension passes 45
 export function moodFactors(mood) {
   const warmth = ((mood.affection + mood.trust) / 2 - 50) / 50;
   const fear = Math.max(0, (mood.tension - 45) / 55);

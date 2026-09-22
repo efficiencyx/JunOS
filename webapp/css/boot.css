@@ -1,8 +1,10 @@
-/* tools/build-critical-css.php drops this into index.html so the
+/* index.html never requests this file.
+   tools/build-critical-css.php drops it into index.html so the
    age gate, auth screen and boot overlay have CSS before
-   styles.css finishes loading. karaoke.html and privacy.html link
-   it straight, for the tokens. edit THIS file, never the inlined
-   copy, then run ./sync-webapp.sh. */
+   styles.css finishes loading. (karaoke, privacy and the
+   showcase pages still link it the normal way, for the tokens.)
+   edit THIS file, never the inlined copy, then run
+   ./sync-webapp.sh. */
 
 :root {
   --bg:         #131314;
@@ -14,7 +16,7 @@
   --fg:         #e3e3e3;
   --muted:      #c4c7c5;
   --dim:        #8e9295;
-  /* the accent IS her mood colour. js/app.js sets these off
+  /* the accent is her mood colour. js/app/mood.js sets these off
      affection, trust and tension once she's loaded. these are the
      resting values before login, and the fallback. --grad comes
      from them, so one change moves the whole palette. */
@@ -303,7 +305,7 @@ html[data-age-gated] #app { visibility: hidden; }
 html[data-pre-auth] #app { visibility: hidden; }
 
 /* the settings drawer sits OUTSIDE #app, so neither rule above
-   touches it. before settings.css lands it's 380 lines of raw
+   touches it. before settings.css lands it's ~270 lines of raw
    form controls dumped on the page, tabs and all, and one frame
    of that is what a hard refresh shows you. settings.css
    re-declares this selector later with display: flex, so this

@@ -8,10 +8,11 @@ function current_user(): ?array {
     $token = $_COOKIE['omega_session'] ?? '';
     if ($token === '') return $user = null;
 
-    // store sha256(cookie) so a stolen omega.sqlite cannot
-    // authenticate. NEVER also accept raw stored tokens: both are 64
-    // hex chars, making that fallback accept the hash as a cookie.
-    // migration 014 deletes old sessions and requires one sign-in.
+    // we store sha256(cookie) so a stolen omega.sqlite can't sign
+    // anyone in. NEVER also accept a raw stored token. both are 64
+    // hex chars, so that fallback would take the stored hash itself
+    // as a valid cookie. migration 014 deleted the old sessions,
+    // everyone had to sign in once.
     $stmt = db()->prepare(
         'SELECT u.* FROM sessions s JOIN users u ON u.id = s.user_id
          WHERE s.token = ? AND s.expires_at > ? LIMIT 1'
