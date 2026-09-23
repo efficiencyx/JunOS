@@ -478,16 +478,24 @@ staged_up() {
   [ "$#" -eq 0 ]
 }
 
+# No exec here. it replaces the shell, so nothing after the
+# compose call gets to run, mtp_recheck included. set -e still
+# takes a compose failure out on the spot, with compose's own
+# exit code.
+up_and_check() {
+  set -x; docker compose "${files[@]}" up -d --build "$@"
+  { set +x; } 2>/dev/null
+  report_gpu_placement
+  mtp_recheck
+}
+
 # A bare first word is a lifecycle subcommand; anything else (a
 # flag like --build, or service names) is forwarded to `up -d`
 # exactly as before.
 case "${1:-up}" in
   stop|down)  shift; set -x; exec docker compose "${files[@]}" down "$@" ;;
   restart)    shift; docker compose "${files[@]}" down
-              set -x; docker compose "${files[@]}" up -d --build "$@"
-              { set +x; } 2>/dev/null
-              report_gpu_placement
-              mtp_recheck ;;
+              up_and_check "$@" ;;
   status|ps)  shift; set -x; exec docker compose "${files[@]}" ps "$@" ;;
   logs)       shift; set -x; exec docker compose "${files[@]}" logs -f "$@" ;;
   *)          if staged_up "$@"; then
@@ -497,12 +505,5 @@ case "${1:-up}" in
                 wait_for_ollama
                 set -x
               fi
-              # No exec here. it replaces the shell, so nothing after
-              # the compose call gets to run, mtp_recheck included.
-              # set -e still takes a compose failure out on the spot,
-              # with compose's own exit code.
-              set -x; docker compose "${files[@]}" up -d --build "$@"
-              { set +x; } 2>/dev/null
-              report_gpu_placement
-              mtp_recheck ;;
+              up_and_check "$@" ;;
 esac

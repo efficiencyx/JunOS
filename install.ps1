@@ -694,6 +694,15 @@ function Install-Ollama {
     }
 }
 
+# a fresh install lands on PATH for new terminals only, so the
+# way out is a new one, not a retry in this one
+function Assert-OnPath([string]$command) {
+    if (Get-Command $command -ErrorAction SilentlyContinue) { return }
+    Fail_ "$command still not on PATH"
+    Note 'open a NEW terminal (so PATH refreshes) and run the one-liner again; setup will resume.'
+    exit 1
+}
+
 # install the named tools, after warning that these are the ONLY
 # machine-wide pieces. each keeps its own uninstaller in Settings
 # > Apps. anything with a winget id goes through winget, ollama
@@ -1101,11 +1110,7 @@ if (-not (Get-Command git -ErrorAction SilentlyContinue)) {
     Warn_ 'git not found'
     Install-MachineTools @('git')
 }
-if (-not (Get-Command git -ErrorAction SilentlyContinue)) {
-    Fail_ 'git still not on PATH'
-    Note 'open a NEW terminal (so PATH refreshes) and run the one-liner again; setup will resume.'
-    exit 1
-}
+Assert-OnPath git
 Ok 'git found'
 
 if ($existing) {
@@ -1146,16 +1151,8 @@ $missing = @()
 if ($cfg.needsOllama -and -not (Get-Command ollama -ErrorAction SilentlyContinue)) { $missing += 'ollama' }
 if ($cfg.needsLlamacpp -and -not (Get-Command llama-server -ErrorAction SilentlyContinue)) { $missing += 'llamacpp' }
 Install-MachineTools $missing
-if ($cfg.needsOllama -and -not (Get-Command ollama -ErrorAction SilentlyContinue)) {
-    Fail_ 'ollama still not on PATH'
-    Note 'open a NEW terminal (so PATH refreshes) and run the one-liner again; setup will resume.'
-    exit 1
-}
-if ($cfg.needsLlamacpp -and -not (Get-Command llama-server -ErrorAction SilentlyContinue)) {
-    Fail_ 'llama-server still not on PATH'
-    Note 'open a NEW terminal (so PATH refreshes) and run the one-liner again; setup will resume.'
-    exit 1
-}
+if ($cfg.needsOllama) { Assert-OnPath ollama }
+if ($cfg.needsLlamacpp) { Assert-OnPath llama-server }
 
 Install-Php
 if ($voice -eq 'on') { Install-Tts $cfg.karaoke }

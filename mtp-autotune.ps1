@@ -122,6 +122,11 @@ $Margin = 1.02
 
 function Test-Better([double]$a, [double]$b) { return ($a -gt ($b * $Margin)) }
 
+function Write-DraftWin($n, $best, $base) {
+    $gain = if ($base -gt 0) { [math]::Round(($best / $base - 1) * 100) } else { 0 }
+    Good "draft $n wins: $best tok/s, $gain% over plain decoding"
+}
+
 # The drafter that goes with a chat model is the same repo with
 # -MTP in the name, so Jun-LoRA-12B-GGUF drafts off
 # Jun-LoRA-12B-MTP-GGUF. The quant tag rides along untouched. A
@@ -220,8 +225,7 @@ function Tune-Ollama {
     if ($LASTEXITCODE -ne 0) { Die "could not rebuild $mtpModel at depth $bestN" }
 
     Set-EnvKey 'OLLAMA_MTP_N_MAX' "$bestN"
-    $gain = if ($base -gt 0) { [math]::Round(($best / $base - 1) * 100) } else { 0 }
-    Good "draft $bestN wins: $best tok/s, $gain% over plain decoding"
+    Write-DraftWin -n $bestN -best $best -base $base
     Set-GpuStamp
 }
 
@@ -320,8 +324,7 @@ function Tune-Llamacpp {
 
     Set-EnvKey 'LLAMACPP_MTP_N_MAX' "$bestN"
     Restart-Llamacpp $url | Out-Null
-    $gain = if ($base -gt 0) { [math]::Round(($best / $base - 1) * 100) } else { 0 }
-    Good "draft $bestN wins: $best tok/s, $gain% over plain decoding"
+    Write-DraftWin -n $bestN -best $best -base $base
     Set-GpuStamp
 }
 

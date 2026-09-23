@@ -155,6 +155,20 @@ better() {
     awk -v a="$1" -v b="$2" -v m="$MARGIN" 'BEGIN { exit !(a > b * m) }'
 }
 
+# A baseline of zero means every request failed, not that she is
+# infinitely slow. Carrying on from there would read the silence
+# as "drafting never helps" and switch the feature off on the
+# strength of nothing.
+need_baseline() {
+    better "$1" 0 || die "could not measure a baseline - $2"
+}
+
+# reads best, base and best_n from the tune_* function calling it
+announce_win() {
+    gain="$(awk -v a="$best" -v b="$base" 'BEGIN { if (b > 0) printf "%.0f", (a / b - 1) * 100; else print 0 }')"
+    good "draft $best_n wins: $best tok/s, ${gain}% over plain decoding"
+}
+
 ollama_exec() { docker exec -i omega-ollama sh -c "$1"; }
 
 # We just wrote OLLAMA_MTP into .env, but php got its copy from
@@ -223,11 +237,7 @@ tune_ollama() {
     printf '\n     %smeasuring%s %s(a few seconds per row)%s\n' "$B" "$R" "$DIM" "$R"
     base="$(bench_ollama "$chat")"
     printf '       %sno drafter%s   %s tok/s\n' "$DIM" "$R" "$base"
-    # A baseline of zero means every request failed, not that she is
-    # infinitely slow. Carrying on from here would read the silence
-    # as "drafting never helps" and switch the feature off on the
-    # strength of nothing.
-    better "$base" 0 || die "could not measure a baseline - is $chat pulled and the stack healthy?"
+    need_baseline "$base" "is $chat pulled and the stack healthy?"
 
     best_n=0; best="$base"
     for n in 1 2 3 4; do
@@ -254,8 +264,7 @@ tune_ollama() {
         || die "could not rebuild $mtp_model at depth $best_n"
 
     set_env OLLAMA_MTP_N_MAX "$best_n"
-    gain="$(awk -v a="$best" -v b="$base" 'BEGIN { if (b > 0) printf "%.0f", (a / b - 1) * 100; else print 0 }')"
-    good "draft $best_n wins: $best tok/s, ${gain}% over plain decoding"
+    announce_win
     stamp_gpu
     sync_php_env
 }
@@ -317,11 +326,7 @@ tune_llamacpp() {
     base="$(bench_llamacpp)"
     printf '       %sno drafter%s   %s tok/s\n' "$DIM" "$R" "$base"
     set_env LLAMACPP_MTP "$drafter"
-    # A baseline of zero means every request failed, not that she is
-    # infinitely slow. Carrying on from here would read the silence
-    # as "drafting never helps" and switch the feature off on the
-    # strength of nothing.
-    better "$base" 0 || die "could not measure a baseline - is llama-server healthy?"
+    need_baseline "$base" "is llama-server healthy?"
 
     best_n=0; best="$base"
     for n in 1 2 3 4; do
@@ -346,8 +351,7 @@ tune_llamacpp() {
 
     set_env LLAMACPP_MTP_N_MAX "$best_n"
     restart_llamacpp || true
-    gain="$(awk -v a="$best" -v b="$base" 'BEGIN { if (b > 0) printf "%.0f", (a / b - 1) * 100; else print 0 }')"
-    good "draft $best_n wins: $best tok/s, ${gain}% over plain decoding"
+    announce_win
     stamp_gpu
 }
 
