@@ -1,6 +1,6 @@
 // Keyed by her affection, trust and tension tiers. 0 is under 34, 1 is 34-66,
 // 2 is 67 and up, so "210" is high affection, mid trust, low tension.
-window.WardrobeReturnLines = {
+export const RETURN_LINES = {
   "000": [
     "Done playing dress-up? Thrilling. Take me back.",
     "Finally. Annalie's seen enough of you.",

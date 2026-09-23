@@ -7,18 +7,18 @@
 // rewrite.
 
 import { showAuthScreen } from './app/auth-screen.js?v=12';
-import { IDLE_AFTER_REPLY_MS, TYPING_POLL_MS, armIdleAfterReply, cancelActiveIdleNudge, cancelAutoReset, cancelIdleNudge, composerPlaceholder, consolidating, fleeActive, reportActivity, resetIdleNudge, scheduleAutoReset, scheduleIdleNudge, setCancelActiveIdleNudge, setConsolidating, showConsolidatingBubble, startFleeLock, syncConsolidationStatus } from './app/consolidation.js?v=15';
+import { IDLE_AFTER_REPLY_MS, TYPING_POLL_MS, armIdleAfterReply, cancelActiveIdleNudge, cancelAutoReset, cancelIdleNudge, composerPlaceholder, consolidating, fleeActive, reportActivity, resetIdleNudge, scheduleAutoReset, scheduleIdleNudge, setCancelActiveIdleNudge, setConsolidating, showConsolidatingBubble, startFleeLock, syncConsolidationStatus } from './app/consolidation.js?v=16';
 import { chatInput, debugSystemPromptEl, devNoIdleChk, messagesEl, messagesEmpty, missingParamsEl, mobileConversationTitle, modelSelect, narrowSidebarQuery, reasoningSelect, sendBtn, sendButtonIdleMarkup, sendButtonStopMarkup, siteVolumeInput, stageEl, thinkChk } from './app/dom.js?v=11';
-import { announceMobileReply, faceBubble, hideFaceBubble, latestAssistantReply, restartFaceBubbleHide, scheduleFaceBubbleHide, scheduleFaceBubblePosition, setLatestAssistantReply, showFaceBubble } from './app/face-bubble.js?v=15';
+import { announceMobileReply, faceBubble, hideFaceBubble, latestAssistantReply, restartFaceBubbleHide, scheduleFaceBubbleHide, scheduleFaceBubblePosition, setLatestAssistantReply, showFaceBubble } from './app/face-bubble.js?v=16';
 import { appendRaw, logAction, logMissing, logToolStatus, setStageStatus } from './app/logging.js?v=11';
-import { loadMood } from './app/mood.js?v=15';
-import { applyProviderCapabilities, applyRoleGates, setSiteVolume, syncThinkToggle, updateSiteVolumeLabel, wireNameSettings } from './app/settings.js?v=16';
-import { loadConversation, refreshSidebar, setSidebarOpen } from './app/sidebar.js?v=15';
-import { makeNameFilter, makeStreamBuffer } from './app/stream-filters.js?v=15';
+import { loadMood } from './app/mood.js?v=16';
+import { applyProviderCapabilities, applyRoleGates, setSiteVolume, syncThinkToggle, updateSiteVolumeLabel, wireNameSettings } from './app/settings.js?v=17';
+import { loadConversation, refreshSidebar, setSidebarOpen } from './app/sidebar.js?v=16';
+import { makeNameFilter, makeStreamBuffer } from './app/stream-filters.js?v=16';
 import { escapeHtml, localTimeString, phoneMode } from './core/util.js?v=1';
-import { wireTts } from './app/wire-tts.js?v=15';
-import { wireVoice } from './app/wire-voice.js?v=16';
-import { WELCOME_TIERS, fetchWelcome, playWelcome, previewWelcome } from './app/welcome.js?v=15';
+import { wireTts } from './app/wire-tts.js?v=16';
+import { wireVoice } from './app/wire-voice.js?v=17';
+import { WELCOME_TIERS, fetchWelcome, playWelcome, previewWelcome } from './app/welcome.js?v=16';
 import * as Names from './core/names.js?v=1';
 import * as Prefs from './core/prefs.js?v=1';
 import * as ui from './core/ui.js?v=1';
@@ -26,11 +26,12 @@ import * as Auth from './core/auth.js?v=1';
 import * as ChatAPI from './core/chat-api.js?v=1';
 import * as MobileViewport from './core/viewport.js?v=1';
 import { loadScripts } from './core/loader.js?v=1';
-import * as Actions from './live2d/actions.js?v=2';
-import * as Live2D from './live2d/live2d.js?v=2';
-import * as ModelTouch from './live2d/touch.js?v=2';
-import * as Mods from './mods/mods.js?v=1';
-import * as Outfit from './outfit/outfit.js?v=1';
+import * as Actions from './live2d/actions.js?v=3';
+import * as Live2D from './live2d/live2d.js?v=3';
+import * as ModelTouch from './live2d/touch.js?v=3';
+import * as Mods from './mods/mods.js?v=2';
+import * as Outfit from './outfit/outfit.js?v=2';
+import { playIntro } from './wardrobe/reactions.js?v=1';
 
 export const messages = [];
 export let abortFn = null;
@@ -720,9 +721,7 @@ function showBoot() {
      'js/tts.js?v=3', 'js/voice.js?v=10',
      'js/voicemode.js?v=3', 'js/trip-loader.js?v=4', 'js/cards.js?v=7',
      'js/skybox.js?v=1', 'js/scene.js?v=1',
-     ...(currentUser?.role === 'admin' ? ['js/devhud.js?v=3'] : []),
-     'js/wardrobe-open-lines.js?v=3', 'js/wardrobe-reactions.js?v=5',
-     'js/wardrobe-return-lines.js?v=3'],
+     ...(currentUser?.role === 'admin' ? ['js/devhud.js?v=3'] : [])],
     ['vendor/cubism4.min.js', 'vendor/pixi-unsafe-eval.min.js'],
   ]);
   // both of these set up a global that loads late, so they can't
@@ -1010,9 +1009,7 @@ async function wireDatesPanel(canForce) {
       if (wBtn.disabled) return;
       wBtn.disabled = true;
       await grant('shop');
-      if (window.WardrobeReactions) {
-        try { await WardrobeReactions.playIntro(); } catch (e) {}
-      }
+      try { await playIntro(); } catch (e) {}
       location.href = 'wardrobe.html';
     });
   }

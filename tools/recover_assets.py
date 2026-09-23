@@ -19,7 +19,7 @@ no intermediate dumps. these are the files the webapp needs:
   variants/limbs/**            per-drawable crops of packed variant
                                textures (Experimental limbs +
                                High-Tech skin), with mapping.json
-                               for outfit.js
+                               for outfit/catalog.js
 
 Usage:
   python3 tools/recover_assets.py [--game DIR] [--out DIR]
@@ -115,7 +115,7 @@ LOGOS = {
 # SpriteTextureDataGenerated, the Sprites/Logos registry for
 # OtherLogos and PartnerLogos. every entry can go on
 # Moddable*Logo. keep this in sync with LOGO_CATALOG in
-# webapp/js/outfit.js.
+# webapp/js/outfit/catalog.js.
 DECALS = {
     "aguiLogo": "AGUI_Logo",
     "avocado": "Avocado",
@@ -293,7 +293,7 @@ def safe_component(value):
     return f"{clean[:72]}_{digest}"
 
 
-# drawable names go into output filenames as-is (outfit.js keys
+# drawable names go into output filenames as-is (outfit/catalog.js keys
 # on them, so they can't be rewritten). the real ones are plain
 # [A-Za-z0-9_-]. anything else came out of a doctored archive
 # and would walk out of the output dir, so refuse it.
@@ -557,13 +557,13 @@ class Recovery:
                         # does it to barcode and lines, her chest barcode and
                         # the cracks down her cheeks, because the hypercamo is
                         # a smooth white shell. an empty PNG can't express
-                        # that (outfit.js paints limb crops with alphaClip,
+                        # that (outfit/catalog.js puts alphaClip on limb crops,
                         # which erases through the patch's own alpha, so an
                         # empty patch erases nothing). so don't write it, and
                         # put the drawable in the option's hide list instead.
                         if crop.getchannel("A").getextrema() == (0, 0):
                             print(f"  skip variants/limbs/{d}/{en}.png "
-                                  "(empty crop - hide the drawable in outfit.js instead)")
+                                  "(empty crop - hide the drawable in outfit/catalog.js instead)")
                             continue
                         self.save(crop, f"variants/limbs/{d}/{en}.png")
                         mapping[group][en] = f"assets/variants/limbs/{d}/{en}.png"

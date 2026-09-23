@@ -1,4 +1,4 @@
-import { itemDrawables } from './parse.js?v=1';
+import { itemDrawables } from './parse.js?v=2';
 
 export const MOD_SLOT = /^Moddable/;
 

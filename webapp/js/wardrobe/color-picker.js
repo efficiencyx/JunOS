@@ -2,8 +2,8 @@ import * as MobileViewport from '../core/viewport.js?v=1';
 import { colorGroup } from '../outfit/catalog.js?v=1';
 import { colors } from '../outfit/current.js?v=1';
 import { hexToHsv, hsvToHex, normalizeHex } from '../outfit/colors.js?v=1';
-import { optPopEl, positionOptionsPopup } from './tiles.js?v=1';
-import { setColor } from '../outfit/apply.js?v=1';
+import { optPopEl, positionOptionsPopup } from './tiles.js?v=2';
+import { setColor } from '../outfit/apply.js?v=2';
 
 function paintColorButton(button) {
   const keys = (button.dataset.colorKeys || '').split(',').filter(Boolean);
@@ -13,6 +13,15 @@ function paintColorButton(button) {
     segment.classList.toggle('unset', !values[i]);
     segment.style.background = values[i] || '';
   });
+}
+
+export function refreshColorButtons() {
+  document.querySelectorAll('[data-color-keys]').forEach(paintColorButton);
+}
+
+function pickColor(key, hex) {
+  setColor(key, hex);
+  refreshColorButtons();
 }
 
 export let colorPickerEl = null, colorPickerAnchor = null, pickerState = null;
@@ -86,7 +95,7 @@ function commitPickerColor(hex) {
     pickerState.values[pickerState.index] = hex || null;
     pickerState.onChange(pickerState.index, hex || null);
   } else {
-    setColor(pickerState.keys[pickerState.index], hex);
+    pickColor(pickerState.keys[pickerState.index], hex);
   }
 }
 
@@ -351,7 +360,7 @@ export function makeColorButton(groupKeys, label, className) {
   button.addEventListener('contextmenu', (e) => {
     e.preventDefault();
     e.stopPropagation();
-    groupKeys.forEach(key => setColor(key, null));
+    groupKeys.forEach(key => pickColor(key, null));
   });
   return button;
 }

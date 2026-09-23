@@ -1,11 +1,12 @@
-import * as Live2D from '../live2d/live2d.js?v=2';
-import * as Mods from '../mods/mods.js?v=1';
+import * as Live2D from '../live2d/live2d.js?v=3';
+import * as Mods from '../mods/mods.js?v=2';
 import { ALWAYS_HIDDEN, COLOR_GROUPS, ITEMS, VARIANTS, VARIANT_OWNER } from './catalog.js?v=1';
-import { applyGlassesTexture, applyStockingTexture, cancelStockingTexture, stockingColorMode } from './composite.js?v=1';
+import { applyGlassesTexture, applyStockingTexture, cancelStockingTexture, stockingColorMode } from './composite.js?v=2';
 import { colors, state, variantState } from './current.js?v=1';
 import { hexToRgb01, normalizeHex } from './colors.js?v=1';
-import { queueWardrobe, saveColors, textureAvailable } from './sync.js?v=1';
-import { snapshot } from './chat-tools.js?v=1';
+import { queueWardrobe, saveColors, textureAvailable } from './sync.js?v=2';
+import { snapshot } from './chat-tools.js?v=2';
+import { hooks } from './hooks.js?v=1';
 
 export const itemPatterns = (it) => it.colorPatterns || it.visibilityPatterns || [];
 
@@ -47,7 +48,7 @@ export function hiddenItemDrawables() {
 }
 
 export function applyItems(onlyItems) {
-  const setParam = window.WardrobeCurtains ? Live2D.setNow : Live2D.setTarget;
+  const setParam = hooks.curtains ? Live2D.setNow : Live2D.setTarget;
   const onlyKeys = onlyItems ? new Set(onlyItems) : null;
   const textureMap = {};
   for (const it of ITEMS) {
@@ -141,8 +142,8 @@ export function setVariant(key, index) {
   const v = VARIANTS.find(x => x.key === key);
   if (!v || !v.options[index]) return;
   return queueWardrobe((items, variants) => { variants[key] = index; }, () => {
-    if (key.indexOf('hair_') === 0 && window.WardrobeReactions) {
-      WardrobeReactions.react({ key, label: v.label, on: true, state: snapshot() });
+    if (key.indexOf('hair_') === 0 && hooks.react) {
+      hooks.react({ key, label: v.label, on: true, state: snapshot() });
     }
   });
 }
@@ -191,8 +192,8 @@ export function setItem(key, on) {
   const it = ITEMS.find(x => x.key === key);
   if (!it) return;
   return queueWardrobe((items) => setDraftItem(items, key, on), () => {
-    if (window.WardrobeReactions) {
-      WardrobeReactions.react({ key, label: it.label, on: state[key], state: snapshot() });
+    if (hooks.react) {
+      hooks.react({ key, label: it.label, on: state[key], state: snapshot() });
     }
   });
 }

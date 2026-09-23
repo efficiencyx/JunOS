@@ -1,6 +1,6 @@
 // Keyed by her affection, trust and tension tiers. 0 is under 34, 1 is 34-66,
 // 2 is 67 and up, so "210" is high affection, mid trust, low tension.
-window.WardrobeOpenLines = {
+export const OPEN_LINES = {
   "000": [
     "Annalie's. Again. My enthusiasm is overwhelming.",
     "Oh good, a shopping trip with my captor.",

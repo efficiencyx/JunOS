@@ -1,10 +1,10 @@
-import * as Live2D from '../live2d/live2d.js?v=2';
-import { closeColorPicker, colorPickerEl, makeColorButton, phonePopupMode, pickerEmbedded, schedulePopupPosition, showColorPicker, visualViewportRect, watchPopupViewport } from './color-picker.js?v=1';
+import * as Live2D from '../live2d/live2d.js?v=3';
+import { closeColorPicker, colorPickerEl, makeColorButton, phonePopupMode, pickerEmbedded, schedulePopupPosition, showColorPicker, visualViewportRect, watchPopupViewport } from './color-picker.js?v=2';
 import { colorGroup } from '../outfit/catalog.js?v=1';
 import { colors, state, variantState } from '../outfit/current.js?v=1';
-import { setItem, setVariant } from '../outfit/apply.js?v=1';
-import { variantThumb } from './tile-bake.js?v=1';
-import { wdGhost } from './panel.js?v=1';
+import { setItem, setVariant } from '../outfit/apply.js?v=2';
+import { variantThumb } from './tile-bake.js?v=2';
+import { wdGhost } from './panel.js?v=2';
 
 export function wdMoveGhost(x, y) {
   wdGhost.style.left = (x + 10) + 'px';
@@ -127,7 +127,7 @@ export function openTilePopup(anchor, cfg) {
       b.dataset.opt = String(i);
       b.dataset.variantKey = v.key;
       const thumb = variantThumb(v, opt);
-      b.innerHTML = `${thumb ? `<img draggable="false" src="${thumb}">` : '<div class="wd-noimg">?</div>'}<span>${opt.name}</span>`;
+      fillTile(b, thumb, opt.name);
       b.addEventListener('click', () => setVariant(v.key, i));
       grid.appendChild(b);
     });
@@ -273,13 +273,27 @@ function bindTileDrag(tile, thumbSrc, onEquip, popupCfg) {
   }, { passive: true });
 }
 
+export function fillTile(el, thumb, label) {
+  const pic = document.createElement(thumb ? 'img' : 'div');
+  if (thumb) {
+    pic.draggable = false;
+    pic.src = thumb;
+  } else {
+    pic.className = 'wd-noimg';
+    pic.textContent = '?';
+  }
+  const name = document.createElement('span');
+  name.textContent = label;
+  el.replaceChildren(pic, name);
+}
+
 export function makeTile(label, thumbSrc, onEquip, colorKeys, popupCfg) {
   const tile = document.createElement('div');
   tile.className = 'wd-tile';
   tile.tabIndex = 0;
   tile.setAttribute('role', 'button');
   tile.setAttribute('aria-label', `${label} options`);
-  tile.innerHTML = `${thumbSrc ? `<img draggable="false" src="${thumbSrc}">` : '<div class="wd-noimg">?</div>'}<span>${label}</span>`;
+  fillTile(tile, thumbSrc, label);
   if (colorKeys && colorKeys.length) tile.appendChild(makeSwatch(colorKeys, label));
   tile.appendChild(makeOptOrb(popupCfg));
   bindTileDrag(tile, thumbSrc, onEquip, popupCfg);

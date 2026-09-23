@@ -1,9 +1,10 @@
 import { api, apiJson } from '../core/api.js?v=1';
 import { COLOR_GROUPS, ITEMS, VARIANTS, VARIANT_OWNER } from './catalog.js?v=1';
-import { activeAssets, authorizedAssets, queueWardrobe, saveColors } from './sync.js?v=1';
-import { applyColors, applyItems, applyVariants, itemDrawableIds } from './apply.js?v=1';
+import { activeAssets, authorizedAssets, queueWardrobe, saveColors } from './sync.js?v=2';
+import { applyColors, applyItems, applyVariants, itemDrawableIds } from './apply.js?v=2';
 import { colors, state, variantState } from './current.js?v=1';
-import * as Mods from '../mods/mods.js?v=1';
+import * as Mods from '../mods/mods.js?v=2';
+import { hooks } from './hooks.js?v=1';
 
 export function exportPreset() {
   return { items: { ...state }, colors: { ...colors }, variants: { ...variantState } };
@@ -186,7 +187,7 @@ let previewVersion = 0;
 function previewPreset(preset) {
   const version = ++previewVersion;
   const change = () => { if (version === previewVersion) applyPreview(preset); };
-  if (window.WardrobeCurtains) WardrobeCurtains.change(change);
+  if (hooks.curtains) hooks.curtains(change);
   else change();
 }
 
@@ -218,7 +219,7 @@ export function endPreview() {
     previewBase = null;
     applyChanged(loadPresetState(base));
   };
-  if (window.WardrobeCurtains) WardrobeCurtains.change(change);
+  if (hooks.curtains) hooks.curtains(change);
   else change();
 }
 

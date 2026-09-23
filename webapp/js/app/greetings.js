@@ -1,4 +1,4 @@
-import { daypart, moodTier } from '../core/mood-tier.js?v=1';
+import { daypart, moodTier } from '../core/mood-tier.js?v=2';
 import { emptySub, promptChips } from './dom.js?v=11';
 import * as Names from '../core/names.js?v=1';
 
