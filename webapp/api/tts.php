@@ -1,6 +1,6 @@
 <?php
 
-require_once __DIR__ . '/_lib.php';
+require_once __DIR__ . '/lib/bootstrap.php';
 
 require_user();
 

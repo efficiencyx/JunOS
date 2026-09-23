@@ -1,6 +1,9 @@
 <?php
 
-require_once __DIR__ . '/_consolidation.php';
+require_once __DIR__ . '/lib/bootstrap.php';
+require_once __DIR__ . '/lib/consolidation/engine.php';
+require_once __DIR__ . '/lib/consolidation/passes.php';
+require_once __DIR__ . '/lib/consolidation/welcome.php';
 
 header('Content-Type: application/json');
 $user = require_user();

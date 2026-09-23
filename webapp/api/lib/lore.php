@@ -55,7 +55,7 @@ function lore_index(): ?array {
         if (is_array($cached)) return $idx = $cached;
     }
 
-    $path = __DIR__ . '/../lore_corpus.txt';
+    $path = __DIR__ . '/../../lore_corpus.txt';
     if (!is_readable($path)) return $idx = null;
     $answers = file($path, FILE_IGNORE_NEW_LINES | FILE_SKIP_EMPTY_LINES);
     if (!$answers) return $idx = null;

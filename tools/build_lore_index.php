@@ -1,5 +1,5 @@
 <?php
-// webapp/api/lore.php does plain keyword lookup over
+// webapp/api/lib/lore.php does plain keyword lookup over
 // lore_corpus.txt. this flattens every user -> assistant pair in
 // tools/lore_dataset.jsonl into one answer row. no Ollama, no
 // embeddings, none of that. --dry-run counts without writing.

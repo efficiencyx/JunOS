@@ -24,7 +24,7 @@ data class WardrobeState(
 
 data class ToolOutcome(val state: WardrobeState?, val apply: JsonObject?, val reply: JsonObject)
 
-// port of webapp/api/_wardrobe.php. the tables are the php ones
+// port of webapp/api/lib/wardrobe.php. the tables are the php ones
 // verbatim and in the php order, the browser and the model both
 // read lists built from them.
 object Wardrobe {

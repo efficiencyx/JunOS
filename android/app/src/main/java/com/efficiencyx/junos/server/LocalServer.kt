@@ -432,7 +432,7 @@ class LocalServer(
             error(HttpStatusCode.Forbidden, "forbidden")
             return false
         }
-        // same rule as require_same_origin() in _lib.php. the cookie
+        // same rule as require_same_origin() in api/lib/guards.php. the cookie
         // is SameSite=Strict but every 127.0.0.1 port is one site, so
         // a page on another local port could still post our cookie.
         // Sec-Fetch-Site is the webview's own verdict and goes first,

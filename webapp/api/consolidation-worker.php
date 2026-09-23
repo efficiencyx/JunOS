@@ -5,7 +5,10 @@
 // hit would hold an fpm child in the loop below for Ever.
 if (PHP_SAPI !== 'cli') { http_response_code(404); exit; }
 
-require_once __DIR__ . '/_consolidation.php';
+require_once __DIR__ . '/lib/bootstrap.php';
+require_once __DIR__ . '/lib/consolidation/engine.php';
+require_once __DIR__ . '/lib/consolidation/passes.php';
+require_once __DIR__ . '/lib/consolidation/welcome.php';
 
 const CONSOLIDATION_IDLE_SECONDS = 180;
 const CONSOLIDATION_POLL_SECONDS = 15;
@@ -13,7 +16,7 @@ const CONSOLIDATION_RETRY_SECONDS = 600;
 
 // rows are sealed under each user's key and this process has no
 // cookie, so php-fpm pushes the key here on every activity touch
-// (key_push in _lib.php). it lives in $keys until that user's
+// (key_push in lib/crypto.php). it lives in $keys until that user's
 // run comes back ok, then it's zeroed. a user with no key yet is
 // skipped, not failed, the next touch brings it.
 $server = stream_socket_server('tcp://127.0.0.1:' . key_push_port(), $errno, $errstr);

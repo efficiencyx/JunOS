@@ -551,7 +551,7 @@ $env:OMEGA_STATE_DIR        = $StateDir
 $env:OMEGA_ALLOWED_HOSTS    = (@('127.0.0.1', 'localhost', '::1') + $LanHosts +
     @($env:OMEGA_EXTRA_HOSTS -split '[,\s]+' | Where-Object { $_ })) -join ','
 $env:OMEGA_ALLOWED_ORIGINS  = $SiteUrl
-$libPath = (Join-Path $PSScriptRoot 'webapp\api\_lib.php').Replace('\', '/')
+$libPath = (Join-Path $PSScriptRoot 'webapp\api\lib\bootstrap.php').Replace('\', '/')
 & $phpExe -r "require '$libPath'; db();"
 if ($LASTEXITCODE -ne 0) { throw 'database migration failed' }
 $oldMemory = Get-TrackedProcess $oldPids 'memory'

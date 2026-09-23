@@ -1,6 +1,6 @@
 <?php
-require_once __DIR__ . '/_lib.php';
-require_once __DIR__ . '/_wardrobe.php';
+require_once __DIR__ . '/lib/bootstrap.php';
+require_once __DIR__ . '/lib/wardrobe.php';
 
 header('Content-Type: application/json');
 $user = require_user();
