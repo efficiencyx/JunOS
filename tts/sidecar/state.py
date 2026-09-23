@@ -28,9 +28,10 @@ sep_tokens = {}
 stt_slots = threading.BoundedSemaphore(max(1, int(os.environ.get("STT_MAX_CONCURRENT", "1"))))
 sep_slots = threading.BoundedSemaphore(max(1, int(os.environ.get("SEP_MAX_CONCURRENT", "1"))))
 # /tts used to have no cap at all, every request got a thread and
-# they all ran the model at once. js/tts.js keeps 3 in flight per
-# reply, so 2 running plus a short wait line covers one user and
-# a second user's burst gets a 429 instead of an unbounded pile.
+# they all ran the model at once. js/voice/tts.js keeps 3 in
+# flight per reply, so 2 running plus a short wait line covers
+# one user and a second user's burst gets a 429 instead of an
+# unbounded pile.
 tts_slots = threading.BoundedSemaphore(max(1, int(os.environ.get("TTS_MAX_CONCURRENT", "2"))))
 
 

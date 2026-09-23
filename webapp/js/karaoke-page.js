@@ -1,4 +1,15 @@
-(async () => {
+import * as Auth from './core/auth.js?v=1';
+import { api } from './core/api.js?v=1';
+import * as Prefs from './core/prefs.js?v=1';
+import * as Karaoke from './karaoke/karaoke.js?v=1';
+import * as Live2D from './live2d/live2d.js?v=3';
+import * as Outfit from './outfit/outfit.js?v=2';
+import * as Scene from './trip/scene.js?v=1';
+import { startSkybox } from './trip/skybox.js?v=1';
+import * as TripLoader from './trip/trip-loader.js?v=1';
+
+async function main() {
+  startSkybox();
   const status = document.getElementById('karaokePageStatus');
   const backLink = document.getElementById('karaokeBackLink');
   const room = document.querySelector('.music-room');
@@ -25,7 +36,7 @@
 
   document.addEventListener('visibilitychange', () => {
     cancelAnimationFrame(micFrame);
-    if (!document.hidden && window.Live2D) positionMic();
+    if (!document.hidden) positionMic();
   });
   window.addEventListener('pagehide', () => cancelAnimationFrame(micFrame));
   const me = await Auth.me().catch(() => null);
@@ -34,7 +45,7 @@
     return;
   }
   // same rule as wardrobe.js: she agreed, or the gate is off
-  const trip = await fetch('api/trip.php', { credentials: 'same-origin' })
+  const trip = await api('trip.php')
     .then(r => r.ok ? r.json() : null).catch(() => null);
   if (trip && trip.gated && trip.where !== 'karaoke') {
     location.replace('index.html');
@@ -46,7 +57,7 @@
   Scene.inject('.music-room', 'scene/lounge.svg');
   Scene.inject('#karaokeMic .mic-head', 'scene/props/mic-head.svg');
 
-  if (window.Prefs) await Prefs.pullFromServer();
+  await Prefs.pullFromServer();
   const storedVolume = parseFloat(localStorage.getItem('audio.volume') || '1');
   const volume = Math.max(0, Math.min(1, Number.isFinite(storedVolume) ? storedVolume : 1));
   Karaoke.setVolume(volume);
@@ -60,7 +71,7 @@
       localStorage.setItem('audio.volume', String(next));
     });
     masterVolume.addEventListener('change', () => {
-      if (window.Prefs) Prefs.pushToServer();
+      Prefs.pushToServer();
     });
   }
 
@@ -109,4 +120,6 @@
   }
   TripLoader.setStage(entered ? 'Welcome to the lounge' : 'The lounge is closed tonight');
   await TripLoader.finish();
-})();
+}
+
+main();

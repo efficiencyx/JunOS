@@ -67,7 +67,7 @@ def get_whisper():
 
 @router.post("/stt")
 async def stt(request: Request):
-    # js/voice.js posts raw 16kHz mono PCM16 WAV, so no
+    # js/voice/voice.js posts raw 16kHz mono PCM16 WAV, so no
     # python-multipart is needed. PyAV bundles ffmpeg libraries and
     # accepts other audio containers too, without an ffmpeg binary.
     if not stt_available():

@@ -1,7 +1,8 @@
-import { currentConversationTitle, setConversationTitle } from '../app.js?v=23';
+import { currentConversationTitle, setConversationTitle } from '../app.js?v=24';
 import { mobileConversationTitle, mobileReplyStatus, sidebarBackground, stageEl } from './dom.js?v=11';
 import { phoneMode, visualRect } from '../core/util.js?v=1';
 import * as Names from '../core/names.js?v=1';
+import * as TTS from '../voice/tts.js?v=1';
 
 export let latestAssistantReply = '';
 export const faceBubble = (() => {
@@ -169,7 +170,7 @@ export function scheduleFaceBubbleHide(text, source) {
   clearTimeout(faceBubbleHideTimer);
   pendingFaceBubbleHide = { text, source };
   faceBubbleText = text;
-  if (window.TTS && TTS.isSpeaking && TTS.isSpeaking()) return;
+  if (TTS.isSpeaking()) return;
   startFaceBubbleHideTimer(text, source);
 }
 

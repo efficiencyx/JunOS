@@ -1,9 +1,11 @@
-import { abortFn, currentConversationId, runChat } from '../app.js?v=23';
+import { abortFn, currentConversationId, runChat } from '../app.js?v=24';
 import { chatInput, consolidationBanner, consolidationSub, consolidationTitle, devNoIdleChk, fleeEtaEl, fleeOverlay, fleeReasonEl, sendBtn, voiceChk } from './dom.js?v=11';
-import { showFaceBubble } from './face-bubble.js?v=16';
+import { showFaceBubble } from './face-bubble.js?v=17';
 import { logAction } from './logging.js?v=11';
 import { escapeHtml, formatElapsed } from '../core/util.js?v=1';
 import * as Names from '../core/names.js?v=1';
+import * as TTS from '../voice/tts.js?v=1';
+import * as Voice from '../voice/voice.js?v=1';
 
 const BUSY_LINES = [
   "Hang on, ${p}, I'm defragging my SSD.",
@@ -143,7 +145,7 @@ export function startFleeLock(untilMs, reason) {
   fleeReason = (reason || '').trim();
   if (!fleeActive()) { endFleeLock(); return; }
   cancelIdleNudge();
-  if (window.Voice && Voice.isEnabled()) {
+  if (Voice.isEnabled()) {
     Voice.disable();
     if (voiceChk) voiceChk.checked = false;
   }
@@ -297,7 +299,7 @@ export function scheduleIdleNudge(delayMs) {
     if (abortFn) return;
     if (document.hidden) { scheduleIdleNudge(delayMs); return; }
     if (chatInput.value.trim() !== '') { scheduleIdleNudge(delayMs); return; }
-    if (window.Voice && Voice.isEnabled()) {
+    if (Voice.isEnabled()) {
       const vs = Voice.getState();
       if (vs === 'speech' || vs === 'maybe' || vs === 'thinking') { scheduleIdleNudge(delayMs); return; }
     }
@@ -309,7 +311,7 @@ export function scheduleIdleNudge(delayMs) {
 // start the idle timer once TTS is DONE, not when the text stops
 // streaming
 export function armIdleAfterReply() {
-  if (window.TTS && TTS.isSpeaking && TTS.isSpeaking()) return;
+  if (TTS.isSpeaking()) return;
   scheduleIdleNudge(IDLE_AFTER_REPLY_MS);
 }
 

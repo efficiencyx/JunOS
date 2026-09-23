@@ -1,12 +1,12 @@
 """
 local audio sidecar on :8001. /tts takes one sentence at a time
-from js/tts.js and returns a WAV for its AudioContext.
+from js/voice/tts.js and returns a WAV for its AudioContext.
 
 `engine` picks kokoro (Kokoro-82M, the default, needs
 espeak-ng) or pockettts (kyutai-labs pocket-tts, 100M, CPU,
 English + 5 languages). /voices lists voices and pocket-tts
-languages for the picker. js/voice.js sends a raw WAV to /stt,
-where faster-whisper transcribes it.
+languages for the picker. js/voice/voice.js sends a raw WAV
+to /stt, where faster-whisper transcribes it.
 
 /separate uses htdemucs to split backing and guide vocals.
 /transcribe_timed uses whisper to time the words. Docker runs

@@ -1,18 +1,19 @@
-import { appendMsg, currentConversationId, discardActiveResponse, messages, renderMarkdown, setConversationTitle, setCurrentConversationId, updateEmptyState } from '../app.js?v=23';
-import { IDLE_AFTER_JOIN_MS, cancelAutoReset, reportActivity, resetIdleNudge, scheduleIdleNudge } from './consolidation.js?v=16';
+import { appendMsg, currentConversationId, discardActiveResponse, messages, renderMarkdown, setConversationTitle, setCurrentConversationId, updateEmptyState } from '../app.js?v=24';
+import { IDLE_AFTER_JOIN_MS, cancelAutoReset, reportActivity, resetIdleNudge, scheduleIdleNudge } from './consolidation.js?v=17';
 import { conversationSidebar, messagesEl, mobileConversationTitle, mobileMenuBtn, narrowSidebarQuery, reloadPromptBtn, resetLive2DBtn, sidebarBackdrop, sidebarBackground } from './dom.js?v=11';
-import { announceMobileReply, faceBubble, hideFaceBubble, latestAssistantReply, scheduleFaceBubbleHide, setLatestAssistantReply, showFaceBubble } from './face-bubble.js?v=16';
+import { announceMobileReply, faceBubble, hideFaceBubble, latestAssistantReply, scheduleFaceBubbleHide, setLatestAssistantReply, showFaceBubble } from './face-bubble.js?v=17';
 import { logAction } from './logging.js?v=11';
-import { makeStreamBuffer } from './stream-filters.js?v=16';
+import { makeStreamBuffer } from './stream-filters.js?v=17';
 import { escapeHtml, phoneMode } from '../core/util.js?v=1';
 import * as Names from '../core/names.js?v=1';
 import * as ui from '../core/ui.js?v=1';
+import * as History from './history.js?v=1';
+import * as TTS from '../voice/tts.js?v=1';
 
 const conversationTitles = new Map();
 let sidebarRefreshGeneration = 0;
 let conversationLoadGeneration = 0;
 export async function refreshSidebar() {
-  if (!window.History) return;
   const ul = document.getElementById('conversationList');
   if (!ul) return;
   const refreshGeneration = ++sidebarRefreshGeneration;
@@ -56,7 +57,6 @@ export async function refreshSidebar() {
 }
 
 function startRename(li, id) {
-  if (!window.History) return;
   const titleSpan = li.querySelector('.conv-title');
   if (!titleSpan) return;
   const oldTitle = conversationTitles.get(id) ?? titleSpan.textContent;
@@ -110,7 +110,6 @@ function startRename(li, id) {
 }
 
 async function deleteConversation(id, title) {
-  if (!window.History) return;
   const ok = await ui.confirm({
     title: 'Delete chat',
     message: `Do you want to delete ${Names.getBot()}'s memory of "${title}"?`,
@@ -164,7 +163,7 @@ export async function loadConversation(id) {
   setConversationTitle(conversationTitles.get(id));
   resetIdleNudge();
   reportActivity();
-  if (window.TTS) TTS.stop();
+  TTS.stop();
   messages.length = 0;
   messagesEl.innerHTML = '';
   updateEmptyState();
@@ -172,7 +171,6 @@ export async function loadConversation(id) {
   Live2D.startIdle();
   markSidebarActive(id);
   scheduleIdleNudge(IDLE_AFTER_JOIN_MS);
-  if (!window.History) return;
   try {
     const rows = await History.load(id);
     if (loadGeneration !== conversationLoadGeneration || currentConversationId !== id) return;
@@ -278,7 +276,6 @@ syncSidebarLayout();
 const newChatBtn = document.getElementById('newChatBtn');
 if (newChatBtn) {
   newChatBtn.addEventListener('click', async () => {
-    if (!window.History) return;
     reportActivity();
     setSidebarOpen(false);
     discardActiveResponse();
