@@ -49,6 +49,14 @@ function db(): PDO {
     return $pdo;
 }
 
+function conversation_owned(int $convId, int $userId): bool {
+    $st = db()->prepare('SELECT 1 FROM conversations WHERE id=? AND user_id=?');
+    $st->execute([$convId, $userId]);
+    $owned = (bool)$st->fetchColumn();
+    $st->closeCursor();
+    return $owned;
+}
+
 function no_users_yet(): bool {
     return db()->query('SELECT id FROM users LIMIT 1')->fetchColumn() === false;
 }

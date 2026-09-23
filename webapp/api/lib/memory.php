@@ -77,7 +77,7 @@ function memory_normalize_entry(string $memory, string $category): array {
     $category = memory_category_note_slug($category);
     if ($memory === '') return ['error' => 'memory_required'];
     if (mb_strlen($memory) > 800) $memory = mb_substr($memory, 0, 797) . '…';
-    return ['created_at' => time(), 'category' => $category, 'memory' => $memory];
+    return ['category' => $category, 'memory' => $memory];
 }
 
 function memory_user_dir(int $userId): string {

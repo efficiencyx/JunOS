@@ -47,7 +47,7 @@ function make_absolute_url(string $base, string $location): string {
 function web_search_public(string $query): array {
     if ($query === '') return ['error' => 'query_required'];
     if (mb_strlen($query) > 400) $query = mb_substr($query, 0, 400);
-    $page = web_fetch_public('https://html.duckduckgo.com/html/?q=' . rawurlencode($query), true);
+    $page = web_fetch_public('https://html.duckduckgo.com/html/?q=' . rawurlencode($query));
     if (!empty($page['error'])) return $page;
     $html = (string)($page['raw_html'] ?? '');
     $results = [];
@@ -68,7 +68,7 @@ function web_search_public(string $query): array {
     return ['query' => $query, 'results' => $results];
 }
 
-function web_fetch_public(string $url, bool $raw = false): array {
+function web_fetch_public(string $url): array {
     $maxBytes = 512 * 1024;
     $current = $url;
     for ($hop = 0; $hop <= 3; $hop++) {
@@ -109,9 +109,7 @@ function web_fetch_public(string $url, bool $raw = false): array {
             $current = make_absolute_url($current, $location);
             continue;
         }
-        if ($raw) return ['status' => $code, 'content_type' => $ctype, 'url' => $current, 'raw_html' => $body];
-        $text = trim(preg_replace('/\s+/', ' ', strip_tags($body)));
-        return ['status' => $code, 'content_type' => $ctype, 'url' => $current, 'bytes_read' => strlen($body), 'text' => mb_substr($text, 0, 6000)];
+        return ['status' => $code, 'content_type' => $ctype, 'url' => $current, 'raw_html' => $body];
     }
     return ['error' => 'too_many_redirects'];
 }

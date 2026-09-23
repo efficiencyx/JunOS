@@ -197,75 +197,62 @@ function tool_catalog(?string $approvedWebSearchQuery): array {
 // fled, and approved_search, which the one web_search it allows
 // uses up. everything else falls through to run_tool_call().
 function chat_run_tool(string $name, array $args, array $ctx, array &$state): string {
+    $idle = $ctx['req']['idle'];
+
     if ($name === 'stay_silent') {
         // an idle turn is unprompted anyway, so staying quiet does nothing
-        if ($ctx['req']['idle']) {
-            $toolResult = json_encode(['error' => 'not_available_on_idle']);
-        } else {
-            $state['silenced'] = true;
-            $state['silence_reason'] = trim((string)($args['reason'] ?? ''));
-            $state['overheard'] = $ctx['req']['spoken'] && !empty($args['overheard']);
-            $toolResult = json_encode(['silent' => true]);
-        }
-    } elseif ($name === 'change_outfit') {
+        if ($idle) return json_encode(['error' => 'not_available_on_idle']);
+        $state['silenced'] = true;
+        $state['silence_reason'] = trim((string)($args['reason'] ?? ''));
+        $state['overheard'] = $ctx['req']['spoken'] && !empty($args['overheard']);
+        return json_encode(['silent' => true]);
+    }
+
+    if ($name === 'change_outfit') {
         $outfit = wardrobe_tool_change($args, (int)$ctx['user']['id'], $ctx['req']['mod_items']);
         // the browser owns what's on screen, so it gets the change as its
         // own frame rather than having to parse it back out of the tool
         // result the model reads
         if ($outfit['apply'] !== null) sse_send(['outfit' => $outfit['apply']]);
-        $toolResult = json_encode($outfit['reply'], JSON_UNESCAPED_UNICODE);
-    } elseif ($name === 'flee') {
-        if ($state['flee_decided']) {
-            $toolResult = json_encode(['fled' => false, 'reason' => 'already_decided']);
-        } else {
-            $state['flee_decided'] = true;
-            $fleeReason = trim((string)($args['reason'] ?? ''));
-            $verdict = flee_adjudicate($ctx['provider'], $ctx['model'], $ctx['req']['body']['messages'], $fleeReason,
-                                       trim((string)($args['destination'] ?? '')));
-            log_event(['msg' => 'flee_adjudication', 'user_id' => (int)$ctx['user']['id'],
-                       'conversation_id' => $ctx['conv_id'], 'can_leave' => $verdict['can_leave'],
-                       'why' => $verdict['why'], 'reason' => $fleeReason]);
-            if ($verdict['can_leave']) {
-                $state['fled'] = flee_bans_enabled()
-                    ? ban_apply((int)$ctx['user']['id'], $fleeReason)
-                    : ['until' => 0, 'minutes' => 0];
-                $state['fled']['reason'] = $fleeReason;
-                $toolResult = json_encode(['fled' => true], JSON_UNESCAPED_UNICODE);
-            } else {
-                $toolResult = json_encode([
-                    'fled' => false,
-                    'why' => $verdict['why'],
-                    'note' => 'You cannot leave right now. Stay in the scene and respond to what is actually happening.',
-                ], JSON_UNESCAPED_UNICODE);
-            }
-        }
-    } elseif (isset(TRIP_TOOLS[$name])) {
+        return json_encode($outfit['reply'], JSON_UNESCAPED_UNICODE);
+    }
+
+    if ($name === 'flee') {
+        if ($state['flee_decided']) return json_encode(['fled' => false, 'reason' => 'already_decided']);
+        $state['flee_decided'] = true;
+        $verdict = chat_flee($ctx, $state, trim((string)($args['reason'] ?? '')), trim((string)($args['destination'] ?? '')), 'tool');
+        if ($verdict['can_leave']) return json_encode(['fled' => true], JSON_UNESCAPED_UNICODE);
+        return json_encode([
+            'fled' => false,
+            'why' => $verdict['why'],
+            'note' => 'You cannot leave right now. Stay in the scene and respond to what is actually happening.',
+        ], JSON_UNESCAPED_UNICODE);
+    }
+
+    if (isset(TRIP_TOOLS[$name])) {
         $where = TRIP_TOOLS[$name];
         // this queues navigation after the reply and TTS finish.
         // an idle nudge must never send it, Anon isn't even there.
-        if ($ctx['req']['idle']) {
-            $toolResult = json_encode(['error' => 'not_available_on_idle']);
-        } elseif ($where === 'karaoke' && empty(karaoke_health()['sep'])) {
-            $toolResult = json_encode([
+        if ($idle) return json_encode(['error' => 'not_available_on_idle']);
+        if ($where === 'karaoke' && empty(karaoke_health()['sep'])) {
+            return json_encode([
                 'started' => false,
                 'note' => 'The karaoke room is closed right now (the karaoke service is not running). Tell Anon plainly, do not pretend to sing.',
             ]);
-        } else {
-            // the grant is what lets the page open at all. cards is
-            // played at home, nothing to grant
-            if ($where !== 'cards') trip_set((int)$ctx['user']['id'], $where, $ctx['conv_id']);
-            sse_send(['go' => $where]);
-            $toolResult = json_encode([
-                'going' => $where,
-                'note' => $where === 'cards'
-                    ? 'Say one short line. The table opens the moment you finish talking.'
-                    : 'Say one short line about heading out together. The trip starts the moment you finish talking.',
-            ]);
         }
-    } else {
-        $toolResult = run_tool_call($name, $args, $ctx['user'], $ctx['conv_id'], $state['approved_search']);
+        // the grant is what lets the page open at all. cards is
+        // played at home, nothing to grant
+        if ($where !== 'cards') trip_set((int)$ctx['user']['id'], $where, $ctx['conv_id']);
+        sse_send(['go' => $where]);
+        return json_encode([
+            'going' => $where,
+            'note' => $where === 'cards'
+                ? 'Say one short line. The table opens the moment you finish talking.'
+                : 'Say one short line about heading out together. The trip starts the moment you finish talking.',
+        ]);
     }
-    return $toolResult;
+
+    return run_tool_call($name, $args, $ctx['user'], $ctx['conv_id'], $state['approved_search']);
 }
 
 function run_tool_call(string $name, array $args, array $user, int $convId, ?string &$approvedWebSearchQuery): string {
@@ -326,8 +313,7 @@ function run_tool_call(string $name, array $args, array $user, int $convId, ?str
                 $snip->execute([(int)$c['id']]);
                 $lines = [];
                 foreach (array_reverse($snip->fetchAll()) as $r) {
-                    $txt = preg_replace('/\[\s*A(?:CTIONS?)?\s*:[^\]]*\]/i', '', (string)dec($r['content']));
-                    $txt = trim(preg_replace('/\s+/', ' ', $txt));
+                    $txt = spoken_text((string)dec($r['content']));
                     if ($txt === '') continue;
                     if (mb_strlen($txt) > 160) $txt = mb_substr($txt, 0, 157) . '…';
                     $lines[] = $r['role'] . ': ' . $txt;

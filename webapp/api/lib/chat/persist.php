@@ -17,7 +17,7 @@ function chat_save_reply(int $convId, string $reply, array $req, string $lastUse
         ->execute([$convId, 'assistant', enc($reply), $now]);
     db()->prepare('UPDATE conversations SET updated_at=? WHERE id=?')->execute([$now, $convId]);
 
-    if (!$req['idle'] && !$req['ephemeral']) {
+    if (!$req['idle']) {
         $titleRow = db()->prepare('SELECT title FROM conversations WHERE id=?');
         $titleRow->execute([$convId]);
         $conversationTitle = dec($titleRow->fetchColumn() ?: null);

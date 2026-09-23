@@ -1,6 +1,7 @@
 <?php
 
 require_once __DIR__ . '/http.php';
+require_once __DIR__ . '/text.php';
 require_once __DIR__ . '/env.php';
 require_once __DIR__ . '/sidecar.php';
 require_once __DIR__ . '/guards.php';

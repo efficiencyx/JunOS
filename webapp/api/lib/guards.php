@@ -46,8 +46,7 @@ function allowed_origins(): array {
     $out = [];
     $host = strtolower($_SERVER['HTTP_HOST'] ?? '');
     if ($host !== '') {
-        $https = !empty($_SERVER['HTTPS']) || (($_SERVER['HTTP_X_FORWARDED_PROTO'] ?? '') === 'https');
-        $out[] = ($https ? 'https://' : 'http://') . $host;
+        $out[] = (request_is_https() ? 'https://' : 'http://') . $host;
         // a proxy that terminates TLS and forwards plain http without
         // telling us leaves the browser saying https while we'd have
         // guessed http

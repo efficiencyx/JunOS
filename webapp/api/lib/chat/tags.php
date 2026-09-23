@@ -20,16 +20,7 @@ function chat_parse_action_tags(string $buffer, array $ctx, array &$state): stri
         $state['flee_decided'] = true;
         $fleeReason = preg_match('/\breason\s*=\s*([^|\]]+)/i', $fm[1], $fr) ? trim($fr[1]) : '';
         $destination = preg_match('/\bdestination\s*=\s*([^|\]]+)/i', $fm[1], $fd) ? trim($fd[1]) : '';
-        $verdict = flee_adjudicate($ctx['provider'], $ctx['model'], $ctx['req']['body']['messages'], $fleeReason, $destination);
-        log_event(['msg' => 'flee_adjudication', 'user_id' => (int)$ctx['user']['id'],
-                   'conversation_id' => $ctx['conv_id'], 'via' => 'action_tag',
-                   'can_leave' => $verdict['can_leave'], 'why' => $verdict['why'], 'reason' => $fleeReason]);
-        if ($verdict['can_leave']) {
-            $state['fled'] = flee_bans_enabled()
-                ? ban_apply((int)$ctx['user']['id'], $fleeReason)
-                : ['until' => 0, 'minutes' => 0];
-            $state['fled']['reason'] = $fleeReason;
-        }
+        chat_flee($ctx, $state, $fleeReason, $destination, 'action_tag');
     }
     return trim(preg_replace('/\[\s*A(?:CTIONS?)?\s*:\s*(?:flee|stay_silent)\b[^\]]*\]/i', '', $buffer));
 }

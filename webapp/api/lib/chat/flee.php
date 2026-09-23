@@ -5,11 +5,10 @@ function flee_scene_excerpt(array $msgs): string {
     foreach (array_slice($msgs, -20) as $m) {
         $role = is_array($m) ? (string)($m['role'] ?? '') : '';
         if ($role !== 'user' && $role !== 'assistant') continue;
-        $txt = preg_replace('/\[\s*A(?:CTIONS?)?\s*:[^\]]*\]/i', '', (string)($m['content'] ?? ''));
-        $txt = trim(preg_replace('/\s+/', ' ', $txt));
+        $txt = spoken_text((string)($m['content'] ?? ''));
         if ($txt === '') continue;
         if (mb_strlen($txt) > 400) $txt = mb_substr($txt, 0, 397) . '…';
-        $lines[] = ($role === 'user' ? 'Anon' : 'Jun') . ': ' . $txt;
+        $lines[] = speaker_name($role) . ': ' . $txt;
     }
     return implode("\n", $lines);
 }
@@ -61,4 +60,20 @@ TXT;
     }
     $why = trim((string)($verdict['why'] ?? ''));
     return ['can_leave' => $verdict['can_leave'] === true, 'why' => mb_substr($why, 0, 300)];
+}
+
+// the referee and, on a yes, the ban. the flee tool and a bare
+// [A:flee] tag both land here. $via is only for the log.
+function chat_flee(array $ctx, array &$state, string $reason, string $destination, string $via): array {
+    $verdict = flee_adjudicate($ctx['provider'], $ctx['model'], $ctx['req']['body']['messages'], $reason, $destination);
+    log_event(['msg' => 'flee_adjudication', 'user_id' => (int)$ctx['user']['id'],
+               'conversation_id' => $ctx['conv_id'], 'via' => $via,
+               'can_leave' => $verdict['can_leave'], 'why' => $verdict['why'], 'reason' => $reason]);
+    if ($verdict['can_leave']) {
+        $state['fled'] = flee_bans_enabled()
+            ? ban_apply((int)$ctx['user']['id'], $reason)
+            : ['until' => 0, 'minutes' => 0];
+        $state['fled']['reason'] = $reason;
+    }
+    return $verdict;
 }

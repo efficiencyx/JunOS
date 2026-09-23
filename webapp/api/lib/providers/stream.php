@@ -155,6 +155,18 @@ const STREAM_PENDING_MAX = 1024 * 1024;
 
 const STREAM_CONTENT_MAX = 4 * 1024 * 1024;
 
+// a turn's stats across tool rounds. generation is spread over
+// every round so those counters add up. the prompt ones do NOT.
+// each round resends the whole transcript, last round's output
+// included, so only the number from the last round is real.
+function provider_merge_stats(?array $total, array $round): array {
+    if ($total === null) return $round;
+    $round['eval_count'] += $total['eval_count'];
+    $round['eval_duration'] += $total['eval_duration'];
+    $round['total_duration'] += $total['total_duration'];
+    return $round;
+}
+
 function stream_turn_deadline(): float {
     static $deadline = null;
     if ($deadline === null) $deadline = microtime(true) + max(30, (int)env_str('OMEGA_TURN_TIMEOUT_S', '900'));

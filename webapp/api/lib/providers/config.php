@@ -80,6 +80,12 @@ function ollama_mtp_fallback_model(string $model): string {
     return ollama_base_chat_model();
 }
 
+// the little CPU-only model that names chats. models.php hides it
+// from the picker, you can't chat with it.
+function title_model(): string {
+    return env_str('TITLE_MODEL', 'hf.co/efficiencyx/Titlewen-GGUF:F16');
+}
+
 function default_chat_model(): string {
     switch (ai_provider()) {
         case 'openrouter':
@@ -97,16 +103,7 @@ function default_chat_model(): string {
             $configured = ollama_base_chat_model();
             if ($configured !== '') return $configured;
 
-            $ch = curl_init(chat_api_base('ollama') . '/api/tags');
-            curl_setopt_array($ch, [
-                CURLOPT_RETURNTRANSFER => true,
-                CURLOPT_CONNECTTIMEOUT => 2,
-                CURLOPT_TIMEOUT => 3,
-            ]);
-            $response = curl_exec($ch);
-            curl_close($ch);
-            $data = is_string($response) ? json_decode($response, true) : null;
-            foreach (($data['models'] ?? []) as $entry) {
+            foreach ((ollama_api_json('/api/tags')['models'] ?? []) as $entry) {
                 $model = (string)($entry['name'] ?? '');
                 if ($model !== '' && !preg_match('/embed/i', $model)) return $model;
             }

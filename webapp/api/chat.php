@@ -17,6 +17,9 @@ sse_open();
 $PROVIDER = ai_provider();
 
 $user = require_user();
+// 90 not 30. the card table is one chat turn per move and a fast
+// hand is 5-8 of them, three hands in a minute tripped the old cap.
+rate_limit('chat', 90, 60);
 if (consolidation_locked((int)$user['id'])) fail(418, 'consolidating');
 
 $ban = ban_active((int)$user['id']);
@@ -28,15 +31,12 @@ if ($ban !== null) {
 }
 
 require_post();
+require_content_type('application/json');
 
 $req = chat_parse_request($PROVIDER);
 $model = $req['model'];
 if (!$req['idle']) consolidation_touch((int)$user['id']);
 $convId = chat_require_conversation($user, $req['body']);
-
-// 90 not 30. the card table is one chat turn per move and a fast
-// hand is 5-8 of them, three hands in a minute tripped the old cap.
-rate_limit('chat', 90, 60);
 
 $lastUserMsg = chat_last_user_message($req);
 $approvedWebSearchQuery = chat_approved_search($lastUserMsg);
@@ -69,7 +69,7 @@ $messages[count($messages) - 1]['content'] .= "\n\n<think:" . ($reasoning === 'm
 // this frame carries the WHOLE assembled system prompt, so it
 // stays behind the admin role. the dev HUD is the only thing that
 // reads it.
-if (($user['role'] ?? '') === 'admin') {
+if (is_admin($user)) {
     sse_send(['debug' => ['system_prompt' => $systemContent, 'live_context' => $liveContext, 'reasoning' => $reasoning, 'think' => $think, 'route' => $route]]);
 }
 
@@ -110,19 +110,7 @@ for ($round = 0; $round < 3; $round++) {
         $result = provider_stream_round($PROVIDER, $upstreamPayload, 'sse_send', $round);
         $roundContent = $result['content'];
         $toolCalls = $result['tool_calls'];
-        if ($result['stats'] !== null) {
-            // generation is spread over every tool round so those counters
-            // add up. the prompt ones do NOT. each round resends the whole
-            // transcript, last round's output included, so only the number
-            // from the last round is real.
-            $prev = $stats;
-            $stats = $result['stats'];
-            if ($prev !== null) {
-                $stats['eval_count'] += $prev['eval_count'];
-                $stats['eval_duration'] += $prev['eval_duration'];
-                $stats['total_duration'] += $prev['total_duration'];
-            }
-        }
+        if ($result['stats'] !== null) $stats = provider_merge_stats($stats, $result['stats']);
         if ($result['done_reason'] !== '') $doneReason = $result['done_reason'];
         if ($result['stream_error']) $sawError = true;
 
@@ -191,14 +179,8 @@ for ($round = 0; $round < 3; $round++) {
         'tool_calls' => $toolCalls,
     ];
     foreach (array_slice($toolCalls, 0, 4) as $call) {
-        $fn = $call['function'] ?? [];
-        $name = (string)($fn['name'] ?? '');
-        $args = $fn['arguments'] ?? [];
-        if (is_string($args)) {
-            $decoded = json_decode($args, true);
-            $args = is_array($decoded) ? $decoded : [];
-        }
-        if (!is_array($args)) $args = [];
+        $name = (string)($call['function']['name'] ?? '');
+        $args = tool_call_args($call);
         sse_send(['tool_status' => ['name' => $name, 'state' => 'running', 'args' => $args]]);
         $t0 = microtime(true);
         $toolResult = chat_run_tool($name, $args, [
@@ -236,15 +218,7 @@ if ($usedTools && !$sawError && !$state['silenced'] && $state['fled'] === null &
     $assistantBuffer .= $result['content'];
     if ($result['done_reason'] !== '') $doneReason = $result['done_reason'];
     if ($result['stream_error']) $sawError = true;
-    if ($result['stats'] !== null) {
-        $prev = $stats;
-        $stats = $result['stats'];
-        if ($prev !== null) {
-            $stats['eval_count'] += $prev['eval_count'];
-            $stats['eval_duration'] += $prev['eval_duration'];
-            $stats['total_duration'] += $prev['total_duration'];
-        }
-    }
+    if ($result['stats'] !== null) $stats = provider_merge_stats($stats, $result['stats']);
 }
 
 // same training quirk as memory_write below. Jun sometimes just
@@ -282,8 +256,6 @@ if (!$sawError && $assistantBuffer === '') {
     log_event(['msg' => 'empty_reply', 'model' => $model, 'done_reason' => $doneReason, 'think' => $think]);
     sse_send(['error' => $doneReason === 'length' ? 'reply_truncated_in_thinking' : 'empty_reply']);
 }
-
-$rawAssistant = $assistantBuffer;
 
 if (!$sawError && $assistantBuffer !== '') {
     $assistantBuffer = chat_apply_bookkeeping_tags($assistantBuffer, (int)$user['id'], $rel);

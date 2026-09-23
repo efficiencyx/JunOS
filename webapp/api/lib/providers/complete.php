@@ -38,33 +38,8 @@ function provider_post_chat(string $provider, array $payload, ?string &$error = 
 }
 
 function provider_complete_once(string $provider, string $model, array $messages, int $maxTokens = 512, bool $think = false, string $reasoning = 'medium'): ?string {
-    if (provider_uses_openai_protocol($provider)) {
-        $payload = ['model' => $model, 'messages' => $messages, 'stream' => false,
-                    'temperature' => 0.3, 'max_tokens' => $maxTokens];
-        if ($think && $provider === 'openrouter') $payload['reasoning'] = ['effort' => $reasoning];
-    } else {
-        $payload = ['model' => $model, 'messages' => $messages, 'stream' => false,
-                    'keep_alive' => -1,
-                    'options' => ['reasoning_effort' => $reasoning, 'temperature' => 0.3,
-                                  'num_ctx' => default_num_ctx(), 'num_predict' => $maxTokens]];
-        // same shape as provider_chat_payload(). you ask for thinking by
-        // LEAVING `think` out and letting reasoning_effort drive the
-        // template. send think:true and Ollama runs a capability check
-        // the Jun GGUFs fail, then 400s in your face.
-        if (!$think) $payload['think'] = false;
-    }
-
-    $obj = provider_post_chat($provider, $payload, $error);
-    if ($obj === null) {
-        log_event(['msg' => 'complete_once_error', 'err' => $error]);
-        return null;
-    }
-    $text = provider_uses_openai_protocol($provider)
-        ? ($obj['choices'][0]['message']['content'] ?? null)
-        : ($obj['message']['content'] ?? null);
-    if (!is_string($text)) return null;
-    $text = provider_strip_think($text);
-    return $text !== '' ? $text : null;
+    $reply = provider_complete_tools($provider, $model, $messages, [], $maxTokens, $think, $reasoning);
+    return $reply['content'] !== '' ? $reply['content'] : null;
 }
 
 function provider_complete_tools(string $provider, string $model, array $messages, array $tools, int $maxTokens = 1024, bool $think = false, string $reasoning = 'medium'): array {
@@ -92,12 +67,16 @@ function provider_complete_tools(string $provider, string $model, array $message
             ],
         ];
         if ($tools) $payload['tools'] = $tools;
+        // same shape as provider_chat_payload(). you ask for thinking by
+        // LEAVING `think` out and letting reasoning_effort drive the
+        // template. send think:true and Ollama runs a capability check
+        // the Jun GGUFs fail, then 400s in your face.
         if (!$think) $payload['think'] = false;
     }
 
     $obj = provider_post_chat($provider, $payload, $error);
     if ($obj === null) {
-        log_event(['msg' => 'complete_tools_error', 'provider' => $provider, 'err' => $error]);
+        log_event(['msg' => 'complete_error', 'provider' => $provider, 'tools' => (bool)$tools, 'err' => $error]);
         return ['content' => '', 'tool_calls' => [], 'error' => $error];
     }
     $message = provider_uses_openai_protocol($provider)
@@ -112,11 +91,10 @@ function provider_complete_tools(string $provider, string $model, array $message
 
 function generate_chat_title(string $userMessage): ?string {
     if (ai_provider() !== 'ollama') return null;
-    $model = env_str('TITLE_MODEL', 'hf.co/efficiencyx/Titlewen-GGUF:F16');
+    $model = title_model();
     if ($model === '') return null;
 
-    $msg = preg_replace('/\[\s*A(?:CTIONS?)?\s*:[^\]]*\]/i', '', $userMessage);
-    $msg = trim(preg_replace('/\s+/', ' ', $msg));
+    $msg = spoken_text($userMessage);
     if ($msg === '') return null;
     $msg = substr($msg, 0, 500);
 
