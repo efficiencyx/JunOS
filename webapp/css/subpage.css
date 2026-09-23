@@ -1,5 +1,5 @@
 /* one source for the tokens the subpages share.
-   wardrobe.css, karaoke-page.css and date.css each carried their own
+   pages/wardrobe.css, pages/karaoke.css and pages/date.css each carried their own
    :root copy and they had already drifted: --bg-2 was #16141e in one
    and #19141f in the other, --border was rgba(255,255,255,.06) in one
    and #c4a0f01c in the other. same intent, three answers.

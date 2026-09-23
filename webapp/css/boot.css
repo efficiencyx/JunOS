@@ -1,7 +1,8 @@
-/* this file is never served. tools/build-critical-css.php drops
-   it into index.html so the age gate, auth screen and boot overlay
-   have CSS before styles.css finishes loading. edit THIS file,
-   then run ./sync-webapp.sh. */
+/* tools/build-critical-css.php drops this into index.html so the
+   age gate, auth screen and boot overlay have CSS before
+   styles.css finishes loading. karaoke.html and privacy.html link
+   it straight, for the tokens. edit THIS file, never the inlined
+   copy, then run ./sync-webapp.sh. */
 
 :root {
   --bg:         #131314;

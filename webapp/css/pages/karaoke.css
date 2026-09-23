@@ -1,4 +1,4 @@
-@import url("css/subpage.css?v=1");
+@import url("../subpage.css?v=1");
 :root {
   --karaoke-panel: clamp(390px, 37vw, 540px);
   --karaoke-sheet: 57dvh;
