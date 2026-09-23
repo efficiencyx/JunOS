@@ -1,8 +1,9 @@
-import { abortFn, currentConversationId, runChat } from '../app.js?v=19';
+import { abortFn, currentConversationId, runChat } from '../app.js?v=20';
 import { chatInput, consolidationBanner, consolidationSub, consolidationTitle, devNoIdleChk, fleeEtaEl, fleeOverlay, fleeReasonEl, sendBtn, voiceChk } from './dom.js?v=11';
-import { showFaceBubble } from './face-bubble.js?v=12';
-import { logAction } from './logging.js?v=10';
-import { escapeHtml, formatElapsed } from './util.js?v=10';
+import { showFaceBubble } from './face-bubble.js?v=13';
+import { logAction } from './logging.js?v=11';
+import { escapeHtml, formatElapsed } from '../core/util.js?v=1';
+import * as Names from '../core/names.js?v=1';
 
 const BUSY_LINES = [
   "Hang on, ${p}, I'm defragging my SSD.",
@@ -88,7 +89,7 @@ function pickBusyLine() {
   let index = Math.floor(Math.random() * BUSY_LINES.length);
   if (index === previousBusyLine) index = (index + 1) % BUSY_LINES.length;
   previousBusyLine = index;
-  const player = window.Names ? Names.getPlayer() : 'Anon';
+  const player = Names.getPlayer();
   return escapeHtml(BUSY_LINES[index].replaceAll('${p}', player));
 }
 
@@ -104,7 +105,7 @@ export function fleeActive() { return fleeUntil > Date.now(); }
 
 function fleeCountdown() { return formatElapsed((fleeUntil - Date.now()) / 1000); }
 
-const botName = () => (window.Names ? Names.getBot() : 'Jun');
+const botName = () => Names.getBot();
 
 export function composerPlaceholder() {
   if (fleeActive()) return botName() + ' walked out. Back in ' + fleeCountdown();

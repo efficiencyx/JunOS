@@ -1,7 +1,8 @@
 import { chatInput, sendBtn } from './dom.js?v=11';
-import { replayFaceBubbleIntro, scheduleFaceBubbleHide, showFaceBubble } from './face-bubble.js?v=12';
-import { loadMood } from './mood.js?v=12';
-import { escapeHtml } from './util.js?v=10';
+import { replayFaceBubbleIntro, scheduleFaceBubbleHide, showFaceBubble } from './face-bubble.js?v=13';
+import { loadMood } from './mood.js?v=13';
+import { escapeHtml } from '../core/util.js?v=1';
+import * as Names from '../core/names.js?v=1';
 
 const CAMERA_MS = 450;
 const SCENE_TAIL_MS = 1800;
@@ -176,7 +177,7 @@ export function playWelcome() {
   if (!pending) return;
   const { lines, tier, mood_changed: moodChanged } = pending;
   pending = null;
-  const player = window.Names ? Names.getPlayer() : 'Anon';
+  const player = Names.getPlayer();
   // wrapped in a span so welcome.css can fade the words in after
   // the panel has opened. without it .fb-text is a plain text node
   // with nothing to aim at.

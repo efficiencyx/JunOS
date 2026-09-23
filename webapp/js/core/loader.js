@@ -7,7 +7,7 @@
 // = false doesn't order it against these anyway, so app.js
 // imports live2d.js itself.
 
-window.loadScripts = function (groups) {
+export function loadScripts(groups) {
   const load = (src) => new Promise((resolve, reject) => {
     const s = document.createElement('script');
     s.src = src;
@@ -21,4 +21,4 @@ window.loadScripts = function (groups) {
     (chain, group) => chain.then(() => Promise.all(group.map(load))),
     Promise.resolve()
   );
-};
+}

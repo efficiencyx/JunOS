@@ -1,8 +1,10 @@
-import { VOICE_STATE_LABELS, renderVoiceDraft, sendAudioFromVoice, sendFromVoice, stopActiveStream, sttAvailable } from '../app.js?v=19';
+import { VOICE_STATE_LABELS, renderVoiceDraft, sendAudioFromVoice, sendFromVoice, stopActiveStream, sttAvailable } from '../app.js?v=20';
 import { voiceBargeChk, voiceChk, voiceHearAllChk, voiceSilenceInput, voiceState } from './dom.js?v=11';
-import { hideFaceBubble } from './face-bubble.js?v=12';
-import { logAction } from './logging.js?v=10';
-import { syncVoiceDeps, updateVoiceSilenceLabel } from './settings.js?v=13';
+import { hideFaceBubble } from './face-bubble.js?v=13';
+import { logAction } from './logging.js?v=11';
+import { syncVoiceDeps, updateVoiceSilenceLabel } from './settings.js?v=14';
+import * as Prefs from '../core/prefs.js?v=1';
+import * as ui from '../core/ui.js?v=1';
 
 export async function wireVoice() {
   if (window.Voice && voiceChk) {
@@ -90,7 +92,7 @@ export async function wireVoice() {
         }
         if (!save) return;
         localStorage.setItem('voice.hear_all', on ? '1' : '0');
-        if (window.Prefs) Prefs.pushToServer();
+        Prefs.pushToServer();
       };
       applyHearAll(localStorage.getItem('voice.hear_all') === '1', false);
       if (voiceHearAllChk) voiceHearAllChk.addEventListener('change', () => applyHearAll(voiceHearAllChk.checked, true));
@@ -118,7 +120,7 @@ export async function wireVoice() {
         voiceBargeChk.addEventListener('change', () => {
           Voice.setBargeIn(voiceBargeChk.checked);
           localStorage.setItem('voice.bargein', voiceBargeChk.checked ? '1' : '0');
-          if (window.Prefs) Prefs.pushToServer();
+          Prefs.pushToServer();
         });
       }
       if (voiceSilenceInput) {
@@ -127,7 +129,7 @@ export async function wireVoice() {
           const ms = parseInt(voiceSilenceInput.value, 10) || 700;
           Voice.setSilenceMs(ms);
           localStorage.setItem('voice.silence_ms', String(ms));
-          if (window.Prefs) Prefs.pushToServer();
+          Prefs.pushToServer();
         });
       }
     }

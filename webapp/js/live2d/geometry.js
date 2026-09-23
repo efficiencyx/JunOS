@@ -1,6 +1,6 @@
-import { app, forcedDrawableOpacity, model, paramMax, paramMin, publicTint, raw } from '../live2d.js?v=10';
+import { app, forcedDrawableOpacity, model, paramMax, paramMin, publicTint, raw } from '../live2d.js?v=11';
 import { S } from './state.js?v=10';
-import { _baseAtlas, _uvRect } from './textures.js?v=10';
+import { _baseAtlas, _uvRect } from './textures.js?v=11';
 
 export function clamp(id, v) {
   const lo = paramMin.get(id), hi = paramMax.get(id);
