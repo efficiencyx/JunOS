@@ -20,10 +20,13 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 MODEL = 'fake-jun'
 LOG = os.environ.get('FAKE_OLLAMA_LOG', '')
 
-# the mood_shift tag sits at the end like she writes it. the
-# chunks split the smile tag in half ON PURPOSE, php has to glue
-# the stream back together before anything downstream sees it.
-REPLY_CHUNKS = ['hey. [A:sm', 'ile] there you are.', '\n[A:mood_shift|affection=-3', '|trust=-1|tension=+2]']
+# the memory_write and mood_shift tags sit at the end like she
+# writes them. the chunks split tags in half ON PURPOSE, php has
+# to glue the stream back together before anything downstream
+# sees it. memory_write names its category FIRST and carries a
+# comma in the note, the shape that used to get misparsed.
+REPLY_CHUNKS = ['hey. [A:sm', 'ile] there you are.', '\n[A:memory_write|category=likes', '|memory=green tea, lots]',
+                '\n[A:mood_shift|affection=-3', '|trust=-1|tension=+2]']
 
 STATS = {'eval_count': 12, 'eval_duration': 400_000_000, 'prompt_eval_count': 300,
          'prompt_eval_duration': 100_000_000, 'total_duration': 600_000_000, 'load_duration': 0}

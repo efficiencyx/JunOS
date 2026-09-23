@@ -221,10 +221,6 @@ if ($usedTools && !$sawError && !$state['silenced'] && $state['fled'] === null &
     if ($result['stats'] !== null) $stats = provider_merge_stats($stats, $result['stats']);
 }
 
-// same training quirk as memory_write below. Jun sometimes just
-// writes these as her own [A:...] tags instead of calling the
-// tool, so send them down the same path. flee_adjudicate() still
-// has to approve a flee tag, the tag itself proves nothing.
 if (!$sawError && $assistantBuffer !== '') {
     $assistantBuffer = chat_parse_action_tags($assistantBuffer, [
         'provider' => $PROVIDER, 'model' => $model, 'user' => $user, 'conv_id' => $convId, 'req' => $req,

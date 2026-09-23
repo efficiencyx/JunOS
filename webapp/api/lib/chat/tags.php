@@ -42,9 +42,16 @@ function chat_apply_bookkeeping_tags(string $buffer, int $userId, array $rel): s
     // of throwing the note away.
     if (preg_match_all('/\[\s*A(?:CTIONS?)?\s*:\s*memory_write\b([^\]]*)\]/i', $buffer, $mws, PREG_SET_ORDER)) {
         foreach ($mws as $mw) {
-            // memory= runs to the end of the tag, the note can have commas
-            if (!preg_match('/\bmemory\s*=\s*(.+)$/is', $mw[1], $mem)) continue;
-            $category = preg_match('/\bcategory\s*=\s*([^,\]]+)/i', $mw[1], $cat) ? trim($cat[1]) : 'general';
+            // category comes out FIRST, separator and all, because
+            // memory= runs to the end of the tag (the note can have
+            // commas) and would take a trailing |category=... with it
+            $args = $mw[1];
+            $category = 'general';
+            if (preg_match('/(?:^|[|,])\s*category\s*=\s*([^|,\]]+)/i', $args, $cat)) {
+                $category = trim($cat[1]);
+                $args = str_replace($cat[0], '', $args);
+            }
+            if (!preg_match('/\bmemory\s*=\s*(.+)$/is', $args, $mem)) continue;
             $res = memory_note_add($userId, $category, trim($mem[1]));
             sse_send(['tool_status' => [
                 'name' => 'memory_write', 'state' => 'done', 'duration_ms' => 0,

@@ -1,8 +1,8 @@
 import { currentConversationId, messages, setCurrentConversationId } from './session.js?v=1';
 import { appendMsg, renderMarkdown, updateEmptyState } from './messages.js?v=1';
-import { discardActiveResponse } from './chat.js?v=1';
+import { discardActiveResponse } from './chat.js?v=2';
 import { setConversationTitle } from './face-bubble.js?v=18';
-import { IDLE_AFTER_JOIN_MS, cancelAutoReset, reportActivity, resetIdleNudge, scheduleIdleNudge } from './consolidation.js?v=18';
+import { IDLE_AFTER_JOIN_MS, cancelAutoReset, reportActivity, resetIdleNudge, scheduleIdleNudge } from './consolidation.js?v=19';
 import { conversationSidebar, messagesEl, mobileConversationTitle, mobileMenuBtn, narrowSidebarQuery, reloadPromptBtn, resetLive2DBtn, sidebarBackdrop, sidebarBackground } from './dom.js?v=11';
 import { announceMobileReply, faceBubble, hideFaceBubble, latestAssistantReply, scheduleFaceBubbleHide, setLatestAssistantReply, showFaceBubble } from './face-bubble.js?v=18';
 import { logAction } from './logging.js?v=11';
