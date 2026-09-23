@@ -63,3 +63,11 @@ function provider_tool_message(string $provider, string $name, string $callId, s
     if (!provider_uses_openai_protocol($provider)) $message['name'] = $name;
     return $message;
 }
+
+// arguments come back as an object from ollama and as a JSON string
+// from the openai-style servers. anything unreadable is no args.
+function tool_call_args(array $call): array {
+    $args = $call['function']['arguments'] ?? [];
+    if (is_string($args)) $args = json_decode($args, true);
+    return is_array($args) ? $args : [];
+}

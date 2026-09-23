@@ -1,37 +1,27 @@
 <?php
 require_once __DIR__ . '/lib/bootstrap.php';
 
-header('Content-Type: application/json');
-rate_limit('trip', 30, 60);
-
 $user = require_user();
+rate_limit('trip', 30, 60);
 $userId = (int)$user['id'];
-$canForce = ($user['role'] ?? '') === 'admin' || free_roam_enabled();
+$canForce = is_admin($user) || free_roam_enabled();
 
-if ($_SERVER['REQUEST_METHOD'] === 'GET') {
+if (require_method('GET', 'POST') === 'GET') {
     $trip = trip_get($userId) ?? ['where' => '', 'since' => 0, 'conversation_id' => 0];
     $trip['gated'] = !free_roam_enabled();
     $trip['can_force'] = $canForce;
-    echo json_encode($trip);
-    exit;
+    json_out($trip);
 }
 
-require_post();
 $action = $_GET['action'] ?? '';
-$body = [];
-if (($_SERVER['CONTENT_LENGTH'] ?? 0) > 0) {
-    require_content_type('application/json');
-    $body = json_decode(read_body(2048), true);
-    if (!is_array($body)) fail(400, 'invalid_request');
-}
+$body = ($_SERVER['CONTENT_LENGTH'] ?? 0) > 0 ? read_json_body(2048) : [];
 
 if ($action === 'go') {
     if (!$canForce) fail(403, 'forbidden');
     $where = (string)($body['where'] ?? '');
     if (!in_array($where, ['shop', 'karaoke', 'date'], true)) fail(400, 'invalid_request');
     trip_set($userId, $where, (int)($body['conversation_id'] ?? 0));
-    echo json_encode(['ok' => true]);
-    exit;
+    json_out(['ok' => true]);
 }
 
 if ($action === 'home') {
@@ -50,8 +40,7 @@ if ($action === 'home') {
         }
     }
     trip_clear($userId);
-    echo json_encode(['ok' => true]);
-    exit;
+    json_out(['ok' => true]);
 }
 
 fail(400, 'invalid_request');

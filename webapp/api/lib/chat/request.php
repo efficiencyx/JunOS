@@ -108,11 +108,7 @@ function chat_parse_request(string $provider): array {
 function chat_require_conversation(array $user, array $body): int {
     $convId = isset($body['conversation_id']) ? (int)$body['conversation_id'] : 0;
     if (!$convId) sse_fail('invalid_request');
-    $owns = db()->prepare('SELECT 1 FROM conversations WHERE id=? AND user_id=?');
-    $owns->execute([$convId, $user['id']]);
-    $ownsConversation = (bool)$owns->fetchColumn();
-    $owns->closeCursor();
-    if (!$ownsConversation) sse_fail('forbidden');
+    if (!conversation_owned($convId, (int)$user['id'])) sse_fail('forbidden');
     return $convId;
 }
 

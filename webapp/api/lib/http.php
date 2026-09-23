@@ -40,8 +40,25 @@ function fail(int $code, string $key, array $extra = []): never {
     exit;
 }
 
+function json_out(mixed $data, int $code = 200): never {
+    http_response_code($code);
+    header('Content-Type: application/json');
+    echo json_encode($data, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
+    exit;
+}
+
+function require_method(string ...$allowed): string {
+    $method = $_SERVER['REQUEST_METHOD'] ?? 'GET';
+    if (!in_array($method, $allowed, true)) fail(405, 'method_not_allowed');
+    return $method;
+}
+
 function require_post(): void {
-    if ($_SERVER['REQUEST_METHOD'] !== 'POST') fail(405, 'method_not_allowed');
+    require_method('POST');
+}
+
+function request_is_https(): bool {
+    return !empty($_SERVER['HTTPS']) || (($_SERVER['HTTP_X_FORWARDED_PROTO'] ?? '') === 'https');
 }
 
 function require_content_type(string $expected): void {
@@ -59,5 +76,14 @@ function read_body(int $maxBytes): string {
     fclose($handle);
 
     if (strlen($body) > $maxBytes) fail(413, 'request_too_large');
+    return $body;
+}
+
+// content type, size cap and a decoded array, or the request never
+// gets past here.
+function read_json_body(int $maxBytes): array {
+    require_content_type('application/json');
+    $body = json_decode(read_body($maxBytes), true);
+    if (!is_array($body)) fail(400, 'invalid_request');
     return $body;
 }

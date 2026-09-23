@@ -34,10 +34,19 @@ function require_user(): array {
     return $user;
 }
 
+function is_admin(array $user): bool {
+    return ($user['role'] ?? '') === 'admin';
+}
+
 function require_admin(): array {
     $user = require_user();
-    if (($user['role'] ?? '') !== 'admin') fail(403, 'forbidden');
+    if (!is_admin($user)) fail(403, 'forbidden');
     return $user;
+}
+
+// what the browser gets to see of an account
+function user_public(array $user): array {
+    return ['id' => $user['id'], 'email' => $user['email'], 'role' => (string)($user['role'] ?? 'user')];
 }
 
 function start_session(int $userId, string $dek): string {
@@ -47,21 +56,25 @@ function start_session(int $userId, string $dek): string {
     db()->prepare('INSERT INTO sessions (token, user_id, created_at, expires_at) VALUES (?, ?, ?, ?)')
         ->execute([session_token_hash($token), $userId, $now, $expires]);
 
-    $secure = !empty($_SERVER['HTTPS']) || (($_SERVER['HTTP_X_FORWARDED_PROTO'] ?? '') === 'https');
-    // Strict, NOT Lax. nothing links into this app from outside so
-    // there's no cross-site navigation that needs the cookie, and Lax
-    // would still send it on a top level GET some other page shoved
-    // us into.
+    session_cookies($token, base64_encode($dek), $expires);
+    return $token;
+}
+
+// Strict, NOT Lax. nothing links into this app from outside so
+// there's no cross-site navigation that needs the cookie, and Lax
+// would still send it on a top level GET some other page shoved
+// us into. logout clears them through here too, so the two sets
+// of attributes can't drift apart again (they did, Lax vs Strict).
+function session_cookies(string $session, string $key, int $expires): void {
     $attrs = [
         'expires' => $expires,
         'path' => '/',
         'httponly' => true,
         'samesite' => 'Strict',
-        'secure' => $secure,
+        'secure' => request_is_https(),
     ];
-    setcookie('omega_session', $token, $attrs);
-    setcookie('omega_key', base64_encode($dek), $attrs);
-    return $token;
+    setcookie('omega_session', $session, $attrs);
+    setcookie('omega_key', $key, $attrs);
 }
 
 function session_token_hash(string $token): string {

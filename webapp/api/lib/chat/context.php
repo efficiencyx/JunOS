@@ -73,25 +73,24 @@ function relationship_directives(array $r): string {
     return "- Affection: {$a}/100\n- Trust: {$t}/100\n- Tension: {$x}/100";
 }
 
+// compact's summary of this conversation, and how many of its
+// oldest messages that summary already covers
 function chat_conversation_summary(int $convId, int $userId): array {
-    $convSummary = '';
-    $summaryCoveredCount = 0;
-    if ($convId > 0) {
-        $sq = db()->prepare('SELECT summary, summary_upto_id FROM conversations WHERE id=? AND user_id=?');
-        $sq->execute([$convId, $userId]);
-        if ($srow = $sq->fetch()) {
-            $convSummary = trim((string)dec($srow['summary'] ?? null));
-            $uptoId = (int)$srow['summary_upto_id'];
-            if ($convSummary !== '' && $uptoId > 0) {
-                $cc = db()->prepare('SELECT COUNT(*) FROM messages WHERE conversation_id=? AND id<=?');
-                $cc->execute([$convId, $uptoId]);
-                $summaryCoveredCount = (int)$cc->fetchColumn();
-                $cc->closeCursor();
-            }
-        }
-        $sq->closeCursor();
-    }
-    return [$convSummary, $summaryCoveredCount];
+    $sq = db()->prepare('SELECT summary, summary_upto_id FROM conversations WHERE id=? AND user_id=?');
+    $sq->execute([$convId, $userId]);
+    $srow = $sq->fetch();
+    $sq->closeCursor();
+    if (!$srow) return ['', 0];
+
+    $convSummary = trim((string)dec($srow['summary'] ?? null));
+    $uptoId = (int)$srow['summary_upto_id'];
+    if ($convSummary === '' || $uptoId <= 0) return [$convSummary, 0];
+
+    $cc = db()->prepare('SELECT COUNT(*) FROM messages WHERE conversation_id=? AND id<=?');
+    $cc->execute([$convId, $uptoId]);
+    $covered = (int)$cc->fetchColumn();
+    $cc->closeCursor();
+    return [$convSummary, $covered];
 }
 
 function chat_live_context(array $req, array $user, string $lastUserMsg, string $convSummary, array $rel,

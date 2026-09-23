@@ -209,12 +209,10 @@ function consolidation_run(int $userId, ?int $idleBefore = null): array {
         $maxId = (int)$rows[count($rows) - 1]['id'];
         $lines = [];
         foreach ($rows as $row) {
-            $text = preg_replace('/\[\s*A(?:CTIONS?)?\s*:[^\]]*\]/i', '', (string)dec($row['content']));
-            $text = trim(preg_replace('/\s+/', ' ', $text));
+            $text = spoken_text((string)dec($row['content']));
             if ($text === '') continue;
             $title = trim((string)dec($row['title'] ?? null)) ?: 'New conversation';
-            $speaker = $row['role'] === 'assistant' ? 'Jun' : 'Anon';
-            $lines[] = '[' . $title . '] ' . $speaker . ': ' . $text;
+            $lines[] = '[' . $title . '] ' . speaker_name($row['role']) . ': ' . $text;
         }
 
         $charLimit = (int)floor(default_num_ctx() * 4 * 0.4);

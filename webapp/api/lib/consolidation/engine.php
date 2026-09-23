@@ -146,12 +146,7 @@ function consolidation_tool_loop(
         foreach ($calls as $call) {
             $fn = is_array($call['function'] ?? null) ? $call['function'] : [];
             $name = trim((string)($fn['name'] ?? ''));
-            $args = $fn['arguments'] ?? [];
-            if (is_string($args)) {
-                $decoded = json_decode($args, true);
-                $args = is_array($decoded) ? $decoded : [];
-            }
-            if (!is_array($args)) $args = [];
+            $args = tool_call_args($call);
             $counts[$name] = ($counts[$name] ?? 0) + 1;
             try {
                 $result = $exec($name, $args);

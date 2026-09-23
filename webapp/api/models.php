@@ -70,9 +70,9 @@ if ($provider === 'openrouter') {
     }
 } else {
     header('Cache-Control: public, max-age=10');
-    $data = http_get_json(rtrim(env_str('OLLAMA_URL', 'http://localhost:11434'), '/') . '/api/tags');
+    $data = http_get_json(chat_api_base('ollama') . '/api/tags');
     if (is_array($data['models'] ?? null)) {
-        $titleModel = env_str('TITLE_MODEL', 'hf.co/efficiencyx/Titlewen-GGUF:F16');
+        $titleModel = title_model();
         // Neither of these is something you can chat with. The drafter
         // can't hold a conversation at all - ask for it and ollama loads
         // it on its own, llama.cpp says "Gemma4Assistant requires
