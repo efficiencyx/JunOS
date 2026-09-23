@@ -152,6 +152,7 @@ server {
     location = /api/consolidation-worker.php { return 404; }
     location = /system_prompt.txt { return 404; }
     location ^~ /api/migrations/ { return 404; }
+    location ^~ /api/lib/ { return 404; }
     location ~ (^|/)\. { return 404; }
 
     location ~ ^/api/.+\.php$ {
