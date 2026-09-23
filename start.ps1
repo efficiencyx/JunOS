@@ -83,6 +83,7 @@ $Runtime  = Join-Path $PSScriptRoot 'runtime'
 $LogDir   = Join-Path $Runtime 'logs'
 $PidFile  = Join-Path $Runtime 'pids.json'
 $StateDir = Join-Path $Runtime 'state'
+$Services = 'php', 'memory', 'tts', 'ollama', 'llamacpp'
 
 # read KEY=VALUE pairs in as env vars, but ONLY when they aren't
 # set already, so you can still override one for a single run.
@@ -326,7 +327,7 @@ function Invoke-MtpRecheck {
 if ($Action -eq 'stop') {
     Step 'stopping services'
     $pids = Read-Pids
-    foreach ($name in 'php', 'memory', 'tts', 'ollama', 'llamacpp') {
+    foreach ($name in $Services) {
         $p = Get-TrackedProcess $pids $name
         if ($p) {
             Ok "stopped $name (pid $($p.Id))"
@@ -342,7 +343,7 @@ if ($Action -eq 'stop') {
 if ($Action -eq 'status') {
     Step 'service status'
     $pids = Read-Pids
-    foreach ($name in 'php', 'memory', 'tts', 'ollama', 'llamacpp') {
+    foreach ($name in $Services) {
         $p = Get-TrackedProcess $pids $name
         if ($p) {
             Ok ("{0,-10} running (pid {1})" -f $name, $p.Id)
