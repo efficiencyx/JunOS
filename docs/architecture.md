@@ -29,7 +29,9 @@ This document is the long-form reference for the system. For a quick orientation
 
 nginx serves static files from `/var/www/omega/` and FastCGI-proxies `*.php` requests to the php-fpm container. The model servers and the audio sidecars are internal-only; their ports are not published to the host. The voice sidecar on `:8001` fronts two swappable engines, Kokoro-82M (default) and kyutai pocket-tts, selected per request. `VOICE=off` drops the `voice` compose profile so the `tts` container is never started; on bare-metal Windows the same variable stops `start.ps1` spawning the sidecar process. Either way php and the frontend degrade gracefully to text-only whenever the sidecar is absent or unhealthy.
 
-Karaoke stem separation runs the *same* `tts/server.py` in a second container (`profiles: [karaoke]`, `SIDECAR_ROLE=karaoke`) built from `docker/karaoke.Dockerfile`: demucs and a CUDA/ROCm torch, no Kokoro or pocket-tts. The split exists so the two can want different hardware - separation is minutes on CPU versus seconds on a GPU, while voice synthesis is real-time on CPU and a GPU copy would only take VRAM away from the LLM. Each image installs only its own dependencies, and `server.py`'s `_stt_available()`/`_sep_available()` probes turn a missing one into a 503 rather than a crash, so the shared file is safe in both roles. Bare-metal installs (Windows, Colab) run a single process that serves both, which is why `api/karaoke.php` falls back to `TTS_URL` when `KARAOKE_URL` is unset.
+Karaoke stem separation runs the *same* `tts/server.py` in a second container (`profiles: [karaoke]`, `SIDECAR_ROLE=karaoke`) built from `docker/karaoke.Dockerfile`: demucs and a CUDA/ROCm torch, no Kokoro or pocket-tts. The split exists so the two can want different hardware - separation is minutes on CPU versus seconds on a GPU, while voice synthesis is real-time on CPU and a GPU copy would only take VRAM away from the LLM. Each image installs only its own dependencies, and the `stt_available()`/`sep_available()` probes in `tts/sidecar/stt.py` and `tts/sidecar/karaoke.py` turn a missing one into a 503 rather than a crash, so the shared code is safe in both roles. Bare-metal installs (Windows, Colab) run a single process that serves both, which is why `api/karaoke.php` falls back to `TTS_URL` when `KARAOKE_URL` is unset.
+
+The browser side has no build step: `webapp/js` is plain ES modules, every import carrying a `?v=` cache-buster, with the vendored libraries as classic scripts. On the chat page `js/app.js` is only the auth gate. Signed out, it draws the login screen from a handful of modules. Signed in, it loads the vendor scripts and `js/app/main.js` side by side and calls `boot()`. The date, wardrobe and karaoke pages have their own entries (`date.js`, `wardrobe.js`, `karaoke-page.js`) and share the feature folders: `core/`, `live2d/`, `outfit/`, `wardrobe/` (the shop UI, which only `wardrobe.html` loads), `mods/`, `voice/`, `karaoke/` and `trip/`.
 
 On a multi-GPU host the launcher decides which card the model server gets: `start.sh` orders the GPUs by VRAM and passes that order down as `CUDA_VISIBLE_DEVICES` (or the ROCm/Vulkan equivalents), so the largest card is device 0, and `TENSOR_PARALLEL=on` additionally lets one model span every card. See [configuration.md](configuration.md) §8 for the full set of knobs and the derived variables.
 
@@ -125,7 +127,7 @@ Multi-token prediction (MTP) runs the chat model with a small Gemma 4 drafter th
 
 ## Action extraction state machine
 
-`makeStreamBuffer` in `webapp/js/app/stream-filters.js` (imported by `app.js`) is a streaming state machine that intercepts action tags before they reach the chat renderer. Two syntaxes are recognized: the compact `[A:name|value|value]` form the prompt now asks for (positional values, mapped to kwargs via the `POS_KEYS` table in `actions.js`, with omitted kwargs filled from `DEFAULTS`), and the legacy `[ACTION:name|key=value|...]` form still present in stored history and the fine-tune's training data.
+`makeStreamBuffer` in `webapp/js/app/stream-filters.js` (driven by `runChat` in `app/chat.js`) is a streaming state machine that intercepts action tags before they reach the chat renderer. Two syntaxes are recognized: the compact `[A:name|value|value]` form the prompt now asks for (positional values, mapped to kwargs via the `POS_KEYS` table in `live2d/actions.js`, with omitted kwargs filled from `DEFAULTS`), and the legacy `[ACTION:name|key=value|...]` form still present in stored history and the fine-tune's training data.
 
 ### States
 
@@ -158,13 +160,13 @@ Malformed or unrecognised tags are logged to the debug panel and silently droppe
 
 ### Name templating stage
 
-The clean text emerging from the action buffer passes through a second streaming filter, `makeNameFilter` in the same `stream-filters.js`, before it reaches the chat renderer and TTS. It resolves `{f_playerName}` / `{f_botName}` placeholders to the user's chosen names (via `webapp/js/names.js`). Like the action marker holdback, it buffers a trailing *partial* placeholder across token chunks, so a split like `"{f_play"` + `"erName}"` substitutes cleanly and never flashes its raw form in the chat or gets read aloud by TTS.
+The clean text emerging from the action buffer passes through a second streaming filter, `makeNameFilter` in the same `stream-filters.js`, before it reaches the chat renderer and TTS. It resolves `{f_playerName}` / `{f_botName}` placeholders to the user's chosen names (via `webapp/js/core/names.js`). Like the action marker holdback, it buffers a trailing *partial* placeholder across token chunks, so a split like `"{f_play"` + `"erName}"` substitutes cleanly and never flashes its raw form in the chat or gets read aloud by TTS.
 
 ---
 
 ## Live2D engine internals
 
-`webapp/js/live2d.js` wraps `pixi-live2d-display` with direct parameter control.
+`webapp/js/live2d/live2d.js` wraps `pixi-live2d-display` with direct parameter control.
 
 ### Disabling internal updaters
 
@@ -195,7 +197,7 @@ The `tick()` function runs on every PIXI `app.ticker` frame. Order matters:
 
 ### Wardrobe: parts, tint, and variants
 
-`webapp/js/outfit.js` drives the wardrobe by three mechanisms, none of which touch the LLM (the current state is injected into the system prompt server-side so Jun knows what she's wearing):
+`webapp/js/outfit/` drives the wardrobe (the tables are in `catalog.js`, `apply.js` puts them on the rig, and the shop UI on top is `webapp/js/wardrobe/`) by three mechanisms, none of which touch the LLM (the current state is injected into the system prompt server-side so Jun knows what she's wearing):
 
 - **Enable params**: most items are a param-backed boolean (`ParamShirtEnabled`, `ParamSkirtEnabled`, …) with `excludes` that force conflicting items off.
 - **Forced opacity**: items with no enable param (the alt dress) are shown/hidden through the `forcedPartOpacity` re-stamp step above.
@@ -233,7 +235,7 @@ The pixi-live2d-display wrapper exposes the Cubism core model in different shape
 
 ## TTS pipeline
 
-`webapp/js/tts.js` accumulates tokens from the stream's `onCleanText` callback (action tags have already been stripped before this callback fires) and builds a sentence queue.
+`webapp/js/voice/tts.js` accumulates tokens from the stream's `onCleanText` callback (action tags have already been stripped before this callback fires) and builds a sentence queue.
 
 ### Sentence accumulation
 
@@ -245,7 +247,7 @@ Each queued sentence triggers an immediate `fetch POST /api/tts.php`. The PHP en
 
 The sidecar (`tts/server.py`, code under `tts/sidecar/`) fronts two engines chosen per request by the `engine` field: **kokoro** (Kokoro-82M, default, ~27 EN voices, needs espeak-ng) and **pockettts** (kyutai pocket-tts, ~100M, CPU-friendly, English + 5 languages). For pocket-tts the language is a separate axis from the voice: it's baked into the model weights, so the request's `lang` field (english, french_24l, german_24l, italian, portuguese, spanish_24l) selects a different checkpoint that actually pronounces that language and resolves the chosen voice to that language's embedding. Only one pocket-tts language stays resident; switching `lang` reloads (a full checkpoint load, a few seconds off HF_HOME-cached weights), which is the cost the auto-language path below is built to hide. `TTS_DEVICE` (`cpu`|`cuda`|`auto`) picks the torch device; Kokoro pre-warms one utterance at startup while pocket-tts loads lazily on its first request. `GET /voices` exposes both engines' voice lists and defaults, plus pocket-tts's selectable languages, so the UI can offer an engine + voice + language picker.
 
-The language picker also has an **Auto-detect** option (the default), which routes each reply to the right pocket-tts language while keeping reloads rare and off the critical path. On send, `js/tts.js` runs a dependency-free stopword detector over **Anon's message** to predict the reply's language, falling back to the *previous* conversation language (not English) when the message is too short or ambiguous to call. That prediction drives two things in parallel: `app.js` fires `POST /api/tts.php?action=warm` → the sidecar's `/warm` (which preloads that language's checkpoint and voice state off-thread, so the reload overlaps LLM generation instead of stalling the first audio chunk), and the client locks the reply to the predicted language. As the reply streams, the detector *verifies* the prediction against the actual text - only a confident disagreement in the opening ~40 characters switches the language (warming the corrected model), and once locked it never flips again, so a stray foreign word mid-sentence can't trigger a mid-reply reload. The result: a monolingual conversation reloads zero times after the first turn, and a genuine language switch reloads once, hidden behind generation. Detection is purely client-side; the sidecar only ever sees a concrete language id, and `chat.php` gets no language hint at all - an earlier "reply in {language}" line in the live context was removed because the sticky fallback made it self-latching. Reply language is the model's to infer from the conversation.
+The language picker also has an **Auto-detect** option (the default), which routes each reply to the right pocket-tts language while keeping reloads rare and off the critical path. On send, `js/voice/tts.js` runs a dependency-free stopword detector over **Anon's message** to predict the reply's language, falling back to the *previous* conversation language (not English) when the message is too short or ambiguous to call. That prediction drives two things in parallel: `app.js` fires `POST /api/tts.php?action=warm` → the sidecar's `/warm` (which preloads that language's checkpoint and voice state off-thread, so the reload overlaps LLM generation instead of stalling the first audio chunk), and the client locks the reply to the predicted language. As the reply streams, the detector *verifies* the prediction against the actual text - only a confident disagreement in the opening ~40 characters switches the language (warming the corrected model), and once locked it never flips again, so a stray foreign word mid-sentence can't trigger a mid-reply reload. The result: a monolingual conversation reloads zero times after the first turn, and a genuine language switch reloads once, hidden behind generation. Detection is purely client-side; the sidecar only ever sees a concrete language id, and `chat.php` gets no language hint at all - an earlier "reply in {language}" line in the live context was removed because the sticky fallback made it self-latching. Reply language is the model's to infer from the conversation.
 
 Results are decoded into `AudioBuffer`s and inserted into a `Map` keyed by submission index. A playback cursor advances only when the buffer at the current index is ready, ensuring sentences always play in the order they were generated even if a later sentence finishes synthesis faster.
 
@@ -267,7 +269,7 @@ The analyser uses FFT size 1024 and smoothing constant 0.4. The RMS-to-mouth map
 
 ## Voice input and barge-in
 
-`webapp/js/voice.js` captures 16 kHz mono PCM through an `AudioWorklet` and calibrates a noise floor. Complete WAV turns go to `chat.php` as base64 audio when the Ollama model supports audio input. When available, faster-whisper transcribes the same turn through `/api/stt.php` in parallel; the transcript replaces the client and stored `<audio>` placeholder through `conversations.php?action=set_audio_text`. The first audio refusal switches to text turns for the rest of the page, reusing the pending transcription. If neither direct audio nor speech-to-text works, the turn fails with a visible error. Microphone controls require browser support, not an available STT sidecar. Automatic gain control stays disabled because it would make the calibrated voice-activity threshold drift during silence.
+`webapp/js/voice/voice.js` captures 16 kHz mono PCM through an `AudioWorklet` and calibrates a noise floor. Complete WAV turns go to `chat.php` as base64 audio when the Ollama model supports audio input. When available, faster-whisper transcribes the same turn through `/api/stt.php` in parallel; the transcript replaces the client and stored `<audio>` placeholder through `conversations.php?action=set_audio_text`. The first audio refusal switches to text turns for the rest of the page, reusing the pending transcription. If neither direct audio nor speech-to-text works, the turn fails with a visible error. Microphone controls require browser support, not an available STT sidecar. Automatic gain control stays disabled because it would make the calibrated voice-activity threshold drift during silence.
 
 When barge-in is enabled, browser echo cancellation removes most of Jun's playback from the microphone, while the client also raises its speech threshold in proportion to the current TTS output and confirms a detected interruption before stopping playback. This protects against speaker echo. Audio routed away from the default output device, loud or distorted speakers, Bluetooth latency, and clock drift can still trigger false detections. Use headphones or turn off barge-in for a fully half-duplex conversation.
 
