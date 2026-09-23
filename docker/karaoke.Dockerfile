@@ -38,6 +38,7 @@ COPY tts/requirements-karaoke.txt /app/requirements.txt
 RUN uv pip install --system -r /app/requirements.txt
 
 COPY tts/server.py /app/server.py
+COPY tts/sidecar /app/sidecar
 COPY docker/sidecar-entrypoint.sh /usr/local/bin/omega-sidecar-entrypoint
 RUN chmod +x /usr/local/bin/omega-sidecar-entrypoint \
  && mkdir -p /home/omega/.cache \

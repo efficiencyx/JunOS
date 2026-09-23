@@ -48,6 +48,7 @@ RUN curl -fsSL \
  && rm "/tmp/en_core_web_sm-${SPACY_MODEL_VERSION}-py3-none-any.whl"
 
 COPY tts/server.py /app/server.py
+COPY tts/sidecar /app/sidecar
 COPY docker/sidecar-entrypoint.sh /usr/local/bin/omega-sidecar-entrypoint
 RUN chmod +x /usr/local/bin/omega-sidecar-entrypoint \
  && mkdir -p /home/omega/.cache \
@@ -74,7 +75,7 @@ RUN chmod +x /usr/local/bin/omega-sidecar-entrypoint \
 #   reliably ship (and has no ROCm backend at all). CPU whisper
 #   isn't the bottleneck; Kokoro is.
 # OMP_NUM_THREADS bounds torch's intra-op pool and is also read
-# by server.py as
+# by sidecar/stt.py as
 #   whisper's cpu_threads. Unpinned, both libraries grab every core
 #   and fight when STT and TTS overlap. Raise it on a big box, drop
 #   to 2 on a 4-core one.
