@@ -1,4 +1,4 @@
-import { currentConversationTitle, setConversationTitle } from '../app.js?v=21';
+import { currentConversationTitle, setConversationTitle } from '../app.js?v=22';
 import { mobileConversationTitle, mobileReplyStatus, sidebarBackground, stageEl } from './dom.js?v=11';
 import { phoneMode, visualRect } from '../core/util.js?v=1';
 import * as Names from '../core/names.js?v=1';

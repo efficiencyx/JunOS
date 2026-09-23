@@ -1,4 +1,5 @@
-import * as Live2D from './live2d.js?v=1';
+import * as Live2D from './live2d.js?v=2';
+import * as Outfit from '../outfit/outfit.js?v=1';
 
 // Jun still fires off old [ACTION:...] tags sometimes,
 // so both forms stay. forever probably.
@@ -277,18 +278,18 @@ export function applyAction({ name, kwargs }) {
   // whole saved outfit, straight out of the shop's Looks list. no rig
   // params of its own, Outfit puts the look on and that moves them.
   if (name === 'wear_look') {
-    if (window.Outfit && Outfit.wearLook) Outfit.wearLook(kwargs.name);
+    Outfit.wearLook(kwargs.name);
     return;
   }
   const node = resolveAction(name, kwargs);
   if (!node) {
-    if (name === 'outfit' && window.Outfit && Outfit.syncFromAction) Outfit.syncFromAction(name, kwargs, false);
+    if (name === 'outfit') Outfit.syncFromAction(name, kwargs, false);
     return;
   }
   applyNode(node, kwargs, 0);
   // the map already knew this one, so it is vanilla and Outfit must
   // not go looking for a mod called "skirt up"
-  if (window.Outfit && Outfit.syncFromAction) Outfit.syncFromAction(name, kwargs, true);
+  Outfit.syncFromAction(name, kwargs, true);
   const k = Object.keys(kwargs).map(x => `${x}=${kwargs[x]}`).join('|');
   log('ok', `▶ ${name}${k ? '|' + k : ''}`);
 }
