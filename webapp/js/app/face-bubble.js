@@ -1,6 +1,7 @@
-import { currentConversationTitle, setConversationTitle } from '../app.js?v=19';
+import { currentConversationTitle, setConversationTitle } from '../app.js?v=20';
 import { mobileConversationTitle, mobileReplyStatus, sidebarBackground, stageEl } from './dom.js?v=11';
-import { phoneMode, visualRect } from './util.js?v=10';
+import { phoneMode, visualRect } from '../core/util.js?v=1';
+import * as Names from '../core/names.js?v=1';
 
 export let latestAssistantReply = '';
 export const faceBubble = (() => {
@@ -8,7 +9,7 @@ export const faceBubble = (() => {
   el.className = 'face-bubble';
   el.tabIndex = 0;
   el.setAttribute('role', 'region');
-  el.setAttribute('aria-label', (window.Names ? Names.getBot() : 'Jun') + ' reply');
+  el.setAttribute('aria-label', Names.getBot() + ' reply');
   el.hidden = true;
   document.body.appendChild(el);
   return el;
@@ -94,7 +95,7 @@ export function showFaceBubble(html, source = 'ephemeral') {
   clearTimeout(faceBubbleHideTimer);
   pendingFaceBubbleHide = null;
   faceBubble.dataset.source = source;
-  const botName = window.Names ? Names.getBot() : 'Jun';
+  const botName = Names.getBot();
   faceBubble.setAttribute('aria-label', `${botName} reply`);
   let name = faceBubble.querySelector('.fb-name');
   let txt = faceBubble.querySelector('.fb-text');
@@ -186,7 +187,7 @@ export function announceMobileReply(text) {
   if (!mobileReplyStatus || !phoneMode() || !text.trim()) return;
   mobileReplyStatus.textContent = '';
   requestAnimationFrame(() => {
-    const botName = window.Names ? Names.getBot() : 'Jun';
+    const botName = Names.getBot();
     mobileReplyStatus.textContent = `${botName} replied: ${text}`;
   });
 }

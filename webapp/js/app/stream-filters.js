@@ -1,5 +1,6 @@
-import { logAction } from './logging.js?v=10';
-import { noteEmotionTint } from './mood.js?v=12';
+import { logAction } from './logging.js?v=11';
+import { noteEmotionTint } from './mood.js?v=13';
+import * as Names from '../core/names.js?v=1';
 
 const MARK_RE = /\[\s*(?:A(?:CTIONS?)?|TOOL)\s*:/i;
 const PARTIAL_RE = /\[\s*(?:A(?:C(?:T(?:I(?:O(?:N(?:S)?)?)?)?)?)?|T(?:O(?:O(?:L)?)?)?)?\s*$/i;
@@ -95,16 +96,16 @@ export function makeNameFilter(emit) {
   return {
     push(chunk) {
       buf += chunk;
-      const hold = window.Names ? Names.pendingPartial(buf) : 0;
+      const hold = Names.pendingPartial(buf);
       if (buf.length > hold) {
         const out = buf.slice(0, buf.length - hold);
-        emit(window.Names ? Names.apply(out) : out);
+        emit(Names.apply(out));
         buf = buf.slice(buf.length - hold);
       }
     },
     flush() {
       if (buf.length) {
-        emit(window.Names ? Names.apply(buf) : buf);
+        emit(Names.apply(buf));
         buf = '';
       }
     },

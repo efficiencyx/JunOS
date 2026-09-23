@@ -1,3 +1,6 @@
+import * as Prefs from '../core/prefs.js?v=1';
+import * as Auth from '../core/auth.js?v=1';
+
 const authScreen = document.getElementById('authScreen');
 const authTabLogin = document.getElementById('authTabLogin');
 const authTabSignup = document.getElementById('authTabSignup');
@@ -183,7 +186,7 @@ if (authFormSignup) {
 
 if (signOutBtn) {
   signOutBtn.addEventListener('click', async () => {
-    if (window.Prefs) Prefs.clearLocal();
+    Prefs.clearLocal();
     await Auth.logout();
     location.reload();
   });

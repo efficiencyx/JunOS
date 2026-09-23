@@ -1,15 +1,16 @@
+import * as MobileViewport from './viewport.js?v=1';
+
 export function formatElapsed(seconds) {
   const whole = Math.max(0, Math.round(seconds));
   return Math.floor(whole / 60) + ':' + String(whole % 60).padStart(2, '0');
 }
 
 export function phoneMode() {
-  return !!(window.MobileViewport && MobileViewport.isPhone());
+  return MobileViewport.isPhone();
 }
 
 export function visualRect() {
-  if (window.MobileViewport && MobileViewport.getVisualRect) return MobileViewport.getVisualRect();
-  return { left: 0, top: 0, width: innerWidth, height: innerHeight, right: innerWidth, bottom: innerHeight };
+  return MobileViewport.getVisualRect();
 }
 
 export function escapeHtml(s) {
@@ -25,4 +26,14 @@ export function localTimeString() {
   } catch (e) {
     return new Date().toString();
   }
+}
+
+export function clamp(v, lo, hi) {
+  return Math.max(lo, Math.min(hi, v));
+}
+
+// the date page and the dates panel both decide lunch or dinner
+// off this, so they can't disagree about what time it is
+export function mealNow() {
+  return new Date().getHours() < 16 ? 'lunch' : 'dinner';
 }

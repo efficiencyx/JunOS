@@ -6,19 +6,26 @@
 // avoid example version numbers that a bulk renumber could
 // rewrite.
 
-import { showAuthScreen } from './app/auth-screen.js?v=11';
-import { IDLE_AFTER_REPLY_MS, TYPING_POLL_MS, armIdleAfterReply, cancelActiveIdleNudge, cancelAutoReset, cancelIdleNudge, composerPlaceholder, consolidating, fleeActive, reportActivity, resetIdleNudge, scheduleAutoReset, scheduleIdleNudge, setCancelActiveIdleNudge, setConsolidating, showConsolidatingBubble, startFleeLock, syncConsolidationStatus } from './app/consolidation.js?v=12';
+import { showAuthScreen } from './app/auth-screen.js?v=12';
+import { IDLE_AFTER_REPLY_MS, TYPING_POLL_MS, armIdleAfterReply, cancelActiveIdleNudge, cancelAutoReset, cancelIdleNudge, composerPlaceholder, consolidating, fleeActive, reportActivity, resetIdleNudge, scheduleAutoReset, scheduleIdleNudge, setCancelActiveIdleNudge, setConsolidating, showConsolidatingBubble, startFleeLock, syncConsolidationStatus } from './app/consolidation.js?v=13';
 import { chatInput, debugSystemPromptEl, devNoIdleChk, messagesEl, messagesEmpty, missingParamsEl, mobileConversationTitle, modelSelect, narrowSidebarQuery, reasoningSelect, sendBtn, sendButtonIdleMarkup, sendButtonStopMarkup, siteVolumeInput, stageEl, thinkChk } from './app/dom.js?v=11';
-import { announceMobileReply, faceBubble, hideFaceBubble, latestAssistantReply, restartFaceBubbleHide, scheduleFaceBubbleHide, scheduleFaceBubblePosition, setLatestAssistantReply, showFaceBubble } from './app/face-bubble.js?v=12';
-import { appendRaw, logAction, logMissing, logToolStatus, setStageStatus } from './app/logging.js?v=10';
-import { loadMood } from './app/mood.js?v=12';
-import { applyProviderCapabilities, applyRoleGates, setSiteVolume, syncThinkToggle, updateSiteVolumeLabel, wireNameSettings } from './app/settings.js?v=13';
-import { loadConversation, refreshSidebar, setSidebarOpen } from './app/sidebar.js?v=12';
-import { makeNameFilter, makeStreamBuffer } from './app/stream-filters.js?v=12';
-import { escapeHtml, localTimeString, phoneMode } from './app/util.js?v=10';
-import { wireTts } from './app/wire-tts.js?v=12';
-import { wireVoice } from './app/wire-voice.js?v=13';
-import { WELCOME_TIERS, fetchWelcome, playWelcome, previewWelcome } from './app/welcome.js?v=12';
+import { announceMobileReply, faceBubble, hideFaceBubble, latestAssistantReply, restartFaceBubbleHide, scheduleFaceBubbleHide, scheduleFaceBubblePosition, setLatestAssistantReply, showFaceBubble } from './app/face-bubble.js?v=13';
+import { appendRaw, logAction, logMissing, logToolStatus, setStageStatus } from './app/logging.js?v=11';
+import { loadMood } from './app/mood.js?v=13';
+import { applyProviderCapabilities, applyRoleGates, setSiteVolume, syncThinkToggle, updateSiteVolumeLabel, wireNameSettings } from './app/settings.js?v=14';
+import { loadConversation, refreshSidebar, setSidebarOpen } from './app/sidebar.js?v=13';
+import { makeNameFilter, makeStreamBuffer } from './app/stream-filters.js?v=13';
+import { escapeHtml, localTimeString, phoneMode } from './core/util.js?v=1';
+import { wireTts } from './app/wire-tts.js?v=13';
+import { wireVoice } from './app/wire-voice.js?v=14';
+import { WELCOME_TIERS, fetchWelcome, playWelcome, previewWelcome } from './app/welcome.js?v=13';
+import * as Names from './core/names.js?v=1';
+import * as Prefs from './core/prefs.js?v=1';
+import * as ui from './core/ui.js?v=1';
+import * as Auth from './core/auth.js?v=1';
+import * as ChatAPI from './core/chat-api.js?v=1';
+import * as MobileViewport from './core/viewport.js?v=1';
+import { loadScripts } from './core/loader.js?v=1';
 
 export const messages = [];
 export let abortFn = null;
@@ -158,15 +165,13 @@ faceBubble.addEventListener('focusout', (event) => {
 });
 if (window.ResizeObserver) new ResizeObserver(scheduleFaceBubblePosition).observe(faceBubble);
 window.addEventListener('resize', scheduleFaceBubblePosition);
-if (window.MobileViewport) {
-  MobileViewport.subscribe((state) => {
-    if (state.visualChanged || state.layoutChanged) scheduleFaceBubblePosition();
-    if (!state.phoneChanged) return;
-    hideFaceBubble();
-    setLatestAssistantReply(latestAssistantReply);
-    if (activeBubbleStream && (state.isPhone || activeBubbleStream.ephemeral)) activeBubbleStream.render();
-  });
-}
+MobileViewport.subscribe((state) => {
+  if (state.visualChanged || state.layoutChanged) scheduleFaceBubblePosition();
+  if (!state.phoneChanged) return;
+  hideFaceBubble();
+  setLatestAssistantReply(latestAssistantReply);
+  if (activeBubbleStream && (state.isPhone || activeBubbleStream.ephemeral)) activeBubbleStream.render();
+});
 
 export function updateEmptyState() {
   if (!messagesEmpty) return;
@@ -200,7 +205,7 @@ export function sendMessage(opts) {
   reportActivity();
   chatInput.value = '';
   const bubble = appendMsg('user', text);
-  const entry = { role: 'user', content: window.Names ? Names.canonicalize(text) : text };
+  const entry = { role: 'user', content: Names.canonicalize(text) };
   messages.push(entry);
   runChat({ idle: false, voice, invite, onOverheard: voice ? () => dropUserTurn(bubble, entry) : null });
 }
@@ -497,7 +502,7 @@ export function runChat({ idle, ephemeral, audio, voice, invite = '', onOverhear
           return;
         }
         draft.className = 'msg silence';
-        draft.textContent = (window.Names ? Names.getBot() : 'Jun') + ' says nothing.';
+        draft.textContent = Names.getBot() + ' says nothing.';
       },
       onFled: (info) => {
         if (!isCurrent()) return;
@@ -719,7 +724,7 @@ function showBoot() {
   // live2d.js is an ES module so it can't go in a loadScripts
   // group, and it rips PIXI.live2d apart the moment it runs. that's
   // what the await is for.
-  await import('./live2d.js?v=10');
+  await import('./live2d.js?v=11');
 
   // both of these set up a global that loads late, so they can't
   // run at module scope anymore. they'd just silently do nothing
@@ -757,8 +762,9 @@ function showBoot() {
 
   // fill in the synced preferences BEFORE any module reads its
   // local keys
-  if (window.Prefs) await Prefs.pullFromServer();
-  if (window.Names) { Names.load(); Names.decorate(); }
+  await Prefs.pullFromServer();
+  Names.load();
+  Names.decorate();
   wireNameSettings();
 
   const storedVolume = parseFloat(localStorage.getItem('audio.volume') || '1');
@@ -773,7 +779,7 @@ function showBoot() {
     siteVolumeInput.addEventListener('change', () => {
       const volume = setSiteVolume(parseFloat(siteVolumeInput.value) / 100);
       localStorage.setItem('audio.volume', String(volume));
-      if (window.Prefs) Prefs.pushToServer();
+      Prefs.pushToServer();
     });
   }
 
@@ -873,10 +879,10 @@ function showBoot() {
 
   async function waitForProvider() {
     let attempt = 0;
-    const bot = window.Names ? Names.getBot() : 'Jun';
+    const bot = Names.getBot();
     const phases = [
       'Waking the model',
-      'Brewing Coffee for ' + (window.Names ? Names.getPlayer() : 'Anon'),
+      'Brewing Coffee for ' + Names.getPlayer(),
       'Recharging ' + bot,
       bot + ' is taking its time',
     ];

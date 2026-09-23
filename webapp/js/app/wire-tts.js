@@ -1,9 +1,10 @@
-import { IDLE_AFTER_REPLY_MS, scheduleIdleNudge } from './consolidation.js?v=12';
+import { IDLE_AFTER_REPLY_MS, scheduleIdleNudge } from './consolidation.js?v=13';
 import { ttsChk, ttsEngineSelect, ttsLangRow, ttsLangSelect, ttsSpeedInput, ttsVoiceSelect } from './dom.js?v=11';
-import { finishPendingFaceBubbleHide } from './face-bubble.js?v=12';
-import { logAction } from './logging.js?v=10';
-import { syncVoiceDeps, updateTtsSpeedLabel } from './settings.js?v=13';
-import { escapeHtml } from './util.js?v=10';
+import { finishPendingFaceBubbleHide } from './face-bubble.js?v=13';
+import { logAction } from './logging.js?v=11';
+import { syncVoiceDeps, updateTtsSpeedLabel } from './settings.js?v=14';
+import { escapeHtml } from '../core/util.js?v=1';
+import * as Prefs from '../core/prefs.js?v=1';
 
 export async function wireTts() {
   if (window.TTS) {
@@ -87,7 +88,7 @@ export async function wireTts() {
         localStorage.setItem('tts.voice', def);
         const langDef = populateLanguages(engineKey, localStorage.getItem('tts.lang') || '');
         if (langDef) localStorage.setItem('tts.lang', langDef);
-        if (window.Prefs) Prefs.pushToServer();
+        Prefs.pushToServer();
       });
     }
 
@@ -99,7 +100,7 @@ export async function wireTts() {
         if (!ttsChk.checked) finishPendingFaceBubbleHide();
         localStorage.setItem('tts.enabled', ttsChk.checked ? '1' : '0');
         syncVoiceDeps();
-        if (window.Prefs) Prefs.pushToServer();
+        Prefs.pushToServer();
       });
       syncVoiceDeps();
     }
@@ -107,14 +108,14 @@ export async function wireTts() {
       ttsVoiceSelect.addEventListener('change', () => {
         TTS.setVoice(ttsVoiceSelect.value);
         localStorage.setItem('tts.voice', ttsVoiceSelect.value);
-        if (window.Prefs) Prefs.pushToServer();
+        Prefs.pushToServer();
       });
     }
     if (ttsLangSelect) {
       ttsLangSelect.addEventListener('change', () => {
         TTS.setLang(ttsLangSelect.value);
         localStorage.setItem('tts.lang', ttsLangSelect.value);
-        if (window.Prefs) Prefs.pushToServer();
+        Prefs.pushToServer();
       });
     }
     if (ttsSpeedInput) {
@@ -123,7 +124,7 @@ export async function wireTts() {
         const s = parseFloat(ttsSpeedInput.value) || 1.0;
         TTS.setSpeed(s);
         localStorage.setItem('tts.speed', String(s));
-        if (window.Prefs) Prefs.pushToServer();
+        Prefs.pushToServer();
       });
     }
   }

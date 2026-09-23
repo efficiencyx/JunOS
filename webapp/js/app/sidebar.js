@@ -1,10 +1,12 @@
-import { appendMsg, currentConversationId, discardActiveResponse, messages, renderMarkdown, setConversationTitle, setCurrentConversationId, updateEmptyState } from '../app.js?v=19';
-import { IDLE_AFTER_JOIN_MS, cancelAutoReset, reportActivity, resetIdleNudge, scheduleIdleNudge } from './consolidation.js?v=12';
+import { appendMsg, currentConversationId, discardActiveResponse, messages, renderMarkdown, setConversationTitle, setCurrentConversationId, updateEmptyState } from '../app.js?v=20';
+import { IDLE_AFTER_JOIN_MS, cancelAutoReset, reportActivity, resetIdleNudge, scheduleIdleNudge } from './consolidation.js?v=13';
 import { conversationSidebar, messagesEl, mobileConversationTitle, mobileMenuBtn, narrowSidebarQuery, reloadPromptBtn, resetLive2DBtn, sidebarBackdrop, sidebarBackground } from './dom.js?v=11';
-import { announceMobileReply, faceBubble, hideFaceBubble, latestAssistantReply, scheduleFaceBubbleHide, setLatestAssistantReply, showFaceBubble } from './face-bubble.js?v=12';
-import { logAction } from './logging.js?v=10';
-import { makeStreamBuffer } from './stream-filters.js?v=12';
-import { escapeHtml, phoneMode } from './util.js?v=10';
+import { announceMobileReply, faceBubble, hideFaceBubble, latestAssistantReply, scheduleFaceBubbleHide, setLatestAssistantReply, showFaceBubble } from './face-bubble.js?v=13';
+import { logAction } from './logging.js?v=11';
+import { makeStreamBuffer } from './stream-filters.js?v=13';
+import { escapeHtml, phoneMode } from '../core/util.js?v=1';
+import * as Names from '../core/names.js?v=1';
+import * as ui from '../core/ui.js?v=1';
 
 const conversationTitles = new Map();
 let sidebarRefreshGeneration = 0;
@@ -111,7 +113,7 @@ async function deleteConversation(id, title) {
   if (!window.History) return;
   const ok = await ui.confirm({
     title: 'Delete chat',
-    message: `Do you want to delete ${window.Names ? Names.getBot() : 'Jun'}'s memory of "${title}"?`,
+    message: `Do you want to delete ${Names.getBot()}'s memory of "${title}"?`,
     confirmLabel: 'Delete',
     cancelLabel: 'Cancel',
     danger: true,
@@ -177,7 +179,7 @@ export async function loadConversation(id) {
     let latest = '';
     for (const row of rows) {
       if (row.role === 'user') {
-        appendMsg('user', window.Names ? Names.apply(row.content) : row.content);
+        appendMsg('user', Names.apply(row.content));
         messages.push({ role: 'user', content: row.content });
       } else if (row.role === 'assistant') {
         const el = appendMsg('assistant', '');
@@ -185,7 +187,7 @@ export async function loadConversation(id) {
         const sb = makeStreamBuffer(clean => { visible += clean; });
         sb.push(row.content);
         sb.flush();
-        const shown = window.Names ? Names.apply(visible) : visible;
+        const shown = Names.apply(visible);
         el.innerHTML = renderMarkdown(shown);
         latest = shown;
         messages.push({ role: 'assistant', content: visible });
