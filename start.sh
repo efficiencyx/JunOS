@@ -31,7 +31,7 @@ nvidia_count() {
 
 # VRAM on the biggest card, in MiB. php has no GPU device of its
 # own so this is the ONLY way it finds out, see default_num_ctx()
-# in api/providers.php.
+# in api/lib/providers/context.php.
 nvidia_vram_mb() {
   nvidia-smi --query-gpu=memory.total --format=csv,noheader,nounits 2>/dev/null \
     | sort -nr | head -n1 | tr -d ' \r' || true
@@ -332,7 +332,7 @@ fi
 
 # Ollama's layer split is decided at load time and then pinned
 # (see default_num_ctx() and the keep_alive=-1 pin in
-# api/providers.php), so a model that loads while the karaoke
+# api/lib/providers/), so a model that loads while the karaoke
 # sidecar's CUDA torch is initialising stays mostly on the CPU -
 # ~1000x on prefill. Hold karaoke back until the model server
 # answers.

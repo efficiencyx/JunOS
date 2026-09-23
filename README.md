@@ -286,7 +286,7 @@ Browser ──HTTP/SSE──▶ nginx ──FastCGI──▶ php-fpm ──HTTP�
 
 1. The browser `POST`s to `/api/chat.php`.
 2. PHP assembles the prompt in two halves. The cached half - `system_prompt.txt` and her journal - stays byte-identical between turns so the KV prompt cache keeps hitting. Everything that moves goes in a live-context block glued *after* your question in the last user turn: clock, matched lore facts, durable notes, outfit, relationship gauges. Dead last comes a `<think:low|med|high>` marker telling her how hard to think this turn.
-3. The model streams back (NDJSON from Ollama, OpenAI-style SSE from the others); `providers.php` normalizes both and PHP re-frames each token as an SSE event and flushes it immediately. If she reaches for a tool (search her notes, change outfit, look something up, walk out) PHP runs it and streams another round, up to three.
+3. The model streams back (NDJSON from Ollama, OpenAI-style SSE from the others); `api/lib/providers/` normalizes both and PHP re-frames each token as an SSE event and flushes it immediately. If she reaches for a tool (search her notes, change outfit, look something up, walk out) PHP runs it and streams another round, up to three.
 4. `js/app/stream-filters.js` watches the stream for `[A:` markers, holds back any half-typed marker so it never renders, and fires the action the instant its `]` arrives.
 5. `js/live2d.js` lerps the model toward the new pose; if voice is on, `js/tts.js` fetches audio per sentence and drives `ParamMouthOpen` from the analyser's RMS.
 6. Bookkeeping happens only *after* `[DONE]`, so nothing can delay a token: her hidden `[A:mood_shift|...]` tag moves the gauges, a new chat gets its title. Wander off and the consolidation worker rewrites her notes and journal.
@@ -377,7 +377,8 @@ The model-server and voice containers are profile-gated. `./start.sh` derives `C
 ├── docs/             architecture.md, configuration.md, wiki/ (the GitHub wiki source), screenshots/
 ├── android/          Same webapp on a phone: Ktor server + LiteRT-LM on-device, its own Gradle project
 ├── webapp/           Everything nginx and php-fpm serve
-│   ├── api/          chat.php, providers.php, auth.php, memory.php, outfit.php, karaoke.php, migrations/, …
+│   ├── api/          chat.php, auth.php, memory.php, outfit.php, karaoke.php, migrations/, …
+│   │   └── lib/      the shared stuff: bootstrap, db, crypto, memory, providers/, chat/, consolidation/ (never served)
 │   ├── js/           app/, live2d/, actions.js, voice.js, wardrobe.js, mods.js, karaoke.js, …
 │   ├── css/          base, shell, chat, stage, sidebar, settings, widgets, welcome, voice-karaoke, responsive
 │   ├── vendor/       PIXI, Cubism core, pixi-live2d-display, marked, DOMPurify (no CDN)

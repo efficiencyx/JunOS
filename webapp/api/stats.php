@@ -4,7 +4,7 @@
 // every few seconds while it is open so keep this cheap and Never
 // fatal, if something upstream hiccups we give back the half we
 // got and not an error page.
-require_once __DIR__ . '/_lib.php';
+require_once __DIR__ . '/lib/bootstrap.php';
 
 header('Content-Type: application/json');
 header('Cache-Control: no-store');

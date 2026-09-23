@@ -1,5 +1,5 @@
 <?php
-require_once __DIR__ . '/_lib.php';
+require_once __DIR__ . '/lib/bootstrap.php';
 
 header('Content-Type: application/json');
 rate_limit('memory', 60, 60);

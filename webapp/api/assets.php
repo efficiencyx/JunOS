@@ -1,6 +1,6 @@
 <?php
-require_once __DIR__ . '/_lib.php';
-require_once __DIR__ . '/_wardrobe.php';
+require_once __DIR__ . '/lib/bootstrap.php';
+require_once __DIR__ . '/lib/wardrobe.php';
 
 $user = require_user();
 $method = strtoupper($_SERVER['REQUEST_METHOD'] ?? 'GET');
