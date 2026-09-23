@@ -1,14 +1,14 @@
-import { armIdleAfterReply, cancelActiveIdleNudge, cancelAutoReset, cancelIdleNudge, composerPlaceholder, consolidating, fleeActive, reportActivity, resetIdleNudge, scheduleAutoReset, setCancelActiveIdleNudge, setConsolidating, showConsolidatingBubble, startFleeLock, syncConsolidationStatus } from './consolidation.js?v=18';
+import { armIdleAfterReply, cancelActiveIdleNudge, cancelAutoReset, cancelIdleNudge, composerPlaceholder, consolidating, fleeActive, reportActivity, resetIdleNudge, scheduleAutoReset, setCancelActiveIdleNudge, setConsolidating, showConsolidatingBubble, startFleeLock, syncConsolidationStatus } from './consolidation.js?v=19';
 import { chatInput, debugSystemPromptEl, messagesEl, modelSelect, reasoningSelect, sendBtn, sendButtonIdleMarkup, sendButtonStopMarkup, thinkChk } from './dom.js?v=11';
 import { announceMobileReply, hideFaceBubble, scheduleFaceBubbleHide, setLatestAssistantReply, showFaceBubble } from './face-bubble.js?v=18';
 import { appendRaw, logToolStatus } from './logging.js?v=11';
 import { loadMood } from './mood.js?v=18';
-import { refreshSidebar } from './sidebar.js?v=18';
+import { refreshSidebar } from './sidebar.js?v=19';
 import { makeNameFilter, makeStreamBuffer } from './stream-filters.js?v=18';
 import { localTimeString, phoneMode } from '../core/util.js?v=1';
 import * as Names from '../core/names.js?v=1';
 import * as ui from '../core/ui.js?v=1';
-import * as ChatAPI from '../core/chat-api.js?v=1';
+import * as ChatAPI from '../core/chat-api.js?v=2';
 import * as Mods from '../mods/mods.js?v=3';
 import * as Outfit from '../outfit/outfit.js?v=3';
 import * as Cards from './cards.js?v=2';
