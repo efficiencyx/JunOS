@@ -1,6 +1,7 @@
 import { logAction } from './logging.js?v=11';
-import { noteEmotionTint } from './mood.js?v=13';
+import { noteEmotionTint } from './mood.js?v=14';
 import * as Names from '../core/names.js?v=1';
+import * as Actions from '../live2d/actions.js?v=1';
 
 const MARK_RE = /\[\s*(?:A(?:CTIONS?)?|TOOL)\s*:/i;
 const PARTIAL_RE = /\[\s*(?:A(?:C(?:T(?:I(?:O(?:N(?:S)?)?)?)?)?)?|T(?:O(?:O(?:L)?)?)?)?\s*$/i;
