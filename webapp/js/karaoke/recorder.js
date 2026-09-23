@@ -1,7 +1,7 @@
 import * as ui from '../core/ui.js?v=1';
-import { $, active } from './karaoke.js?v=1';
-import { instrSource, soloPhase } from './playback.js?v=1';
-import { mode, setStatus, track } from './setup.js?v=1';
+import { $, active } from './karaoke.js?v=2';
+import { instrSource, soloPhase } from './playback.js?v=2';
+import { mode, setStatus, track } from './setup.js?v=2';
 import { normWord } from './lyrics.js?v=1';
 import { api, apiJson } from '../core/api.js?v=1';
 import { escapeHtml } from '../core/util.js?v=1';

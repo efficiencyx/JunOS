@@ -1,8 +1,19 @@
-import { currentConversationTitle, setConversationTitle } from '../app.js?v=24';
 import { mobileConversationTitle, mobileReplyStatus, sidebarBackground, stageEl } from './dom.js?v=11';
 import { phoneMode, visualRect } from '../core/util.js?v=1';
 import * as Names from '../core/names.js?v=1';
-import * as TTS from '../voice/tts.js?v=1';
+import * as TTS from '../voice/tts.js?v=2';
+import * as Live2D from '../live2d/live2d.js?v=4';
+
+let currentConversationTitle = 'New conversation';
+
+export function setConversationTitle(title) {
+  currentConversationTitle = title || 'New conversation';
+  if (!mobileConversationTitle) return;
+  mobileConversationTitle.textContent = currentConversationTitle;
+  mobileConversationTitle.setAttribute('aria-label', latestAssistantReply
+    ? `${currentConversationTitle}. Show latest reply`
+    : currentConversationTitle);
+}
 
 export let latestAssistantReply = '';
 export const faceBubble = (() => {
@@ -25,7 +36,7 @@ let pendingFaceBubbleHide = null;
 let faceBubbleText = '';
 
 function positionFaceBubble() {
-  const a = window.Live2D && Live2D.faceAnchor && Live2D.faceAnchor();
+  const a = Live2D.faceAnchor();
   if (!a) return;
   const viewport = visualRect();
   const stage = stageEl.getBoundingClientRect();

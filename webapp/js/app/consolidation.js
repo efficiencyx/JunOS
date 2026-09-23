@@ -1,11 +1,13 @@
-import { abortFn, currentConversationId, runChat } from '../app.js?v=24';
+import { abortFn, currentConversationId } from './session.js?v=1';
+import { runChat } from './chat.js?v=1';
 import { chatInput, consolidationBanner, consolidationSub, consolidationTitle, devNoIdleChk, fleeEtaEl, fleeOverlay, fleeReasonEl, sendBtn, voiceChk } from './dom.js?v=11';
-import { showFaceBubble } from './face-bubble.js?v=17';
+import { showFaceBubble } from './face-bubble.js?v=18';
 import { logAction } from './logging.js?v=11';
 import { escapeHtml, formatElapsed } from '../core/util.js?v=1';
 import * as Names from '../core/names.js?v=1';
-import * as TTS from '../voice/tts.js?v=1';
-import * as Voice from '../voice/voice.js?v=1';
+import * as TTS from '../voice/tts.js?v=2';
+import * as Voice from '../voice/voice.js?v=2';
+import * as Live2D from '../live2d/live2d.js?v=4';
 
 const BUSY_LINES = [
   "Hang on, ${p}, I'm defragging my SSD.",

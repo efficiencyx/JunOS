@@ -1,8 +1,6 @@
-// same version rule as app.js. the <script type="module"> tags
-// in date.html, wardrobe.html and karaoke.html, app.js's await
-// import(), and every ?v= inside js/live2d/ ALL have to match, or
-// the browser builds a second copy of the graph and everything
-// goes sideways.
+// same version rule as app.js. every import of this file and
+// every ?v= inside js/live2d/ ALL have to match, or the browser
+// builds a second copy of the graph and everything goes sideways.
 
 import { resetIdle, renderIfDirty, setFidgetsEnabled, setMood, setMouthOverride, startIdle, stopIdle, tick } from './anim.js?v=2';
 import { bakeThumb } from './bake.js?v=1';
@@ -173,47 +171,3 @@ export async function init({ stageEl, onStatus, ignoreSavedPos }) {
 export function setDrawableHighlight(drawableId, rgb) {
   if (publicTint) publicTint.setHighlight(drawableId, rgb);
 }
-
-// TEMPORARY, like js/bridge.js. the classic scripts that still use
-// the renderer reach it through this until they're modules too.
-window.Live2D = {
-  init,
-  setTarget,
-  setNow,
-  cancelPending,
-  startLoop,
-  stopLoop,
-  stopAllLoops,
-  scheduleSequence,
-  resetIdle,
-  startIdle,
-  stopIdle,
-  setFidgetsEnabled,
-  setMood,
-  knows,
-  setOnMissingParam,
-  fitModel,
-  setCameraPreset,
-  debugParam,
-  tintByPattern,
-  screenByPattern,
-  findDrawables,
-  listDrawables,
-  setDrawableTint,
-  getDrawableTint,
-  setDrawableScreen,
-  setDrawableHighlight,
-  setDrawableOpacity,
-  setDrawableOrderBelow,
-  opacityByPattern,
-  setDrawableTexture,
-  setDrawableTextures,
-  setMouthOverride,
-  isOverModel,
-  faceAnchor,
-  drawableAt,
-  hitTest,
-  drawableThumb,
-  bakeThumb,
-  texturesSettled,
-};

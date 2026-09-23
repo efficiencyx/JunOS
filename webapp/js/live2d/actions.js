@@ -1,5 +1,5 @@
-import * as Live2D from './live2d.js?v=3';
-import * as Outfit from '../outfit/outfit.js?v=2';
+import * as Live2D from './live2d.js?v=4';
+import * as Outfit from '../outfit/outfit.js?v=3';
 
 // Jun still fires off old [ACTION:...] tags sometimes,
 // so both forms stay. forever probably.
@@ -11,6 +11,7 @@ const NAV_KEYS = ['target','dir','type','shape','emotion','side','state','speed'
 export async function load(url) {
   const res = await fetch(url, { cache: 'no-cache' });
   actionMap = await res.json();
+  return actionMap;
 }
 
 export function setLogger(cb) { onLog = cb; }

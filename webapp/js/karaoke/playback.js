@@ -1,7 +1,7 @@
-import * as Live2D from '../live2d/live2d.js?v=3';
-import { $, active, hooks } from './karaoke.js?v=1';
-import { mode, setStatus, track } from './setup.js?v=1';
-import { startRecording, stopRecording } from './recorder.js?v=1';
+import * as Live2D from '../live2d/live2d.js?v=4';
+import { $, active, hooks } from './karaoke.js?v=2';
+import { mode, setStatus, track } from './setup.js?v=2';
+import { startRecording, stopRecording } from './recorder.js?v=2';
 import { clamp } from '../core/util.js?v=1';
 
 // queue both stems 0.1 seconds ahead. they start on the exact

@@ -68,10 +68,6 @@ async function revealRegKeyField() {
   } catch {}
 }
 
-function hideAuthScreen() {
-  if (authScreen) authScreen.hidden = true;
-}
-
 if (authTabLogin && authTabSignup) {
   authTabLogin.addEventListener('click', () => {
     authTabLogin.classList.add('active');
