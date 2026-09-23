@@ -7,18 +7,18 @@
 // rewrite.
 
 import { showAuthScreen } from './app/auth-screen.js?v=12';
-import { IDLE_AFTER_REPLY_MS, TYPING_POLL_MS, armIdleAfterReply, cancelActiveIdleNudge, cancelAutoReset, cancelIdleNudge, composerPlaceholder, consolidating, fleeActive, reportActivity, resetIdleNudge, scheduleAutoReset, scheduleIdleNudge, setCancelActiveIdleNudge, setConsolidating, showConsolidatingBubble, startFleeLock, syncConsolidationStatus } from './app/consolidation.js?v=14';
+import { IDLE_AFTER_REPLY_MS, TYPING_POLL_MS, armIdleAfterReply, cancelActiveIdleNudge, cancelAutoReset, cancelIdleNudge, composerPlaceholder, consolidating, fleeActive, reportActivity, resetIdleNudge, scheduleAutoReset, scheduleIdleNudge, setCancelActiveIdleNudge, setConsolidating, showConsolidatingBubble, startFleeLock, syncConsolidationStatus } from './app/consolidation.js?v=15';
 import { chatInput, debugSystemPromptEl, devNoIdleChk, messagesEl, messagesEmpty, missingParamsEl, mobileConversationTitle, modelSelect, narrowSidebarQuery, reasoningSelect, sendBtn, sendButtonIdleMarkup, sendButtonStopMarkup, siteVolumeInput, stageEl, thinkChk } from './app/dom.js?v=11';
-import { announceMobileReply, faceBubble, hideFaceBubble, latestAssistantReply, restartFaceBubbleHide, scheduleFaceBubbleHide, scheduleFaceBubblePosition, setLatestAssistantReply, showFaceBubble } from './app/face-bubble.js?v=14';
+import { announceMobileReply, faceBubble, hideFaceBubble, latestAssistantReply, restartFaceBubbleHide, scheduleFaceBubbleHide, scheduleFaceBubblePosition, setLatestAssistantReply, showFaceBubble } from './app/face-bubble.js?v=15';
 import { appendRaw, logAction, logMissing, logToolStatus, setStageStatus } from './app/logging.js?v=11';
-import { loadMood } from './app/mood.js?v=14';
-import { applyProviderCapabilities, applyRoleGates, setSiteVolume, syncThinkToggle, updateSiteVolumeLabel, wireNameSettings } from './app/settings.js?v=15';
-import { loadConversation, refreshSidebar, setSidebarOpen } from './app/sidebar.js?v=14';
-import { makeNameFilter, makeStreamBuffer } from './app/stream-filters.js?v=14';
+import { loadMood } from './app/mood.js?v=15';
+import { applyProviderCapabilities, applyRoleGates, setSiteVolume, syncThinkToggle, updateSiteVolumeLabel, wireNameSettings } from './app/settings.js?v=16';
+import { loadConversation, refreshSidebar, setSidebarOpen } from './app/sidebar.js?v=15';
+import { makeNameFilter, makeStreamBuffer } from './app/stream-filters.js?v=15';
 import { escapeHtml, localTimeString, phoneMode } from './core/util.js?v=1';
-import { wireTts } from './app/wire-tts.js?v=14';
-import { wireVoice } from './app/wire-voice.js?v=15';
-import { WELCOME_TIERS, fetchWelcome, playWelcome, previewWelcome } from './app/welcome.js?v=14';
+import { wireTts } from './app/wire-tts.js?v=15';
+import { wireVoice } from './app/wire-voice.js?v=16';
+import { WELCOME_TIERS, fetchWelcome, playWelcome, previewWelcome } from './app/welcome.js?v=15';
 import * as Names from './core/names.js?v=1';
 import * as Prefs from './core/prefs.js?v=1';
 import * as ui from './core/ui.js?v=1';
@@ -26,9 +26,11 @@ import * as Auth from './core/auth.js?v=1';
 import * as ChatAPI from './core/chat-api.js?v=1';
 import * as MobileViewport from './core/viewport.js?v=1';
 import { loadScripts } from './core/loader.js?v=1';
-import * as Actions from './live2d/actions.js?v=1';
-import * as Live2D from './live2d/live2d.js?v=1';
-import * as ModelTouch from './live2d/touch.js?v=1';
+import * as Actions from './live2d/actions.js?v=2';
+import * as Live2D from './live2d/live2d.js?v=2';
+import * as ModelTouch from './live2d/touch.js?v=2';
+import * as Mods from './mods/mods.js?v=1';
+import * as Outfit from './outfit/outfit.js?v=1';
 
 export const messages = [];
 export let abortFn = null;
@@ -455,7 +457,7 @@ export function runChat({ idle, ephemeral, audio, voice, invite = '', onOverhear
     { messages: [...messages], model: modelSelect.value,
       reasoning: reasoningSelect.value, think: thinkChk.checked,
       outfit_context: Outfit.describe(),
-      mod_items: window.Mods && Mods.itemNames ? Mods.itemNames() : [],
+      mod_items: Mods.itemNames(),
       conversation_id: currentConversationId,
       idle: !!idle, ephemeral: !!ephemeral, client_time: localTimeString(),
       audio, voice: !!voice, invite,
@@ -715,8 +717,7 @@ function showBoot() {
   await loadScripts([
     ['vendor/pixi.min.js', 'vendor/live2dcubismcore.min.js',
      'vendor/marked.min.js', 'vendor/purify.min.js?v=4',
-     'js/outfit.js?v=23',
-     'js/mods.js?v=16', 'js/tts.js?v=3', 'js/voice.js?v=10',
+     'js/tts.js?v=3', 'js/voice.js?v=10',
      'js/voicemode.js?v=3', 'js/trip-loader.js?v=4', 'js/cards.js?v=7',
      'js/skybox.js?v=1', 'js/scene.js?v=1',
      ...(currentUser?.role === 'admin' ? ['js/devhud.js?v=3'] : []),

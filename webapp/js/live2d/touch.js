@@ -1,5 +1,5 @@
-import * as Actions from './actions.js?v=1';
-import * as Live2D from './live2d.js?v=1';
+import * as Actions from './actions.js?v=2';
+import * as Live2D from './live2d.js?v=2';
 
 let sendEvent = null;
 let isBusy = () => false;

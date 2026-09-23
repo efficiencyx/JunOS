@@ -12,7 +12,7 @@ import { installStageInput } from './input.js?v=1';
 import { cancelPending, debugParam, knows, scheduleSequence, setNow, setOnMissingParam, setTarget, startLoop, stopAllLoops, stopLoop } from './params.js?v=1';
 import { installColorShaderPatch, patchRenderer } from './renderer.js?v=1';
 import { S, app, currentValues, model, paramDefault, paramIndex, paramMax, paramMin, publicTint, raw, setApp, setModel, setParamRanges, setRaw } from './state.js?v=11';
-import { drawableThumb, getDrawableTint, installVariantCompositor, listDrawables, opacityByPattern, screenByPattern, setDrawableOpacity, setDrawableOrderBelow, setDrawableScreen, setDrawableTexture, setDrawableTextures, setDrawableTint, texturesSettled, tintByPattern } from './textures.js?v=12';
+import { drawableThumb, getDrawableTint, installVariantCompositor, listDrawables, opacityByPattern, screenByPattern, setDrawableOpacity, setDrawableOrderBelow, setDrawableScreen, setDrawableTexture, setDrawableTextures, setDrawableTint, texturesSettled, tintByPattern } from './textures.js?v=13';
 
 export {
   bakeThumb, cancelPending, debugParam, drawableAt, drawableThumb, faceAnchor, findDrawables, fitModel,

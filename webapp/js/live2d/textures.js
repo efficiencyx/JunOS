@@ -307,8 +307,8 @@ function recompositeTexture(texIndex, dirtyIds) {
   // because one multiply covers the whole drawable and you can't
   // spare the mod's pixels from it. so the caller cleared the
   // uniform and handed us the colour, and the art underneath gets
-  // it here instead. mods.js does the same to its own layers that
-  // wanted it.
+  // it here instead. mods/layers.js does the same to its own
+  // layers that wanted it.
   for (const a of active) {
     if (!a.entry.baseTint || a.entry.fullClear || !a.entry.overlay) continue;
     const x = Math.floor(a.x), y = Math.floor(a.yTop);

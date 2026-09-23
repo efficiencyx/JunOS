@@ -1,6 +1,6 @@
 import { moodControlPhrases, moodControlVals, moodInputs, moodPhrases, moodRefreshBtn, moodVals } from './dom.js?v=11';
 import { renderGreeting } from './greetings.js?v=11';
-import { setSidebarOpen } from './sidebar.js?v=14';
+import { setSidebarOpen } from './sidebar.js?v=15';
 import * as ui from '../core/ui.js?v=1';
 
 const MOOD_PHRASES = {
