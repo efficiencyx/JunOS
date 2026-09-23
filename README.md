@@ -372,7 +372,7 @@ The model-server and voice containers are profile-gated. `./start.sh` derives `C
 ```
 .
 ├── docker/           Dockerfiles, nginx templates + security-headers snippet, entrypoints
-├── tts/              Audio sidecar: TTS + STT + karaoke separation (FastAPI, server.py)
+├── tts/              Audio sidecar: TTS + STT + karaoke separation (FastAPI, server.py + sidecar/)
 ├── tools/            Lore builder, critical-CSS inliner, asset recovery, the bare-metal php router
 ├── docs/             architecture.md, configuration.md, wiki/ (the GitHub wiki source), screenshots/
 ├── android/          Same webapp on a phone: Ktor server + LiteRT-LM on-device, its own Gradle project

@@ -24,7 +24,7 @@ if ($action === 'stt') {
     // 4MB is ~2min of 16kHz mono PCM16, way past voice.js's 30s cap
     // on one utterance. keep it in step with nginx
     // client_max_body_size, PHP post_max_size and STT_MAX_BYTES in
-    // tts/server.py, all four have to let it through.
+    // tts/sidecar/config.py, all four have to let it through.
     $rawBody = read_body(4 * 1024 * 1024);
     if ($rawBody === '') fail(400, 'invalid_request');
 
