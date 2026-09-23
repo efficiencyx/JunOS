@@ -7,18 +7,18 @@
 // rewrite.
 
 import { showAuthScreen } from './app/auth-screen.js?v=12';
-import { IDLE_AFTER_REPLY_MS, TYPING_POLL_MS, armIdleAfterReply, cancelActiveIdleNudge, cancelAutoReset, cancelIdleNudge, composerPlaceholder, consolidating, fleeActive, reportActivity, resetIdleNudge, scheduleAutoReset, scheduleIdleNudge, setCancelActiveIdleNudge, setConsolidating, showConsolidatingBubble, startFleeLock, syncConsolidationStatus } from './app/consolidation.js?v=16';
+import { IDLE_AFTER_REPLY_MS, TYPING_POLL_MS, armIdleAfterReply, cancelActiveIdleNudge, cancelAutoReset, cancelIdleNudge, composerPlaceholder, consolidating, fleeActive, reportActivity, resetIdleNudge, scheduleAutoReset, scheduleIdleNudge, setCancelActiveIdleNudge, setConsolidating, showConsolidatingBubble, startFleeLock, syncConsolidationStatus } from './app/consolidation.js?v=17';
 import { chatInput, debugSystemPromptEl, devNoIdleChk, messagesEl, messagesEmpty, missingParamsEl, mobileConversationTitle, modelSelect, narrowSidebarQuery, reasoningSelect, sendBtn, sendButtonIdleMarkup, sendButtonStopMarkup, siteVolumeInput, stageEl, thinkChk } from './app/dom.js?v=11';
-import { announceMobileReply, faceBubble, hideFaceBubble, latestAssistantReply, restartFaceBubbleHide, scheduleFaceBubbleHide, scheduleFaceBubblePosition, setLatestAssistantReply, showFaceBubble } from './app/face-bubble.js?v=16';
+import { announceMobileReply, faceBubble, hideFaceBubble, latestAssistantReply, restartFaceBubbleHide, scheduleFaceBubbleHide, scheduleFaceBubblePosition, setLatestAssistantReply, showFaceBubble } from './app/face-bubble.js?v=17';
 import { appendRaw, logAction, logMissing, logToolStatus, setStageStatus } from './app/logging.js?v=11';
-import { loadMood } from './app/mood.js?v=16';
-import { applyProviderCapabilities, applyRoleGates, setSiteVolume, syncThinkToggle, updateSiteVolumeLabel, wireNameSettings } from './app/settings.js?v=17';
-import { loadConversation, refreshSidebar, setSidebarOpen } from './app/sidebar.js?v=16';
-import { makeNameFilter, makeStreamBuffer } from './app/stream-filters.js?v=16';
-import { escapeHtml, localTimeString, phoneMode } from './core/util.js?v=1';
-import { wireTts } from './app/wire-tts.js?v=16';
-import { wireVoice } from './app/wire-voice.js?v=17';
-import { WELCOME_TIERS, fetchWelcome, playWelcome, previewWelcome } from './app/welcome.js?v=16';
+import { loadMood } from './app/mood.js?v=17';
+import { applyProviderCapabilities, applyRoleGates, setSiteVolume, syncThinkToggle, updateSiteVolumeLabel, wireNameSettings } from './app/settings.js?v=18';
+import { loadConversation, refreshSidebar, setSidebarOpen } from './app/sidebar.js?v=17';
+import { makeNameFilter, makeStreamBuffer } from './app/stream-filters.js?v=17';
+import { escapeHtml, localTimeString, mealNow, phoneMode } from './core/util.js?v=1';
+import { wireTts } from './app/wire-tts.js?v=17';
+import { wireVoice } from './app/wire-voice.js?v=18';
+import { WELCOME_TIERS, fetchWelcome, playWelcome, previewWelcome } from './app/welcome.js?v=17';
 import * as Names from './core/names.js?v=1';
 import * as Prefs from './core/prefs.js?v=1';
 import * as ui from './core/ui.js?v=1';
@@ -31,7 +31,15 @@ import * as Live2D from './live2d/live2d.js?v=3';
 import * as ModelTouch from './live2d/touch.js?v=3';
 import * as Mods from './mods/mods.js?v=2';
 import * as Outfit from './outfit/outfit.js?v=2';
-import { playIntro } from './wardrobe/reactions.js?v=1';
+import { playIntro } from './wardrobe/reactions.js?v=2';
+import * as BootFX from './app/boot-fx.js?v=1';
+import * as Cards from './app/cards.js?v=1';
+import * as History from './app/history.js?v=1';
+import { startSkybox } from './trip/skybox.js?v=1';
+import * as TripLoader from './trip/trip-loader.js?v=1';
+import * as TTS from './voice/tts.js?v=1';
+import * as Voice from './voice/voice.js?v=1';
+import * as VoiceMode from './voice/voicemode.js?v=1';
 
 export const messages = [];
 export let abortFn = null;
@@ -42,6 +50,7 @@ export function setCurrentConversationId(id) { currentConversationId = id; }
 
 window.Welcome = { preview: previewWelcome, tiers: WELCOME_TIERS };
 let chatGeneration = 0;
+let DevHud = null;
 
 export let stopActiveStream = null;
 export let renderVoiceDraft = null;
@@ -313,7 +322,7 @@ function leaveFor(where) {
   const href = { karaoke: 'karaoke.html', date: 'date.html' }[where] || 'wardrobe.html';
   const t0 = Date.now();
   const tick = () => {
-    if ((window.TTS && TTS.isSpeaking()) || Date.now() - t0 < 1500) return setTimeout(tick, 250);
+    if (TTS.isSpeaking() || Date.now() - t0 < 1500) return setTimeout(tick, 250);
     location.href = href;
   };
   tick();
@@ -375,7 +384,7 @@ export function runChat({ idle, ephemeral, audio, voice, invite = '', onOverhear
     onReply(text);
   };
   const bubbleSource = ephemeral ? 'ephemeral' : 'phone';
-  const bubbleEnabled = () => !(window.VoiceMode && VoiceMode.isActive()) && (ephemeral || phoneMode());
+  const bubbleEnabled = () => !VoiceMode.isActive() && (ephemeral || phoneMode());
   const renderBubble = () => {
     if (!shown.trim() || !bubbleEnabled()) return;
     showFaceBubble(renderMarkdown(shown), bubbleSource);
@@ -384,13 +393,13 @@ export function runChat({ idle, ephemeral, audio, voice, invite = '', onOverhear
   activeBubbleStream = bubbleStream;
   const names = makeNameFilter(sub => {
     shown += sub;
-    if (!(window.VoiceMode && VoiceMode.isActive())) {
+    if (!VoiceMode.isActive()) {
       body.innerHTML = renderMarkdown(shown);
       body.appendChild(typing);
       messagesEl.scrollTop = messagesEl.scrollHeight;
     }
     renderBubble();
-    if (window.TTS) TTS.feed(sub);
+    TTS.feed(sub);
   });
   renderVoiceDraft = () => {
     body.innerHTML = renderMarkdown(shown);
@@ -410,7 +419,7 @@ export function runChat({ idle, ephemeral, audio, voice, invite = '', onOverhear
     if (!isCurrent()) return;
     chatGeneration++;
     if (abortFn) abortFn();
-    if (window.TTS) TTS.stop();
+    TTS.stop();
     typing.remove();
     if (!discard && visible.trim()) messages.push({ role: 'assistant', content: visible });
     else draft.remove();
@@ -430,7 +439,7 @@ export function runChat({ idle, ephemeral, audio, voice, invite = '', onOverhear
     if (!isCurrent()) return;
     chatGeneration++;
     if (abortFn) abortFn();
-    if (window.TTS) TTS.stop();
+    TTS.stop();
     typing.remove();
     draft.remove();
     updateEmptyState();
@@ -438,20 +447,18 @@ export function runChat({ idle, ephemeral, audio, voice, invite = '', onOverhear
   } : null);
 
   ui.setStatus('streaming', 'streaming');
-  if (window.DevHud) DevHud.beginGen();
+  if (DevHud) DevHud.beginGen();
   appendRaw('--- ' + new Date().toLocaleTimeString() + (idle ? ' (idle nudge)' : '') + ' ---\n');
 
   // guess the reply's language off Anon's message so the pocket-tts
   // model can warm up while she writes. this ONLY picks the voice,
   // the guess never reaches the model, she works out Anon's
   // language from the conversation herself.
-  if (window.TTS && TTS.predictLang) {
-    const lastUser = [...messages].reverse().find(m => m.role === 'user');
-    const predicted = TTS.predictLang(lastUser ? lastUser.content : '');
-    if (predicted) {
-      TTS.setReplyLang(predicted);
-      TTS.warmLang(predicted);
-    }
+  const lastUser = [...messages].reverse().find(m => m.role === 'user');
+  const predicted = TTS.predictLang(lastUser ? lastUser.content : '');
+  if (predicted) {
+    TTS.setReplyLang(predicted);
+    TTS.warmLang(predicted);
   }
 
   abortFn = ChatAPI.chat(
@@ -462,7 +469,7 @@ export function runChat({ idle, ephemeral, audio, voice, invite = '', onOverhear
       conversation_id: currentConversationId,
       idle: !!idle, ephemeral: !!ephemeral, client_time: localTimeString(),
       audio, voice: !!voice, invite,
-      hear_all: !!(window.Voice && Voice.hearAll && Voice.hearAll()) },
+      hear_all: !!Voice.hearAll() },
     {
       onDebug: (dbg) => {
         if (!isCurrent()) return;
@@ -475,7 +482,7 @@ export function runChat({ idle, ephemeral, audio, voice, invite = '', onOverhear
       },
       onStats: (s) => {
         if (!isCurrent()) return;
-        if (window.DevHud) DevHud.setGenStats(s);
+        if (DevHud) DevHud.setGenStats(s);
       },
       onToolStatus: (s) => {
         if (!isCurrent()) return;
@@ -494,7 +501,7 @@ export function runChat({ idle, ephemeral, audio, voice, invite = '', onOverhear
         // she decided to say nothing, so whatever leaked into the bubble
         // first never happened. drop it and mark the turn instead.
         silenced = true;
-        if (window.TTS) TTS.stop();
+        TTS.stop();
         hideFaceBubble();
         visible = '';
         shown = '';
@@ -516,14 +523,14 @@ export function runChat({ idle, ephemeral, audio, voice, invite = '', onOverhear
       },
       onThinking: (t) => {
         if (!isCurrent()) return;
-        if (window.DevHud) DevHud.tickToken();
+        if (DevHud) DevHud.tickToken();
         appendRaw(t);
         pushThinking(t);
       },
       onToken: (tok) => {
         if (!isCurrent()) return;
         settleThinking();
-        if (window.DevHud) DevHud.tickToken();
+        if (DevHud) DevHud.tickToken();
         appendRaw(tok);
         stream.push(tok);
       },
@@ -532,14 +539,14 @@ export function runChat({ idle, ephemeral, audio, voice, invite = '', onOverhear
         stream.flush();
         names.flush();
         settleThinking();
-        if (window.TTS) TTS.flush();
+        TTS.flush();
         typing.remove();
         if (silenced) {
           // the flushes above can still push held back bytes. none of it
           // exists
           visible = '';
           shown = '';
-          if (window.TTS) TTS.stop();
+          TTS.stop();
           if (!overheard) messages.push({ role: 'assistant', content: '...' });
         } else if (visible.trim()) {
           messages.push({ role: 'assistant', content: visible });
@@ -551,19 +558,19 @@ export function runChat({ idle, ephemeral, audio, voice, invite = '', onOverhear
         scheduleAutoReset();
         armIdleAfterReply();
         loadMood();
-        if (window.History && !ephemeral && currentConversationId) {
+        if (!ephemeral && currentConversationId) {
           History.compact(currentConversationId).catch(() => {});
         }
         reply(silenced ? '' : visible);
-        if (window.History) await refreshSidebar();
-        if (trip === 'cards') { if (window.Cards) Cards.open(); }
+        await refreshSidebar();
+        if (trip === 'cards') Cards.open();
         else if (trip) leaveFor(trip);
       },
       onError: async (err) => {
         if (!isCurrent()) return;
         stream.flush();
         names.flush();
-        if (window.TTS) TTS.flush();
+        TTS.flush();
         typing.remove();
         if (!visible.trim()) draft.remove();
         if (err.message === 'user_fled') {
@@ -587,7 +594,7 @@ export function runChat({ idle, ephemeral, audio, voice, invite = '', onOverhear
         updateEmptyState();
         scheduleAutoReset();
         armIdleAfterReply();
-        if (window.History) await refreshSidebar();
+        await refreshSidebar();
       },
     }
   );
@@ -603,7 +610,7 @@ export function runChat({ idle, ephemeral, audio, voice, invite = '', onOverhear
         scheduleFaceBubbleHide(shown, bubbleSource);
       }
     }
-    if (window.VoiceMode && VoiceMode.isActive()) body.innerHTML = renderMarkdown(shown);
+    if (VoiceMode.isActive()) body.innerHTML = renderMarkdown(shown);
     renderVoiceDraft = null;
     setCancelActiveIdleNudge(null);
     stopActiveStream = null;
@@ -624,7 +631,7 @@ export function discardActiveResponse() {
   chatGeneration++;
   abortFn();
   abortFn = null;
-  if (window.TTS) TTS.stop();
+  TTS.stop();
   activeBubbleStream = null;
   setCancelActiveIdleNudge(null);
   renderVoiceDraft = null;
@@ -696,7 +703,7 @@ function showBoot() {
     bo.removeAttribute('data-ready');
     bo.setAttribute('aria-hidden', 'false');
   }
-  if (window.BootFX) BootFX.start();
+  BootFX.start();
 }
 
 (async function bootstrap() {
@@ -714,16 +721,14 @@ function showBoot() {
     .then(r => r.ok ? r.json() : null).catch(() => null);
 
   // load avatar features after auth. devhud.js owns Ctrl+Shift+D,
-  // so only admins get that script.
+  // so only admins get that module.
   await loadScripts([
     ['vendor/pixi.min.js', 'vendor/live2dcubismcore.min.js',
-     'vendor/marked.min.js', 'vendor/purify.min.js?v=4',
-     'js/tts.js?v=3', 'js/voice.js?v=10',
-     'js/voicemode.js?v=3', 'js/trip-loader.js?v=4', 'js/cards.js?v=7',
-     'js/skybox.js?v=1', 'js/scene.js?v=1',
-     ...(currentUser?.role === 'admin' ? ['js/devhud.js?v=3'] : [])],
+     'vendor/marked.min.js', 'vendor/purify.min.js?v=4'],
     ['vendor/cubism4.min.js', 'vendor/pixi-unsafe-eval.min.js'],
   ]);
+  if (currentUser?.role === 'admin') DevHud = await import('./app/devhud.js?v=1');
+  startSkybox();
   // both of these set up a global that loads late, so they can't
   // run at module scope anymore. they'd just silently do nothing
   // before the load.
@@ -737,7 +742,7 @@ function showBoot() {
       scheduleIdleNudge(IDLE_AFTER_REPLY_MS);
     },
   });
-  if (window.Cards) Cards.init({ sendEvent: sendTouchEvent, isBusy: () => !!abortFn });
+  Cards.init({ sendEvent: sendTouchEvent, isBusy: () => !!abortFn });
 
   // coming back from the shop or a date, the return cutscene
   // REPLACES the boot terminal. skipping BootFX.start also makes
@@ -809,7 +814,7 @@ function showBoot() {
 
   Actions.setLogger(logAction);
   Live2D.setOnMissingParam(logMissing);
-  if (window.DevHud) DevHud.init();
+  if (DevHud) DevHud.init();
 
   try {
     const live2dInfo = await Live2D.init({ stageEl, onStatus: (m) => {
@@ -850,13 +855,9 @@ function showBoot() {
   wireDatesPanel(!!(tripState && tripState.can_force));
 
   const bootOverlay = document.getElementById('bootOverlay');
-  const bootStatusLabel = document.querySelector('#bootStatus .boot-status-label');
   const bootHint = document.getElementById('bootHint');
   const setBoot = (label, hint, tone) => {
-    if (label) {
-      if (window.BootFX) BootFX.typeStatus(label);
-      else if (bootStatusLabel) bootStatusLabel.textContent = label;
-    }
+    if (label) BootFX.typeStatus(label);
     if (bootHint && hint != null) {
       bootHint.textContent = hint;
       if (tone) bootHint.setAttribute('data-tone', tone);
@@ -871,8 +872,7 @@ function showBoot() {
       bootOverlay.setAttribute('data-ready', '1');
       bootOverlay.setAttribute('aria-hidden', 'true');
     };
-    if (window.BootFX && BootFX.finish) BootFX.finish(hide);
-    else setTimeout(hide, 350);
+    BootFX.finish(hide);
   };
 
   async function waitForProvider() {
@@ -929,18 +929,16 @@ function showBoot() {
   if (picked) modelSelect.value = picked;
   dismissBoot();
 
-  if (window.History) {
-    try {
-      let convs = await History.list();
-      if (convs.length === 0) {
-        const { id } = await History.create();
-        convs = [{ id, title: null }];
-      }
-      await refreshSidebar();
-      await loadConversation(convs[0].id);
-    } catch (e) {
-      console.warn('[History] init failed:', e.message);
+  try {
+    let convs = await History.list();
+    if (convs.length === 0) {
+      const { id } = await History.create();
+      convs = [{ id, title: null }];
     }
+    await refreshSidebar();
+    await loadConversation(convs[0].id);
+  } catch (e) {
+    console.warn('[History] init failed:', e.message);
   }
 })();
 
@@ -950,7 +948,6 @@ function showBoot() {
 // the page bounces straight back here.
 // same cutoff as date.js, the page decides the menu off the same
 // clock
-const mealNow = () => new Date().getHours() < 16 ? 'lunch' : 'dinner';
 const ASK_LINES = {
   shop: "Wanna go to Annalie's shop with me?",
   karaoke: 'Sing with me? Karaoke, tonight.',
@@ -1029,7 +1026,7 @@ async function wireDatesPanel(canForce) {
   const cardsBtn = document.getElementById('forceCardsBtn');
   if (cardsBtn) cardsBtn.addEventListener('click', () => {
     ui.toggleDrawer(false);
-    if (window.Cards) Cards.open();
+    Cards.open();
   });
 
   const karaokeBtn = document.getElementById('karaokeOpenBtn');

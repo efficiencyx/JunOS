@@ -67,10 +67,6 @@ body.voice-mode .voice-overlay { opacity: 1; }
 .voice-overlay.muted .voice-overlay-mute { background: #3a1f23; color: var(--danger); }
 .voice-overlay.hear-all .voice-overlay-hear { background: var(--accent-soft); color: var(--accent); }
 
-body.karaoke-mode .chat-panel,
-body.karaoke-mode .conv-sidebar,
-body.karaoke-mode .app-header { visibility: hidden; }
-
 .karaoke-overlay {
   position: fixed;
   inset: 0;

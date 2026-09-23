@@ -1,13 +1,15 @@
-import { VOICE_STATE_LABELS, renderVoiceDraft, sendAudioFromVoice, sendFromVoice, stopActiveStream, sttAvailable } from '../app.js?v=23';
+import { VOICE_STATE_LABELS, renderVoiceDraft, sendAudioFromVoice, sendFromVoice, stopActiveStream, sttAvailable } from '../app.js?v=24';
 import { voiceBargeChk, voiceChk, voiceHearAllChk, voiceSilenceInput, voiceState } from './dom.js?v=11';
-import { hideFaceBubble } from './face-bubble.js?v=16';
+import { hideFaceBubble } from './face-bubble.js?v=17';
 import { logAction } from './logging.js?v=11';
-import { syncVoiceDeps, updateVoiceSilenceLabel } from './settings.js?v=17';
+import { syncVoiceDeps, updateVoiceSilenceLabel } from './settings.js?v=18';
 import * as Prefs from '../core/prefs.js?v=1';
 import * as ui from '../core/ui.js?v=1';
+import * as Voice from '../voice/voice.js?v=1';
+import * as VoiceMode from '../voice/voicemode.js?v=1';
 
 export async function wireVoice() {
-  if (window.Voice && voiceChk) {
+  if (voiceChk) {
     Voice.setLogger(logAction);
     Voice.setOnTranscript(sendFromVoice);
 
@@ -51,12 +53,10 @@ export async function wireVoice() {
       }
     });
 
-    if (window.VoiceMode) {
-      VoiceMode.init({
-        onEnter: hideFaceBubble,
-        onExitMidStream: () => { if (renderVoiceDraft) renderVoiceDraft(); },
-      });
-    }
+    VoiceMode.init({
+      onEnter: hideFaceBubble,
+      onExitMidStream: () => { if (renderVoiceDraft) renderVoiceDraft(); },
+    });
 
     if (!sup.ok) {
       voiceChk.disabled = true;

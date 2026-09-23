@@ -1,8 +1,10 @@
 import { chatInput, sendBtn } from './dom.js?v=11';
-import { replayFaceBubbleIntro, scheduleFaceBubbleHide, showFaceBubble } from './face-bubble.js?v=16';
-import { loadMood } from './mood.js?v=16';
+import { replayFaceBubbleIntro, scheduleFaceBubbleHide, showFaceBubble } from './face-bubble.js?v=17';
+import { loadMood } from './mood.js?v=17';
 import { escapeHtml } from '../core/util.js?v=1';
 import * as Names from '../core/names.js?v=1';
+import * as TTS from '../voice/tts.js?v=1';
+import * as VoiceMode from '../voice/voicemode.js?v=1';
 
 const CAMERA_MS = 450;
 const SCENE_TAIL_MS = 1800;
@@ -186,7 +188,7 @@ export function playWelcome() {
   const at = (ms, fn) => sceneTimers.push(setTimeout(fn, ms));
 
   const loops = TIER_LOOPS[tier] || TIER_LOOPS.none;
-  const speaks = !!(window.TTS && TTS.isEnabled && TTS.isEnabled());
+  const speaks = TTS.isEnabled();
 
   const detach = abortOnInteraction();
   endScene = () => {
@@ -201,7 +203,7 @@ export function playWelcome() {
     // voice mode uses the same 'face' preset. if it took over mid
     // scene then handing the camera back yanks it out of a zoom it
     // still wants.
-    if (!(window.VoiceMode && VoiceMode.isActive())) live2d.setCameraPreset('default');
+    if (!VoiceMode.isActive()) live2d.setCameraPreset('default');
     live2d.resetIdle();
     live2d.startIdle();
     live2d.setFidgetsEnabled(true);

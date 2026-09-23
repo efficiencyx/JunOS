@@ -3,8 +3,11 @@ import * as MobileViewport from './core/viewport.js?v=1';
 import * as Names from './core/names.js?v=1';
 import { api } from './core/api.js?v=1';
 import * as Outfit from './outfit/outfit.js?v=2';
+import * as Scene from './trip/scene.js?v=1';
+import { startSkybox } from './trip/skybox.js?v=1';
+import * as TripLoader from './trip/trip-loader.js?v=1';
 import { armCurtains } from './wardrobe/curtains.js?v=1';
-import { openWardrobe } from './wardrobe/panel.js?v=2';
+import { openWardrobe } from './wardrobe/panel.js?v=3';
 
 const status = document.getElementById('stageStatus');
 const coarsePointer = matchMedia('(pointer: coarse)');
@@ -46,6 +49,7 @@ function dressPanel() {
 }
 
 async function main() {
+  startSkybox();
   syncOrientation();
   window.addEventListener('resize', () => syncOrientation());
   document.addEventListener('focusout', () => requestAnimationFrame(() => syncOrientation()));

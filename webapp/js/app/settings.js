@@ -1,12 +1,13 @@
-import { abortFn, currentConversationId, sendMessage } from '../app.js?v=23';
-import { cancelIdleNudge } from './consolidation.js?v=16';
+import { abortFn, currentConversationId, sendMessage } from '../app.js?v=24';
+import { cancelIdleNudge } from './consolidation.js?v=17';
 import { closeSettingsBtn, devNoIdleChk, drawerBackdrop, modelSelect, openSettingsBtn, reasoningSelect, sendBtn, siteVolumeInput, thinkChk, ttsChk, ttsSpeedInput, voiceChk, voiceSilenceInput } from './dom.js?v=11';
 import { logAction } from './logging.js?v=11';
-import { loadMood, setMoodEditingEnabled } from './mood.js?v=16';
-import { loadConversation, setSidebarOpen } from './sidebar.js?v=16';
+import { loadMood, setMoodEditingEnabled } from './mood.js?v=17';
+import { loadConversation, setSidebarOpen } from './sidebar.js?v=17';
 import * as Names from '../core/names.js?v=1';
 import * as Prefs from '../core/prefs.js?v=1';
 import * as ui from '../core/ui.js?v=1';
+import * as TTS from '../voice/tts.js?v=1';
 
 export function syncThinkToggle() {
   thinkChk.disabled = reasoningSelect.value === 'auto';
@@ -87,7 +88,7 @@ settingsNavItems.forEach((item, idx) => {
     const label = item.querySelector('span');
     if (settingsPanelTitle && label) settingsPanelTitle.textContent = label.textContent;
     if (key === 'developer') loadMood();
-    if (window.MemoryGraph) MemoryGraph.setActive(key === 'memory');
+    if (MemoryGraph) MemoryGraph.setActive(key === 'memory');
     if (key === 'memory') { loadMemories(); loadMood(); }
   });
   item.tabIndex = item.classList.contains('active') ? 0 : -1;
@@ -110,7 +111,7 @@ export function updateTtsSpeedLabel() {
 }
 export function setSiteVolume(value) {
   const volume = Math.max(0, Math.min(1, Number.isFinite(value) ? value : 1));
-  if (window.TTS && TTS.setVolume) TTS.setVolume(volume);
+  TTS.setVolume(volume);
   return volume;
 }
 export function updateSiteVolumeLabel() {
@@ -131,8 +132,10 @@ export function syncVoiceDeps() {
 syncVoiceDeps();
 
 const memoryCount = document.getElementById('memoryCount');
+// the graph only loads once somebody actually opens this panel
+let MemoryGraph = null;
 async function loadMemories() {
-  if (!window.MemoryGraph) return;
+  MemoryGraph = MemoryGraph || await import('./memory-graph.js?v=1');
   MemoryGraph.setActive(true);
   MemoryGraph.setStatus('Loading…');
   try {
