@@ -1,6 +1,6 @@
-import * as Live2D from '../live2d/live2d.js?v=3';
+import * as Live2D from '../live2d/live2d.js?v=4';
 import { ITEMS, VARIANTS } from '../outfit/catalog.js?v=1';
-import { itemDrawableIds, setItem, setVariant } from '../outfit/apply.js?v=2';
+import { itemDrawableIds, setItem, setVariant } from '../outfit/apply.js?v=3';
 import { state, variantState } from '../outfit/current.js?v=1';
 
 export function wornDrawableMap() {

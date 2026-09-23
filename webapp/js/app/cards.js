@@ -8,9 +8,9 @@
 // her lines land in the face bubble.
 
 import * as Names from '../core/names.js?v=1';
-import * as Live2D from '../live2d/live2d.js?v=3';
+import * as Live2D from '../live2d/live2d.js?v=4';
 import * as Scene from '../trip/scene.js?v=1';
-import * as VoiceMode from '../voice/voicemode.js?v=1';
+import * as VoiceMode from '../voice/voicemode.js?v=2';
 
 const SUITS = ['♠', '♥', '♦', '♣'];
 const RANKS = ['A', '2', '3', '4', '5', '6', '7', '8', '9', '10', 'J', 'Q', 'K'];

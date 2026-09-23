@@ -1,13 +1,13 @@
-import * as Live2D from './live2d/live2d.js?v=3';
+import * as Live2D from './live2d/live2d.js?v=4';
 import * as MobileViewport from './core/viewport.js?v=1';
 import * as Names from './core/names.js?v=1';
 import { api } from './core/api.js?v=1';
-import * as Outfit from './outfit/outfit.js?v=2';
+import * as Outfit from './outfit/outfit.js?v=3';
 import * as Scene from './trip/scene.js?v=1';
 import { startSkybox } from './trip/skybox.js?v=1';
 import * as TripLoader from './trip/trip-loader.js?v=1';
-import { armCurtains } from './wardrobe/curtains.js?v=1';
-import { openWardrobe } from './wardrobe/panel.js?v=3';
+import { armCurtains } from './wardrobe/curtains.js?v=2';
+import { openWardrobe } from './wardrobe/panel.js?v=4';
 
 const status = document.getElementById('stageStatus');
 const coarsePointer = matchMedia('(pointer: coarse)');

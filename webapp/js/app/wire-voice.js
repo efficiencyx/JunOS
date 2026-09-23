@@ -1,12 +1,34 @@
-import { VOICE_STATE_LABELS, renderVoiceDraft, sendAudioFromVoice, sendFromVoice, stopActiveStream, sttAvailable } from '../app.js?v=24';
+import { renderVoiceDraft, stopActiveStream } from './session.js?v=1';
+import { sendAudioFromVoice, sendFromVoice } from './chat.js?v=1';
 import { voiceBargeChk, voiceChk, voiceHearAllChk, voiceSilenceInput, voiceState } from './dom.js?v=11';
-import { hideFaceBubble } from './face-bubble.js?v=17';
+import { hideFaceBubble } from './face-bubble.js?v=18';
 import { logAction } from './logging.js?v=11';
-import { syncVoiceDeps, updateVoiceSilenceLabel } from './settings.js?v=18';
+import { syncVoiceDeps, updateVoiceSilenceLabel } from './settings.js?v=19';
 import * as Prefs from '../core/prefs.js?v=1';
 import * as ui from '../core/ui.js?v=1';
-import * as Voice from '../voice/voice.js?v=1';
-import * as VoiceMode from '../voice/voicemode.js?v=1';
+import * as Voice from '../voice/voice.js?v=2';
+import * as VoiceMode from '../voice/voicemode.js?v=2';
+
+const VOICE_STATE_LABELS = {
+  idle: 'off',
+  calibrating: 'listening to the room…',
+  listening: 'listening',
+  // maybe lasts ~96ms. way too short to flicker another label
+  maybe: 'listening',
+  speech: 'hearing you',
+  thinking: 'transcribing…',
+};
+
+async function sttAvailable() {
+  try {
+    const r = await fetch('/api/stt.php?action=health', { credentials: 'same-origin' });
+    if (!r.ok) return false;
+    const d = await r.json();
+    return !!d.stt;
+  } catch (e) {
+    return false;
+  }
+}
 
 export async function wireVoice() {
   if (voiceChk) {
