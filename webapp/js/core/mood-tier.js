@@ -21,6 +21,12 @@ export function moodTier(mood) {
   return 'neutral';
 }
 
+// one gauge into the 0/1/2 bucket the wardrobe line tables are
+// keyed on
+export function gaugeTier(v) {
+  return v < 34 ? 0 : v < 67 ? 1 : 2;
+}
+
 export function daypart(d) {
   const h = (d || new Date()).getHours();
   if (h < 5) return 'night';

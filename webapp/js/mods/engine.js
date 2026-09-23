@@ -1,11 +1,12 @@
-import * as Live2D from '../live2d/live2d.js?v=2';
+import * as Live2D from '../live2d/live2d.js?v=3';
 import * as Prefs from '../core/prefs.js?v=1';
 import { idbStore } from '../core/idb.js?v=1';
 import { hexToRgb01 } from '../outfit/colors.js?v=1';
-import { hiddenItemDrawables, refreshVisibility, setModdedDrawables } from '../outfit/apply.js?v=1';
+import { hiddenItemDrawables, refreshVisibility, setModdedDrawables } from '../outfit/apply.js?v=2';
 import { unzip } from './zip.js?v=1';
-import { itemDrawables, parseMod } from './parse.js?v=1';
-import { MOD_SLOT, bakeDrawable, fileUrl } from './layers.js?v=1';
+import { itemDrawables, parseMod } from './parse.js?v=2';
+import { MOD_SLOT, bakeDrawable, fileUrl } from './layers.js?v=2';
+import { hooks } from '../outfit/hooks.js?v=1';
 
 const STATE_KEY = 'omega.mods.state.v1';
 const zips = idbStore('omega-mods', 'zips', 'guid');
@@ -260,7 +261,7 @@ export async function removeMod(guid) {
 
 export function setEquipped(guid, index, on) {
   const change = () => applyEquipped(guid, index, on);
-  return window.WardrobeCurtains ? WardrobeCurtains.change(change) : change();
+  return hooks.curtains ? hooks.curtains(change) : change();
 }
 
 function applyEquipped(guid, index, on) {

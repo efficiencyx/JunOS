@@ -7,7 +7,6 @@ import * as Names from './core/names.js?v=1';
 import * as Prefs from './core/prefs.js?v=1';
 import * as ui from './core/ui.js?v=1';
 import * as MobileViewport from './core/viewport.js?v=1';
-import * as Mods from './mods/mods.js?v=1';
-import * as Outfit from './outfit/outfit.js?v=1';
+import * as Outfit from './outfit/outfit.js?v=2';
 
-Object.assign(window, { Auth, ChatAPI, loadScripts, Names, Prefs, ui, MobileViewport, Mods, Outfit });
+Object.assign(window, { Auth, ChatAPI, loadScripts, Names, Prefs, ui, MobileViewport, Outfit });

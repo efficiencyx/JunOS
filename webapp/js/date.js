@@ -1,14 +1,25 @@
 // the date page. same skeleton as wardrobe.js, but her lines come
 // from the model: every turn is one ephemeral turn (nothing
 // stored, gauges still move) carrying an OOC stage direction, and
-// the reply goes through WardrobeReactions.say(). the trip
+// the reply goes through say() in core/speech-card.js. the trip
 // endpoint writes the memory note on the way home, the turns
 // themselves leave nothing behind.
 //
 // she orders for herself. Anon taps his own dish on the card, hers
 // comes out of her reply as an ORDER: tag (SUGGEST: is her
 // proposing one for him). there is no button that picks for her.
-(async () => {
+
+import * as Auth from './core/auth.js?v=1';
+import { api, apiJson } from './core/api.js?v=1';
+import * as ChatAPI from './core/chat-api.js?v=1';
+import * as Names from './core/names.js?v=1';
+import * as Prefs from './core/prefs.js?v=1';
+import { say } from './core/speech-card.js?v=1';
+import { localTimeString, mealNow } from './core/util.js?v=1';
+import * as Live2D from './live2d/live2d.js?v=3';
+import * as Outfit from './outfit/outfit.js?v=2';
+
+async function main() {
   const status = document.getElementById('stageStatus');
   const list = document.getElementById('menuList');
   const input = document.getElementById('sayInput');
@@ -50,7 +61,7 @@
     { name: 'The counter on Vane Street', scene: 'diner-counter.svg' },
   ];
   let venue = VENUES[0];
-  const meal = new Date().getHours() < 16 ? 'lunch' : 'dinner';
+  const meal = mealNow();
   const dishes = MENU[meal];
   document.body.dataset.meal = meal;
   const FALLBACK = {
@@ -68,16 +79,7 @@
   let busy = false;
   let history = [];
   let conversationId = 0;
-  const her = () => window.Names ? Names.getBot() : 'Jun';
-
-  const clientTime = () => {
-    try {
-      return new Date().toLocaleString(undefined, {
-        weekday: 'long', year: 'numeric', month: 'long', day: 'numeric',
-        hour: 'numeric', minute: '2-digit', timeZoneName: 'short',
-      });
-    } catch (e) { return new Date().toString(); }
-  };
+  const her = () => Names.getBot();
 
   // "ORDER: the carbonara, please" has to land on a menu row. score
   // each dish by how many of its own words show up, most hits wins,
@@ -135,12 +137,12 @@
 
   function turn(content) {
     return new Promise((resolve) => {
-      if (!window.ChatAPI || !conversationId) return resolve('');
+      if (!conversationId) return resolve('');
       let text = '';
       history.push({ role: 'user', content });
       ChatAPI.chat(
         { messages: [...history], conversation_id: conversationId, ephemeral: true,
-          client_time: clientTime(), outfit_context: window.Outfit ? Outfit.describe() : '' },
+          client_time: localTimeString(), outfit_context: Outfit.describe() },
         {
           onToken: (t) => { text += t; },
           onDone: () => {
@@ -163,7 +165,7 @@
     readTags(raw);
     let line = raw.replace(STRIP_RE, '').replace(/\[\s*A(?:CTIONS?)?\s*:[^\]]*\]/gi, '')
       .replace(/\s+/g, ' ').replace(/^[\s,.;:]+/, '').trim();
-    if (window.Names) line = Names.apply(line);
+    line = Names.apply(line);
     line = line || fallback;
     status.textContent = '';
     lastLine.textContent = line;
@@ -171,8 +173,6 @@
     renderMarks();
     return line;
   }
-
-  const speak = (line) => window.WardrobeReactions ? WardrobeReactions.say(line) : undefined;
 
   function setComposer() {
     const locked = busy || !ready;
@@ -205,7 +205,7 @@
   function renderMenu() {
     const h = her();
     document.title = meal === 'lunch' ? 'Lunch for two' : 'Dinner for two';
-    document.getElementById('menuNames').textContent = `${window.Names ? Names.getPlayer() : 'Anon'} & ${h}`;
+    document.getElementById('menuNames').textContent = `${Names.getPlayer()} & ${h}`;
     document.getElementById('menuDate').textContent = `${meal === 'lunch' ? 'Lunch' : 'Dinner'} · ${new Date().toLocaleDateString(undefined, { day: 'numeric', month: 'long', year: 'numeric' })}`;
     document.getElementById('menuPlace').textContent = venue.name;
     document.getElementById('menuHint').textContent = hintText();
@@ -258,20 +258,16 @@
     orderBtn.hidden = true;
     billBtn.hidden = false;
     setComposer();
-    await speak(line);
+    await say(line);
   }
 
   async function goHome() {
     if (busy) return;
     billBtn.disabled = true;
     billBtn.textContent = 'Heading home…';
-    await speak(await ask(note('leave'), FALLBACK.leave));
+    await say(await ask(note('leave'), FALLBACK.leave));
     try {
-      await fetch('api/trip.php?action=home', {
-        method: 'POST', credentials: 'same-origin',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ meal, dishes: picks }),
-      });
+      await apiJson('trip.php?action=home', { meal, dishes: picks });
     } catch (e) {}
     location.href = 'index.html?from=date';
   }
@@ -280,7 +276,7 @@
   if (!me) { location.replace('index.html'); return; }
   // she has to have agreed in chat. a dead endpoint (android has
   // none) counts as open, this is a story rule not a security one
-  const trip = await fetch('api/trip.php', { credentials: 'same-origin' })
+  const trip = await api('trip.php')
     .then(r => r.ok ? r.json() : null).catch(() => null);
   if (trip && trip.gated && trip.where !== 'date') { location.replace('index.html'); return; }
   // mount AFTER the gate. bounced users used to sit through the whole
@@ -296,8 +292,9 @@
   Scene.inject('.table', 'scene/table.svg');
   conversationId = trip ? Number(trip.conversation_id) || 0 : 0;
 
-  if (window.Prefs) await Prefs.pullFromServer();
-  if (window.Names) { Names.load(); Names.decorate(); }
+  await Prefs.pullFromServer();
+  Names.load();
+  Names.decorate();
   renderMenu();
 
   // the tail of the chat she agreed in, so the lines follow on
@@ -305,7 +302,7 @@
   // placeholder, not words
   if (conversationId) {
     try {
-      const rows = await fetch(`api/conversations.php?action=messages&id=${conversationId}`, { credentials: 'same-origin' })
+      const rows = await api(`conversations.php?action=messages&id=${conversationId}`)
         .then(r => r.ok ? r.json() : []);
       history = rows.filter(r => r.content !== '<audio>').slice(-20).map(r => ({ role: r.role, content: r.content }));
     } catch (e) {}
@@ -316,8 +313,8 @@
     const text = input.value.trim();
     if (!text || busy || !ready) return;
     input.value = '';
-    const spoken = window.Names ? Names.canonicalize(text) : text;
-    speak(await ask(`${spoken}\n\n${note('talk')}`, FALLBACK.talk));
+    const spoken = Names.canonicalize(text);
+    say(await ask(`${spoken}\n\n${note('talk')}`, FALLBACK.talk));
     input.focus();
   });
   orderBtn.addEventListener('click', callWaiter);
@@ -340,10 +337,12 @@
     await TripLoader.finish();
     status.textContent = '';
     ready = true;
-    speak(await ask(note('arrive'), FALLBACK.arrive));
+    say(await ask(note('arrive'), FALLBACK.arrive));
   } catch (e) {
     console.error(e);
     status.textContent = 'Load error: ' + e.message;
     TripLoader.fail('Load error: ' + e.message);
   }
-})();
+}
+
+main();

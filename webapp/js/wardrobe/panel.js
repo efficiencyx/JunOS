@@ -1,12 +1,15 @@
-import * as Live2D from '../live2d/live2d.js?v=2';
+import * as Live2D from '../live2d/live2d.js?v=3';
 import { BODY_VARIANTS, CLOTHING_VARIANTS, COLOR_GROUPS, ITEMS, ITEM_COLOR_GROUPS, ITEM_VARIANTS, VARIANTS } from '../outfit/catalog.js?v=1';
-import { closeOptionsPopup, makeOptOrb, makeSwatch, makeTile, openTilePopup, syncOptionsPopup, wdMoveGhost, wdShowGhost } from './tiles.js?v=1';
+import { fillTile, makeOptOrb, makeSwatch, makeTile, openTilePopup, syncOptionsPopup, wdMoveGhost, wdShowGhost } from './tiles.js?v=2';
 import { state, variantState } from '../outfit/current.js?v=1';
-import { itemThumb, variantThumb } from './tile-bake.js?v=1';
-import { looksEl, looksOpen, toggleLooks } from './looks.js?v=1';
-import { reset, setItem } from '../outfit/apply.js?v=1';
-import { wornDrawableMap, wornHitAt, wornLabel, wornRemove, wornWear } from './worn.js?v=1';
-import { buildWardrobeSection } from '../mods/section.js?v=1';
+import { itemThumb, variantThumb } from './tile-bake.js?v=2';
+import { looksOpen, toggleLooks } from './looks.js?v=2';
+import { reset, setItem } from '../outfit/apply.js?v=2';
+import { wornDrawableMap, wornHitAt, wornLabel, wornRemove, wornWear } from './worn.js?v=2';
+import { buildWardrobeSection } from '../mods/section.js?v=2';
+import { activate, playOutro } from './reactions.js?v=1';
+import { refreshColorButtons } from './color-picker.js?v=2';
+import { hooks } from '../outfit/hooks.js?v=1';
 
 export let clearWornHover = null;
 
@@ -15,6 +18,7 @@ export let wdOverlay = null, wdTooltip = null, wdGhost = null;
 function buildWardrobe() {
   const coarsePointer = matchMedia('(pointer: coarse)');
   wdOverlay = document.createElement('div');
+  hooks.refresh = syncWardrobe;
   wdOverlay.className = 'wardrobe-overlay';
   wdOverlay.innerHTML = `<div class="wd-head">
       <div class="wd-titles"><span class="wd-hint"></span></div>
@@ -68,7 +72,7 @@ function buildWardrobe() {
   const tileGroups = new Set(Object.values(ITEM_COLOR_GROUPS).flat());
   const studioKeys = COLOR_GROUPS.filter(g =>
     !tileGroups.has(g.key) &&
-    (!Live2D.findDrawables || Live2D.findDrawables(g.includes, g.excludes).length))
+    Live2D.findDrawables(g.includes, g.excludes).length)
     .map(g => g.key);
 
   const makeVariantTile = (v, colorKeys) => {
@@ -78,7 +82,7 @@ function buildWardrobe() {
     tile.setAttribute('role', 'button');
     tile.setAttribute('aria-label', `Choose ${v.label.toLowerCase()}`);
     const thumb = variantThumb(v, v.options[variantState[v.key] || 0]);
-    tile.innerHTML = `${thumb ? `<img draggable="false" src="${thumb}">` : '<div class="wd-noimg">?</div>'}<span>${v.label}</span>`;
+    fillTile(tile, thumb, v.label);
     tile.dataset.variantTile = v.key;
     tile.dataset.variantIndex = String(variantState[v.key] || 0);
     if (colorKeys && colorKeys.length) tile.appendChild(makeSwatch(colorKeys, v.label));
@@ -332,31 +336,19 @@ function syncWardrobe() {
     }
   }
   syncOptionsPopup();
+  refreshColorButtons();
 }
 
 export function openWardrobe() {
   if (!wdOverlay) buildWardrobe();
   document.body.classList.add('wardrobe-open');
-  if (window.WardrobeReactions) return WardrobeReactions.activate();
+  return activate();
 }
 
 let leavingWardrobePage = false;
 
 function closeWardrobe() {
-  if (location.pathname.endsWith('wardrobe.html')) {
-    if (leavingWardrobePage) return;
-    leavingWardrobePage = true;
-    const go = () => { location.href = 'index.html?from=wardrobe'; };
-    if (window.WardrobeReactions && WardrobeReactions.playOutro) {
-      WardrobeReactions.playOutro().catch(() => {}).then(go);
-    } else go();
-    return;
-  }
-  document.body.classList.remove('wardrobe-open');
-  if (looksEl) toggleLooks(false);
-  if (window.WardrobeReactions) WardrobeReactions.deactivate();
-  closeOptionsPopup(false);
-  wdTooltip.style.display = 'none';
-  wdShowGhost(null);
-  document.body.classList.remove('wd-over-worn-item');
+  if (leavingWardrobePage) return;
+  leavingWardrobePage = true;
+  playOutro().catch(() => {}).then(() => { location.href = 'index.html?from=wardrobe'; });
 }

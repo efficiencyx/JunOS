@@ -34,10 +34,10 @@ const WARDROBE_COLOR_DEFAULTS = [
 ];
 
 // pairs that cannot both be on. this is the same list
-// ITEMS[].excludes holds in outfit.js and the two have to stay in
-// step: a state the browser thinks is fine and this file rejects
-// means every wardrobe PUT after it 400s and nothing the user
-// does in the shop persists again.
+// ITEMS[].excludes holds in outfit/catalog.js and the two
+// have to stay in step: a state the browser thinks is fine and
+// this file rejects means every wardrobe PUT after it 400s and
+// nothing the user does in the shop persists again.
 const WARDROBE_CONFLICTS = [
     ['dress', 'shirt'], ['dress', 'hoodie'], ['dress', 'skirt'], ['dress', 'pants'], ['dress', 'dress1'],
     ['dress1', 'shirt'], ['dress1', 'hoodie'], ['dress1', 'skirt'], ['dress1', 'pants'],
@@ -46,8 +46,9 @@ const WARDROBE_CONFLICTS = [
 ];
 
 // what a person calls the thing -> the keys the state uses.
-// mirrors the alias table in outfit.js syncFromAction, because
-// she reaches for the same words whichever channel she uses.
+// mirrors the alias table in syncFromAction in
+// outfit/chat-tools.js, because she reaches for the same words
+// whichever channel she uses.
 const WARDROBE_ALIASES = [
     'shoes' => ['shoe_l', 'shoe_r'],
     'shoe' => ['shoe_l', 'shoe_r'],
