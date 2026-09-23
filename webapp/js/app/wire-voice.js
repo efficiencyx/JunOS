@@ -1,8 +1,8 @@
-import { VOICE_STATE_LABELS, renderVoiceDraft, sendAudioFromVoice, sendFromVoice, stopActiveStream, sttAvailable } from '../app.js?v=20';
+import { VOICE_STATE_LABELS, renderVoiceDraft, sendAudioFromVoice, sendFromVoice, stopActiveStream, sttAvailable } from '../app.js?v=21';
 import { voiceBargeChk, voiceChk, voiceHearAllChk, voiceSilenceInput, voiceState } from './dom.js?v=11';
-import { hideFaceBubble } from './face-bubble.js?v=13';
+import { hideFaceBubble } from './face-bubble.js?v=14';
 import { logAction } from './logging.js?v=11';
-import { syncVoiceDeps, updateVoiceSilenceLabel } from './settings.js?v=14';
+import { syncVoiceDeps, updateVoiceSilenceLabel } from './settings.js?v=15';
 import * as Prefs from '../core/prefs.js?v=1';
 import * as ui from '../core/ui.js?v=1';
 

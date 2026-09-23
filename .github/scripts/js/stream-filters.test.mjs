@@ -14,22 +14,19 @@ register('./dom-stub-hooks.mjs', import.meta.url);
 
 globalThis.window = globalThis;
 globalThis.__log = [];
-await import('../../../webapp/js/actions.js');
+globalThis.__applied = [];
 const { makeStreamBuffer, makeNameFilter } = await import('../../../webapp/js/app/stream-filters.js');
 
-// parseActions is the real one, applyAction would try to drive
-// the Live2D rig. record what would have been applied instead.
-let applied = [];
-Actions.applyAction = (a) => applied.push(a);
-
+// parseActions is the real one. applyAction is the hooks' stub, it
+// records what would have been applied to the rig.
 function run(chunks) {
   const out = [];
-  applied = [];
+  globalThis.__applied = [];
   globalThis.__log = [];
   const sb = makeStreamBuffer((t) => out.push(t));
   for (const c of chunks) sb.push(c);
   sb.flush();
-  return { text: out.join(''), out, applied };
+  return { text: out.join(''), out, applied: globalThis.__applied };
 }
 
 test('a tag split across chunks never reaches the text', () => {

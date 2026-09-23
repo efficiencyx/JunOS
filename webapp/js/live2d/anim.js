@@ -1,8 +1,7 @@
-import { LERP_TAU_MS, app, currentValues, forcedPartOpacity, loops, markDirty, model, paramDefault, paramIndex, paramMax, paramMin, pendingSequences, raw, scheduleSequence, startLoop, stopLoop, targetParams } from '../live2d.js?v=11';
 import { daypart, moodFactors, moodTier } from '../core/mood-tier.js?v=1';
-import { cameraTween } from './camera.js?v=11';
-import { clamp } from './geometry.js?v=11';
-import { S } from './state.js?v=10';
+import { cameraTween } from './camera.js?v=12';
+import { clampParam, scheduleSequence, startLoop, stopLoop } from './params.js?v=1';
+import { LERP_TAU_MS, S, app, currentValues, forcedPartOpacity, loops, markDirty, model, paramDefault, paramIndex, paramMax, paramMin, pendingSequences, raw, targetParams } from './state.js?v=11';
 
 const ACTIVE_FPS = 60;
 const IDLE_FPS = 30;
@@ -68,7 +67,7 @@ const DAYPART_BASELINE = {
 };
 
 function trySet(param, value) {
-  if (paramIndex.has(param)) targetParams.set(param, clamp(param, value));
+  if (paramIndex.has(param)) targetParams.set(param, clampParam(param, value));
 }
 
 function applyMoodBaseline() {
@@ -258,10 +257,10 @@ function runFidget(f) {
     return;
   }
   if (f.kind === 'pose') {
-    targetParams.set(f.param, clamp(f.param, f.value));
+    targetParams.set(f.param, clampParam(f.param, f.value));
     const extras = f.pairValue || {};
     for (const [p, v] of Object.entries(extras)) {
-      if (paramIndex.has(p)) targetParams.set(p, clamp(p, v));
+      if (paramIndex.has(p)) targetParams.set(p, clampParam(p, v));
     }
     setTimeout(() => {
       targetParams.set(f.param, paramDefault.get(f.param));
@@ -378,7 +377,7 @@ function driveTail(ps, now) {
     const span = Math.min(Math.abs(paramMax.get(id) ?? 1), Math.abs(paramMin.get(id) ?? 1)) || 1;
     const reach = (i + 1) / TAIL_SEGMENTS.length;
     const phase = tailPhase - i * TAIL_LAG;
-    ps.values[idx] = clamp(id, Math.sin(2 * Math.PI * phase) * amp * reach * span);
+    ps.values[idx] = clampParam(id, Math.sin(2 * Math.PI * phase) * amp * reach * span);
   }
 }
 
@@ -422,7 +421,7 @@ export function tick() {
     const phase = (now - L.phase_start_ms) / L.period_ms;
     const v = L.base + Math.sin(2 * Math.PI * phase) * L.amplitude;
     const idx = paramIndex.get(id);
-    if (idx !== undefined) ps.values[idx] = clamp(id, v);
+    if (idx !== undefined) ps.values[idx] = clampParam(id, v);
   }
 
   driveTail(ps, now);
@@ -438,7 +437,7 @@ export function tick() {
   if (mouthOverride != null) {
     const idx = paramIndex.get('ParamMouthOpen');
     if (idx !== undefined) {
-      ps.values[idx] = clamp('ParamMouthOpen', mouthOverride);
+      ps.values[idx] = clampParam('ParamMouthOpen', mouthOverride);
       currentValues.set('ParamMouthOpen', mouthOverride);
     }
   }

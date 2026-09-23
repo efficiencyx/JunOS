@@ -7,18 +7,18 @@
 // rewrite.
 
 import { showAuthScreen } from './app/auth-screen.js?v=12';
-import { IDLE_AFTER_REPLY_MS, TYPING_POLL_MS, armIdleAfterReply, cancelActiveIdleNudge, cancelAutoReset, cancelIdleNudge, composerPlaceholder, consolidating, fleeActive, reportActivity, resetIdleNudge, scheduleAutoReset, scheduleIdleNudge, setCancelActiveIdleNudge, setConsolidating, showConsolidatingBubble, startFleeLock, syncConsolidationStatus } from './app/consolidation.js?v=13';
+import { IDLE_AFTER_REPLY_MS, TYPING_POLL_MS, armIdleAfterReply, cancelActiveIdleNudge, cancelAutoReset, cancelIdleNudge, composerPlaceholder, consolidating, fleeActive, reportActivity, resetIdleNudge, scheduleAutoReset, scheduleIdleNudge, setCancelActiveIdleNudge, setConsolidating, showConsolidatingBubble, startFleeLock, syncConsolidationStatus } from './app/consolidation.js?v=14';
 import { chatInput, debugSystemPromptEl, devNoIdleChk, messagesEl, messagesEmpty, missingParamsEl, mobileConversationTitle, modelSelect, narrowSidebarQuery, reasoningSelect, sendBtn, sendButtonIdleMarkup, sendButtonStopMarkup, siteVolumeInput, stageEl, thinkChk } from './app/dom.js?v=11';
-import { announceMobileReply, faceBubble, hideFaceBubble, latestAssistantReply, restartFaceBubbleHide, scheduleFaceBubbleHide, scheduleFaceBubblePosition, setLatestAssistantReply, showFaceBubble } from './app/face-bubble.js?v=13';
+import { announceMobileReply, faceBubble, hideFaceBubble, latestAssistantReply, restartFaceBubbleHide, scheduleFaceBubbleHide, scheduleFaceBubblePosition, setLatestAssistantReply, showFaceBubble } from './app/face-bubble.js?v=14';
 import { appendRaw, logAction, logMissing, logToolStatus, setStageStatus } from './app/logging.js?v=11';
-import { loadMood } from './app/mood.js?v=13';
-import { applyProviderCapabilities, applyRoleGates, setSiteVolume, syncThinkToggle, updateSiteVolumeLabel, wireNameSettings } from './app/settings.js?v=14';
-import { loadConversation, refreshSidebar, setSidebarOpen } from './app/sidebar.js?v=13';
-import { makeNameFilter, makeStreamBuffer } from './app/stream-filters.js?v=13';
+import { loadMood } from './app/mood.js?v=14';
+import { applyProviderCapabilities, applyRoleGates, setSiteVolume, syncThinkToggle, updateSiteVolumeLabel, wireNameSettings } from './app/settings.js?v=15';
+import { loadConversation, refreshSidebar, setSidebarOpen } from './app/sidebar.js?v=14';
+import { makeNameFilter, makeStreamBuffer } from './app/stream-filters.js?v=14';
 import { escapeHtml, localTimeString, phoneMode } from './core/util.js?v=1';
-import { wireTts } from './app/wire-tts.js?v=13';
-import { wireVoice } from './app/wire-voice.js?v=14';
-import { WELCOME_TIERS, fetchWelcome, playWelcome, previewWelcome } from './app/welcome.js?v=13';
+import { wireTts } from './app/wire-tts.js?v=14';
+import { wireVoice } from './app/wire-voice.js?v=15';
+import { WELCOME_TIERS, fetchWelcome, playWelcome, previewWelcome } from './app/welcome.js?v=14';
 import * as Names from './core/names.js?v=1';
 import * as Prefs from './core/prefs.js?v=1';
 import * as ui from './core/ui.js?v=1';
@@ -26,6 +26,9 @@ import * as Auth from './core/auth.js?v=1';
 import * as ChatAPI from './core/chat-api.js?v=1';
 import * as MobileViewport from './core/viewport.js?v=1';
 import { loadScripts } from './core/loader.js?v=1';
+import * as Actions from './live2d/actions.js?v=1';
+import * as Live2D from './live2d/live2d.js?v=1';
+import * as ModelTouch from './live2d/touch.js?v=1';
 
 export const messages = [];
 export let abortFn = null;
@@ -712,7 +715,7 @@ function showBoot() {
   await loadScripts([
     ['vendor/pixi.min.js', 'vendor/live2dcubismcore.min.js',
      'vendor/marked.min.js', 'vendor/purify.min.js?v=4',
-     'js/actions.js?v=4', 'js/outfit.js?v=23', 'js/touch.js?v=3',
+     'js/outfit.js?v=23',
      'js/mods.js?v=16', 'js/tts.js?v=3', 'js/voice.js?v=10',
      'js/voicemode.js?v=3', 'js/trip-loader.js?v=4', 'js/cards.js?v=7',
      'js/skybox.js?v=1', 'js/scene.js?v=1',
@@ -721,11 +724,6 @@ function showBoot() {
      'js/wardrobe-return-lines.js?v=3'],
     ['vendor/cubism4.min.js', 'vendor/pixi-unsafe-eval.min.js'],
   ]);
-  // live2d.js is an ES module so it can't go in a loadScripts
-  // group, and it rips PIXI.live2d apart the moment it runs. that's
-  // what the await is for.
-  await import('./live2d.js?v=11');
-
   // both of these set up a global that loads late, so they can't
   // run at module scope anymore. they'd just silently do nothing
   // before the load.

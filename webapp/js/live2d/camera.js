@@ -1,5 +1,5 @@
-import { app, markDirty, model } from '../live2d.js?v=11';
-import { S } from './state.js?v=10';
+import * as MobileViewport from '../core/viewport.js?v=1';
+import { S, app, markDirty, model } from './state.js?v=11';
 
 const CAMERA_STORAGE_KEY = 'l2d.camera';
 const CAMERA_STORAGE_VERSION = 2;
@@ -17,7 +17,7 @@ function boundNumber(value, min, max) {
 
 export function currentCameraMode() {
   try {
-    return window.MobileViewport && window.MobileViewport.isPhone() ? 'phone' : 'desktop';
+    return MobileViewport.isPhone() ? 'phone' : 'desktop';
   } catch (e) {
     return 'desktop';
   }
@@ -59,10 +59,10 @@ function textEntryFocused() {
 function usableStage(mode = S.cameraMode) {
   const screen = stageScreen();
   const full = { x: 0, y: 0, width: screen.width, height: screen.height };
-  if (mode !== 'phone' || !window.MobileViewport || !app || !app.view) return full;
+  if (mode !== 'phone' || !app || !app.view) return full;
 
   let visual;
-  try { visual = window.MobileViewport.getVisualRect(); } catch (e) { return full; }
+  try { visual = MobileViewport.getVisualRect(); } catch (e) { return full; }
   const canvas = app.view.getBoundingClientRect();
   if (!visual || !canvas.width || !canvas.height) return full;
 
@@ -290,12 +290,10 @@ export function watchStageSize() {
     window.addEventListener('resize', queueStageResize);
   }
 
-  if (window.MobileViewport && window.MobileViewport.subscribe) {
-    removeViewportSubscription = window.MobileViewport.subscribe((event) => {
-      if (event.visualChanged && event.isPhone) visualRefitPending = true;
-      if (event.phoneChanged || visualRefitPending || currentCameraMode() !== S.cameraMode) queueStageResize();
-    });
-  }
+  removeViewportSubscription = MobileViewport.subscribe((event) => {
+    if (event.visualChanged && event.isPhone) visualRefitPending = true;
+    if (event.phoneChanged || visualRefitPending || currentCameraMode() !== S.cameraMode) queueStageResize();
+  });
   queueStageResize();
 }
 
