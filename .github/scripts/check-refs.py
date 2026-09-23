@@ -26,6 +26,10 @@ HTML_REF = re.compile(r'(?:src|href)\s*=\s*"([^"]+)"')
 # .wd-looks-import sit right next to a quote in the html
 # templates and every one of them looked like a bare import.
 JS_IMPORT = re.compile(r"""(?<![-'"\w$])(?:from|import)\s*\(?\s*['"]([^'"]+)['"]""")
+# a moved stylesheet keeps its url() and @import pointing at the
+# old neighbours, and the browser just draws without them. no
+# error anywhere.
+CSS_REF = re.compile(r"""(?:@import\s+(?:url\(\s*)?|url\(\s*)['"]?([^'")\s;]+)""")
 
 problems = []
 
@@ -68,6 +72,15 @@ for js in sorted(WEBAPP.rglob("*.js")):
                             "nothing here resolves those")
             continue
         check(js, ref)
+
+for css in sorted(WEBAPP.rglob("*.css")):
+    if "vendor" in css.parts:
+        continue
+    text = re.sub(r"/\*.*?\*/", "", css.read_text(encoding="utf-8"), flags=re.S)
+    for ref in CSS_REF.findall(text):
+        if ref.startswith("#"):
+            continue
+        check(css, ref)
 
 if problems:
     for p in problems:

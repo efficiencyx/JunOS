@@ -32,7 +32,7 @@ Create a branch from `main`, copy `.env.example` to `.env`, and use the installa
 ./sync-webapp.sh
 ```
 
-Use `./sync-webapp.sh -s` only when every changed file is static. PHP opcache does not watch timestamps, so PHP changes require the full command. Hard-refresh the browser after synchronizing.
+Use `./sync-webapp.sh -s` only when every changed file is static. PHP opcache does not watch timestamps, so PHP changes require the full command. After moving or deleting files, add `--clean` so the old paths are removed from the containers. Hard-refresh the browser after synchronizing.
 
 The Windows installation is managed by `install.ps1` and `start.ps1`. `installer-gui.ps1` is a WPF front end over the same `install.ps1`: it collects answers, exports the matching `JUN_*` variables plus `JUN_YES=1`, and runs the script, so installer behavior changes belong in `install.ps1` and only the questions belong in the GUI. `tools/build-installer-exe.ps1` compiles it into `JunSetup.exe` with `install.ps1` embedded as base64, and `.github/workflows/release-installer.yml` attaches that exe to tagged releases. The Colab deployment lives in `colab.ipynb`, and `android/` is a separate Gradle project. See [the architecture guide](docs/architecture.md) before changing a cross-service flow.
 
