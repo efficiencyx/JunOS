@@ -381,9 +381,10 @@ The model-server and voice containers are profile-gated. `./start.sh` derives `C
 │   │   └── lib/      the shared stuff: bootstrap, db, crypto, memory, providers/, chat/, consolidation/ (never served)
 │   ├── js/           app/, live2d/, actions.js, voice.js, wardrobe.js, mods.js, karaoke.js, …
 │   ├── css/          base, shell, chat, stage, sidebar, settings, widgets, welcome, voice-karaoke, responsive
+│   │   ├── boot.css  Critical CSS, inlined into index.html at sync time
+│   │   └── pages/    one sheet each for the date, wardrobe, karaoke and privacy pages
 │   ├── vendor/       PIXI, Cubism core, pixi-live2d-display, marked, DOMPurify (no CDN)
 │   ├── assets/       Live2D model files - you generate these, gitignored
-│   ├── boot.css      Critical CSS, inlined into index.html at sync time
 │   └── system_prompt.txt
 ├── install.sh · install.ps1     One-line bootstrap (Docker · bare metal)
 ├── installer-gui.ps1            The Windows click-through window (ships as JunSetup.exe)

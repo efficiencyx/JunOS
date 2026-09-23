@@ -1,4 +1,4 @@
-@import url("css/subpage.css?v=1");
+@import url("../subpage.css?v=1");
 :root {
   --panel-w: clamp(400px, 39vw, 570px);
   --panel-h: 55dvh;
@@ -484,7 +484,7 @@ body.wd-over-worn-item { cursor: grab; }
 .fitting-curtains { position: fixed; inset: 0 var(--panel-w) 0 0; z-index: 82; overflow: hidden; pointer-events: none; }
 .curtain {
   position: absolute; width: 12%; top: 0; bottom: 0;
-  background: url(scene/curtain.svg) repeat-x 0 0 / auto 100%;
+  background: url(../../scene/curtain.svg) repeat-x 0 0 / auto 100%;
   border-top: 5px solid #8a6f96;
   box-shadow: 9px 12px 18px #170e2044;
   transition: width .34s cubic-bezier(.4, 0, .2, 1), clip-path .34s cubic-bezier(.4, 0, .2, 1);

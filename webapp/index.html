@@ -14,11 +14,12 @@
 <link rel="apple-touch-icon" href="icon-192.png?v=2">
 
 <style id="critical">
-/* generated from boot.css by tools/build-critical-css.php. do NOT edit. */
-/* this file is never served. tools/build-critical-css.php drops
-   it into index.html so the age gate, auth screen and boot overlay
-   have CSS before styles.css finishes loading. edit THIS file,
-   then run ./sync-webapp.sh. */
+/* generated from css/boot.css by tools/build-critical-css.php. do NOT edit. */
+/* tools/build-critical-css.php drops this into index.html so the
+   age gate, auth screen and boot overlay have CSS before
+   styles.css finishes loading. karaoke.html and privacy.html link
+   it straight, for the tokens. edit THIS file, never the inlined
+   copy, then run ./sync-webapp.sh. */
 
 :root {
   --bg:         #131314;
@@ -608,7 +609,7 @@ html[data-pre-auth] #app { visibility: hidden; }
    the full sheet would cost a round trip the auth screen does not
    need. -->
 <link rel="preload" as="style" href="styles.css?v=10">
-<link rel="preload" as="style" href="trip-loader.css?v=3">
+<link rel="preload" as="style" href="css/trip-loader.css?v=1">
 <noscript><link rel="stylesheet" href="styles.css?v=10"></noscript>
 
 <script defer src="js/viewport.js?v=3"></script>
