@@ -1,13 +1,15 @@
-/* the table is a mode like voice mode: chrome hidden, stage up on
-   the face preset (she's centered, zoomed to the head), overlay
-   above the stage at 40 and below drawers and toasts. her hand sits
-   above her head, yours in the felt under her chin. */
 .cards-overlay {
+  --table-accent: #d8b875;
+  --table-ink: #f2ead9;
+  --table-muted: #c3b99d;
+  --card-width: 82px;
+  --card-height: 116px;
   position: fixed;
   inset: 0;
   z-index: 50;
   pointer-events: none;
   opacity: 0;
+  color: var(--table-ink);
   transition: opacity .25s ease;
 }
 .cards-overlay[hidden] { display: none; }
@@ -15,68 +17,157 @@ body.cards-mode .cards-overlay { opacity: 1; }
 body.cards-mode .chat-panel,
 body.cards-mode .conv-sidebar,
 body.cards-mode .app-header { visibility: hidden; }
-
+.cards-room { display: none; position: fixed; inset: 0; z-index: 35; pointer-events: none; }
+body.cards-mode .cards-room { display: block; }
+.cards-room svg { display: block; width: 100%; height: 100%; }
+html body.cards-mode #stage { position: fixed; inset: -16dvh 0 16dvh; width: 100%; height: 100%; min-height: 0; z-index: 40; }
 .cards-close {
   position: absolute;
-  top: calc(16px + env(safe-area-inset-top, 0px));
-  right: calc(16px + env(safe-area-inset-right, 0px));
+  top: calc(20px + env(safe-area-inset-top, 0px));
+  right: calc(24px + env(safe-area-inset-right, 0px));
+  padding: 0;
+  background: #282820;
+  border-color: #d8b87540;
+  color: var(--table-ink);
 }
 .cards-tally {
   position: absolute;
-  top: calc(24px + env(safe-area-inset-top, 0px));
+  top: calc(28px + env(safe-area-inset-top, 0px));
   left: 50%;
   transform: translateX(-50%);
-  padding: 8px 16px;
-  border-radius: var(--radius-pill);
-  font-size: 13px;
-  background: var(--bg-2);
-  border: 1px solid var(--border);
-  color: var(--muted);
+  padding: 9px 18px;
+  border-radius: 30px;
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+  background: #202820e6;
+  border: 1px solid #d8b87533;
+  color: var(--table-muted);
+  max-width: 45%;
+  text-align: center;
 }
-.cards-hand { display: flex; flex-direction: column; align-items: center; gap: var(--space-2); }
-.cards-label { color: var(--muted); font-size: 14px; }
-.cards-val { color: var(--fg); font-weight: 700; }
-.cards-row { display: flex; justify-content: center; flex-wrap: wrap; gap: var(--space-2); min-height: 120px; }
+.cards-hand { display: flex; flex-direction: column; align-items: center; gap: 10px; min-width: 0; }
+.cards-label { display: flex; align-items: center; gap: 10px; color: var(--table-muted); font-size: 12px; }
+.cards-val { display: inline-block; min-width: 28px; padding: 3px 9px; text-align: center; border: 1px solid #d8b8753d; border-radius: 20px; color: var(--table-ink); background: #102f2999; font-weight: 600; font-variant-numeric: tabular-nums; }
+.cards-row { display: flex; width: 100%; gap: 9px; min-height: calc(var(--card-height) + 12px); padding: 3px 4px 9px; overflow-x: auto; overscroll-behavior-x: contain; pointer-events: auto; scrollbar-width: thin; scrollbar-color: #c4ae74 transparent; }
+.cards-row > :first-child { margin-left: auto; }
+.cards-row > :last-child { margin-right: auto; }
 .cards-her {
   position: absolute;
   top: calc(80px + env(safe-area-inset-top, 0px));
   left: 50%;
+  width: min(520px, 58%);
   transform: translateX(-50%);
 }
 .cards-felt {
   pointer-events: auto;
   position: absolute;
-  left: 0; right: 0;
-  bottom: 0;
-  padding: var(--space-4) var(--space-4) calc(var(--space-5) + env(safe-area-inset-bottom, 0px));
+  left: 50%;
+  bottom: -22px;
+  transform: translateX(-50%);
+  width: min(1280px, 106%);
+  padding: 56px 90px calc(44px + env(safe-area-inset-bottom, 0px));
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: var(--space-3);
-  background: linear-gradient(180deg, transparent, rgba(18, 60, 40, .55) 30%, rgba(12, 44, 30, .85));
-  border-top: 1px solid rgba(255, 255, 255, .08);
+  gap: 12px;
+  border: 18px solid #3c2b22;
+  border-top-width: 22px;
+  border-radius: 50% 50% 12% 12% / 24% 24% 8% 8%;
+  background: radial-gradient(ellipse at 50% 10%, #578c7066, transparent 72%),
+    repeating-linear-gradient(38deg, #ffffff03 0 1px, transparent 1px 4px), #174c3e;
+  box-shadow: 0 -4px 0 #6b5128, inset 0 8px 30px #09261f88, 0 -22px 70px #0007;
 }
-.cards-status { color: var(--muted); font-size: 14px; min-height: 1.4em; }
-.cards-actions { display: flex; gap: var(--space-2); }
-.cards-actions button { min-width: 96px; }
-
-.card {
-  width: 84px; height: 120px;
-  display: grid; place-items: center;
-  background: #f4f1ea;
-  color: #1c1c1c;
-  border-radius: 10px;
-  font-weight: 700;
-  font-size: 30px;
-  box-shadow: 0 4px 12px rgba(0,0,0,.45);
+.cards-table-mark { position: absolute; top: 14px; left: 50%; transform: translateX(-50%); color: #dac38c99; font: 11px Georgia, serif; letter-spacing: .24em; text-align: center; }
+.cards-table-mark span { display: block; margin-top: 5px; font-size: 12px; letter-spacing: .15em; }
+.cards-you { width: min(100%, 620px); }
+.cards-status { color: var(--table-ink); font-size: 13px; min-height: 1.5em; text-align: center; }
+.cards-actions { display: flex; flex-wrap: wrap; justify-content: center; gap: 10px; }
+.cards-actions button { min-width: 104px; min-height: 44px; padding: 10px 22px; border: 1px solid #d8b8756b; border-radius: 6px; background: #12372e; color: var(--table-ink); font-size: 13px; box-shadow: 0 3px 0 #10251c; }
+.cards-actions .cards-hit, .cards-actions .cards-next { background: var(--table-accent); border-color: var(--table-accent); color: #2e2414; }
+.cards-actions button:hover:not(:disabled) { background: #47644a; color: #fff; border-color: #f4dda5; }
+/* the generic hover above outranks the gold on .cards-hit.
+   without this the primary button goes muted green the moment
+   you point at it */
+.cards-actions .cards-hit:hover:not(:disabled),
+.cards-actions .cards-next:hover:not(:disabled) { background: #e9cd8d; color: #2e2414; border-color: #f4dda5; }
+.cards-actions button:disabled { opacity: .4; cursor: default; box-shadow: none; }
+.cards-actions button:focus-visible, .cards-close:focus-visible { outline: 2px solid #f4dda5; outline-offset: 4px; }
+.cards-actions button[hidden] { display: none; }
+.cards-overlay .card {
+  position: relative;
+  flex: 0 0 var(--card-width);
+  width: var(--card-width);
+  height: var(--card-height);
+  display: grid;
+  place-items: center;
+  border: 1px solid #d8ccbd;
+  border-radius: 7px;
+  background: linear-gradient(135deg, #fffdf7, #eae3d8);
+  color: #28352e;
+  box-shadow: 1px 3px 0 #c0b3a5, 0 5px 8px #10251c59;
+  font-family: Georgia, 'Times New Roman', serif;
 }
-.card.red { color: #c0262f; }
-.card.down {
-  background: repeating-linear-gradient(45deg, var(--accent) 0 5px, var(--accent-2) 5px 10px);
+.cards-overlay .card.red { color: #af3941; }
+.card-corner { position: absolute; top: 6px; left: 7px; display: flex; flex-direction: column; align-items: center; font-size: 18px; line-height: 1; font-weight: 700; }
+.card-corner small { margin-top: 2px; font-size: 13px; }
+.card-corner-bottom { inset: auto 7px 6px auto; transform: rotate(180deg); }
+.card-suit { font-size: 38px; }
+.cards-overlay .card.down {
+  border: 5px solid #eee6dd;
+  background: repeating-linear-gradient(45deg, transparent 0 7px, #e2c99438 7px 8px),
+    repeating-linear-gradient(-45deg, transparent 0 7px, #e2c99438 7px 8px), #254d40;
 }
-
+.cards-overlay .card.down::after { content: "♠"; position: absolute; inset: 8px; display: grid; place-items: center; border: 1px solid #e2c99480; border-radius: 3px; color: #eee0b9; font: 30px Georgia, serif; }
+.cards-deck { position: absolute; top: 62px; right: 9%; width: 74px; height: 88px; transform: rotate(11deg); filter: drop-shadow(3px 10px 10px #0007); }
+.cards-chips { position: absolute; top: 96px; left: 9%; width: 108px; height: 86px; transform: rotate(-7deg); filter: drop-shadow(3px 10px 9px #0006); }
+.cards-deck svg, .cards-chips svg { display: block; width: 100%; height: 100%; }
 @media (max-width: 700px) {
-  .cards-her { top: calc(72px + env(safe-area-inset-top, 0px)); }
-  .card { width: 60px; height: 86px; font-size: 22px; }
-  .cards-row { min-height: 86px; }
+  .cards-overlay { --card-width: 58px; --card-height: 82px; }
+        .cards-close { top: calc(20px + env(safe-area-inset-top, 0px)); right: 16px; width: 40px; height: 40px; }
+  .cards-tally { top: calc(86px + env(safe-area-inset-top, 0px)); max-width: calc(100% - 36px); white-space: nowrap; padding: 6px 14px; font-size: 11px; }
+  .cards-her { top: calc(129px + env(safe-area-inset-top, 0px)); width: calc(100% - 40px); gap: 6px; }
+  .cards-label { font-size: 11px; }
+  .cards-row { gap: 7px; }
+  .cards-felt { width: 112%; padding: 48px 8% calc(38px + env(safe-area-inset-bottom, 0px)); gap: 10px; border-width: 12px; border-top-width: 16px; }
+  .cards-table-mark { top: 10px; font-size: 11px; }
+  .cards-table-mark span { font-size: 11px; }
+  .cards-deck, .cards-chips { display: none; }
+  .cards-actions { gap: 8px; }
+  .cards-actions button { min-width: 78px; padding: 10px 13px; font-size: 12px; }
+  .cards-status { font-size: 12px; }
+  .card-corner { top: 4px; left: 5px; font-size: 14px; }
+  .card-corner small { font-size: 11px; }
+  .card-corner-bottom { inset: auto 5px 4px auto; }
+  .card-suit { font-size: 28px; }
+  .cards-overlay .card.down { border-width: 4px; }
+  .cards-overlay .card.down::after { inset: 5px; font-size: 24px; }
+}
+@media (max-height: 720px) and (orientation: portrait) {
+  html body.cards-mode #stage { inset: -18dvh 0 18dvh; }
+  .cards-overlay { --card-width: 52px; --card-height: 74px; }
+        .cards-tally { top: calc(64px + env(safe-area-inset-top, 0px)); }
+  .cards-her { top: calc(96px + env(safe-area-inset-top, 0px)); }
+  .cards-her .cards-row { --card-width: 44px; --card-height: 62px; }
+  .cards-her .card-corner { font-size: 11px; }
+  .cards-her .card-corner small { font-size: 11px; }
+  .cards-her .card-suit { font-size: 22px; }
+  .cards-felt { padding-top: 28px; padding-bottom: calc(26px + env(safe-area-inset-bottom, 0px)); gap: 6px; }
+  .cards-table-mark span { display: none; }
+}
+@media (max-height: 520px) and (orientation: landscape) {
+  html body.cards-mode #stage { inset: 0; }
+  .cards-overlay { --card-width: 52px; --card-height: 74px; }
+      .cards-tally { top: 15px; font-size: 11px; padding: 7px 12px; }
+  .cards-her { top: 84px; left: 18%; width: 30%; gap: 5px; }
+  .cards-felt { left: auto; right: -30px; transform: none; width: 43%; bottom: -24px; padding: 45px 44px 40px 20px; gap: 8px; border-width: 12px; border-radius: 26% 12% 0 0 / 16% 10% 0 0; }
+  .cards-deck, .cards-chips { display: none; }
+  .cards-actions { gap: 6px; }
+  .cards-actions button { min-width: 66px; padding: 8px 12px; }
+  .cards-label, .cards-status { font-size: 11px; }
+  .card-corner { font-size: 13px; }
+  .card-corner small { font-size: 11px; }
+  .card-suit { font-size: 26px; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .cards-overlay, .cards-actions button, .cards-close { transition: none; }
 }

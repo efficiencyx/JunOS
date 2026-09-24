@@ -1,0 +1,105 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1000 430" preserveAspectRatio="none">
+<!-- your table. STILL preserveAspectRatio="none", on purpose.
+     the container is a 5:1 strip on desktop and about 1.2:1 on a
+     phone, and there is no single aspect mode that survives both -
+     "meet" leaves a small island in the middle of a wide table,
+     "slice" crops the plates off. so it stretches, and everything
+     in here is drawn to survive stretching: plates are ellipses
+     anyway in perspective, the cutlery is tapered rather than
+     round, the glasses are wide.
+
+     #plateHer and #plateMe are written by date.js when the food
+     arrives. do not rename them. -->
+<defs>
+  <linearGradient id="tb-linen" x1=".3" y1="0" x2=".62" y2="1">
+    <stop offset="0" stop-color="#e2d0ab"/><stop offset=".26" stop-color="#c3a67e"/>
+    <stop offset=".52" stop-color="#94724f"/><stop offset=".76" stop-color="#5e4632"/>
+    <stop offset="1" stop-color="#372a20"/>
+  </linearGradient>
+  <radialGradient id="tb-vig" cx="46%" cy="30%" r="62%">
+    <stop offset="0" stop-color="#000" stop-opacity="0"/>
+    <stop offset=".62" stop-color="#1a120c" stop-opacity=".18"/>
+    <stop offset="1" stop-color="#140d08" stop-opacity=".52"/>
+  </radialGradient>
+  <radialGradient id="tb-china" cx="38%" cy="30%" r="76%">
+    <stop offset="0" stop-color="#fffaf0"/><stop offset=".62" stop-color="#ece0cb"/>
+    <stop offset=".84" stop-color="#cbbda4"/><stop offset="1" stop-color="#a08f76"/>
+  </radialGradient>
+  <linearGradient id="tb-silver" x1="0" y1="0" x2="1" y2=".2">
+    <stop offset="0" stop-color="#7d7365"/><stop offset=".38" stop-color="#fff6e2"/>
+    <stop offset=".58" stop-color="#b0a089"/><stop offset="1" stop-color="#5e5142"/>
+  </linearGradient>
+  <linearGradient id="tb-glass" x1="0" y1="0" x2="1" y2="0">
+    <stop offset="0" stop-color="#fff3d8" stop-opacity=".34"/>
+    <stop offset=".42" stop-color="#fff3d8" stop-opacity=".05"/>
+    <stop offset="1" stop-color="#fff3d8" stop-opacity=".32"/>
+  </linearGradient>
+  <radialGradient id="tb-candle" cx="50%" cy="50%" r="50%">
+    <stop offset="0" stop-color="#ffc86a" stop-opacity=".42"/>
+    <stop offset=".32" stop-color="#ffc86a" stop-opacity=".2"/>
+    <stop offset=".66" stop-color="#ffc86a" stop-opacity=".05"/>
+    <stop offset="1" stop-color="#ffc86a" stop-opacity="0"/>
+  </radialGradient>
+  <pattern id="tb-weave" width="6" height="6" patternUnits="userSpaceOnUse">
+    <path d="M0 0H6M0 0V6" stroke="#fff" stroke-opacity=".05"/>
+  </pattern>
+  <g id="tb-plate">
+    <ellipse cy="9" rx="116" ry="44" fill="#4a3526" opacity=".3"/>
+    <ellipse rx="114" ry="43" fill="url(#tb-china)"/>
+    <ellipse rx="104" ry="37" fill="none" stroke="#a4885a" stroke-width="1.4"/>
+    <ellipse rx="78" ry="26" fill="none" stroke="#cdbb9b" stroke-width="1.2"/>
+    <path d="M-96-14a104 37 0 0 1 60-20" fill="none" stroke="#fffdf6" stroke-width="3" opacity=".7"/>
+  </g>
+  <!-- tapered, so a horizontal stretch reads as a different fork
+       rather than as a broken one -->
+  <g id="tb-fork" fill="url(#tb-silver)">
+    <path d="M-8-36h3.4v21H-1v-21h3.4v21H6v-21h3.4v27Q9.4-2 3.6 1.5L6 58Q0 65-6 58l2.4-56.5Q-9.4-2-9.4-9Z"/>
+  </g>
+  <g id="tb-knife" fill="url(#tb-silver)">
+    <path d="M-1-37Q13-21 10 7L4.5 13 7 59Q1 65-3 59l.6-45.5L-3 7Z"/>
+  </g>
+  <g id="tb-glassware">
+    <ellipse cy="60" rx="22" ry="6" fill="url(#tb-glass)" stroke="#f3e0bd" stroke-opacity=".5"/>
+    <path d="M0 24v36M-22-32Q-33 19 0 24Q33 19 22-32Z" fill="url(#tb-glass)" stroke="#f3e0bd" stroke-opacity=".55"/>
+    <path d="M-24-4Q-22 21 0 22Q22 21 24-4Q0 2-24-4" fill="#6d2836" opacity=".82"/>
+    <path d="M-24-4Q-22 0 0 1Q22 0 24-4Q0 1-24-4" fill="#9c4353" opacity=".7"/>
+    <path d="M-16-26Q-21-10-17 4" fill="none" stroke="#fff6e0" stroke-opacity=".7" stroke-width="2.4"/>
+  </g>
+</defs>
+
+<ellipse cx="500" cy="292" rx="640" ry="248" fill="#241a14"/>
+<ellipse cx="500" cy="264" rx="632" ry="230" fill="url(#tb-linen)"/>
+<ellipse cx="500" cy="264" rx="632" ry="230" fill="url(#tb-weave)"/>
+<ellipse cx="500" cy="264" rx="632" ry="230" fill="url(#tb-vig)"/>
+<!-- the fall of the cloth over the near edge -->
+<path d="M382 44 262 430h392L576 42" fill="#f4e4c6" opacity=".14"/>
+<path d="M390 45 272 430M570 44l74 386" stroke="#ece0c6" stroke-opacity=".3" stroke-width="2.4"/>
+
+<g transform="translate(505 111) scale(.78)">
+  <use href="#tb-plate"/><use href="#tb-fork" x="-140"/><use href="#tb-knife" x="139"/>
+</g>
+<g transform="translate(402 322) scale(1.32)">
+  <path d="M-162-38l38 3-8 88-38-6Z" fill="#7a5154"/>
+  <path d="M-162-38l38 3-2 6-38-3Z" fill="#a1707a"/>
+  <use href="#tb-plate"/><use href="#tb-fork" x="-144"/><use href="#tb-knife" x="142"/>
+</g>
+<use href="#tb-glassware" transform="translate(672 74) scale(.8)"/>
+<use href="#tb-glassware" transform="translate(628 233) scale(1.16)"/>
+
+<!-- candle, off to one side. the only light on the table -->
+<ellipse cx="268" cy="152" rx="150" ry="96" fill="url(#tb-candle)"/>
+<ellipse cx="268" cy="176" rx="33" ry="12" fill="#5a4432" opacity=".45"/>
+<ellipse cx="268" cy="170" rx="28" ry="10" fill="#ab8752"/>
+<ellipse cx="268" cy="168" rx="28" ry="9" fill="#c9a065"/>
+<path d="M255 161 258 98h20l3 63q-13 8-26 0" fill="#f6e5b8"/>
+<path d="M272 99h6l3 62q-5 3-10 3z" fill="#cbb287"/>
+<ellipse cx="268" cy="98" rx="10.5" ry="4" fill="#fff6dd"/>
+<path d="M268 97v-8" stroke="#4c3220" stroke-width="2.2"/>
+<g class="flame">
+  <path d="M268 94Q251 83 269 63Q282 85 268 94" fill="#ffcc6f"/>
+  <path d="M268 93Q262 87 269 76Q276 87 268 93" fill="#fff8d4"/>
+</g>
+
+<text id="plateHer" x="505" y="117" text-anchor="middle" font-size="34"></text>
+<text id="plateMe" x="402" y="333" text-anchor="middle" font-size="57"></text>
+</svg>

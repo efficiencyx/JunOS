@@ -1,0 +1,158 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 800" preserveAspectRatio="xMidYMid slice">
+<!-- the restaurant. brass and oxblood on a green black wall, one
+     pendant just above frame doing the work. window left of centre
+     because the boutique already has one on the right and two rooms
+     with the same window in the same place is how a set of scenes
+     starts looking generated.
+
+     no violet in here at all. Jun has to read against it. -->
+<style>
+  .sky-hi { stop-color: var(--sky-zenith, #0d1426); }
+  .sky-md { stop-color: var(--sky-mid, #37334f); }
+  .sky-lo { stop-color: var(--sky-horizon, #7a4a55); }
+  .sun    { stop-color: var(--sky-glow, #b0685f); }
+  .key    { stop-color: var(--key-warm, #ffb87a); }
+  .lampfill { fill: var(--key-warm, #ffb87a); }
+  .lit    { opacity: var(--city-lit, .8); }
+  .glow   { mix-blend-mode: screen; }
+  .keyrect  { opacity: calc(1.08 - var(--key-level, .5) * .44); }
+  .daylight { opacity: calc(var(--key-level, .5) * .3); mix-blend-mode: screen; }
+</style>
+<defs>
+  <linearGradient id="dn-sky" x1="0" y1="0" x2="0" y2="1">
+    <stop offset="0" class="sky-hi"/><stop offset=".56" class="sky-md"/><stop offset="1" class="sky-lo"/>
+  </linearGradient>
+  <radialGradient id="dn-sun" cx="30%" cy="82%" r="58%">
+    <stop offset="0" class="sun" stop-opacity=".9"/><stop offset="1" class="sun" stop-opacity="0"/>
+  </radialGradient>
+  <!-- pendant over the table, just out of frame at the top. warm
+       core falling off through olive into near black -->
+  <radialGradient id="dn-key" cx="46%" cy="-8%" r="92%">
+    <stop offset="0" class="key" stop-opacity=".46"/>
+    <stop offset=".24" stop-color="#c9a06a" stop-opacity=".18"/>
+    <stop offset=".54" stop-color="#4b4536" stop-opacity=".32"/>
+    <stop offset=".82" stop-color="#231f1c" stop-opacity=".58"/>
+    <stop offset="1" stop-color="#110f0e" stop-opacity=".8"/>
+  </radialGradient>
+  <radialGradient id="dn-pool" cx="50%" cy="50%" r="50%">
+    <stop offset="0" class="key" stop-opacity=".26"/><stop offset=".3" class="key" stop-opacity=".13"/>
+    <stop offset=".62" class="key" stop-opacity=".04"/><stop offset="1" class="key" stop-opacity="0"/>
+  </radialGradient>
+  <radialGradient id="dn-sconce" cx="50%" cy="50%" r="50%">
+    <stop offset="0" stop-color="#ffd79a" stop-opacity=".34"/><stop offset=".28" stop-color="#ffd79a" stop-opacity=".16"/>
+    <stop offset=".6" stop-color="#ffd79a" stop-opacity=".045"/><stop offset="1" stop-color="#ffd79a" stop-opacity="0"/>
+  </radialGradient>
+  <linearGradient id="dn-wall" x1=".2" y1="0" x2=".8" y2="1">
+    <stop offset="0" stop-color="#37402f"/><stop offset=".55" stop-color="#2a2f26"/><stop offset="1" stop-color="#1b1d1b"/>
+  </linearGradient>
+  <linearGradient id="dn-wains" x1="0" y1="0" x2="0" y2="1">
+    <stop offset="0" stop-color="#4a3a2a"/><stop offset=".5" stop-color="#33271d"/><stop offset="1" stop-color="#1f1812"/>
+  </linearGradient>
+  <linearGradient id="dn-vinyl" x1="0" y1="0" x2="0" y2="1">
+    <stop offset="0" stop-color="#5c2724"/><stop offset=".4" stop-color="#3a1817"/><stop offset="1" stop-color="#1c0c0c"/>
+  </linearGradient>
+  <linearGradient id="dn-brass" x1="0" y1="0" x2="1" y2=".4">
+    <stop offset="0" stop-color="#6b5128"/><stop offset=".35" stop-color="#e0bb70"/>
+    <stop offset=".6" stop-color="#9c7b3c"/><stop offset="1" stop-color="#4a3819"/>
+  </linearGradient>
+  <linearGradient id="dn-glassref" x1="0" y1="0" x2=".7" y2="1">
+    <stop offset="0" stop-color="#d8e2e8" stop-opacity=".12"/>
+    <stop offset=".45" stop-color="#d8e2e8" stop-opacity=".01"/>
+    <stop offset="1" stop-color="#fff0d0" stop-opacity=".1"/>
+  </linearGradient>
+  <linearGradient id="dn-day" x1="0" y1=".1" x2="1" y2="1">
+    <stop offset="0" class="sky-lo" stop-opacity=".5"/>
+    <stop offset=".45" class="sky-md" stop-opacity=".18"/>
+    <stop offset="1" class="sky-md" stop-opacity="0"/>
+  </linearGradient>
+  <filter id="dn-grain" x="0" y="0" width="100%" height="100%">
+    <feTurbulence type="fractalNoise" baseFrequency="0.85" numOctaves="3" stitchTiles="stitch"/>
+    <feColorMatrix type="saturate" values="0"/>
+  </filter>
+  <filter id="dn-haze" x="-40%" y="-40%" width="180%" height="180%"><feGaussianBlur stdDeviation="10"/></filter>
+  <filter id="dn-rain" x="-10%" y="-10%" width="120%" height="120%">
+    <feTurbulence type="fractalNoise" baseFrequency="0.02 0.28" numOctaves="2"/>
+    <feDisplacementMap in="SourceGraphic" scale="9"/>
+  </filter>
+</defs>
+
+<rect width="1200" height="800" fill="url(#dn-wall)"/>
+
+<!-- window. arched head, left of centre, deep reveal so it reads as
+     a thick old wall rather than a hole -->
+<g>
+  <path d="M264 512V236a166 166 0 0 1 332 0v276z" fill="url(#dn-sky)"/>
+  <path d="M264 512V236a166 166 0 0 1 332 0v276z" fill="url(#dn-sun)"/>
+  <g class="lit">
+    <path d="M264 512v-92h48v92zm62 0v-124h36v124zm52 0v-70h58v70zm74 0v-146h40v146zm56 0v-96h48v96z" fill="#0c0f12" opacity=".8"/>
+    <g class="lampfill" opacity=".5">
+      <rect x="274" y="432" width="7" height="9"/><rect x="290" y="458" width="7" height="9"/>
+      <rect x="336" y="400" width="7" height="9"/><rect x="336" y="440" width="7" height="9"/>
+      <rect x="392" y="460" width="7" height="9"/><rect x="452" y="376" width="7" height="9"/>
+      <rect x="468" y="414" width="7" height="9"/><rect x="452" y="452" width="7" height="9"/>
+      <rect x="510" y="438" width="7" height="9"/><rect x="530" y="468" width="7" height="9"/>
+    </g>
+  </g>
+  <path d="M264 512V236a166 166 0 0 1 332 0v276z" fill="url(#dn-glassref)"/>
+  <!-- rain. displaced strokes, so it runs rather than sits -->
+  <g filter="url(#dn-rain)" opacity=".3">
+    <g stroke="#dce8f0" stroke-width="2" stroke-linecap="round" opacity=".55">
+      <path d="M300 280v54M352 240v72M404 300v46M456 250v66M508 290v50M330 360v40M380 380v36M482 350v44M556 300v52M276 330v42"/>
+    </g>
+  </g>
+  <!-- glazing bars: two thirds and one, not halves -->
+  <path d="M374 512V204M486 512V196M264 348h332" stroke="#241d16" stroke-width="8"/>
+  <path d="M264 512V236a166 166 0 0 1 332 0v276" fill="none" stroke="#2c241a" stroke-width="22"/>
+  <path d="M252 506h356v22H252z" fill="url(#dn-brass)" opacity=".5"/>
+</g>
+
+<!-- one brass sconce, on the right wall only. the left side of this
+     room is lit by the window and that is the point -->
+<g transform="translate(862 268)">
+  <path d="M-6 0h12v54h-12z" fill="url(#dn-brass)"/>
+  <path d="M-34 54h68l-10 34h-48z" fill="#2a2119" stroke="#6b5128" stroke-width="2"/>
+  <path d="M-24 56h48l-7 30h-34z" class="lampfill" opacity=".55"/>
+  <ellipse cx="0" cy="86" rx="16" ry="5" class="lampfill" opacity=".7"/>
+</g>
+<ellipse class="glow" cx="862" cy="330" rx="300" ry="240" fill="url(#dn-sconce)"/>
+
+<!-- something on the wall so the right half is not dead. hung
+     slightly low and slightly crooked, like everything in a room
+     that has been open twenty years -->
+<g transform="rotate(1.4 1010 368)">
+  <rect x="936" y="296" width="148" height="176" rx="3" fill="#2a2018" stroke="#6b5128" stroke-width="3"/>
+  <rect x="948" y="308" width="124" height="152" fill="#1b2420"/>
+  <path d="M948 412h124v48H948z" fill="#243029"/>
+  <ellipse cx="1002" cy="392" rx="34" ry="26" fill="#3b4a3c"/>
+  <path d="M968 460l28-52 22 30 18-22 36 44z" fill="#2e3b32"/>
+</g>
+
+<!-- panelling, then the banquette. the bench runs off both edges,
+     you are sitting in the middle of it -->
+<path d="M0 512h1200v96H0z" fill="url(#dn-wains)"/>
+<path d="M0 506h1200v10H0z" fill="url(#dn-brass)" opacity=".45"/>
+<g stroke="#181209" stroke-opacity=".5" stroke-width="3" fill="none">
+  <path d="M132 524v74M318 524v74M704 524v74M912 524v74M1078 524v74"/>
+</g>
+
+<g>
+  <path d="M-30 580h1260v220H-30z" fill="url(#dn-vinyl)"/>
+  <path d="M-30 572q60-26 160-26h940q100 0 160 26v26H-30z" fill="#6b302b"/>
+  <!-- buttoning, spaced unevenly so it reads as upholstery and not
+       as a repeating-linear-gradient -->
+  <g fill="#2a100e" opacity=".55">
+    <circle cx="96" cy="642" r="6"/><circle cx="284" cy="650" r="6"/><circle cx="470" cy="640" r="6"/>
+    <circle cx="672" cy="652" r="6"/><circle cx="858" cy="642" r="6"/><circle cx="1046" cy="650" r="6"/>
+    <circle cx="190" cy="712" r="6"/><circle cx="378" cy="720" r="6"/><circle cx="572" cy="710" r="6"/>
+    <circle cx="764" cy="722" r="6"/><circle cx="952" cy="712" r="6"/>
+  </g>
+  <g stroke="#2a100e" stroke-opacity=".35" stroke-width="3" fill="none">
+    <path d="M96 642q94 6 188 8M284 650q93-6 186-10M470 640q101 8 202 12"/>
+  </g>
+</g>
+
+<rect class="keyrect" width="1200" height="800" fill="url(#dn-key)"/>
+<rect class="daylight" width="1200" height="800" fill="url(#dn-day)"/>
+<ellipse class="glow" cx="540" cy="648" rx="520" ry="230" fill="url(#dn-pool)"/>
+<rect width="1200" height="800" filter="url(#dn-grain)" opacity=".05"/>
+</svg>

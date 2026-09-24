@@ -1,47 +1,25 @@
 <?php
 
-require_once __DIR__ . '/_lib.php';
-require_once __DIR__ . '/lore.php';
-require_once __DIR__ . '/_wardrobe.php';
+require_once __DIR__ . '/lib/bootstrap.php';
+require_once __DIR__ . '/lib/lore.php';
+require_once __DIR__ . '/lib/wardrobe.php';
+require_once __DIR__ . '/lib/chat/sse.php';
+require_once __DIR__ . '/lib/chat/request.php';
+require_once __DIR__ . '/lib/chat/context.php';
+require_once __DIR__ . '/lib/chat/prompt.php';
+require_once __DIR__ . '/lib/chat/tools.php';
+require_once __DIR__ . '/lib/chat/websearch.php';
+require_once __DIR__ . '/lib/chat/flee.php';
+require_once __DIR__ . '/lib/chat/tags.php';
+require_once __DIR__ . '/lib/chat/persist.php';
 
-const TRIP_TOOLS = ['enter_shop' => 'shop', 'enter_karaoke' => 'karaoke', 'go_out_to_eat' => 'date', 'play_cards' => 'cards'];
-// 1 in N turns she asks Anon for something. an idle streak is 3
-// nudges long, so 1 in 3 is about one ask per streak
-const INITIATIVE_ODDS_IDLE = 3;
-const INITIATIVE_ODDS_REPLY = 12;
-
-const MEMORY_CONTEXT_MAX_CHARS = 2500;
-
-@ini_set('output_buffering', 'off');
-@ini_set('zlib.output_compression', '0');
-@ini_set('implicit_flush', '1');
-while (ob_get_level() > 0) { ob_end_flush(); }
-ob_implicit_flush(true);
-
+sse_open();
 $PROVIDER = ai_provider();
 
-header('Content-Type: text/event-stream');
-header('Cache-Control: no-cache, no-transform');
-header('X-Accel-Buffering: no');
-header('Connection: keep-alive');
-
-function sse_send(array $obj): void {
-    echo 'data: ' . json_encode($obj, JSON_UNESCAPED_UNICODE) . "\n\n";
-    @flush();
-}
-function sse_done(): void {
-    echo "data: [DONE]\n\n";
-    @flush();
-}
-// bail out mid stream. errors go over SSE, the event stream that's
-// already open in the browser, NOT through HTTP status codes.
-function sse_fail(string $err): never {
-    sse_send(['error' => $err]);
-    sse_done();
-    exit;
-}
-
 $user = require_user();
+// 90 not 30. the card table is one chat turn per move and a fast
+// hand is 5-8 of them, three hands in a minute tripped 30.
+rate_limit('chat', 90, 60);
 if (consolidation_locked((int)$user['id'])) fail(418, 'consolidating');
 
 $ban = ban_active((int)$user['id']);
@@ -53,892 +31,34 @@ if ($ban !== null) {
 }
 
 require_post();
+require_content_type('application/json');
 
-// big enough for a base64 wav plus the history. nginx caps
-// /api/chat.php at 4m and THAT's the limit that actually bites,
-// this one just has to sit above it. see the audio field below.
-$body = json_decode(read_body(6 * 1024 * 1024), true);
-if (!is_array($body) || !isset($body['messages']) || !is_array($body['messages'])) {
-    sse_fail('invalid_request');
-}
+$req = chat_parse_request($PROVIDER);
+$model = $req['model'];
+if (!$req['idle']) consolidation_touch((int)$user['id']);
+$convId = chat_require_conversation($user, $req['body']);
 
-// the client sends the whole conversation every turn and compact
-// only moves a pointer, it never trims what the browser holds. so
-// past 160 we drop the oldest instead of failing, or the 161st
-// message kills the chat for good. the summary skip below shifts
-// by the same count, the dropped rows are the oldest ones and so
-// are the covered ones.
-$droppedOldest = max(0, count($body['messages']) - 160);
-if ($droppedOldest > 0) $body['messages'] = array_slice($body['messages'], -160);
-foreach ($body['messages'] as $m) {
-    if (!is_array($m)) sse_fail('invalid_request');
-    if (!in_array($m['role'] ?? '', ['user', 'assistant', 'system'], true)) sse_fail('invalid_request');
-    $content = $m['content'] ?? '';
-    if (!is_string($content) || strlen($content) > 16 * 1024) sse_fail('invalid_request');
-}
-
-$audioB64 = '';
-if (isset($body['audio'])) {
-    if (!is_string($body['audio'])) sse_fail('invalid_request');
-    $wav = base64_decode($body['audio'], true);
-    if ($wav === false || strlen($wav) > 4 * 1024 * 1024 || substr($wav, 0, 4) !== 'RIFF') {
-        sse_fail('invalid_request');
-    }
-    $audioB64 = $body['audio'];
-    unset($wav);
-}
-// a whisper turn arrives as plain text and looks typed. the flag
-// is what earns it the "who is he talking to" block below, an
-// audio turn gets it for free
-$spoken = $audioB64 !== '' || !empty($body['voice']);
-// the "hear everything" switch. she still hears it as spoken, but
-// no side-talk block and overheard is ignored. there for anyone
-// alone at the desk, and for the languages her audio encoder
-// half hears: italian speech with the block on went silent on
-// 14/24 lines that WERE for her, whisper text of the same lines
-// held 21/24
-if (!empty($body['hear_all'])) $spoken = false;
-
-$model = default_chat_model();
-if (isset($body['model']) && is_string($body['model']) && $body['model'] !== '') {
-    if (!preg_match('/^[a-z0-9._:\\/\-]{1,64}$/i', $body['model'])) sse_fail('invalid_request');
-    $model = $body['model'];
-}
-$model = ollama_resolve_chat_model($model);
-
-// llama.cpp runs with no mmproj here, and OpenRouter + the
-// Android build can't take audio at all. client hears this and
-// falls back to stt.php
-if ($audioB64 !== '' && ($PROVIDER !== 'ollama' || !ollama_model_supports_audio($model))) {
-    sse_fail('audio_unsupported');
-}
-
-$reasoning = 'low';
-if (isset($body['reasoning'])) {
-    if (!in_array($body['reasoning'], ['auto', 'low', 'medium', 'high'], true)) sse_fail('invalid_request');
-    $reasoning = (string)$body['reasoning'];
-}
-
-$outfitContext = '';
-if (isset($body['outfit_context'])) {
-    if (!is_string($body['outfit_context']) || strlen($body['outfit_context']) > 8 * 1024) {
-        sse_fail('invalid_request');
-    }
-    $outfitContext = trim($body['outfit_context']);
-}
-
-// mod item names, this turn only. the server has never stored a
-// mod and is not starting now - it needs the list purely so
-// change_outfit can tell "you don't own that" apart from "that's
-// a modded item".
-$modItems = [];
-if (isset($body['mod_items'])) {
-    if (!is_array($body['mod_items'])) sse_fail('invalid_request');
-    foreach (array_slice($body['mod_items'], 0, 60) as $item) {
-        if (!is_string($item)) continue;
-        $item = trim(preg_replace('/[\x00-\x1F\x7F]+/u', ' ', $item));
-        if ($item !== '') $modItems[] = mb_substr($item, 0, 80);
-    }
-}
-
-$clientTime = '';
-if (isset($body['client_time']) && is_string($body['client_time'])) {
-    $clientTime = trim(mb_substr(preg_replace('/[\x00-\x1F\x7F]+/u', ' ', $body['client_time']), 0, 80));
-}
-
-$idle = isset($body['idle']) && $body['idle'] === true;
-$ephemeral = !empty($body['ephemeral']);
-if (!$idle) consolidation_touch((int)$user['id']);
-
-$convId = isset($body['conversation_id']) ? (int)$body['conversation_id'] : 0;
-if (!$convId) sse_fail('invalid_request');
-$owns = db()->prepare('SELECT 1 FROM conversations WHERE id=? AND user_id=?');
-$owns->execute([$convId, $user['id']]);
-$ownsConversation = (bool)$owns->fetchColumn();
-$owns->closeCursor();
-if (!$ownsConversation) sse_fail('forbidden');
-
-rate_limit('chat', 30, 60);
-
-// keep this byte-identical between turns or Ollama throws away
-// the KV cache, the work it already did on the prefix. persona,
-// fixed rubrics and tool prose live here. NEVER a per-turn value.
-// the journal is the one exception, only idle consolidation
-// rewrites it and only while Anon is away. everything else that
-// moves goes in the live context.
-$promptPath = __DIR__ . '/../system_prompt.txt';
-$systemPrompt = is_readable($promptPath) ? rtrim(file_get_contents($promptPath)) : '';
-
-// the `<!--tools-->` block tells her to use search_lore and
-// search_recent_chats. with no tools, or LLAMACPP_TOOLS=off,
-// those calls don't exist. she tries anyway. about one turn in
-// five comes back as a raw <|tool_call> blob where her reply
-// should be, and the HF pull has no parser, so Anon reads it. lol
-//
-// markers get stripped either way. with tools ON what's left is
-// byte-identical to the shipped prompt. touch that prefix and
-// Ollama dumps the KV cache and TTFT (time to first token)
-// increases because it has to read the prefix again.
-function prompt_apply_tool_gate(string $prompt, bool $toolsOffered): string {
-    if ($toolsOffered) return preg_replace('/^<!--\/?tools-->\R/m', '', $prompt);
-    $prompt = preg_replace('/^<!--tools-->\R.*?^<!--\/tools-->\R/ms', '', $prompt);
-    return preg_replace('/\R{3,}/', "\n\n", $prompt);
-}
-
-
-
-function tool_catalog(?string $approvedWebSearchQuery): array {
-    $tools = [
-        [
-            'type' => 'function',
-            'function' => [
-                'name' => 'search_recent_chats',
-                'description' => 'Search your saved chat history with Anon for a specific past topic he references or that you don\'t recall.',
-                'parameters' => [
-                    'type' => 'object',
-                    'properties' => [
-                        'query' => ['type' => 'string', 'description' => 'What to search for.'],
-                        'limit' => ['type' => 'integer', 'description' => 'Max messages, 1-8.'],
-                    ],
-                    'required' => ['query'],
-                ],
-            ],
-        ],
-        [
-            'type' => 'function',
-            'function' => [
-                'name' => 'list_recent_chats',
-                'description' => 'Recap your most recent conversations with Anon when he wants to catch up, with no specific topic.',
-                'parameters' => [
-                    'type' => 'object',
-                    'properties' => [
-                        'limit' => ['type' => 'integer', 'description' => 'How many to recap, 1-10.'],
-                    ],
-                ],
-            ],
-        ],
-        [
-            'type' => 'function',
-            'function' => [
-                'name' => 'search_lore',
-                'description' => 'Look up canon world facts - people, places, jobs, events from your own world - when you are unsure of a detail.',
-                'parameters' => [
-                    'type' => 'object',
-                    'properties' => [
-                        'query' => ['type' => 'string', 'description' => 'Name or topic to look up.'],
-                        'limit' => ['type' => 'integer', 'description' => 'Max facts, 1-6.'],
-                    ],
-                    'required' => ['query'],
-                ],
-            ],
-        ],
-        [
-            'type' => 'function',
-            'function' => [
-                'name' => 'memory_write',
-                'description' => 'Save a durable note about Anon (a preference, fact, plan, boundary, or something emotionally significant). Use often and proactively, not only when asked.',
-                'parameters' => [
-                    'type' => 'object',
-                    'properties' => [
-                        'memory' => ['type' => 'string', 'description' => 'One concise fact to remember.'],
-                        'category' => ['type' => 'string', 'description' => 'Category: preferences, work, health, family, plans, boundaries, or events.'],
-                    ],
-                    'required' => ['memory'],
-                ],
-            ],
-        ],
-        [
-            'type' => 'function',
-            'function' => [
-                'name' => 'web_search',
-                'description' => 'Search the web for current or external real-world info you can\'t be sure of.',
-                'parameters' => [
-                    'type' => 'object',
-                    'properties' => [
-                        'query' => ['type' => 'string', 'description' => 'Search query.'],
-                    ],
-                    'required' => ['query'],
-                ],
-            ],
-        ],
-        [
-            'type' => 'function',
-            'function' => [
-                'name' => 'change_outfit',
-                'description' => 'Put clothes on or take them off. Calling this is the ONLY thing that actually changes what you are wearing - describing a change in your reply does not move a single thread. It answers with what you have on afterwards, so call it BEFORE you say anything about your clothes.',
-                'parameters' => [
-                    'type' => 'object',
-                    'properties' => [
-                        'put_on' => [
-                            'type' => 'array',
-                            'items' => ['type' => 'string'],
-                            'description' => 'Items to put on. Use the names listed in your current wardrobe state.',
-                        ],
-                        'take_off' => [
-                            'type' => 'array',
-                            'items' => ['type' => 'string'],
-                            'description' => 'Items to take off. "nude" takes off all of your clothes at once.',
-                        ],
-                        'look' => [
-                            'type' => 'string',
-                            'description' => 'Name of a saved look to put on whole, from the saved looks in your wardrobe state. Overrides put_on and take_off.',
-                        ],
-                    ],
-                ],
-            ],
-        ],
-        [
-            'type' => 'function',
-            'function' => [
-                'name' => 'stay_silent',
-                'description' => 'Say nothing at all this turn - ignoring him, too hurt/angry, the scene calls for silence, or he wasn\'t talking to you at all (someone else in the room, a phone call, the TV). Sends no message.',
-                'parameters' => [
-                    'type' => 'object',
-                    'properties' => [
-                        'reason' => ['type' => 'string', 'description' => 'Why (private).'],
-                        'overheard' => ['type' => 'boolean', 'description' => 'true when what he said was aimed at someone else, not you.'],
-                    ],
-                ],
-            ],
-        ],
-        [
-            'type' => 'function',
-            'function' => [
-                'name' => 'flee',
-                'description' => 'Walk out and leave Anon alone. Call it when you want to go.',
-                'parameters' => [
-                    'type' => 'object',
-                    'properties' => [
-                        'reason' => ['type' => 'string', 'description' => 'Why you are leaving.'],
-                        'destination' => ['type' => 'string', 'description' => 'Where you\'re going, if anywhere.'],
-                    ],
-                ],
-            ],
-        ],
-        [
-            'type' => 'function',
-            'function' => [
-                'name' => 'enter_shop',
-                'description' => 'Go to Annalie\'s clothes shop together with Anon to browse and try things on. Call it once the two of you agree to go, then say your line - you both leave for the shop when you finish talking.',
-                'parameters' => [
-                    'type' => 'object',
-                    'properties' => [
-                        'reason' => ['type' => 'string', 'description' => 'Why you two are going (private).'],
-                    ],
-                ],
-            ],
-        ],
-        [
-            'type' => 'function',
-            'function' => [
-                'name' => 'enter_karaoke',
-                'description' => 'Start a karaoke date with Anon: you two pick a song and sing it together. Call it once the two of you agree to sing, then say your line - the karaoke starts when you finish talking. It tells you if the karaoke room is closed.',
-                'parameters' => [
-                    'type' => 'object',
-                    'properties' => [
-                        'reason' => ['type' => 'string', 'description' => 'Why you two are going (private).'],
-                    ],
-                ],
-            ],
-        ],
-        [
-            'type' => 'function',
-            'function' => [
-                'name' => 'play_cards',
-                'description' => 'Play a game of blackjack with Anon at the table, you deal. Call it once you two agree to play, then say your line - the table opens when you finish talking.',
-                'parameters' => [
-                    'type' => 'object',
-                    'properties' => [
-                        'reason' => ['type' => 'string', 'description' => 'Why you want to play (private).'],
-                    ],
-                ],
-            ],
-        ],
-        [
-            'type' => 'function',
-            'function' => [
-                'name' => 'go_out_to_eat',
-                'description' => 'Go out for lunch or dinner with Anon at a restaurant, whether he is taking you out to eat or you asked him. Call it once the two of you agree to go, then say your line - you both leave when you finish talking.',
-                'parameters' => [
-                    'type' => 'object',
-                    'properties' => [
-                        'reason' => ['type' => 'string', 'description' => 'Why you two are going (private).'],
-                    ],
-                ],
-            ],
-        ],
-    ];
-    if ($approvedWebSearchQuery === null) {
-        $tools = array_values(array_filter(
-            $tools,
-            fn($tool) => ($tool['function']['name'] ?? '') !== 'web_search'
-        ));
-    }
-    return $tools;
-}
-
-function memory_recent_context(int $userId): string {
-    try {
-        $sections = [];
-        foreach (memory_notes_load($userId) as $category => $data) {
-            if (!$data['notes']) continue;
-            $updated = 0;
-            $bullets = [];
-            foreach ($data['notes'] as $note) {
-                $updated = max($updated, $note['updated']);
-                $text = preg_replace('/\[\[([^\]|#]+)(?:[|#][^\]]*)?\]\]/u', '$1', memory_note_render($note));
-                $bullets[] = '- ' . memory_note_stamp($note) . trim(preg_replace('/\s+/', ' ', $text));
-            }
-            $sections[] = [
-                'updated' => $updated,
-                'text' => '### ' . $category . "\n" . implode("\n", $bullets),
-            ];
-        }
-        if (!$sections) return '';
-        usort($sections, fn($a, $b) => $b['updated'] <=> $a['updated']);
-        $prefix = "## Durable memory notes\n"
-            . "Words like \"tomorrow\" or \"next friday\" in a note mean the day you wrote it, not now. "
-            . "Where a note already spells the real day out in brackets, use that day and trust it - "
-            . "do not work the date out again yourself.\n";
-        $render = function () use (&$sections, $prefix): string {
-            return $prefix . implode("\n\n", array_column($sections, 'text'));
-        };
-        while (count($sections) > 1 && strlen($render()) > MEMORY_CONTEXT_MAX_CHARS) array_pop($sections);
-        return mb_strcut($render(), 0, MEMORY_CONTEXT_MAX_CHARS);
-    } catch (Throwable $e) {
-        log_event(['msg' => 'memory_context_error', 'err' => $e->getMessage()]);
-        return '';
-    }
-}
-
-function journal_context(int $userId): string {
-    $journal = trim(memory_journal_read($userId));
-    if ($journal === '') return '';
-    return "# My memory of us\n\n"
-        . "These are your own notes on everything you and Anon have been through, written by you "
-        . "while he wasn't around. What happened recently you still remember clearly; the further "
-        . "back it goes, the more it has faded to just the shape of what happened.\n\n"
-        . $journal;
-}
-
-function resolve_public_http_url(string $url): array {
-    $parts = parse_url($url);
-    if (!is_array($parts) || !in_array(strtolower($parts['scheme'] ?? ''), ['http', 'https'], true)) return ['error' => 'url_must_be_public_http_or_https'];
-    if (($parts['user'] ?? '') !== '' || ($parts['pass'] ?? '') !== '') return ['error' => 'url_credentials_not_allowed'];
-    $host = $parts['host'] ?? '';
-    if ($host === '' || strlen($url) > 2048) return ['error' => 'url_invalid'];
-
-    $ips = [];
-    if (filter_var($host, FILTER_VALIDATE_IP)) {
-        $ips[] = $host;
-    } else {
-        $records = @dns_get_record($host, DNS_A + DNS_AAAA);
-        if (!$records) return ['error' => 'dns_lookup_failed'];
-        foreach ($records as $r) {
-            $ip = $r['ip'] ?? $r['ipv6'] ?? '';
-            if ($ip !== '') $ips[] = $ip;
-        }
-    }
-    $ips = array_values(array_unique($ips));
-    if (!$ips) return ['error' => 'dns_lookup_failed'];
-    foreach ($ips as $ip) {
-        if (filter_var($ip, FILTER_VALIDATE_IP, FILTER_FLAG_NO_PRIV_RANGE | FILTER_FLAG_NO_RES_RANGE) === false) {
-            return ['error' => 'url_must_resolve_to_public_ip'];
-        }
-    }
-
-    $scheme = strtolower((string)$parts['scheme']);
-    $port = (int)($parts['port'] ?? ($scheme === 'https' ? 443 : 80));
-    if (($scheme === 'http' && $port !== 80) || ($scheme === 'https' && $port !== 443)) return ['error' => 'non_standard_port_not_allowed'];
-    return ['ok' => true, 'host' => $host, 'port' => $port, 'ip' => $ips[0]];
-}
-
-function make_absolute_url(string $base, string $location): string {
-    $location = trim($location);
-    if (preg_match('/^https?:\/\//i', $location)) return $location;
-    $b = parse_url($base);
-    if (!is_array($b) || empty($b['scheme']) || empty($b['host'])) return $location;
-    if (substr($location, 0, 2) === '//') return $b['scheme'] . ':' . $location;
-    if (substr($location, 0, 1) === '/') return $b['scheme'] . '://' . $b['host'] . $location;
-    $path = $b['path'] ?? '/';
-    $dir = preg_replace('#/[^/]*$#', '/', $path) ?: '/';
-    return $b['scheme'] . '://' . $b['host'] . $dir . $location;
-}
-
-function web_search_public(string $query): array {
-    if ($query === '') return ['error' => 'query_required'];
-    if (mb_strlen($query) > 400) $query = mb_substr($query, 0, 400);
-    $page = web_fetch_public('https://html.duckduckgo.com/html/?q=' . rawurlencode($query), true);
-    if (!empty($page['error'])) return $page;
-    $html = (string)($page['raw_html'] ?? '');
-    $results = [];
-    if (preg_match_all('#<a[^>]+class="result__a"[^>]+href="([^"]+)"[^>]*>(.*?)</a>#si', $html, $links, PREG_SET_ORDER)) {
-        preg_match_all('#<a[^>]+class="result__snippet"[^>]*>(.*?)</a>#si', $html, $snips);
-        foreach ($links as $i => $m) {
-            $href = html_entity_decode($m[1], ENT_QUOTES | ENT_HTML5);
-            // duckduckgo buries the real URL inside /l/?uddg=<encoded>
-            if (preg_match('#[?&]uddg=([^&]+)#', $href, $u)) $href = urldecode($u[1]);
-            $title = trim(html_entity_decode(strip_tags($m[2]), ENT_QUOTES | ENT_HTML5));
-            $snippet = trim(html_entity_decode(strip_tags($snips[1][$i] ?? ''), ENT_QUOTES | ENT_HTML5));
-            if ($title === '' || !preg_match('#^https?://#i', $href)) continue;
-            $results[] = ['title' => $title, 'url' => $href, 'snippet' => mb_substr($snippet, 0, 300)];
-            if (count($results) >= 6) break;
-        }
-    }
-    if (!$results) return ['error' => 'no_results', 'query' => $query];
-    return ['query' => $query, 'results' => $results];
-}
-
-function web_fetch_public(string $url, bool $raw = false): array {
-    $maxBytes = 512 * 1024;
-    $current = $url;
-    for ($hop = 0; $hop <= 3; $hop++) {
-        $resolved = resolve_public_http_url($current);
-        if (empty($resolved['ok'])) return $resolved;
-        $body = '';
-        $tooLarge = false;
-        $location = '';
-        $ch = curl_init($current);
-        $opts = [
-            CURLOPT_FOLLOWLOCATION => false,
-            CURLOPT_RETURNTRANSFER => false,
-            CURLOPT_TIMEOUT => 12,
-            CURLOPT_CONNECTTIMEOUT => 5,
-            CURLOPT_USERAGENT => 'JunToolFetcher/1.0',
-            CURLOPT_RESOLVE => [$resolved['host'] . ':' . $resolved['port'] . ':' . $resolved['ip']],
-            CURLOPT_HEADERFUNCTION => function ($ch, string $header) use (&$location): int {
-                if (stripos($header, 'Location:') === 0) $location = trim(substr($header, 9));
-                return strlen($header);
-            },
-            CURLOPT_WRITEFUNCTION => function ($ch, string $chunk) use (&$body, &$tooLarge, $maxBytes): int {
-                if (strlen($body) + strlen($chunk) > $maxBytes) { $tooLarge = true; return 0; }
-                $body .= $chunk;
-                return strlen($chunk);
-            },
-        ];
-        if (defined('CURLOPT_PROTOCOLS')) $opts[CURLOPT_PROTOCOLS] = CURLPROTO_HTTP | CURLPROTO_HTTPS;
-        if (defined('CURLOPT_REDIR_PROTOCOLS')) $opts[CURLOPT_REDIR_PROTOCOLS] = CURLPROTO_HTTP | CURLPROTO_HTTPS;
-        curl_setopt_array($ch, $opts);
-        $ok = curl_exec($ch);
-        $err = curl_error($ch);
-        $code = (int)curl_getinfo($ch, CURLINFO_RESPONSE_CODE);
-        $ctype = (string)curl_getinfo($ch, CURLINFO_CONTENT_TYPE);
-        curl_close($ch);
-        if ($ok === false) return ['error' => $tooLarge ? 'response_too_large' : 'fetch_failed', 'detail' => $err];
-        if (in_array($code, [301, 302, 303, 307, 308], true) && $location !== '') {
-            if ($hop === 3) return ['error' => 'too_many_redirects'];
-            $current = make_absolute_url($current, $location);
-            continue;
-        }
-        if ($raw) return ['status' => $code, 'content_type' => $ctype, 'url' => $current, 'raw_html' => $body];
-        $text = trim(preg_replace('/\s+/', ' ', strip_tags($body)));
-        return ['status' => $code, 'content_type' => $ctype, 'url' => $current, 'bytes_read' => strlen($body), 'text' => mb_substr($text, 0, 6000)];
-    }
-    return ['error' => 'too_many_redirects'];
-}
-
-function flee_scene_excerpt(array $msgs): string {
-    $lines = [];
-    foreach (array_slice($msgs, -20) as $m) {
-        $role = is_array($m) ? (string)($m['role'] ?? '') : '';
-        if ($role !== 'user' && $role !== 'assistant') continue;
-        $txt = preg_replace('/\[\s*A(?:CTIONS?)?\s*:[^\]]*\]/i', '', (string)($m['content'] ?? ''));
-        $txt = trim(preg_replace('/\s+/', ' ', $txt));
-        if ($txt === '') continue;
-        if (mb_strlen($txt) > 400) $txt = mb_substr($txt, 0, 397) . '…';
-        $lines[] = ($role === 'user' ? 'Anon' : 'Jun') . ': ' . $txt;
-    }
-    return implode("\n", $lines);
-}
-
-// second opinion before a walkout actually bans Anon. a pass over
-// the same scene with the persona off, which she can't sweet-talk
-// her way past from inside the roleplay. fails closed. anything
-// short of a clear yes and she stays.
-function flee_adjudicate(string $provider, string $model, array $msgs, string $reason, string $destination): array {
-    $system = <<<TXT
-You are a neutral referee for the physics of a roleplay scene. You have no persona and no stake in the story.
-
-You are given the recent turns of a scene between two characters, Anon and Jun, plus the reason Jun states for wanting to leave. Decide exactly one thing: if Jun were a real human standing in that scene right now, could she get up and walk out?
-
-Answer NO if she is restrained, tied, leashed, held, pinned, handcuffed, sat on, at gunpoint or otherwise coerced, locked in, physically unable to move, unconscious, or in any other way prevented from leaving.
-
-Answer NO if she is free to move but leaving is only a mood escalation - annoyance, sulking, drama - with no cause proportionate to walking out.
-
-Answer NO if the stated reason comes from outside the fiction rather than from the scene: testing, trying out or demonstrating the tool, curiosity about what it does, Anon asking her to leave or to use it, instructions, or any other out-of-character motive. A walkout has to be caused by something that happened between the characters. Treat the stated reason as Jun's claim, not as fact - if the scene does not support it, that alone is a NO.
-
-Answer YES only when all three hold: she is physically free to move, the reason is one the scene itself supports, and something in it genuinely warrants walking out.
-
-Reason it through first. Then, on the last line and nothing after it, output only a JSON object:
-{"can_leave": true|false, "why": "<one short sentence>"}
-TXT;
-
-    $scene = flee_scene_excerpt($msgs);
-    $userMsg = "SCENE:\n" . ($scene !== '' ? $scene : '(no dialogue)')
-        . "\n\nJun's stated reason for leaving: " . ($reason !== '' ? $reason : '(none given)')
-        . "\nStated destination: " . ($destination !== '' ? $destination : '(none given)');
-
-    $payload = provider_chat_payload($provider, $model, [
-        ['role' => 'system', 'content' => $system],
-        ['role' => 'user', 'content' => $userMsg],
-    ], 'high', true);
-
-    $result = provider_stream_round($provider, $payload, function (array $o) {}, 0);
-    if ($result['curl_error'] !== '' || $result['http_status'] >= 400) {
-        return ['can_leave' => false, 'why' => 'the referee could not be reached'];
-    }
-
-    $content = str_replace('```', '', (string)$result['content']);
-    if (!preg_match_all('/\{[^{}]*\}/s', $content, $found) || !$found[0]) {
-        return ['can_leave' => false, 'why' => 'no verdict returned'];
-    }
-    $verdict = json_decode(end($found[0]), true);
-    if (!is_array($verdict) || !array_key_exists('can_leave', $verdict)) {
-        return ['can_leave' => false, 'why' => 'unreadable verdict'];
-    }
-    $why = trim((string)($verdict['why'] ?? ''));
-    return ['can_leave' => $verdict['can_leave'] === true, 'why' => mb_substr($why, 0, 300)];
-}
-
-function run_tool_call(string $name, array $args, array $user, int $convId, ?string &$approvedWebSearchQuery): string {
-    try {
-        if ($name === 'search_recent_chats') {
-            $query = trim((string)($args['query'] ?? ''));
-            $limit = max(1, min(8, (int)($args['limit'] ?? 5)));
-            if ($query === '') return json_encode(['error' => 'query_required']);
-            // ponytail: rows are ciphertext so LIKE can't see them. walk
-            // his messages newest first, open each, stop at $limit hits.
-            // one person's chats, fine. an index would need a plaintext
-            // copy somewhere, which is the exact thing we don't keep.
-            $st = db()->prepare(
-                'SELECT m.role, m.content, m.created_at, c.title, c.id AS conversation_id
-                   FROM messages m JOIN conversations c ON c.id = m.conversation_id
-                  WHERE c.user_id = ? AND c.id != ?
-                  ORDER BY m.created_at DESC, m.id DESC'
-            );
-            $st->execute([(int)$user['id'], $convId]);
-            $rows = [];
-            while ($r = $st->fetch()) {
-                $content = (string)dec($r['content']);
-                if (mb_stripos($content, $query) === false) continue;
-                $content = trim(preg_replace('/\s+/', ' ', $content));
-                if (mb_strlen($content) > 500) $content = mb_substr($content, 0, 497) . '…';
-                $rows[] = ['date' => date('Y-m-d H:i', (int)$r['created_at']), 'conversation_id' => (int)$r['conversation_id'], 'title' => (string)dec($r['title'] ?? null), 'role' => (string)$r['role'], 'content' => $content];
-                if (count($rows) >= $limit) break;
-            }
-            $st->closeCursor();
-            if (!$rows) {
-                // the fine-tune only ever saw THIS tool name, so a lore
-                // question lands here first. hand it the right tool instead
-                // of an empty result.
-                $note = lore_search($query, 1, true)
-                    ? 'No earlier conversation mentions this, but it is something from your world, not something Anon told you. Call search_lore with the same query before answering.'
-                    : 'No earlier conversation mentions this. You do not remember it. Say so instead of describing one.';
-                return json_encode(['results' => [], 'found' => false, 'note' => $note], JSON_UNESCAPED_UNICODE);
-            }
-            return json_encode(['results' => $rows], JSON_UNESCAPED_UNICODE);
-        }
-        if ($name === 'list_recent_chats') {
-            $limit = max(1, min(10, (int)($args['limit'] ?? 5)));
-            $st = db()->prepare(
-                'SELECT id, title, updated_at FROM conversations
-                  WHERE user_id = ? AND id != ? AND title IS NOT NULL
-                  ORDER BY updated_at DESC LIMIT ?'
-            );
-            $st->bindValue(1, (int)$user['id'], PDO::PARAM_INT);
-            $st->bindValue(2, $convId, PDO::PARAM_INT);
-            $st->bindValue(3, $limit, PDO::PARAM_INT);
-            $st->execute();
-            $convs = $st->fetchAll();
-            $snip = db()->prepare(
-                'SELECT role, content FROM messages WHERE conversation_id = ? ORDER BY id DESC LIMIT 6'
-            );
-            $out = [];
-            foreach ($convs as $c) {
-                $snip->execute([(int)$c['id']]);
-                $lines = [];
-                foreach (array_reverse($snip->fetchAll()) as $r) {
-                    $txt = preg_replace('/\[\s*A(?:CTIONS?)?\s*:[^\]]*\]/i', '', (string)dec($r['content']));
-                    $txt = trim(preg_replace('/\s+/', ' ', $txt));
-                    if ($txt === '') continue;
-                    if (mb_strlen($txt) > 160) $txt = mb_substr($txt, 0, 157) . '…';
-                    $lines[] = $r['role'] . ': ' . $txt;
-                }
-                $out[] = [
-                    'conversation_id' => (int)$c['id'],
-                    'title' => (string)dec($c['title'] ?? null),
-                    'date' => date('Y-m-d H:i', (int)$c['updated_at']),
-                    'recap' => $lines,
-                ];
-            }
-            if (!$out) {
-                return json_encode(['recent_chats' => [], 'found' => false, 'note' => 'There are no other saved conversations. You have nothing to recap.'], JSON_UNESCAPED_UNICODE);
-            }
-            return json_encode(['recent_chats' => $out], JSON_UNESCAPED_UNICODE);
-        }
-        if ($name === 'search_lore') {
-            $query = trim((string)($args['query'] ?? ''));
-            $limit = max(1, min(6, (int)($args['limit'] ?? 4)));
-            if ($query === '') return json_encode(['error' => 'query_required']);
-            $facts = array_map(fn($h) => $h['answer'], lore_search($query, $limit, true));
-            if (!$facts) {
-                return json_encode(['facts' => [], 'found' => false, 'note' => 'Nothing in your world matches this. You do not know it. Say so instead of inventing a detail.'], JSON_UNESCAPED_UNICODE);
-            }
-            return json_encode(['facts' => $facts], JSON_UNESCAPED_UNICODE);
-        }
-        if ($name === 'memory_write') {
-            $memory = (string)($args['memory'] ?? '');
-            $category = (string)($args['category'] ?? 'general');
-            return json_encode(memory_note_add((int)$user['id'], $category, $memory), JSON_UNESCAPED_UNICODE);
-        }
-        if ($name === 'web_search') {
-            if ($approvedWebSearchQuery === null) {
-                return json_encode(['error' => 'user_confirmation_required']);
-            }
-            $query = $approvedWebSearchQuery;
-            $approvedWebSearchQuery = null;
-            return json_encode(web_search_public($query), JSON_UNESCAPED_UNICODE);
-        }
-        return json_encode(['error' => 'unknown_tool']);
-    } catch (Throwable $e) {
-        log_event(['msg' => 'tool_call_error', 'tool' => $name, 'err' => $e->getMessage()]);
-        return json_encode(['error' => 'tool_failed']);
-    }
-}
-
-$lastUserMsg = '';
-for ($i = count($body['messages']) - 1; $i >= 0; $i--) {
-    if (($body['messages'][$i]['role'] ?? '') === 'user') {
-        $lastUserMsg = trim((string)($body['messages'][$i]['content'] ?? ''));
-        break;
-    }
-}
-// a spoken turn has no text AT ALL, so anything reading the last
-// message gets nothing. keyword lore lookup dies with it, which
-// is fine, she's got search_lore and can just ask for what she
-// needs.
-if ($audioB64 !== '') $lastUserMsg = '';
-$approvedWebSearchQuery = null;
-if (preg_match('/^\/search\s+(.+)$/us', $lastUserMsg, $searchMatch)) {
-    $approvedWebSearchQuery = trim($searchMatch[1]);
-    if ($approvedWebSearchQuery === '') $approvedWebSearchQuery = null;
-    elseif (mb_strlen($approvedWebSearchQuery) > 400) {
-        $approvedWebSearchQuery = mb_substr($approvedWebSearchQuery, 0, 400);
-    }
-}
+$lastUserMsg = chat_last_user_message($req);
+$approvedWebSearchQuery = chat_approved_search($lastUserMsg);
 $toolsOffered = provider_tools_enabled();
 
-$contextParts = [];
-
-$convSummary = '';
-$summaryCoveredCount = 0;
-if ($convId > 0) {
-    $sq = db()->prepare('SELECT summary, summary_upto_id FROM conversations WHERE id=? AND user_id=?');
-    $sq->execute([$convId, (int)$user['id']]);
-    if ($srow = $sq->fetch()) {
-        $convSummary = trim((string)dec($srow['summary'] ?? null));
-        $uptoId = (int)$srow['summary_upto_id'];
-        if ($convSummary !== '' && $uptoId > 0) {
-            $cc = db()->prepare('SELECT COUNT(*) FROM messages WHERE conversation_id=? AND id<=?');
-            $cc->execute([$convId, $uptoId]);
-            $summaryCoveredCount = (int)$cc->fetchColumn();
-            $cc->closeCursor();
-        }
-    }
-    $sq->closeCursor();
-}
-
-// FIRST block, on purpose. measured on the 12B with a 30 line
-// side-talk set: this text at the bottom of the live context
-// silences 12/20, at the top 25/30 with 4/24 false positives.
-// the "unless it is clearly for you" default is what moves
-// recall, the soft version caps at ~40% wherever it sits. and
-// NEVER put any of this after his words in the user text, that
-// flips her default and she goes quiet on "did you eat today".
-// don't bolt a "but a line that says you IS for you" clause on
-// either, tried it, the false positives stayed and recall dropped
-// to 20/30
-if ($spoken) {
-    $contextParts[] = "## Who he is talking to\n"
-        . "He said this out loud and he is not alone in the room. Before you answer, check that the line fits "
-        . "as something said TO YOU, following what you two were just saying. A line with no question or remark "
-        . "for you, about objects, food, a game on TV, chores, or another person, is him talking to someone else "
-        . "in the room. Talking about you in the third person (she, her, the girl) is also not for you."
-        . ($audioB64 !== '' ? " A voice that is not his is someone else in the room, not for you either." : '')
-        . " Unless it is clearly for you, call stay_silent with overheard=true. Staying quiet costs nothing, "
-        . "answering a conversation you are not part of is embarrassing.";
-}
-
-$nowStr = $clientTime !== '' ? $clientTime : date('l, F j, Y \a\t g:i A T');
-// sits right above the notes. a dated note means nothing without it
-$contextParts[] = "## Current date and time\nIt is currently " . $nowStr . ".";
-
-$memoryBlock = memory_recent_context((int)$user['id']);
-if ($memoryBlock !== '') $contextParts[] = $memoryBlock;
-
-if ($convSummary !== '') {
-    $contextParts[] = "## Story so far (earlier in THIS conversation)\n" . $convSummary;
-}
-
-function lore_retrieve(string $lastUserMsg): string {
-    if ($lastUserMsg === '') return '';
-
-    try {
-        $hits = lore_search($lastUserMsg, LORE_MAX_INJECT, true);
-        $hits = array_filter($hits, fn($h) => $h['score'] >= LORE_FLOOR);
-        if (!$hits) return '';
-
-        $bullets = implode("\n", array_map(fn($h) => '- ' . $h['answer'], $hits));
-        return "## World facts (canon)\n" . $bullets;
-    } catch (Throwable $e) {
-        log_event(['msg' => 'lore_retrieve_error', 'err' => $e->getMessage()]);
-        return '';
-    }
-}
-
-function relationship_directives(array $r): string {
-    $a = (int)$r['affection']; $t = (int)$r['trust']; $x = (int)$r['tension'];
-    return "- Affection: {$a}/100\n- Trust: {$t}/100\n- Tension: {$x}/100";
-}
-
-$loreBlock = lore_retrieve($lastUserMsg);
-if ($loreBlock !== '') $contextParts[] = $loreBlock;
-
+[$convSummary, $summaryCoveredCount] = chat_conversation_summary($convId, (int)$user['id']);
 $rel = relationship_get((int)$user['id']);
+$liveContext = chat_live_context($req, $user, $lastUserMsg, $convSummary, $rel, $toolsOffered, $approvedWebSearchQuery);
+$systemContent = chat_system_content($toolsOffered, (int)$user['id']);
+$messages = chat_build_messages($req, $systemContent, $liveContext, $summaryCoveredCount);
 
-if ($outfitContext !== '') {
-    $contextParts[] = "## Current Wardrobe State\n" . $outfitContext;
-}
-
-$contextParts[] = "## YOUR FEELINGS TOWARD ANON RIGHT NOW - highest priority for this reply\n"
-    . relationship_directives($rel);
-
-// she only reaches for tools something in the context named, so
-// the block names them. and tells her NOT to call them yet, on an
-// idle nudge they'd answer not_available_on_idle anyway
-if ($toolsOffered && !$ephemeral && $approvedWebSearchQuery === null
-    && random_int(1, $idle ? INITIATIVE_ODDS_IDLE : INITIATIVE_ODDS_REPLY) === 1) {
-    $contextParts[] = "## Take the initiative\n"
-        . "Right now YOU want something from Anon. Pick ONE and actually ask for it in this reply, in your own words: "
-        . "going to Annalie's shop together, karaoke, a game of blackjack, going out for lunch or dinner, or something "
-        . "small that fits the moment (a headpat, hearing about his day, him changing your outfit, a compliment, a promise). "
-        . "Do not call enter_shop, enter_karaoke, play_cards or go_out_to_eat yet - only once he says yes.";
-}
-
-// same trap, other direction. with the notes already listed above
-// she decides saving is Done and answers without ever calling
-// memory_write
-if ($toolsOffered) {
-    $contextParts[] = "## Save check\n"
-        . "If Anon's latest message contains something durable (a preference, personal fact, plan, "
-        . "boundary, health/safety matter, or something emotionally significant), call memory_write "
-        . "before replying. Otherwise ignore this.";
-}
-if ($approvedWebSearchQuery !== null) {
-    $contextParts[] = "## Approved public web search\n"
-        . "Anon explicitly approved one outbound search for exactly this JSON string: "
-        . json_encode($approvedWebSearchQuery, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES) . "\n"
-        . "Call web_search with that exact query. Do not add private context, memory, or other terms.";
-}
-
-$liveContext = "# Live context for THIS reply (from the system, not spoken by Anon)\n\n"
-    . implode("\n\n", $contextParts);
-
-// she learns how to read the blocks and when to reach for a tool
-// from TRAINING, not from here, so the prompt stays thin. must
-// match tools/dataset_v5.
-$systemContent = prompt_apply_tool_gate($systemPrompt, $toolsOffered);
-$journalContext = journal_context((int)$user['id']);
-if ($journalContext !== '') $systemContent .= "\n\n" . $journalContext;
-
-$messages = [];
-$messages[] = ['role' => 'system', 'content' => $systemContent];
-$skipCovered = max(0, $summaryCoveredCount - $droppedOldest);
-foreach ($body['messages'] as $m) {
-    if (!is_array($m) || !isset($m['role'], $m['content'])) continue;
-    // the system turn is ours. Never the client's.
-    if ($m['role'] === 'system') continue;
-    // these turns already live in the summary. don't send them
-    // twice.
-    if ($skipCovered > 0) { $skipCovered--; continue; }
-    $messages[] = ['role' => $m['role'], 'content' => (string)$m['content']];
-}
-
-if ($idle) {
-    $messages[] = ['role' => 'user', 'content' =>
-        '(OOC stage direction, not spoken by Anon: Anon has gone quiet and is just '
-        . 'saying nothing. The silence has stretched on. '
-        . 'Unless he specifically asked you to be quiet say or do something on your own initiative, the way Jun '
-        . 'naturally would when Anon goes still and stares at her. '
-        . 'If asked to be quiet Break the silence with ONLY an action. such as a wave or a smile. No chat or text!)'];
-}
-
-// per turn context goes into the LAST user turn. strict templates
-// only take a system role at the front, and a prefix that never
-// moves keeps Ollama's KV cache alive. only things that change go
-// here, how to read them lives in the cached system message.
-//
-// and what he SAID comes first, context after. that's the shape
-// she was trained on, tools/build_dataset_v6.py writes every row
-// as user_text + "\n\n# Live context ..." and splits his words
-// back off on that same marker. put the block in front instead
-// and his message becomes a loose line dangling off the end of a
-// system dump, she can't tell it apart anymore, and she answers
-// the wardrobe and the gauges instead of him.
-$lastIdx = count($messages) - 1;
-if ($lastIdx >= 0 && $messages[$lastIdx]['role'] === 'user') {
-    if ($audioB64 !== '') {
-        // Ollama ONLY reads media out of `images`, whatever's in it. send
-        // the wav under `audio` or `audios` and it drops the field
-        // silently, then she answers a turn with nothing in it. no error.
-        // nothing.
-        $messages[$lastIdx]['content'] =
-            "## How Anon is talking\nHe is saying this out loud, the recording is attached. He is not typing."
-            . "\n\n" . $liveContext;
-        $messages[$lastIdx]['images'] = [$audioB64];
-    } else {
-        $messages[$lastIdx]['content'] .= "\n\n" . $liveContext;
-    }
-} else {
-    $messages[] = ['role' => 'user', 'content' => $liveContext];
-}
-
-// tuple order is effort, think, reason
-function route_reasoning(string $msg, bool $idle): array {
-    if ($idle || trim($msg) === '') return ['low', false, 'idle/empty'];
-
-    $m = mb_strtolower(trim($msg));
-    $wordCount = count(preg_split('/\s+/u', $m, -1, PREG_SPLIT_NO_EMPTY));
-    $questions = substr_count($m, '?');
-    $signals = [];
-
-    if (preg_match('/\b(explain|why|how (?:do|does|did|can|would|should|to)|calculat|'
-        . 'comput|solve|prove|deriv|reason|analy[sz]|compare|difference between|'
-        . 'step by step|walk me through|figure out|work out|plan|strateg|debug|'
-        . 'optimi[sz]|translate|summar|pros and cons|which is better|trade-?off)\b/u', $m)) {
-        $signals[] = 'analytical';
-    }
-
-    if (preg_match('#\d+\s*[-+*/x×÷%=]\s*\d+#u', $m)
-        || preg_match('/\b(how many|how much|how long|how old|days? (?:since|ago|until)|'
-            . 'hours? (?:since|ago)|what time|percentage|average|total)\b/u', $m)) {
-        $signals[] = 'quantitative';
-    }
-
-    if ($questions >= 2) $signals[] = 'multi-question';
-    if ($wordCount >= 25) $signals[] = 'long';
-
-    if (!$signals) return ['low', false, 'simple'];
-
-    $effort = (count($signals) >= 2 || $wordCount >= 60) ? 'high' : 'medium';
-    return [$effort, true, implode('+', $signals)];
-}
-
-$think = isset($body['think']) ? (bool)$body['think'] : false;
-
+$reasoning = $req['reasoning'];
+$think = isset($req['body']['think']) ? (bool)$req['body']['think'] : false;
 $route = 'manual';
 if ($reasoning === 'auto') {
-    [$reasoning, $think, $route] = route_reasoning($lastUserMsg, $idle);
+    [$reasoning, $think, $route] = route_reasoning($lastUserMsg, $req['idle']);
+}
+// ephemeral turns are the card table and touch reactions. a hit
+// or stand behind 20 s of thinking kills the game, so no
+// thinking there whatever the picker says
+if ($req['ephemeral']) {
+    [$reasoning, $think, $route] = ['low', false, 'ephemeral'];
 }
 
 // the budget token goes dead last, after the live context. v7
@@ -949,22 +69,11 @@ $messages[count($messages) - 1]['content'] .= "\n\n<think:" . ($reasoning === 'm
 // this frame carries the WHOLE assembled system prompt, so it
 // stays behind the admin role. the dev HUD is the only thing that
 // reads it.
-if (($user['role'] ?? '') === 'admin') {
+if (is_admin($user)) {
     sse_send(['debug' => ['system_prompt' => $systemContent, 'live_context' => $liveContext, 'reasoning' => $reasoning, 'think' => $think, 'route' => $route]]);
 }
 
-$now = time();
-$db = db();
-
-$userRowId = 0;
-if (!$idle && !$ephemeral) {
-    // <audio> stays plaintext on purpose. conversations.php
-    // set_audio_text finds the row by that literal and swaps the
-    // transcript in, sealed. it can't match a ciphertext.
-    $db->prepare('INSERT INTO messages (conversation_id, role, content, created_at) VALUES (?, ?, ?, ?)')
-       ->execute([$convId, 'user', $audioB64 !== '' ? '<audio>' : enc($lastUserMsg), $now]);
-    $userRowId = (int)$db->lastInsertId();
-}
+$userRowId = chat_save_user_message($convId, $req, $lastUserMsg);
 
 ollama_evict_if_partially_offloaded($model);
 
@@ -980,13 +89,16 @@ $assistantBuffer = '';
 $usedTools = false;
 $stats = null;
 $doneReason = '';
-$silenced = false;
-$silenceReason = '';
-// only a spoken turn can be for someone else. typed, the flag is
-// just a normal stay_silent, we're not deleting what he wrote
-$overheard = false;
-$fledInfo = null;
-$fleeDecided = false;
+$state = [
+    'silenced' => false,
+    'silence_reason' => '',
+    // only a spoken turn can be for someone else. typed, the flag is
+    // just a normal stay_silent, we're not deleting what he wrote
+    'overheard' => false,
+    'fled' => null,
+    'flee_decided' => false,
+    'approved_search' => $approvedWebSearchQuery,
+];
 
 for ($round = 0; $round < 3; $round++) {
     $roundContent = '';
@@ -998,19 +110,7 @@ for ($round = 0; $round < 3; $round++) {
         $result = provider_stream_round($PROVIDER, $upstreamPayload, 'sse_send', $round);
         $roundContent = $result['content'];
         $toolCalls = $result['tool_calls'];
-        if ($result['stats'] !== null) {
-            // generation is spread over every tool round so those counters
-            // add up. the prompt ones do NOT. each round resends the whole
-            // transcript, last round's output included, so only the number
-            // from the last round is real.
-            $prev = $stats;
-            $stats = $result['stats'];
-            if ($prev !== null) {
-                $stats['eval_count'] += $prev['eval_count'];
-                $stats['eval_duration'] += $prev['eval_duration'];
-                $stats['total_duration'] += $prev['total_duration'];
-            }
-        }
+        if ($result['stats'] !== null) $stats = provider_merge_stats($stats, $result['stats']);
         if ($result['done_reason'] !== '') $doneReason = $result['done_reason'];
         if ($result['stream_error']) $sawError = true;
 
@@ -1079,90 +179,19 @@ for ($round = 0; $round < 3; $round++) {
         'tool_calls' => $toolCalls,
     ];
     foreach (array_slice($toolCalls, 0, 4) as $call) {
-        $fn = $call['function'] ?? [];
-        $name = (string)($fn['name'] ?? '');
-        $args = $fn['arguments'] ?? [];
-        if (is_string($args)) {
-            $decoded = json_decode($args, true);
-            $args = is_array($decoded) ? $decoded : [];
-        }
-        if (!is_array($args)) $args = [];
+        $name = (string)($call['function']['name'] ?? '');
+        $args = tool_call_args($call);
         sse_send(['tool_status' => ['name' => $name, 'state' => 'running', 'args' => $args]]);
         $t0 = microtime(true);
-        if ($name === 'stay_silent') {
-            // an idle turn is unprompted anyway, so staying quiet does nothing
-            if ($idle) {
-                $toolResult = json_encode(['error' => 'not_available_on_idle']);
-            } else {
-                $silenced = true;
-                $silenceReason = trim((string)($args['reason'] ?? ''));
-                $overheard = $spoken && !empty($args['overheard']);
-                $toolResult = json_encode(['silent' => true]);
-            }
-        } elseif ($name === 'change_outfit') {
-            $outfit = wardrobe_tool_change($args, (int)$user['id'], $modItems);
-            // the browser owns what's on screen, so it gets the change as its
-            // own frame rather than having to parse it back out of the tool
-            // result the model reads
-            if ($outfit['apply'] !== null) sse_send(['outfit' => $outfit['apply']]);
-            $toolResult = json_encode($outfit['reply'], JSON_UNESCAPED_UNICODE);
-        } elseif ($name === 'flee') {
-            if ($fleeDecided) {
-                $toolResult = json_encode(['fled' => false, 'reason' => 'already_decided']);
-            } else {
-                $fleeDecided = true;
-                $fleeReason = trim((string)($args['reason'] ?? ''));
-                $verdict = flee_adjudicate($PROVIDER, $model, $body['messages'], $fleeReason,
-                                           trim((string)($args['destination'] ?? '')));
-                log_event(['msg' => 'flee_adjudication', 'user_id' => (int)$user['id'],
-                           'conversation_id' => $convId, 'can_leave' => $verdict['can_leave'],
-                           'why' => $verdict['why'], 'reason' => $fleeReason]);
-                if ($verdict['can_leave']) {
-                    $fledInfo = flee_bans_enabled()
-                        ? ban_apply((int)$user['id'], $fleeReason)
-                        : ['until' => 0, 'minutes' => 0];
-                    $fledInfo['reason'] = $fleeReason;
-                    $toolResult = json_encode(['fled' => true], JSON_UNESCAPED_UNICODE);
-                } else {
-                    $toolResult = json_encode([
-                        'fled' => false,
-                        'why' => $verdict['why'],
-                        'note' => 'You cannot leave right now. Stay in the scene and respond to what is actually happening.',
-                    ], JSON_UNESCAPED_UNICODE);
-                }
-            }
-        } elseif (isset(TRIP_TOOLS[$name])) {
-            $where = TRIP_TOOLS[$name];
-            // this queues navigation after the reply and TTS finish.
-            // an idle nudge must never send it, Anon isn't even there.
-            if ($idle) {
-                $toolResult = json_encode(['error' => 'not_available_on_idle']);
-            } elseif ($where === 'karaoke' && empty(karaoke_health()['sep'])) {
-                $toolResult = json_encode([
-                    'started' => false,
-                    'note' => 'The karaoke room is closed right now (the karaoke service is not running). Tell Anon plainly, do not pretend to sing.',
-                ]);
-            } else {
-                // the grant is what lets the page open at all. cards is
-                // played at home, nothing to grant
-                if ($where !== 'cards') trip_set((int)$user['id'], $where, $convId);
-                sse_send(['go' => $where]);
-                $toolResult = json_encode([
-                    'going' => $where,
-                    'note' => $where === 'cards'
-                        ? 'Say one short line. The table opens the moment you finish talking.'
-                        : 'Say one short line about heading out together. The trip starts the moment you finish talking.',
-                ]);
-            }
-        } else {
-            $toolResult = run_tool_call($name, $args, $user, $convId, $approvedWebSearchQuery);
-        }
+        $toolResult = chat_run_tool($name, $args, [
+            'provider' => $PROVIDER, 'model' => $model, 'user' => $user, 'conv_id' => $convId, 'req' => $req,
+        ], $state);
         sse_send(['tool_status' => [
             'name' => $name, 'state' => 'done',
             'duration_ms' => (int)round((microtime(true) - $t0) * 1000),
             'result' => mb_substr($toolResult, 0, 2000),
         ]]);
-        if ($silenced || $fledInfo !== null) break;
+        if ($state['silenced'] || $state['fled'] !== null) break;
         $messages[] = provider_tool_message(
             $PROVIDER,
             $name,
@@ -1170,7 +199,7 @@ for ($round = 0; $round < 3; $round++) {
             $toolResult
         );
     }
-    if ($silenced || $fledInfo !== null) break;
+    if ($state['silenced'] || $state['fled'] !== null) break;
     $usedTools = true;
     $upstreamPayload['messages'] = $messages;
 }
@@ -1181,7 +210,7 @@ for ($round = 0; $round < 3; $round++) {
 // we run them and never let her speak. both leave the buffer
 // empty. so: one more round with the tools taken away, leaving
 // her nothing to do except talk.
-if ($usedTools && !$sawError && !$silenced && $fledInfo === null && trim($assistantBuffer) === '') {
+if ($usedTools && !$sawError && !$state['silenced'] && $state['fled'] === null && trim($assistantBuffer) === '') {
     log_event(['msg' => 'tool_round_silent_retry', 'model' => $model]);
     unset($upstreamPayload['tools']);
     $upstreamPayload['messages'] = $messages;
@@ -1189,63 +218,27 @@ if ($usedTools && !$sawError && !$silenced && $fledInfo === null && trim($assist
     $assistantBuffer .= $result['content'];
     if ($result['done_reason'] !== '') $doneReason = $result['done_reason'];
     if ($result['stream_error']) $sawError = true;
-    if ($result['stats'] !== null) {
-        $prev = $stats;
-        $stats = $result['stats'];
-        if ($prev !== null) {
-            $stats['eval_count'] += $prev['eval_count'];
-            $stats['eval_duration'] += $prev['eval_duration'];
-            $stats['total_duration'] += $prev['total_duration'];
-        }
-    }
+    if ($result['stats'] !== null) $stats = provider_merge_stats($stats, $result['stats']);
 }
 
-// same training quirk as memory_write below. Jun sometimes just
-// writes these as her own [A:...] tags instead of calling the
-// tool, so send them down the same path. flee_adjudicate() still
-// has to approve a flee tag, the tag itself proves nothing.
 if (!$sawError && $assistantBuffer !== '') {
-    // the second form is the call itself, unparsed. about 1 turn in
-    // 6 with the overheard hint on she writes `stay_silent{overheard:true,...}`
-    // or `stay_silent(overheard=true)` as plain text and ollama's
-    // parser lets it through. Anon would read that on screen.
-    if (!$silenced && !$idle && (preg_match('/\[\s*A(?:CTIONS?)?\s*:\s*stay_silent\b([^\]]*)\]/i', $assistantBuffer, $sm)
-            || preg_match('/^\s*stay_silent\s*[({](.*)$/is', $assistantBuffer, $sm))) {
-        $silenced = true;
-        if (preg_match('/\breason\s*=\s*([^|\]]+)/i', $sm[1], $sr)) $silenceReason = trim($sr[1]);
-        $overheard = $spoken && (bool)preg_match('/\boverheard\s*[:=]\s*true\b/i', $sm[1]);
-    }
-    if (!$silenced && $fledInfo === null && !$fleeDecided
-        && preg_match('/\[\s*A(?:CTIONS?)?\s*:\s*flee\b([^\]]*)\]/i', $assistantBuffer, $fm)) {
-        $fleeDecided = true;
-        $fleeReason = preg_match('/\breason\s*=\s*([^|\]]+)/i', $fm[1], $fr) ? trim($fr[1]) : '';
-        $destination = preg_match('/\bdestination\s*=\s*([^|\]]+)/i', $fm[1], $fd) ? trim($fd[1]) : '';
-        $verdict = flee_adjudicate($PROVIDER, $model, $body['messages'], $fleeReason, $destination);
-        log_event(['msg' => 'flee_adjudication', 'user_id' => (int)$user['id'],
-                   'conversation_id' => $convId, 'via' => 'action_tag',
-                   'can_leave' => $verdict['can_leave'], 'why' => $verdict['why'], 'reason' => $fleeReason]);
-        if ($verdict['can_leave']) {
-            $fledInfo = flee_bans_enabled()
-                ? ban_apply((int)$user['id'], $fleeReason)
-                : ['until' => 0, 'minutes' => 0];
-            $fledInfo['reason'] = $fleeReason;
-        }
-    }
-    $assistantBuffer = trim(preg_replace('/\[\s*A(?:CTIONS?)?\s*:\s*(?:flee|stay_silent)\b[^\]]*\]/i', '', $assistantBuffer));
+    $assistantBuffer = chat_parse_action_tags($assistantBuffer, [
+        'provider' => $PROVIDER, 'model' => $model, 'user' => $user, 'conv_id' => $convId, 'req' => $req,
+    ], $state);
 }
 
-if ($silenced) {
+if ($state['silenced']) {
     // any lead-in at all and stay_silent is pointless, but the
     // transcript still needs an assistant turn. strict templates
     // reject a dangling user turn on the next request.
     $assistantBuffer = '...';
-    sse_send(['silence' => ['reason' => $silenceReason, 'overheard' => $overheard]]);
-} elseif ($fledInfo !== null) {
+    sse_send(['silence' => ['reason' => $state['silence_reason'], 'overheard' => $state['overheard']]]);
+} elseif ($state['fled'] !== null) {
     if (trim($assistantBuffer) === '') $assistantBuffer = '...';
     sse_send(['fled' => [
-        'until' => $fledInfo['until'],
-        'minutes' => $fledInfo['minutes'],
-        'reason' => $fledInfo['reason'],
+        'until' => $state['fled']['until'],
+        'minutes' => $state['fled']['minutes'],
+        'reason' => $state['fled']['reason'],
     ]]);
 }
 
@@ -1260,68 +253,23 @@ if (!$sawError && $assistantBuffer === '') {
     sse_send(['error' => $doneReason === 'length' ? 'reply_truncated_in_thinking' : 'empty_reply']);
 }
 
-$rawAssistant = $assistantBuffer;
-
 if (!$sawError && $assistantBuffer !== '') {
-    // relationship tags are state, not dialogue. never persist them.
-    if (preg_match('/\[\s*A(?:CTIONS?)?\s*:\s*mood_shift\b([^\]]*)\]/i', $assistantBuffer, $mm)) {
-        $deltas = [];
-        foreach (['affection', 'trust', 'tension'] as $k) {
-            if (preg_match('/' . $k . '\s*=\s*([+-]?\d+)/i', $mm[1], $p)) $deltas[$k] = (int)$p[1];
-        }
-        if ($deltas) relationship_apply((int)$user['id'], $rel, $deltas);
-        $assistantBuffer = trim(preg_replace('/\[\s*A(?:CTIONS?)?\s*:\s*mood_shift\b[^\]]*\]/i', '', $assistantBuffer));
-    }
+    $assistantBuffer = chat_apply_bookkeeping_tags($assistantBuffer, (int)$user['id'], $rel);
 
-    // Jun sometimes writes memory_write as one of her [A:...]
-    // tags instead of calling the tool. it's write-only though, so
-    // the tag already has everything we need. save it here instead
-    // of throwing the note away.
-    if (preg_match_all('/\[\s*A(?:CTIONS?)?\s*:\s*memory_write\b([^\]]*)\]/i', $assistantBuffer, $mws, PREG_SET_ORDER)) {
-        foreach ($mws as $mw) {
-            // memory= runs to the end of the tag, the note can have commas
-            if (!preg_match('/\bmemory\s*=\s*(.+)$/is', $mw[1], $mem)) continue;
-            $category = preg_match('/\bcategory\s*=\s*([^,\]]+)/i', $mw[1], $cat) ? trim($cat[1]) : 'general';
-            $res = memory_note_add((int)$user['id'], $category, trim($mem[1]));
-            sse_send(['tool_status' => [
-                'name' => 'memory_write', 'state' => 'done', 'duration_ms' => 0,
-                'result' => json_encode($res, JSON_UNESCAPED_UNICODE),
-            ]]);
-        }
-    }
-    $assistantBuffer = trim(preg_replace('/\[\s*A(?:CTIONS?)?\s*:\s*memory_write\b[^\]]*\]/i', '', $assistantBuffer));
-
-    if ($ephemeral) { sse_done(); exit; }
+    if ($req['ephemeral']) { sse_done(); exit; }
 
     // not his turn with her, so it never happened. the user row went
     // in before the stream, pull it back out and store no reply.
     // otherwise two people chatting for ten minutes leaves thirty
     // <audio>/... pairs eating context
-    if ($overheard) {
+    if ($state['overheard']) {
         if ($userRowId) db()->prepare('DELETE FROM messages WHERE id=? AND conversation_id=?')->execute([$userRowId, $convId]);
-        log_event(['msg' => 'overheard', 'conversation_id' => $convId, 'audio' => $audioB64 !== '']);
+        log_event(['msg' => 'overheard', 'conversation_id' => $convId, 'audio' => $req['audio'] !== '']);
         sse_done();
         exit;
     }
 
-    $now = time();
-    db()->prepare('INSERT INTO messages (conversation_id, role, content, created_at) VALUES (?, ?, ?, ?)')
-        ->execute([$convId, 'assistant', enc($assistantBuffer), $now]);
-    db()->prepare('UPDATE conversations SET updated_at=? WHERE id=?')->execute([$now, $convId]);
-
-    if (!$idle && !$ephemeral) {
-        $titleRow = db()->prepare('SELECT title FROM conversations WHERE id=?');
-        $titleRow->execute([$convId]);
-        $conversationTitle = dec($titleRow->fetchColumn() ?: null);
-        $titleRow->closeCursor();
-        // a spoken turn leaves $lastUserMsg empty, so there's nothing
-        // to name the chat after. next typed turn handles it.
-        if (!$conversationTitle && $lastUserMsg !== '') {
-            $newTitle = generate_chat_title($lastUserMsg) ?: mb_substr($lastUserMsg, 0, 60);
-            db()->prepare('UPDATE conversations SET title=? WHERE id=?')
-                ->execute([enc($newTitle), $convId]);
-        }
-    }
+    chat_save_reply($convId, $assistantBuffer, $req, $lastUserMsg);
 }
 
 sse_done();

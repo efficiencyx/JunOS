@@ -1,0 +1,181 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="100 -100 1000 1000" preserveAspectRatio="xMidYMid slice">
+<!-- Annalie's shop. one warm track lamp high on the left, shopfront
+     glass on the right, and everything in between falls off into
+     cool violet grey. the magenta is Annalie's - Jun's violet stays
+     out of the room so she still reads against it.
+
+     xMidYMid slice into a wide box crops roughly the top and bottom
+     60 units, so nothing that has to be seen goes above y=70 or
+     below y=730. -->
+<style>
+  .sky-hi { stop-color: var(--sky-zenith, #0d1426); }
+  .sky-md { stop-color: var(--sky-mid, #37334f); }
+  .sky-lo { stop-color: var(--sky-horizon, #7a4a55); }
+  .sun    { stop-color: var(--sky-glow, #b0685f); }
+  .key    { stop-color: var(--key-warm, #ffb87a); }
+  .lamp   { fill: var(--key-warm, #ffb87a); }
+  .lit    { opacity: var(--city-lit, .8); }
+  .glow   { mix-blend-mode: screen; }
+  /* the room's own exposure follows the sky. at noon the dark
+     falloff backs off and the daylight wash comes up; after dark
+     it's the other way round and the lamp is all there is */
+  .keyrect { opacity: calc(1.1 - var(--key-level, .5) * .4); }
+  .daylight { opacity: calc(var(--key-level, .5) * .32); mix-blend-mode: screen; }
+</style>
+<defs>
+  <linearGradient id="bq-sky" x1="0" y1="0" x2="0" y2="1">
+    <stop offset="0" class="sky-hi"/><stop offset=".58" class="sky-md"/><stop offset="1" class="sky-lo"/>
+  </linearGradient>
+  <radialGradient id="bq-sun" cx="74%" cy="88%" r="56%">
+    <stop offset="0" class="sun" stop-opacity=".9"/><stop offset="1" class="sun" stop-opacity="0"/>
+  </radialGradient>
+  <!-- the key. warm core, then the falloff shifts hue into violet
+       grey instead of just going darker. that hue turn is the whole
+       difference between a light and a gradient -->
+  <radialGradient id="bq-key" cx="17%" cy="-4%" r="96%">
+    <stop offset="0" class="key" stop-opacity=".4"/>
+    <stop offset=".24" stop-color="#c9a894" stop-opacity=".16"/>
+    <stop offset=".52" stop-color="#57475f" stop-opacity=".3"/>
+    <stop offset=".8" stop-color="#2b2334" stop-opacity=".5"/>
+    <stop offset="1" stop-color="#140f1c" stop-opacity=".72"/>
+  </radialGradient>
+  <radialGradient id="bq-pool" cx="50%" cy="50%" r="50%">
+    <stop offset="0" class="key" stop-opacity="0.34"/>
+    <stop offset=".3" class="key" stop-opacity="0.17"/>
+    <stop offset=".62" class="key" stop-opacity="0.054"/>
+    <stop offset="1" class="key" stop-opacity="0.0"/>
+  </radialGradient>
+  <!-- what the shopfront throws on the floor. sky coloured, so it
+       goes cold at noon and orange at dusk while the lamp doesn't -->
+  <linearGradient id="bq-day" x1="1" y1=".1" x2="0" y2="1">
+    <stop offset="0" class="sky-lo" stop-opacity=".55"/>
+    <stop offset=".45" class="sky-md" stop-opacity=".2"/>
+    <stop offset="1" class="sky-md" stop-opacity="0"/>
+  </linearGradient>
+  <radialGradient id="bq-spill" cx="50%" cy="50%" r="50%">
+    <stop offset="0" class="sky-lo" stop-opacity="0.3"/>
+    <stop offset=".3" class="sky-lo" stop-opacity="0.15"/>
+    <stop offset=".62" class="sky-lo" stop-opacity="0.048"/>
+    <stop offset="1" class="sky-lo" stop-opacity="0.0"/>
+  </radialGradient>
+  <linearGradient id="bq-floor" x1=".15" y1="0" x2=".85" y2="1">
+    <stop offset="0" stop-color="#6a5d47"/><stop offset=".55" stop-color="#4a4041"/><stop offset="1" stop-color="#2b2431"/>
+  </linearGradient>
+  <linearGradient id="bq-glassref" x1="0" y1="0" x2=".8" y2="1">
+    <stop offset="0" stop-color="#cfd8e4" stop-opacity=".14"/>
+    <stop offset=".4" stop-color="#cfd8e4" stop-opacity=".01"/>
+    <stop offset="1" stop-color="#e8dcf0" stop-opacity=".09"/>
+  </linearGradient>
+  <!-- foxed silvering, bottom right. it is an old mirror in a shop,
+       not a showroom piece -->
+  <radialGradient id="bq-fox" cx="84%" cy="86%" r="38%">
+    <stop offset="0" stop-color="#a2977f" stop-opacity=".42"/>
+    <stop offset=".55" stop-color="#6e6a63" stop-opacity=".14"/>
+    <stop offset="1" stop-color="#6e6a63" stop-opacity="0"/>
+  </radialGradient>
+  <linearGradient id="bq-mirror" x1=".1" y1="0" x2=".95" y2="1">
+    <stop offset="0" stop-color="#4b4453"/><stop offset=".45" stop-color="#655d70"/><stop offset="1" stop-color="#2e2838"/>
+  </linearGradient>
+  <linearGradient id="bq-velvet" x1="0" y1="0" x2="1" y2="0">
+    <stop offset="0" stop-color="#3c1531"/><stop offset=".5" stop-color="#743a63"/><stop offset="1" stop-color="#26101f"/>
+  </linearGradient>
+  <linearGradient id="bq-pipe" x1="0" y1="0" x2="0" y2="1">
+    <stop offset="0" stop-color="#2f2a36"/><stop offset=".3" stop-color="#a49eaa"/><stop offset=".62" stop-color="#5d5768"/><stop offset="1" stop-color="#231e2c"/>
+  </linearGradient>
+  <clipPath id="bq-mirrorclip"><rect x="566" y="150" width="186" height="410"/></clipPath>
+  <filter id="bq-grain" x="0" y="0" width="100%" height="100%">
+    <feTurbulence type="fractalNoise" baseFrequency="0.85" numOctaves="3" stitchTiles="stitch"/>
+    <feColorMatrix type="saturate" values="0"/>
+  </filter>
+  <filter id="bq-soft" x="-40%" y="-40%" width="180%" height="180%"><feGaussianBlur stdDeviation="18"/></filter>
+  <filter id="bq-smear" x="-20%" y="-20%" width="140%" height="140%"><feGaussianBlur stdDeviation="7"/></filter>
+</defs>
+
+<rect x="-50" y="-150" width="1300" height="1100" fill="#2f2839"/>
+
+<!-- shopfront, right of centre, not mirrored by anything on the
+     left. sill sits low so the sky gets room -->
+<g>
+  <rect x="770" y="80" width="372" height="468" fill="url(#bq-sky)"/>
+  <rect x="770" y="80" width="372" height="468" fill="url(#bq-sun)"/>
+  <g class="lit">
+    <path d="M770 548V430h40v118zm54 0V372h30v176zm44 0V462h54v86zm68 0V344h38v204zm52 0V408h46v140zm60 0V452h64v96z" fill="#090b13" opacity=".86"/>
+    <g class="lamp" opacity=".55">
+      <rect x="780" y="442" width="7" height="9"/><rect x="794" y="470" width="7" height="9"/>
+      <rect x="832" y="388" width="7" height="9"/><rect x="832" y="424" width="7" height="9"/>
+      <rect x="880" y="476" width="7" height="9"/><rect x="944" y="360" width="7" height="9"/>
+      <rect x="960" y="398" width="7" height="9"/><rect x="944" y="448" width="7" height="9"/>
+      <rect x="1004" y="428" width="7" height="9"/><rect x="1062" y="470" width="7" height="9"/>
+      <rect x="1080" y="500" width="7" height="9"/>
+    </g>
+  </g>
+  <rect x="770" y="80" width="372" height="468" fill="url(#bq-glassref)"/>
+  <!-- uneven bays. a shopfront is not graph paper -->
+  <path d="M896 80v468M1014 80v468M770 296h372" stroke="#241f2c" stroke-width="7"/>
+  <rect x="762" y="72" width="388" height="484" fill="none" stroke="#1b1724" stroke-width="16"/>
+  <!-- her sign, hung inside the glass so you see it from the back:
+       a hanger, in Annalie's magenta -->
+  <g>
+    <path d="M912 196h-84l70-52 70 52h-84m14 0v-26q0-16 14-16t14 12" fill="none" stroke="#b8508f" stroke-width="8" stroke-linecap="round" stroke-linejoin="round"/>
+    <path d="M912 196h-84l70-52 70 52h-84m14 0v-26q0-16 14-16t14 12" fill="none" stroke="#f7bfe0" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>
+    <path d="M912 196h-84l70-52 70 52h-84" fill="none" stroke="#b8508f" stroke-width="30" opacity=".35" filter="url(#bq-soft)"/>
+  </g>
+</g>
+
+<path d="M-50-150h820v698H-50z" fill="#4e4458"/>
+<path d="M0 506h770v42H0z" fill="#2c2536"/>
+
+<!-- floor. planks run across, spacing compresses toward the wall.
+     no vanishing point on the floor plane, that reads as a
+     starburst, not as boards -->
+<path d="M-50 548h1300v402H-50z" fill="url(#bq-floor)"/>
+<g stroke="#0e0a15" stroke-opacity=".45" stroke-width="2">
+  <path d="M0 555h1200M0 566h1200M0 582h1200M0 606h1200M0 640h1200M0 688h1200M0 752h1200"/>
+</g>
+<g stroke="#0e0a15" stroke-opacity=".18" stroke-width="2">
+  <path d="M604 548v34M92 582v24M1010 606v82M520 640v48M240 688v64"/>
+</g>
+<path d="M0 548h1200v5H0z" fill="#9a8c74" opacity=".35"/>
+
+<!-- fitting booth curtain, far left, cropped by the frame. the only
+     velvet in the room and the only thing hanging at that angle -->
+<g>
+  <path d="M0 130h118l-14 486H0z" fill="url(#bq-velvet)"/>
+  <g stroke="#1d0917" stroke-opacity=".5" stroke-width="3">
+    <path d="M22 132 16 614M50 131 46 614M78 130 74 614M102 130 100 614"/>
+  </g>
+  <path d="M0 120h126v16H0z" fill="#241d2e"/>
+</g>
+
+<!-- rail lives in scene/props/rail.svg. the slot owns where it
+     stands and how far it leans, the prop owns its own 310x262 box -->
+<g data-prop="rail" transform="translate(200 292) rotate(-2.4)"></g>
+
+<!-- mirror. off the centre line, tilted, leaning on the wall. the
+     reflection is a smeared second room, which is what sells it as
+     glass instead of a grey slab -->
+<g transform="rotate(-1.6 640 420)">
+  <path d="M554 138h210v434H554z" fill="#241e2b"/>
+  <path d="M566 150h186v410H566z" fill="url(#bq-mirror)"/>
+  <g clip-path="url(#bq-mirrorclip)" filter="url(#bq-smear)" opacity=".5">
+    <path d="M566 150h186v276H566z" fill="#4b4254"/>
+    <path d="M566 426h186v134H566z" fill="#2a2430"/>
+    <ellipse cx="700" cy="300" rx="70" ry="120" fill="#7d6f86"/>
+    <path d="M596 220h34v170h-34z" fill="#6a5f74"/>
+  </g>
+  <path d="M566 150h186v410H566z" fill="url(#bq-fox)"/>
+  <path d="M566 150 752 392v-72L566 196z" fill="#ddd5ea" opacity=".12"/>
+  <path d="M566 286 752 150h-52L566 246z" fill="#f2ecff" opacity=".16"/>
+  <path d="M566 508l186-72v40l-186 84z" fill="#0d0916" opacity=".3"/>
+  <path d="M554 566h210v14H554z" fill="#191422"/>
+</g>
+
+<rect class="keyrect" x="-50" y="-150" width="1300" height="1100" fill="url(#bq-key)"/>
+<rect class="daylight" x="-50" y="-150" width="1300" height="1100" fill="url(#bq-day)"/>
+<!-- the two floor pools go ON TOP of the key. under it the key's
+     outer stop paints straight over them and screen has nothing
+     left to lift -->
+<ellipse class="glow" cx="250" cy="648" rx="540" ry="190" fill="url(#bq-pool)"/>
+<ellipse class="glow" cx="930" cy="600" rx="260" ry="96" fill="url(#bq-spill)"/>
+<rect x="-50" y="-150" width="1300" height="1100" filter="url(#bq-grain)" opacity=".05"/>
+</svg>

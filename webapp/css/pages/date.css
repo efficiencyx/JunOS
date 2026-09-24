@@ -1,0 +1,108 @@
+@import url("../subpage.css?v=1");
+:root {
+  --cream: #f3e9d5;
+  --ink: #392d28;
+  --wine: #773b43;
+  --muted-ink: #796859;
+}
+* { box-sizing: border-box; }
+[hidden] { display: none !important; }
+html, body { height: 100%; height: 100dvh; }
+body { margin: 0; background: #201c19; color: var(--cream); font: 14px/1.5 system-ui, sans-serif; overflow: hidden; }
+button { font: inherit; cursor: pointer; }
+button:focus-visible { outline: 2px solid var(--wine); outline-offset: 4px; }
+button:disabled { cursor: default; }
+.date-layout { position: relative; height: 100%; }
+.restaurant { position: absolute; inset: 0; overflow: hidden; isolation: isolate; }
+.room { position: absolute; inset: 0; z-index: -1; overflow: hidden; background: #1b1d1b; }
+.room svg { display: block; width: 100%; height: 100%; }
+/* the venues range from a near black trattoria to a pale tiled cafe,
+   so this needs its own backing or it vanishes in half of them */
+.date-back { position: absolute; z-index: 9; top: max(26px, env(safe-area-inset-top)); right: 20px; padding: 5px 10px; border-radius: 4px; background: #1d1a17b8; color: #e6ddc8; font-size: 11px; text-decoration: none; }
+.date-back:hover { background: #2c2823d9; color: var(--cream); }
+.date-back:focus-visible { outline: 2px solid var(--wine); outline-offset: 4px; }
+#stage { position: absolute; inset: -22% 0 0; }
+#stage canvas { display: block; }
+.table { position: absolute; z-index: 2; pointer-events: none; left: -9%; right: -9%; top: 68%; bottom: -3%; filter: drop-shadow(0 -10px 20px #1a100e33); }
+.table svg { display: block; width: 100%; height: 100%; overflow: visible; }
+.flame { transform-origin: 268px 94px; animation: candlelight 3s ease-in-out infinite; }
+@keyframes candlelight { 50% { transform: scale(.85, 1.08); opacity: .8; } }
+.table text { opacity: 0; transition: opacity .6s, transform .6s; transform: translateY(-7px); }
+body.served .table text { opacity: 1; transform: translateY(0); }
+#stageStatus { position: absolute; z-index: 6; top: calc(max(30px, env(safe-area-inset-top)) + 26px); right: 20px; max-width: min(46%, 360px); font-size: 12px; background: #211c19dd; border-radius: 4px; padding: 6px 10px; }
+#stageStatus:empty { display: none; }
+#stage .wardrobe-reaction { z-index: 4; }
+#stage .wardrobe-reaction-name { background: #713e44; border-color: #d5b784; }
+#stage .wardrobe-reaction-text { background: #f3e9d5; color: #392d28; font-weight: 500; }
+/* the menu. an open card, held low in the middle so her face
+   stays above it. bottom-anchored to the composer, grows up */
+.menu-card { position: absolute; z-index: 7; left: 50%; bottom: calc(92px + env(safe-area-inset-bottom)); width: min(92vw, 760px); max-height: min(46%, 520px); transform: translateX(-50%); display: flex; flex-direction: column; color-scheme: light; color: var(--ink); background: #f3e9d5; border-radius: 3px; box-shadow: 0 22px 60px #0008, 0 2px 0 #d3c2a3; transition: transform .7s ease, opacity .7s ease; }
+body.ordered .menu-card { transform: translate(-50%, 70px); opacity: 0; pointer-events: none; }
+.page { flex: 1; min-height: 0; overflow-y: auto; overscroll-behavior: contain; padding: 18px 22px 14px; scrollbar-width: thin; scrollbar-color: #bda989 transparent; background: linear-gradient(100deg, #f5ecd9, #f3e9d5 60%, #eee2cb); }
+.page p, .page h2 { margin: 0; }
+/* names, date and place get a header strip, not a page. on
+   the whole left page of the card they take half its width for
+   three lines, and the dishes get squeezed into the other half
+   and scroll. strip up top, dishes get the card. */
+.menu-head { flex: none; display: flex; align-items: baseline; justify-content: space-between; gap: 14px; flex-wrap: wrap; padding: 12px 22px 9px; border-bottom: 1px solid #c9b896; background: linear-gradient(100deg, #f7eedd, #f1e6cf); }
+.menu-head p { margin: 0; }
+.page-names { font: italic 400 clamp(19px, 2.1vw, 27px)/1.1 var(--serif); color: #5a4638; overflow-wrap: anywhere; }
+.page-meta { display: flex; gap: 10px; font: italic 400 13px/1.4 var(--serif); color: #6a5443; }
+.page-meta span + span::before { content: "\00b7"; margin-right: 10px; }
+.menu-title { display: flex; justify-content: center; align-items: center; gap: 8px; margin: 0 0 6px; font: italic 400 clamp(26px, 2.8vw, 36px)/1.1 var(--serif); color: #5a4638; }
+.flourish { width: 42px; height: 14px; color: #8a7455; flex: none; }
+.flourish.mirror { transform: scaleX(-1); }
+.menu-list { flex: 1; }
+.menu-course { display: flex; align-items: center; gap: 10px; margin: 8px 0 0; font: 400 11px system-ui, sans-serif; text-transform: uppercase; letter-spacing: .22em; color: var(--muted-ink); }
+.menu-course::before, .menu-course::after { content: ""; flex: 1; height: 1px; background: #967c4944; }
+.dish { display: block; width: 100%; margin: 0; padding: 3px 4px; border: 0; border-radius: 4px; background: none; color: var(--ink); font: italic 400 clamp(14px, 1.35vw, 17px)/1.35 var(--serif); text-align: center; transition: background .15s; }
+.dish:not(:disabled):hover { background: #7a664a14; }
+.dish-title { display: inline-block; padding: 1px 12px; border-radius: 48% / 55%; transition: box-shadow .15s; }
+.dish[aria-pressed="true"] .dish-title { box-shadow: 0 0 0 1.4px var(--wine); }
+.dish-note { display: block; font: 400 11px/1.4 system-ui, sans-serif; letter-spacing: .05em; color: var(--wine); }
+.dish-note:empty { display: none; }
+/* the only line that explains the mechanic, so it does not live in
+   the scroller and it does not get display:none on a phone */
+.menu-hint { flex: none; margin: 0; padding: 7px 22px 9px; border-top: 1px solid #d5c6a8; background: #efe3cb; font: italic 12px var(--serif); color: var(--muted-ink); text-align: center; }
+
+.composer { position: absolute; z-index: 8; left: 50%; bottom: calc(12px + env(safe-area-inset-bottom)); width: min(92vw, 760px); transform: translateX(-50%); margin: 0; display: flex; flex-direction: column; gap: 6px; }
+.last-line { margin: 0; min-height: 1.4em; text-align: center; font: italic 13px/1.4 var(--serif); color: #efe3cb; text-shadow: 0 1px 4px #000b; overflow-wrap: anywhere; }
+.composer-row { display: flex; gap: 8px; }
+.composer input { flex: 1; min-width: 0; padding: 11px 14px; border: 1px solid #6b5a4a; border-radius: 4px; background: #2a231fdd; color: var(--cream); font: inherit; }
+.composer input:focus-visible { outline: 2px solid var(--wine); outline-offset: 1px; }
+.composer button { min-height: 42px; padding: 0 16px; border: 1px solid var(--wine); border-radius: 4px; background: var(--wine); color: #fff4df; font-size: 12px; white-space: nowrap; }
+.composer button:not(:disabled):hover { background: #603039; }
+.composer button:disabled { opacity: .45; }
+#sendBtn { background: transparent; border-color: #6b5a4a; color: var(--cream); }
+#sendBtn:not(:disabled):hover { background: #3a302a; }
+@media (max-width: 760px) {
+  #stageStatus { top: auto; bottom: calc(100px + env(safe-area-inset-bottom)); right: 12px; max-width: 60%; }
+  #stage { inset: -12% 0 0; }
+  .table { top: 70%; left: -2%; right: -2%; bottom: -9%; }
+  .menu-card, .composer { width: calc(100vw - 20px); }
+  .menu-card { max-height: 56%; bottom: calc(86px + env(safe-area-inset-bottom)); }
+  .page { padding: 14px 10px; }
+  .page-names { font-size: 20px; }
+  .menu-title { font-size: 24px; }
+  .flourish { width: 28px; }
+  .dish { font-size: 14px; padding: 4px 2px; min-height: 36px; }
+  .dish-title { padding: 1px 8px; }
+  .composer button { padding: 0 11px; font-size: 11px; }
+}
+@media (max-height: 500px) and (orientation: landscape) {
+  #stage { inset: -10% 46% 0 0; }
+  .menu-card, .composer { left: auto; right: 10px; width: 54vw; transform: none; }
+  .menu-card { max-height: calc(100% - 78px - env(safe-area-inset-bottom)); bottom: calc(66px + env(safe-area-inset-bottom)); }
+  body.ordered .menu-card { transform: translateY(70px); }
+  .page { padding: 10px 14px; }
+  .page .page-date { margin-top: 8px; }
+  .menu-title { font-size: 22px; margin-bottom: 2px; }
+  .dish { padding: 2px; }
+  .last-line { display: none; }
+  .composer { bottom: calc(8px + env(safe-area-inset-bottom)); }
+  .composer button, .composer input { min-height: 38px; padding-block: 0; }
+}
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after { animation: none !important; transition: none !important; }
+  #stage .wardrobe-reaction-text span { opacity: 1; }
+}

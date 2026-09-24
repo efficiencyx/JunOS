@@ -1,11 +1,37 @@
-import { VOICE_STATE_LABELS, renderVoiceDraft, sendAudioFromVoice, sendFromVoice, stopActiveStream, sttAvailable } from '../app.js?v=17';
+import { renderVoiceDraft, stopActiveStream } from './session.js?v=1';
+import { sendAudioFromVoice, sendFromVoice } from './chat.js?v=2';
 import { voiceBargeChk, voiceChk, voiceHearAllChk, voiceSilenceInput, voiceState } from './dom.js?v=11';
-import { hideFaceBubble } from './face-bubble.js?v=12';
-import { logAction } from './logging.js?v=10';
-import { syncVoiceDeps, updateVoiceSilenceLabel } from './settings.js?v=13';
+import { hideFaceBubble } from './face-bubble.js?v=18';
+import { logAction } from './logging.js?v=11';
+import { syncVoiceDeps, updateVoiceSilenceLabel } from './settings.js?v=20';
+import * as Prefs from '../core/prefs.js?v=1';
+import * as ui from '../core/ui.js?v=1';
+import * as Voice from '../voice/voice.js?v=2';
+import * as VoiceMode from '../voice/voicemode.js?v=2';
+
+const VOICE_STATE_LABELS = {
+  idle: 'off',
+  calibrating: 'listening to the room…',
+  listening: 'listening',
+  // maybe lasts ~96ms. way too short to flicker another label
+  maybe: 'listening',
+  speech: 'hearing you',
+  thinking: 'transcribing…',
+};
+
+async function sttAvailable() {
+  try {
+    const r = await fetch('/api/stt.php?action=health', { credentials: 'same-origin' });
+    if (!r.ok) return false;
+    const d = await r.json();
+    return !!d.stt;
+  } catch (e) {
+    return false;
+  }
+}
 
 export async function wireVoice() {
-  if (window.Voice && voiceChk) {
+  if (voiceChk) {
     Voice.setLogger(logAction);
     Voice.setOnTranscript(sendFromVoice);
 
@@ -49,12 +75,10 @@ export async function wireVoice() {
       }
     });
 
-    if (window.VoiceMode) {
-      VoiceMode.init({
-        onEnter: hideFaceBubble,
-        onExitMidStream: () => { if (renderVoiceDraft) renderVoiceDraft(); },
-      });
-    }
+    VoiceMode.init({
+      onEnter: hideFaceBubble,
+      onExitMidStream: () => { if (renderVoiceDraft) renderVoiceDraft(); },
+    });
 
     if (!sup.ok) {
       voiceChk.disabled = true;
@@ -90,7 +114,7 @@ export async function wireVoice() {
         }
         if (!save) return;
         localStorage.setItem('voice.hear_all', on ? '1' : '0');
-        if (window.Prefs) Prefs.pushToServer();
+        Prefs.pushToServer();
       };
       applyHearAll(localStorage.getItem('voice.hear_all') === '1', false);
       if (voiceHearAllChk) voiceHearAllChk.addEventListener('change', () => applyHearAll(voiceHearAllChk.checked, true));
@@ -118,7 +142,7 @@ export async function wireVoice() {
         voiceBargeChk.addEventListener('change', () => {
           Voice.setBargeIn(voiceBargeChk.checked);
           localStorage.setItem('voice.bargein', voiceBargeChk.checked ? '1' : '0');
-          if (window.Prefs) Prefs.pushToServer();
+          Prefs.pushToServer();
         });
       }
       if (voiceSilenceInput) {
@@ -127,7 +151,7 @@ export async function wireVoice() {
           const ms = parseInt(voiceSilenceInput.value, 10) || 700;
           Voice.setSilenceMs(ms);
           localStorage.setItem('voice.silence_ms', String(ms));
-          if (window.Prefs) Prefs.pushToServer();
+          Prefs.pushToServer();
         });
       }
     }

@@ -67,10 +67,6 @@ body.voice-mode .voice-overlay { opacity: 1; }
 .voice-overlay.muted .voice-overlay-mute { background: #3a1f23; color: var(--danger); }
 .voice-overlay.hear-all .voice-overlay-hear { background: var(--accent-soft); color: var(--accent); }
 
-body.karaoke-mode .chat-panel,
-body.karaoke-mode .conv-sidebar,
-body.karaoke-mode .app-header { visibility: hidden; }
-
 .karaoke-overlay {
   position: fixed;
   inset: 0;
@@ -98,19 +94,19 @@ body.karaoke-mode .karaoke-overlay {
   max-height: min(760px, calc(100dvh - 32px));
   margin: 16px;
 }
+.karaoke-field { display: flex; flex-direction: column; gap: 10px; }
+.karaoke-lyrics-row { flex-direction: row; align-items: center; flex-wrap: wrap; gap: 8px; }
+.karaoke-linkish {
+  padding: 0; border: 0; background: none; cursor: pointer;
+  color: var(--term-accent); font: inherit; font-size: 11.5px;
+  text-decoration: underline; text-underline-offset: 3px;
+}
+.karaoke-linkish:disabled { opacity: .45; cursor: default; }
+.karaoke-linkish.selected { text-decoration: none; }
+.karaoke-lyrics-clear { color: var(--term-dim); }
 .karaoke-menu-body {
   height: min(550px, calc(100dvh - 70px));
   overflow-y: auto;
-}
-.karaoke-question-step {
-  display: flex;
-  flex-direction: column;
-  gap: 12px;
-  flex: 1;
-}
-.karaoke-step-label {
-  color: var(--term-dim);
-  font-size: 11px;
 }
 .karaoke-question {
   margin: 0;
@@ -128,43 +124,8 @@ body.karaoke-mode .karaoke-overlay {
   color: var(--term-accent);
   font-family: inherit;
 }
-.karaoke-step-track {
-  display: flex;
-  align-items: center;
-  width: 100%;
-  color: var(--term-dim);
-}
-.karaoke-step-track span {
-  display: grid;
-  place-items: center;
-  width: 22px;
-  height: 22px;
-  flex: none;
-  border: 1px solid rgba(255,255,255,.16);
-  border-radius: 50%;
-  font-size: 10px;
-  transition: color .15s, border-color .15s, background .15s;
-}
-.karaoke-step-track span.active {
-  color: var(--term-bg);
-  border-color: var(--term-accent);
-  background: var(--term-accent);
-}
-.karaoke-step-track span.done {
-  color: var(--term-accent);
-  border-color: var(--term-accent);
-}
-.karaoke-step-track i {
-  height: 1px;
-  flex: 1;
-  background: rgba(255,255,255,.12);
-}
 
 .karaoke-mode-sel,
-.karaoke-lyrics-options {
-  display: grid;
-  gap: 8px;
-}
 .karaoke-mode-chip,
 .karaoke-answer {
   display: flex;
@@ -213,32 +174,6 @@ body.karaoke-mode .karaoke-overlay {
 }
 .karaoke-mode-desc::before { content: "# "; opacity: .55; }
 
-.karaoke-wizard-actions {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  margin-top: auto;
-  padding-top: 4px;
-}
-.karaoke-wizard-actions .auth-submit {
-  flex: 1;
-  margin: 0;
-}
-.karaoke-wizard-actions-back {
-  justify-content: flex-start;
-  margin-top: 0;
-}
-.karaoke-back {
-  padding: 9px 12px;
-  border: 0;
-  background: transparent;
-  color: var(--term-dim);
-  font-family: inherit;
-  cursor: pointer;
-}
-.karaoke-back::before { content: "← "; }
-.karaoke-back:hover:not(:disabled) { color: var(--term-fg); }
-.karaoke-back:disabled { opacity: .5; cursor: default; }
 
 .karaoke-load {
   width: 100%;
@@ -363,9 +298,10 @@ body.karaoke-mode .karaoke-overlay {
   gap: 20px;
   width: min(720px, 92vw);
   max-height: 82vh;
-  /* the score card only shows up after you sing, and with a whole lyric line
-     per section it can outgrow what the lyrics already claim. so scroll,
-     instead of shoving the controls off the bottom. */
+  /* the score card only shows up after you sing. with a whole
+     lyric line per section it can outgrow what the lyrics
+     already claim. so scroll, don't shove the controls off
+     the bottom. */
   overflow-y: auto;
 }
 .karaoke-turn {

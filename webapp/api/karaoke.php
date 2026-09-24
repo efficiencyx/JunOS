@@ -1,15 +1,14 @@
 <?php
 
-require_once __DIR__ . '/_lib.php';
+require_once __DIR__ . '/lib/bootstrap.php';
 
 $user = require_user();
 
-$sepUrl = karaoke_url();
 $action = $_GET['action'] ?? '';
 
-// Splitting a song is heavy and slow, and one request throws the
-// chat model out first, so 30/60s is plenty for any real karaoke
-// session.
+// splitting a song is heavy and slow, and every split kicks the
+// chat model out of VRAM first. 30 per 60s is plenty for any real
+// karaoke session.
 rate_limit('karaoke', 30, 60);
 
 // 30MB is a few minutes of compressed audio, well past one song.
@@ -23,43 +22,20 @@ function karaoke_purge_jobs(PDO $db): void {
     $db->prepare('DELETE FROM karaoke_jobs WHERE expires_at <= ?')->execute([time()]);
 }
 
-// Give the LLM's VRAM back before demucs starts, so the two don't
-// fight over the GPU. we try and move on, and it is Ollama only,
-// /api/ps and keep_alive:0 are Ollama things. a failed eviction
-// must never stop the separation, worst case they both want the
-// card.
+// give the LLM's VRAM back before demucs (the vocal/instrument
+// splitter) starts, so the two don't fight over the GPU. Ollama
+// only, /api/ps and keep_alive:0 are Ollama things. we try once
+// and move on. a failed eviction must NEVER stop the separation,
+// worst case they both want the card.
 function evict_chat_model(): void {
     if (ai_provider() !== 'ollama') return;
-
-    $ollamaUrl = rtrim(env_str('OLLAMA_URL', 'http://localhost:11434'), '/');
-
-    $ch = curl_init($ollamaUrl . '/api/ps');
-    curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
-    curl_setopt($ch, CURLOPT_CONNECTTIMEOUT, 3);
-    curl_setopt($ch, CURLOPT_TIMEOUT, 5);
-    $res = curl_exec($ch);
-    curl_close($ch);
-    if ($res === false) return;
-
-    $data = json_decode($res, true);
-    $name = $data['models'][0]['name'] ?? null;
+    $name = ollama_api_json('/api/ps', null, 5)['models'][0]['name'] ?? null;
     if (!is_string($name) || $name === '') return;
-
-    $ch = curl_init($ollamaUrl . '/api/generate');
-    curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
-    curl_setopt($ch, CURLOPT_POST, true);
-    curl_setopt($ch, CURLOPT_POSTFIELDS, json_encode(['model' => $name, 'keep_alive' => 0]));
-    curl_setopt($ch, CURLOPT_HTTPHEADER, ['Content-Type: application/json']);
-    curl_setopt($ch, CURLOPT_CONNECTTIMEOUT, 3);
-    curl_setopt($ch, CURLOPT_TIMEOUT, 10);
-    curl_exec($ch);
-    curl_close($ch);
+    ollama_api_json('/api/generate', ['model' => $name, 'keep_alive' => 0], 10);
 }
 
 if ($action === 'health') {
-    header('Content-Type: application/json');
-    echo json_encode(karaoke_health() ?? ['ok' => false, 'sep' => false]);
-    exit;
+    json_out(karaoke_health() ?? ['ok' => false, 'sep' => false]);
 }
 
 if ($action === 'separate') {
@@ -68,47 +44,21 @@ if ($action === 'separate') {
     $rawBody = read_body(KARAOKE_MAX_BYTES);
     if ($rawBody === '') fail(400, 'invalid_request');
 
-    // only now. an empty or oversized upload used to kick the chat
-    // model out of VRAM first and then 400.
+    // evict only AFTER the body checked out. otherwise an empty or
+    // oversized upload kicks the chat model out of VRAM and then
+    // fails anyway (400 empty, 413 too big).
     evict_chat_model();
 
-    $ch = curl_init($sepUrl . '/separate');
-    curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
-    curl_setopt($ch, CURLOPT_POST, true);
-    curl_setopt($ch, CURLOPT_POSTFIELDS, $rawBody);
     // "Expect:" for the same reason as api/stt.php: a megabyte body
     // would otherwise stall a full second on libcurl's 100-continue
-    // handshake.
-    curl_setopt($ch, CURLOPT_HTTPHEADER, sidecar_headers(['Content-Type: application/octet-stream', 'Expect:']));
-    curl_setopt($ch, CURLOPT_CONNECTTIMEOUT, 5);
-    // Demucs on the CPU is slower than realtime, so a whole song can
-    // take well over five minutes. keep it in step with
-    // fastcgi_read_timeout here.
-    curl_setopt($ch, CURLOPT_TIMEOUT, 900);
-    $res = curl_exec($ch);
-    $code = curl_getinfo($ch, CURLINFO_HTTP_CODE);
-    curl_close($ch);
+    // handshake. and 900s because demucs on the CPU is slower than
+    // realtime, a whole song can take well over five minutes. keep
+    // it in step with fastcgi_read_timeout here.
+    $res = sidecar_call(karaoke_url() . '/separate', $rawBody, ['Content-Type: application/octet-stream', 'Expect:'], 900);
+    sidecar_check($res, 'karaoke_unreachable', 'separate_failed');
+    if ($res['code'] >= 400) sidecar_relay($res);
 
-    header('Content-Type: application/json');
-
-    if ($res === false) {
-        http_response_code(502);
-        echo json_encode(['error' => 'karaoke_unreachable']);
-        exit;
-    }
-
-    if ($code >= 500) {
-        log_event(['msg' => 'karaoke_separate_error', 'upstream_code' => $code]);
-        fail(502, 'separate_failed');
-    }
-
-    if ($code >= 400) {
-        http_response_code($code);
-        echo $res;
-        exit;
-    }
-
-    $payload = json_decode((string)$res, true);
+    $payload = json_decode((string)$res['body'], true);
     $sidecarToken = is_array($payload) ? ($payload['token'] ?? null) : null;
     if (!is_string($sidecarToken) || !preg_match('/^[0-9a-f]{32,128}$/', $sidecarToken)) {
         log_event(['msg' => 'karaoke_separate_invalid_response']);
@@ -124,18 +74,14 @@ if ($action === 'separate') {
     )->execute([hash('sha256', $token), $user['id'], $sidecarToken, time() + KARAOKE_JOB_TTL]);
     $payload['token'] = $token;
 
-    http_response_code($code);
-    echo json_encode($payload, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
-    exit;
+    json_out($payload, $res['code']);
 }
 
 if ($action === 'stem') {
     require_post();
-    require_content_type('application/json');
-
-    $body = json_decode(read_body(1024), true);
-    $which = is_array($body) ? ($body['which'] ?? '') : '';
-    $token = is_array($body) ? ($body['token'] ?? '') : '';
+    $body = read_json_body(1024);
+    $which = $body['which'] ?? '';
+    $token = $body['token'] ?? '';
     if (!in_array($which, ['instrumental', 'guide'], true)) fail(400, 'invalid_request');
     if (!is_string($token) || !preg_match('/^[0-9a-f]{64}$/', $token)) fail(400, 'invalid_request');
 
@@ -148,32 +94,19 @@ if ($action === 'stem') {
     );
     $job->execute([$tokenHash, $user['id'], time()]);
     $sidecarToken = $job->fetchColumn();
+    // NOT optional. an unfinished SELECT pins a WAL read snapshot,
+    // and the other stem request writes the same row in the
+    // meantime. the UPDATE below then gets "database is locked"
+    // straight away, busy_timeout does not retry a stale snapshot.
+    $job->closeCursor();
     if (!is_string($sidecarToken) || $sidecarToken === '') fail(404, 'stem_failed');
 
-    $ch = curl_init($sepUrl . '/separate/stem');
-    curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
-    curl_setopt($ch, CURLOPT_POST, true);
-    curl_setopt($ch, CURLOPT_POSTFIELDS, json_encode(['token' => $sidecarToken, 'which' => $which]));
-    curl_setopt($ch, CURLOPT_HTTPHEADER, sidecar_headers(['Content-Type: application/json']));
-    curl_setopt($ch, CURLOPT_CONNECTTIMEOUT, 5);
-    curl_setopt($ch, CURLOPT_TIMEOUT, 60);
-    $res = curl_exec($ch);
-    $code = curl_getinfo($ch, CURLINFO_HTTP_CODE);
-    curl_close($ch);
-
-    if ($res === false) {
-        http_response_code(502);
-        header('Content-Type: application/json');
-        echo json_encode(['error' => 'karaoke_unreachable']);
-        exit;
-    }
-
-    if ($code >= 400) {
-        log_event(['msg' => 'karaoke_stem_error', 'upstream_code' => $code]);
-        http_response_code($code);
-        header('Content-Type: application/json');
-        echo json_encode(['error' => 'stem_failed']);
-        exit;
+    $res = sidecar_call(karaoke_url() . '/separate/stem', json_encode(['token' => $sidecarToken, 'which' => $which]),
+                        ['Content-Type: application/json'], 60);
+    sidecar_check($res, 'karaoke_unreachable', 'stem_failed');
+    if ($res['code'] >= 400) {
+        log_event(['msg' => 'karaoke_stem_error', 'upstream_code' => $res['code']]);
+        fail($res['code'], 'stem_failed');
     }
 
     $column = $which === 'instrumental' ? 'instrumental_fetched' : 'guide_fetched';
@@ -184,10 +117,7 @@ if ($action === 'stem') {
          WHERE token_hash = ? AND user_id = ? AND instrumental_fetched = 1 AND guide_fetched = 1'
     )->execute([$tokenHash, $user['id']]);
 
-    http_response_code($code);
-    header('Content-Type: audio/wav');
-    echo $res;
-    exit;
+    sidecar_relay($res, 'audio/wav');
 }
 
 if ($action === 'transcribe') {
@@ -196,47 +126,21 @@ if ($action === 'transcribe') {
     $rawBody = read_body(KARAOKE_MAX_BYTES);
     if ($rawBody === '') fail(400, 'invalid_request');
 
-    $ch = curl_init($sepUrl . '/transcribe_timed');
-    curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
-    curl_setopt($ch, CURLOPT_POST, true);
-    curl_setopt($ch, CURLOPT_POSTFIELDS, $rawBody);
-    curl_setopt($ch, CURLOPT_HTTPHEADER, sidecar_headers(['Content-Type: application/octet-stream', 'Expect:']));
-    curl_setopt($ch, CURLOPT_CONNECTTIMEOUT, 5);
-    curl_setopt($ch, CURLOPT_TIMEOUT, 300);
-    $res = curl_exec($ch);
-    $code = curl_getinfo($ch, CURLINFO_HTTP_CODE);
-    curl_close($ch);
-
-    header('Content-Type: application/json');
-
-    if ($res === false) {
-        http_response_code(502);
-        echo json_encode(['error' => 'karaoke_unreachable']);
-        exit;
-    }
-
-    if ($code >= 500) {
-        log_event(['msg' => 'karaoke_transcribe_error', 'upstream_code' => $code]);
-        fail(502, 'transcribe_failed');
-    }
-
-    http_response_code($code);
-    echo $res;
-    exit;
+    $res = sidecar_call(karaoke_url() . '/transcribe_timed', $rawBody, ['Content-Type: application/octet-stream', 'Expect:'], 300);
+    sidecar_check($res, 'karaoke_unreachable', 'transcribe_failed');
+    sidecar_relay($res);
 }
 
 if ($action === 'lyrics') {
-    header('Content-Type: application/json');
-
     $title = trim((string)($_GET['title'] ?? ''));
     $artist = trim((string)($_GET['artist'] ?? ''));
     $album = trim((string)($_GET['album'] ?? ''));
     $duration = (int)($_GET['duration'] ?? 0);
 
-    if ($title === '') { echo json_encode(['found' => false]); exit; }
+    if ($title === '') json_out(['found' => false]);
 
     // LRCLIB asks us to say who we are in the User-Agent, with a link.
-    $ua = 'Jun-OS Karaoke (https://github.com/efficiencyx/jun)';
+    $ua = 'Jun-OS Karaoke (https://github.com/efficiencyx/JunOS)';
     $fetch = function (string $url) use ($ua): array {
         $ch = curl_init($url);
         curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
@@ -281,22 +185,19 @@ if ($action === 'lyrics') {
         }
     }
 
-    if (!is_array($result)) { echo json_encode(['found' => false]); exit; }
+    if (!is_array($result)) json_out(['found' => false]);
 
     $synced = !empty($result['syncedLyrics']) && is_string($result['syncedLyrics']) ? $result['syncedLyrics'] : null;
     $plain = !empty($result['plainLyrics']) && is_string($result['plainLyrics']) ? $result['plainLyrics'] : null;
-    if ($synced === null && $plain === null) { echo json_encode(['found' => false]); exit; }
+    if ($synced === null && $plain === null) json_out(['found' => false]);
 
-    echo json_encode([
+    json_out([
         'found'      => true,
         'synced'     => $synced,
         'plain'      => $plain,
         'trackName'  => $result['trackName'] ?? $title,
         'artistName' => $result['artistName'] ?? $artist,
     ]);
-    exit;
 }
 
-http_response_code(400);
-header('Content-Type: application/json');
-echo json_encode(['error' => 'unknown_action']);
+fail(400, 'unknown_action');

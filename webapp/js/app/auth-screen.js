@@ -1,3 +1,6 @@
+import * as Prefs from '../core/prefs.js?v=1';
+import * as Auth from '../core/auth.js?v=1';
+
 const authScreen = document.getElementById('authScreen');
 const authTabLogin = document.getElementById('authTabLogin');
 const authTabSignup = document.getElementById('authTabSignup');
@@ -63,10 +66,6 @@ async function revealRegKeyField() {
     const info = await r.json();
     if (info && info.registration_key_required) field.hidden = false;
   } catch {}
-}
-
-function hideAuthScreen() {
-  if (authScreen) authScreen.hidden = true;
 }
 
 if (authTabLogin && authTabSignup) {
@@ -183,7 +182,7 @@ if (authFormSignup) {
 
 if (signOutBtn) {
   signOutBtn.addEventListener('click', async () => {
-    if (window.Prefs) Prefs.clearLocal();
+    Prefs.clearLocal();
     await Auth.logout();
     location.reload();
   });

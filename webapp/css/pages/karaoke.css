@@ -1,0 +1,125 @@
+@import url("../subpage.css?v=1");
+:root {
+  --karaoke-panel: clamp(390px, 37vw, 540px);
+  --karaoke-sheet: 57dvh;
+  --room-h: 100%;
+}
+body { background: var(--bg); overflow: hidden; }
+[hidden] { display: none !important; }
+.music-room { position: fixed; inset: 0 var(--karaoke-panel) 0 0; overflow: hidden; background: #0d0b14; --vocal-level: 0; }
+/* the room scales off the HEIGHT, same as Jun does. slice scaled
+   it off the width, so folding the panel away zoomed the room 1.3x
+   (1.9x at 1080p) while she stayed put, tiny girl giant tv. the
+   square box + overflow shows the art lounge.svg draws past its
+   viewBox, good to ~2.4:1 */
+.music-room svg { display: block; position: absolute; left: 50%; height: 100%; width: auto; aspect-ratio: 1; transform: translateX(-50%); overflow: visible; }
+/* she sits on the banquette, behind the table lounge-front.svg
+   draws over her (back edge at y 700, her hips). box starts
+   18.7% down the room and is 110% of it tall, so it runs off the
+   bottom on purpose and the clip-path cuts it at the room's bottom
+   edge. that's .287 of the room, and inset() % is of the box
+   itself, so .287 / 1.1 = 26.1%. her crotch is ~60% down the model,
+   which is what lands it on that edge. all of it hangs off y 700,
+   move one number and she floats or sinks. % not dvh, the room is
+   sized in % and headless chrome at least disagrees */
+html #stage, html.phone-ui #stage { position: fixed; min-height: 0; inset: calc(var(--room-h) * .187) var(--karaoke-panel) auto 0; width: auto; height: calc(var(--room-h) * 1.1); clip-path: inset(0 0 26.1% 0); z-index: 40; }
+.music-room-front { z-index: 45; background: none; pointer-events: none; }
+.stage-microphone { position: fixed; z-index: 46; pointer-events: none; }
+.stage-microphone svg { display: block; width: 100%; height: 100%; }
+.karaoke-page-back { position: fixed; top: max(22px, env(safe-area-inset-top)); left: 28px; z-index: 60; color: #c8b5d8; font-size: 11px; text-decoration: none; }
+.karaoke-page-back:hover { color: #f1dcff; }
+.room-session { position: fixed; z-index: 45; bottom: 18px; width: calc(100% - var(--karaoke-panel)); display: flex; justify-content: center; align-items: center; gap: 12px; color: #bba6ce; font-size: 11px; letter-spacing: .15em; text-transform: uppercase; pointer-events: none; }
+.room-equalizer { display: flex; gap: 3px; height: 15px; align-items: center; }
+.room-equalizer i { width: 2px; height: 3px; border-radius: 2px; background: var(--accent); }
+.is-singing .room-equalizer i { animation: level-dance .8s ease-in-out infinite alternate; }
+.room-equalizer i:nth-child(2n) { animation-delay: -.5s; }
+.room-equalizer i:nth-child(3n) { animation-delay: -.2s; }
+@keyframes level-dance { to { height: 14px; } }
+.karaoke-page-status { position: fixed; z-index: 55; top: 35%; right: 24px; width: calc(var(--karaoke-panel) - 32px); padding: 28px; border: 1px solid var(--border-2); border-radius: 5px; background: var(--bg-2); color: var(--muted); font-size: 14px; }
+body.karaoke-mode .karaoke-page-status { display: none; }
+html #karaokeOverlay { inset: 24px 24px 24px auto; width: calc(var(--karaoke-panel) - 32px); height: auto; background: none; overflow: visible; }
+body.karaoke-mode #karaokeOverlay { display: block; }
+#karaokeOverlayClose { position: fixed; top: max(18px, env(safe-area-inset-top)); right: calc(var(--karaoke-panel) + 18px); padding: 0; }
+#karaokeSetup, #karaokeAssign, #karaokeStage { width: 100%; max-width: none; height: 100%; max-height: none; margin: 0; overflow: hidden; }
+#karaokeSetup, #karaokeAssign { display: flex; flex-direction: column; }
+.karaoke-menu .auth-term-bar { flex: none; }
+.karaoke-menu-body, .karaoke-assign-body { flex: 1; min-height: 0; height: auto; max-height: none; overflow-y: auto; overscroll-behavior: contain; }
+.karaoke-question-step { min-height: min-content; }
+.karaoke-assign-list { flex: 1; min-height: 80px; max-height: none; }
+#karaokeStage { padding: 28px 24px 20px; align-items: stretch; gap: 18px; overflow-y: auto; border: 1px solid var(--border-2); border-radius: 12px; background: #19141fe8; }
+.karaoke-turn { align-self: center; flex: none; padding: 7px 12px; }
+.karaoke-turn-main { font-size: 13px; }
+.karaoke-turn-next { font-size: 11px; }
+.karaoke-lyrics { flex: 1 1 auto; min-height: 80px; max-height: none; padding: 8px 12px; font-size: clamp(21px, 2vw, 28px); line-height: 1.55; overscroll-behavior: contain; }
+.karaoke-line { padding: 10px 0; }
+.karaoke-progress-bar { flex: none; height: 4px; }
+.karaoke-controls { display: grid; grid-template-columns: 40px 40px minmax(0, 1fr) minmax(0, 1fr); flex: none; align-items: center; gap: 12px; padding-top: 5px; }
+.karaoke-controls .voice-overlay-btn { width: 40px; height: 40px; padding: 0; }
+.karaoke-controls .voice-overlay-btn svg { flex: none; }
+.karaoke-volume-control { display: flex; flex-direction: column; min-width: 0; gap: 2px; color: var(--muted); font-size: 11px; }
+.karaoke-volume-control .karaoke-vol { width: 100%; min-height: 32px; }
+#karaokeStatus { position: absolute; bottom: -19px; left: 0; width: 100%; transform: none; text-align: center; font-size: 11px; }
+.karaoke-score { padding: 12px; }
+.karaoke-score-list { max-height: 120px; }
+/* singing is a read-the-words activity. in the side panel the
+   words get 37vw and a static lounge takes the other 63%. so
+   once a song is loaded the panel drops to a band across the
+   bottom and the lyrics get the room. :has() so the scene can
+   react to a data-view that lives on the overlay, not on body.
+   no :has() and the layout just stays as it was, which still
+   works. */
+html #karaokeOverlay[data-view="stage"] {
+  inset: auto 0 0 0;
+  width: 100%;
+  height: auto;
+}
+[data-view="stage"] #karaokeStage {
+  height: auto;
+  max-height: 64dvh;
+  gap: 14px;
+  padding: 22px clamp(16px, 6vw, 90px) calc(16px + env(safe-area-inset-bottom));
+  border: 0;
+  border-top: 1px solid var(--border-2);
+  border-radius: 18px 18px 0 0;
+  background: linear-gradient(#19141f00, #19141ff2 16%);
+}
+[data-view="stage"] .karaoke-lyrics { text-align: center; font-size: clamp(24px, 3.2vw, 44px); }
+[data-view="stage"] .karaoke-turn { align-self: center; }
+[data-view="stage"] .karaoke-controls { width: 100%; max-width: 640px; margin: 0 auto; }
+[data-view="stage"] #karaokeStatus { bottom: auto; top: -18px; }
+body:has(#karaokeOverlay[data-view="stage"]) .music-room { right: 0; }
+body:has(#karaokeOverlay[data-view="stage"]) #karaokeOverlayClose { right: max(18px, env(safe-area-inset-right)); }
+html body:has(#karaokeOverlay[data-view="stage"]) #stage { right: 0; }
+
+@media (max-width: 760px) {
+  #karaokeOverlayClose { right: 18px; }
+  .music-room { right: 0; bottom: var(--karaoke-sheet); }
+  :root { --room-h: calc(100% - var(--karaoke-sheet)); }
+  html #stage, html.phone-ui #stage { right: 0; }
+  .karaoke-page-back { top: max(14px, env(safe-area-inset-top)); left: 18px; font-size: 11px; }
+  .room-session { bottom: 10px; font-size: 11px; letter-spacing: .1em; }
+  .karaoke-page-status { top: auto; bottom: 20%; left: 18px; right: 18px; width: auto; }
+  html #karaokeOverlay { inset: auto 8px max(12px, env(safe-area-inset-bottom)) 8px; width: auto; height: calc(var(--karaoke-sheet) - 12px); }
+  .karaoke-menu-body, .karaoke-assign-body { padding: 16px; gap: 14px; }
+  #karaokeStage { padding: 16px 16px 12px; gap: 10px; }
+  .karaoke-lyrics { font-size: 23px; min-height: 40px; }
+  .karaoke-controls { grid-template-columns: 36px 36px minmax(0, 1fr) minmax(0, 1fr); gap: 8px; }
+  .karaoke-controls .voice-overlay-btn { width: 36px; height: 36px; }
+  #karaokeStatus { bottom: -12px; font-size: 11px; }
+}
+@media (max-height: 500px) and (orientation: landscape) {
+  :root { --karaoke-panel: 48vw; --room-h: 100%; }
+  #karaokeOverlayClose { right: calc(var(--karaoke-panel) + 18px); }
+  .music-room { right: var(--karaoke-panel); bottom: 0; }
+  html #karaokeOverlay { inset: 8px 8px 18px auto; width: calc(var(--karaoke-panel) - 16px); height: auto; }
+  .karaoke-menu-body, .karaoke-assign-body { padding: 16px; gap: 14px; }
+  #karaokeStage { padding: 16px; gap: 10px; }
+  .karaoke-lyrics { min-height: 40px; }
+  .room-session { bottom: 10px; font-size: 11px; letter-spacing: .1em; }
+  .karaoke-page-status { top: 30%; right: 16px; left: auto; bottom: auto; width: calc(var(--karaoke-panel) - 24px); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .room-equalizer i { animation: none !important; }
+  .music-room .cone { transform: none; }
+  .karaoke-mode-chip, .karaoke-answer, .karaoke-word { transition: none; }
+}

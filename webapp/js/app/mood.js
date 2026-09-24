@@ -1,6 +1,6 @@
 import { moodControlPhrases, moodControlVals, moodInputs, moodPhrases, moodRefreshBtn, moodVals } from './dom.js?v=11';
-import { renderGreeting } from './greetings.js?v=10';
-import { setSidebarOpen } from './sidebar.js?v=12';
+import { renderGreeting } from './greetings.js?v=12';
+import * as Live2D from '../live2d/live2d.js?v=4';
 
 const MOOD_PHRASES = {
   affection: [
@@ -172,7 +172,7 @@ function renderMood(state) {
   }
   applyMoodAccent(shown);
   renderGreeting(shown);
-  if (window.Live2D && Live2D.setMood) Live2D.setMood(state);
+  Live2D.setMood(state);
 }
 export async function loadMood() {
   try {
@@ -214,13 +214,3 @@ for (const k of ['affection', 'trust', 'tension']) setMoodFill(k, moodBaseline[k
 applyMoodAccent(moodBaseline);
 renderGreeting(moodBaseline);
 if (moodRefreshBtn) moodRefreshBtn.addEventListener('click', loadMood);
-
-document.addEventListener('keydown', (e) => {
-  if (e.key !== 'Escape') return;
-  if (document.body.classList.contains('sidebar-open')) {
-    setSidebarOpen(false);
-    return;
-  }
-  const d = document.getElementById('settingsDrawer');
-  if (d && d.classList.contains('open')) ui.toggleDrawer(false);
-});

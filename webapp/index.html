@@ -14,11 +14,14 @@
 <link rel="apple-touch-icon" href="icon-192.png?v=2">
 
 <style id="critical">
-/* generated from boot.css by tools/build-critical-css.php. do NOT edit. */
-/* this file is never served. tools/build-critical-css.php drops
-   it into index.html so the age gate, auth screen and boot overlay
-   have CSS before styles.css finishes loading. edit THIS file,
-   then run ./sync-webapp.sh. */
+/* generated from css/boot.css by tools/build-critical-css.php. do NOT edit. */
+/* index.html never requests this file.
+   tools/build-critical-css.php drops it into index.html so the
+   age gate, auth screen and boot overlay have CSS before
+   styles.css finishes loading. (karaoke, privacy and the
+   showcase pages still link it the normal way, for the tokens.)
+   edit THIS file, never the inlined copy, then run
+   ./sync-webapp.sh. */
 
 :root {
   --bg:         #131314;
@@ -30,7 +33,7 @@
   --fg:         #e3e3e3;
   --muted:      #c4c7c5;
   --dim:        #8e9295;
-  /* the accent IS her mood colour. js/app.js sets these off
+  /* the accent is her mood colour. js/app/mood.js sets these off
      affection, trust and tension once she's loaded. these are the
      resting values before login, and the fallback. --grad comes
      from them, so one change moves the whole palette. */
@@ -319,7 +322,7 @@ html[data-age-gated] #app { visibility: hidden; }
 html[data-pre-auth] #app { visibility: hidden; }
 
 /* the settings drawer sits OUTSIDE #app, so neither rule above
-   touches it. before settings.css lands it's 380 lines of raw
+   touches it. before settings.css lands it's ~270 lines of raw
    form controls dumped on the page, tabs and all, and one frame
    of that is what a hard refresh shows you. settings.css
    re-declares this selector later with display: flex, so this
@@ -603,28 +606,17 @@ html[data-pre-auth] #app { visibility: hidden; }
 }
 </style>
 
-<!-- Fetched during parse but applied by boot-gate.js: the CSP
-   forbids the usual media="print" onload= trick, and blocking on
-   the full sheet would cost a round trip the auth screen does not
-   need. -->
-<link rel="preload" as="style" href="styles.css?v=7">
-<link rel="preload" as="style" href="trip-loader.css?v=2">
-<noscript><link rel="stylesheet" href="styles.css?v=7"></noscript>
+<!-- fetched during parse, applied later by boot-gate.js. the CSP
+   (the page's allowlist for what may run) forbids the usual
+   media="print" onload= trick. and blocking on the full sheet
+   costs a round trip the auth screen doesn't even need. -->
+<link rel="preload" as="style" href="styles.css?v=13">
+<link rel="preload" as="style" href="css/trip-loader.css?v=1">
+<noscript><link rel="stylesheet" href="styles.css?v=13"></noscript>
 
-<script defer src="js/viewport.js?v=3"></script>
-<script defer src="js/pwa.js?v=2"></script>
-<script src="js/boot-gate.js?v=5"></script>
-
-<script defer src="js/loader.js?v=2"></script>
-<script defer src="js/auth.js?v=4"></script>
-<script defer src="js/prefs.js?v=4"></script>
-<script defer src="js/names.js?v=4"></script>
-<script defer src="js/chat-api.js?v=6"></script>
-<script defer src="js/ui.js?v=3"></script>
-<script defer src="js/history.js?v=2"></script>
-<script defer src="js/boot-fx.js?v=2"></script>
-<script defer src="js/memory-graph.js?v=2"></script>
-<script type="module" src="js/app.js?v=17"></script>
+<script type="module" src="js/core/pwa.js?v=1"></script>
+<script src="js/boot-gate.js?v=8"></script>
+<script type="module" src="js/app.js?v=27"></script>
 </head>
 <body>
 
@@ -995,7 +987,7 @@ html[data-pre-auth] #app { visibility: hidden; }
         <div class="set-row">
           <div class="set-row-text">
             <div class="set-row-title" id="dateRowTitle">Dinner out</div>
-            <div class="set-row-desc">Take her out to eat - you order for both, she has opinions.</div>
+            <div class="set-row-desc">Take her out to eat - you pick your dish, she orders her own.</div>
           </div>
           <div class="set-row-control">
             <button class="secondary" id="askDateBtn" title="Ask her in chat">Ask her</button>

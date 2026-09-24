@@ -80,14 +80,14 @@ services:
       OMEGA_ALLOWED_HOSTS: "${DOMAIN:-localhost},localhost,127.0.0.1,::1,${OMEGA_EXTRA_HOSTS:-}"
       OMEGA_ALLOWED_ORIGINS: "${OMEGA_ALLOWED_ORIGINS:-}"
       TRUST_PROXY: "${TRUST_PROXY:-}"
-# start.sh reads this on the host, php has no GPU device of its
-# own.
+      # start.sh reads this on the host, php has no GPU device of
+      # its own
       OMEGA_GPU_VRAM_MB: "${OMEGA_GPU_VRAM_MB:-}"
       LLAMACPP_TOOLS: "${LLAMACPP_TOOLS:-}"
       FLEE_BANS: "${FLEE_BANS:-on}"
       FREE_ROAM: "${FREE_ROAM:-off}"
-# KOKORO_URL is the old name, kept so existing .env files still
-# work.
+      # KOKORO_URL is the old name, kept so existing .env files
+      # still work
       TTS_URL: "${TTS_URL:-}"
       KOKORO_URL: "${KOKORO_URL:-http://tts:8001}"
       KARAOKE_URL: "${KARAOKE_URL:-http://karaoke:8001}"
@@ -95,8 +95,8 @@ services:
     volumes:
       - omega_state:/var/lib/omega
       - ./tools:/var/www/omega/tools
-# Soft dependencies, the model server and TTS come and go with
-# their profiles.
+    # no depends_on for the model server or TTS, ON PURPOSE. they
+    # come and go with their profiles, so they're soft dependencies
     healthcheck:
       test: ["CMD", "cgi-fcgi", "-bind", "-connect", "127.0.0.1:9000"]
       interval: 10s
@@ -129,14 +129,14 @@ services:
       OLLAMA_MTP_N_MAX: "${OLLAMA_MTP_N_MAX:-4}"
       OLLAMA_MTP_MODEL: "${OLLAMA_MTP_MODEL:-jun-mtp}"
       OMEGA_NUM_CTX: "${OMEGA_NUM_CTX:-}"
-# Cap how many requests and models Ollama holds at once. each one
-# keeps its own KV cache, the memory of the prompt it already
-# read, so they add up fast.
+      # cap how many requests and models Ollama holds at once. each
+      # one keeps its own KV cache, the memory of the prompt it
+      # already read, so they add up fast.
       OLLAMA_NUM_PARALLEL: "${OLLAMA_NUM_PARALLEL:-1}"
       OLLAMA_MAX_LOADED_MODELS: "${OLLAMA_MAX_LOADED_MODELS:-3}"
       OLLAMA_KEEP_ALIVE: "${OLLAMA_KEEP_ALIVE:-5m}"
-# q8_0 stores that cache smaller. it needs flash attention,
-# without it we get f16.
+      # q8_0 stores that cache smaller. it needs flash attention,
+      # without it we get f16.
       OLLAMA_FLASH_ATTENTION: "${OLLAMA_FLASH_ATTENTION:-1}"
       OLLAMA_KV_CACHE_TYPE: "${OLLAMA_KV_CACHE_TYPE:-q8_0}"
     volumes:
@@ -222,11 +222,12 @@ services:
     cap_add: [CHOWN, DAC_OVERRIDE, SETGID, SETUID]
     networks: [omega]
 
-# The same server.py as `tts`, built with demucs and, on the GPU
-# overlays, a CUDA or ROCm torch. it sits behind a profile
-# because the image is several GB and only karaoke wants it. with
-# the profile off api/karaoke.php just can't reach the host, and
-# the webapp greys the karaoke button out.
+  # the same server.py as `tts`, built with demucs (splits a song
+  # into vocals and backing) and, on the GPU overlays, a CUDA or
+  # ROCm torch. it sits behind a profile because the image is
+  # several GB and only karaoke wants it. with the profile off
+  # api/karaoke.php just can't reach the host, and the webapp
+  # greys the karaoke button out.
   karaoke:
     build:
       context: .

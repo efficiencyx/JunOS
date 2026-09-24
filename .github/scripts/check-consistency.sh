@@ -27,7 +27,7 @@ else
 fi
 
 echo "migrations"
-# _lib.php picks migrations with glob + sort and compares the
+# db() in api/lib/db.php picks migrations with glob + sort and compares the
 # leading number against MAX(v) in schema_version. a duplicate
 # number means one of the two never runs on an existing database,
 # and a file that forgets its own INSERT gets re-run on every
@@ -37,7 +37,7 @@ for f in webapp/api/migrations/*.sql; do
 	base=$(basename "$f")
 	n=$(printf '%s' "$base" | sed -n 's/^\([0-9][0-9][0-9]\)_.*\.sql$/\1/p')
 	if [ -z "$n" ]; then
-		fail "$base is not NNN_name.sql, _lib.php will skip it"
+		fail "$base is not NNN_name.sql, db() will skip it"
 		continue
 	fi
 	if [ "$n" = "$prev" ]; then fail "two migrations numbered $n"; fi

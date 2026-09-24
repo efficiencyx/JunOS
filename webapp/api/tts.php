@@ -1,68 +1,53 @@
 <?php
 
-require_once __DIR__ . '/_lib.php';
+require_once __DIR__ . '/lib/bootstrap.php';
 
 require_user();
 
-// KOKORO_URL is what TTS_URL was called before, we still take it for old .env files.
-$ttsUrl = rtrim(env_str('TTS_URL', env_str('KOKORO_URL', 'http://localhost:8001')), '/');
 $action = $_GET['action'] ?? '';
 
-if ($action === 'voices') {
-    header('Content-Type: application/json');
+const VOICES_CACHE_KEY = 'omega_voices_v2';
 
-    $cacheKey = 'omega_voices_v2';
-    $cached = null;
-
+function voices_cache_read(): ?string {
     if (function_exists('apcu_fetch')) {
         $success = false;
-        $val = apcu_fetch($cacheKey, $success);
-        if ($success) $cached = $val;
-    } else {
-        $cacheFile = sys_get_temp_dir() . '/omega_voices_v2.cache';
-        if (is_readable($cacheFile) && (time() - filemtime($cacheFile)) < 60) {
-            $cached = file_get_contents($cacheFile) ?: null;
-        }
+        $val = apcu_fetch(VOICES_CACHE_KEY, $success);
+        return $success ? $val : null;
     }
-
-    if ($cached !== null) {
-        header('Cache-Control: public, max-age=60');
-        echo $cached;
-        exit;
+    $cacheFile = sys_get_temp_dir() . '/' . VOICES_CACHE_KEY . '.cache';
+    if (is_readable($cacheFile) && (time() - filemtime($cacheFile)) < 60) {
+        return file_get_contents($cacheFile) ?: null;
     }
+    return null;
+}
 
-    $ch = curl_init($ttsUrl . '/voices');
-    curl_setopt($ch, CURLOPT_HTTPHEADER, sidecar_headers());
-    curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
-    curl_setopt($ch, CURLOPT_CONNECTTIMEOUT, 5);
-    curl_setopt($ch, CURLOPT_TIMEOUT, 10);
-    $res = curl_exec($ch);
-    $code = curl_getinfo($ch, CURLINFO_HTTP_CODE);
-    curl_close($ch);
-
-    if ($res === false) {
-        http_response_code(502);
-        echo json_encode(['error' => 'tts_unreachable']);
-        exit;
-    }
-
-    if ($code >= 500) {
-        http_response_code(502);
-        log_event(['msg' => 'tts_voices_error', 'upstream_code' => $code]);
-        echo json_encode(['error' => 'tts_failed']);
-        exit;
-    }
-
+function voices_cache_write(string $voices): void {
     if (function_exists('apcu_store')) {
-        apcu_store($cacheKey, $res, 60);
+        apcu_store(VOICES_CACHE_KEY, $voices, 60);
     } else {
-        $cacheFile = sys_get_temp_dir() . '/omega_voices_v2.cache';
-        @file_put_contents($cacheFile, $res);
+        @file_put_contents(sys_get_temp_dir() . '/' . VOICES_CACHE_KEY . '.cache', $voices);
     }
+}
 
+// voice names and pocket-tts language ids (english, french_24l,
+// ...). only the shape gets checked here, the sidecar puts a
+// language it doesn't know back to its default.
+function tts_valid_id(mixed $id): bool {
+    return $id === null || (is_string($id) && preg_match('/^[a-z][a-z0-9_]*$/', $id));
+}
+
+if ($action === 'voices') {
+    $cached = voices_cache_read();
+    if ($cached === null) {
+        $res = sidecar_call(tts_url() . '/voices');
+        sidecar_check($res, 'tts_unreachable', 'tts_failed');
+        $cached = (string)$res['body'];
+        voices_cache_write($cached);
+        http_response_code($res['code']);
+    }
+    header('Content-Type: application/json');
     header('Cache-Control: public, max-age=60');
-    http_response_code($code);
-    echo $res;
+    echo $cached;
     exit;
 }
 
@@ -80,22 +65,12 @@ if ($action === 'tts') {
     if (!is_string($text) || trim($text) === '' || strlen($text) > 2000) {
         fail(400, 'invalid_request');
     }
-
-    $voice = $body['voice'] ?? null;
-    if ($voice !== null && (!is_string($voice) || !preg_match('/^[a-z][a-z0-9_]*$/', $voice))) {
+    if (!tts_valid_id($body['voice'] ?? null) || !tts_valid_id($body['lang'] ?? null)) {
         fail(400, 'invalid_request');
     }
 
     $engine = $body['engine'] ?? null;
     if ($engine !== null && !in_array($engine, ['kokoro', 'pockettts'], true)) {
-        fail(400, 'invalid_request');
-    }
-
-    // pocket-tts language id, english or french_24l and so on. the sidecar
-    // puts anything it doesn't know back to its default, here we only check
-    // the shape.
-    $lang = $body['lang'] ?? null;
-    if ($lang !== null && (!is_string($lang) || !preg_match('/^[a-z][a-z0-9_]*$/', $lang))) {
         fail(400, 'invalid_request');
     }
 
@@ -105,34 +80,9 @@ if ($action === 'tts') {
         if ($speed === false || $speed < 0.5 || $speed > 2.0) fail(400, 'invalid_request');
     }
 
-    $ch = curl_init($ttsUrl . '/tts');
-    curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
-    curl_setopt($ch, CURLOPT_POST, true);
-    curl_setopt($ch, CURLOPT_POSTFIELDS, $rawBody);
-    curl_setopt($ch, CURLOPT_HTTPHEADER, sidecar_headers(['Content-Type: application/json']));
-    curl_setopt($ch, CURLOPT_CONNECTTIMEOUT, 5);
-    curl_setopt($ch, CURLOPT_TIMEOUT, 60);
-    $res = curl_exec($ch);
-    $code = curl_getinfo($ch, CURLINFO_HTTP_CODE);
-    $ct  = curl_getinfo($ch, CURLINFO_CONTENT_TYPE);
-    curl_close($ch);
-
-    if ($res === false) {
-        http_response_code(502);
-        header('Content-Type: application/json');
-        echo json_encode(['error' => 'tts_unreachable']);
-        exit;
-    }
-
-    if ($code >= 500) {
-        log_event(['msg' => 'tts_upstream_error', 'upstream_code' => $code]);
-        fail(502, 'tts_failed');
-    }
-
-    http_response_code($code);
-    if ($ct) header('Content-Type: ' . $ct);
-    echo $res;
-    exit;
+    $res = sidecar_call(tts_url() . '/tts', $rawBody, ['Content-Type: application/json'], 60);
+    sidecar_check($res, 'tts_unreachable', 'tts_failed');
+    sidecar_relay($res, $res['type'] ?: 'application/json');
 }
 
 if ($action === 'warm') {
@@ -143,39 +93,13 @@ if ($action === 'warm') {
 
     $rawBody = read_body(1024);
     $body = json_decode($rawBody, true);
-    if (!is_array($body)) fail(400, 'invalid_request');
+    if (!is_array($body) || !tts_valid_id($body['lang'] ?? null)) fail(400, 'invalid_request');
 
-    $lang = $body['lang'] ?? null;
-    if ($lang !== null && (!is_string($lang) || !preg_match('/^[a-z][a-z0-9_]*$/', $lang))) {
-        fail(400, 'invalid_request');
-    }
-
-    header('Content-Type: application/json');
-
-    $ch = curl_init($ttsUrl . '/warm');
-    curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
-    curl_setopt($ch, CURLOPT_POST, true);
-    curl_setopt($ch, CURLOPT_POSTFIELDS, $rawBody);
-    curl_setopt($ch, CURLOPT_HTTPHEADER, sidecar_headers(['Content-Type: application/json']));
-    curl_setopt($ch, CURLOPT_CONNECTTIMEOUT, 5);
-    // Loading a cold language checkpoint can take several seconds. the client
-    // is not waiting on this, so give the sidecar room to finish.
-    curl_setopt($ch, CURLOPT_TIMEOUT, 120);
-    $res = curl_exec($ch);
-    $code = curl_getinfo($ch, CURLINFO_HTTP_CODE);
-    curl_close($ch);
-
-    if ($res === false) {
-        http_response_code(502);
-        echo json_encode(['error' => 'tts_unreachable']);
-        exit;
-    }
-
-    http_response_code($code >= 500 ? 502 : $code);
-    echo $res === false ? json_encode(['error' => 'tts_failed']) : $res;
-    exit;
+    // a cold language checkpoint can take several seconds to load.
+    // the client isn't waiting on this one, so let the sidecar finish
+    $res = sidecar_call(tts_url() . '/warm', $rawBody, ['Content-Type: application/json'], 120);
+    sidecar_check($res, 'tts_unreachable', 'tts_failed');
+    sidecar_relay($res);
 }
 
-http_response_code(400);
-header('Content-Type: application/json');
-echo json_encode(['error' => 'unknown_action']);
+fail(400, 'unknown_action');

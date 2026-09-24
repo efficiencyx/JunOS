@@ -4,7 +4,7 @@
 // every few seconds while it is open so keep this cheap and Never
 // fatal, if something upstream hiccups we give back the half we
 // got and not an error page.
-require_once __DIR__ . '/_lib.php';
+require_once __DIR__ . '/lib/bootstrap.php';
 
 header('Content-Type: application/json');
 header('Cache-Control: no-store');
@@ -17,34 +17,21 @@ $out = ['models' => [], 'vram_bytes' => 0, 'ram_model_bytes' => 0, 'host' => nul
 // /api/ps is an Ollama thing. with any other chat provider there
 // is nobody to ask, and no reason to pay the connect timeout on
 // every HUD poll, so we just report host memory.
-$res = false;
-if (ai_provider() === 'ollama') {
-    $ollamaUrl = rtrim(env_str('OLLAMA_URL', 'http://localhost:11434'), '/');
-    $ch = curl_init($ollamaUrl . '/api/ps');
-    curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
-    curl_setopt($ch, CURLOPT_CONNECTTIMEOUT, 3);
-    curl_setopt($ch, CURLOPT_TIMEOUT, 5);
-    $res = curl_exec($ch);
-    curl_close($ch);
-}
-
-if ($res !== false) {
-    $data = json_decode($res, true);
-    if (is_array($data) && isset($data['models']) && is_array($data['models'])) {
-        foreach ($data['models'] as $m) {
-            $size = (int)($m['size'] ?? 0);
-            $vram = (int)($m['size_vram'] ?? 0);
-            $out['vram_bytes'] += $vram;
-            $out['ram_model_bytes'] += max(0, $size - $vram);
-            $out['models'][] = [
-                'name'    => (string)($m['name'] ?? ''),
-                'size'    => $size,
-                'vram'    => $vram,
-                'quant'   => (string)($m['details']['quantization_level'] ?? ''),
-                'params'  => (string)($m['details']['parameter_size'] ?? ''),
-                'context' => (int)($m['context_length'] ?? 0),
-            ];
-        }
+$loaded = ai_provider() === 'ollama' ? (ollama_api_json('/api/ps', null, 5)['models'] ?? null) : null;
+if (is_array($loaded)) {
+    foreach ($loaded as $m) {
+        $size = (int)($m['size'] ?? 0);
+        $vram = (int)($m['size_vram'] ?? 0);
+        $out['vram_bytes'] += $vram;
+        $out['ram_model_bytes'] += max(0, $size - $vram);
+        $out['models'][] = [
+            'name'    => (string)($m['name'] ?? ''),
+            'size'    => $size,
+            'vram'    => $vram,
+            'quant'   => (string)($m['details']['quantization_level'] ?? ''),
+            'params'  => (string)($m['details']['parameter_size'] ?? ''),
+            'context' => (int)($m['context_length'] ?? 0),
+        ];
     }
 }
 

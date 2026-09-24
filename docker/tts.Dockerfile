@@ -23,14 +23,15 @@ WORKDIR /app
 
 # Where we get torch from. CPU only, so kokoro or pocket-tts
 # can't quietly pull a multi-GB GPU build in behind them.
-# TTS_TORCH_INDEX overrides it for the rare bare metal setup that
-# wants GPU voice, no compose overlay touches it.
+# TTS_TORCH_INDEX overrides it (docker-compose.yml passes it in)
+# for the rare setup that wants GPU voice. no compose overlay
+# touches it.
 ARG TORCH_INDEX=https://download.pytorch.org/whl/cpu
 
 # Install torch FIRST, from TORCH_INDEX, or something later drags
 # a different build in behind it. keep it in its own layer ahead
 # of the requirements COPY so editing requirements.txt doesn't
-# re-run this install. No BuildKit cache mount here on purpose -
+# re-run this install. no BuildKit cache mount here, on purpose.
 # `docker compose build` on the legacy builder errors on --mount,
 # so we rely on uv's speed instead.
 RUN UV_HTTP_TIMEOUT=120 uv pip install --system torch --index-url ${TORCH_INDEX}
@@ -48,36 +49,36 @@ RUN curl -fsSL \
  && rm "/tmp/en_core_web_sm-${SPACY_MODEL_VERSION}-py3-none-any.whl"
 
 COPY tts/server.py /app/server.py
+COPY tts/sidecar /app/sidecar
 COPY docker/sidecar-entrypoint.sh /usr/local/bin/omega-sidecar-entrypoint
 RUN chmod +x /usr/local/bin/omega-sidecar-entrypoint \
  && mkdir -p /home/omega/.cache \
  && chown -R omega:omega /home/omega
 
 # TTS_DEVICE: cpu | cuda | auto. "auto" uses the GPU when the
-# installed torch exposes one, so it's a no-op on this CPU build
-# and only bites when TORCH_INDEX was overridden. STT_MODEL /
-# STT_LANG: must agree. base is the multilingual default with
-#   STT_LANG="" (auto-detect per utterance/song). The ".en" builds
-#   (base.en, small.en) are English-ONLY and a touch faster/sharper
-#   on English - pair one with STT_LANG=en if you never leave
-#   English. For better non-English accuracy size up the
-#   multilingual model (small, medium, large-v3), CPU cost
-#   permitting. Auto-detect costs an extra decode pass and is shaky
-#   under ~2s of audio; pin STT_LANG to a code (it, es, de, ...)
-#   when you know the language. Note Kokoro only speaks American
-#   English; the pockettts engine is the one with it/es/de/pt/fr
-#   voices, so a non-English loop needs engine=pockettts too.
+#   installed torch exposes one, so it's a no-op on this CPU build
+#   and only matters when TORCH_INDEX was overridden.
+# STT_MODEL / STT_LANG: must agree. base is the multilingual
+#   default with STT_LANG="" (auto-detect per utterance/song).
+#   The ".en" builds (base.en, small.en) are English-ONLY and a
+#   touch faster/sharper on English. Pair one with STT_LANG=en if
+#   you never leave English. For better non-English accuracy size
+#   up the multilingual model (small, medium, large-v3), CPU cost
+#   permitting. Auto-detect costs an extra decode pass and is
+#   shaky under ~2s of audio, so pin STT_LANG to a code (it, es,
+#   de, ...) when you know the language. Kokoro only speaks
+#   American English. The pockettts engine is the one with
+#   it/es/de/pt/fr voices, so a non-English loop needs
+#   engine=pockettts too.
 # STT_DEVICE: cpu | cuda. Separate from TTS_DEVICE and defaults
-# to cpu on
-#   purpose - whisper runs on CTranslate2, not torch, and CUDA
-#   CTranslate2 needs cuDNN that the torch CUDA wheel doesn't
+#   to cpu on purpose. whisper runs on CTranslate2, not torch, and
+#   CUDA CTranslate2 needs cuDNN that the torch CUDA wheel doesn't
 #   reliably ship (and has no ROCm backend at all). CPU whisper
-#   isn't the bottleneck; Kokoro is.
+#   isn't the bottleneck, Kokoro is.
 # OMP_NUM_THREADS bounds torch's intra-op pool and is also read
-# by server.py as
-#   whisper's cpu_threads. Unpinned, both libraries grab every core
-#   and fight when STT and TTS overlap. Raise it on a big box, drop
-#   to 2 on a 4-core one.
+#   by sidecar/stt.py as whisper's cpu_threads. Unpinned, both
+#   libraries grab every core and fight when STT and TTS overlap.
+#   Raise it on a big box, drop to 2 on a 4-core one.
 ENV SIDECAR_ROLE=tts \
     TTS_HOST=0.0.0.0 \
     TTS_PORT=8001 \

@@ -1,7 +1,11 @@
 import { chatInput, sendBtn } from './dom.js?v=11';
-import { replayFaceBubbleIntro, scheduleFaceBubbleHide, showFaceBubble } from './face-bubble.js?v=12';
-import { loadMood } from './mood.js?v=12';
-import { escapeHtml } from './util.js?v=10';
+import { replayFaceBubbleIntro, scheduleFaceBubbleHide, showFaceBubble } from './face-bubble.js?v=18';
+import { loadMood } from './mood.js?v=18';
+import { escapeHtml } from '../core/util.js?v=1';
+import * as Names from '../core/names.js?v=1';
+import * as TTS from '../voice/tts.js?v=2';
+import * as VoiceMode from '../voice/voicemode.js?v=2';
+import * as Live2D from '../live2d/live2d.js?v=4';
 
 const CAMERA_MS = 450;
 const SCENE_TAIL_MS = 1800;
@@ -176,16 +180,15 @@ export function playWelcome() {
   if (!pending) return;
   const { lines, tier, mood_changed: moodChanged } = pending;
   pending = null;
-  const player = window.Names ? Names.getPlayer() : 'Anon';
+  const player = Names.getPlayer();
   // wrapped in a span so welcome.css can fade the words in after
   // the panel has opened. without it .fb-text is a plain text node
   // with nothing to aim at.
   const resolved = lines.map(line => '<span>' + escapeHtml(line.replaceAll('{f_playerName}', player)) + '</span>');
-  const live2d = window.Live2D;
   const at = (ms, fn) => sceneTimers.push(setTimeout(fn, ms));
 
   const loops = TIER_LOOPS[tier] || TIER_LOOPS.none;
-  const speaks = !!(window.TTS && TTS.isEnabled && TTS.isEnabled());
+  const speaks = TTS.isEnabled();
 
   const detach = abortOnInteraction();
   endScene = () => {
@@ -195,32 +198,29 @@ export function playWelcome() {
     sceneTimers = [];
     exitScene();
     if (speaks) TTS.stop();
-    if (!live2d) return;
-    for (const [param] of loops) live2d.stopLoop(param);
+    for (const [param] of loops) Live2D.stopLoop(param);
     // voice mode uses the same 'face' preset. if it took over mid
     // scene then handing the camera back yanks it out of a zoom it
     // still wants.
-    if (!(window.VoiceMode && VoiceMode.isActive())) live2d.setCameraPreset('default');
-    live2d.resetIdle();
-    live2d.startIdle();
-    live2d.setFidgetsEnabled(true);
+    if (!VoiceMode.isActive()) Live2D.setCameraPreset('default');
+    Live2D.resetIdle();
+    Live2D.startIdle();
+    Live2D.setFidgetsEnabled(true);
   };
 
   enterScene(tier);
-  if (live2d) {
-    live2d.setFidgetsEnabled(false);
-    live2d.setCameraPreset('face');
-    // let the camera arrive before she reacts, or it happens off screen
-    at(CAMERA_MS, () => {
-      live2d.scheduleSequence(SCENES[tier] || SCENES.none);
-      for (const [param, amp, period] of loops) live2d.startLoop(param, amp, period);
-    });
-  }
+  Live2D.setFidgetsEnabled(false);
+  Live2D.setCameraPreset('face');
+  // let the camera arrive before she reacts, or it happens off screen
+  at(CAMERA_MS, () => {
+    Live2D.scheduleSequence(SCENES[tier] || SCENES.none);
+    for (const [param, amp, period] of loops) Live2D.startLoop(param, amp, period);
+  });
 
   const plains = lines.map(line => line.replaceAll('{f_playerName}', player));
 
   // lines advance when the VOICE finishes them, not on a timer. a
-  // fixed pace yanked the text away mid sentence on anything longer
+  // fixed pace yanks the text away mid sentence on anything longer
   // than a few words. with no TTS we guess from the word count
   // instead.
   function showLine(i) {

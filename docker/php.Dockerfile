@@ -14,7 +14,7 @@ RUN apk add --no-cache curl fcgi sqlite-libs \
 # post_max_size has to cover the biggest upload we take, the
 # audio body on /api/karaoke.php. the STT WAV sits well under it.
 # yes this is global, but nginx caps every other location at
-# 16k/256k so they never get near it.
+# 16k or 4m so they never get near it.
 RUN { \
       echo 'post_max_size=30M'; \
       echo 'upload_max_filesize=30M'; \

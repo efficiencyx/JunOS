@@ -6,14 +6,18 @@
 <meta name="color-scheme" content="dark">
 <title>Karaoke with Jun</title>
 <link rel="icon" type="image/png" href="favicon.png?v=1">
-<link rel="stylesheet" href="boot.css?v=1">
-<link rel="stylesheet" href="styles.css?v=1">
-<link rel="stylesheet" href="karaoke-page.css?v=1">
-<script defer src="js/viewport.js?v=3"></script>
+<link rel="stylesheet" href="css/boot.css?v=1">
+<link rel="stylesheet" href="styles.css?v=13">
+<link rel="stylesheet" href="css/pages/karaoke.css?v=5">
+<link rel="stylesheet" href="css/trip-loader.css?v=1">
 </head>
 <body>
-<a id="karaokeBackLink" class="karaoke-page-back" href="index.html" aria-label="Back to chat">← Chat</a>
+<div class="music-room" aria-hidden="true"></div>
+<a id="karaokeBackLink" class="karaoke-page-back" href="index.html" aria-label="Back to chat">← Back to chat</a>
 <div id="stage" aria-label="Live2D stage"></div>
+<div id="karaokeMic" class="stage-microphone" aria-hidden="true" hidden></div>
+<div class="music-room music-room-front" aria-hidden="true"></div>
+<div class="room-session"><span id="karaokeRoomBadge">Soundcheck</span><div class="room-equalizer" aria-hidden="true"><i></i><i></i><i></i><i></i><i></i><i></i><i></i></div></div>
 <div id="karaokePageStatus" class="karaoke-page-status" role="status" aria-live="polite">Loading Jun…</div>
 <div id="toasts" aria-live="polite" aria-atomic="false"></div>
 
@@ -37,19 +41,10 @@
 
       <div class="auth-motd">
         <div class="auth-motd-line" id="karaokeTitle">Karaoke with Jun</div>
-        <div class="auth-motd-line auth-dim">shell detected: <b class="auth-os-name karaoke-os-name">linux</b> - answer three quick questions<span class="auth-caret" aria-hidden="true"></span></div>
+        <div class="auth-motd-line auth-dim">shell detected: <b class="auth-os-name karaoke-os-name">linux</b> - pick a mode, pick a song<span class="auth-caret" aria-hidden="true"></span></div>
       </div>
 
-      <div class="karaoke-step-track" aria-label="Setup progress">
-        <span class="active" data-karaoke-step-dot="0">1</span>
-        <i></i>
-        <span data-karaoke-step-dot="1">2</span>
-        <i></i>
-        <span data-karaoke-step-dot="2">3</span>
-      </div>
-
-      <section class="karaoke-question-step" data-karaoke-step="0">
-        <div class="karaoke-step-label"><span class="auth-ps" aria-hidden="true"></span> question 1 / 3</div>
+      <section class="karaoke-field">
         <h2 class="karaoke-question">How should we sing it?</h2>
         <div id="karaokeModeSel" class="karaoke-mode-sel" role="group" aria-label="Karaoke mode">
           <button class="karaoke-mode-chip" type="button" data-mode="solo">
@@ -66,40 +61,12 @@
           </button>
         </div>
         <div id="karaokeModeDesc" class="karaoke-mode-desc" aria-live="polite"></div>
-        <div class="karaoke-wizard-actions">
-          <button class="auth-submit" type="button" data-karaoke-next>continue</button>
-        </div>
       </section>
 
-      <section class="karaoke-question-step" data-karaoke-step="1" hidden>
-        <div class="karaoke-step-label"><span class="auth-ps" aria-hidden="true"></span> question 2 / 3</div>
-        <h2 class="karaoke-question">Do you have a lyrics file?</h2>
-        <p class="karaoke-question-hint">Synced <code>.lrc</code> gives the best timing. Plain <code>.txt</code> also works.</p>
-        <div class="karaoke-lyrics-options" role="group" aria-label="Lyrics source">
-          <button id="karaokeLyricsAuto" class="karaoke-answer selected" type="button">
-            <strong>No, detect them</strong>
-            <span>Use embedded lyrics or transcribe the song.</span>
-          </button>
-          <button id="karaokeLyricsBtn" class="karaoke-answer" type="button">
-            <strong>Choose lyrics</strong>
-            <span>Load an .lrc or .txt file from this device.</span>
-          </button>
-        </div>
-        <input id="karaokeLyricsInput" type="file" accept=".lrc,.txt,text/plain" hidden>
-        <div id="karaokeLyricsSrc" class="karaoke-lyrics-src" aria-live="polite"></div>
-        <div class="karaoke-wizard-actions">
-          <button class="karaoke-back" type="button" data-karaoke-back>back</button>
-          <button class="auth-submit" type="button" data-karaoke-next>continue</button>
-        </div>
-      </section>
-
-      <section class="karaoke-question-step" data-karaoke-step="2" hidden>
-        <div class="karaoke-step-label"><span class="auth-ps" aria-hidden="true"></span> question 3 / 3</div>
-        <h2 class="karaoke-question">Which song are we singing?</h2>
-        <p id="karaokeSetupSummary" class="karaoke-question-hint"></p>
-        <div id="karaokeDeviceHint" class="karaoke-hint"></div>
+      <section class="karaoke-field">
         <button id="karaokeLoadBtn" class="auth-submit karaoke-load" type="button">choose an mp3 or wav</button>
         <input id="karaokeFileInput" type="file" accept="audio/*,.mp3,.wav" hidden>
+        <div id="karaokeDeviceHint" class="karaoke-hint"></div>
         <div id="karaokeProgress" class="karaoke-progress" hidden>
           <span class="karaoke-spinner" aria-hidden="true"></span>
           <span class="karaoke-progress-text">
@@ -108,9 +75,13 @@
           </span>
           <button id="karaokeCancelBtn" class="karaoke-cancel" type="button" hidden>cancel</button>
         </div>
-        <div class="karaoke-wizard-actions karaoke-wizard-actions-back">
-          <button class="karaoke-back" type="button" data-karaoke-back>back</button>
-        </div>
+      </section>
+
+      <section class="karaoke-field karaoke-lyrics-row">
+        <button id="karaokeLyricsBtn" class="karaoke-linkish" type="button">use my own lyrics file</button>
+        <span id="karaokeLyricsSrc" class="karaoke-lyrics-src" aria-live="polite"></span>
+        <button id="karaokeLyricsAuto" class="karaoke-linkish karaoke-lyrics-clear" type="button" hidden>clear</button>
+        <input id="karaokeLyricsInput" type="file" accept=".lrc,.txt,text/plain" hidden>
       </section>
     </div>
   </section>
@@ -159,13 +130,6 @@
 <script defer src="vendor/pixi.min.js"></script>
 <script defer src="vendor/pixi-unsafe-eval.min.js"></script>
 <script defer src="vendor/cubism4.min.js"></script>
-<script defer src="js/auth.js?v=4"></script>
-<script defer src="js/prefs.js?v=4"></script>
-<script defer src="js/ui.js?v=3"></script>
-<script type="module" src="js/live2d.js?v=10"></script>
-<script defer src="js/mods.js?v=14"></script>
-<script defer src="js/outfit.js?v=21"></script>
-<script defer src="js/karaoke.js?v=5"></script>
-<script defer src="js/karaoke-page.js?v=4"></script>
+<script type="module" src="js/karaoke-page.js?v=14"></script>
 </body>
 </html>

@@ -1,11 +1,12 @@
-// Not inline. the nginx CSP has no 'unsafe-inline' for script-src, so this is
-// a blocking <script> in <head> instead.
+// not inline. the nginx CSP (Content-Security-Policy, the header
+// that says what the page may run) has no 'unsafe-inline' in
+// script-src, so this is a blocking <script> in <head> instead.
 
 document.documentElement.setAttribute('data-pre-auth', '1');
 
 // Done here and not with <link> tags so they don't block the parser. the
 // pre-app screens are covered by the inlined critical CSS until these land.
-for (const href of ['styles.css?v=7', 'trip-loader.css?v=2']) {
+for (const href of ['styles.css?v=13', 'css/trip-loader.css?v=1']) {
   const link = document.createElement('link');
   link.rel = 'stylesheet';
   link.href = href;

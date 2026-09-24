@@ -1,8 +1,13 @@
-import { abortFn, currentConversationId, runChat } from '../app.js?v=17';
+import { abortFn, currentConversationId } from './session.js?v=1';
+import { runChat } from './chat.js?v=2';
 import { chatInput, consolidationBanner, consolidationSub, consolidationTitle, devNoIdleChk, fleeEtaEl, fleeOverlay, fleeReasonEl, sendBtn, voiceChk } from './dom.js?v=11';
-import { showFaceBubble } from './face-bubble.js?v=12';
-import { logAction } from './logging.js?v=10';
-import { escapeHtml, formatElapsed } from './util.js?v=10';
+import { showFaceBubble } from './face-bubble.js?v=18';
+import { logAction } from './logging.js?v=11';
+import { escapeHtml, formatElapsed } from '../core/util.js?v=1';
+import * as Names from '../core/names.js?v=1';
+import * as TTS from '../voice/tts.js?v=2';
+import * as Voice from '../voice/voice.js?v=2';
+import * as Live2D from '../live2d/live2d.js?v=4';
 
 const BUSY_LINES = [
   "Hang on, ${p}, I'm defragging my SSD.",
@@ -88,7 +93,7 @@ function pickBusyLine() {
   let index = Math.floor(Math.random() * BUSY_LINES.length);
   if (index === previousBusyLine) index = (index + 1) % BUSY_LINES.length;
   previousBusyLine = index;
-  const player = window.Names ? Names.getPlayer() : 'Anon';
+  const player = Names.getPlayer();
   return escapeHtml(BUSY_LINES[index].replaceAll('${p}', player));
 }
 
@@ -104,7 +109,7 @@ export function fleeActive() { return fleeUntil > Date.now(); }
 
 function fleeCountdown() { return formatElapsed((fleeUntil - Date.now()) / 1000); }
 
-const botName = () => (window.Names ? Names.getBot() : 'Jun');
+const botName = () => Names.getBot();
 
 export function composerPlaceholder() {
   if (fleeActive()) return botName() + ' walked out. Back in ' + fleeCountdown();
@@ -142,7 +147,7 @@ export function startFleeLock(untilMs, reason) {
   fleeReason = (reason || '').trim();
   if (!fleeActive()) { endFleeLock(); return; }
   cancelIdleNudge();
-  if (window.Voice && Voice.isEnabled()) {
+  if (Voice.isEnabled()) {
     Voice.disable();
     if (voiceChk) voiceChk.checked = false;
   }
@@ -296,7 +301,7 @@ export function scheduleIdleNudge(delayMs) {
     if (abortFn) return;
     if (document.hidden) { scheduleIdleNudge(delayMs); return; }
     if (chatInput.value.trim() !== '') { scheduleIdleNudge(delayMs); return; }
-    if (window.Voice && Voice.isEnabled()) {
+    if (Voice.isEnabled()) {
       const vs = Voice.getState();
       if (vs === 'speech' || vs === 'maybe' || vs === 'thinking') { scheduleIdleNudge(delayMs); return; }
     }
@@ -308,7 +313,7 @@ export function scheduleIdleNudge(delayMs) {
 // start the idle timer once TTS is DONE, not when the text stops
 // streaming
 export function armIdleAfterReply() {
-  if (window.TTS && TTS.isSpeaking && TTS.isSpeaking()) return;
+  if (TTS.isSpeaking()) return;
   scheduleIdleNudge(IDLE_AFTER_REPLY_MS);
 }
 

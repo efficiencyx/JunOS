@@ -1,5 +1,5 @@
-# omega.conf.template - HTTP + self-signed HTTPS (TLS_MODE=off,
-# default) Expanded by nginx envsubst at container boot.
+# HTTP + self-signed HTTPS, for TLS_MODE=off (the default).
+# Expanded by nginx envsubst at container boot.
 
 limit_req_zone  $binary_remote_addr zone=api:10m   rate=10r/s;
 limit_conn_zone $binary_remote_addr zone=conns:10m;
@@ -25,14 +25,14 @@ server {
     listen 80;
     listen 443 ssl;
     http2  on;
-    # OMEGA_EXTRA_HOSTS is the LAN case: reaching Jun from a phone
+    # OMEGA_EXTRA_HOSTS is the LAN case. Reaching Jun from a phone
     # means the Host header is a bare 192.168.x.x, which matches
-    # neither DOMAIN nor localhost, and the default_server above
-    # answers 444. start.sh fills this in with the host's own private
-    # addresses whenever BIND_ADDR is off loopback. space seperated,
-    # no commas, server_name doesn't take them. has to stay in step
-    # with the OMEGA_ALLOWED_HOSTS php reads, or nginx lets a request
-    # through and php answers 421.
+    # neither DOMAIN nor localhost, so the default_server above
+    # answers 444. start.sh fills this in with the host's own
+    # private addresses whenever BIND_ADDR is off loopback. Space
+    # separated, no commas, server_name does not accept them. It has
+    # to stay in step with the OMEGA_ALLOWED_HOSTS php reads, or
+    # nginx lets a request through and php answers 421.
     server_name ${DOMAIN} localhost 127.0.0.1 ${OMEGA_EXTRA_HOSTS};
 
     ssl_certificate     /etc/nginx/selfsigned/fullchain.pem;
@@ -51,8 +51,8 @@ server {
     root  /var/www/omega;
     index index.html;
 
-    # Maximum request body for most locations; /api/chat.php
-    # overrides below
+    # Request body limit for most locations. /api/chat.php and the
+    # upload endpoints override it below.
     client_max_body_size 16k;
 
     # A literal host in fastcgi_pass is resolved once at config load
@@ -70,9 +70,9 @@ server {
         return 200 "ok";
     }
 
-    # Buffering and compression must remain off for incremental SSE:
-    # gzip collects the response into its own buffer, which stalls
-    # the token stream.
+    # Buffering and compression must stay off for SSE (server-sent
+    # events, the token-by-token reply stream). gzip collects the
+    # response into its own buffer, which stalls the token stream.
     location = /api/chat.php {
         limit_req zone=api burst=20 nodelay;
         limit_conn conns 2;
@@ -98,8 +98,8 @@ server {
 
     location = /api/tts.php {
         limit_req zone=api burst=10 nodelay;
-        # js/tts.js keeps 3 synthesis requests in flight per reply,
-        # plus one warm call.
+        # js/voice/tts.js keeps 3 synthesis requests in flight per
+        # reply, plus one warm call.
         limit_conn conns 4;
         client_max_body_size 16k;
 
@@ -110,9 +110,10 @@ server {
         fastcgi_pass  $php_upstream;
     }
 
-    # Accept the larger WAV upload body. keep it in step with PHP's
-    # post_max_size, STT_MAX_BYTES in tts/server.py, and the chat.php
-    # limit above, an utterance goes to one or the other.
+    # Larger body for the WAV upload. Keep it in step with PHP's
+    # post_max_size, STT_MAX_BYTES in tts/sidecar/config.py and the
+    # chat.php limit above, since an utterance goes to one or the
+    # other.
     location = /api/stt.php {
         limit_req zone=api burst=5 nodelay;
         limit_conn conns 1;
@@ -130,7 +131,9 @@ server {
     # demucs runtime.
     location = /api/karaoke.php {
         limit_req zone=api burst=5 nodelay;
-        limit_conn conns 1;
+        # js/karaoke/setup.js pulls both stems in parallel after a
+        # split. With a limit of 1 the second one is a 429 every time.
+        limit_conn conns 2;
         client_max_body_size 30m;
         # Demucs on CPU runs slower than realtime and whisper then reads
         # the vocal stem back, so a full-length song can sit well past
@@ -145,11 +148,11 @@ server {
         fastcgi_pass  $php_upstream;
     }
 
-    # CLI-only long-running worker; it must never be reachable over
-    # HTTP.
+    # Long-running CLI worker. It must never be reachable over HTTP.
     location = /api/consolidation-worker.php { return 404; }
     location = /system_prompt.txt { return 404; }
     location ^~ /api/migrations/ { return 404; }
+    location ^~ /api/lib/ { return 404; }
     location ~ (^|/)\. { return 404; }
 
     location ~ ^/api/.+\.php$ {

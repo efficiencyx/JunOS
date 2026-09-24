@@ -21,8 +21,8 @@ RUN useradd --create-home --uid 10001 omega
 
 WORKDIR /app
 
-# The nvidia and amd overlays swap this for a CUDA or ROCm index.
-# the CPU default is what a machine with no GPU, or
+# The nvidia and amd overlays swap this for a CUDA or ROCm
+# index. the CPU default is what a machine with no GPU, or
 # KARAOKE_GPU=off, builds against.
 ARG TORCH_INDEX=https://download.pytorch.org/whl/cpu
 
@@ -38,28 +38,25 @@ COPY tts/requirements-karaoke.txt /app/requirements.txt
 RUN uv pip install --system -r /app/requirements.txt
 
 COPY tts/server.py /app/server.py
+COPY tts/sidecar /app/sidecar
 COPY docker/sidecar-entrypoint.sh /usr/local/bin/omega-sidecar-entrypoint
 RUN chmod +x /usr/local/bin/omega-sidecar-entrypoint \
  && mkdir -p /home/omega/.cache \
  && chown -R omega:omega /home/omega
 
 # SIDECAR_ROLE=karaoke skips the Kokoro pre-warm (there is no
-# Kokoro here) and is
-#   what /health reports back to the webapp.
-# SEP_DEVICE: cpu | cuda | auto - device for demucs. "auto" uses
-# the GPU when
-#   torch exposes one, else CPU; a per-job CUDA failure falls back
-#   to CPU rather than failing the song. Weights (~80MB) download
-#   into HF_HOME at runtime.
+#   Kokoro here) and is what /health reports back to the webapp.
+# SEP_DEVICE: cpu | cuda | auto, the device for demucs. "auto"
+#   uses the GPU when torch exposes one, else CPU. A per-job CUDA
+#   failure falls back to CPU rather than failing the song.
+#   Weights (~80MB) download into HF_HOME at runtime.
 # STT_MODEL / STT_LANG / STT_DEVICE: whisper transcribes the
-# separated vocal into
-#   timed words for the lyric track. Pairing rules and the reason
-#   STT_DEVICE stays cpu are documented once in
-#   docker/tts.Dockerfile. Songs are long, so sizing the model up
-#   here costs less than it does on chat.
+#   separated vocal into timed words for the lyric track. Pairing
+#   rules and the reason STT_DEVICE stays cpu are documented once
+#   in docker/tts.Dockerfile. Songs are long, so sizing the model
+#   up here costs less than it does on chat.
 # TTS_IDLE_UNLOAD_S drops demucs after an idle spell, handing the
-# VRAM back to
-#   the LLM between songs.
+#   VRAM back to the LLM between songs.
 ENV SIDECAR_ROLE=karaoke \
     TTS_HOST=0.0.0.0 \
     TTS_PORT=8001 \

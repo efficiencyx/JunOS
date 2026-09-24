@@ -24,7 +24,7 @@ data class WardrobeState(
 
 data class ToolOutcome(val state: WardrobeState?, val apply: JsonObject?, val reply: JsonObject)
 
-// port of webapp/api/_wardrobe.php. the tables are the php ones
+// port of webapp/api/lib/wardrobe.php. the tables are the php ones
 // verbatim and in the php order, the browser and the model both
 // read lists built from them.
 object Wardrobe {
@@ -46,8 +46,9 @@ object Wardrobe {
         "hoodie_logo" to 100, "panties_logo" to 100,
     )
 
-    // pairs that cannot both be on. same list as ITEMS[].excludes in
-    // outfit.js, the two have to stay in step or every PUT 400s.
+    // pairs that cannot both be on. same list as ITEMS[].excludes
+    // in outfit/catalog.js, the two have to stay in step or every
+    // PUT 400s.
     val CONFLICTS: List<Pair<String, String>> = listOf(
         "dress" to "shirt", "dress" to "hoodie", "dress" to "skirt", "dress" to "pants", "dress" to "dress1",
         "dress1" to "shirt", "dress1" to "hoodie", "dress1" to "skirt", "dress1" to "pants",

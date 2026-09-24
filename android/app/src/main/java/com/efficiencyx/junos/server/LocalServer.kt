@@ -85,9 +85,10 @@ class LocalServer(
         server.start(wait = false)
         val port = server.engine.resolvedConnectors().single().port
         stopServer = { server.stop(500, 2_000) }
-        // bootstrap and currentUrl are also touched by the /__bootstrap
-        // handler, which runs on a ktor thread and knows nothing about this
-        // Mutex. same monitor on both sides or the token gets burned twice.
+        // bootstrap and currentUrl also get touched by the
+        // /__bootstrap handler. that one runs on a ktor thread and
+        // knows nothing about this Mutex. same monitor on both sides
+        // or the token gets burned twice.
         synchronized(this@LocalServer) {
             val token = bootstrap ?: randomToken().also { bootstrap = it }
             "http://$LOOPBACK:$port/__bootstrap?token=$token".also { currentUrl = it }
@@ -432,7 +433,7 @@ class LocalServer(
             error(HttpStatusCode.Forbidden, "forbidden")
             return false
         }
-        // same rule as require_same_origin() in _lib.php. the cookie
+        // same rule as require_same_origin() in api/lib/guards.php. the cookie
         // is SameSite=Strict but every 127.0.0.1 port is one site, so
         // a page on another local port could still post our cookie.
         // Sec-Fetch-Site is the webview's own verdict and goes first,

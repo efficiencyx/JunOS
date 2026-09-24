@@ -1,8 +1,7 @@
-import { LERP_TAU_MS, app, currentValues, forcedPartOpacity, loops, markDirty, model, paramDefault, paramIndex, paramMax, paramMin, pendingSequences, raw, scheduleSequence, startLoop, stopLoop, targetParams } from '../live2d.js?v=10';
-import { daypart, moodFactors, moodTier } from '../mood-tier.js?v=10';
-import { cameraTween } from './camera.js?v=10';
-import { clamp } from './geometry.js?v=10';
-import { S } from './state.js?v=10';
+import { daypart, moodFactors, moodTier } from '../core/mood-tier.js?v=2';
+import { cameraTween } from './camera.js?v=12';
+import { clampParam, scheduleSequence, startLoop, stopLoop } from './params.js?v=1';
+import { LERP_TAU_MS, S, app, currentValues, forcedPartOpacity, loops, markDirty, model, paramDefault, paramIndex, paramMax, paramMin, pendingSequences, raw, targetParams } from './state.js?v=11';
 
 const ACTIVE_FPS = 60;
 const IDLE_FPS = 30;
@@ -12,8 +11,6 @@ let animating = false;
 let wasAnimating = false;
 let tickDeltaMs = 0;
 
-// tints, opacity, order, atlases and camera changes bypass
-// parameters. mark them dirty here or the canvas stays stale.
 const STATEFUL_PARAMS = new Set([
   'ParamShirtEnabled', 'ParamBraEnabled', 'ParamPantiesEnabled',
   'ParamSkirtEnabled', 'ParamHoodieEnabled', 'ParamPantsEnabled',
@@ -68,7 +65,7 @@ const DAYPART_BASELINE = {
 };
 
 function trySet(param, value) {
-  if (paramIndex.has(param)) targetParams.set(param, clamp(param, value));
+  if (paramIndex.has(param)) targetParams.set(param, clampParam(param, value));
 }
 
 function applyMoodBaseline() {
@@ -258,10 +255,10 @@ function runFidget(f) {
     return;
   }
   if (f.kind === 'pose') {
-    targetParams.set(f.param, clamp(f.param, f.value));
+    targetParams.set(f.param, clampParam(f.param, f.value));
     const extras = f.pairValue || {};
     for (const [p, v] of Object.entries(extras)) {
-      if (paramIndex.has(p)) targetParams.set(p, clamp(p, v));
+      if (paramIndex.has(p)) targetParams.set(p, clampParam(p, v));
     }
     setTimeout(() => {
       targetParams.set(f.param, paramDefault.get(f.param));
@@ -340,25 +337,26 @@ export function stopIdle() {
 }
 
 // ParamTailWiggle, ParamHairPhysicsBaseToShort and
-// ParamPhysicsBoobXL need the missing physics3.json. drive the
-// nine tail rotation params root-to-tip with a delayed sine so
-// [A:tail_wag] and fidgets actually move it.
+// ParamPhysicsBoobXL need the missing physics3.json (the rig's
+// physics sim file). so drive the nine tail rotation params
+// root-to-tip with a delayed sine ourselves, or [A:tail_wag] and
+// fidgets never actually move it.
 const TAIL_SEGMENTS = Array.from({ length: 9 }, (_, i) => `Param_Angle_Rotation_${i + 1}_TailMain`);
 // fractions of each segment's own range, because these are angle
 // params and their range is whatever the rigger picked. 0.18 is a
 // resting sway, the wiggle on top is what the fidgets and
-// [A:tail_wag] actually buy you now.
+// [A:tail_wag] actually buy you.
 const TAIL_IDLE_AMP = 0.18;
 const TAIL_WAG_AMP = 0.7;
 const TAIL_PERIOD_MS = 5200;
 // how far behind the segment above each one runs, in periods
 const TAIL_LAG = 0.1;
-/* phase has to ACCUMULATE. now / period jumps when wiggle
-   changes period. dropping 2800 -> 1260 at now = 100000 moves
-   phase by 43 whole cycles in one frame. during a wiggle loop
-   this was ~1.7 cycles per frame, and the error grows with time
-   since page load. integrating dt / period changes only the
-   speed when period moves, keeping phase continuous. */
+// phase has to ACCUMULATE. now / period jumps when wiggle
+// changes period. dropping 2800 -> 1260 at now = 100000 moves
+// phase by 43 whole cycles in one frame. during a wiggle loop
+// that was ~1.7 cycles per frame, and the error grows with time
+// since page load. integrating dt / period only changes the
+// speed when period moves, so phase stays continuous.
 let tailPhase = 0;
 let tailLastMs = performance.now();
 
@@ -378,7 +376,7 @@ function driveTail(ps, now) {
     const span = Math.min(Math.abs(paramMax.get(id) ?? 1), Math.abs(paramMin.get(id) ?? 1)) || 1;
     const reach = (i + 1) / TAIL_SEGMENTS.length;
     const phase = tailPhase - i * TAIL_LAG;
-    ps.values[idx] = clamp(id, Math.sin(2 * Math.PI * phase) * amp * reach * span);
+    ps.values[idx] = clampParam(id, Math.sin(2 * Math.PI * phase) * amp * reach * span);
   }
 }
 
@@ -404,8 +402,9 @@ export function tick() {
     const cur = currentValues.get(id);
     if (cur === undefined) { currentValues.set(id, target); continue; }
     let next = cur + (target - cur) * alpha;
-    // snap when it's close. params that turn drawables on and off, like
-    // ParamHeadpat, have to ACTUALLY hit 0, not creep at it for Ever.
+    // snap when it's close. params that turn drawables (single
+    // meshes of the rig) on and off, like ParamHeadpat, have to
+    // actually land on the target, not creep at it for Ever.
     if (Math.abs(target - next) < 0.001) next = target;
     else settling = true;
     currentValues.set(id, next);
@@ -422,7 +421,7 @@ export function tick() {
     const phase = (now - L.phase_start_ms) / L.period_ms;
     const v = L.base + Math.sin(2 * Math.PI * phase) * L.amplitude;
     const idx = paramIndex.get(id);
-    if (idx !== undefined) ps.values[idx] = clamp(id, v);
+    if (idx !== undefined) ps.values[idx] = clampParam(id, v);
   }
 
   driveTail(ps, now);
@@ -438,7 +437,7 @@ export function tick() {
   if (mouthOverride != null) {
     const idx = paramIndex.get('ParamMouthOpen');
     if (idx !== undefined) {
-      ps.values[idx] = clamp('ParamMouthOpen', mouthOverride);
+      ps.values[idx] = clampParam('ParamMouthOpen', mouthOverride);
       currentValues.set('ParamMouthOpen', mouthOverride);
     }
   }
@@ -476,7 +475,7 @@ export function tick() {
 export function renderIfDirty() {
   if (!raw) return;
   // wasAnimating buys us one more frame. the tick that settles a
-  // parameter or ends a blink writes the last value FIRST, then
+  // parameter or ends a blink writes the last value first, then
   // reports idle.
   const draw = animating || wasAnimating || S.needsRender;
   wasAnimating = animating;

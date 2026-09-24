@@ -1,7 +1,5 @@
 <?php
-require_once __DIR__ . '/_lib.php';
-
-header('Content-Type: application/json');
+require_once __DIR__ . '/lib/bootstrap.php';
 
 function user_keys_mint(string $password): array {
     $dek = random_bytes(SODIUM_CRYPTO_SECRETBOX_KEYBYTES);
@@ -21,14 +19,12 @@ switch ($_GET['action'] ?? '') {
 case 'me':
     $user = current_user();
     if (!$user) fail(401, 'unauthorized');
-    echo json_encode(['user' => ['id' => $user['id'], 'email' => $user['email'], 'role' => (string)($user['role'] ?? 'user')]]);
-    break;
+    json_out(['user' => user_public($user)]);
 
 case 'signup_info':
-    echo json_encode([
+    json_out([
         'registration_key_required' => env_str('OMEGA_REGISTRATION_KEY') !== '' && !no_users_yet(),
     ]);
-    break;
 
 case 'signup':
     require_post();
@@ -77,8 +73,7 @@ case 'signup':
     $db->exec('COMMIT');
 
     start_session($userId, $keys['dek']);
-    echo json_encode(['user' => ['id' => $userId, 'email' => $email, 'role' => 'user'], 'recovery_code' => $keys['recovery_code']]);
-    break;
+    json_out(['user' => ['id' => $userId, 'email' => $email, 'role' => 'user'], 'recovery_code' => $keys['recovery_code']]);
 
 case 'login':
     require_post();
@@ -103,7 +98,7 @@ case 'login':
     $db->prepare('DELETE FROM sessions WHERE user_id = ? AND created_at < ?')
        ->execute([$user['id'], time() - 30 * 86400]);
 
-    $out = ['user' => ['id' => $user['id'], 'email' => $user['email'], 'role' => (string)($user['role'] ?? 'user')]];
+    $out = ['user' => user_public($user)];
     if ($user['wrapped_dek'] === null) {
         // account from before migration 016. mint its key now and
         // seal what it already has, the recovery code goes back in
@@ -124,8 +119,7 @@ case 'login':
     crypt_bind($dek);
     crypt_encrypt_backlog((int)$user['id']);
     start_session((int)$user['id'], $dek);
-    echo json_encode($out);
-    break;
+    json_out($out);
 
 // forgot the password: the recovery code opens the same data key,
 // so we rewrap it under the new password and nothing on disk has
@@ -163,8 +157,7 @@ case 'recover':
     log_event(['msg' => 'password_recovered', 'user_id' => $user['id']]);
 
     start_session((int)$user['id'], $dek);
-    echo json_encode(['user' => ['id' => $user['id'], 'email' => $user['email'], 'role' => (string)($user['role'] ?? 'user')]]);
-    break;
+    json_out(['user' => user_public($user)]);
 
 case 'promote':
     require_post();
@@ -184,8 +177,7 @@ case 'promote':
 
     db()->prepare("UPDATE users SET role = 'admin' WHERE id = ?")->execute([$user['id']]);
     log_event(['msg' => 'admin_promoted', 'user_id' => $user['id']]);
-    echo json_encode(['user' => ['id' => $user['id'], 'email' => $user['email'], 'role' => 'admin']]);
-    break;
+    json_out(['user' => array_merge(user_public($user), ['role' => 'admin'])]);
 
 case 'factory_reset':
     require_post();
@@ -223,8 +215,7 @@ case 'factory_reset':
         fail(500, 'factory_reset_incomplete');
     }
     log_event(['msg' => 'factory_reset', 'user_id' => $userId]);
-    echo json_encode(['ok' => true]);
-    break;
+    json_out(['ok' => true]);
 
 case 'logout':
     require_post();
@@ -233,12 +224,8 @@ case 'logout':
         db()->prepare('DELETE FROM sessions WHERE token = ?')
             ->execute([session_token_hash($token)]);
     }
-    $secure = !empty($_SERVER['HTTPS']) || (($_SERVER['HTTP_X_FORWARDED_PROTO'] ?? '') === 'https');
-    foreach (['omega_session', 'omega_key'] as $cookie) {
-        setcookie($cookie, '', ['expires' => 1, 'path' => '/', 'httponly' => true, 'samesite' => 'Lax', 'secure' => $secure]);
-    }
-    echo json_encode(['ok' => true]);
-    break;
+    session_cookies('', '', 1);
+    json_out(['ok' => true]);
 
 default:
     fail(400, 'unknown_action');

@@ -23,7 +23,8 @@ $dir  = if ($env:JUN_DIR)  { $env:JUN_DIR }  else { 'JunOS' }
 $ref  = if ($env:JUN_REF)  { $env:JUN_REF }  else { 'main' }
 
 # windows terminal, VS Code and modern conhost all handle VT
-# sequences. detect support and fall back to unstyled text.
+# sequences (the ANSI escape codes behind the colours).
+# anything else gets plain unstyled text.
 $VTSupported = $false
 if ($Host.UI.SupportsVirtualTerminal -or $env:WT_SESSION -or
     $env:TERM_PROGRAM -eq 'vscode' -or $PSVersionTable.PSVersion.Major -ge 7) {
@@ -105,9 +106,11 @@ function Resolve-Model([string]$a) {
     }
 }
 
-# match the drafter to the SAME Gemma 4 size and QAT branch. a
-# mismatch still runs but accepted tokens dropped from 2.74 to
-# 2.10 per pass. QAT and plain repos are not interchangeable.
+# match the drafter, the little model that guesses tokens
+# ahead, to the same Gemma 4 size and QAT branch (QAT is
+# quantization-aware training, the -qat- repos). a mismatch
+# still Runs but accepted tokens dropped from 2.74 to 2.10 per
+# pass. QAT and plain repos are not interchangeable.
 $mtpDrafters = @{
     '12b' = 'hf.co/Janvitos/gemma-4-12B-it-qat-assistant-MTP-Q8_0-GGUF:Q8_0'
     'e4b' = 'hf.co/amaranus/Gemma-4-E4B-it-qat-assistant-MTP-Q8_0-GGUF:Q8_0'
@@ -237,7 +240,7 @@ function New-AccessKey {
     return (($bytes | ForEach-Object { $_.ToString('x2') }) -join '')
 }
 
-# ONLY when the line is missing altogether. an empty
+# only when the line is missing altogether. an empty
 # OMEGA_REGISTRATION_KEY= is the operator saying "off", and every
 # upgrade run comes back through here, so filling that in would
 # silently turn the gate back on behind their back.
@@ -248,10 +251,11 @@ function Add-EnvKeyIfMissing([string]$key) {
 
 $interactive = [Environment]::UserInteractive -and ($env:JUN_YES -ne '1')
 # true only when a person picked Express at the keyboard. JUN_YES
-# on its own can mean an unattended run - CI, or
+# on its own can also mean an unattended run (CI, or
 # installer-gui.ps1 driving this script with its output
-# redirected - and the two want opposite things the moment
-# something needs asking.
+# redirected). the moment something needs asking, the person and
+# the unattended run want opposite things. a person can answer.
+# a redirected run just Hangs on Read-Host with nobody to see it.
 $script:expressInteractive = $false
 
 function Test-Sha256([string]$path, [string]$expected) {
@@ -259,9 +263,10 @@ function Test-Sha256([string]$path, [string]$expected) {
     return (Get-FileHash -Algorithm SHA256 -LiteralPath $path).Hash -ieq $expected.Trim()
 }
 
-# JUN_REPO permits forks, so require HTTPS and explicit consent
-# for non-upstream code. $env:JUN_ALLOW_FORK='1' permits it
-# unattended. JUN_YES does not.
+# JUN_REPO lets people install from a fork. so https only, and
+# anything that isn't upstream needs an explicit yes.
+# $env:JUN_ALLOW_FORK='1' is that yes for unattended runs.
+# JUN_YES doesn't count, on purpose.
 function Confirm-RepoSource {
     if ($repo -notmatch '^https://') {
         Fail_ "JUN_REPO must be an https:// URL - refusing to clone $repo"
@@ -389,10 +394,11 @@ function Ask-Karaoke([string]$voice) {
     return $(if ($v -match '^(n|no)$') { 'off' } else { 'on' })
 }
 
-# Jun checks every drafted token, so MTP changes speed, not
-# accepted output. speed depends on the card. Express enables it
-# and measures depth. unattended: JUN_MTP=on|off,
-# JUN_MTP_DEPTH=auto|1|2|3|4.
+# MTP is multi-token prediction, the drafter guesses tokens and
+# Jun checks every one of them. so it only changes speed, what she
+# actually says comes out the same. how much speed depends on the
+# card. Express turns it on and measures depth.
+# unattended: JUN_MTP=on|off, JUN_MTP_DEPTH=auto|1|2|3|4.
 function Ask-Mtp {
     if ($env:JUN_MTP) {
         return $(if ($env:JUN_MTP.ToLower() -match '^(on|1|true|yes|y)$') { 'on' } else { 'off' })
@@ -426,7 +432,7 @@ function Ask-MtpDepth {
 # can only happen once the stack is up and the models are pulled.
 function Configure-Mtp([string]$provider, [string]$modelRef) {
     $drafter = Get-MtpDrafter $modelRef
-    # ONLY Gemma 4 ships an MTP head, and only for the sizes mapped
+    # only Gemma 4 ships an MTP head, and only for the sizes mapped
     # above. on anything else there's no drafter to pair, so there's
     # no question to ask.
     if (-not $drafter) { return $false }
@@ -495,7 +501,7 @@ function Configure-Jun {
 
     Step 'configure'
 
-    # we ask this BEFORE the model question. splitting across cards
+    # we ask this before the model question. splitting across cards
     # changes how much VRAM we get to assume when recommending one.
     $script:tensorParallel = if ($provider -eq 'openrouter') { 'off' } else { Ask-TensorParallel }
 
@@ -512,7 +518,7 @@ function Configure-Jun {
         'openrouter' {
             $key = $env:OPENROUTER_API_KEY
             if (-not $key -and $interactive) {
-                # hidden input that works on PS 5.1. the key is NEVER echoed
+                # hidden input that works on PS 5.1. the key is never echoed
                 # back and never printed in the summary at the end.
                 Write-Host "     ${OK}▸${R} OpenRouter API key ${DIM}(hidden; from openrouter.ai/keys)${R}"
                 $sec = Read-Host '       key' -AsSecureString
@@ -574,7 +580,7 @@ function Configure-Jun {
     Set-EnvKey 'VOICE' $voice
     Ok "voice $voice"
 
-    # the voice sidecar stays on the CPU ON PURPOSE. both engines
+    # the voice sidecar stays on the CPU on purpose. both engines
     # keep up in real time there, and a GPU copy would squat on VRAM
     # she wants for her own layers.
     if ($voice -eq 'on') {
@@ -609,10 +615,11 @@ function Refresh-Path {
     $env:Path = (($machine, $user, $env:Path) | Where-Object { $_ }) -join ';'
 }
 
-# clean/LTSC/Server images may lack winget. bootstrapping
-# installs a machine-wide package manager through PSGallery, so
-# ask first. $env:JUN_BOOTSTRAP_WINGET='1' accepts, '0' leaves
-# App Installer installation to the user.
+# clean/LTSC/Server images can ship without winget (LTSC is the
+# enterprise build with no Store). bootstrapping it means
+# installing a machine-wide package manager off PSGallery, so we
+# ask first. $env:JUN_BOOTSTRAP_WINGET='1' says yes, '0' leaves
+# App Installer to the user.
 function Ensure-Winget {
     if (Get-Command winget -ErrorAction SilentlyContinue) { return $true }
 
@@ -645,12 +652,14 @@ function Ensure-Winget {
     return [bool](Get-Command winget -ErrorAction SilentlyContinue)
 }
 
-# fetch OllamaSetup.exe from ollama.com and verify Ollama Inc.
-# signing. winget can fail with "Failed in attempting to update
-# the source" or a bare exit code during the 1.5 GB download. the
-# Inno installer is per-user: PrivilegesRequired=lowest,
-# %LocalAppData%\Programs\Ollama, user PATH. keep winget's silent
-# switches.
+# straight from ollama.com, not winget. winget can die with
+# "Failed in attempting to update the source" or just a bare
+# exit code somewhere in the 1.5 GB download. so we fetch
+# OllamaSetup.exe ourselves and check it's signed by Ollama Inc.
+# it's an Inno Setup installer and per-user, which means
+# PrivilegesRequired=lowest, %LocalAppData%\Programs\Ollama and
+# user PATH. the silent switches are the ones winget passes it,
+# keep them.
 function Install-Ollama {
     $url = 'https://ollama.com/download/OllamaSetup.exe'
     $tmp = Join-Path $env:TEMP ('jun-ollama-' + [guid]::NewGuid().ToString('N') + '.exe')
@@ -694,7 +703,16 @@ function Install-Ollama {
     }
 }
 
-# install the named tools, after warning that these are the ONLY
+# a fresh install lands on PATH for new terminals only, so the
+# way out is a new one, not a retry in this one
+function Assert-OnPath([string]$command) {
+    if (Get-Command $command -ErrorAction SilentlyContinue) { return }
+    Fail_ "$command still not on PATH"
+    Note 'open a NEW terminal (so PATH refreshes) and run the one-liner again; setup will resume.'
+    exit 1
+}
+
+# install the named tools, after warning that these are the only
 # machine-wide pieces. each keeps its own uninstaller in Settings
 # > Apps. anything with a winget id goes through winget, ollama
 # goes through Install-Ollama.
@@ -729,7 +747,7 @@ function Install-MachineTools([string[]]$missing, [switch]$Optional) {
     foreach ($c in $missing) {
         Step ("install {0}" -f $c)
         if ($c -eq 'ollama') { Install-Ollama; continue }
-        # --source winget ON PURPOSE. without it the id can resolve out of
+        # --source winget on purpose. without it the id can resolve out of
         # msstore or any private source somebody added to this machine, and
         # we'd install whatever answers to that name over there.
         winget install -e --id $wingetIds[$c] --source winget `
@@ -771,10 +789,10 @@ function Get-PythonCandidates {
 }
 
 # returns a path to an interpreter, or $null. $Below is an
-# exclusive upper bound like '3.13' - the voice venv needs one
-# because kokoro 0.9.4 declares
-# Requires-Python <3.13 and pip on a 3.13+ interpreter just says "no matching
-# distribution" and takes voice down with it.
+# exclusive upper bound like '3.13'. the voice venv needs one,
+# kokoro 0.9.4 declares Requires-Python <3.13 and pip on a 3.13+
+# interpreter just says "no matching distribution" and takes
+# voice down with it.
 function Get-UsablePython([string]$Min = '3.9', [string]$Below) {
     $check = "import ensurepip, sys, venv; assert sys.version_info >= ({0})" -f ($Min -replace '\.', ', ')
     if ($Below) { $check += "; assert sys.version_info < ({0})" -f ($Below -replace '\.', ', ') }
@@ -833,7 +851,7 @@ function Install-Php {
         $zip = Join-Path $tmpDir 'php.zip'
         Invoke-WebRequest -Uri $zipUrl -OutFile $zip -UseBasicParsing
         # the digest and the zip come from the same host, so this catches
-        # a mangled CDN copy or a half finished download, NOT a
+        # a mangled CDN copy or a half finished download, not a
         # windows.php.net that's itself owned. it's the strongest check
         # php.net offers.
         if (-not (Test-Sha256 $zip $zipSha)) {
@@ -862,7 +880,7 @@ function Install-Php {
         $phpStage = $null
 
         # curl.se publishes the digest next to the bundle. a tampered CA
-        # bundle is WORSE than none at all, it makes PHP trust a CA you
+        # bundle is worse than none at all, it makes PHP trust a CA you
         # never chose, so on a mismatch we install nothing and PHP falls
         # back to the OS store.
         $cacert = Join-Path $phpDir 'cacert.pem'
@@ -974,7 +992,7 @@ function Install-Tts([string]$Karaoke = 'off') {
 function Install-AssetRecovery {
     $python = Get-UsablePython
     if (-not $python) {
-        # the user explicitly asked for extraction, so python is REQUIRED
+        # the user explicitly asked for extraction, so python is required
         # here instead of being treated as an optional voice dependency.
         Install-MachineTools @('python')
         $python = Get-UsablePython
@@ -1063,7 +1081,7 @@ function Install-AssetRecovery {
 }
 
 
-# markers, not the folder name - JUN_DIR lets people call it
+# markers, not the folder name. JUN_DIR lets people call it
 # whatever they want, and "Jun" on its own could be anything.
 function Test-JunCheckout([string]$path) {
     if (-not $path) { return $false }
@@ -1101,11 +1119,7 @@ if (-not (Get-Command git -ErrorAction SilentlyContinue)) {
     Warn_ 'git not found'
     Install-MachineTools @('git')
 }
-if (-not (Get-Command git -ErrorAction SilentlyContinue)) {
-    Fail_ 'git still not on PATH'
-    Note 'open a NEW terminal (so PATH refreshes) and run the one-liner again; setup will resume.'
-    exit 1
-}
+Assert-OnPath git
 Ok 'git found'
 
 if ($existing) {
@@ -1117,9 +1131,10 @@ if ($existing) {
         if ($LASTEXITCODE -eq 0) {
             Ok 'repo up to date'
         } else {
-            # local commits, a dirty tree, a branch of their own. all fine,
-            # all reasons a pull can't fast-forward. NOT a reason to stop -
-            # the rest of the installer still fixes .env, deps and the stack.
+            # Local commits, a dirty tree or a branch of their own all
+            # block a fast-forward. None of that is a reason to abort.
+            # The rest of the installer still fixes .env, deps and the
+            # stack.
             Warn_ "couldn't fast-forward $dir - keeping the code that's on disk"
             Note "pull it yourself with: git -C $dir pull"
         }
@@ -1134,7 +1149,7 @@ if ($existing) {
 
 Set-Location -LiteralPath $dir
 if (-not (Test-Path .env)) { Copy-Item .env.example .env }
-# EVERY run, not just the first. an .env from an older install is
+# every run, not just the first. an .env from an older install is
 # exactly the one still sitting there with the folder's inherited
 # ACL on it.
 Protect-EnvFile
@@ -1146,16 +1161,8 @@ $missing = @()
 if ($cfg.needsOllama -and -not (Get-Command ollama -ErrorAction SilentlyContinue)) { $missing += 'ollama' }
 if ($cfg.needsLlamacpp -and -not (Get-Command llama-server -ErrorAction SilentlyContinue)) { $missing += 'llamacpp' }
 Install-MachineTools $missing
-if ($cfg.needsOllama -and -not (Get-Command ollama -ErrorAction SilentlyContinue)) {
-    Fail_ 'ollama still not on PATH'
-    Note 'open a NEW terminal (so PATH refreshes) and run the one-liner again; setup will resume.'
-    exit 1
-}
-if ($cfg.needsLlamacpp -and -not (Get-Command llama-server -ErrorAction SilentlyContinue)) {
-    Fail_ 'llama-server still not on PATH'
-    Note 'open a NEW terminal (so PATH refreshes) and run the one-liner again; setup will resume.'
-    exit 1
-}
+if ($cfg.needsOllama) { Assert-OnPath ollama }
+if ($cfg.needsLlamacpp) { Assert-OnPath llama-server }
 
 Install-Php
 if ($voice -eq 'on') { Install-Tts $cfg.karaoke }
@@ -1225,7 +1232,7 @@ $psExe = (Get-Process -Id $PID).MainModule.FileName
 & $psExe -NoProfile -ExecutionPolicy Bypass -File (Resolve-Path './start.ps1').Path
 $startCode = $LASTEXITCODE
 
-# has to run HERE and not in Configure-Jun. every row of it is a
+# has to run here and not in Configure-Jun. every row of it is a
 # real generation, so the models have to be pulled and the stack
 # has to be up.
 if ($script:mtpAutotune -and $startCode -eq 0) {

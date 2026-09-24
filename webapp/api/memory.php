@@ -1,12 +1,10 @@
 <?php
-require_once __DIR__ . '/_lib.php';
-
-header('Content-Type: application/json');
-rate_limit('memory', 60, 60);
+require_once __DIR__ . '/lib/bootstrap.php';
 
 $user = require_user();
+rate_limit('memory', 60, 60);
 $userId = (int)$user['id'];
-$method = $_SERVER['REQUEST_METHOD'];
+$method = require_method('GET', 'POST', 'DELETE');
 
 try {
     if ($method === 'GET') {
@@ -30,46 +28,35 @@ try {
                 'updated' => $updated,
             ];
         }
-        echo json_encode([
+        json_out([
             'categories' => $categories,
             'notes' => $notes,
             'journal' => ['entries' => journal_parse(memory_journal_read($userId))],
-        ], JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
-        exit;
+        ]);
     }
 
     if ($method === 'POST') {
-        require_content_type('application/json');
-        $body = json_decode(read_body(8 * 1024), true);
-        if (!is_array($body)) fail(400, 'invalid_request');
+        $body = read_json_body(8 * 1024);
         $res = memory_note_add($userId, (string)($body['category'] ?? 'general'), (string)($body['memory'] ?? ''));
         if (isset($res['error'])) fail(400, $res['error']);
-        echo json_encode($res, JSON_UNESCAPED_UNICODE);
-        exit;
+        json_out($res);
     }
 
-    if ($method === 'DELETE') {
-        if (($user['role'] ?? '') !== 'admin') fail(403, 'forbidden');
-        $body = json_decode(read_body(8 * 1024), true);
-        if (!is_array($body)) fail(400, 'invalid_request');
-        if (!empty($body['all'])) {
-            $res = memory_wipe_user($userId);
-            if (isset($res['error'])) fail(500, $res['error']);
-            echo json_encode(['ok' => true]);
-            exit;
-        }
-
-        if (!isset($body['id']) || !preg_match('/^[a-z0-9]{5}$/', (string)$body['id'])) {
-            fail(400, 'invalid_request');
-        }
-        $res = memory_note_delete($userId, (string)$body['id']);
-        if (($res['error'] ?? '') === 'memory_not_found') fail(404, 'memory_not_found');
+    require_admin();
+    $body = read_json_body(8 * 1024);
+    if (!empty($body['all'])) {
+        $res = memory_wipe_user($userId);
         if (isset($res['error'])) fail(500, $res['error']);
-        echo json_encode(['ok' => true]);
-        exit;
+        json_out(['ok' => true]);
     }
 
-    fail(405, 'method_not_allowed');
+    if (!isset($body['id']) || !preg_match('/^[a-z0-9]{5}$/', (string)$body['id'])) {
+        fail(400, 'invalid_request');
+    }
+    $res = memory_note_delete($userId, (string)$body['id']);
+    if (($res['error'] ?? '') === 'memory_not_found') fail(404, 'memory_not_found');
+    if (isset($res['error'])) fail(500, $res['error']);
+    json_out(['ok' => true]);
 } catch (RuntimeException $e) {
     log_event(['msg' => 'memory_api_error', 'err' => $e->getMessage()]);
     fail(500, 'memory_unavailable');

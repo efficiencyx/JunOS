@@ -1,5 +1,5 @@
-import { markDirty, model, publicTint, raw } from '../live2d.js?v=10';
-import { findDrawables } from './geometry.js?v=10';
+import { markDirty, model, publicTint, raw } from './state.js?v=11';
+import { findDrawables } from './geometry.js?v=12';
 
 export function tintByPattern(includes, excludes, rgb) {
   if (!publicTint) return [];
@@ -20,15 +20,16 @@ export function listDrawables() {
 }
 
 // a variant only replaces its own UV region, the patch of the
-// shared atlas this drawable reads from
+// shared atlas (the big sheet every part's texture lives on)
+// that this drawable, one mesh of the rig, reads from
 const _texOverride = new Map();
-export const _uvRect = new Map();
+const uvRect = new Map();
 const _baseCanvas = [];
 const _imgCache = new Map();
 const _originalSource = [];
 
 export function installVariantCompositor() {
-  _uvRect.clear();
+  uvRect.clear();
   const D = raw.drawables, uvs = D.vertexUvs, ti = D.textureIndices;
   for (let d = 0; d < D.count; d++) {
     const uv = uvs[d];
@@ -38,7 +39,7 @@ export function installVariantCompositor() {
       if (u < u0) u0 = u; if (u > u1) u1 = u;
       if (v < v0) v0 = v; if (v > v1) v1 = v;
     }
-    _uvRect.set(D.ids[d], { tex: ti[d], u0, v0, w: u1 - u0, h: v1 - v0, d });
+    uvRect.set(D.ids[d], { tex: ti[d], u0, v0, w: u1 - u0, h: v1 - v0, d });
   }
 }
 
@@ -46,7 +47,7 @@ export function installVariantCompositor() {
 const _meshPath = new Map();
 function meshPath(id, W, H) {
   if (_meshPath.has(id)) return _meshPath.get(id);
-  const r = _uvRect.get(id);
+  const r = uvRect.get(id);
   const D = raw.drawables;
   const uv = D.vertexUvs[r.d], ix = D.indices[r.d];
   const p = new Path2D();
@@ -82,7 +83,7 @@ function _loadImg(url) {
 // reads costs a flush and a pull back over the bus, ~29 of them
 // per mod recomposite. willReadFrequently keeps them in system
 // memory, where the reads are a memcpy. the option only counts on
-// the FIRST getContext for a canvas, later calls hand back the
+// the first getContext for a canvas, later calls hand back the
 // context that already exists and ignore it.
 const ctx2d = (c) => c.getContext('2d', { willReadFrequently: true });
 
@@ -100,7 +101,7 @@ function _alphaMask(img) {
   return c;
 }
 
-export function _baseAtlas(texIndex) {
+function baseAtlas(texIndex) {
   if (_baseCanvas[texIndex]) return _baseCanvas[texIndex];
   const bt = model.textures[texIndex].baseTexture;
   const src = bt.resource.source;
@@ -194,7 +195,7 @@ function _mapAlpha(tc, w, h, toPremultiplied) {
 const CLEAR_PAD = 8;
 
 function _boxFor(id, texIndex, W, H) {
-  const r = _uvRect.get(id);
+  const r = uvRect.get(id);
   if (!r || r.tex !== texIndex) return null;
   const x0 = r.u0 * W, y0 = (1 - (r.v0 + r.h)) * H;
   const x = Math.max(0, Math.floor(x0) - CLEAR_PAD);
@@ -220,7 +221,7 @@ function recompositeTexture(texIndex, dirtyIds) {
   const _t0 = performance.now();
   let hasOverride = false;
   for (const [id, entry] of _texOverride) {
-    const r = _uvRect.get(id);
+    const r = uvRect.get(id);
     if (r && r.tex === texIndex && entry) {
       hasOverride = true;
       break;
@@ -238,7 +239,7 @@ function recompositeTexture(texIndex, dirtyIds) {
     }
   }
 
-  const base = _baseAtlas(texIndex), W = base.width, H = base.height;
+  const base = baseAtlas(texIndex), W = base.width, H = base.height;
   const rebuild = !_liveCanvas[texIndex];
   if (rebuild) {
     const c = document.createElement('canvas');
@@ -249,9 +250,9 @@ function recompositeTexture(texIndex, dirtyIds) {
   const ctx = ctx2d(c);
   let active = [];
   for (const [id, entry] of _texOverride) {
-    const r = _uvRect.get(id);
+    const r = uvRect.get(id);
     if (!r || r.tex !== texIndex || !entry) continue;
-    // Cubism counts v from the BOTTOM, so the canvas origin has to flip
+    // Cubism counts v from the bottom, so the canvas origin has to flip
     active.push({ id, entry, x: r.u0 * W, yTop: (1 - (r.v0 + r.h)) * H, w: r.w * W, h: r.h * H });
   }
   let boxes = null;
@@ -307,8 +308,8 @@ function recompositeTexture(texIndex, dirtyIds) {
   // because one multiply covers the whole drawable and you can't
   // spare the mod's pixels from it. so the caller cleared the
   // uniform and handed us the colour, and the art underneath gets
-  // it here instead. mods.js does the same to its own layers that
-  // wanted it.
+  // it here instead. mods/layers.js does the same to its own
+  // layers that wanted it.
   for (const a of active) {
     if (!a.entry.baseTint || a.entry.fullClear || !a.entry.overlay) continue;
     const x = Math.floor(a.x), y = Math.floor(a.yTop);
@@ -353,7 +354,7 @@ function recompositeTexture(texIndex, dirtyIds) {
 }
 
 // atlas recomposites are async and every caller fires them
-// without awaiting, which is fine on screen - the frame after the
+// without awaiting, which is fine on screen, the frame after the
 // load just looks right. it is NOT fine for anything that reads
 // pixels back, so keep a tail of the in-flight work for those
 // callers to wait on. see Live2D.bakeThumb.
@@ -369,7 +370,7 @@ export function setDrawableTextures(map) {
 }
 
 async function _setDrawableTexture(drawableId, url, overlay) {
-  const r = _uvRect.get(drawableId);
+  const r = uvRect.get(drawableId);
   if (!r) return;
   if (url) _texOverride.set(drawableId, { key: url, img: await _loadImg(url), overlay: !!overlay, alphaClip: false, fullClear: false });
   else _texOverride.delete(drawableId);
@@ -379,7 +380,7 @@ async function _setDrawableTexture(drawableId, url, overlay) {
 async function _setDrawableTextures(map) {
   const dirty = new Map();
   await Promise.all(Object.entries(map).map(async ([id, val]) => {
-    const r = _uvRect.get(id);
+    const r = uvRect.get(id);
     if (!r) return;
     const url = val && typeof val === 'object' ? (val.url || null) : val;
     // mods hand us the baked canvas directly plus a key describing
@@ -400,7 +401,7 @@ async function _setDrawableTextures(map) {
       if (prev && prev.key === key && prev.overlay === overlay &&
           prev.alphaClip === alphaClip && prev.fullClear === fullClear &&
           prev.baseTint === baseTint && prev.straightAlpha === straightAlpha) return;
-      // one bad image must NOT kill the whole batch, the other overrides
+      // one bad image must not kill the whole batch, the other overrides
       // still have to land and get drawn
       let img = img0;
       if (!img) {
@@ -450,4 +451,17 @@ export function opacityByPattern(includes, excludes, op) {
   const ids = findDrawables(includes, excludes);
   for (const id of ids) setDrawableOpacity(id, op);
   return ids;
+}
+
+export function drawableThumb(drawableId, size = 72) {
+  const r = uvRect.get(drawableId);
+  if (!r || !model) return null;
+  const base = baseAtlas(r.tex), W = base.width, H = base.height;
+  const w = Math.max(1, r.w * W), h = Math.max(1, r.h * H);
+  const s = Math.min(size / w, size / h, 1);
+  const c = document.createElement('canvas');
+  c.width = Math.max(1, Math.round(w * s));
+  c.height = Math.max(1, Math.round(h * s));
+  c.getContext('2d').drawImage(base, r.u0 * W, (1 - (r.v0 + r.h)) * H, w, h, 0, 0, c.width, c.height);
+  return c.toDataURL();
 }

@@ -56,6 +56,7 @@ https://github.com/user-attachments/assets/f27859ad-9fee-467b-84a8-4f7630d2e2b6
 - **She knows her lore.** Ask her about the game's world and she stays in canon.
 - **She'll sing with you.** 🎤 Load a song, get timed lyrics, and see how close you got.
 - **Dress her up.** A whole wardrobe to toggle and recolor - she'll tell you what she thinks of it.
+- **Take her out.** 🍝 Shopping at Annalie's, karaoke night, lunch or dinner at a restaurant, a few hands of blackjack. Ask her and it's *her* call - say yes and she takes you there. She'll ask you out herself now and then too.
 - **Bring your mods.** Game-mod zips load straight into the browser.
 - **It's yours.** She runs on your machine. No external account, no cloud inference by default, no analytics, nothing reporting back to us - the only things that leave your box are the ones you ask for: a model download, a lyrics lookup, a web search she runs for you, and OpenRouter if you *choose* that provider. [The full list](SECURITY.md#what-talks-to-the-internet).
 
@@ -286,9 +287,9 @@ Browser ──HTTP/SSE──▶ nginx ──FastCGI──▶ php-fpm ──HTTP�
 
 1. The browser `POST`s to `/api/chat.php`.
 2. PHP assembles the prompt in two halves. The cached half - `system_prompt.txt` and her journal - stays byte-identical between turns so the KV prompt cache keeps hitting. Everything that moves goes in a live-context block glued *after* your question in the last user turn: clock, matched lore facts, durable notes, outfit, relationship gauges. Dead last comes a `<think:low|med|high>` marker telling her how hard to think this turn.
-3. The model streams back (NDJSON from Ollama, OpenAI-style SSE from the others); `providers.php` normalizes both and PHP re-frames each token as an SSE event and flushes it immediately. If she reaches for a tool (search her notes, change outfit, look something up, walk out) PHP runs it and streams another round, up to three.
+3. The model streams back (NDJSON from Ollama, OpenAI-style SSE from the others); `api/lib/providers/` normalizes both and PHP re-frames each token as an SSE event and flushes it immediately. If she reaches for a tool (search her notes, change outfit, look something up, take you out, walk out) PHP runs it and streams another round, up to three.
 4. `js/app/stream-filters.js` watches the stream for `[A:` markers, holds back any half-typed marker so it never renders, and fires the action the instant its `]` arrives.
-5. `js/live2d.js` lerps the model toward the new pose; if voice is on, `js/tts.js` fetches audio per sentence and drives `ParamMouthOpen` from the analyser's RMS.
+5. `js/live2d/live2d.js` lerps the model toward the new pose; if voice is on, `js/voice/tts.js` fetches audio per sentence and drives `ParamMouthOpen` from the analyser's RMS.
 6. Bookkeeping happens only *after* `[DONE]`, so nothing can delay a token: her hidden `[A:mood_shift|...]` tag moves the gauges, a new chat gets its title. Wander off and the consolidation worker rewrites her notes and journal.
 
 The gory version - the action state machine, the tick loop, the memory pipeline - is in [`docs/architecture.md`](docs/architecture.md).
@@ -352,7 +353,7 @@ Karaoke is its own container, so it needs `KARAOKE=on` in `.env` (`./start.sh` p
 <details>
 <summary><b>Getting 429s while chatting</b></summary>
 
-The rate limiter tripped, and there are two layers: `limit_req` / `limit_conn` per location in the nginx template (`/api/chat.php` allows 2 open streams per IP) and `rate_limit('chat', 30, 60)` in `webapp/api/chat.php`. The stricter one wins, so raise both.
+The rate limiter tripped, and there are two layers: `limit_req` / `limit_conn` per location in the nginx template (`/api/chat.php` allows 2 open streams per IP) and `rate_limit('chat', 90, 60)` in `webapp/api/chat.php`. The stricter one wins, so raise both.
 </details>
 
 <details>
@@ -372,17 +373,22 @@ The model-server and voice containers are profile-gated. `./start.sh` derives `C
 ```
 .
 ├── docker/           Dockerfiles, nginx templates + security-headers snippet, entrypoints
-├── tts/              Audio sidecar: TTS + STT + karaoke separation (FastAPI, server.py)
+├── tts/              Audio sidecar: TTS + STT + karaoke separation (FastAPI, server.py + sidecar/)
 ├── tools/            Lore builder, critical-CSS inliner, asset recovery, the bare-metal php router
 ├── docs/             architecture.md, configuration.md, wiki/ (the GitHub wiki source), screenshots/
 ├── android/          Same webapp on a phone: Ktor server + LiteRT-LM on-device, its own Gradle project
 ├── webapp/           Everything nginx and php-fpm serve
-│   ├── api/          chat.php, providers.php, auth.php, memory.php, outfit.php, karaoke.php, migrations/, …
-│   ├── js/           app/, live2d/, actions.js, voice.js, wardrobe.js, mods.js, karaoke.js, …
-│   ├── css/          base, shell, chat, stage, sidebar, settings, widgets, welcome, voice-karaoke, responsive
+│   ├── api/          chat.php, auth.php, memory.php, outfit.php, karaoke.php, trip.php, migrations/, …
+│   │   └── lib/      the shared stuff: bootstrap, db, crypto, memory, providers/, chat/, consolidation/ (never served)
+│   ├── js/           one entry per page (app.js is just the login gate) + the folders they share:
+│   │                 core/, app/, live2d/, outfit/, wardrobe/, mods/, voice/, karaoke/, trip/
+│   ├── css/          base, shell, chat, stage, sidebar, settings, widgets, welcome, voice-karaoke, cards, subpage, responsive
+│   │   ├── boot.css  Critical CSS, inlined into index.html at sync time
+│   │   └── pages/    one sheet each for the date, wardrobe, karaoke and privacy pages
+│   ├── scene/        The rooms she goes out to (shop, karaoke lounge, restaurants, card table) as SVG
 │   ├── vendor/       PIXI, Cubism core, pixi-live2d-display, marked, DOMPurify (no CDN)
 │   ├── assets/       Live2D model files - you generate these, gitignored
-│   ├── boot.css      Critical CSS, inlined into index.html at sync time
+│   ├── wardrobe.html · karaoke.html · date.html   The outing pages
 │   └── system_prompt.txt
 ├── install.sh · install.ps1     One-line bootstrap (Docker · bare metal)
 ├── installer-gui.ps1            The Windows click-through window (ships as JunSetup.exe)

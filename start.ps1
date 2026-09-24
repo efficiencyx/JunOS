@@ -55,10 +55,13 @@ function Get-GpuOrder {
     return ($uuids -join ',')
 }
 
-# the card the MTP tune was measured on, as one string: the vendor,
-# then every GPU's name and how much VRAM it has. sorted biggest
-# card first, so shuffling cards between slots isn't a change. only
-# a real swap is.
+# the card the MTP tune was measured on, as one string. MTP is
+# multi-token prediction, a small drafter model guesses the next
+# few tokens (how many = the draft depth) and the chat model
+# checks them all in one pass. string is the vendor, then every
+# GPU's name and how much VRAM it has. sorted biggest card first,
+# so shuffling cards between slots isn't a change. only a real
+# swap is.
 #
 # keep this in step with the copy in mtp-autotune.ps1. we compare
 # what it prints against MTP_TUNED_GPU, so the day the two print a
@@ -83,6 +86,7 @@ $Runtime  = Join-Path $PSScriptRoot 'runtime'
 $LogDir   = Join-Path $Runtime 'logs'
 $PidFile  = Join-Path $Runtime 'pids.json'
 $StateDir = Join-Path $Runtime 'state'
+$Services = 'php', 'memory', 'tts', 'ollama', 'llamacpp'
 
 # read KEY=VALUE pairs in as env vars, but ONLY when they aren't
 # set already, so you can still override one for a single run.
@@ -144,7 +148,7 @@ function Test-Elevated {
 
 # binding to 0.0.0.0 is only half of it on windows. the firewall
 # drops the inbound connection before php ever sees it, so the
-# phone just hangs with no error anywhere. Private profile ONLY -
+# phone just hangs with no error anywhere. Private profile ONLY,
 # this must not follow you onto cafe wifi. delete it with:
 #   Remove-NetFirewallRule -DisplayName "Jun OS (<port>)"
 function Confirm-FirewallRule([string]$port) {
@@ -177,7 +181,7 @@ function Confirm-FirewallRule([string]$port) {
 }
 
 if ($Action -eq 'start' -and $BindAddr -notin @('127.0.0.1', 'localhost', '::1')) {
-    # bare metal has no TLS at all - no nginx, no certs, php -S
+    # bare metal has no TLS at all. no nginx, no certs, php -S
     # speaks plain HTTP and nothing else. so this is the same refusal
     # the docker path makes, except here there is no TLS_MODE=on to
     # offer as the way out.
@@ -326,7 +330,7 @@ function Invoke-MtpRecheck {
 if ($Action -eq 'stop') {
     Step 'stopping services'
     $pids = Read-Pids
-    foreach ($name in 'php', 'memory', 'tts', 'ollama', 'llamacpp') {
+    foreach ($name in $Services) {
         $p = Get-TrackedProcess $pids $name
         if ($p) {
             Ok "stopped $name (pid $($p.Id))"
@@ -342,7 +346,7 @@ if ($Action -eq 'stop') {
 if ($Action -eq 'status') {
     Step 'service status'
     $pids = Read-Pids
-    foreach ($name in 'php', 'memory', 'tts', 'ollama', 'llamacpp') {
+    foreach ($name in $Services) {
         $p = Get-TrackedProcess $pids $name
         if ($p) {
             Ok ("{0,-10} running (pid {1})" -f $name, $p.Id)
@@ -551,7 +555,7 @@ $env:OMEGA_STATE_DIR        = $StateDir
 $env:OMEGA_ALLOWED_HOSTS    = (@('127.0.0.1', 'localhost', '::1') + $LanHosts +
     @($env:OMEGA_EXTRA_HOSTS -split '[,\s]+' | Where-Object { $_ })) -join ','
 $env:OMEGA_ALLOWED_ORIGINS  = $SiteUrl
-$libPath = (Join-Path $PSScriptRoot 'webapp\api\_lib.php').Replace('\', '/')
+$libPath = (Join-Path $PSScriptRoot 'webapp\api\lib\bootstrap.php').Replace('\', '/')
 & $phpExe -r "require '$libPath'; db();"
 if ($LASTEXITCODE -ne 0) { throw 'database migration failed' }
 $oldMemory = Get-TrackedProcess $oldPids 'memory'
@@ -585,7 +589,7 @@ while (-not (Test-Http $SiteUrl)) {
 }
 
 # BEFORE the ready banner, not after. on llamacpp the sweep bounces
-# llama-server five times, so she isn't usable till it finishes and
+# llama-server six times, so she isn't usable till it finishes and
 # opening the browser first would just show a broken chat.
 Invoke-MtpRecheck
 

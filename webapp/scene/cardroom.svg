@@ -1,0 +1,70 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 800" preserveAspectRatio="xMidYMid slice">
+<!-- back room. one shaded bulb on a flex over the table and nothing
+     outside its circle. brass, warm wood, green felt - no violet,
+     Jun has to read against it.
+
+     the felt itself is a CSS element (it has to size to the buttons
+     inside it), so this file is the room around it: the pool of
+     light, the panelling, and the dark. -->
+<defs>
+  <radialGradient id="cr-key" cx="50%" cy="4%" r="76%">
+    <stop offset="0" stop-color="#ffdca4" stop-opacity=".4"/>
+    <stop offset=".2" stop-color="#c9a271" stop-opacity=".16"/>
+    <stop offset=".46" stop-color="#3c3a2c" stop-opacity=".4"/>
+    <stop offset=".74" stop-color="#181a18" stop-opacity=".78"/>
+    <stop offset="1" stop-color="#090b0a" stop-opacity=".96"/>
+  </radialGradient>
+  <radialGradient id="cr-pool" cx="50%" cy="50%" r="50%">
+    <stop offset="0" stop-color="#ffd79a" stop-opacity=".3"/>
+    <stop offset=".3" stop-color="#ffd79a" stop-opacity=".14"/>
+    <stop offset=".64" stop-color="#ffd79a" stop-opacity=".04"/>
+    <stop offset="1" stop-color="#ffd79a" stop-opacity="0"/>
+  </radialGradient>
+  <linearGradient id="cr-wall" x1=".3" y1="0" x2=".8" y2="1">
+    <stop offset="0" stop-color="#2c3129"/><stop offset=".55" stop-color="#1e211d"/><stop offset="1" stop-color="#121412"/>
+  </linearGradient>
+  <linearGradient id="cr-wood" x1="0" y1="0" x2="0" y2="1">
+    <stop offset="0" stop-color="#4b3724"/><stop offset=".5" stop-color="#33251a"/><stop offset="1" stop-color="#1d1510"/>
+  </linearGradient>
+  <linearGradient id="cr-shade" x1="0" y1="0" x2="1" y2=".3">
+    <stop offset="0" stop-color="#2a2620"/><stop offset=".42" stop-color="#6d6152"/>
+    <stop offset=".68" stop-color="#3d362c"/><stop offset="1" stop-color="#1c1915"/>
+  </linearGradient>
+  <filter id="cr-grain" x="0" y="0" width="100%" height="100%">
+    <feTurbulence type="fractalNoise" baseFrequency="0.85" numOctaves="3" stitchTiles="stitch"/>
+    <feColorMatrix type="saturate" values="0"/>
+  </filter>
+  <filter id="cr-soft" x="-60%" y="-60%" width="220%" height="220%"><feGaussianBlur stdDeviation="26"/></filter>
+</defs>
+
+<rect width="1200" height="800" fill="url(#cr-wall)"/>
+<path d="M0 470h1200v330H0z" fill="url(#cr-wood)"/>
+<path d="M0 464h1200v10H0z" fill="#6b5128" opacity=".38"/>
+<g stroke="#100c08" stroke-opacity=".5" stroke-width="3" fill="none">
+  <path d="M148 480v320M402 480v320M736 480v320M1016 480v320"/>
+</g>
+
+<!-- the bulb. flex, tin shade, and the hot filament under it -->
+<g>
+  <path d="M600 0v96" stroke="#15120d" stroke-width="5"/>
+  <path d="M528 96h144l-30 58H558z" fill="url(#cr-shade)" stroke="#6b5128" stroke-width="2"/>
+  <path d="M600 96h72l-30 58h-42z" fill="#0d0b08" opacity=".35"/>
+  <ellipse cx="600" cy="154" rx="42" ry="9" fill="#ffe2ad" opacity=".85"/>
+  <ellipse cx="600" cy="158" rx="16" ry="12" fill="#fff3d0"/>
+  <ellipse cx="600" cy="158" rx="46" ry="34" fill="#ffd79a" opacity=".5" filter="url(#cr-soft)"/>
+</g>
+
+<!-- a door, off to one side, shut. somebody is on the other side of
+     it and it is none of your business -->
+<g>
+  <rect x="936" y="188" width="196" height="286" fill="#1a1712" stroke="#4b3724" stroke-width="5"/>
+  <rect x="958" y="212" width="66" height="112" fill="#12100c"/>
+  <rect x="1044" y="212" width="66" height="112" fill="#12100c"/>
+  <rect x="958" y="348" width="152" height="104" fill="#12100c"/>
+  <circle cx="952" cy="336" r="7" fill="#9c7b3c"/>
+</g>
+
+<rect width="1200" height="800" fill="url(#cr-key)"/>
+<ellipse cx="600" cy="560" rx="620" ry="330" fill="url(#cr-pool)" style="mix-blend-mode:screen"/>
+<rect width="1200" height="800" filter="url(#cr-grain)" opacity=".05"/>
+</svg>

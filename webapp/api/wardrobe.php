@@ -1,13 +1,11 @@
 <?php
-require_once __DIR__ . '/_lib.php';
-require_once __DIR__ . '/_wardrobe.php';
-
-header('Content-Type: application/json');
-rate_limit('wardrobe', 60, 60);
+require_once __DIR__ . '/lib/bootstrap.php';
+require_once __DIR__ . '/lib/wardrobe.php';
 
 $user = require_user();
+rate_limit('wardrobe', 60, 60);
 $db = db();
-$method = $_SERVER['REQUEST_METHOD'];
+$method = require_method('GET', 'POST', 'DELETE');
 
 if ($method === 'GET') {
     $stmt = $db->prepare(
@@ -25,13 +23,11 @@ if ($method === 'GET') {
             'data' => is_array($parsed) ? $parsed : new stdClass(),
         ];
     }
-    echo json_encode($out);
-    exit;
+    json_out($out);
 }
 
 if ($method === 'POST') {
-    $req = json_decode(read_body(64 * 1024), true);
-    if (!is_array($req)) fail(400, 'invalid_request');
+    $req = read_json_body(64 * 1024);
     $name = trim((string)($req['name'] ?? ''));
     $data = $req['data'] ?? null;
     if ($name === '' || mb_strlen($name) > 60 || !is_array($data)) fail(400, 'invalid_request');
@@ -48,16 +44,10 @@ if ($method === 'POST') {
 
     $id = $db->prepare('SELECT id FROM wardrobe_presets WHERE user_id=? AND name=?');
     $id->execute([$user['id'], $name]);
-    echo json_encode(['id' => (int)$id->fetchColumn(), 'name' => $name]);
-    exit;
+    json_out(['id' => (int)$id->fetchColumn(), 'name' => $name]);
 }
 
-if ($method === 'DELETE') {
-    $id = (int)($_GET['id'] ?? 0);
-    if (!$id) fail(400, 'invalid_request');
-    $db->prepare('DELETE FROM wardrobe_presets WHERE id=? AND user_id=?')->execute([$id, $user['id']]);
-    echo json_encode(['ok' => true]);
-    exit;
-}
-
-fail(405, 'method_not_allowed');
+$id = (int)($_GET['id'] ?? 0);
+if (!$id) fail(400, 'invalid_request');
+$db->prepare('DELETE FROM wardrobe_presets WHERE id=? AND user_id=?')->execute([$id, $user['id']]);
+json_out(['ok' => true]);

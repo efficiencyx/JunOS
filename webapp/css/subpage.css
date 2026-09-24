@@ -1,0 +1,27 @@
+/* one source for the tokens the subpages share. with its own
+   :root copy in pages/wardrobe.css, pages/karaoke.css and
+   pages/date.css they drift apart. last time --bg-2 was #16141e
+   in one and #19141f in the other, --border was
+   rgba(255,255,255,.06) in one and #c4a0f01c in the other. same
+   intent, three answers.
+
+   the accent is Jun's violet and it stays on her and on
+   controls (focus rings, selected states, primary buttons).
+   the rooms don't get to use it, that's what stops her
+   dissolving into the wallpaper. Annalie's shop has its own
+   magenta inside scene/boutique.svg, because that one's a
+   character's colour, not a UI colour. */
+:root {
+  color-scheme: dark;
+  --bg:   #100d17;
+  --bg-2: #17131f;
+  --bg-3: #201a2b;
+  --bg-4: #2a2237;
+  --fg:   #e9e3f2;
+  --muted: #aaa0b8;
+  --accent: #c4a0f0;
+  --accent-soft: #c4a0f017;
+  --border: #c4a0f01c;
+  --border-2: #c4a0f038;
+  --serif: "Iowan Old Style", "Palatino Linotype", Palatino, Georgia, serif;
+}

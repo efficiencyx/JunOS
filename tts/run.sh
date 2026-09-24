@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
-# Start the audio (TTS/STT) sidecar. First run creates a venv and installs deps.
-# Requires espeak-ng on the host (sudo pacman -S espeak-ng on Arch).
+# starts the audio sidecar (TTS/STT). first run makes a venv and
+# installs the deps into it.
+# needs espeak-ng on the host (sudo pacman -S espeak-ng on Arch)
 
 set -euo pipefail
 cd "$(dirname "$0")"

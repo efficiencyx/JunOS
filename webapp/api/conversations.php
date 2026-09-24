@@ -1,19 +1,17 @@
 <?php
-require_once __DIR__ . '/_lib.php';
-
-header('Content-Type: application/json');
-rate_limit('conversations', 60, 60);
+require_once __DIR__ . '/lib/bootstrap.php';
 
 $user = require_user();
+rate_limit('conversations', 60, 60);
+$userId = (int)$user['id'];
 $action = $_GET['action'] ?? '';
 
 function summarize_conversation_chunk(string $oldSummary, array $chunk): ?string {
     $lines = [];
     foreach ($chunk as $m) {
-        $text = preg_replace('/\[\s*A(?:CTIONS?)?\s*:[^\]]*\]/i', '', (string)$m['content']);
-        $text = trim(preg_replace('/\s+/', ' ', $text));
+        $text = spoken_text((string)$m['content']);
         if ($text === '') continue;
-        $lines[] = ($m['role'] === 'assistant' ? 'Jun' : 'Anon') . ': ' . $text;
+        $lines[] = speaker_name($m['role']) . ': ' . $text;
     }
     if (!$lines) return null;
 
@@ -26,40 +24,46 @@ function summarize_conversation_chunk(string $oldSummary, array $chunk): ?string
     return provider_complete_once(ai_provider(), default_chat_model(),
         [['role' => 'system', 'content' => $sys], ['role' => 'user', 'content' => $usr]], 512);
 }
-$method = $_SERVER['REQUEST_METHOD'];
+
+// every action but list/create is about one conversation, ?id=
+function conversation_id(): int {
+    $id = (int)($_GET['id'] ?? 0);
+    if (!$id) fail(400, 'invalid_request');
+    return $id;
+}
+
+function require_owned(int $id, int $userId): void {
+    if (!conversation_owned($id, $userId)) fail(404, 'not_found');
+}
+
 $db = db();
 
 switch ($action) {
 
     case 'list':
-        if ($method !== 'GET') fail(405, 'method_not_allowed');
+        require_method('GET');
         $stmt = $db->prepare(
             'SELECT id, title, created_at, updated_at FROM conversations
              WHERE user_id=? ORDER BY updated_at DESC LIMIT 100'
         );
-        $stmt->execute([$user['id']]);
+        $stmt->execute([$userId]);
         $rows = $stmt->fetchAll();
         foreach ($rows as &$row) $row['title'] = dec($row['title']);
         unset($row);
-        echo json_encode($rows);
-        break;
+        json_out($rows);
 
     case 'create':
-        if ($method !== 'POST') fail(405, 'method_not_allowed');
+        require_method('POST');
         $now = time();
         $db->prepare(
             'INSERT INTO conversations (user_id, title, created_at, updated_at) VALUES (?, NULL, ?, ?)'
-        )->execute([$user['id'], $now, $now]);
-        echo json_encode(['id' => (int)$db->lastInsertId()]);
-        break;
+        )->execute([$userId, $now, $now]);
+        json_out(['id' => (int)$db->lastInsertId()]);
 
     case 'messages':
-        if ($method !== 'GET') fail(405, 'method_not_allowed');
-        $id = (int)($_GET['id'] ?? 0);
-        if (!$id) fail(400, 'invalid_request');
-        $own = $db->prepare('SELECT 1 FROM conversations WHERE id=? AND user_id=?');
-        $own->execute([$id, $user['id']]);
-        if (!$own->fetchColumn()) fail(404, 'not_found');
+        require_method('GET');
+        $id = conversation_id();
+        require_owned($id, $userId);
         $stmt = $db->prepare(
             'SELECT role, content, created_at FROM messages WHERE conversation_id=? ORDER BY id'
         );
@@ -67,42 +71,34 @@ switch ($action) {
         $rows = $stmt->fetchAll();
         foreach ($rows as &$row) $row['content'] = dec($row['content']);
         unset($row);
-        echo json_encode($rows);
-        break;
+        json_out($rows);
 
     case 'rename':
-        if ($method !== 'POST') fail(405, 'method_not_allowed');
-        $id = (int)($_GET['id'] ?? 0);
-        if (!$id) fail(400, 'invalid_request');
-        $body = json_decode(read_body(4 * 1024), true);
+        require_method('POST');
+        $id = conversation_id();
+        $body = read_json_body(4 * 1024);
         $title = mb_substr(trim((string)($body['title'] ?? '')), 0, 120);
         if ($title === '') fail(400, 'invalid_request');
         $stmt = $db->prepare('UPDATE conversations SET title=? WHERE id=? AND user_id=?');
-        $stmt->execute([enc($title), $id, $user['id']]);
+        $stmt->execute([enc($title), $id, $userId]);
         if (!$stmt->rowCount()) fail(404, 'not_found');
-        echo json_encode(['ok' => true]);
-        break;
+        json_out(['ok' => true]);
 
     case 'delete':
-        if ($method !== 'DELETE') fail(405, 'method_not_allowed');
-        $id = (int)($_GET['id'] ?? 0);
-        if (!$id) fail(400, 'invalid_request');
+        require_method('DELETE');
+        $id = conversation_id();
         $stmt = $db->prepare('DELETE FROM conversations WHERE id=? AND user_id=?');
-        $stmt->execute([$id, $user['id']]);
+        $stmt->execute([$id, $userId]);
         if (!$stmt->rowCount()) fail(404, 'not_found');
-        echo json_encode(['ok' => true]);
-        break;
+        json_out(['ok' => true]);
 
     case 'set_audio_text':
-        if ($method !== 'POST') fail(405, 'method_not_allowed');
-        $id = (int)($_GET['id'] ?? 0);
-        if (!$id) fail(400, 'invalid_request');
-        $body = json_decode(read_body(16 * 1024), true);
+        require_method('POST');
+        $id = conversation_id();
+        $body = read_json_body(16 * 1024);
         $text = trim((string)($body['text'] ?? ''));
         if ($text === '') fail(400, 'invalid_request');
-        $own = $db->prepare('SELECT 1 FROM conversations WHERE id=? AND user_id=?');
-        $own->execute([$id, $user['id']]);
-        if (!$own->fetchColumn()) fail(404, 'not_found');
+        require_owned($id, $userId);
         // ponytail: newest <audio> row. wrong row only if whisper takes
         // longer than a whole voice turn (speak again + 700ms silence),
         // upgrade is chat.php sending the inserted id and matching on it
@@ -113,30 +109,24 @@ switch ($action) {
         );
         $stmt->execute([enc($text), $id]);
         if (!$stmt->rowCount()) fail(404, 'not_found');
-        echo json_encode(['ok' => true]);
-        break;
+        json_out(['ok' => true]);
 
     case 'delete_last_assistant':
-        if ($method !== 'POST') fail(405, 'method_not_allowed');
-        $id = (int)($_GET['id'] ?? 0);
-        if (!$id) fail(400, 'invalid_request');
-        $own = $db->prepare('SELECT 1 FROM conversations WHERE id=? AND user_id=?');
-        $own->execute([$id, $user['id']]);
-        if (!$own->fetchColumn()) fail(404, 'not_found');
+        require_method('POST');
+        $id = conversation_id();
+        require_owned($id, $userId);
         $db->prepare(
             "DELETE FROM messages WHERE id = (
                SELECT id FROM messages WHERE conversation_id=? AND role='assistant'
                ORDER BY id DESC LIMIT 1)"
         )->execute([$id]);
-        echo json_encode(['ok' => true]);
-        break;
+        json_out(['ok' => true]);
 
     case 'compact':
-        if ($method !== 'POST') fail(405, 'method_not_allowed');
-        $id = (int)($_GET['id'] ?? 0);
-        if (!$id) fail(400, 'invalid_request');
+        require_method('POST');
+        $id = conversation_id();
         $row = $db->prepare('SELECT summary, summary_upto_id FROM conversations WHERE id=? AND user_id=?');
-        $row->execute([$id, $user['id']]);
+        $row->execute([$id, $userId]);
         $conv = $row->fetch();
         if (!$conv) fail(404, 'not_found');
 
@@ -156,10 +146,7 @@ switch ($action) {
 
         $tailChars = 0;
         foreach ($tail as $m) $tailChars += strlen((string)$m['content']);
-        if ($tailChars <= $budgetChars || count($tail) <= $keepTail) {
-            echo json_encode(['compacted' => false]);
-            break;
-        }
+        if ($tailChars <= $budgetChars || count($tail) <= $keepTail) json_out(['compacted' => false]);
 
         $chunk = [];
         $remaining = $tailChars;
@@ -170,15 +157,14 @@ switch ($action) {
             $remaining -= strlen((string)$tail[$i]['content']);
             $lastFoldedId = (int)$tail[$i]['id'];
         }
-        if (!$chunk) { echo json_encode(['compacted' => false]); break; }
+        if (!$chunk) json_out(['compacted' => false]);
 
         $newSummary = summarize_conversation_chunk($oldSummary, $chunk);
-        if ($newSummary === null) { echo json_encode(['compacted' => false, 'error' => 'summarize_failed']); break; }
+        if ($newSummary === null) json_out(['compacted' => false, 'error' => 'summarize_failed']);
 
         $db->prepare('UPDATE conversations SET summary=?, summary_upto_id=? WHERE id=? AND user_id=?')
-           ->execute([enc($newSummary), $lastFoldedId, $id, $user['id']]);
-        echo json_encode(['compacted' => true, 'upto_id' => $lastFoldedId]);
-        break;
+           ->execute([enc($newSummary), $lastFoldedId, $id, $userId]);
+        json_out(['compacted' => true, 'upto_id' => $lastFoldedId]);
 
     default:
         fail(400, 'invalid_action');

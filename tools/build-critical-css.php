@@ -1,11 +1,11 @@
 <?php
-// boot.css is the source. the <style id="critical"> copy in
+// css/boot.css is the source. the <style id="critical"> copy in
 // index.html is GENERATED, never touch it by hand. pre-app
 // screens need it before async styles.css loads. sync-webapp.sh
 // updates it. --check just compares and exits 1 when stale.
 
 $webappDir = is_dir(__DIR__ . '/../webapp') ? __DIR__ . '/../webapp' : __DIR__ . '/..';
-$cssPath  = $webappDir . '/boot.css';
+$cssPath  = $webappDir . '/css/boot.css';
 $htmlPath = $webappDir . '/index.html';
 
 foreach ([$cssPath, $htmlPath] as $p) {
@@ -32,7 +32,7 @@ if ($end === false) {
     exit(1);
 }
 
-$banner  = "\n/* generated from boot.css by tools/build-critical-css.php. do NOT edit. */\n";
+$banner  = "\n/* generated from css/boot.css by tools/build-critical-css.php. do NOT edit. */\n";
 $updated = substr($html, 0, $bodyAt) . $banner . $css . "\n" . substr($html, $end);
 
 if (in_array('--check', $argv, true)) {

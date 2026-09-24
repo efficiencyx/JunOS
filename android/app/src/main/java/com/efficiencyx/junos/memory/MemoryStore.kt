@@ -207,7 +207,7 @@ class MemoryStore(context: Context) {
         private val WIKI_LINK = Regex("\\[\\[([^]\\n]+)]]")
         private val JOURNAL_HEADING = Regex("^##\\s+(\\d{4}-\\d{2}-\\d{2})$")
 
-        // Word for word what memory_recent_context() in webapp/api/chat.php puts
+        // Word for word what memory_recent_context() in webapp/api/lib/chat/context.php puts
         // in front of the notes, she reads the same block on both sides.
         private const val CONTEXT_HEADER = "## Durable memory notes\n" +
             "Words like \"tomorrow\" or \"next friday\" in a note mean the day you wrote it, not now. " +

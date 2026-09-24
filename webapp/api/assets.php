@@ -1,6 +1,6 @@
 <?php
-require_once __DIR__ . '/_lib.php';
-require_once __DIR__ . '/_wardrobe.php';
+require_once __DIR__ . '/lib/bootstrap.php';
+require_once __DIR__ . '/lib/wardrobe.php';
 
 $user = require_user();
 $method = strtoupper($_SERVER['REQUEST_METHOD'] ?? 'GET');
@@ -19,13 +19,14 @@ if ($target === false || !is_file($target)
 // items/ holds the baked wardrobe tiles. every tile is on screen
 // the moment the wardrobe opens, so gating them on the active
 // look would just 403 the whole grid. same category as the base
-// atlas above: always needed, never secret to the user who owns
-// the look. logos and the two glasses shots are in here for the
-// same reason. they never get baked (they're painted into a face
-// or garment texture, so the crop comes back as her whole face),
-// so the picker uses the decal png itself as the thumb. gate
-// those on the worn look and every logo you're NOT wearing is a
-// 403, which is the entire point of a picker gone.
+// atlas (texture_NN.png in the regex): always needed, never
+// secret to the user who owns the look. logos and the two
+// glasses shots are in here for the same reason. they never get
+// baked (they're painted into a face or garment texture, so the
+// crop comes back as her whole face), so the picker uses the
+// decal png itself as the thumb. gate those on the worn look and
+// every logo you're NOT wearing is a 403, which is the entire
+// point of a picker gone.
 $baseAsset = preg_match('#^(interaction_model\\.(?:moc3|model3\\.json)|texture_\\d{2}\\.png|items/[A-Za-z0-9_-]+\\.png|variants/logos/[A-Za-z0-9_-]+\\.png|variants/(?:glasses|heartGlasses)\\.png)$#', $relative) === 1;
 $metadata = str_ends_with($relative, '.json');
 if (!$baseAsset && !$metadata) {

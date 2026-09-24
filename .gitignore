@@ -24,16 +24,18 @@ Junk/
 # personal use only, NEVER redistribute (see the NOTICE in LICENSE).
 webapp/assets/
 
-# generated library cache (unsloth) - don't commit
+# generated library cache from unsloth (the fine-tuning lib),
+# don't commit it
 unsloth_compiled_cache/
 
 # dataset generation tools
 tools/dataset_v5
 tools/dataset_v6
 
-# LoRA training pipeline and its debug scratch - operates on the
+# the LoRA training pipeline (LoRA = the small adapter trained on
+# top of the base model) and its debug scratch. runs on the
 # gitignored dataset dirs, nothing in the running stack imports
-# it. Not to be confused with colab.ipynb, which serves the app
+# it. not to be confused with colab.ipynb, which serves the app
 # and stays tracked.
 train_jun.py
 train_think_colab.ipynb
@@ -42,19 +44,21 @@ diag_labels.py
 diag_thinking.py
 smoke_thinking.py
 from_think_tags.py
-# review.php is tracked here; the line only matters once this file is
-# copied to the public tree, where a stale local copy must stay ignored.
+# review.php is tracked here. the line only matters once this
+# file gets copied to the public tree, where a stale local copy
+# has to stay ignored.
 webapp/api/review.php
 webapp/api/review.js
 
-# raw Live2D source assets - kept locally, not in the repo
+# raw Live2D source assets. kept locally, not in the repo
 live2d_raw/
 
-# lore dataset and the corpus built from it by build_lore_index.php.
-# the jsonl is tracked here but publish.sh keeps it out of the public
-# tree; this line is what stops it being re-added over there.
+# lore dataset and the corpus build_lore_index.php builds from
+# it. the jsonl is tracked here but publish.sh keeps it out of
+# the public tree. this line is what stops it getting re-added
+# over there.
 tools/lore_dataset.jsonl
-# (.bin/.json came from the embedding index, deleted in 2026-07;
+# (.bin/.json came from the embedding index, deleted in 2026-07.
 # still ignored so stale copies in older checkouts never get
 # committed)
 webapp/lore_corpus.txt
@@ -69,7 +73,7 @@ letsencrypt/
 # local .env snapshots kept while switching backends
 .env.bak-*
 
-# local render rig for clothing shots - opens the shipped webapp
+# local render rig for clothing shots. opens the shipped webapp
 # assets, not something a user needs
 tools/clothing-render.html
 tools/clothing-render.js
@@ -80,7 +84,7 @@ dist/
 
 # the promo reels, landscape and vertical. both drive the real
 # rig off the real webapp/assets/, so they only run on a machine
-# that already has them - nothing to ship to a user, and nothing
+# that already has them. nothing to ship to a user, and nothing
 # that would survive a fresh clone anyway. the audio and the mod
 # tiles under them are generated too, out of material that is
 # itself gitignored.
@@ -92,33 +96,6 @@ webapp/showcase-mod/
 webapp/showcase-tiktok.html
 webapp/showcase-tiktok.css
 webapp/js/showcase-tiktok.js
-
-# #`ignore publish.sh  
-# tpu port. jax rewrite of the stream buffer + the live2d param
-# feed, runs on a v5e but still eats every third action tag.
-# nothing here is wired into start.sh yet
-tpu/
-tpu/.xla_cache/
-webapp/js/tpu-bridge.js
-webapp/wasm/tpu-bridge.wasm
-
-# Custom W8 engine build tree. 8 bit weight-only.
-# 2731% speedup on my 3060 12gb.
-# 1229 tok/s against ~44 for the ollama path, some problems in tool calling tho.
-
-engine/w8/build/
-engine/w8/kernels/*.ptx
-engine/w8/*.w8k
-*.w8cache
-
-# junos-linux. yes an actual distro, immutable rootfs with the stack
-# baked in, boots straight into her. iso scratch never gets committed
-distro/iso/
-distro/rootfs/
-distro/*.squashfs
-distro/*.iso
-# #/ignore publish.sh  
-
 .consider
 .this
 .one

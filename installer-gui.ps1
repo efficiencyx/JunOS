@@ -12,9 +12,9 @@ if ([Environment]::OSVersion.Platform -ne [PlatformID]::Win32NT) {
 # when this file is compiled with tools/build-installer-exe.ps1
 # the host process is JunSetup.exe, NOT powershell.exe. so
 # MainModule is useless for "give me a shell to run install.ps1
-# in" - it would relaunch the installer inside itself. resolve
+# in", it would relaunch the installer inside itself. resolve
 # the real powershell.exe off SystemRoot instead. Sysnative is
-# the door a 32 bit process uses to reach the 64 bit System32,
+# the alias a 32 bit process uses to reach the 64 bit System32,
 # and it only exists for such a process, so try it first and fall
 # back.
 $script:PowerShellExe = @(
@@ -25,7 +25,7 @@ if (-not $script:PowerShellExe) { $script:PowerShellExe = 'powershell.exe' }
 
 $script:IsCompiled = $PSCommandPath -and $PSCommandPath.EndsWith('.exe', 'OrdinalIgnoreCase')
 
-# tools/build-installer-exe.ps1 rewrites the next line, and ONLY
+# tools/build-installer-exe.ps1 rewrites the next line, and only
 # that line, to base64 of install.ps1. leave the marker comment
 # and the exact assignment shape alone or the build stops
 # embedding and says nothing about it.
@@ -985,6 +985,20 @@ $script:pollTimer.Add_Tick({
     if ($script:installing) { Complete-Installation $script:process.ExitCode }
 })
 
+function Confirm-StopInstallation([string]$text, [string]$title) {
+    $answer = [System.Windows.MessageBox]::Show(
+        $window,
+        $text,
+        $title,
+        [System.Windows.MessageBoxButton]::YesNo,
+        [System.Windows.MessageBoxImage]::Warning
+    )
+    if ($answer -ne [System.Windows.MessageBoxResult]::Yes) { return $false }
+    Stop-Installation
+    $script:installing = $false
+    return $true
+}
+
 function Stop-Installation {
     if ($null -eq $script:process -or $script:process.HasExited) { return }
     try {
@@ -1135,18 +1149,7 @@ $NextButton.Add_Click({
 })
 
 $CancelButton.Add_Click({
-    if ($script:installing) {
-        $answer = [System.Windows.MessageBox]::Show(
-            $window,
-            'Installation is still running. Stop it now?',
-            'Cancel installation',
-            [System.Windows.MessageBoxButton]::YesNo,
-            [System.Windows.MessageBoxImage]::Warning
-        )
-        if ($answer -ne [System.Windows.MessageBoxResult]::Yes) { return }
-        Stop-Installation
-        $script:installing = $false
-    }
+    if ($script:installing -and -not (Confirm-StopInstallation 'Installation is still running. Stop it now?' 'Cancel installation')) { return }
     $window.Close()
 })
 
@@ -1160,17 +1163,7 @@ $OpenSiteButton.Add_Click({ Start-Process (Get-JunUrl) })
 $window.Add_Closing({
     param($sender, $eventArgs)
     if (-not $script:installing) { return }
-    $answer = [System.Windows.MessageBox]::Show(
-        $window,
-        'Installation is still running. Stop it and close setup?',
-        'Close Jun OS Setup',
-        [System.Windows.MessageBoxButton]::YesNo,
-        [System.Windows.MessageBoxImage]::Warning
-    )
-    if ($answer -eq [System.Windows.MessageBoxResult]::Yes) {
-        Stop-Installation
-        $script:installing = $false
-    } else {
+    if (-not (Confirm-StopInstallation 'Installation is still running. Stop it and close setup?' 'Close Jun OS Setup')) {
         $eventArgs.Cancel = $true
     }
 })

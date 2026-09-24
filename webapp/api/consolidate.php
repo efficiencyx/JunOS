@@ -1,13 +1,16 @@
 <?php
 
-require_once __DIR__ . '/_consolidation.php';
+require_once __DIR__ . '/lib/bootstrap.php';
+require_once __DIR__ . '/lib/consolidation/engine.php';
+require_once __DIR__ . '/lib/consolidation/passes.php';
+require_once __DIR__ . '/lib/consolidation/welcome.php';
 
-header('Content-Type: application/json');
 $user = require_user();
 $userId = (int)$user['id'];
 $action = $_GET['action'] ?? '';
+$method = require_method('GET', 'POST');
 
-if ($_SERVER['REQUEST_METHOD'] === 'GET' && $action === 'status') {
+if ($method === 'GET' && $action === 'status') {
     $status = consolidation_status($userId);
     $stmt = db()->prepare('SELECT last_run, last_status, last_note_count FROM memory_consolidation WHERE user_id = ?');
     $stmt->execute([$userId]);
@@ -21,14 +24,14 @@ if ($_SERVER['REQUEST_METHOD'] === 'GET' && $action === 'status') {
     }
     $ban = ban_active($userId);
     if ($ban !== null) $status['ban'] = ['until' => $ban['until'], 'reason' => $ban['reason']];
-    echo json_encode($status);
-    exit;
+    json_out($status);
 }
 
-// Has to be read BEFORE the client reports activity for this session, or the
-// absence it is measuring is already written over with "just now".
-if ($_SERVER['REQUEST_METHOD'] === 'GET' && $action === 'welcome') {
-    if (($user['role'] ?? '') !== 'admin') {
+// has to be read BEFORE the client reports activity for this
+// session, or the absence it's measuring already got written
+// over with "just now".
+if ($method === 'GET' && $action === 'welcome') {
+    if (!is_admin($user)) {
         foreach (['preview', 'away', 'tier'] as $param) {
             if (isset($_GET[$param])) fail(403, 'forbidden');
         }
@@ -39,17 +42,15 @@ if ($_SERVER['REQUEST_METHOD'] === 'GET' && $action === 'welcome') {
     ] : null;
     $hour = isset($_GET['hour']) && $_GET['hour'] !== '' ? (int)$_GET['hour'] : null;
     if ($hour !== null && ($hour < 0 || $hour > 23)) $hour = null;
-    echo json_encode(welcome_payload($userId, $preview, $hour));
-    exit;
+    json_out(welcome_payload($userId, $preview, $hour));
 }
 
-if ($_SERVER['REQUEST_METHOD'] === 'POST' && $action === 'activity') {
+if ($method === 'POST' && $action === 'activity') {
     rate_limit('consolidate_activity', 120, 60);
     consolidation_touch($userId, ($_GET['enabled'] ?? '1') !== '0');
-    echo json_encode(['ok' => true]);
-    exit;
+    json_out(['ok' => true]);
 }
 
 require_post();
 rate_limit('consolidate', 6, 600);
-echo json_encode(consolidation_run($userId));
+json_out(consolidation_run($userId));

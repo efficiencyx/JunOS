@@ -1,0 +1,36 @@
+<svg xmlns="http://www.w3.org/2000/svg">
+<!-- PROP: neon sign, karaoke booth.
+     local box 120 x 150, origin top left. a microphone in a cradle.
+     drawn as stroke only, three passes: tube, hot core, bloom.
+     drop-in replaceable - keep it inside the box and keep it
+     readable as a silhouette at 120px wide, because that is all the
+     room ever gives it. -->
+<defs>
+  <filter id="mic-bloom" x="-70%" y="-70%" width="240%" height="240%"><feGaussianBlur stdDeviation="14"/></filter>
+</defs>
+<g fill="none" stroke-linecap="round" stroke-linejoin="round">
+  <!-- bloom first so the tube sits on top of its own spill -->
+  <g stroke="#ff5fae" opacity=".3" stroke-width="22" filter="url(#mic-bloom)">
+    <path d="M42 34a18 18 0 0 1 36 0v34a18 18 0 0 1-36 0z"/>
+    <path d="M26 62a34 34 0 0 0 68 0"/>
+    <path d="M60 96v26"/>
+  </g>
+  <g stroke="#ff5fae" stroke-width="8">
+    <path d="M42 34a18 18 0 0 1 36 0v34a18 18 0 0 1-36 0z"/>
+    <path d="M26 62a34 34 0 0 0 68 0"/>
+    <path d="M60 96v26"/>
+    <path d="M40 130h40"/>
+  </g>
+  <g stroke="#ffd4ea" stroke-width="2.4">
+    <path d="M42 34a18 18 0 0 1 36 0v34a18 18 0 0 1-36 0z"/>
+    <path d="M26 62a34 34 0 0 0 68 0"/>
+    <path d="M60 96v26"/>
+    <path d="M40 130h40"/>
+  </g>
+  <!-- grille. thin, unlit tube, the bit that makes it read as a mic
+       and not as a capsule -->
+  <g stroke="#ff9ccf" stroke-width="2" opacity=".75">
+    <path d="M44 34h32M43 46h34M43 58h34M45 70h30"/>
+  </g>
+</g>
+</svg>

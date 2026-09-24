@@ -19,7 +19,7 @@ no intermediate dumps. these are the files the webapp needs:
   variants/limbs/**            per-drawable crops of packed variant
                                textures (Experimental limbs +
                                High-Tech skin), with mapping.json
-                               for outfit.js
+                               for outfit/catalog.js
 
 Usage:
   python3 tools/recover_assets.py [--game DIR] [--out DIR]
@@ -115,7 +115,7 @@ LOGOS = {
 # SpriteTextureDataGenerated, the Sprites/Logos registry for
 # OtherLogos and PartnerLogos. every entry can go on
 # Moddable*Logo. keep this in sync with LOGO_CATALOG in
-# webapp/js/outfit.js.
+# webapp/js/outfit/catalog.js.
 DECALS = {
     "aguiLogo": "AGUI_Logo",
     "avocado": "Avocado",
@@ -293,7 +293,7 @@ def safe_component(value):
     return f"{clean[:72]}_{digest}"
 
 
-# drawable names go into output filenames as-is (outfit.js keys
+# drawable names go into output filenames as-is (outfit/catalog.js keys
 # on them, so they can't be rewritten). the real ones are plain
 # [A-Za-z0-9_-]. anything else came out of a doctored archive
 # and would walk out of the output dir, so refuse it.
@@ -319,7 +319,7 @@ def crop_box(img, rect):
     width, height = img.size
     if w <= 0 or h <= 0 or x < 0 or y < 0 or x + w > width or y + h > height:
         raise ValueError(f"crop {rect} outside {width}x{height} texture")
-    # unity rectangles start at the BOTTOM left
+    # unity rectangles start at the bottom left
     return (x, height - y - h, x + w, height - y)
 
 
@@ -488,7 +488,7 @@ class Recovery:
         for tn, pid in sorted(atlas.items()):
             img = self.res_objs[pid].read().image
             if self.atlas_size and self.atlas_size < img.width:
-                # the atlases ARE the webapp's entire GPU budget. each
+                # the atlases are the webapp's entire GPU budget. each
                 # 4096 one costs 64 MB of VRAM uncompressed. UVs are
                 # normalized and mipmaps are off, so the renderer
                 # doesn't depend on this size.
@@ -527,7 +527,7 @@ class Recovery:
         # the registry stores decals as Sprites, so try those first.
         # fruit decals are rectangles in the Fruit+ atlas, and some
         # names collide with small unrelated sprites. the real decal
-        # is ALWAYS the biggest one.
+        # is always the biggest one.
         for tname in ("Sprite", "Texture2D"):
             hits = [o.read() for env in (self.res, self.shared)
                     for o in env.objects
@@ -553,17 +553,18 @@ class Recovery:
                         checked_name(en)
                         crop = img.crop(crop_box(img, entry["rect"]))
                         # an all transparent crop is the item saying "get rid
-                        # of this drawable" - hightechHypercamoSkin_interact
-                        # does it to barcode and lines, her chest barcode and
-                        # the cracks down her cheeks, because the hypercamo is
-                        # a smooth white shell. an empty PNG can't express
-                        # that (outfit.js paints limb crops with alphaClip,
-                        # which erases through the patch's own alpha, so an
-                        # empty patch erases nothing). so don't write it, and
-                        # put the drawable in the option's hide list instead.
+                        # of this drawable". hightechHypercamoSkin_interact
+                        # does it to barcode and lines, her chest barcode
+                        # and the cracks down her cheeks, because the
+                        # hypercamo is a smooth white shell. an empty PNG
+                        # can't express that. outfit/catalog.js puts
+                        # alphaClip on limb crops, which erases through the
+                        # patch's own alpha, so an empty patch erases
+                        # nothing. so don't write it, and put the drawable
+                        # in the option's hide list instead.
                         if crop.getchannel("A").getextrema() == (0, 0):
                             print(f"  skip variants/limbs/{d}/{en}.png "
-                                  "(empty crop - hide the drawable in outfit.js instead)")
+                                  "(empty crop - hide the drawable in outfit/catalog.js instead)")
                             continue
                         self.save(crop, f"variants/limbs/{d}/{en}.png")
                         mapping[group][en] = f"assets/variants/limbs/{d}/{en}.png"
@@ -597,7 +598,7 @@ class Recovery:
 
     def recover_item_catalog(self):
         # keep every packed game item layer and its ColorIndex from
-        # EVERY scene, not just the interaction model. texture
+        # every scene, not just the interaction model. texture
         # resource paths stay too, so later wardrobe work can crop
         # any native item without reverse engineering the binary all
         # over again.

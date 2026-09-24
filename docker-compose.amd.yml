@@ -29,8 +29,8 @@ services:
       - LLAMA_ARG_TENSOR_SPLIT
       - LLAMA_ARG_MAIN_GPU
 
-# Only the karaoke sidecar gets a GPU; the voice sidecar stays CPU-only by
-# design (see docker/tts.Dockerfile).
+  # only the karaoke sidecar gets a GPU. the voice sidecar stays
+  # CPU-only by design, see docker/tts.Dockerfile
   karaoke:
     build:
       args:

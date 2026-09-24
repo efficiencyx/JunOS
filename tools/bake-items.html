@@ -4,9 +4,9 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <!-- every relative url on this page resolves into webapp/, because
-   live2d.js fetches 'assets/interaction_model.moc3' relative to
-   the DOCUMENT, not to itself, and so do all of outfit.js's
-   variant textures. serve the repo root and open
+   live2d/live2d.js fetches 'assets/interaction_model.moc3'
+   relative to the DOCUMENT, not to itself, and so do all of
+   outfit/'s variant textures. serve the repo root and open
    /tools/bake-items.html. -->
 <base href="../webapp/">
 <title>Jun - bake wardrobe tiles</title>
@@ -33,19 +33,20 @@
 </style>
 <script>
 // this page runs off a dumb static server. there is no php, so
-// /api/outfit.php 404s on GET and 501s on PUT, and outfit.js
-// treats both as fatal - the wardrobe is server-backed since
+// /api/outfit.php 404s on GET and 501s on PUT, and outfit/sync.js
+// treats both as fatal. the wardrobe is server-backed since
 // 015_wardrobe_state.sql. so stand the endpoint up in the
 // browser, backed by localStorage, matching what api/outfit.php
 // returns: GET gives {initialized, state}, PUT echoes {state}.
 //
-// answering the first GET with initialized:false makes outfit.js
+// answering the first GET with initialized:false makes outfit
 // turn around and PUT its own defaults, and echoing that PUT back
 // hands it an `assets` list it computed itself. that list
-// matters: outfit.js drops any variant whose files aren't in it,
+// matters: outfit drops any variant whose files aren't in it,
 // and an empty stub gets you a naked model with no styles.
 //
-// NOT defer. it has to replace fetch before outfit.js is parsed.
+// NOT a module. it has to replace fetch before the outfit
+// modules run.
 (function () {
   const KEY = 'omega.tools.wardrobe.v1';
   const json = (body) => new Response(JSON.stringify(body),
@@ -53,7 +54,7 @@
   const realFetch = window.fetch.bind(window);
   window.fetch = (input, init) => {
     const url = typeof input === 'string' ? input : input.url;
-    if (!url.includes('/api/outfit.php')) return realFetch(input, init);
+    if (!url.includes('api/outfit.php')) return realFetch(input, init);
     if ((init && init.method) === 'PUT') {
       localStorage.setItem(KEY, init.body);
       return Promise.resolve(json({ state: JSON.parse(init.body) }));
@@ -81,21 +82,19 @@
 <script src="vendor/live2dcubismcore.min.js"></script>
 <script src="vendor/pixi.min.js"></script>
 <script src="vendor/cubism4.min.js"></script>
-<!-- same ?v= as everywhere else. a mismatch here and the browser
-   builds a second copy of the module graph, which is an afternoon
-   you don't get back -->
-<script type="module" src="js/live2d.js?v=3"></script>
-<script defer src="js/mods.js?v=3"></script>
-<script defer src="js/outfit.js?v=6"></script>
 <script type="module">
+// same ?v= as everywhere else. a mismatch here and the browser
+// builds a second copy of the module graph, which is an afternoon
+// you don't get back
+import * as Live2D from './js/live2d/live2d.js?v=4';
+import * as Outfit from './js/outfit/outfit.js?v=3';
+import { bakeAll } from './js/wardrobe/tile-bake.js?v=3';
+
 const log = (msg) => { document.getElementById('log').textContent = msg; };
 const bakeBtn = document.getElementById('bake');
 const saveBtn = document.getElementById('save');
 const sheet = document.getElementById('sheet');
 let baked = [];
-
-// classic scripts with defer are not ready when a module runs
-await new Promise(r => window.addEventListener('load', r, { once: true }));
 
 await Live2D.init({
   stageEl: document.getElementById('stage'),
@@ -112,7 +111,7 @@ log('ready');
 bakeBtn.addEventListener('click', async () => {
   bakeBtn.disabled = saveBtn.disabled = true;
   sheet.textContent = '';
-  baked = await Outfit.bakeAll((i, total, name) => log(`${i + 1}/${total}  ${name}`));
+  baked = await bakeAll((i, total, name) => log(`${i + 1}/${total}  ${name}`));
   for (const { name, png } of baked) {
     const img = new Image();
     img.src = png; img.title = name;

@@ -1,6 +1,19 @@
-import { currentConversationTitle, setConversationTitle } from '../app.js?v=17';
 import { mobileConversationTitle, mobileReplyStatus, sidebarBackground, stageEl } from './dom.js?v=11';
-import { phoneMode, visualRect } from './util.js?v=10';
+import { phoneMode, visualRect } from '../core/util.js?v=1';
+import * as Names from '../core/names.js?v=1';
+import * as TTS from '../voice/tts.js?v=2';
+import * as Live2D from '../live2d/live2d.js?v=4';
+
+let currentConversationTitle = 'New conversation';
+
+export function setConversationTitle(title) {
+  currentConversationTitle = title || 'New conversation';
+  if (!mobileConversationTitle) return;
+  mobileConversationTitle.textContent = currentConversationTitle;
+  mobileConversationTitle.setAttribute('aria-label', latestAssistantReply
+    ? `${currentConversationTitle}. Show latest reply`
+    : currentConversationTitle);
+}
 
 export let latestAssistantReply = '';
 export const faceBubble = (() => {
@@ -8,7 +21,7 @@ export const faceBubble = (() => {
   el.className = 'face-bubble';
   el.tabIndex = 0;
   el.setAttribute('role', 'region');
-  el.setAttribute('aria-label', (window.Names ? Names.getBot() : 'Jun') + ' reply');
+  el.setAttribute('aria-label', Names.getBot() + ' reply');
   el.hidden = true;
   document.body.appendChild(el);
   return el;
@@ -23,7 +36,7 @@ let pendingFaceBubbleHide = null;
 let faceBubbleText = '';
 
 function positionFaceBubble() {
-  const a = window.Live2D && Live2D.faceAnchor && Live2D.faceAnchor();
+  const a = Live2D.faceAnchor();
   if (!a) return;
   const viewport = visualRect();
   const stage = stageEl.getBoundingClientRect();
@@ -94,7 +107,7 @@ export function showFaceBubble(html, source = 'ephemeral') {
   clearTimeout(faceBubbleHideTimer);
   pendingFaceBubbleHide = null;
   faceBubble.dataset.source = source;
-  const botName = window.Names ? Names.getBot() : 'Jun';
+  const botName = Names.getBot();
   faceBubble.setAttribute('aria-label', `${botName} reply`);
   let name = faceBubble.querySelector('.fb-name');
   let txt = faceBubble.querySelector('.fb-text');
@@ -168,7 +181,7 @@ export function scheduleFaceBubbleHide(text, source) {
   clearTimeout(faceBubbleHideTimer);
   pendingFaceBubbleHide = { text, source };
   faceBubbleText = text;
-  if (window.TTS && TTS.isSpeaking && TTS.isSpeaking()) return;
+  if (TTS.isSpeaking()) return;
   startFaceBubbleHideTimer(text, source);
 }
 
@@ -186,7 +199,7 @@ export function announceMobileReply(text) {
   if (!mobileReplyStatus || !phoneMode() || !text.trim()) return;
   mobileReplyStatus.textContent = '';
   requestAnimationFrame(() => {
-    const botName = window.Names ? Names.getBot() : 'Jun';
+    const botName = Names.getBot();
     mobileReplyStatus.textContent = `${botName} replied: ${text}`;
   });
 }

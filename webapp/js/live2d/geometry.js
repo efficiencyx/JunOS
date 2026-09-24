@@ -1,12 +1,4 @@
-import { app, forcedDrawableOpacity, model, paramMax, paramMin, publicTint, raw } from '../live2d.js?v=10';
-import { S } from './state.js?v=10';
-import { _baseAtlas, _uvRect } from './textures.js?v=10';
-
-export function clamp(id, v) {
-  const lo = paramMin.get(id), hi = paramMax.get(id);
-  if (lo === undefined) return v;
-  return Math.max(lo, Math.min(hi, v));
-}
+import { S, app, forcedDrawableOpacity, model, publicTint, raw } from './state.js?v=11';
 
 const MOUTH_DRAWABLES = ['HitAreaOpenMouth', 'HitAreaCloseMouth', 'InnerMouth', 'SkinLipUpper'];
 const FACE_DRAWABLES = ['HitAreaFaceStroke', 'SkinFace', 'ModdableFace'];
@@ -123,8 +115,8 @@ function pointInMesh(D, i, p) {
   return false;
 }
 
-// checks a point against certain drawables even when they're hidden, for the
-// model's invisible HitArea* meshes
+// hidden drawables (single meshes of the rig) count too. that's
+// the point, the model's HitArea* meshes are invisible
 export function hitTest(clientX, clientY, ids) {
   if (!model || !raw || !app) return null;
   const p = toModelPoint(clientX, clientY);
@@ -175,17 +167,4 @@ export function drawableAt(clientX, clientY, onlyIds, tolerancePx) {
     if (area < bestArea) { bestArea = area; best = D.ids[i]; }
   }
   return best;
-}
-
-export function drawableThumb(drawableId, size = 72) {
-  const r = _uvRect.get(drawableId);
-  if (!r || !model) return null;
-  const base = _baseAtlas(r.tex), W = base.width, H = base.height;
-  const w = Math.max(1, r.w * W), h = Math.max(1, r.h * H);
-  const s = Math.min(size / w, size / h, 1);
-  const c = document.createElement('canvas');
-  c.width = Math.max(1, Math.round(w * s));
-  c.height = Math.max(1, Math.round(h * s));
-  c.getContext('2d').drawImage(base, r.u0 * W, (1 - (r.v0 + r.h)) * H, w, h, 0, 0, c.width, c.height);
-  return c.toDataURL();
 }

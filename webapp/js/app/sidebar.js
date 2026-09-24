@@ -1,16 +1,23 @@
-import { appendMsg, currentConversationId, discardActiveResponse, messages, renderMarkdown, setConversationTitle, setCurrentConversationId, updateEmptyState } from '../app.js?v=17';
-import { IDLE_AFTER_JOIN_MS, cancelAutoReset, reportActivity, resetIdleNudge, scheduleIdleNudge } from './consolidation.js?v=12';
+import { currentConversationId, messages, setCurrentConversationId } from './session.js?v=1';
+import { appendMsg, renderMarkdown, updateEmptyState } from './messages.js?v=1';
+import { discardActiveResponse } from './chat.js?v=2';
+import { setConversationTitle } from './face-bubble.js?v=18';
+import { IDLE_AFTER_JOIN_MS, cancelAutoReset, reportActivity, resetIdleNudge, scheduleIdleNudge } from './consolidation.js?v=19';
 import { conversationSidebar, messagesEl, mobileConversationTitle, mobileMenuBtn, narrowSidebarQuery, reloadPromptBtn, resetLive2DBtn, sidebarBackdrop, sidebarBackground } from './dom.js?v=11';
-import { announceMobileReply, faceBubble, hideFaceBubble, latestAssistantReply, scheduleFaceBubbleHide, setLatestAssistantReply, showFaceBubble } from './face-bubble.js?v=12';
-import { logAction } from './logging.js?v=10';
-import { makeStreamBuffer } from './stream-filters.js?v=12';
-import { escapeHtml, phoneMode } from './util.js?v=10';
+import { announceMobileReply, faceBubble, hideFaceBubble, latestAssistantReply, scheduleFaceBubbleHide, setLatestAssistantReply, showFaceBubble } from './face-bubble.js?v=18';
+import { logAction } from './logging.js?v=11';
+import { makeStreamBuffer } from './stream-filters.js?v=18';
+import { escapeHtml, phoneMode } from '../core/util.js?v=1';
+import * as Names from '../core/names.js?v=1';
+import * as ui from '../core/ui.js?v=1';
+import * as History from './history.js?v=1';
+import * as TTS from '../voice/tts.js?v=2';
+import * as Live2D from '../live2d/live2d.js?v=4';
 
 const conversationTitles = new Map();
 let sidebarRefreshGeneration = 0;
 let conversationLoadGeneration = 0;
 export async function refreshSidebar() {
-  if (!window.History) return;
   const ul = document.getElementById('conversationList');
   if (!ul) return;
   const refreshGeneration = ++sidebarRefreshGeneration;
@@ -54,7 +61,6 @@ export async function refreshSidebar() {
 }
 
 function startRename(li, id) {
-  if (!window.History) return;
   const titleSpan = li.querySelector('.conv-title');
   if (!titleSpan) return;
   const oldTitle = conversationTitles.get(id) ?? titleSpan.textContent;
@@ -108,10 +114,9 @@ function startRename(li, id) {
 }
 
 async function deleteConversation(id, title) {
-  if (!window.History) return;
   const ok = await ui.confirm({
     title: 'Delete chat',
-    message: `Do you want to delete ${window.Names ? Names.getBot() : 'Jun'}'s memory of "${title}"?`,
+    message: `Do you want to delete ${Names.getBot()}'s memory of "${title}"?`,
     confirmLabel: 'Delete',
     cancelLabel: 'Cancel',
     danger: true,
@@ -162,7 +167,7 @@ export async function loadConversation(id) {
   setConversationTitle(conversationTitles.get(id));
   resetIdleNudge();
   reportActivity();
-  if (window.TTS) TTS.stop();
+  TTS.stop();
   messages.length = 0;
   messagesEl.innerHTML = '';
   updateEmptyState();
@@ -170,14 +175,13 @@ export async function loadConversation(id) {
   Live2D.startIdle();
   markSidebarActive(id);
   scheduleIdleNudge(IDLE_AFTER_JOIN_MS);
-  if (!window.History) return;
   try {
     const rows = await History.load(id);
     if (loadGeneration !== conversationLoadGeneration || currentConversationId !== id) return;
     let latest = '';
     for (const row of rows) {
       if (row.role === 'user') {
-        appendMsg('user', window.Names ? Names.apply(row.content) : row.content);
+        appendMsg('user', Names.apply(row.content));
         messages.push({ role: 'user', content: row.content });
       } else if (row.role === 'assistant') {
         const el = appendMsg('assistant', '');
@@ -185,7 +189,7 @@ export async function loadConversation(id) {
         const sb = makeStreamBuffer(clean => { visible += clean; });
         sb.push(row.content);
         sb.flush();
-        const shown = window.Names ? Names.apply(visible) : visible;
+        const shown = Names.apply(visible);
         el.innerHTML = renderMarkdown(shown);
         latest = shown;
         messages.push({ role: 'assistant', content: visible });
@@ -200,6 +204,16 @@ export async function loadConversation(id) {
 }
 
 let sidebarOpener = null;
+
+document.addEventListener('keydown', (e) => {
+  if (e.key !== 'Escape') return;
+  if (document.body.classList.contains('sidebar-open')) {
+    setSidebarOpen(false);
+    return;
+  }
+  const d = document.getElementById('settingsDrawer');
+  if (d && d.classList.contains('open')) ui.toggleDrawer(false);
+});
 
 export function setSidebarOpen(open) {
   if (!conversationSidebar || !sidebarBackdrop || !mobileMenuBtn) return;
@@ -276,7 +290,6 @@ syncSidebarLayout();
 const newChatBtn = document.getElementById('newChatBtn');
 if (newChatBtn) {
   newChatBtn.addEventListener('click', async () => {
-    if (!window.History) return;
     reportActivity();
     setSidebarOpen(false);
     discardActiveResponse();

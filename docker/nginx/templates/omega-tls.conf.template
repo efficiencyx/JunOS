@@ -1,4 +1,4 @@
-# omega-tls.conf.template - HTTPS with certbot (TLS_MODE=on)
+# HTTPS with certbot, for TLS_MODE=on.
 # Expanded by nginx envsubst at container boot.
 
 limit_req_zone  $binary_remote_addr zone=api:10m   rate=10r/s;
@@ -77,9 +77,9 @@ server {
         return 200 "ok";
     }
 
-    # Buffering and compression must remain off for incremental SSE:
-    # gzip collects the response into its own buffer, which stalls
-    # the token stream.
+    # Buffering and compression must stay off for SSE (server-sent
+    # events, the token-by-token reply stream). gzip collects the
+    # response into its own buffer, which stalls the token stream.
     location = /api/chat.php {
         limit_req zone=api burst=20 nodelay;
         limit_conn conns 2;
@@ -115,9 +115,10 @@ server {
         fastcgi_pass  $php_upstream;
     }
 
-    # Accept the larger WAV upload body. keep it in step with PHP's
-    # post_max_size, STT_MAX_BYTES in tts/server.py, and the chat.php
-    # limit above, an utterance goes to one or the other.
+    # Larger body for the WAV upload. Keep it in step with PHP's
+    # post_max_size, STT_MAX_BYTES in tts/sidecar/config.py and the
+    # chat.php limit above, since an utterance goes to one or the
+    # other.
     location = /api/stt.php {
         limit_req zone=api burst=5 nodelay;
         limit_conn conns 1;
@@ -135,7 +136,9 @@ server {
     # demucs runtime.
     location = /api/karaoke.php {
         limit_req zone=api burst=5 nodelay;
-        limit_conn conns 1;
+        # js/karaoke/setup.js pulls both stems in parallel after a
+        # split. With a limit of 1 the second one is a 429 every time.
+        limit_conn conns 2;
         client_max_body_size 30m;
         fastcgi_read_timeout 300s;
 
@@ -146,11 +149,11 @@ server {
         fastcgi_pass  $php_upstream;
     }
 
-    # CLI-only long-running worker; it must never be reachable over
-    # HTTP.
+    # Long-running CLI worker. It must never be reachable over HTTP.
     location = /api/consolidation-worker.php { return 404; }
     location = /system_prompt.txt { return 404; }
     location ^~ /api/migrations/ { return 404; }
+    location ^~ /api/lib/ { return 404; }
     location ~ (^|/)\. { return 404; }
 
     location ~ ^/api/.+\.php$ {

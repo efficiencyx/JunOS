@@ -1,0 +1,40 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 150 120" preserveAspectRatio="xMidYMid meet">
+<!-- PROP: chip stacks, card room. box 150 x 120.
+     scenery only - there is no betting in this game and these are
+     not a control. three stacks, three denominations, leaning,
+     because a tidy stack is a stack nobody has played with. -->
+<defs>
+  <linearGradient id="ch-edge" x1="0" y1="0" x2="0" y2="1">
+    <stop offset="0" stop-color="#ffffff" stop-opacity=".18"/><stop offset="1" stop-color="#000000" stop-opacity=".35"/>
+  </linearGradient>
+</defs>
+<!-- back stack, greens -->
+<g transform="translate(40 74)">
+  <g fill="#2d5f49" stroke="#173528" stroke-width="1.4">
+    <ellipse cy="0" rx="26" ry="9"/><ellipse cy="-7" rx="26" ry="9"/><ellipse cy="-14" rx="26" ry="9"/>
+    <ellipse cy="-21" rx="26" ry="9"/><ellipse cy="-28" rx="26" ry="9"/>
+  </g>
+  <ellipse cy="-28" rx="26" ry="9" fill="url(#ch-edge)"/>
+  <ellipse cy="-28" rx="15" ry="5" fill="none" stroke="#e5d7b0" stroke-width="2" stroke-dasharray="5 4"/>
+</g>
+<!-- middle stack, reds, knocked over at the top -->
+<g transform="translate(84 92)">
+  <g fill="#8e3b3a" stroke="#4d1b1b" stroke-width="1.4">
+    <ellipse cy="0" rx="25" ry="8.5"/><ellipse cy="-7" rx="25" ry="8.5"/><ellipse cy="-14" rx="25" ry="8.5"/>
+  </g>
+  <ellipse cy="-14" rx="25" ry="8.5" fill="url(#ch-edge)"/>
+  <ellipse cy="-14" rx="14" ry="4.5" fill="none" stroke="#f0ddc4" stroke-width="2" stroke-dasharray="5 4"/>
+  <g transform="rotate(-24 18 -24)">
+    <ellipse cx="18" cy="-24" rx="25" ry="15" fill="#8e3b3a" stroke="#4d1b1b" stroke-width="1.4"/>
+    <ellipse cx="18" cy="-24" rx="14" ry="8" fill="none" stroke="#f0ddc4" stroke-width="2" stroke-dasharray="5 4"/>
+  </g>
+</g>
+<!-- front, two blacks -->
+<g transform="translate(118 104)">
+  <g fill="#2e3434" stroke="#141818" stroke-width="1.4">
+    <ellipse cy="0" rx="24" ry="8"/><ellipse cy="-7" rx="24" ry="8"/>
+  </g>
+  <ellipse cy="-7" rx="24" ry="8" fill="url(#ch-edge)"/>
+  <ellipse cy="-7" rx="13" ry="4" fill="none" stroke="#b9ae90" stroke-width="2" stroke-dasharray="5 4"/>
+</g>
+</svg>

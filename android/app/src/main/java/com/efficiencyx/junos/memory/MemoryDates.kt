@@ -14,7 +14,7 @@ import java.util.Locale
 // her "(noted Monday 10 August)" next to it and she hands back
 // "tomorrow", four days late. so we do the maths here and paste
 // the real day after the phrase. this is memory_note_render()
-// from webapp/api/_lib.php. keep the two prompts together.
+// from webapp/api/lib/memory.php. keep the two prompts together.
 object MemoryDates {
     fun day(created: Long): LocalDate? =
         if (created <= 0) null else Instant.ofEpochSecond(created).atZone(ZoneId.systemDefault()).toLocalDate()

@@ -1,0 +1,55 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="100 -100 1000 1000" preserveAspectRatio="xMidYMid slice">
+<!-- the booth table, right in front of the camera. same viewBox as
+     lounge.svg so it lines up 1:1, and it sits ABOVE #stage. the
+     model has no sitting pose (her legs are always standing), so
+     this table is the only thing making her sit: back edge is at
+     y 700 right where her hips are, and it runs off the bottom of
+     the frame so nothing under it ever shows. same trick as the
+     diner. the mic sits above this layer, its base stands on it -->
+<defs>
+  <linearGradient id="lf-top" gradientUnits="userSpaceOnUse" x1="0" y1="700" x2="0" y2="900">
+    <stop offset="0" stop-color="#3b3244"/><stop offset=".45" stop-color="#2a2333"/><stop offset="1" stop-color="#171220"/>
+  </linearGradient>
+  <linearGradient id="lf-glass" x1="0" y1="0" x2="1" y2="0">
+    <stop offset="0" stop-color="#cfe8f2" stop-opacity=".3"/>
+    <stop offset=".45" stop-color="#cfe8f2" stop-opacity=".06"/>
+    <stop offset="1" stop-color="#eaf6ff" stop-opacity=".26"/>
+  </linearGradient>
+</defs>
+
+<ellipse cx="600" cy="890" rx="780" ry="190" fill="url(#lf-top)" stroke="#4d4459" stroke-width="3"/>
+<!-- highlight on the edge facing the screen, top left. it's the only
+     light this table ever gets -->
+<path d="M-60 788a780 190 0 0 1 560-86" fill="none" stroke="#9fd9ea" stroke-width="3" opacity=".22"/>
+
+<!-- songbook + remote, her left, our left -->
+<g transform="translate(130 678) scale(1.7)">
+  <g transform="rotate(-6 108 56)">
+    <path d="M56 62h104l-4 16H52z" fill="#1c1018"/>
+    <path d="M56 44h104v18H56z" fill="#8c3f60"/>
+    <path d="M56 44h104v5H56z" fill="#c1748f"/>
+    <path d="M60 49h96v9H60z" fill="#e8dcc8" opacity=".25"/>
+    <path d="M106 44v18" stroke="#5a2440" stroke-width="2"/>
+  </g>
+  <g transform="rotate(14 160 82)">
+    <rect x="136" y="74" width="54" height="17" rx="4" fill="#211b2b" stroke="#3d3550" stroke-width="1.4"/>
+    <circle cx="148" cy="82" r="3" fill="#8ce6ff" opacity=".5"/>
+  </g>
+</g>
+
+<!-- two glasses, different levels, because two people are drinking -->
+<g transform="translate(420 668) scale(1.7)">
+  <g>
+    <path d="M236 22h34l-5 40q-1 9-12 9t-12-9z" fill="url(#lf-glass)" stroke="#cbe4f0" stroke-opacity=".4" stroke-width="1.6"/>
+    <path d="M239 40h28l-2 22q-1 9-12 9t-12-9z" fill="#c9793f" opacity=".55"/>
+    <ellipse cx="253" cy="22" rx="17" ry="4" fill="none" stroke="#dcf0fa" stroke-opacity=".45" stroke-width="1.6"/>
+    <path d="M241 26q-2 16 0 30" fill="none" stroke="#ffffff" stroke-opacity=".3" stroke-width="2"/>
+  </g>
+  <g>
+    <path d="M292 30h30l-4 34q-1 8-11 8t-11-8z" fill="url(#lf-glass)" stroke="#cbe4f0" stroke-opacity=".4" stroke-width="1.6"/>
+    <path d="M296 56h22l-2 8q-1 8-9 8t-9-8z" fill="#c9793f" opacity=".45"/>
+    <ellipse cx="307" cy="30" rx="15" ry="3.5" fill="none" stroke="#dcf0fa" stroke-opacity=".45" stroke-width="1.6"/>
+    <path d="M297 34q-2 14 0 26" fill="none" stroke="#ffffff" stroke-opacity=".26" stroke-width="2"/>
+  </g>
+</g>
+</svg>

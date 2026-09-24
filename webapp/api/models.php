@@ -1,5 +1,5 @@
 <?php
-require_once __DIR__ . '/_lib.php';
+require_once __DIR__ . '/lib/bootstrap.php';
 
 header('Content-Type: application/json');
 
@@ -34,10 +34,10 @@ $provider = ai_provider();
 $models = null;
 
 if ($provider === 'openrouter') {
-    // The boot screen hits this every 1-3s and OpenRouter's catalog
-    // is about 1-2 MB, so keep the id list we pulled out on disk and
-    // give back an old one when they error, instead of hammering
-    // their public API.
+    // the boot screen hits this every 1-3s and OpenRouter's catalog
+    // is ~1-2 MB. so the id list we pulled out goes on disk, and
+    // when they error we hand back the stale one instead of
+    // hammering their public API.
     header('Cache-Control: public, max-age=300');
     $cacheFile = state_dir() . '/openrouter_models.json';
     $ttl = 3600;
@@ -70,25 +70,28 @@ if ($provider === 'openrouter') {
     }
 } else {
     header('Cache-Control: public, max-age=10');
-    $data = http_get_json(rtrim(env_str('OLLAMA_URL', 'http://localhost:11434'), '/') . '/api/tags');
+    $data = http_get_json(chat_api_base('ollama') . '/api/tags');
     if (is_array($data['models'] ?? null)) {
-        $titleModel = env_str('TITLE_MODEL', 'hf.co/efficiencyx/Titlewen-GGUF:F16');
-        // Neither of these is something you can chat with. The drafter
-        // can't hold a conversation at all - ask for it and ollama loads
-        // it on its own, llama.cpp says "Gemma4Assistant requires
-        // ctx_other to be set" and the server exits, which reaches you as
-        // an empty reply. jun-mtp can, but it's the model below it with a
-        // drafter bolted on, so offering both is offering the same Jun
-        // twice.
+        $titleModel = title_model();
+        // neither of these goes in the picker. the drafter (the small
+        // MTP model that guesses tokens ahead for the big one) can't
+        // hold a conversation at all. ask for it and ollama loads it
+        // on its own, llama.cpp says "Gemma4Assistant requires
+        // ctx_other to be set" and the server exits. you just get an
+        // empty reply. jun-mtp CAN chat, but it's the model below it
+        // with a drafter bolted on, so offering both is offering the
+        // same Jun twice.
         //
-        // /api/tags always writes the tag out, .env usually doesn't, so
-        // fill in :latest before comparing or `jun-mtp` never matches.
+        // /api/tags always writes the tag out, .env usually doesn't,
+        // so fill in :latest before comparing or `jun-mtp` never
+        // matches.
         //
-        // and hide -MTP by name on top of that. ./mtp-autotune.sh pulls
-        // the drafter it derives (repo + -MTP), so switching OLLAMA_MTP
-        // later leaves the old one sitting in the store, off this list
-        // and back in the picker. pick it once and prefs.php hands that
-        // dead name to every browser you own until you notice.
+        // and hide -MTP by name on top of that. ./mtp-autotune.sh
+        // pulls the drafter it derives (repo + -MTP), so switching
+        // OLLAMA_MTP later leaves the old one sitting in the store.
+        // it's off this list and back in the picker. pick it once and
+        // prefs.php hands that dead name to every browser you own
+        // until you notice.
         $withTag = fn(string $n): string => strpos($n, ':') === false ? "$n:latest" : $n;
         $hidden = [];
         foreach ([env_str('OLLAMA_MTP'), ollama_mtp_model()] as $name) {

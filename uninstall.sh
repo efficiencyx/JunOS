@@ -9,10 +9,10 @@
 #      volume is saved to ~/jun-backup-<date>.tar.gz first.
 #   3. delete this folder
 #
-# Docker itself, git and Python are left alone - they're
-# general-purpose tools you may use elsewhere. So is your docker
-# group membership. Remove them with your package manager if you
-# want.
+# Docker itself, git and Python are left alone, since they're
+# general-purpose tools you may use elsewhere. Your docker group
+# membership is left alone too. Remove them with your package
+# manager if you want.
 #
 #   ./uninstall.sh          # interactive
 #   ./uninstall.sh -y       # no prompts

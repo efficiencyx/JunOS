@@ -1,16 +1,29 @@
 #!/bin/sh
-# Every reference to a given JS module must carry the same ?v=
-# number across the whole webapp. Modules are independent of each
-# other, so two different modules sitting at different versions
-# is normal and expected. What this catches is one module
-# referenced at two versions: the browser then fetches it twice
-# and builds two separate copies of the module.
+# every reference to one JS module has to carry the same ?v=
+# number, across the whole webapp. two different modules on two
+# different versions is normal, they're independent of each
+# other. what this catches is ONE module referenced at two
+# versions. the browser then fetches it twice and builds two
+# separate copies of the module. stylesheets get the same
+# treatment, a skewed one is just a wasted download.
+#
+# refs are keyed by basename, not by path, because resolving
+# "../x.js" in awk is misery. that only works while every
+# basename under webapp/ is unique, so that gets checked first.
 set -eu
 
 cd "$(dirname "$0")/../.." || exit 1
 
-refs=$(grep -rnoE '[A-Za-z0-9_./-]+\.js\?v=[0-9]+' webapp \
-	--include='*.html' --include='*.js' --exclude-dir=vendor || true)
+dupes=$(find webapp -path webapp/vendor -prune -o -type f \( -name '*.js' -o -name '*.css' \) -print \
+	| sed 's#.*/##' | sort | uniq -d)
+if [ -n "$dupes" ]; then
+	echo "check-cache-busters: these basenames exist more than once under webapp/, the version check can't tell them apart:" >&2
+	printf '    %s\n' $dupes >&2
+	exit 1
+fi
+
+refs=$(grep -rnoE '[A-Za-z0-9_./-]+\.(js|css)\?v=[0-9]+' webapp \
+	--include='*.html' --include='*.js' --include='*.css' --exclude-dir=vendor || true)
 
 if [ -z "$refs" ]; then
 	echo "check-cache-busters: no ?v= references found under webapp/ - the scan is broken" >&2

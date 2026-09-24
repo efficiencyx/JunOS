@@ -31,7 +31,7 @@ nvidia_count() {
 
 # VRAM on the biggest card, in MiB. php has no GPU device of its
 # own so this is the ONLY way it finds out, see default_num_ctx()
-# in api/providers.php.
+# in api/lib/providers/context.php.
 nvidia_vram_mb() {
   nvidia-smi --query-gpu=memory.total --format=csv,noheader,nounits 2>/dev/null \
     | sort -nr | head -n1 | tr -d ' \r' || true
@@ -49,17 +49,20 @@ amd_visible() {
     | sort -t, -k1 -nr | cut -d, -f2 | paste -sd, - || true
 }
 
-# The card the MTP tune was measured on, as one string: the vendor,
-# then every GPU's name and how much VRAM it has. Sorted biggest
-# card first, so moving cards between slots is not a change, only
-# a real swap is.
+# the card the MTP tune was measured on, as one string. MTP is
+# multi-token prediction, a small drafter model guesses the next
+# few tokens (how many = the draft depth) and the chat model
+# checks them all in one pass. string is the vendor, then every
+# GPU's name and how much VRAM it has. sorted biggest card first,
+# so moving cards between slots is not a change, only a real
+# swap is.
 #
-# The AMD half takes VRAM and nothing else. rocm-smi moves its
-# product-name columns around between versions and a name read out
-# of the wrong column would make every boot look like a new card.
-# missing a swap between two cards of the same size is the cheaper
-# mistake. Prints NOTHING when neither tool is here, an empty
-# string is how the callers know we could not tell.
+# the AMD half takes VRAM and nothing else. rocm-smi moves its
+# product-name columns around between versions, and a name read
+# out of the wrong column would make every boot look like a new
+# card. missing a swap between two cards of the same size is the
+# cheaper mistake. prints nothing when neither tool is here, an
+# empty string is how the callers know we could not tell.
 gpu_signature() {
   if command -v nvidia-smi >/dev/null 2>&1; then
     nvidia-smi --query-gpu=name,memory.total --format=csv,noheader,nounits 2>/dev/null \
@@ -75,12 +78,12 @@ gpu_signature() {
 }
 
 
-# The model servers sit behind compose profiles, `ollama` runs
+# the model servers sit behind compose profiles, `ollama` runs
 # the Ollama one and `llamacpp` the llama.cpp one. we MERGE with
-# whatever is already set in the shell, like
-# COMPOSE_PROFILES=prod ./start.sh, and in .env, we never replace
-# it, then add what AI_PROVIDER implies. that way an old .env
-# from before providers existed still boots ollama.
+# whatever the shell already set, like
+# COMPOSE_PROFILES=prod ./start.sh, and whatever .env set. never
+# replace it. then add what AI_PROVIDER implies on top. that way
+# an old .env from before providers existed still boots ollama.
 env_get() { sed -n "s/^$1=//p" .env 2>/dev/null | tail -n1 || true; }
 add_profile() {
   case ",${profiles}," in *,"$1",*) ;; *) profiles="${profiles:+$profiles,}$1" ;; esac
@@ -267,8 +270,8 @@ case "$gpu" in
     ;;
   amd)
     files+=(-f docker-compose.amd.yml)
-    # The container must join the host groups that own the GPU device
-    # nodes.
+    # the container has to be in the host groups that own the GPU
+    # device nodes, or it can't open them.
     vgid="$(getent group video | cut -d: -f3 || true)"
     rgid="$(stat -c '%g' /dev/dri/renderD* 2>/dev/null | head -n1 || true)"
     [ -n "$rgid" ] || rgid="$(getent group render | cut -d: -f3 || true)"
@@ -330,12 +333,12 @@ if [ -n "${OMEGA_GPU_VRAM_MB:-}" ]; then
   echo "  vram: ${OMEGA_GPU_VRAM_MB} MiB"
 fi
 
-# Ollama's layer split is decided at load time and then pinned
+# ollama picks the layer split at load time and then it's pinned
 # (see default_num_ctx() and the keep_alive=-1 pin in
-# api/providers.php), so a model that loads while the karaoke
-# sidecar's CUDA torch is initialising stays mostly on the CPU -
-# ~1000x on prefill. Hold karaoke back until the model server
-# answers.
+# api/lib/providers/). so a model that loads while the karaoke
+# sidecar's CUDA torch is still initialising stays mostly on the
+# CPU. that's ~1000x slower on prefill, the pass that reads the
+# prompt in. karaoke waits until the model server answers.
 wait_for_ollama() {
   local i status
   for i in $(seq 1 90); do
@@ -352,7 +355,7 @@ wait_for_ollama() {
 # is where this bites: we hand down a device list sorted biggest
 # VRAM first, ollama picks from it, and nothing has ever said out
 # loud which one it took. so say it. waits up to 20s for the
-# line, then gives up without a word - the model server pulling
+# line, then gives up without a word. the model server pulling
 # an 8 GB fine-tune on first boot is not an error.
 report_gpu_placement() {
   local i line
@@ -373,8 +376,16 @@ report_gpu_placement() {
     if (match($0, /description="[^"]*"/)) nm = substr($0, RSTART + 13, RLENGTH - 14);
     else if (match($0, /name="[^"]*"/))   nm = substr($0, RSTART + 6,  RLENGTH - 7);
     if (match($0, /total="[^"]*"/))  tot = substr($0, RSTART + 7,  RLENGTH - 8);
-    if (nm != "") printf "  %s (%s%s)\n", nm, lib, (tot != "" ? ", " tot : "");
+    # a CPU-only line is description=cpu, unquoted, so nm stays empty
+    if (lib == "cpu") print "  CPU. no GPU at all, ollama gave up on the card";
+    else if (nm != "") printf "  %s (%s%s)\n", nm, lib, (tot != "" ? ", " tot : "");
   }'
+  if printf '%s\n' "$line" | grep -q 'library=cpu'; then
+    echo "  nvidia-smi working != CUDA working. a stale /etc/cdi/nvidia.yaml hands the" >&2
+    echo "  container the wrong nvidia-uvm major (it moves between boots) and cuInit dies" >&2
+    echo "  with 999. regen it: sudo nvidia-ctk cdi generate --output=/etc/cdi/nvidia.yaml" >&2
+    return 0
+  fi
   echo "  wrong card? pin it with GPU_DEVICES= in .env, biggest-VRAM-first is only our guess."
 }
 
@@ -478,16 +489,24 @@ staged_up() {
   [ "$#" -eq 0 ]
 }
 
-# A bare first word is a lifecycle subcommand; anything else (a
-# flag like --build, or service names) is forwarded to `up -d`
-# exactly as before.
+# No exec here. it replaces the shell, so nothing after the
+# compose call gets to run, mtp_recheck included. set -e still
+# takes a compose failure out on the spot, with compose's own
+# exit code.
+up_and_check() {
+  set -x; docker compose "${files[@]}" up -d --build "$@"
+  { set +x; } 2>/dev/null
+  report_gpu_placement
+  mtp_recheck
+}
+
+# a bare first word is a lifecycle subcommand. anything else (a
+# flag like --build, or service names) goes straight through to
+# `up -d`.
 case "${1:-up}" in
   stop|down)  shift; set -x; exec docker compose "${files[@]}" down "$@" ;;
   restart)    shift; docker compose "${files[@]}" down
-              set -x; docker compose "${files[@]}" up -d --build "$@"
-              { set +x; } 2>/dev/null
-              report_gpu_placement
-              mtp_recheck ;;
+              up_and_check "$@" ;;
   status|ps)  shift; set -x; exec docker compose "${files[@]}" ps "$@" ;;
   logs)       shift; set -x; exec docker compose "${files[@]}" logs -f "$@" ;;
   *)          if staged_up "$@"; then
@@ -497,12 +516,5 @@ case "${1:-up}" in
                 wait_for_ollama
                 set -x
               fi
-              # No exec here. it replaces the shell, so nothing after
-              # the compose call gets to run, mtp_recheck included.
-              # set -e still takes a compose failure out on the spot,
-              # with compose's own exit code.
-              set -x; docker compose "${files[@]}" up -d --build "$@"
-              { set +x; } 2>/dev/null
-              report_gpu_placement
-              mtp_recheck ;;
+              up_and_check "$@" ;;
 esac

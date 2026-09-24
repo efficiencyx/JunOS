@@ -10,7 +10,8 @@
 # in CI. it talks to fake-ollama.py, which streams a canned reply
 # and dumps every request it gets, so what's checked is the
 # plumbing around the model: prompt order, the tool round trip,
-# the SSE frames, mood_shift stripping, what hits the db.
+# the SSE frames (the event stream the browser reads),
+# mood_shift stripping, what hits the db.
 set -eu
 
 cd "$(dirname "$0")/../.." || exit 1
@@ -79,8 +80,8 @@ fail() { printf '  FAIL %s\n' "$1"; fails=1; }
 
 echo "router only"
 # nginx answers a bad Host with 444 (no response at all), the
-# router answers
-# 421. same intent, different shape, so it lives here and not in api-checks.
+# router answers 421. same intent, different shape, so it lives
+# here and not in api-checks.
 check_status() {
 	got=$(curl -sS -o /dev/null -w '%{http_code}' "$@" || echo 000)
 	printf '%s' "$got"
@@ -191,6 +192,17 @@ else
 	pass 'mood_shift stripped before storage'
 fi
 if grep -q '\[A:smile\]' "$work/body"; then pass 'action tags are stored verbatim'; else fail 'the [A:smile] tag went missing'; fi
+if grep -q 'memory_write' "$work/body"; then
+	fail 'the memory_write tag was stored with the message'
+else
+	pass 'memory_write stripped before storage'
+fi
+curl -sS -b "$cookies" "$BASE/api/memory.php" >"$work/body"
+if grep -q '"category":"likes","text":"green tea, lots"' "$work/body"; then
+	pass 'the memory_write tag saved its note under its own category'
+else
+	fail "the memory_write tag note is missing or misfiled: $(cat "$work/body")"
+fi
 curl -sS -b "$cookies" "$BASE/api/relationship.php" >"$work/body"
 # api-checks left the gauges at 99/99/0, the fake shifts them by -3/-1/+2
 if grep -q '"affection":96' "$work/body" && grep -q '"trust":98' "$work/body" && grep -q '"tension":2' "$work/body"; then
