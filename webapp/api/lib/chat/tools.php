@@ -255,6 +255,39 @@ function chat_run_tool(string $name, array $args, array $ctx, array &$state): st
     return run_tool_call($name, $args, $ctx['user'], $ctx['conv_id'], $state['approved_search']);
 }
 
+// byte offset of $needle starting a word in $text, or null. a
+// bare substring would let "ai" hit "said". lookbehind, not \b,
+// so a needle that opens with "(" still matches
+function recall_word_at(string $text, string $needle): ?int {
+    if (!preg_match('/(?<![\p{L}\p{N}])' . preg_quote($needle, '/') . '/iu', $text, $m, PREG_OFFSET_CAPTURE)) return null;
+    return $m[0][1];
+}
+
+// char offset of the hit, or null. exact phrase first, then every
+// word of the query in any order, so "her birthday party" still
+// finds "threw a party for her birthday"
+function recall_match(string $text, string $query, array $terms): ?int {
+    $at = recall_word_at($text, $query);
+    if ($at === null && $terms) {
+        foreach ($terms as $t) {
+            $hit = recall_word_at($text, $t);
+            if ($hit === null) return null;
+            $at = min($at ?? PHP_INT_MAX, $hit);
+        }
+    }
+    return $at === null ? null : mb_strlen(substr($text, 0, $at));
+}
+
+// 500 chars around the hit. the first 500 of a long message can
+// leave out the very line the search found
+function recall_excerpt(string $text, int $at, int $max = 500): string {
+    $len = mb_strlen($text);
+    if ($len <= $max) return $text;
+    $keep = $max - 2;
+    $start = max(0, min($at - intdiv($keep, 3), $len - $keep));
+    return ($start > 0 ? '…' : '') . mb_substr($text, $start, $keep) . ($start + $keep < $len ? '…' : '');
+}
+
 function run_tool_call(string $name, array $args, array $user, int $convId, ?string &$approvedWebSearchQuery): string {
     try {
         if ($name === 'search_recent_chats') {
@@ -272,12 +305,13 @@ function run_tool_call(string $name, array $args, array $user, int $convId, ?str
                   ORDER BY m.created_at DESC, m.id DESC'
             );
             $st->execute([(int)$user['id'], $convId]);
+            $terms = array_values(array_unique(array_column(lore_tokens($query), 0)));
             $rows = [];
             while ($r = $st->fetch()) {
-                $content = (string)dec($r['content']);
-                if (mb_stripos($content, $query) === false) continue;
-                $content = trim(preg_replace('/\s+/', ' ', $content));
-                if (mb_strlen($content) > 500) $content = mb_substr($content, 0, 497) . '…';
+                $content = trim(preg_replace('/\s+/', ' ', (string)dec($r['content'])));
+                $at = recall_match($content, $query, $terms);
+                if ($at === null) continue;
+                $content = recall_excerpt($content, $at);
                 $rows[] = ['date' => date('Y-m-d H:i', (int)$r['created_at']), 'conversation_id' => (int)$r['conversation_id'], 'title' => (string)dec($r['title'] ?? null), 'role' => (string)$r['role'], 'content' => $content];
                 if (count($rows) >= $limit) break;
             }
