@@ -19,8 +19,9 @@ function memory_file_path(int $userId): string {
 }
 
 // a note saying "tomorrow" means nothing without the day it was
-// written, but stamping EVERY note costs us a whole category off
-// the end of the context budget. so only the notes whose wording
+// written, but stamping EVERY note costs ~30 chars each against
+// the context budget, and that's whole notes that don't fit
+// anymore. so only the notes whose wording
 // leans on their own date get one.
 const MEMORY_RELATIVE_TIME_RE = '/\b(today|tonight|tomorrow|yesterday|this (?:morning|afternoon|evening|week|month|weekend)|last (?:night|week|month|weekend)|next (?:week|month|weekend|monday|tuesday|wednesday|thursday|friday|saturday|sunday)|in (?:a few|a couple of|\d{1,2}) (?:days?|weeks?|months?)|days? from now|weeks? from now)\b/i';
 

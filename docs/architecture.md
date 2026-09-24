@@ -446,12 +446,13 @@ tools are ordinary SQLite queries scoped to the calling user with the current
 conversation excluded:
 
 - `search_recent_chats(query, limit)` - reads the user's messages newest first,
-  decrypts each and applies `mb_stripos` substring matching, stopping at up to
-  8 hits. SQL `LIKE` cannot search the stored ciphertext. Each hit comes back as date,
-  conversation id, title, role, and the message collapsed to one line and
-  truncated at 500 characters. Substring matching means it is exact on names and
-  distinctive phrases and blind to paraphrase; the model is expected to pick the
-  query term, and to retry with a different one when a search comes back empty.
+  decrypts each and stops at up to 8 hits. SQL `LIKE` cannot search the stored
+  ciphertext. A message hits when the whole query appears at a word start, or
+  failing that when every non-stopword query term (`lore_tokens()`) does, in any
+  order. Each hit comes back as date, conversation id, title, role, and the
+  message collapsed to one line, cut to 500 characters around the first hit.
+  Word matching is still blind to paraphrase; the model is expected to pick the
+  query terms, and to retry with different ones when a search comes back empty.
 - `list_recent_chats(limit)` - the user's most recently updated titled
   conversations, each with a short tail snippet (last few turns, action tags
   stripped, 160 characters per line). This is the "what have we been talking
@@ -486,7 +487,7 @@ After decryption, each category file has a Markdown heading and one bullet per f
 
 A scored karaoke take also posts an `events` note through `memory.php`, containing the song, artist when available, singing mode, score, matched-word count and a spelled-out date. This makes the take available to later chat context; an unscored take adds no note.
 
-`memory_recent_context()` renders the complete compacted note set under category headings, unwraps wikilinks, and caps the live-context block at 2500 characters by dropping the least recently updated categories first. It remains in the trailing live-context message, preserving the static prompt prefix and Ollama KV-cache reuse.
+`memory_recent_context()` renders the compacted note set under category headings and unwraps wikilinks. When the set passes 2500 characters it keeps the 3 most recently updated notes plus whichever share the most words with the current message (IDF-weighted over the notes), packing whole bullets only. It remains in the trailing live-context message, preserving the static prompt prefix and Ollama KV-cache reuse.
 
 `webapp/api/memory.php` returns category summaries, stable-id facts, parsed journal entries, and their original dates. `POST` adds a fact; `DELETE {"id":"abc12"}` removes one; `DELETE {"all":true}` wipes the user's directory and migrated backups. The Settings → Memory panel renders the payload as a dependency-free Canvas 2D constellation: category and journal hubs anchor fact/date leaves, wikilinks draw cross-edges, and a visually hidden list mirrors the canvas for assistive technology.
 
