@@ -2,6 +2,63 @@
 
 const TRIP_TOOLS = ['enter_shop' => 'shop', 'enter_karaoke' => 'karaoke', 'go_out_to_eat' => 'date', 'play_cards' => 'cards'];
 
+const TRIP_WORDS = [
+    'shop' => "annalie|shop|shopping|boutique|clothes store|buy (?:you )?(?:some )?clothes",
+    'karaoke' => 'karaoke|sing together|sing with me|sing a song|go singing',
+    'date' => 'dinner|lunch|restaurant|eat out|go out to eat|grab (?:a bite|food|something to eat)',
+    'cards' => 'blackjack|cards|card game',
+];
+
+const TRIP_APOS = "['\x{2019}]?";
+
+function trip_words_in(string $text): array {
+    $text = mb_strtolower(preg_replace('/\[[^\]]*\]/', ' ', $text));
+    return array_keys(array_filter(TRIP_WORDS, fn($re) => preg_match("/\b(?:$re)\b/u", $text)));
+}
+
+// "why not" and "can't wait" are a yes. everything else with a
+// not in it is a no, or close enough that we keep our hands off
+function trip_has_no(string $text): bool {
+    $a = TRIP_APOS;
+    $text = preg_replace("/why (?:not|don{$a}t we)|can{$a}t wait|not gonna say no/u", '', mb_strtolower($text));
+    return (bool)preg_match("/\b(?:no|nope|not|never|don{$a}t|do not|can{$a}t|won{$a}t|rather not|later|another time|tomorrow)\b/u", $text);
+}
+
+// the typed version of the drawer's ask-her-out buttons. she only
+// calls a trip tool reliably when the OOC line names it, and that
+// line only went out for the buttons, so "wanna go to karaoke?"
+// typed got a yes in prose and no tool. two shapes count: he
+// names one trip with an invite word, or he says yes right after
+// she offered exactly one. ponytail: english keyword match, a
+// false hit costs one turn of dropped live context and she can
+// still say no
+function trip_guess_invite(string $his, string $herLast): string {
+    $a = TRIP_APOS;
+    $his = mb_strtolower(trim($his));
+    if ($his === '' || trip_has_no($his)) return '';
+    $named = trip_words_in($his);
+    if (count($named) === 1 && preg_match("/\b(?:wanna|want to|let{$a}s|shall we|should we|how about|what about|why don{$a}t we|come with me|take you|feel like|up for|go (?:to|for|out))\b/u", $his)) {
+        return $named[0];
+    }
+    if (mb_strlen($his) <= 80 && str_contains($herLast, '?')
+        && preg_match("/^\W*(?:yes|yeah|yea|yep|yup|sure|ok|okay|alright|of course|let{$a}s go|let{$a}s do it|sounds good|deal|why not|i{$a}d love|absolutely|definitely|gladly)\b/u", $his)) {
+        $offered = trip_words_in($herLast);
+        if (count($offered) === 1) return $offered[0];
+        if (count($named) === 1 && in_array($named[0], $offered, true)) return $named[0];
+    }
+    return '';
+}
+
+// the other half. she got the OOC line, said yes in prose and
+// STILL didn't call the tool. a plain yes with no no anywhere
+// in it is enough to send the trip for her
+function trip_reply_accepts(string $reply): bool {
+    $a = TRIP_APOS;
+    $reply = mb_strtolower(preg_replace('/\[[^\]]*\]/', ' ', $reply));
+    return !trip_has_no($reply)
+        && (bool)preg_match("/\b(?:yes|yeah|yay|sure|okay|ok|alright|of course|let{$a}s go|let{$a}s do it|lead the way|grab my (?:coat|bag|jacket)|i{$a}d love (?:to|that)|i{$a}m in|count me in|deal|gladly|absolutely|definitely|can{$a}t wait|you{$a}re on)\b/u", $reply);
+}
+
 function tool_catalog(?string $approvedWebSearchQuery): array {
     $tools = [
         [
@@ -244,6 +301,7 @@ function chat_run_tool(string $name, array $args, array $ctx, array &$state): st
         // played at home, nothing to grant
         if ($where !== 'cards') trip_set((int)$ctx['user']['id'], $where, $ctx['conv_id']);
         sse_send(['go' => $where]);
+        $state['went'] = $where;
         return json_encode([
             'going' => $where,
             'note' => $where === 'cards'
