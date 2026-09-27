@@ -97,6 +97,13 @@ for h in 'X-Content-Type-Options: nosniff' 'X-Frame-Options: DENY' 'Content-Secu
 	if grep -qi "^$h" "$work/head"; then pass "$h"; else fail "missing header: $h"; fi
 done
 if grep -qi '^X-Powered-By' "$work/head"; then fail 'X-Powered-By leaked'; else pass 'no X-Powered-By'; fi
+# the router and the nginx snippet each carry their own copy of
+# the CSP. unsafe-eval got dropped from one and not the other once.
+if grep -qi '^Content-Security-Policy:.*unsafe-eval' "$work/head"; then
+	fail 'CSP allows unsafe-eval'
+else
+	pass 'CSP has no unsafe-eval'
+fi
 
 echo "auth"
 check 'signup_info'                     200 "$BASE/api/auth.php?action=signup_info"
