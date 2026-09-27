@@ -283,11 +283,13 @@ Rate-limit zones defined in `docker/nginx/templates/omega.conf.template`:
 
 ```nginx
 limit_req_zone  $binary_remote_addr zone=api:10m rate=10r/s;
+limit_req_zone  $binary_remote_addr zone=api_other:10m rate=10r/s;
 limit_conn_zone $binary_remote_addr zone=conns:10m;
 limit_conn_status 429;
+limit_req_status  429;
 ```
 
-Each API location layers its own burst and open-connection cap on top: `/api/chat.php` gets `limit_req zone=api burst=20 nodelay;` and `limit_conn conns 2;` (two live streams per IP), `/api/tts.php` `burst=10` / `conns 4`, `/api/stt.php` `burst=5` / `conns 1`, `/api/karaoke.php` `burst=5` / `conns 2` (the karaoke page fetches both stems in parallel). Requests over the burst return 429 immediately (no queuing delay). `client_max_body_size` is 16k everywhere except the locations that take a body (chat, STT, karaoke), which override it.
+Each API location layers its own burst and open-connection cap on top: `/api/chat.php` gets `limit_req zone=api burst=20 nodelay;` and `limit_conn conns 2;` (two live streams per IP), `/api/tts.php` `burst=10` / `conns 4`, `/api/stt.php` `burst=5` / `conns 1`, `/api/karaoke.php` `burst=5` / `conns 2` (the karaoke page fetches both stems in parallel). Those four use `nodelay`: requests over the burst return 429 immediately, no queuing. Every other `/api/*.php` sits in its own `api_other` bucket with `burst=20 delay=10`: the first 10 requests over the rate are served at once (a page load fires about 8 in parallel), the next 10 queue at 10r/s, and anything past that is a 429. It gets its own bucket because a page's burst of small calls would otherwise spend the `burst=5` that `stt.php` and `karaoke.php` get hit with right after. `limit_req_status 429` matters: nginx's default for `limit_req` is 503. `client_max_body_size` is 16k everywhere except the locations that take a body (chat, STT, karaoke), which override it.
 
 Security headers live in `docker/nginx/snippets/security-headers.conf` and are `include`d by the server block:
 

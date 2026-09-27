@@ -28,6 +28,18 @@ RUN { \
       echo 'opcache.validate_timestamps=0'; \
     } > /usr/local/etc/php/conf.d/omega.ini
 
+# the stock pool is 5 workers. a chat stream, a karaoke split and
+# every tts call each hold one for as long as they run (up to
+# 900s), and nginx lets a single IP keep 9 of those open. 5 means
+# karaoke + voice mode eats the whole pool and every other api
+# call queues behind them. ondemand, NOT dynamic: dynamic only
+# adds ~1 worker per second when a burst lands, so 8 streams
+# starting together still stalled everything for ~3s. ondemand
+# forks the moment a request comes in. a worker is ~20MB (source:
+# trust me bro, measured on the dev box), 16 fit the 1g container
+# fine. zz- so it loads after www.conf.
+RUN printf '[www]\npm = ondemand\npm.max_children = 16\n' > /usr/local/etc/php-fpm.d/zz-omega.conf
+
 WORKDIR /var/www/omega
 
 COPY webapp/ /var/www/omega/
