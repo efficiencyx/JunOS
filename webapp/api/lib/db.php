@@ -14,7 +14,7 @@ function db(): PDO {
         fail(503, 'state_unavailable');
     }
     $path = $base . '/omega.sqlite';
-    $pdo = new PDO('sqlite:' . $path, null, null, [
+    $conn = new PDO('sqlite:' . $path, null, null, [
         PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION,
         PDO::ATTR_DEFAULT_FETCH_MODE => PDO::FETCH_ASSOC,
     ]);
@@ -23,30 +23,51 @@ function db(): PDO {
     // writes the same file as php-fpm, and the default of 0 turns any
     // overlap into an instant "database is locked" instead of a short
     // wait.
-    $pdo->exec('PRAGMA journal_mode=WAL; PRAGMA foreign_keys=ON; PRAGMA busy_timeout=5000;');
+    $conn->exec('PRAGMA journal_mode=WAL; PRAGMA foreign_keys=ON; PRAGMA busy_timeout=5000;');
     foreach ([$path . '-wal', $path . '-shm'] as $sidecar) {
         if (file_exists($sidecar)) @chmod($sidecar, 0600);
     }
 
-    // run any migrations/NNN_*.sql newer than the schema version
-    // we're on. a fresh DB reads 0 (there's no schema_version table
-    // yet) so it gets every file in order. each migration does its
-    // own INSERT INTO schema_version.
+    // a migration is several statements in one exec. outside a
+    // transaction a failure halfway leaves the first half applied
+    // and the version never bumped, so every boot after re-runs the
+    // file and dies on "duplicate column". the php entrypoint is
+    // set -e, that's a crash loop. IMMEDIATE takes the write lock
+    // BEFORE the version gets read again, so two processes on a
+    // fresh db can't both decide to run 001.
+    if (db_pending_migrations($conn)) {
+        $conn->exec('BEGIN IMMEDIATE');
+        try {
+            foreach (db_pending_migrations($conn) as $file) $conn->exec(file_get_contents($file));
+            $conn->exec('COMMIT');
+        } catch (Throwable $e) {
+            // sqlite already rolled back on its own for some errors
+            // (disk full), then ROLLBACK throws and buries the real one
+            try { $conn->exec('ROLLBACK'); } catch (PDOException) {}
+            throw $e;
+        }
+    }
+
+    // only now. a worker that kept the handle from a failed run
+    // would skip migrating on every request it serves after that.
+    return $pdo = $conn;
+}
+
+// migrations/NNN_*.sql newer than the schema version we're on. a
+// fresh DB reads 0 (there's no schema_version table yet) so it
+// gets every file in order. each migration does its own INSERT
+// INTO schema_version.
+function db_pending_migrations(PDO $conn): array {
     $current = 0;
     try {
-        $v = $pdo->query('SELECT MAX(v) FROM schema_version')->fetchColumn();
+        $v = $conn->query('SELECT MAX(v) FROM schema_version')->fetchColumn();
         if ($v !== false && $v !== null) $current = (int)$v;
     } catch (PDOException $e) {
     }
     $files = glob(__DIR__ . '/../migrations/*.sql');
     sort($files);
-    foreach ($files as $file) {
-        if (!preg_match('/(\d+)_[^\/]*\.sql$/', basename($file), $m)) continue;
-        if ((int)$m[1] <= $current) continue;
-        $pdo->exec(file_get_contents($file));
-    }
-
-    return $pdo;
+    return array_values(array_filter($files, fn($f) =>
+        preg_match('/(\d+)_[^\/]*\.sql$/', basename($f), $m) && (int)$m[1] > $current));
 }
 
 function conversation_owned(int $convId, int $userId): bool {

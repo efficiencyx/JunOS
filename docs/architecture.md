@@ -27,7 +27,7 @@ This document is the long-form reference for the system. For a quick orientation
   Optional (profile=prod): certbot sidecar for Let's Encrypt issuance + renewal
 ```
 
-nginx serves static files from `/var/www/omega/` and FastCGI-proxies `*.php` requests to the php-fpm container. The model servers and the audio sidecars are internal-only; their ports are not published to the host. The voice sidecar on `:8001` fronts two swappable engines, Kokoro-82M (default) and kyutai pocket-tts, selected per request. `VOICE=off` drops the `voice` compose profile so the `tts` container is never started; on bare-metal Windows the same variable stops `start.ps1` spawning the sidecar process. Either way php and the frontend degrade gracefully to text-only whenever the sidecar is absent or unhealthy.
+nginx serves static files from `/var/www/omega/` and FastCGI-proxies `*.php` requests to the php-fpm container. The php-fpm pool is `pm = ondemand` with `pm.max_children = 16` (`docker/php.Dockerfile`): chat streams, TTS calls and karaoke splits each hold a worker for as long as they run, and the stock 5-worker pool let karaoke plus voice mode queue every other API call behind them. The model servers and the audio sidecars are internal-only; their ports are not published to the host. The voice sidecar on `:8001` fronts two swappable engines, Kokoro-82M (default) and kyutai pocket-tts, selected per request. `VOICE=off` drops the `voice` compose profile so the `tts` container is never started; on bare-metal Windows the same variable stops `start.ps1` spawning the sidecar process. Either way php and the frontend degrade gracefully to text-only whenever the sidecar is absent or unhealthy.
 
 Karaoke stem separation runs the *same* `tts/server.py` in a second container (`profiles: [karaoke]`, `SIDECAR_ROLE=karaoke`) built from `docker/karaoke.Dockerfile`: demucs and a CUDA/ROCm torch, no Kokoro or pocket-tts. The split exists so the two can want different hardware - separation is minutes on CPU versus seconds on a GPU, while voice synthesis is real-time on CPU and a GPU copy would only take VRAM away from the LLM. Each image installs only its own dependencies, and the `stt_available()`/`sep_available()` probes in `tts/sidecar/stt.py` and `tts/sidecar/karaoke.py` turn a missing one into a 503 rather than a crash, so the shared code is safe in both roles. Bare-metal installs (Windows, Colab) run a single process that serves both, which is why `api/karaoke.php` falls back to `TTS_URL` when `KARAOKE_URL` is unset.
 
@@ -283,11 +283,13 @@ Rate-limit zones defined in `docker/nginx/templates/omega.conf.template`:
 
 ```nginx
 limit_req_zone  $binary_remote_addr zone=api:10m rate=10r/s;
+limit_req_zone  $binary_remote_addr zone=api_other:10m rate=10r/s;
 limit_conn_zone $binary_remote_addr zone=conns:10m;
 limit_conn_status 429;
+limit_req_status  429;
 ```
 
-Each API location layers its own burst and open-connection cap on top: `/api/chat.php` gets `limit_req zone=api burst=20 nodelay;` and `limit_conn conns 2;` (two live streams per IP), `/api/tts.php` `burst=10` / `conns 4`, `/api/stt.php` `burst=5` / `conns 1`, `/api/karaoke.php` `burst=5` / `conns 2` (the karaoke page fetches both stems in parallel). Requests over the burst return 429 immediately (no queuing delay). `client_max_body_size` is 16k everywhere except the locations that take a body (chat, STT, karaoke), which override it.
+Each API location layers its own burst and open-connection cap on top: `/api/chat.php` gets `limit_req zone=api burst=20 nodelay;` and `limit_conn conns 2;` (two live streams per IP), `/api/tts.php` `burst=10` / `conns 4`, `/api/stt.php` `burst=5` / `conns 1`, `/api/karaoke.php` `burst=5` / `conns 2` (the karaoke page fetches both stems in parallel). Those four use `nodelay`: requests over the burst return 429 immediately, no queuing. Every other `/api/*.php` sits in its own `api_other` bucket with `burst=20 delay=10`: the first 10 requests over the rate are served at once (a page load fires about 8 in parallel), the next 10 queue at 10r/s, and anything past that is a 429. It gets its own bucket because a page's burst of small calls would otherwise spend the `burst=5` that `stt.php` and `karaoke.php` get hit with right after. `limit_req_status 429` matters: nginx's default for `limit_req` is 503. `client_max_body_size` is 16k everywhere except the locations that take a body (chat, STT, karaoke), which override it.
 
 Security headers live in `docker/nginx/snippets/security-headers.conf` and are `include`d by the server block:
 
@@ -300,7 +302,7 @@ add_header Content-Security-Policy "default-src 'self'; script-src 'self'; style
 server_tokens off;
 ```
 
-The CSP is `script-src 'self'` and nothing else: every third-party script (PIXI, Cubism core, pixi-live2d-display, marked, DOMPurify) is vendored under `webapp/vendor/`, so no external origin is trusted to execute code and the app boots without internet. `'unsafe-eval'` is gone too - pixi.js 6.5.10 compiled its uniform-sync functions with `new Function`, and the vendored `@pixi/unsafe-eval` plugin (loaded right after `pixi.min.js` on every page that creates a renderer) replaces that with a table-driven sync. `worker-src 'self' blob:` is required by PIXI's internal web workers; `'unsafe-inline'` for styles by pixi-live2d-display's canvas tinting. Because nginx's `add_header` does not inherit into a location that sets its own header, any new location that adds one must `include` the snippet or it ships with no CSP at all.
+The CSP is `script-src 'self'` and nothing else: every third-party script (PIXI, Cubism core, pixi-live2d-display, marked, DOMPurify) is vendored under `webapp/vendor/`, so no external origin is trusted to execute code and the app boots without internet. `'unsafe-eval'` is gone too - pixi.js 6.5.10 compiled its uniform-sync functions with `new Function`, and the vendored `@pixi/unsafe-eval` plugin (loaded right after `pixi.min.js` on every page that creates a renderer) replaces that with a table-driven sync. `worker-src 'self' blob:` is required by PIXI's internal web workers; `'unsafe-inline'` for styles by pixi-live2d-display's canvas tinting. Bare metal (`tools/php-router.php`) sends the same CSP, `'unsafe-eval'` included in the removal. Because nginx's `add_header` does not inherit into a location that sets its own header, any new location that adds one must `include` the snippet or it ships with no CSP at all.
 
 HSTS (`Strict-Transport-Security: max-age=31536000`) is added only when `TLS_MODE=on`.
 
@@ -446,12 +448,13 @@ tools are ordinary SQLite queries scoped to the calling user with the current
 conversation excluded:
 
 - `search_recent_chats(query, limit)` - reads the user's messages newest first,
-  decrypts each and applies `mb_stripos` substring matching, stopping at up to
-  8 hits. SQL `LIKE` cannot search the stored ciphertext. Each hit comes back as date,
-  conversation id, title, role, and the message collapsed to one line and
-  truncated at 500 characters. Substring matching means it is exact on names and
-  distinctive phrases and blind to paraphrase; the model is expected to pick the
-  query term, and to retry with a different one when a search comes back empty.
+  decrypts each and stops at up to 8 hits. SQL `LIKE` cannot search the stored
+  ciphertext. A message hits when the whole query appears at a word start, or
+  failing that when every non-stopword query term (`lore_tokens()`) does, in any
+  order. Each hit comes back as date, conversation id, title, role, and the
+  message collapsed to one line, cut to 500 characters around the first hit.
+  Word matching is still blind to paraphrase; the model is expected to pick the
+  query terms, and to retry with different ones when a search comes back empty.
 - `list_recent_chats(limit)` - the user's most recently updated titled
   conversations, each with a short tail snippet (last few turns, action tags
   stripped, 160 characters per line). This is the "what have we been talking
@@ -486,7 +489,7 @@ After decryption, each category file has a Markdown heading and one bullet per f
 
 A scored karaoke take also posts an `events` note through `memory.php`, containing the song, artist when available, singing mode, score, matched-word count and a spelled-out date. This makes the take available to later chat context; an unscored take adds no note.
 
-`memory_recent_context()` renders the complete compacted note set under category headings, unwraps wikilinks, and caps the live-context block at 2500 characters by dropping the least recently updated categories first. It remains in the trailing live-context message, preserving the static prompt prefix and Ollama KV-cache reuse.
+`memory_recent_context()` renders the compacted note set under category headings and unwraps wikilinks. When the set passes 2500 characters it keeps the 3 most recently updated notes plus whichever share the most words with the current message (IDF-weighted over the notes), packing whole bullets only. It remains in the trailing live-context message, preserving the static prompt prefix and Ollama KV-cache reuse.
 
 `webapp/api/memory.php` returns category summaries, stable-id facts, parsed journal entries, and their original dates. `POST` adds a fact; `DELETE {"id":"abc12"}` removes one; `DELETE {"all":true}` wipes the user's directory and migrated backups. The Settings → Memory panel renders the payload as a dependency-free Canvas 2D constellation: category and journal hubs anchor fact/date leaves, wikilinks draw cross-edges, and a visually hidden list mirrors the canvas for assistive technology.
 
@@ -502,9 +505,15 @@ The three pages are gated by a per-user `trips` row (migration 017). The tool wr
 
 **Ask her** sends a normal chat turn with an `invite` field. On an invite turn the live context is cut down to the feelings block plus one OOC (out-of-character) stage direction naming the tool to call if she agrees; clock, notes, lore, wardrobe and the save check are dropped. A longer "you MUST call X" rule did not get small models to call the tool on `<think:low>`; the one-line direction did.
 
+Typed invitations get the same treatment. When a turn arrives without `invite` (and is neither idle nor ephemeral), `trip_guess_invite()` in `lib/chat/tools.php` fills it in from the text: either the message names exactly one outing (`TRIP_WORDS`: shop, karaoke, a meal, cards) next to an invite phrase ("wanna", "let's", "how about", ...), or it is a short yes (80 characters or less) right after a reply of hers that asked a question and named exactly one outing. Anything with a no-word in it ("not", "later", "tomorrow", but not "why not" or "can't wait") guesses nothing. It is an English keyword match; a false hit costs one turn of trimmed live context, and she can still refuse.
+
+If she then says yes in prose and never calls the tool, `chat.php` sends the trip for her: on an invite turn with no error, no flee, no silence and no trip already sent, a reply that `trip_reply_accepts()` reads as a plain yes runs the matching `TRIP_TOOLS` entry after the stream (`trip_inferred` in the log). This is also the only way trips work at all with `LLAMACPP_TOOLS=off`.
+
 On a normal turn with tools offered, 1 in 12 replies and 1 in 3 idle nudges (`INITIATIVE_ODDS_REPLY` / `INITIATIVE_ODDS_IDLE`) get a `## Take the initiative` block asking her to ask Anon for something herself, with the outing tools named but not to be called until he agrees.
 
 **Ephemeral turns** (`ephemeral: true`) are the date page, the card table and touch reactions. They store neither the user message nor the reply, skip bookkeeping, and force `reasoning=low` with thinking off whatever the picker says, since a hit or a stand that waits 20 s on a trace makes the game unplayable. `date.js` picks one of three restaurants from the trip's start timestamp, so reloading keeps the same room. Jun picks her own dish by ending a line with `ORDER: <dish>`, which the page matches against the menu and strips before display.
+
+**Rooms and sky.** The rooms are SVGs under `webapp/scene/` (`boutique`, `lounge` + `lounge-front`, the three `diner-*` restaurants, `table`, `cardroom`), with reusable props under `scene/props/`. (`curtain.svg` is only a CSS background in the wardrobe page.) `trip/scene.js` inlines them into the page rather than using `<img>`, because an `<img>` SVG is its own document and cannot read the page's CSS custom properties. A room can leave `<g data-prop="name">` slots, which `scene.js` fills from `scene/props/name.svg`; the slot owns the transform, the prop file only its own local box. `trip/skybox.js` picks one of seven phases (night, dawn, morning, midday, afternoon, golden, dusk) from the local clock and a fixed mid-latitude day-length curve (no geolocation), sets `--sky-*`, `--key-warm`, `--key-level`, `--city-shade` and `--city-lit` on `<html>`, and re-checks every 5 minutes and on tab focus. Every room reads those: the window gradient, the building colour, the city's window lights, and the room's own key light. Room and prop URLs carry a `?v=` like everything else, since nginx serves `.svg` as immutable; props filled into a slot are fetched without one, so bumping the room's `?v=` does not refetch them and a browser that already has a slot prop keeps its old copy.
 
 ## Relationship state
 

@@ -8,34 +8,76 @@ const INITIATIVE_ODDS_REPLY = 12;
 
 const MEMORY_CONTEXT_MAX_CHARS = 2500;
 
-function memory_recent_context(int $userId): string {
+// the newest few go in whatever he just said, so the thing that
+// happened an hour ago doesn't vanish on an off topic turn
+const MEMORY_CONTEXT_RECENT_KEEP = 3;
+
+// newest few first, then everything else by how many of his words
+// it shares (rarer words across the notes count more), recency
+// breaking ties. usort is stable, so the recency sort survives
+// the score sort for every note that scores the same
+function memory_rank_notes(array $notes, string $query): array {
+    usort($notes, fn($a, $b) => $b['updated'] <=> $a['updated']);
+    $head = array_splice($notes, 0, MEMORY_CONTEXT_RECENT_KEEP);
+    $want = array_flip(array_column(lore_tokens($query), 0));
+    $df = [];
+    foreach ($notes as $n) {
+        foreach ($n['terms'] as $t) if (isset($want[$t])) $df[$t] = ($df[$t] ?? 0) + 1;
+    }
+    $total = count($notes) + 1;
+    foreach ($notes as &$n) {
+        $n['score'] = 0.0;
+        foreach ($n['terms'] as $t) if (isset($df[$t])) $n['score'] += log($total / $df[$t]) + 1;
+    }
+    unset($n);
+    usort($notes, fn($a, $b) => $b['score'] <=> $a['score']);
+    return array_merge($head, $notes);
+}
+
+function memory_recent_context(int $userId, string $lastUserMsg): string {
     try {
-        $sections = [];
+        $notes = [];
         foreach (memory_notes_load($userId) as $category => $data) {
-            if (!$data['notes']) continue;
-            $updated = 0;
-            $bullets = [];
-            foreach ($data['notes'] as $note) {
-                $updated = max($updated, $note['updated']);
+            foreach ($data['notes'] as $i => $note) {
                 $text = preg_replace('/\[\[([^\]|#]+)(?:[|#][^\]]*)?\]\]/u', '$1', memory_note_render($note));
-                $bullets[] = '- ' . memory_note_stamp($note) . trim(preg_replace('/\s+/', ' ', $text));
+                $notes[] = [
+                    'category' => $category,
+                    'order' => $i,
+                    'updated' => $note['updated'],
+                    'terms' => array_unique(array_column(lore_tokens($category . ' ' . $note['text']), 0)),
+                    'bullet' => '- ' . memory_note_stamp($note) . trim(preg_replace('/\s+/', ' ', $text)),
+                ];
             }
-            $sections[] = [
-                'updated' => $updated,
-                'text' => '### ' . $category . "\n" . implode("\n", $bullets),
-            ];
         }
-        if (!$sections) return '';
-        usort($sections, fn($a, $b) => $b['updated'] <=> $a['updated']);
+        if (!$notes) return '';
         $prefix = "## Durable memory notes\n"
             . "Words like \"tomorrow\" or \"next friday\" in a note mean the day you wrote it, not now. "
             . "Where a note already spells the real day out in brackets, use that day and trust it - "
             . "do not work the date out again yourself.\n";
-        $render = function () use (&$sections, $prefix): string {
-            return $prefix . implode("\n\n", array_column($sections, 'text'));
-        };
-        while (count($sections) > 1 && strlen($render()) > MEMORY_CONTEXT_MAX_CHARS) array_pop($sections);
-        return mb_strcut($render(), 0, MEMORY_CONTEXT_MAX_CHARS);
+
+        // whole bullets or nothing, a byte cutoff can end a note
+        // halfway through its date. +7 is "\n\n### " and "\n" around
+        // a heading, +1 the newline before a bullet
+        $picked = [];
+        $size = strlen($prefix);
+        foreach (memory_rank_notes($notes, $lastUserMsg) as $n) {
+            $cost = strlen($n['bullet']) + 1 + (isset($picked[$n['category']]) ? 0 : strlen($n['category']) + 7);
+            if ($size + $cost > MEMORY_CONTEXT_MAX_CHARS) continue;
+            $picked[$n['category']][] = $n;
+            $size += $cost;
+        }
+        if (!$picked) return '';
+
+        $sections = [];
+        foreach ($picked as $category => $rows) {
+            usort($rows, fn($a, $b) => $a['order'] <=> $b['order']);
+            $sections[] = [
+                'updated' => max(array_column($rows, 'updated')),
+                'text' => '### ' . $category . "\n" . implode("\n", array_column($rows, 'bullet')),
+            ];
+        }
+        usort($sections, fn($a, $b) => $b['updated'] <=> $a['updated']);
+        return $prefix . implode("\n\n", array_column($sections, 'text'));
     } catch (Throwable $e) {
         log_event(['msg' => 'memory_context_error', 'err' => $e->getMessage()]);
         return '';
@@ -123,7 +165,7 @@ function chat_live_context(array $req, array $user, string $lastUserMsg, string 
     // sits right above the notes. a dated note means nothing without it
     $contextParts[] = "## Current date and time\nIt is currently " . $nowStr . ".";
 
-    $memoryBlock = memory_recent_context((int)$user['id']);
+    $memoryBlock = memory_recent_context((int)$user['id'], $lastUserMsg);
     if ($memoryBlock !== '') $contextParts[] = $memoryBlock;
 
     if ($convSummary !== '') {

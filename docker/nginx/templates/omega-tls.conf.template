@@ -2,8 +2,15 @@
 # Expanded by nginx envsubst at container boot.
 
 limit_req_zone  $binary_remote_addr zone=api:10m   rate=10r/s;
+# The catch-all /api location gets its own bucket. The page fires
+# its small calls in one burst and then hits stt.php and karaoke.php
+# (burst=5), which would find a shared bucket already spent.
+limit_req_zone  $binary_remote_addr zone=api_other:10m rate=10r/s;
 limit_conn_zone $binary_remote_addr zone=conns:10m;
 limit_conn_status 429;
+# nginx answers limit_req rejections with 503 unless told
+# otherwise, which reads as the server being down.
+limit_req_status  429;
 
 server {
     listen 80 default_server;
@@ -157,7 +164,12 @@ server {
     location ~ (^|/)\. { return 404; }
 
     location ~ ^/api/.+\.php$ {
-        limit_req zone=api burst=10;
+        # The first 10 requests over the rate go through at once (a
+        # page load fires ~8 of these in parallel), the next 10 queue at
+        # 10r/s, anything past that is a 429. A plain burst queues the
+        # page load 100ms apart, nodelay rejects a quick sequential
+        # client outright once the 10 are spent.
+        limit_req zone=api_other burst=20 delay=10;
         client_max_body_size 16k;
 
         include fastcgi_params;

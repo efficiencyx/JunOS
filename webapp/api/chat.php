@@ -40,6 +40,9 @@ $convId = chat_require_conversation($user, $req['body']);
 
 $lastUserMsg = chat_last_user_message($req);
 $approvedWebSearchQuery = chat_approved_search($lastUserMsg);
+if ($req['invite'] === '' && !$req['idle'] && !$req['ephemeral']) {
+    $req['invite'] = trip_guess_invite($lastUserMsg, chat_last_reply($req));
+}
 $toolsOffered = provider_tools_enabled();
 
 [$convSummary, $summaryCoveredCount] = chat_conversation_summary($convId, (int)$user['id']);
@@ -98,6 +101,7 @@ $state = [
     'fled' => null,
     'flee_decided' => false,
     'approved_search' => $approvedWebSearchQuery,
+    'went' => '',
 ];
 
 for ($round = 0; $round < 3; $round++) {
@@ -223,6 +227,17 @@ if ($usedTools && !$sawError && !$state['silenced'] && $state['fled'] === null &
 
 if (!$sawError && $assistantBuffer !== '') {
     $assistantBuffer = chat_parse_action_tags($assistantBuffer, [
+        'provider' => $PROVIDER, 'model' => $model, 'user' => $user, 'conv_id' => $convId, 'req' => $req,
+    ], $state);
+}
+
+// he asked, she said yes in words and never called the tool, so
+// nothing would navigate. send the trip for her. also the only
+// way trips work at all with LLAMACPP_TOOLS=off
+if ($req['invite'] !== '' && !$sawError && $state['went'] === '' && !$state['silenced'] && $state['fled'] === null
+    && trip_reply_accepts($assistantBuffer)) {
+    log_event(['msg' => 'trip_inferred', 'where' => $req['invite']]);
+    chat_run_tool(array_search($req['invite'], TRIP_TOOLS, true), [], [
         'provider' => $PROVIDER, 'model' => $model, 'user' => $user, 'conv_id' => $convId, 'req' => $req,
     ], $state);
 }

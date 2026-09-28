@@ -132,6 +132,12 @@ jobs:
             exit 1
           }
 
+      - name: Trip intent
+        run: php .github/scripts/trip-intent.test.php
+
+      - name: Migrations
+        run: php .github/scripts/migrations.test.php
+
       - name: API smoke test
         # php -S + tools/php-router.php, which is the bare metal install.
         # no docker, no ollama: everything under test here has to work

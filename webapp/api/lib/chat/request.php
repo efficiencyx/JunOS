@@ -129,6 +129,14 @@ function chat_last_user_message(array $req): string {
     return $lastUserMsg;
 }
 
+function chat_last_reply(array $req): string {
+    $messages = $req['body']['messages'];
+    for ($i = count($messages) - 1; $i >= 0; $i--) {
+        if (($messages[$i]['role'] ?? '') === 'assistant') return (string)($messages[$i]['content'] ?? '');
+    }
+    return '';
+}
+
 function chat_approved_search(string $lastUserMsg): ?string {
     $approvedWebSearchQuery = null;
     if (preg_match('/^\/search\s+(.+)$/us', $lastUserMsg, $searchMatch)) {
