@@ -97,14 +97,14 @@ What happens now, in order. It can take anywhere from 2 to 30 minutes depending 
 1. **git** is installed if missing (through `winget`, Windows' built-in app installer). If `winget` itself is missing the installer offers to set it up. Say **y**.
 2. **Ollama** is downloaded (about 1.5 GB) and its installer runs. A normal Windows install window may pop up, let it finish.
 3. If the installer says **"open a NEW terminal and run the one-liner again"**, do exactly that: close the black window, open a fresh one (Step 1), paste the same line from Step 3 again. It picks up where it stopped. This happens because Windows only learns about newly installed programs in a new window.
-4. **Portable PHP** is downloaded into `JunOS\runtime\php`. If it needs the Microsoft Visual C++ runtime, that gets installed too.
+4. **Portable PHP** is downloaded into `JunOS\runtime\php`. If it needs the Microsoft Visual C++ runtime, that gets installed too. **Caddy** goes into `JunOS\runtime\caddy`, it's what serves her over HTTPS.
 5. The **voice engine** is set up (Python 3.11 through winget if you don't have 3.10, 3.11 or 3.12, then a few hundred MB of packages will be downloaded).
 6. **Her body** is rebuilt from your game. The installer looks in the usual games folder Steam and itch folders. If it can't find the game it asks you to paste the game folder, or you can drag the game's `.exe` file onto the terminal window and press Enter. Press Enter on an empty line to skip; she'll use placeholder art and you can redo this later.
 7. **The model** is downloaded on the first start. This is the biggest download, 2 to 12 GB.
 
 ### Step 6 - She opens by herself
 
-When everything is ready the installer starts her and your browser opens on **<http://127.0.0.1:8080>**. If it doesn't, type that address into your browser. (Plain `http`, not `https`: the Windows install has no certificate, and it only listens on this machine.)
+When everything is ready the installer starts her and your browser opens on **<https://127.0.0.1:8080>**. If it doesn't, type that address into your browser. The browser will warn you that the connection isn't private: the certificate is one your install made for itself, so nobody vouches for it. Click **Advanced** and **Proceed** (Firefox: **Accept the Risk and Continue**). The connection is encrypted either way.
 
 Near the end the terminal prints a line like `registration  a1b2c3...`. That is the **registration key**.
 Your first account doesn't need it, but every account after that does.
@@ -402,10 +402,9 @@ Out of the box she only answers on the computer she's installed on. Opening her 
 
 ```
 BIND_ADDR=0.0.0.0
-OMEGA_ALLOW_INSECURE_PUBLIC_HTTP=1
 ```
 
-The next start prints the address to type on the phone (`reachable as: 192.168.x.x` on Linux, `on your phone: http://192.168.x.x:8080` on Windows). Windows also adds a firewall rule for you, or prints the command if the terminal isn't running as administrator.
+The next start prints the address to type on the phone (`reachable as: https://192.168.x.x` on Linux, `on your phone: https://192.168.x.x:8080` on Windows). The phone shows the same certificate warning, click through it. Windows also adds a firewall rule for you, or prints the command if the terminal isn't running as administrator.
 
 PLEASE Do **not** forward that port on your router or run her behind a reverse proxy unless you know what you are doing and you are following the following instructions. She's built for your living room, not the open internet.
 
@@ -427,14 +426,15 @@ Run the same one-liner from Step 3 / Step 4 again. It finds the existing install
 |---|---|---|
 | `git still not on PATH` / `ollama still not on PATH` (Windows) | A program was just installed and this window doesn't know yet | Close the terminal, open a new one, run the one-liner again |
 | `Docker isn't reachable yet` (Linux) | Docker was just installed, or the group change needs a new login | Log out and in, then `./JunOS/start.sh` |
-| `refusing to expose login and chat over plain HTTP` | You set `BIND_ADDR` but not the insecure-HTTP line | Add `OMEGA_ALLOW_INSECURE_PUBLIC_HTTP=1` to `.env`, or put `BIND_ADDR` back to `127.0.0.1` |
+| "Your connection is not private" / `NET::ERR_CERT_AUTHORITY_INVALID` | Expected: the certificate is self-signed | **Advanced** then **Proceed**. Chrome asks again after a while, and a new address for her means a new certificate and a new warning |
+| `Caddy not found` (Windows) | An older install from before HTTPS | Run the one-liner again, it adds Caddy |
 | `NVIDIA selected but nvidia-smi not found` | Driver or container toolkit missing | [NVIDIA](#nvidia) steps 1 and 2 |
 | `ollama is running on:` says CPU, you have a card | Docker can't see the card | NVIDIA: toolkit, and if `nvidia-smi` works, [regenerate the CDI file](#on-linux). AMD: `HSA_OVERRIDE_GFX_VERSION`. Then `./JunOS/start.sh restart` |
 | `ollama ps` shows `45% GPU` or similar | The model is too big for the card | Pick a smaller row from the model table or cope with slow generation. |
 | Her body is not here! | Assets weren't extracted | ["Installing" her body later](#installing-her-body-later) |
 | The page loads, the first reply takes forever | Model still downloading or warming up | `./JunOS/start.sh logs ollama` on Linux, `JunOS\runtime\logs\ollama.err.log` on Windows. Wait for it to finish once |
 | **signup** asks for a key | You're not the first account on this install | The key is in `.env` as `OMEGA_REGISTRATION_KEY`. Empty the value to open signup to anyone on your network |
-| Port 80 already in use (Linux) | Another web server on the box | Stop it, or change the `80:80` line under `ports:` in `docker-compose.yml` to `8080:80` and open <http://localhost:8080> instead |
+| Port 80 or 443 already in use (Linux) | Another web server on the box | Stop it. Port 80 only redirects to 443, so moving just one of them breaks the redirect |
 
 Still stuck? Grab the last 50 lines of the logs and open an issue. Say which OS, which card, and answer the questions the Issue Template asks you about.
 
@@ -467,7 +467,7 @@ Then:
 ./start.sh
 ```
 
-`start.sh` detects the card, writes a registration key into `.env` if there's none, and starts the containers. Force a backend with `GPU=nvidia ./start.sh`, `GPU=amd ./start.sh` or `GPU=cpu ./start.sh`. Watch the model download with `./start.sh logs ollama`, then open <http://localhost>.
+`start.sh` detects the card, writes a registration key into `.env` if there's none, and starts the containers. Force a backend with `GPU=nvidia ./start.sh`, `GPU=amd ./start.sh` or `GPU=cpu ./start.sh`. Watch the model download with `./start.sh logs ollama`, then open <https://localhost> and click through the self-signed certificate warning.
 
 Without `start.sh` at all, it's plain compose with the overlay for your card and the `ollama` profile:
 

@@ -22,8 +22,6 @@ services:
     environment:
       DOMAIN:    "${DOMAIN:-localhost}"
       TLS_MODE:  "${TLS_MODE:-off}"
-      BIND_ADDR: "${BIND_ADDR:-127.0.0.1}"
-      OMEGA_ALLOW_INSECURE_PUBLIC_HTTP: "${OMEGA_ALLOW_INSECURE_PUBLIC_HTTP:-}"
       OMEGA_EXTRA_HOSTS: "${OMEGA_EXTRA_HOSTS:-}"
     volumes:
       - letsencrypt:/etc/letsencrypt:ro
@@ -284,6 +282,11 @@ services:
     volumes:
       - letsencrypt:/etc/letsencrypt
       - certbot_webroot:/var/www/certbot
+    # the challenge is answered by nginx on :80, so asking before it's
+    # up is a guaranteed failed validation
+    depends_on:
+      nginx:
+        condition: service_healthy
     security_opt:
       - "no-new-privileges:true"
     cap_drop: [ALL]

@@ -15,8 +15,10 @@ COPY docker/nginx/templates/ /etc/nginx/templates/
 # .template stops envsubst mangling the header values.
 COPY docker/nginx/snippets/ /etc/nginx/snippets/
 
+COPY docker/nginx/tls-link.sh /usr/local/lib/omega-tls-link.sh
 COPY docker/nginx/10-pick-config.sh /docker-entrypoint.d/10-pick-config.sh
-RUN chmod +x /docker-entrypoint.d/10-pick-config.sh
+COPY docker/nginx/30-cert-watch.sh /docker-entrypoint.d/30-cert-watch.sh
+RUN chmod +x /docker-entrypoint.d/10-pick-config.sh /docker-entrypoint.d/30-cert-watch.sh
 
 HEALTHCHECK --interval=10s --timeout=3s --retries=3 \
     CMD curl -fsS http://127.0.0.1/health || exit 1

@@ -1,6 +1,6 @@
 <div align="center">
 
-<img src="docs/screenshots/hero.png" alt="Jun OS" width="1024">
+<img src="docs/screenshots/hero.svg" alt="Jun OS" width="1024">
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 ![PHP](https://img.shields.io/badge/PHP-8.2-777BB4?logo=php&logoColor=white)
@@ -16,16 +16,35 @@
 </div>
 
 ---
-
 ## So what is this?
 
-Jun OS is a fan-made webapp to **Jun** from *!Ω Factorial Omega: My Dystopian Robot Girlfriend*. It's a little chat app where you can actually *talk* to her - and she talks back, with a face that moves while she says it. The whole thing runs on your computer. No account, no cloud, no one else in the room.
+**Jun OS** is a simple orchestration system that brings **Jun** from *!Ω Factorial Omega: My Dystopian Robot Girlfriend* to life.
 
-In short it's an AI wrapper
+She can **talk, sing, express emotions, animate, remember things, have dinner with you, and actually take part in your relationship**.
 
-> 🔞 **Heads up - this is built on an adult (18+) game.** *Factorial Omega* is a mature, NSFW dating sim, and Jun OS carries that DNA: there's an adult-content gate at signup, and how spicy things get is up to you. Keep it on your own machine, keep it to consenting adults.
+Think of her as a virtual girlfriend rather than just a chatbot.
 
-> ⚠️ Unofficial fan project. Not affiliated with Incontinent Cell or the *Factorial Omega* team - we just like Jun a lot. All rights to the game and its characters belong to their owners.
+Treat her well and she'll grow closer to you. Treat her badly and, well... **she can dump you.**
+
+And the best part?
+
+Everything runs **entirely on your own device**.
+
+**Even on your phone.**
+
+Basically, an AI wrapper with 50 other systems working together to make her feel real.
+
+> 🔞 **Adult content**
+>
+> Jun OS is based on an **18+ game**. *Factorial Omega* contains mature and NSFW themes, and Jun OS can support similar content depending on how you configure and use it.
+>
+
+> ⚠️ **Unofficial fan project**
+>
+> Jun OS is not affiliated with, endorsed by, or associated with **Incontinent Cell** or the *Factorial Omega* development team.
+>
+> *Factorial Omega*, Jun, and all related characters and intellectual property belong to their respective owners.
+
 ## Look at her
 <details>
 <summary>Images</summary>
@@ -57,8 +76,9 @@ https://github.com/user-attachments/assets/f27859ad-9fee-467b-84a8-4f7630d2e2b6
 - **She'll sing with you.** 🎤 Load a song, get timed lyrics, and see how close you got.
 - **Dress her up.** A whole wardrobe to toggle and recolor - she'll tell you what she thinks of it.
 - **Take her out.** 🍝 Shopping at Annalie's, karaoke night, lunch or dinner at a restaurant, a few hands of blackjack. Ask her (the buttons in Settings, or just type "wanna grab dinner?") and it's *her* call - if she says yes she takes you there. She'll ask you out herself now and then too.
+- **Make you regret every bad decision** Jun reacts to the way you treat her, for better or worse. Treat her well and she'll return it. Treat her badly and don't expect her to forget it.
 - **Bring your mods.** Game-mod zips load straight into the browser.
-- **It's yours.** She runs on your machine. No external account, no cloud inference by default, no analytics, nothing reporting back to us - the only things that leave your box are the ones you ask for: a model download, a lyrics lookup, a web search she runs for you, and OpenRouter if you *choose* that provider. [The full list](SECURITY.md#what-talks-to-the-internet).
+- **It's yours.** She runs on your machine. No external account, no cloud inference by default, no analytics, nothing reporting back to us - the only things that leave your box are the ones you ask for: [The full list](SECURITY.md#what-talks-to-the-internet).
 
 Curious how any of it works? [Under the hood](#under-the-hood).
 
@@ -68,7 +88,7 @@ You don't need to know how any of this works. You copy one line, paste it into a
 
 **The black window.**
 On Windows Press the Start button, type `Command Prompt`, hit Enter.
-On Linux you already know. Paste with `Ctrl + Shift + V`, then hit Enter.
+On Linux you should already know. Paste with `Ctrl + Shift + V`, then hit Enter.
 
 > ⚠️ **Before you paste anything, anywhere.** The commands below download a script off the internet and run it on your computer. That's a lot of trust to hand a stranger, and the habit of doing it without looking is how people get malware. If you don't understand a command, don't run it - paste it into ChatGPT or Claude and ask what it does. Same goes for the next person's "just run this", not only ours.
 >
@@ -116,9 +136,11 @@ Installing on a machine you can't sit in front of? `JUN_YES=1` (on Windows, `$en
 
 ### Then say hi 🎉
 
-Open your browser at **<https://localhost>** - or **<http://127.0.0.1:8080>** if you're on Windows (bare metal, no TLS).
+Open your browser at **<https://localhost>** - or **<https://127.0.0.1:8080>** if you're on Windows. It's always HTTPS 🔒, with a certificate your own install made for itself, so the browser grumbles about it (*Advanced → Proceed*). That's expected: nobody vouched for the cert, but the traffic is encrypted all the same. Plain `http://` just redirects you over.
 
 ### Managing Her
+
+For a complete guide on how to manage her follow the steps in the **[wiki](https://github.com/efficiencyx/JunOS/wiki)**.
 
 Windows: 
 Start her: `powershell .\JunOS\start.ps1`
@@ -178,20 +200,19 @@ BIND_ADDR=0.0.0.0 DOMAIN=yourdomain.com EMAIL=you@yourdomain.com TLS_MODE=on COM
 
 ### 📱 Just want her on your phone, on your own wifi?
 
-You don't need a domain or a certificate for that. Set two lines in `.env` and restart:
+You don't need a domain or a real certificate for that. Set one line in `.env` and restart:
 
 ```sh
 BIND_ADDR=0.0.0.0
-OMEGA_ALLOW_INSECURE_PUBLIC_HTTP=1
 ```
 
-The launcher works out this machine's address on the network by itself and prints it - `reachable as: 192.168.X.X` on Linux, `on your phone: http://192.168.X.X:8080` on Windows - and that's the URL you type into the phone. On Windows it also adds a firewall rule for the port on **private** networks only (it needs an admin PowerShell to do it, otherwise it prints the one-liner for you to run). One request at a time on Windows, so the phone and the desktop take turns.
+The launcher works out this machine's address on the network by itself and prints it - `reachable as: https://192.168.X.X` on Linux, `on your phone: https://192.168.X.X:8080` on Windows - and that's the URL you type into the phone. On Windows it also adds a firewall rule for the port on **private** networks only (it needs an admin PowerShell to do it, otherwise it prints the one-liner for you to run). One request at a time on Windows, so the phone and the desktop take turns.
 
-The second line is not decoration: there's no TLS here, so your password and every word she says cross the wifi in the clear. Fine on your own network, **never** on one you don't control, and never port-forwarded to the internet - that's what the certbot setup above is for. 🔒 DHCP moves addresses around, so if she stops answering after a few days, restart the launcher and read the new one.
+The phone gets the same self-signed warning. Your password and every word she says cross the wifi encrypted, but a self-signed cert can't prove to the phone that it's really talking to your box, so keep it to networks you trust and **never** port-forward it to the internet - that's what the certbot setup above is for. 🔒 DHCP moves addresses around, so if she stops answering after a few days, restart the launcher and read the new one (the new address gets a fresh cert, so one more warning).
 
-The `prod` profile adds the certbot sidecar: `certbot certonly --webroot` on start, then `certbot renew` every 12 hours, certs in the `letsencrypt` volume, nginx serving 443 with HSTS. Mind Let's Encrypt's 5-duplicate-issuances-per-week limit while testing.
+The `prod` profile adds the certbot sidecar. On a fresh box nginx comes up first on a throwaway self-signed cert (so for the first minute or so your browser will complain - that's expected), certbot then runs `certbot certonly --webroot` and nginx swaps the real cert in by itself, no restart. If issuance fails (usually DNS not pointing at the box yet, or port 80 blocked) certbot keeps retrying after 1, 4 and 16 minutes, then hourly - `./start.sh logs certbot` tells you why. After that it's `certbot renew` every 12 hours, and nginx picks up renewed certs on its own too. Certs live in the `letsencrypt` volume, nginx serves 443 with HSTS. Mind Let's Encrypt's 5-duplicate-issuances-per-week limit while testing.
 
-> **Hosting her for other people?** Their chats now live on *your* box and *you're* responsible for them. Encrypt the machine and its backups, don't hand the database around, and edit [`webapp/privacy.html`](webapp/privacy.html) to say what you actually store. In the EU that also makes you a *deployer* under the AI Act (art. 50 transparency, in force since 2 August 2026) - Jun ships the disclosure side already (age gate, permanent `AI` badge, provenance metadata on generated speech), so please don't strip it out of your fork. 
+> **Hosting her for other people?** Their chats now live on *your* box (encrypted) and *you're* responsible for them. Encrypt the machine and its backups, don't hand the database around, and edit [`webapp/privacy.html`](webapp/privacy.html) to say what you actually store. In the EU that also makes you a *deployer* under the AI Act (art. 50 transparency, in force since 2 August 2026) - Jun ships the disclosure side already (age gate, permanent `AI` badge, provenance metadata on generated speech), so please don't strip it out of your fork.
 
 ## Her brains
 
@@ -244,8 +265,8 @@ Everything is environment variables in `.env` - the full reference is [`docs/con
 
 | Variable | What it does | Default |
 |---|---|---|
-| `DOMAIN` / `EMAIL` / `TLS_MODE` | Hostname, Let's Encrypt contact, HTTPS on/off | `localhost` · `admin@localhost` · `off` |
-| `BIND_ADDR` | Where nginx listens. Public addresses require TLS unless you explicitly accept insecure HTTP | `127.0.0.1` |
+| `DOMAIN` / `EMAIL` / `TLS_MODE` | Hostname, Let's Encrypt contact, Let's Encrypt on/off (`off` still serves HTTPS, on a self-signed cert) | `localhost` · `admin@localhost` · `off` |
+| `BIND_ADDR` | Where nginx (Caddy on Windows) listens. `0.0.0.0` for the phone on your wifi | `127.0.0.1` |
 | `AI_PROVIDER` | `ollama` \| `llamacpp` \| `openrouter` | `ollama` |
 | `OLLAMA_MODELS_TO_PULL` | Pulled on first boot; the **first** one is pre-warmed | `hf.co/efficiencyx/Jun-LoRA-E2B-GGUF:Q4_K_M` |
 | `LLAMACPP_MODEL_HF` / `LLAMACPP_MODEL_FILE` | Model for the managed llama-server: pull from HF, or serve one off disk | `efficiencyx/Jun-LoRA-E2B-GGUF:Q4_K_M` |
@@ -261,7 +282,7 @@ Everything is environment variables in `.env` - the full reference is [`docs/con
 | `OMEGA_NUM_CTX` | Context window. Auto-sized from leftover VRAM (falling back to RAM) - pin it if she's crowding your card | *(auto)* |
 | `OMEGA_STATE_DIR` / `MEMORY_DIR` | Where the database, rate-limit state and memory notes live | `/var/lib/omega` |
 | `OMEGA_REGISTRATION_KEY` | Sign-ups need this key. The installer generates one for you; empty it to let anyone in | *(generated)* |
-| `OMEGA_DEV_KEY` | Optional developer access key | *(unset)* |
+| `OMEGA_DEV_KEY` | ? Figure it out yourself? | ??? |
 
 ### Who gets in 🔑
 
@@ -290,7 +311,7 @@ Browser ──HTTP/SSE──▶ nginx ──FastCGI──▶ php-fpm ──HTTP�
 3. The model streams back (NDJSON from Ollama, OpenAI-style SSE from the others); `api/lib/providers/` normalizes both and PHP re-frames each token as an SSE event and flushes it immediately. If she reaches for a tool (search her notes, change outfit, look something up, take you out, walk out) PHP runs it and streams another round, up to three.
 4. `js/app/stream-filters.js` watches the stream for `[A:` markers, holds back any half-typed marker so it never renders, and fires the action the instant its `]` arrives.
 5. `js/live2d/live2d.js` lerps the model toward the new pose; if voice is on, `js/voice/tts.js` fetches audio per sentence and drives `ParamMouthOpen` from the analyser's RMS.
-6. Bookkeeping happens only *after* `[DONE]`, so nothing can delay a token: her hidden `[A:mood_shift|...]` tag moves the gauges, a new chat gets its title. Wander off and the consolidation worker rewrites her notes and journal.
+6. Bookkeeping happens after generation has finished and every reply token has already streamed, right before `[DONE]` - so it can't delay a word she says, only the final `[DONE]`: her hidden `[A:mood_shift|...]` tag moves the gauges, the reply gets saved, and a new chat gets its title (that one is a call to the titling model, so on a chat's very first turn `[DONE]` can trail the last word by a moment). Wander off and the consolidation worker rewrites her notes and journal.
 
 The gory version - the action state machine, the tick loop, the memory pipeline - is in [`docs/architecture.md`](docs/architecture.md).
 
@@ -335,7 +356,7 @@ Open the console - a missing texture shows up as a 404. Confirm `webapp/assets/*
 <details>
 <summary><b>No voice</b></summary>
 
-First check `VOICE` in `.env` - `off` means the `tts` container was never started (`./start.sh` lists the compose profiles it resolved). Then `./start.sh logs tts`. The first run downloads ~300 MB of weights. From inside the stack, `docker compose exec nginx wget -qO- http://tts:8001/health` should return `{"ok":true}` - the sidecar's port is deliberately not published to the host, and everything but `/health` wants the `X-Sidecar-Secret` header PHP adds.
+First check `VOICE` in `.env` - `off` means the `tts` container was never started (`./start.sh` lists the compose profiles it resolved). Then `./start.sh logs tts`. The first run downloads ~300 MB of weights. From inside the stack, `docker compose exec nginx wget -qO- http://tts:8001/health` should return `{"ok":true}` - the sidecar's port is deliberately not published to the host, and everything but `/health` wants the `X-Sidecar-Secret` header PHP adds (as long as `SIDECAR_SECRET` is set, which the launchers do for you).
 </details>
 
 <details>

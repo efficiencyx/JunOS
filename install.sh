@@ -1322,7 +1322,7 @@ if docker_run docker info >/dev/null 2>&1; then
     else
         note "registration key is empty, anyone who reaches the page can sign up."
     fi
-    printf '\n   %s$%s %s%sready%s %s-%s open %shttp://localhost%s\n' \
+    printf '\n   %s$%s %s%sready%s %s-%s open %shttps://localhost%s\n' \
         "$OK" "$R" "$B" "$OK" "$R" "$DIM" "$R" "$B$ACCENT" "$R"
     printf '   %sstop:%s ./start.sh stop   %s·%s   %sstatus:%s ./start.sh status\n\n' \
         "$DIM" "$R" "$DIM" "$R" "$DIM" "$R"
