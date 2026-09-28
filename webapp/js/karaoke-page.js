@@ -5,7 +5,7 @@ import * as Karaoke from './karaoke/karaoke.js?v=2';
 import * as Live2D from './live2d/live2d.js?v=4';
 import * as Outfit from './outfit/outfit.js?v=3';
 import * as Scene from './trip/scene.js?v=1';
-import { startSkybox } from './trip/skybox.js?v=1';
+import { startSkybox } from './trip/skybox.js?v=2';
 import * as TripLoader from './trip/trip-loader.js?v=1';
 
 async function main() {
@@ -55,7 +55,7 @@ async function main() {
   TripLoader.setStage('Walking to the lounge');
   Scene.inject('.music-room', 'scene/lounge.svg?v=4');
   Scene.inject('.music-room-front', 'scene/lounge-front.svg?v=2');
-  Scene.inject('#karaokeMic', 'scene/props/desk-mic.svg?v=1');
+  Scene.inject('#karaokeMic', 'scene/props/desk-mic.svg?v=2');
 
   await Prefs.pullFromServer();
   const storedVolume = parseFloat(localStorage.getItem('audio.volume') || '1');

@@ -56,11 +56,12 @@
     <path d="M-8-36h3.4v21H-1v-21h3.4v21H6v-21h3.4v27Q9.4-2 3.6 1.5L6 58Q0 65-6 58l2.4-56.5Q-9.4-2-9.4-9Z"/>
   </g>
   <g id="tb-knife" fill="url(#tb-silver)">
-    <path d="M-1-37Q13-21 10 7L4.5 13 7 59Q1 65-3 59l.6-45.5L-3 7Z"/>
+    <path d="M1-37Q-13-21-10 7L-4.5 13-7 59Q-1 65 3 59l-.6-45.5L3 7Z"/>
   </g>
   <g id="tb-glassware">
     <ellipse cy="60" rx="22" ry="6" fill="url(#tb-glass)" stroke="#f3e0bd" stroke-opacity=".5"/>
     <path d="M0 24v36M-22-32Q-33 19 0 24Q33 19 22-32Z" fill="url(#tb-glass)" stroke="#f3e0bd" stroke-opacity=".55"/>
+    <ellipse cy="-32" rx="22" ry="5" fill="none" stroke="#f3e0bd" stroke-opacity=".55"/>
     <path d="M-24-4Q-22 21 0 22Q22 21 24-4Q0 2-24-4" fill="#6d2836" opacity=".82"/>
     <path d="M-24-4Q-22 0 0 1Q22 0 24-4Q0 1-24-4" fill="#9c4353" opacity=".7"/>
     <path d="M-16-26Q-21-10-17 4" fill="none" stroke="#fff6e0" stroke-opacity=".7" stroke-width="2.4"/>
@@ -76,14 +77,17 @@
 <path d="M390 45 272 430M570 44l74 386" stroke="#ece0c6" stroke-opacity=".3" stroke-width="2.4"/>
 
 <g transform="translate(505 111) scale(.78)">
-  <use href="#tb-plate"/><use href="#tb-fork" x="-140"/><use href="#tb-knife" x="139"/>
+  <use href="#tb-plate"/>
+  <g transform="rotate(180)">
+    <use href="#tb-fork" x="-140"/><use href="#tb-knife" x="139"/>
+  </g>
 </g>
 <g transform="translate(402 322) scale(1.32)">
   <path d="M-162-38l38 3-8 88-38-6Z" fill="#7a5154"/>
   <path d="M-162-38l38 3-2 6-38-3Z" fill="#a1707a"/>
   <use href="#tb-plate"/><use href="#tb-fork" x="-144"/><use href="#tb-knife" x="142"/>
 </g>
-<use href="#tb-glassware" transform="translate(672 74) scale(.8)"/>
+<use href="#tb-glassware" transform="translate(350 120) scale(.8)"/>
 <use href="#tb-glassware" transform="translate(628 233) scale(1.16)"/>
 
 <!-- candle, off to one side. the only light on the table -->

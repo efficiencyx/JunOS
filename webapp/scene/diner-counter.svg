@@ -13,7 +13,8 @@
   .sun    { stop-color: var(--sky-glow, #b0685f); }
   .key    { stop-color: var(--key-warm, #ffb87a); }
   .lampfill { fill: var(--key-warm, #ffb87a); }
-  .lit    { opacity: var(--city-lit, .8); }
+  .city-buildings { fill: var(--city-shade, #0e1014); }
+  .lit    { opacity: calc(var(--city-lit, .8) * .55); }
   .glow   { mix-blend-mode: screen; }
   .keyrect  { opacity: calc(1.12 - var(--key-level, .5) * .4); }
   .daylight { opacity: calc(var(--key-level, .5) * .26); mix-blend-mode: screen; }
@@ -64,11 +65,11 @@
      much of it, which is the point of sitting at a counter -->
 <g>
   <rect x="108" y="66" width="980" height="128" fill="url(#nc-sky)"/>
-  <g class="lit">
-    <path d="M108 194v-52h54v52zm76 0v-74h40v74zm62 0v-40h64v40zm88 0v-88h44v88zm70 0v-56h56v56zm82 0v-34h70v34zm92 0v-70h48v70zm74 0v-44h60v44zm84 0v-62h52v62z" fill="#0e1014" opacity=".8"/>
-    <g class="lampfill" opacity=".55">
+  <g>
+    <path d="M108 194v-52h54v52zm76 0v-74h40v74zm62 0v-40h64v40zm88 0v-88h44v88zm70 0v-56h56v56zm82 0v-34h70v34zm92 0v-70h48v70zm74 0v-44h60v44zm84 0v-62h52v62zm70 0v-66h60v66zm134 0v-58h64v58z" class="city-buildings"/>
+    <g class="lampfill lit">
       <rect x="120" y="156" width="8" height="10"/><rect x="196" y="136" width="8" height="10"/>
-      <rect x="330" y="122" width="8" height="10"/><rect x="424" y="152" width="8" height="10"/>
+      <rect x="346" y="122" width="8" height="10"/><rect x="424" y="152" width="8" height="10"/>
       <rect x="600" y="140" width="8" height="10"/><rect x="700" y="160" width="8" height="10"/>
       <rect x="820" y="146" width="8" height="10"/><rect x="960" y="152" width="8" height="10"/>
     </g>

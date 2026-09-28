@@ -13,7 +13,8 @@
   .sun    { stop-color: var(--sky-glow, #b0685f); }
   .key    { stop-color: var(--key-warm, #ffb87a); }
   .lampfill { fill: var(--key-warm, #ffb87a); }
-  .lit    { opacity: var(--city-lit, .8); }
+  .city-buildings { fill: var(--city-shade, #0f1114); }
+  .lit    { opacity: calc(var(--city-lit, .8) * .5); }
   .glow   { mix-blend-mode: screen; }
   .keyrect  { opacity: calc(1.02 - var(--key-level, .5) * .46); }
   .daylight { opacity: calc(var(--key-level, .5) * .4); mix-blend-mode: screen; }
@@ -62,6 +63,7 @@
   <path d="M60 228v76M180 228v76M300 228v76M420 228v76M540 228v76M660 228v76M780 228v76M900 228v76M1020 228v76M1140 228v76"/>
   <path d="M0 304v76M120 304v76M240 304v76M360 304v76M480 304v76M600 304v76M720 304v76M840 304v76M960 304v76M1080 304v76"/>
   <path d="M60 380v76M180 380v76M300 380v76M420 380v76M540 380v76M660 380v76M780 380v76M900 380v76M1020 380v76M1140 380v76"/>
+  <path d="M0 456v76M120 456v76M240 456v76M360 456v76M480 456v76M600 456v76M720 456v76M840 456v76M960 456v76M1080 456v76"/>
 </g>
 <rect width="1200" height="540" fill="url(#mg-tile)" opacity=".55"/>
 
@@ -69,9 +71,9 @@
 <g>
   <rect x="612" y="96" width="470" height="404" fill="url(#mg-sky)"/>
   <rect x="612" y="96" width="470" height="404" fill="url(#mg-sun)"/>
-  <g class="lit">
-    <path d="M612 500v-86h52v86zm70 0v-118h40v118zm58 0v-64h64v64zm84 0v-140h46v140zm64 0v-92h56v92zm74 0v-58h64v58z" fill="#0f1114" opacity=".76"/>
-    <g class="lampfill" opacity=".5">
+  <g>
+    <path d="M612 500v-86h52v86zm70 0v-118h40v118zm58 0v-64h64v64zm84 0v-140h46v140zm64 0v-92h56v92zm74 0v-58h64v58z" class="city-buildings"/>
+    <g class="lampfill lit">
       <rect x="624" y="426" width="8" height="10"/><rect x="694" y="400" width="8" height="10"/>
       <rect x="694" y="440" width="8" height="10"/><rect x="756" y="458" width="8" height="10"/>
       <rect x="838" y="380" width="8" height="10"/><rect x="856" y="418" width="8" height="10"/>
@@ -81,7 +83,7 @@
   <path d="M847 96v404M612 298h470" stroke="#3f4438" stroke-width="9"/>
   <rect x="600" y="84" width="494" height="428" fill="none" stroke="#454b3c" stroke-width="18"/>
   <!-- the plants the place is named for -->
-  <g>
+  <g transform="translate(0 -24)">
     <path d="M636 512h58l-7 44h-44z" fill="#9a6a3c"/>
     <path d="M636 512h58l-2 9h-54z" fill="#c08f57"/>
     <g fill="#5c7a49">
@@ -91,7 +93,7 @@
       <circle cx="649" cy="474" r="7"/><circle cx="683" cy="482" r="6"/><circle cx="670" cy="460" r="6"/>
     </g>
   </g>
-  <g>
+  <g transform="translate(0 -24)">
     <path d="M1010 512h46l-6 44h-34z" fill="#8a5f38"/>
     <g fill="#4e6b40">
       <path d="M1033 512q-26-8-28-36 22 2 28 36M1033 512q24-12 26-40-22 4-26 40"/>

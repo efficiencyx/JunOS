@@ -14,16 +14,16 @@
 // zenith/mid/horizon are the three stops of the gradient you see
 // through the glass. glow is the sun or the moon and x/y is where
 // it sits in the frame, 0 0 top left. key is the interior light
-// colour, level how hard it's driving, lit how lit the city
-// silhouette reads (high at night, nothing at noon).
+// colour, level how hard it's driving, city the building shade,
+// and lit the city window lights (high at night, off at noon).
 const PHASES = {
-  night:     { zenith: '#070a14', mid: '#0d1426', horizon: '#1b2138', glow: '#2a3358', x: 70, y: 84, key: '#ffb26b', level: 0.38, lit: 1 },
-  dawn:      { zenith: '#1b2340', mid: '#4a3a55', horizon: '#b3705c', glow: '#e8926a', x: 20, y: 77, key: '#ffc79a', level: 0.55, lit: 0.7 },
-  morning:   { zenith: '#3f7bb5', mid: '#7fa9cf', horizon: '#cfd9e0', glow: '#fff3d8', x: 26, y: 58, key: '#e8f0ff', level: 0.9, lit: 0.15 },
-  midday:    { zenith: '#2f6fb0', mid: '#6fa2d4', horizon: '#c6d8e8', glow: '#ffffff', x: 52, y: 24, key: '#f2f7ff', level: 1, lit: 0 },
-  afternoon: { zenith: '#3b73a8', mid: '#8aa8c4', horizon: '#d8cdb5', glow: '#ffe9c0', x: 78, y: 54, key: '#fff0d8', level: 0.88, lit: 0.1 },
-  golden:    { zenith: '#4a4a7a', mid: '#b06a52', horizon: '#e29553', glow: '#ffb464', x: 83, y: 71, key: '#ffc98a', level: 0.7, lit: 0.35 },
-  dusk:      { zenith: '#141a33', mid: '#37334f', horizon: '#7a4a55', glow: '#b0685f', x: 86, y: 81, key: '#ffb87a', level: 0.5, lit: 0.8 },
+  night:     { zenith: '#070a14', mid: '#0d1426', horizon: '#1b2138', glow: '#2a3358', x: 70, y: 84, key: '#ffb26b', city: '#101421', level: 0.38, lit: 1 },
+  dawn:      { zenith: '#1b2340', mid: '#4a3a55', horizon: '#b3705c', glow: '#e8926a', x: 20, y: 77, key: '#ffc79a', city: '#4b4551', level: 0.55, lit: 0.7 },
+  morning:   { zenith: '#3f7bb5', mid: '#7fa9cf', horizon: '#cfd9e0', glow: '#fff3d8', x: 26, y: 58, key: '#e8f0ff', city: '#657b8d', level: 0.9, lit: 0.15 },
+  midday:    { zenith: '#2f6fb0', mid: '#6fa2d4', horizon: '#c6d8e8', glow: '#ffffff', x: 52, y: 24, key: '#f2f7ff', city: '#647a8b', level: 1, lit: 0 },
+  afternoon: { zenith: '#3b73a8', mid: '#8aa8c4', horizon: '#d8cdb5', glow: '#ffe9c0', x: 78, y: 54, key: '#fff0d8', city: '#756d68', level: 0.88, lit: 0.1 },
+  golden:    { zenith: '#4a4a7a', mid: '#b06a52', horizon: '#e29553', glow: '#ffb464', x: 83, y: 71, key: '#ffc98a', city: '#58464b', level: 0.7, lit: 0.35 },
+  dusk:      { zenith: '#141a33', mid: '#37334f', horizon: '#7a4a55', glow: '#b0685f', x: 86, y: 81, key: '#ffb87a', city: '#282a3d', level: 0.5, lit: 0.8 },
 };
 
 function phaseAt(d) {
@@ -58,6 +58,7 @@ function apply(now) {
   root.style.setProperty('--sky-glow-y', p.y + '%');
   root.style.setProperty('--key-warm', p.key);
   root.style.setProperty('--key-level', String(p.level));
+  root.style.setProperty('--city-shade', p.city);
   root.style.setProperty('--city-lit', String(p.lit));
   return name;
 }

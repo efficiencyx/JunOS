@@ -19,7 +19,7 @@ import { localTimeString, mealNow } from './core/util.js?v=1';
 import * as Live2D from './live2d/live2d.js?v=4';
 import * as Outfit from './outfit/outfit.js?v=3';
 import * as Scene from './trip/scene.js?v=1';
-import { startSkybox } from './trip/skybox.js?v=1';
+import { startSkybox } from './trip/skybox.js?v=2';
 import * as TripLoader from './trip/trip-loader.js?v=1';
 
 async function main() {
@@ -292,8 +292,8 @@ async function main() {
   const seed = (trip && Number(trip.since)) || Math.floor(Date.now() / 864e5);
   venue = VENUES[Math.abs(seed) % VENUES.length];
   document.body.dataset.venue = venue.scene.replace(/^diner-|\.svg$/g, '');
-  Scene.inject('.room', 'scene/' + venue.scene);
-  Scene.inject('.table', 'scene/table.svg');
+  Scene.inject('.room', 'scene/' + venue.scene + '?v=2');
+  Scene.inject('.table', 'scene/table.svg?v=2');
   conversationId = trip ? Number(trip.conversation_id) || 0 : 0;
 
   await Prefs.pullFromServer();

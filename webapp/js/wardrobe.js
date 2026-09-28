@@ -4,7 +4,7 @@ import * as Names from './core/names.js?v=1';
 import { api } from './core/api.js?v=1';
 import * as Outfit from './outfit/outfit.js?v=3';
 import * as Scene from './trip/scene.js?v=1';
-import { startSkybox } from './trip/skybox.js?v=1';
+import { startSkybox } from './trip/skybox.js?v=2';
 import * as TripLoader from './trip/trip-loader.js?v=1';
 import { armCurtains } from './wardrobe/curtains.js?v=2';
 import { openWardrobe } from './wardrobe/panel.js?v=4';
@@ -71,7 +71,7 @@ async function main() {
   }
   // mount AFTER the gate, same reason as date.js
   TripLoader.mount();
-  Scene.inject('.fitting-room', 'scene/boutique.svg');
+  Scene.inject('.fitting-room', 'scene/boutique.svg?v=2');
   Names.load();
   Names.decorate();
 

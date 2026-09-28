@@ -17,6 +17,7 @@
   <linearGradient id="dm-base" x1="0" y1="0" x2="0" y2="1">
     <stop offset="0" stop-color="#6d6279"/><stop offset=".35" stop-color="#2b2433"/><stop offset="1" stop-color="#0c0910"/>
   </linearGradient>
+  <clipPath id="dm-grille-clip"><use href="#dm-grille-shape"/></clipPath>
 </defs>
 
 <ellipse cx="60" cy="252" rx="58" ry="8" fill="#050308" opacity=".6"/>
@@ -25,11 +26,12 @@
 
 <!-- the yoke. two arms from the pivots down to the neck -->
 <path d="M20 112v72q0 22 22 22h36q22 0 22-22v-72" fill="none" stroke="url(#dm-body)" stroke-width="9" stroke-linecap="round"/>
+<path d="M20 112h10M90 112h10" stroke="#6d6279" stroke-width="6"/>
 
 <!-- capsule. grille on top, solid body under it -->
 <path d="M30 34a30 30 0 0 1 60 0v116q0 10-10 10H40q-10 0-10-10z" fill="url(#dm-body)"/>
-<path d="M31 34a29 29 0 0 1 58 0v48H31z" fill="url(#dm-grille)"/>
-<g stroke="#0d0913" stroke-opacity=".45" stroke-width="1.2">
+<path id="dm-grille-shape" d="M31 34a29 29 0 0 1 58 0v48H31z" fill="url(#dm-grille)"/>
+<g clip-path="url(#dm-grille-clip)" stroke="#0d0913" stroke-opacity=".45" stroke-width="1.2">
   <path d="M33 14h54M31 24h58M31 34h58M31 44h58M31 54h58M31 64h58M31 74h58"/>
   <path d="M40 10v72M50 6v76M60 5v77M70 6v76M80 10v72"/>
 </g>
