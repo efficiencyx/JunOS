@@ -56,7 +56,7 @@ https://github.com/user-attachments/assets/f27859ad-9fee-467b-84a8-4f7630d2e2b6
 - **She knows her lore.** Ask her about the game's world and she stays in canon.
 - **She'll sing with you.** 🎤 Load a song, get timed lyrics, and see how close you got.
 - **Dress her up.** A whole wardrobe to toggle and recolor - she'll tell you what she thinks of it.
-- **Take her out.** 🍝 Shopping at Annalie's, karaoke night, lunch or dinner at a restaurant, a few hands of blackjack. Ask her and it's *her* call - say yes and she takes you there. She'll ask you out herself now and then too.
+- **Take her out.** 🍝 Shopping at Annalie's, karaoke night, lunch or dinner at a restaurant, a few hands of blackjack. Ask her (the buttons in Settings, or just type "wanna grab dinner?") and it's *her* call - if she says yes she takes you there. She'll ask you out herself now and then too.
 - **Bring your mods.** Game-mod zips load straight into the browser.
 - **It's yours.** She runs on your machine. No external account, no cloud inference by default, no analytics, nothing reporting back to us - the only things that leave your box are the ones you ask for: a model download, a lyrics lookup, a web search she runs for you, and OpenRouter if you *choose* that provider. [The full list](SECURITY.md#what-talks-to-the-internet).
 
@@ -223,7 +223,7 @@ Gemma 4 ships a tiny *drafter* that guesses the next few tokens; Jun checks the 
 
 llama.cpp can also serve a GGUF straight off your disk (`LLAMACPP_MODELS_DIR` + `LLAMACPP_MODEL_FILE`), and `LLAMACPP_TOOLS=off` exists for fine-tunes whose tool-call syntax llama-server can't parse.
 
-**No retrieval model:** lore lookup and cross-chat recall are plain text matching - keyword/IDF over the corpus, case-insensitive substring matching over your decrypted history - so lore and recall need no embedding model, whichever provider you choose. The only extra model in the stack is the Ollama-only chat titler (`TITLE_MODEL`, a 0.6B fine-tune pinned to the CPU so it never fights her for VRAM; set it empty and titles fall back to your first message).
+**No retrieval model:** lore lookup and cross-chat recall are plain text matching - keyword/IDF over the corpus, word matching over your decrypted history - so lore and recall need no embedding model, whichever provider you choose. The only extra model in the stack is the Ollama-only chat titler (`TITLE_MODEL`, a 0.6B fine-tune pinned to the CPU so it never fights her for VRAM; set it empty and titles fall back to your first message).
 
 ### Picking your GPU
 
