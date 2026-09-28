@@ -13,7 +13,8 @@
   .sun    { stop-color: var(--sky-glow, #b0685f); }
   .key    { stop-color: var(--key-warm, #ffb87a); }
   .lampfill { fill: var(--key-warm, #ffb87a); }
-  .lit    { opacity: var(--city-lit, .8); }
+  .city-buildings { fill: var(--city-shade, #0c0f12); }
+  .lit    { opacity: calc(var(--city-lit, .8) * .5); }
   .glow   { mix-blend-mode: screen; }
   .keyrect  { opacity: calc(1.08 - var(--key-level, .5) * .44); }
   .daylight { opacity: calc(var(--key-level, .5) * .3); mix-blend-mode: screen; }
@@ -83,9 +84,9 @@
 <g>
   <path d="M264 512V236a166 166 0 0 1 332 0v276z" fill="url(#dn-sky)"/>
   <path d="M264 512V236a166 166 0 0 1 332 0v276z" fill="url(#dn-sun)"/>
-  <g class="lit">
-    <path d="M264 512v-92h48v92zm62 0v-124h36v124zm52 0v-70h58v70zm74 0v-146h40v146zm56 0v-96h48v96z" fill="#0c0f12" opacity=".8"/>
-    <g class="lampfill" opacity=".5">
+  <g>
+    <path d="M264 512v-92h48v92zm62 0v-124h36v124zm52 0v-70h58v70zm74 0v-146h40v146zm56 0v-96h48v96z" class="city-buildings"/>
+    <g class="lampfill lit">
       <rect x="274" y="432" width="7" height="9"/><rect x="290" y="458" width="7" height="9"/>
       <rect x="336" y="400" width="7" height="9"/><rect x="336" y="440" width="7" height="9"/>
       <rect x="392" y="460" width="7" height="9"/><rect x="452" y="376" width="7" height="9"/>
@@ -101,7 +102,7 @@
     </g>
   </g>
   <!-- glazing bars: two thirds and one, not halves -->
-  <path d="M374 512V204M486 512V196M264 348h332" stroke="#241d16" stroke-width="8"/>
+  <path d="M374 512V80M486 512V80M264 348h332" stroke="#241d16" stroke-width="8"/>
   <path d="M264 512V236a166 166 0 0 1 332 0v276" fill="none" stroke="#2c241a" stroke-width="22"/>
   <path d="M252 506h356v22H252z" fill="url(#dn-brass)" opacity=".5"/>
 </g>

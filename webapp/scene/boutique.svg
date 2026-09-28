@@ -14,7 +14,8 @@
   .sun    { stop-color: var(--sky-glow, #b0685f); }
   .key    { stop-color: var(--key-warm, #ffb87a); }
   .lamp   { fill: var(--key-warm, #ffb87a); }
-  .lit    { opacity: var(--city-lit, .8); }
+  .city-buildings { fill: var(--city-shade, #090b13); }
+  .lit    { opacity: calc(var(--city-lit, .8) * .55); }
   .glow   { mix-blend-mode: screen; }
   /* the room's own exposure follows the sky. at noon the dark
      falloff backs off and the daylight wash comes up; after dark
@@ -83,6 +84,7 @@
     <stop offset="0" stop-color="#2f2a36"/><stop offset=".3" stop-color="#a49eaa"/><stop offset=".62" stop-color="#5d5768"/><stop offset="1" stop-color="#231e2c"/>
   </linearGradient>
   <clipPath id="bq-mirrorclip"><rect x="566" y="150" width="186" height="410"/></clipPath>
+  <path id="bq-hanger-sign" d="M926 118a14 14 0 0 0-28 0c0 12 14 12 14 26v10m0 0-70 42h140z"/>
   <filter id="bq-grain" x="0" y="0" width="100%" height="100%">
     <feTurbulence type="fractalNoise" baseFrequency="0.85" numOctaves="3" stitchTiles="stitch"/>
     <feColorMatrix type="saturate" values="0"/>
@@ -98,9 +100,9 @@
 <g>
   <rect x="770" y="80" width="372" height="468" fill="url(#bq-sky)"/>
   <rect x="770" y="80" width="372" height="468" fill="url(#bq-sun)"/>
-  <g class="lit">
-    <path d="M770 548V430h40v118zm54 0V372h30v176zm44 0V462h54v86zm68 0V344h38v204zm52 0V408h46v140zm60 0V452h64v96z" fill="#090b13" opacity=".86"/>
-    <g class="lamp" opacity=".55">
+  <g>
+    <path d="M770 548V430h40v118zm54 0V372h30v176zm44 0V462h54v86zm68 0V344h38v204zm52 0V408h46v140zm60 0V452h64v96z" class="city-buildings"/>
+    <g class="lamp lit">
       <rect x="780" y="442" width="7" height="9"/><rect x="794" y="470" width="7" height="9"/>
       <rect x="832" y="388" width="7" height="9"/><rect x="832" y="424" width="7" height="9"/>
       <rect x="880" y="476" width="7" height="9"/><rect x="944" y="360" width="7" height="9"/>
@@ -115,10 +117,10 @@
   <rect x="762" y="72" width="388" height="484" fill="none" stroke="#1b1724" stroke-width="16"/>
   <!-- her sign, hung inside the glass so you see it from the back:
        a hanger, in Annalie's magenta -->
-  <g>
-    <path d="M912 196h-84l70-52 70 52h-84m14 0v-26q0-16 14-16t14 12" fill="none" stroke="#b8508f" stroke-width="8" stroke-linecap="round" stroke-linejoin="round"/>
-    <path d="M912 196h-84l70-52 70 52h-84m14 0v-26q0-16 14-16t14 12" fill="none" stroke="#f7bfe0" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>
-    <path d="M912 196h-84l70-52 70 52h-84" fill="none" stroke="#b8508f" stroke-width="30" opacity=".35" filter="url(#bq-soft)"/>
+  <g fill="none" stroke-linecap="round" stroke-linejoin="round">
+    <use href="#bq-hanger-sign" stroke="#b8508f" stroke-width="30" opacity=".35" filter="url(#bq-soft)"/>
+    <use href="#bq-hanger-sign" stroke="#b8508f" stroke-width="8"/>
+    <use href="#bq-hanger-sign" stroke="#f7bfe0" stroke-width="2.5"/>
   </g>
 </g>
 
