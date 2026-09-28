@@ -166,6 +166,8 @@ jobs:
           # the karaoke container only exists under its profile, and start.sh is
           # what turns KARAOKE=on into that profile.
           KARAOKE=on docker compose -f docker-compose.yml --profile karaoke config -q
+          # certbot sits behind prod and waits on nginx being healthy.
+          docker compose -f docker-compose.yml --profile prod config -q
 
       - name: Dockerfiles
         # error threshold only. the warnings are all "pin your apt

@@ -12,10 +12,20 @@ limit_conn_status 429;
 # otherwise, which reads as the server being down.
 limit_req_status  429;
 
+# The container healthcheck calls http://127.0.0.1/health, which
+# lands here and not in the ${DOMAIN} servers.
 server {
     listen 80 default_server;
     server_name "";
-    return 444;
+
+    location = /health {
+        default_type text/plain;
+        return 200 "ok";
+    }
+
+    location / {
+        return 444;
+    }
 }
 
 # HTTP server for ACME challenges and HTTPS redirects.
@@ -37,8 +47,12 @@ server {
 server {
     listen 443 ssl default_server;
     server_name "";
-    ssl_certificate     /etc/letsencrypt/live/${DOMAIN}/fullchain.pem;
-    ssl_certificate_key /etc/letsencrypt/live/${DOMAIN}/privkey.pem;
+    # Symlinks, not the letsencrypt paths. Before the first issuance
+    # they point at a self-signed placeholder so nginx can start and
+    # answer the ACME challenge on :80. 30-cert-watch.sh repoints them
+    # and reloads once certbot has a certificate, and after renewals.
+    ssl_certificate     /etc/nginx/tls/fullchain.pem;
+    ssl_certificate_key /etc/nginx/tls/privkey.pem;
     ssl_protocols       TLSv1.2 TLSv1.3;
     ssl_ciphers         ECDHE-ECDSA-AES256-GCM-SHA384:ECDHE-RSA-AES256-GCM-SHA384:ECDHE-ECDSA-CHACHA20-POLY1305:ECDHE-RSA-CHACHA20-POLY1305:ECDHE-ECDSA-AES128-GCM-SHA256:ECDHE-RSA-AES128-GCM-SHA256;
     return 444;
@@ -57,8 +71,8 @@ server {
     gzip_min_length 512;
     gzip_types      text/css application/javascript application/json image/svg+xml text/plain;
 
-    ssl_certificate     /etc/letsencrypt/live/${DOMAIN}/fullchain.pem;
-    ssl_certificate_key /etc/letsencrypt/live/${DOMAIN}/privkey.pem;
+    ssl_certificate     /etc/nginx/tls/fullchain.pem;
+    ssl_certificate_key /etc/nginx/tls/privkey.pem;
     ssl_protocols       TLSv1.2 TLSv1.3;
     ssl_ciphers         ECDHE-ECDSA-AES256-GCM-SHA384:ECDHE-RSA-AES256-GCM-SHA384:ECDHE-ECDSA-CHACHA20-POLY1305:ECDHE-RSA-CHACHA20-POLY1305:ECDHE-ECDSA-AES128-GCM-SHA256:ECDHE-RSA-AES128-GCM-SHA256;
     ssl_session_cache   shared:SSL:10m;
@@ -113,6 +127,9 @@ server {
 
     location = /api/tts.php {
         limit_req zone=api burst=10 nodelay;
+        # js/voice/tts.js keeps 3 synthesis requests in flight per
+        # reply, plus one warm call.
+        limit_conn conns 4;
         client_max_body_size 16k;
 
         gzip off;
@@ -147,7 +164,11 @@ server {
         # split. With a limit of 1 the second one is a 429 every time.
         limit_conn conns 2;
         client_max_body_size 30m;
-        fastcgi_read_timeout 300s;
+        # Demucs on CPU runs slower than realtime and whisper then reads
+        # the vocal stem back, so a full-length song can sit well past
+        # five minutes. Keep in step with the 900 that api/karaoke.php
+        # passes to sidecar_call() for /separate.
+        fastcgi_read_timeout 900s;
 
         gzip off;
 

@@ -11,7 +11,7 @@ set -eu
 
 cd "$(dirname "$0")/../.." || exit 1
 
-BASE=${SMOKE_STACK_BASE:-http://127.0.0.1}
+BASE=${SMOKE_STACK_BASE:-https://127.0.0.1}
 work=$(mktemp -d)
 export work
 # never the developer's own .env: a registration key or a stray
@@ -66,6 +66,7 @@ cleanup() {
 	# developer's whole database. the volumes go separately, by name,
 	# through the prefix check.
 	$COMPOSE down --remove-orphans >/dev/null 2>&1 || true
+	docker rm -f "${PROJECT}-tls" >/dev/null 2>&1 || true
 	drop_ci_volumes
 	rm -rf "$work"
 }
@@ -85,7 +86,7 @@ fi
 fails=0
 pass() { printf '  ok   %s\n' "$1"; }
 fail() { printf '  FAIL %s\n' "$1"; fails=1; }
-status() { curl -sS -o /dev/null -w '%{http_code}' "$@" 2>/dev/null || true; }
+status() { curl -sSk -o /dev/null -w '%{http_code}' "$@" 2>/dev/null || true; }
 
 
 echo "boot"
@@ -114,7 +115,7 @@ else
 	fail 'a php file outside /api was reachable'
 fi
 
-hdr=$(curl -sS -D - -o /dev/null "$BASE/")
+hdr=$(curl -sSk -D - -o /dev/null "$BASE/")
 if printf '%s' "$hdr" | grep -qi '^server: nginx/'; then
 	fail 'the nginx version is in the Server header'
 else
@@ -124,33 +125,93 @@ fi
 echo "caching"
 # index.html has to stay revalidated, otherwise the ?v= bumps
 # underneath it get cached too and nobody ever sees a new build.
-if curl -sS -D - -o /dev/null "$BASE/index.html" | grep -qi 'cache-control:.*no-cache'; then
+if curl -sSk -D - -o /dev/null "$BASE/index.html" | grep -qi 'cache-control:.*no-cache'; then
 	pass 'index.html is no-cache'
 else
 	fail 'index.html lost its no-cache'
 fi
-if curl -sS -D - -o /dev/null "$BASE/js/app.js" | grep -qi 'cache-control:.*immutable'; then
+if curl -sSk -D - -o /dev/null "$BASE/js/app.js" | grep -qi 'cache-control:.*immutable'; then
 	pass 'modules are immutable'
 else
 	fail 'modules lost their immutable cache header'
 fi
 
-echo "tls guard"
-# 10-pick-config.sh refuses to serve plain HTTP on anything but
-# loopback. that guard is one env var away from being bypassed by
-# accident.
+echo "plain http"
+# :80 carries no app traffic at all, only /health for the
+# healthcheck and a redirect. a login form served there would
+# post the password in the clear.
+if [ "$(status http://127.0.0.1/health)" = "200" ]; then pass 'health on :80'; else fail 'health on :80'; fi
+loc=$(curl -sS -o /dev/null -w '%{http_code} %{redirect_url}' http://127.0.0.1/index.html?x=1 2>/dev/null || true)
+if [ "$loc" = "301 https://127.0.0.1/index.html?x=1" ]; then
+	pass ':80 redirects to https'
+else
+	fail ":80 answered '$loc' instead of a redirect to https"
+fi
+if [ "$(status -X POST http://127.0.0.1/api/auth.php?action=login)" = "301" ]; then
+	pass 'the api is not served on :80'
+else
+	fail 'the api answered on plain http'
+fi
 img=$($COMPOSE images -q nginx)
-if docker run --rm -e TLS_MODE=off -e BIND_ADDR=0.0.0.0 "$img" nginx -t >/dev/null 2>&1; then
-	fail 'public HTTP with TLS_MODE=off was allowed to boot'
+san=$(docker run --rm --entrypoint sh -e OMEGA_EXTRA_HOSTS='192.168.1.42 jun.local' "$img" -c \
+	'/docker-entrypoint.d/10-pick-config.sh >/dev/null && openssl x509 -noout -ext subjectAltName -in /etc/nginx/selfsigned/fullchain.pem' 2>/dev/null || true)
+case $san in
+*'IP Address:192.168.1.42'*'DNS:jun.local'* | *'DNS:jun.local'*'IP Address:192.168.1.42'*)
+	pass 'the self-signed cert names the LAN hosts' ;;
+*) fail "the self-signed cert is missing OMEGA_EXTRA_HOSTS: $san" ;;
+esac
+
+echo "tls bootstrap"
+# a fresh prod install: TLS_MODE=on and an EMPTY letsencrypt
+# volume. nginx used to refuse to start there (no cert yet), and
+# certbot needs nginx up on :80 to get one. so: it has to boot on
+# the placeholder, pass its healthcheck, serve the challenge, and
+# swap to the real cert on its own once one shows up. no real ACME
+# here, the "issued" cert is one we make ourselves.
+tls_boot() {
+	docker volume create "${PROJECT}_tls_le" >/dev/null
+	docker volume create "${PROJECT}_tls_webroot" >/dev/null
+	docker run -d --name "$TLS_CT" \
+		--cap-drop ALL --cap-add CHOWN --cap-add DAC_OVERRIDE --cap-add NET_BIND_SERVICE \
+		--cap-add SETGID --cap-add SETUID --security-opt no-new-privileges:true \
+		-e TLS_MODE=on -e DOMAIN=jun.test -e CERT_WATCH_INTERVAL=1 \
+		-v "${PROJECT}_tls_le:/etc/letsencrypt:ro" -v "${PROJECT}_tls_webroot:/var/www/certbot:ro" \
+		-p 127.0.0.1:18081:80 -p 127.0.0.1:18444:443 "$img" >/dev/null
+}
+served_cn() {
+	curl -sk -v --resolve jun.test:18444:127.0.0.1 -o /dev/null https://jun.test:18444/health 2>&1 |
+		sed -n 's/.*subject:.*CN *= *\([^,;]*\).*/\1/p' | head -n 1
+}
+TLS_CT="${PROJECT}-tls"
+tls_boot
+ok=''
+for _ in $(seq 1 30); do
+	if [ "$(status http://127.0.0.1:18081/health)" = "200" ]; then ok=1; break; fi
+	sleep 1
+done
+if [ -n "$ok" ]; then pass 'TLS_MODE=on boots with no certificate and answers /health on :80'; else fail 'TLS_MODE=on without a certificate never came up'; fi
+docker run --rm -v "${PROJECT}_tls_webroot:/w" --entrypoint sh "$img" -c \
+	'mkdir -p /w/.well-known/acme-challenge && printf tok-ci > /w/.well-known/acme-challenge/probe'
+if [ "$(curl -sS -H 'Host: jun.test' http://127.0.0.1:18081/.well-known/acme-challenge/probe 2>/dev/null)" = "tok-ci" ]; then
+	pass 'the ACME challenge is served before any certificate exists'
 else
-	pass 'public HTTP with TLS_MODE=off is refused'
+	fail 'the ACME challenge is not reachable on :80'
 fi
-if docker run --rm -e TLS_MODE=off -e BIND_ADDR=0.0.0.0 -e OMEGA_ALLOW_INSECURE_PUBLIC_HTTP=1 \
-	"$img" nginx -t >/dev/null 2>&1; then
-	pass 'the explicit insecure opt out still boots'
+if [ "$(served_cn)" = "jun.test" ]; then pass 'the placeholder answers on :443'; else fail 'nothing usable on :443 before issuance'; fi
+docker run --rm -v "${PROJECT}_tls_le:/le" --entrypoint sh "$img" -c \
+	'mkdir -p /le/live/jun.test && openssl req -x509 -nodes -newkey rsa:2048 -days 1 -subj /CN=issued.jun.test -keyout /le/live/jun.test/privkey.pem -out /le/live/jun.test/fullchain.pem 2>/dev/null'
+cn=''
+for _ in $(seq 1 20); do
+	cn=$(served_cn)
+	[ "$cn" = "issued.jun.test" ] && break
+	sleep 1
+done
+if [ "$cn" = "issued.jun.test" ]; then
+	pass 'nginx picks up the issued certificate without a restart'
 else
-	fail 'OMEGA_ALLOW_INSECURE_PUBLIC_HTTP=1 no longer gets past the guard'
+	fail "nginx still serves '$cn' after the certificate landed"
 fi
+docker rm -f "$TLS_CT" >/dev/null 2>&1 || true
 
 echo "logs"
 $COMPOSE logs --no-color php >"$work/php.log" 2>&1 || true

@@ -48,6 +48,26 @@ for f in webapp/api/migrations/*.sql; do
 done
 if [ "$fails" -eq 0 ]; then pass 'migration numbering is sane'; fi
 
+echo "nginx templates"
+# the http and the TLS template carry the same /api locations twice.
+# they drifted once already: karaoke got 300s under TLS against 900s
+# everywhere else, and tts lost its limit_conn. so from the first
+# api location down they have to match, minus the HSTS lines only
+# TLS adds.
+api_locations() {
+	sed -n '/location = \/api\/chat.php/,$p' "$1" | grep -v 'Strict-Transport-Security'
+}
+tmp=$(mktemp -d)
+api_locations docker/nginx/templates/omega.conf.template >"$tmp/http"
+api_locations docker/nginx/templates/omega-tls.conf.template >"$tmp/tls"
+if diff -u "$tmp/http" "$tmp/tls" >"$tmp/diff"; then
+	pass 'the two nginx templates serve /api the same way'
+else
+	sed 's/^/       /' "$tmp/diff"
+	fail 'omega.conf.template and omega-tls.conf.template differ below /api/chat.php'
+fi
+rm -rf "$tmp"
+
 echo "nothing that must not be in the repo"
 # the extractor is personal-use only per the agreement with the
 # game dev (see the NOTICE in LICENSE). ripped assets must never

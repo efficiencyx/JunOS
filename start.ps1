@@ -86,7 +86,7 @@ $Runtime  = Join-Path $PSScriptRoot 'runtime'
 $LogDir   = Join-Path $Runtime 'logs'
 $PidFile  = Join-Path $Runtime 'pids.json'
 $StateDir = Join-Path $Runtime 'state'
-$Services = 'php', 'memory', 'tts', 'ollama', 'llamacpp'
+$Services = 'caddy', 'php', 'memory', 'tts', 'ollama', 'llamacpp'
 
 # read KEY=VALUE pairs in as env vars, but ONLY when they aren't
 # set already, so you can still override one for a single run.
@@ -117,11 +117,15 @@ if (Test-Path .env) {
 $SidecarSecret = if ($env:SIDECAR_SECRET) { $env:SIDECAR_SECRET } else { '' }
 
 $Port      = if ($env:JUN_PORT) { $env:JUN_PORT } else { '8080' }
+# php -S speaks plain HTTP only, so it sits on loopback behind
+# caddy, which does the TLS on JUN_PORT. nothing but caddy should
+# ever talk to this one.
+$PhpPort   = if ($env:JUN_PHP_PORT) { $env:JUN_PHP_PORT } else { '8079' }
 $OllamaUrl = if ($env:OLLAMA_URL) { $env:OLLAMA_URL } else { 'http://127.0.0.1:11434' }
 # SiteUrl stays loopback whatever we bind to. it is what the
-# health probe polls and what the browser opens, and both of
-# those are this machine talking to itself.
-$SiteUrl   = "http://127.0.0.1:$Port"
+# browser opens, and that's this machine talking to itself.
+$SiteUrl   = "https://127.0.0.1:$Port"
+$PhpUrl    = "http://127.0.0.1:$PhpPort"
 $BindAddr  = if ($env:BIND_ADDR) { $env:BIND_ADDR.Trim() } else { '127.0.0.1' }
 $LanHosts  = @()
 
@@ -181,17 +185,6 @@ function Confirm-FirewallRule([string]$port) {
 }
 
 if ($Action -eq 'start' -and $BindAddr -notin @('127.0.0.1', 'localhost', '::1')) {
-    # bare metal has no TLS at all. no nginx, no certs, php -S
-    # speaks plain HTTP and nothing else. so this is the same refusal
-    # the docker path makes, except here there is no TLS_MODE=on to
-    # offer as the way out.
-    if ($env:OMEGA_ALLOW_INSECURE_PUBLIC_HTTP -ne '1') {
-        Fail_ "refusing to serve login and chat over plain HTTP on $BindAddr."
-        Note 'bare metal has no TLS. set OMEGA_ALLOW_INSECURE_PUBLIC_HTTP=1 in .env if your'
-        Note 'network is one you trust, and know that passwords and chats cross it in the clear.'
-        exit 1
-    }
-    Warn_ 'OMEGA_ALLOW_INSECURE_PUBLIC_HTTP=1 - passwords, sessions and chats are not encrypted.'
     $LanHosts = @(Get-PrivateIPv4)
     # php's built-in server is single-worker on windows
     # (PHP_CLI_SERVER_WORKERS is a unix-only knob), so the phone and
@@ -245,6 +238,21 @@ function Test-Http([string]$url, [int]$timeoutSec = 2) {
         Invoke-WebRequest -Uri $url -UseBasicParsing -TimeoutSec $timeoutSec | Out-Null
         return $true
     } catch { return $false }
+}
+
+# PS 5.1's Invoke-WebRequest has no -SkipCertificateCheck and our
+# cert is self-signed, so it just refuses caddy. a bare handshake
+# that takes any cert answers the only question we have: is caddy
+# up on the port and doing TLS.
+function Test-Tls([string]$port) {
+    $tcp = [Net.Sockets.TcpClient]::new()
+    try {
+        if (-not $tcp.ConnectAsync('127.0.0.1', [int]$port).Wait(2000)) { return $false }
+        $ssl = [Net.Security.SslStream]::new($tcp.GetStream(), $false,
+            [Net.Security.RemoteCertificateValidationCallback] { $true })
+        $ssl.AuthenticateAsClient('localhost', $null, [Security.Authentication.SslProtocols]::Tls12, $false)
+        return $true
+    } catch { return $false } finally { $tcp.Dispose() }
 }
 
 # the draft depth in .env is a measurement, and it only describes
@@ -354,7 +362,7 @@ if ($Action -eq 'status') {
             Note ("{0,-10} not running" -f $name)
         }
     }
-    if (Test-Http $SiteUrl) {
+    if ((Test-Http $PhpUrl) -and (Test-Tls $Port)) {
         Ok "web UI     $SiteUrl"
     } else {
         Warn_ 'web UI     not responding'
@@ -520,9 +528,17 @@ if (-not (Test-Path $phpExe)) {
     if (-not $cmd) { throw 'PHP not found. Run install.ps1 first (it puts a portable PHP under runtime\php).' }
     $phpExe = $cmd.Source
 }
+$caddyExe = Join-Path $Runtime 'caddy\caddy.exe'
+if (-not (Test-Path $caddyExe)) {
+    $cmd = Get-Command caddy -ErrorAction SilentlyContinue
+    if (-not $cmd) { throw 'Caddy not found. Run install.ps1 again (it puts Caddy under runtime\caddy, it does the HTTPS).' }
+    $caddyExe = $cmd.Source
+}
 
-$old = Get-TrackedProcess $oldPids 'php'
-if ($old) { Stop-Process -Id $old.Id -Force -ErrorAction SilentlyContinue }
+foreach ($name in 'caddy', 'php') {
+    $old = Get-TrackedProcess $oldPids $name
+    if ($old) { Stop-Process -Id $old.Id -Force -ErrorAction SilentlyContinue }
+}
 
 # sanity-check php.exe before launching it hidden. a missing VC++
 # runtime kills it with NO visible error (NTSTATUS 0xC0000135 =
@@ -536,7 +552,23 @@ if ($LASTEXITCODE -ne 0) {
     throw "php.exe failed its self-check (exit code $LASTEXITCODE). Try re-running install.ps1."
 }
 
-$listenLabel = if ($BindAddr -eq '127.0.0.1') { $SiteUrl } else { "${BindAddr}:${Port}" }
+function Wait-Up([string]$name, [Diagnostics.Process]$proc, [scriptblock]$probe) {
+    $deadline = (Get-Date).AddSeconds(20)
+    while (-not (& $probe)) {
+        if ($proc.HasExited -or (Get-Date) -gt $deadline) {
+            $err = Join-Path $LogDir "$name.err.log"
+            if (Test-Path $err) {
+                Write-Host "    ${DIM}--- last lines of runtime\logs\$name.err.log ---${R}"
+                Get-Content $err -Tail 10 | ForEach-Object { Write-Host "    ${DIM}$_${R}" }
+            }
+            $why = if ($proc.HasExited) { "$name exited (code $($proc.ExitCode))" } else { 'timed out' }
+            throw "web server did not come up on ${SiteUrl}: $why"
+        }
+        Start-Sleep -Seconds 1
+    }
+}
+
+$listenLabel = if ($BindAddr -eq '127.0.0.1') { $SiteUrl } else { "https://${BindAddr}:${Port}" }
 Step "start web server on $listenLabel"
 $env:AI_PROVIDER            = $Provider
 $env:OLLAMA_URL             = $OllamaUrl
@@ -548,13 +580,20 @@ $env:SIDECAR_SECRET         = $SidecarSecret
 $env:KARAOKE_URL            = 'http://127.0.0.1:8001'
 $env:OMEGA_STATE_DIR        = $StateDir
 # php-router.php refuses any Host that isn't in here with a 421,
-# so a phone opening http://192.168.1.42:8080 needs that exact
+# so a phone opening https://192.168.1.42:8080 needs that exact
 # address listed. filled in from this machine's own private
 # addresses, plus OMEGA_EXTRA_HOSTS for what we can't guess (an
 # mDNS name, a tailscale address).
-$env:OMEGA_ALLOWED_HOSTS    = (@('127.0.0.1', 'localhost', '::1') + $LanHosts +
-    @($env:OMEGA_EXTRA_HOSTS -split '[,\s]+' | Where-Object { $_ })) -join ','
+$SiteHosts = @('localhost', '127.0.0.1', '::1') + $LanHosts +
+    @($env:OMEGA_EXTRA_HOSTS -split '[,\s]+' | Where-Object { $_ })
+$env:OMEGA_ALLOWED_HOSTS    = $SiteHosts -join ','
 $env:OMEGA_ALLOWED_ORIGINS  = $SiteUrl
+# every request reaches php from caddy, so REMOTE_ADDR is always
+# 127.0.0.1 and the rate limits would lump the phone and the
+# desktop into one bucket. caddy throws away any X-Forwarded-For
+# the client sent and writes the real address, and php only
+# listens on loopback, so here the header is safe to believe.
+$env:TRUST_PROXY            = '1'
 $libPath = (Join-Path $PSScriptRoot 'webapp\api\lib\bootstrap.php').Replace('\', '/')
 & $phpExe -r "require '$libPath'; db();"
 if ($LASTEXITCODE -ne 0) { throw 'database migration failed' }
@@ -567,26 +606,65 @@ Start-Tracked 'memory' $phpExe @((Join-Path $PSScriptRoot 'webapp\api\consolidat
 # single local user.
 $env:PHP_CLI_SERVER_WORKERS = '8'
 $phpProc = Start-Tracked 'php' $phpExe @(
-    '-S', "${BindAddr}:$Port",
+    '-S', "127.0.0.1:$PhpPort",
     '-t', (Join-Path $PSScriptRoot 'webapp'),
     (Join-Path $PSScriptRoot 'tools\php-router.php')
 )
-
 $newPids | ConvertTo-Json | Set-Content $PidFile
+Wait-Up 'php' $phpProc { Test-Http $PhpUrl }
 
-$deadline = (Get-Date).AddSeconds(20)
-while (-not (Test-Http $SiteUrl)) {
-    if ($phpProc.HasExited -or (Get-Date) -gt $deadline) {
-        $err = Join-Path $LogDir 'php.err.log'
-        if (Test-Path $err) {
-            Write-Host "    ${DIM}--- last lines of runtime\logs\php.err.log ---${R}"
-            Get-Content $err -Tail 10 | ForEach-Object { Write-Host "    ${DIM}$_${R}" }
-        }
-        $why = if ($phpProc.HasExited) { "php exited (code $($phpProc.ExitCode))" } else { 'timed out' }
-        throw "web server did not come up on ${SiteUrl}: $why"
-    }
-    Start-Sleep -Seconds 1
+# the cert names every host in the allowlist, so the phone on
+# https://192.168.1.42 gets the self-signed warning and not a
+# name mismatch on top. same host list next boot = same cert.
+# a new one is a new warning in every browser that already
+# clicked through the old one.
+$caddyDir = Join-Path $Runtime 'caddy'
+$certDir  = Join-Path $caddyDir 'tls'
+& $phpExe (Join-Path $PSScriptRoot 'tools\selfsigned-cert.php') $certDir @SiteHosts
+if ($LASTEXITCODE -ne 0) { throw 'could not make the self-signed certificate (see above)' }
+
+# admin off: the admin API would want :2019 and we never
+#   reconfigure a running caddy anyway.
+# auto_https off: we bring our own cert, and its automatic
+#   http->https redirect wants port 80.
+# http_redirect: plain http:// typed at JUN_PORT gets a 308 to
+#   https:// on the same port instead of a 400.
+# flush_interval -1: every write php makes goes straight out.
+#   the chat reply is SSE, one token at a time, and a buffered
+#   proxy hands her whole reply over at the end.
+$caddyfile = Join-Path $caddyDir 'Caddyfile'
+$certPem = (Join-Path $certDir 'fullchain.pem').Replace('\', '/')
+$keyPem  = (Join-Path $certDir 'privkey.pem').Replace('\', '/')
+[IO.File]::WriteAllText($caddyfile, @"
+{
+	admin off
+	auto_https off
+	servers {
+		listener_wrappers {
+			http_redirect
+			tls
+		}
+	}
 }
+
+https://:$Port {
+	bind $BindAddr
+	tls "$certPem" "$keyPem"
+	reverse_proxy 127.0.0.1:$PhpPort {
+		flush_interval -1
+	}
+}
+"@)
+# caddy keeps its autosave and lock files under XDG_* when set,
+# %AppData%\Caddy otherwise. inside runtime\ they go away with
+# the install. only for caddy's own launch, nothing after it
+# should inherit them.
+$env:XDG_CONFIG_HOME = $caddyDir
+$env:XDG_DATA_HOME   = $caddyDir
+$caddyProc = Start-Tracked 'caddy' $caddyExe @('run', '--config', $caddyfile, '--adapter', 'caddyfile')
+Remove-Item env:XDG_CONFIG_HOME, env:XDG_DATA_HOME -ErrorAction SilentlyContinue
+$newPids | ConvertTo-Json | Set-Content $PidFile
+Wait-Up 'caddy' $caddyProc { Test-Tls $Port }
 
 # BEFORE the ready banner, not after. on llamacpp the sweep bounces
 # llama-server six times, so she isn't usable till it finishes and
@@ -596,8 +674,9 @@ Invoke-MtpRecheck
 Write-Host ''
 Write-Host "  ${OK}▸${R} ${B}${OK}ready${R} ${DIM}-${R} open ${B}${ACCENT}${SiteUrl}${R}"
 foreach ($lan in $LanHosts) {
-    Write-Host "    ${DIM}on your phone:${R} ${ACCENT}http://${lan}:${Port}${R} ${DIM}(same wifi)${R}"
+    Write-Host "    ${DIM}on your phone:${R} ${ACCENT}https://${lan}:${Port}${R} ${DIM}(same wifi)${R}"
 }
+Note 'the certificate is self-signed, so the browser warns about it. click through, the traffic is encrypted either way'
 Note 'stop with: ./start.ps1 stop   |   logs: runtime\logs\'
 if (-not $NoBrowser) { Start-Process $SiteUrl }
 exit 0

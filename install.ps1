@@ -933,6 +933,48 @@ function Install-Php {
     }
 }
 
+# php -S can't speak TLS, so caddy sits in front of it and does
+# the HTTPS (start.ps1 writes its config). the version AND its
+# sha512 are pinned here. the checksums file lives on the same
+# github release as the zip, so reading it at install time would
+# only catch a broken download. a pinned hash catches a swapped
+# release too. bump both together.
+$CaddyVersion = '2.11.4'
+$CaddySha512  = 'cd5ccfd86a4b40732cf715890d0dca5bf3f63adefec5a7914de85adf240c60ce7e5d2791631b88ef9758e46b23bb1730e020b9c5d696889740b284ffd4788e35'
+
+function Install-Caddy {
+    $caddyDir = Join-Path (Get-Location) 'runtime\caddy'
+    $caddyExe = Join-Path $caddyDir 'caddy.exe'
+    if (Test-Path $caddyExe) {
+        $have = ''
+        try { $have = (& $caddyExe version 2>$null | Select-Object -First 1) } catch {}
+        if ("$have" -match ('^v' + [regex]::Escape($CaddyVersion) + '\b')) { return }
+    }
+
+    Step "download Caddy $CaddyVersion (the HTTPS in front of PHP)"
+    $tmpDir = Join-Path $env:TEMP ('jun-caddy-' + [guid]::NewGuid().ToString('N'))
+    New-Item -ItemType Directory -Force -Path $tmpDir | Out-Null
+    try {
+        $zip = Join-Path $tmpDir 'caddy.zip'
+        $url = "https://github.com/caddyserver/caddy/releases/download/v$CaddyVersion/caddy_${CaddyVersion}_windows_amd64.zip"
+        Invoke-WebRequest -Uri $url -OutFile $zip -UseBasicParsing
+        $got = (Get-FileHash -Algorithm SHA512 -LiteralPath $zip).Hash
+        if ($got -ine $CaddySha512) {
+            throw "Caddy download doesn't match the pinned sha512 (wanted $CaddySha512, got $got)."
+        }
+        Ok 'Caddy zip matches the pinned sha512'
+        Add-Type -AssemblyName System.IO.Compression.FileSystem
+        [IO.Compression.ZipFile]::ExtractToDirectory($zip, (Join-Path $tmpDir 'x'))
+        $unpacked = Join-Path $tmpDir 'x\caddy.exe'
+        if (-not (Test-Path $unpacked)) { throw 'The verified Caddy archive did not contain caddy.exe.' }
+        New-Item -ItemType Directory -Force -Path $caddyDir | Out-Null
+        [IO.File]::Copy($unpacked, $caddyExe, $true)
+    } finally {
+        Remove-Item -LiteralPath $tmpDir -Recurse -Force -ErrorAction SilentlyContinue
+    }
+    Ok 'Caddy ready'
+}
+
 function Install-Tts([string]$Karaoke = 'off') {
     $venv = Join-Path (Get-Location) 'runtime\tts-venv'
     $py = Join-Path $venv 'Scripts\python.exe'
@@ -1165,6 +1207,7 @@ if ($cfg.needsOllama) { Assert-OnPath ollama }
 if ($cfg.needsLlamacpp) { Assert-OnPath llama-server }
 
 Install-Php
+Install-Caddy
 if ($voice -eq 'on') { Install-Tts $cfg.karaoke }
 
 Step 'asset policy'
@@ -1206,7 +1249,7 @@ if ($extract) {
 Write-Host ''
 Step 'install summary'
 $loc = Get-Location
-Note "in this folder (${loc}): webapp, PHP, TTS venv, models, chat data"
+Note "in this folder (${loc}): webapp, PHP, Caddy, TTS venv, models, chat data"
 $machineWide = 'git'
 if ($cfg.needsOllama) { $machineWide += ', Ollama' }
 if ($cfg.needsLlamacpp) { $machineWide += ', llama.cpp' }

@@ -51,10 +51,14 @@ how to report something you find.
   nginx publishes a port, and everything else talks over the internal `omega`
   network.
 * *Something else on that network talking to the sidecars.* Every voice/karaoke
-  request except `/health` needs the `X-Sidecar-Secret` header (`SIDECAR_SECRET`,
-  minted into `.env` by the launchers), a `Host` from `SIDECAR_ALLOWED_HOSTS`,
-  no `Origin`/`Sec-Fetch-Site` header at all (browsers never talk to it, PHP
-  does), and the right content type - all checked before a body is read.
+  request except `/health` needs a `Host` from `SIDECAR_ALLOWED_HOSTS`, no
+  `Origin`/`Sec-Fetch-Site` header at all (browsers never talk to it, PHP
+  does), and the right content type, and - while `SIDECAR_SECRET` is set,
+  which the launchers mint into `.env` - the matching `X-Sidecar-Secret`
+  header. All of it is checked before a body is read. `SIDECAR_SECRET=`
+  (empty) switches the secret check off on purpose and leaves only the
+  `Host` and browser-header checks; the sidecar logs a warning at startup
+  when it runs that way.
 
 **What it does not defend against**
 
@@ -232,10 +236,12 @@ If you put her on the internet:
 * `BIND_ADDR=0.0.0.0` is deliberate, and it should be the last thing you change,
   not the first.
 * Do not expose an install that has the original game assets in it. You risk legal action.
-* Use `TLS_MODE=on` with the `prod` profile. Serving accounts and chat logs over
-  plain http on a network you don't own is not worth it. Startup refuses a
-  public bind without TLS unless `OMEGA_ALLOW_INSECURE_PUBLIC_HTTP=1` explicitly
-  accepts that risk.
+* Use `TLS_MODE=on` with the `prod` profile. The default is HTTPS on a
+  self-signed certificate (nginx on Docker, Caddy in front of `php -S` on
+  Windows), and plain http only ever redirects to it. That keeps the traffic
+  encrypted, but the browser has no way to tell your box from someone sitting
+  between it and you, so a click-through warning is fine on your own network
+  and not on one you don't own.
 * Set `TRUST_PROXY=1` only when a proxy you control sets
   `X-Forwarded-For`. The last entry in that header is used (the one your proxy
   appended). Without that, rate limiting counts every request as coming from the

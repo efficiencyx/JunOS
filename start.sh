@@ -177,7 +177,7 @@ if [ -f .env ] && ! grep -qE '^SIDECAR_SECRET=' .env; then
 fi
 
 # nginx and php both refuse a Host they don't know (444 and 421),
-# so opening the phone at http://192.168.1.42 needs that exact
+# so opening the phone at https://192.168.1.42 needs that exact
 # address in the allowlist. the containers can't work it out
 # themselves, all they see is the docker bridge, so we read the
 # host's own private v4 addresses here and hand them down. only
@@ -205,27 +205,14 @@ case "$bind_addr" in
     # "jun.local,".
     extra_hosts="$(printf '%s %s' "$extra_hosts" "$detected" | tr ',' ' ' | tr -s ' ' | sed 's/^ //; s/ $//')"
     export OMEGA_EXTRA_HOSTS="$extra_hosts"
-    [ -z "$detected" ] || echo "reachable as: $(printf '%s' "$detected" | sed 's/ $//')"
+    [ -z "$detected" ] || echo "reachable as: $(printf '%s' "$detected" | sed 's/ $//; s/[^ ]*/https:\/\/&/g')"
     ;;
 esac
 
 tls_mode="${TLS_MODE:-$(env_get TLS_MODE)}"
 tls_mode_normalized="$(printf '%s' "${tls_mode:-off}" | tr '[:upper:]' '[:lower:]')"
 case "$tls_mode_normalized" in
-  off|"")
-    case "$bind_addr" in
-      127.0.0.1|127.*|localhost|::1) ;;
-      *)
-        allow_insecure="${OMEGA_ALLOW_INSECURE_PUBLIC_HTTP:-$(env_get OMEGA_ALLOW_INSECURE_PUBLIC_HTTP)}"
-        if [ "$allow_insecure" != 1 ]; then
-          echo "error: refusing to expose login and chat over plain HTTP on $bind_addr." >&2
-          echo "       Set TLS_MODE=on, or explicitly set OMEGA_ALLOW_INSECURE_PUBLIC_HTTP=1." >&2
-          exit 1
-        fi
-        echo "warning: OMEGA_ALLOW_INSECURE_PUBLIC_HTTP=1 - credentials and sessions are not encrypted." >&2
-        ;;
-    esac
-    ;;
+  off|"") ;;
   *) case "$bind_addr" in
        127.0.0.1|localhost|::1)
          echo "note: TLS_MODE=$tls_mode but we only listen on $bind_addr, so Let's Encrypt can't reach the challenge. set BIND_ADDR=0.0.0.0 in .env." ;;

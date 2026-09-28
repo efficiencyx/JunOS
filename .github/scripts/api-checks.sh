@@ -12,6 +12,8 @@ set -eu
 
 BASE=${1:?usage: api-checks.sh BASE_URL}
 ORIGIN=$BASE
+# every curl here takes -k. the stack answers on https with the
+# self-signed cert, and there's nothing to verify it against.
 work=${work:-$(mktemp -d)}
 cookies="$work/cookies.txt"
 rm -f "$cookies"
@@ -32,7 +34,7 @@ check() {
 	# curl already prints 000 through -w when it cannot connect, so
 	# no || fallback here, that would concatenate onto the code it
 	# just printed.
-	got=$(curl -sS -o "$work/body" -w '%{http_code}' "$@" || true)
+	got=$(curl -sSk -o "$work/body" -w '%{http_code}' "$@" || true)
 	if [ "$got" = "$want" ]; then
 		pass "$name ($got)"
 	else
@@ -55,7 +57,7 @@ body_has() {
 refused() {
 	name=$1
 	shift
-	got=$(curl -sS -o /dev/null -w '%{http_code}' "$@" || true)
+	got=$(curl -sSk -o /dev/null -w '%{http_code}' "$@" || true)
 	case $got in
 	2*) fail "$name: served it ($got)" ;;
 	*)  pass "$name ($got)" ;;
@@ -92,7 +94,7 @@ refused 'uppercase alias of a migration'    --path-as-is "$BASE/API/migrations/0
 check 'asset without a session'          401 "$BASE/assets/texture_00.png"
 
 echo "headers"
-curl -sS -D "$work/head" -o /dev/null "$BASE/" || true
+curl -sSk -D "$work/head" -o /dev/null "$BASE/" || true
 for h in 'X-Content-Type-Options: nosniff' 'X-Frame-Options: DENY' 'Content-Security-Policy:' 'Referrer-Policy:' 'Permissions-Policy:'; do
 	if grep -qi "^$h" "$work/head"; then pass "$h"; else fail "missing header: $h"; fi
 done

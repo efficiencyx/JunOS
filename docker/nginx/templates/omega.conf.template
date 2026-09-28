@@ -1,4 +1,5 @@
-# HTTP + self-signed HTTPS, for TLS_MODE=off (the default).
+# self-signed HTTPS, for TLS_MODE=off (the default). :80 only
+# redirects to it.
 # Expanded by nginx envsubst at container boot.
 
 limit_req_zone  $binary_remote_addr zone=api:10m   rate=10r/s;
@@ -28,8 +29,27 @@ server {
     return 444;
 }
 
+# same names as the HTTPS server below, so an unknown Host still
+# gets the 444 before it gets a redirect. /health stays on plain
+# HTTP because the container healthcheck curls
+# http://127.0.0.1/health and a 301 fails curl -f.
 server {
     listen 80;
+    server_name ${DOMAIN} localhost 127.0.0.1 ${OMEGA_EXTRA_HOSTS};
+
+    server_tokens off;
+
+    location = /health {
+        default_type text/plain;
+        return 200 "ok";
+    }
+
+    location / {
+        return 301 https://$host$request_uri;
+    }
+}
+
+server {
     listen 443 ssl;
     http2  on;
     # OMEGA_EXTRA_HOSTS is the LAN case. Reaching Jun from a phone
@@ -144,8 +164,8 @@ server {
         client_max_body_size 30m;
         # Demucs on CPU runs slower than realtime and whisper then reads
         # the vocal stem back, so a full-length song can sit well past
-        # five minutes. Keep in step with CURLOPT_TIMEOUT in
-        # api/karaoke.php.
+        # five minutes. Keep in step with the 900 that api/karaoke.php
+        # passes to sidecar_call() for /separate.
         fastcgi_read_timeout 900s;
 
         gzip off;
