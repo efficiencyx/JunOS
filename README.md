@@ -1,6 +1,8 @@
 <div align="center">
 
-<img src="docs/screenshots/hero.svg" alt="Jun OS" width="1024">
+<img src="docs/screenshots/hero.svg" alt="Jun OS - MDRG AI companion for Factorial Omega: My Dystopian Robot Girlfriend" width="1024">
+
+<h1>Jun OS - AI Companion for MDRG (Factorial Omega)</h1>
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 ![PHP](https://img.shields.io/badge/PHP-8.2-777BB4?logo=php&logoColor=white)
@@ -18,7 +20,7 @@
 ---
 ## So what is this?
 
-**Jun OS** is a simple orchestration system that brings **Jun** from *!Ω Factorial Omega: My Dystopian Robot Girlfriend* to life.
+**Jun OS** is an unofficial, self-hosted **MDRG AI companion**: a simple orchestration system that brings **Jun** from *!Ω Factorial Omega: My Dystopian Robot Girlfriend* (MDRG) to life.
 
 She can **talk, sing, express emotions, animate, remember things, have dinner with you, and actually take part in your relationship**.
 
@@ -49,9 +51,9 @@ Basically, an AI wrapper with 50 other systems working together to make her feel
 <details>
 <summary>Images</summary>
 
-| <img src="docs/screenshots/chat.png" alt="Chat Interface" width="512"> | <img src="docs/screenshots/wardrobe.png" alt="Chat Interface" width="512"> |
+| <img src="docs/screenshots/chat.png" alt="Jun chatting in Jun OS, the MDRG AI companion" width="512"> | <img src="docs/screenshots/wardrobe.png" alt="Jun OS wardrobe: dress up Jun from Factorial Omega" width="512"> |
 |:---:|:---:|
-| <img src="docs/screenshots/welcomeback.png" alt="Welcomeback Reaction" width="512"> | <img src="docs/screenshots/voicemode.png" alt="Voice Mode" width="512"> |
+| <img src="docs/screenshots/welcomeback.png" alt="Jun welcome-back reaction" width="512"> | <img src="docs/screenshots/voicemode.png" alt="Jun OS hands-free voice mode" width="512"> |
 
 </details>
 <details>
@@ -426,7 +428,7 @@ The model-server and voice containers are profile-gated. `./start.sh` derives `C
 
 [PIXI.js](https://pixijs.com/) · [pixi-live2d-display](https://github.com/guansss/pixi-live2d-display) · [Live2D Cubism SDK](https://www.live2d.com/en/sdk/about/) · [Ollama](https://ollama.com/) · [llama.cpp](https://github.com/ggml-org/llama.cpp) · [Kokoro-82M](https://huggingface.co/hexgrad/Kokoro-82M) · [pocket-tts](https://github.com/kyutai-labs/pocket-tts) · [faster-whisper](https://github.com/SYSTRAN/faster-whisper) · [demucs](https://github.com/adefossez/demucs) · [marked](https://github.com/markedjs/marked) + [DOMPurify](https://github.com/cure53/DOMPurify)
 
-And of course [**Incontinent Cell**](https://itch.io/profile/incontinentcell), for giving us Jun in the first place.
+And of course [**Incontinent Cell**](https://itch.io/profile/incontinentcell), creator of *Factorial Omega* (MDRG), for giving us Jun in the first place.
 
 ## License
 
