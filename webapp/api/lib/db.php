@@ -81,3 +81,14 @@ function conversation_owned(int $convId, int $userId): bool {
 function no_users_yet(): bool {
     return db()->query('SELECT id FROM users LIMIT 1')->fetchColumn() === false;
 }
+
+// the first account skips the registration key, but only while
+// BIND_ADDR is loopback. off loopback the first signup needs the
+// key too, or whoever finds the LAN address before the owner does
+// gets the box. TRUST_PROXY can't be part of this, start.ps1 sets
+// it for its own caddy on every Windows install.
+function first_signup_keyless(): bool {
+    $bind = env_str('BIND_ADDR', '127.0.0.1');
+    $local = $bind === 'localhost' || $bind === '::1' || str_starts_with($bind, '127.');
+    return $local && no_users_yet();
+}

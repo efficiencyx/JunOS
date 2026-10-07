@@ -78,7 +78,9 @@ for css in sorted(WEBAPP.rglob("*.css")):
         continue
     text = re.sub(r"/\*.*?\*/", "", css.read_text(encoding="utf-8"), flags=re.S)
     for ref in CSS_REF.findall(text):
-        if ref.startswith("#"):
+        # %23 is an encoded #, a fragment inside a data: svg
+        # (filter='url(%23n)'), not a file
+        if ref.startswith(("#", "%23")):
             continue
         check(css, ref)
 

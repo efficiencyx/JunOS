@@ -107,7 +107,7 @@ What happens now, in order. It can take anywhere from 2 to 30 minutes depending 
 When everything is ready the installer starts her and your browser opens on **<https://127.0.0.1:8080>**. If it doesn't, type that address into your browser. The browser will warn you that the connection isn't private: the certificate is one your install made for itself, so nobody vouches for it. Click **Advanced** and **Proceed** (Firefox: **Accept the Risk and Continue**). The connection is encrypted either way.
 
 Near the end the terminal prints a line like `registration  a1b2c3...`. That is the **registration key**.
-Your first account doesn't need it, but every account after that does.
+Your first account doesn't need it (as long as she only listens on this machine, which is the default), but every account after that does.
 It's also saved in the `JunOS\.env` file if you lose it.
 
 ### Step 7 - Create your account and say hi
@@ -196,7 +196,7 @@ In order. Budget 5 to 40 minutes on the first run, most of it downloads:
 
 1. **Missing tools.** If git or Docker are missing it asks `install ... with apt-get?` (or dnf, pacman, zypper, whatever your distro uses). Answer **y**. It will ask for your password, that's `sudo`, type it and press Enter (nothing appears while you type a password, that's normal).
    * On **Bazzite** and other immutable systems it layers the packages and then tells you to **reboot and run the one-liner again**. Do that.
-   * When Docker was just installed it asks `add <you> to the docker group?`. **y** means you can run her without typing `sudo` every time. **N** is the safer choice, it keeps Docker behind a password; then every command in this page that touches her needs `sudo` in front (`sudo ./start.sh`). Pick what you're more comfortable with. we suggest NOT adding the group since it's less secure.
+   * When Docker was just installed it asks `add <you> to the docker group?`. **y** means you can run her without typing `sudo` every time. **N** is the safer choice, it keeps Docker behind a password; then every command in this page that touches her needs `sudo` in front (`sudo ./start.sh`). Pick what you're more comfortable with. we suggest NOT adding the group since it's less secure. **Express** adds you without asking. An unattended install (`JUN_YES=1`) leaves you out of the group unless you also set `JUN_DOCKER_GROUP=1`.
 2. **The code** is downloaded into `JunOS` folder.
 3. **Her body** is rebuilt from your game. If the game isn't found in the usual locations for games it asks you to paste the game folder (or you can just drag the folder from your file manager onto the terminal). Press Enter on an empty line to skip; placeholders are used until you redo it.
 4. **The containers** are built and started. The first time builds a few images, and can take a while.
@@ -208,7 +208,7 @@ If the installer ends with **"Docker isn't reachable yet"**: log out and back in
 
 Open your browser at **<https://localhost>**.
 
-The terminal printed a `registration  ...` line just above the `ready` line. That's the **registration key**. The first account doesn't require it, but every other account needs it. It's also in `JunOS/.env`.
+The terminal printed a `registration  ...` line just above the `ready` line. That's the **registration key**. The first account doesn't require it while she only listens on this machine, but every other account needs it. If you switched on access from your network (`BIND_ADDR=0.0.0.0`) before creating your account, the first one needs it too. It's also in `JunOS/.env`.
 
 ### Step 8 - Create your account and say hi
 
@@ -229,7 +229,7 @@ Every start prints which card she landed on, like `ollama is running on: NVIDIA 
 
 ### Uninstalling on Linux
 
-From the folder above `JunOS`, run `./JunOS/uninstall.sh` (with `sudo` in front if you said no to the docker group). It asks before every step: whether to delete the Docker volumes (every account, every chat, the downloaded model; your accounts, chats and memory notes are saved to `~/jun-backup-<date>.tar.gz` first, the model is not), whether to remove the Docker images, and finally the `JunOS` folder itself. Nothing is deleted without a yes. Say no to the volumes and a reinstall picks your chats and the model back up. The long version: [Uninstall](4-Uninstall).
+From the folder above `JunOS`, run `./JunOS/uninstall.sh` (with `sudo` in front if you said no to the docker group). It asks before every step: whether to delete the Docker volumes (every account, every chat, the downloaded model; your accounts, chats and memory notes are saved to `~/jun-backup-<date>.tar.gz` first, the model is not), whether to remove the Docker images, whether to undo what the installer changed on your system (taking you back out of the docker group if it added you, and the port setting it changes for rootless Docker), and finally the `JunOS` folder itself. Nothing is deleted without a yes. Say no to the volumes and a reinstall picks your chats and the model back up. The long version: [Uninstall](4-Uninstall).
 
 ---
 
@@ -433,7 +433,7 @@ Run the same one-liner from Step 3 / Step 4 again. It finds the existing install
 | `ollama ps` shows `45% GPU` or similar | The model is too big for the card | Pick a smaller row from the model table or cope with slow generation. |
 | Her body is not here! | Assets weren't extracted | ["Installing" her body later](#installing-her-body-later) |
 | The page loads, the first reply takes forever | Model still downloading or warming up | `./JunOS/start.sh logs ollama` on Linux, `JunOS\runtime\logs\ollama.err.log` on Windows. Wait for it to finish once |
-| **signup** asks for a key | You're not the first account on this install | The key is in `.env` as `OMEGA_REGISTRATION_KEY`. Empty the value to open signup to anyone on your network |
+| **signup** asks for a key | You're not the first account on this install, or she listens on your network (`BIND_ADDR`) and then even the first account needs it | The key is in `.env` as `OMEGA_REGISTRATION_KEY`. Empty the value to open signup to anyone on your network |
 | Port 80 or 443 already in use (Linux) | Another web server on the box | Stop it. Port 80 only redirects to 443, so moving just one of them breaks the redirect |
 
 Still stuck? Grab the last 50 lines of the logs and open an issue. Say which OS, which card, and answer the questions the Issue Template asks you about.

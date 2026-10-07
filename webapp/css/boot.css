@@ -534,6 +534,17 @@ html[data-pre-auth] #app { visibility: hidden; }
 .auth-submit::before { content: "➜ "; }
 .auth-submit:hover:not(:disabled) { background: var(--term-accent); color: var(--term-bg); }
 .auth-submit:disabled { opacity: .55; cursor: default; }
+.auth-link {
+  align-self: center;
+  padding: 2px 4px;
+  font-family: inherit; font-size: 12.5px; font-weight: 400;
+  color: var(--term-dim);
+  background: none; border: 0;
+  text-decoration: underline; text-underline-offset: 3px;
+  cursor: pointer;
+}
+.auth-link:hover { color: var(--term-accent); }
+.auth-link:focus-visible { outline: 1px solid var(--term-accent); outline-offset: 2px; }
 
 
 :is(.auth-term, .boot-term)[data-os="mac"] {

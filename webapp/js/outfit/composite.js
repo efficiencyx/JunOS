@@ -1,6 +1,6 @@
-import * as Live2D from '../live2d/live2d.js?v=4';
+import * as Live2D from '../live2d/live2d.js?v=76';
 import { GLASSES_STYLES, VARIANTS } from './catalog.js?v=1';
-import { availableAssets, textureAvailable } from './sync.js?v=3';
+import { availableAssets, textureAvailable } from './sync.js?v=6';
 import { colors, variantState } from './current.js?v=1';
 import { hexToRgb01 } from './colors.js?v=1';
 

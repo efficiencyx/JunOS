@@ -19,27 +19,6 @@ body.privacy-page {
   padding: 88px var(--space-5) 96px;
 }
 
-.privacy-back {
-  position: fixed;
-  top: calc(18px + env(safe-area-inset-top, 0px));
-  left: calc(18px + env(safe-area-inset-left, 0px));
-  z-index: 60;
-  display: inline-flex;
-  align-items: center;
-  gap: 7px;
-  padding: 8px 14px 8px 11px;
-  border: 1px solid var(--border);
-  border-radius: var(--radius-pill);
-  background: color-mix(in srgb, var(--bg-2) 88%, transparent);
-  backdrop-filter: blur(10px);
-  -webkit-backdrop-filter: blur(10px);
-  color: var(--muted);
-  font-size: 13px;
-  text-decoration: none;
-  transition: color .15s, background .15s, border-color .15s;
-}
-.privacy-back:hover { color: var(--fg); background: var(--bg-3); border-color: var(--border-2); }
-
 .privacy-hero { margin-bottom: var(--space-6); }
 
 .privacy-eyebrow {

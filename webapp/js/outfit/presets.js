@@ -1,9 +1,9 @@
 import { api, apiJson } from '../core/api.js?v=1';
 import { COLOR_GROUPS, ITEMS, VARIANTS, VARIANT_OWNER } from './catalog.js?v=1';
-import { activeAssets, authorizedAssets, queueWardrobe, saveColors } from './sync.js?v=3';
-import { applyColors, applyItems, applyVariants, itemDrawableIds } from './apply.js?v=3';
+import { activeAssets, authorizedAssets, queueWardrobe, saveColors } from './sync.js?v=6';
+import { applyColors, applyItems, applyVariants, itemDrawableIds } from './apply.js?v=6';
 import { colors, state, variantState } from './current.js?v=1';
-import * as Mods from '../mods/mods.js?v=3';
+import * as Mods from '../mods/mods.js?v=77';
 import { hooks } from './hooks.js?v=1';
 
 export function exportPreset() {
@@ -162,11 +162,19 @@ export function applyPreset(preset) {
   clearTimeout(previewTimer);
   previewVersion++;
   const clean = canonicalPreset(preset);
+  // a click always lands on a row the hover already previewed, so
+  // state is ALREADY the look. diff against that and nothing moved,
+  // no PUT, and the next page loads the old outfit off the server.
+  // so state goes back to what she had on first (the rig keeps
+  // showing the preview, no flash) and whatever the preview moved
+  // gets redrawn once the real look is in.
+  const previewed = previewBase ? loadPresetState(previewBase) : null;
   previewBase = null;
   const wardrobeChanged = ITEMS.some(it => state[it.key] !== clean.items[it.key])
     || VARIANTS.some(v => variantState[v.key] !== clean.variants[v.key]);
   const applyPresetColors = () => {
     for (const g of COLOR_GROUPS) colors[g.key] = clean.colors[g.key];
+    applyChanged(previewed);
     saveColors();
     applyColors();
   };

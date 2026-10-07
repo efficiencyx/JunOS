@@ -242,6 +242,8 @@
 .msg-rate button:hover:not(:disabled) { opacity: 1; border-color: var(--accent); }
 .msg-rate button.selected { opacity: 1; border-color: var(--accent); }
 .msg-rate button:disabled { cursor: default; }
+.msg-rate button svg { display: block; }
+.msg-spoken-icon { vertical-align: -2px; margin-right: 6px; }
 .msg-think {
   margin: 0 0 8px;
   border-left: 2px solid var(--border-2);

@@ -3,11 +3,11 @@
 // builds a second copy of the module graph, and the two copies
 // don't share state.
 
-import { resetIdle, renderIfDirty, setFidgetsEnabled, setMood, setMouthOverride, startIdle, stopIdle, tick } from './anim.js?v=3';
+import { resetIdle, renderIfDirty, setFidgetsEnabled, setMood, setMouthOverride, startIdle, stopIdle, tick } from './anim.js?v=75';
 import { bakeThumb } from './bake.js?v=1';
-import { cameraStates, captureCameraState, currentCameraMode, fitModel, loadPos, measureStage, rendererResolution, setCameraPreset, watchStageSize, writeCameraStates } from './camera.js?v=12';
+import { cameraStates, captureCameraState, currentCameraMode, fitModel, loadPos, measureStage, rendererResolution, setCameraPreset, watchStageSize, writeCameraStates } from './camera.js?v=13';
 import { drawableAt, faceAnchor, findDrawables, hitTest, isOverModel } from './geometry.js?v=12';
-import { installStageInput } from './input.js?v=1';
+import { installStageInput } from './input.js?v=2';
 import { cancelPending, debugParam, knows, scheduleSequence, setNow, setOnMissingParam, setTarget, startLoop, stopAllLoops, stopLoop } from './params.js?v=1';
 import { installColorShaderPatch, patchRenderer } from './renderer.js?v=1';
 import { S, app, currentValues, model, paramDefault, paramIndex, paramMax, paramMin, publicTint, raw, setApp, setModel, setParamRanges, setRaw } from './state.js?v=11';

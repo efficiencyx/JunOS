@@ -1,5 +1,5 @@
 import { daypart, moodFactors, moodTier } from '../core/mood-tier.js?v=2';
-import { cameraTween } from './camera.js?v=12';
+import { cameraTween } from './camera.js?v=13';
 import { clampParam, scheduleSequence, startLoop, stopLoop } from './params.js?v=1';
 import { LERP_TAU_MS, S, app, currentValues, forcedPartOpacity, loops, markDirty, model, paramDefault, paramIndex, paramMax, paramMin, pendingSequences, raw, targetParams } from './state.js?v=11';
 
@@ -380,6 +380,56 @@ function driveTail(ps, now) {
   }
 }
 
+// same missing physics3.json story for the hair. the three
+// ParamHairPhysics* params are sway OUTPUTS (base to tip, -1..1,
+// +1 swings right) and nothing wrote them, so a head roll swung
+// the ponytail round the neck like a plank. the tip went the
+// opposite way to the knot.
+// a spring chain fixes it. segment 0 chases HAIR_HANG * sway (head
+// roll + a bit of turn + body lean), each one after chases the one
+// above it, softer, so the tip
+// trails. 0.5 makes the ponytail tip hang right under the knot,
+// measured off the moc in node, source: trust me bro.
+// stiffness/damping give one overshoot and it's still in ~1.8s.
+const HAIR_CHAIN = [
+  { id: 'ParamHairPhysicsBaseToShort', k: 110, zeta: 0.45 },
+  { id: 'ParamHairPhysicsShortToMid', k: 75, zeta: 0.4 },
+  { id: 'ParamHairPhysicsMidToLong', k: 50, zeta: 0.35 },
+];
+const HAIR_HANG = 0.5;
+const HAIR_STEP_S = 1 / 120;
+const hairPos = [0, 0, 0];
+const hairVel = [0, 0, 0];
+let hairMoving = false;
+
+function liveValue(ps, id) {
+  const idx = paramIndex.get(id);
+  return idx === undefined ? 0 : ps.values[idx];
+}
+
+function driveHair(ps, dtMs) {
+  const sway = liveValue(ps, 'ParamHeadZ') + 0.3 * liveValue(ps, 'ParamHeadX')
+    + liveValue(ps, 'ParamBodyZ');
+  // fixed substeps, a 33ms frame at 30fps idle blows up a k=110
+  // spring with plain euler
+  const steps = Math.ceil(Math.min(100, dtMs) / 1000 / HAIR_STEP_S);
+  for (let n = 0; n < steps; n++) {
+    for (let i = 0; i < HAIR_CHAIN.length; i++) {
+      const { k, zeta } = HAIR_CHAIN[i];
+      const goal = i ? hairPos[i - 1] : HAIR_HANG * sway;
+      hairVel[i] += (k * (goal - hairPos[i]) - 2 * zeta * Math.sqrt(k) * hairVel[i]) * HAIR_STEP_S;
+      hairPos[i] += hairVel[i] * HAIR_STEP_S;
+    }
+  }
+  hairMoving = false;
+  for (let i = 0; i < HAIR_CHAIN.length; i++) {
+    const idx = paramIndex.get(HAIR_CHAIN[i].id);
+    if (idx !== undefined) ps.values[idx] = clampParam(HAIR_CHAIN[i].id, hairPos[i]);
+    const goal = i ? hairPos[i - 1] : HAIR_HANG * sway;
+    if (Math.abs(hairVel[i]) > 0.005 || Math.abs(goal - hairPos[i]) > 0.002) hairMoving = true;
+  }
+}
+
 export function tick() {
   if (!raw) return;
   const now = performance.now();
@@ -425,6 +475,7 @@ export function tick() {
   }
 
   driveTail(ps, now);
+  driveHair(ps, dt);
 
   if (forcedPartOpacity.size && raw.parts && raw.parts.opacities) {
     for (const [id, op] of forcedPartOpacity) {
@@ -467,7 +518,8 @@ export function tick() {
   }
 
   animating = settling || loops.size > 0 || blinkPhase !== null
-    || pendingSequences.length > 0 || mouthOverride != null || cameraTween !== null;
+    || pendingSequences.length > 0 || mouthOverride != null || cameraTween !== null
+    || hairMoving;
   app.ticker.maxFPS = animating ? ACTIVE_FPS : IDLE_FPS;
   tickDeltaMs = dt;
 }

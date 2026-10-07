@@ -1,26 +1,35 @@
-import { armIdleAfterReply, cancelActiveIdleNudge, cancelAutoReset, cancelIdleNudge, composerPlaceholder, consolidating, fleeActive, reportActivity, resetIdleNudge, scheduleAutoReset, setCancelActiveIdleNudge, setConsolidating, showConsolidatingBubble, startFleeLock, syncConsolidationStatus } from './consolidation.js?v=19';
+import { armIdleAfterReply, cancelActiveIdleNudge, cancelAutoReset, cancelIdleNudge, composerPlaceholder, consolidating, fleeActive, reportActivity, resetIdleNudge, scheduleAutoReset, setCancelActiveIdleNudge, setConsolidating, showConsolidatingBubble, startFleeLock, syncConsolidationStatus } from './consolidation.js?v=77';
 import { chatInput, debugSystemPromptEl, messagesEl, modelSelect, reasoningSelect, sendBtn, sendButtonIdleMarkup, sendButtonStopMarkup, thinkChk } from './dom.js?v=11';
-import { announceMobileReply, hideFaceBubble, scheduleFaceBubbleHide, setLatestAssistantReply, showFaceBubble } from './face-bubble.js?v=18';
+import { announceMobileReply, hideFaceBubble, scheduleFaceBubbleHide, setLatestAssistantReply, showFaceBubble } from './face-bubble.js?v=76';
 import { appendRaw, logToolStatus } from './logging.js?v=11';
-import { loadMood } from './mood.js?v=18';
-import { refreshSidebar } from './sidebar.js?v=19';
-import { makeNameFilter, makeStreamBuffer } from './stream-filters.js?v=18';
+import { loadMood } from './mood.js?v=76';
+import { refreshSidebar } from './sidebar.js?v=77';
+import { makeNameFilter, makeStreamBuffer } from './stream-filters.js?v=77';
 import { localTimeString, phoneMode } from '../core/util.js?v=1';
 import * as Names from '../core/names.js?v=1';
 import * as ui from '../core/ui.js?v=1';
 import * as ChatAPI from '../core/chat-api.js?v=2';
-import * as Mods from '../mods/mods.js?v=3';
-import * as Outfit from '../outfit/outfit.js?v=3';
-import * as Cards from './cards.js?v=2';
+import * as Mods from '../mods/mods.js?v=77';
+import * as Outfit from '../outfit/outfit.js?v=76';
+import * as Cards from './cards.js?v=11';
 import * as History from './history.js?v=1';
-import * as TTS from '../voice/tts.js?v=2';
-import * as Voice from '../voice/voice.js?v=2';
-import * as VoiceMode from '../voice/voicemode.js?v=2';
+import * as TTS from '../voice/tts.js?v=77';
+import * as Voice from '../voice/voice.js?v=77';
+import * as VoiceMode from '../voice/voicemode.js?v=76';
 import { DevHud, abortFn, currentConversationId, messages, setAbortFn, setRenderVoiceDraft, setStopActiveStream, stopActiveStream } from './session.js?v=1';
-import { appendMsg, renderMarkdown, updateEmptyState } from './messages.js?v=1';
+import { appendMsg, renderMarkdown, updateEmptyState } from './messages.js?v=3';
+
+const THUMBS_UP_ICON = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M14 9V5a3 3 0 0 0-3-3l-4 9v11h11.28a2 2 0 0 0 2-1.7l1.38-9a2 2 0 0 0-2-2.3zM7 22H4a2 2 0 0 1-2-2v-7a2 2 0 0 1 2-2h3"/></svg>';
+const THUMBS_DOWN_ICON = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M10 15v4a3 3 0 0 0 3 3l4-9V2H5.72a2 2 0 0 0-2 1.7l-1.38 9a2 2 0 0 0 2 2.3zm7-13h2.67A2.31 2.31 0 0 1 22 4v7a2.31 2.31 0 0 1-2.33 2H17"/></svg>';
+const SPOKEN_ICON = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" class="msg-spoken-icon"><path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/><line x1="12" y1="19" x2="12" y2="23"/><line x1="8" y1="23" x2="16" y2="23"/></svg>';
 
 let chatGeneration = 0;
 let activeBubbleStream = null;
+
+function setSpokenText(bubble, text) {
+  bubble.innerHTML = SPOKEN_ICON;
+  bubble.append(text);
+}
 
 function addRatingControls(message) {
   document.querySelectorAll('.msg-rate button').forEach(button => { button.disabled = true; });
@@ -29,8 +38,8 @@ function addRatingControls(message) {
   const up = document.createElement('button');
   const down = document.createElement('button');
   up.type = down.type = 'button';
-  up.textContent = '👍';
-  down.textContent = '👎';
+  up.innerHTML = THUMBS_UP_ICON;
+  down.innerHTML = THUMBS_DOWN_ICON;
   up.setAttribute('aria-label', 'Rate this reply positively');
   down.setAttribute('aria-label', 'Rate this reply negatively');
   rate.append(up, down);
@@ -144,7 +153,8 @@ export function sendAudioFromVoice(b64, onUnsupported) {
   if (stopActiveStream) stopActiveStream();
   resetIdleNudge();
   reportActivity();
-  const bubble = appendMsg('user', '🎤 spoken message');
+  const bubble = appendMsg('user', '');
+  setSpokenText(bubble, 'spoken message');
   const entry = { role: 'user', content: '<audio>' };
   const convId = currentConversationId;
   messages.push(entry);
@@ -161,7 +171,7 @@ export function sendAudioFromVoice(b64, onUnsupported) {
     setTranscript(text) {
       if (!messages.includes(entry)) return;
       entry.content = text;
-      bubble.textContent = '🎤 ' + text;
+      setSpokenText(bubble, text);
       if (convId == null) return;
       // chat.php inserts the <audio> row before it starts
       // streaming, and whisper on CPU is almost always slower than

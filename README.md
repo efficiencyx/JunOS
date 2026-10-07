@@ -134,7 +134,7 @@ Exactly one question: **Express** or **Custom**.
 - **Express** - press Enter and forget about it. It figures out your hardware on its own and rebuilds her Live2D model from your game copy. The only thing it might still ask is *where* the game is, and only if it can't find it by itself.
 - **Custom** - walks you through which provider, which model, which voice, and whether to turn on [MTP](#faster-tokens-mtp).
 
-Installing on a machine you can't sit in front of? `JUN_YES=1` (on Windows, `$env:JUN_YES='1'`) skips the question entirely.
+Installing on a machine you can't sit in front of? `JUN_YES=1` (on Windows, `$env:JUN_YES='1'`) skips the question entirely. On Linux nobody's there to say yes to the docker group either, so Docker stays behind `sudo` unless you also pass `JUN_DOCKER_GROUP=1`.
 
 ### Then say hi 🎉
 
@@ -277,7 +277,7 @@ Everything is environment variables in `.env` - the full reference is [`docs/con
 | `COMPOSE_PROFILES` | Optional containers: `ollama`, `llamacpp`, `voice`, `karaoke`, `prod`. `start.sh` derives them from the knobs below, you only set this by hand for `prod` | `ollama` |
 | `VOICE` | `off` skips the voice sidecar: the `tts` container under Docker (`voice` profile), the sidecar process on bare-metal Windows. Chat degrades to text-only | `on` |
 | `FLEE_BANS` | When she walks out of a scene, `on` locks that account out of chat for 5 min, doubling per repeat up to 30. `off` lets her leave without the lockout | `on` |
-| `FREE_ROAM` | Going out is her call: the shop, karaoke and date pages bounce home unless she agreed in chat. `on` drops that gate and gives everyone the "Force her" buttons (admins have them regardless) | `off` |
+| `FREE_ROAM` | Going out is her call: the shop, karaoke and date pages bounce home unless she agreed in chat. `on` drops that gate and gives everyone the "Force her" buttons and the restaurant's "Skip the wait" (admins have them regardless) | `off` |
 | `TTS_DEVICE` | Voice synthesis device. Keep it on CPU: both engines are real-time there, and a GPU copy parks ~2 GB your LLM wants more | `cpu` |
 | `KARAOKE` / `SEP_DEVICE` | Karaoke sidecar on/off, and where stem separation runs. *This* is the audio job that wants a GPU - minutes on CPU, seconds on a card, VRAM handed back after | `on` · `auto` |
 | `STT_MODEL` / `STT_LANG` | Whisper size and language; blank lang = per-utterance auto-detect | `base` · *(auto)* |
@@ -290,7 +290,7 @@ Everything is environment variables in `.env` - the full reference is [`docs/con
 
 **Save your recovery code.** 🔐 Signup shows it once; older accounts get one on their first login after the encryption upgrade. Chats, saved preferences and her memory are encrypted under your account's data key. If you forget your password, use **forgot password?** with your email and recovery code. Lose both and a backup alone cannot unlock encrypted data. This protects stored content, not a compromised running machine; [the security notes](SECURITY.md#encryption-and-recovery) spell out the limits.
 
-**The registration key** is written into `.env` by the installer and printed when it finishes. The very first account on a fresh install skips it (it's your box, you just ran the installer); every account after that has to type it, so nobody who reaches the page later can make themselves a login. Don't want the lock? Empty the value (`OMEGA_REGISTRATION_KEY=`) and sign-ups are open to whoever can reach the page. 🔑 Lost it? It's sitting in plain text in your own `.env` - read it back, or change it to whatever you like and restart.
+**The registration key** is written into `.env` by the installer and printed when it finishes. The very first account on a fresh install skips it (it's your box, you just ran the installer) - but only while she listens on this machine alone. Flip `BIND_ADDR=0.0.0.0` before you've made yours and even the first signup needs the key 🔒. Every account after that has to type it, so nobody who reaches the page later can make themselves a login. Don't want the lock? Empty the value (`OMEGA_REGISTRATION_KEY=`) and sign-ups are open to whoever can reach the page. 🔑 Lost it? It's sitting in plain text in your own `.env` - read it back, or change it to whatever you like and restart.
 
 Normal accounts get **Factory Reset** in the same panel - one button that erases every conversation, memory and setting and hands the account back the way it came.
 

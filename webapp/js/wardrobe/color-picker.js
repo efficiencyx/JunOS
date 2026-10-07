@@ -2,8 +2,8 @@ import * as MobileViewport from '../core/viewport.js?v=1';
 import { colorGroup } from '../outfit/catalog.js?v=1';
 import { colors } from '../outfit/current.js?v=1';
 import { hexToHsv, hsvToHex, normalizeHex } from '../outfit/colors.js?v=1';
-import { optPopEl, positionOptionsPopup } from './tiles.js?v=4';
-import { setColor } from '../outfit/apply.js?v=3';
+import { optPopEl, positionOptionsPopup } from './tiles.js?v=7';
+import { setColor } from '../outfit/apply.js?v=6';
 
 function paintColorButton(button) {
   const keys = (button.dataset.colorKeys || '').split(',').filter(Boolean);

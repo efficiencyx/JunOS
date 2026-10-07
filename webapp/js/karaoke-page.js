@@ -1,9 +1,9 @@
 import * as Auth from './core/auth.js?v=1';
 import { api } from './core/api.js?v=1';
 import * as Prefs from './core/prefs.js?v=1';
-import * as Karaoke from './karaoke/karaoke.js?v=2';
-import * as Live2D from './live2d/live2d.js?v=4';
-import * as Outfit from './outfit/outfit.js?v=3';
+import * as Karaoke from './karaoke/karaoke.js?v=11';
+import * as Live2D from './live2d/live2d.js?v=76';
+import * as Outfit from './outfit/outfit.js?v=76';
 import * as Scene from './trip/scene.js?v=1';
 import { startSkybox } from './trip/skybox.js?v=2';
 import * as TripLoader from './trip/trip-loader.js?v=1';

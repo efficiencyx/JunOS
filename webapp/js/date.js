@@ -14,10 +14,10 @@ import { api, apiJson } from './core/api.js?v=1';
 import * as ChatAPI from './core/chat-api.js?v=2';
 import * as Names from './core/names.js?v=1';
 import * as Prefs from './core/prefs.js?v=1';
-import { say } from './core/speech-card.js?v=3';
+import { say } from './core/speech-card.js?v=5';
 import { localTimeString, mealNow } from './core/util.js?v=1';
-import * as Live2D from './live2d/live2d.js?v=4';
-import * as Outfit from './outfit/outfit.js?v=3';
+import * as Live2D from './live2d/live2d.js?v=76';
+import * as Outfit from './outfit/outfit.js?v=76';
 import * as Scene from './trip/scene.js?v=1';
 import { startSkybox } from './trip/skybox.js?v=2';
 import * as TripLoader from './trip/trip-loader.js?v=1';
@@ -31,27 +31,34 @@ async function main() {
   const orderBtn = document.getElementById('orderBtn');
   const billBtn = document.getElementById('billBtn');
   const lastLine = document.getElementById('lastLine');
+  const skipBtn = document.getElementById('skipBtn');
+  const ticket = document.getElementById('kitchen');
+  const ticketText = document.getElementById('kitchenText');
 
+  // first column is the dish's drawing in scene/table.svg
+  // (#fd-<key>), last is seconds in the kitchen. the wait is the slower
+  // of the two plates, so two drinks is half a minute and a steak
+  // next to a risotto is ~4 min of having to actually talk
   const MENU = {
     lunch: [
-      ['🥪', 'a club sandwich', 'The club sandwich', 'From the kitchen'],
-      ['🍜', 'a bowl of ramen', 'Ramen', 'From the kitchen'],
-      ['🍳', 'omurice', 'Omurice', 'From the kitchen'],
-      ['🍛', 'a katsu curry', 'Katsu curry', 'From the kitchen'],
-      ['🥗', 'a big salad', 'Garden salad', 'From the kitchen'],
-      ['🍕', 'a slice of pizza', 'Pizza by the slice', 'From the kitchen'],
-      ['🧊', 'an iced coffee', 'Iced coffee', 'Something to sip'],
-      ['🍋', 'a lemonade', 'Cloudy lemonade', 'Something to sip'],
+      ['club', 'a club sandwich', 'The club sandwich', 'From the kitchen', 100],
+      ['ramen', 'a bowl of ramen', 'Ramen', 'From the kitchen', 140],
+      ['omurice', 'omurice', 'Omurice', 'From the kitchen', 130],
+      ['curry', 'a katsu curry', 'Katsu curry', 'From the kitchen', 160],
+      ['salad', 'a big salad', 'Garden salad', 'From the kitchen', 80],
+      ['pizza', 'a slice of pizza', 'Pizza by the slice', 'From the kitchen', 90],
+      ['coffee', 'an iced coffee', 'Iced coffee', 'Something to sip', 30],
+      ['lemonade', 'a lemonade', 'Cloudy lemonade', 'Something to sip', 30],
     ],
     dinner: [
-      ['🥩', 'a steak', 'Steak frites', 'The main affair'],
-      ['🍝', 'pasta carbonara', 'Carbonara', 'The main affair'],
-      ['🍣', 'a sushi platter', 'Sushi selection', 'The main affair'],
-      ['🍚', 'mushroom risotto', 'Mushroom risotto', 'The main affair'],
-      ['🐟', 'grilled fish', 'Grilled fish', 'The main affair'],
-      ['🍷', 'a glass of red wine', 'House red', 'By the glass'],
-      ['🍰', 'tiramisu', 'Tiramisu', 'A sweet ending'],
-      ['🧁', 'cheesecake', 'Cheesecake', 'A sweet ending'],
+      ['steak', 'a steak', 'Steak frites', 'The main affair', 220],
+      ['carbonara', 'pasta carbonara', 'Carbonara', 'The main affair', 160],
+      ['sushi', 'a sushi platter', 'Sushi selection', 'The main affair', 190],
+      ['risotto', 'mushroom risotto', 'Mushroom risotto', 'The main affair', 230],
+      ['fish', 'grilled fish', 'Grilled fish', 'The main affair', 200],
+      ['wine', 'a glass of red wine', 'House red', 'By the glass', 30],
+      ['tiramisu', 'tiramisu', 'Tiramisu', 'A sweet ending', 70],
+      ['cheesecake', 'cheesecake', 'Cheesecake', 'A sweet ending', 70],
     ],
   };
   // three rooms, and which one you walk into is seeded off the
@@ -72,6 +79,8 @@ async function main() {
     arrive: "Okay. It's nicer than I expected. Don't make it weird.",
     talk: "...Say that again. I was reading.",
     order: "Fine. Let's see if the kitchen is as good as the menu makes it sound.",
+    lull: "...Are they growing it back there? Because it feels like they're growing it.",
+    served: 'Oh. Okay. That actually looks good. Hands off mine.',
     leave: 'Walk me home. And no, that was not a thank you.',
   };
 
@@ -80,7 +89,11 @@ async function main() {
   let mentioned = '';
   let ready = false;
   let ordered = false;
+  let served = false;
   let busy = false;
+  let canSkip = false;
+  const kitchen = { start: 0, due: 0, lulls: 0, timer: 0 };
+  let lastLineAt = 0;
   let history = [];
   let conversationId = 0;
   const her = () => Names.getBot();
@@ -129,6 +142,7 @@ async function main() {
   function note(phase) {
     if (phase === 'arrive') return `${OOC}you and Anon just sat down at ${venue.name} for ${meal} and opened the menu. Say one or two lines out loud, in character, as you look around and at him. No narration. ${menuNote()})`;
     if (phase === 'talk') {
+      if (ordered && !served) return `${OOC}you ordered (${picks.me} for Anon, ${picks.her} for you) and the two of you are waiting for the food to come out. Answer him out loud, in character, one to three lines. No narration.)`;
       if (ordered) return `${OOC}at the table eating, Anon has ${picks.me} and you have ${picks.her}. Answer him out loud, in character, one to three lines. No narration.)`;
       return `${OOC}reading the menu together. Answer him out loud, in character, one to three lines. No narration. ${menuNote()})`;
     }
@@ -136,6 +150,8 @@ async function main() {
       if (picks.her) return `${OOC}the waiter takes the order: ${picks.me} for Anon, ${picks.her} for you, your own pick. React out loud in one or two lines, in character. No narration.)`;
       return `${OOC}the waiter is at the table and Anon just ordered ${picks.me}. Tell him what you are having, ending your line with ORDER: <dish from the menu>. One or two lines, in character. No narration. ${menuNote()})`;
     }
+    if (phase === 'lull') return `${OOC}still waiting for the food, the kitchen is taking its time and neither of you has said anything for a while. Break the silence out loud, in character, one or two lines: him, the place, the wait, whatever is on your mind. No narration.)`;
+    if (phase === 'served') return `${OOC}the waiter just brought the food: ${picks.me} for Anon, ${picks.her} for you. React out loud in one or two lines, in character, as you dig in. No narration.)`;
     return `${OOC}the ${meal} is over, Anon asked for the bill and you two are getting up to walk home. Say one or two lines out loud, in character. No narration.)`;
   }
 
@@ -173,6 +189,7 @@ async function main() {
     line = line || fallback;
     status.textContent = '';
     lastLine.textContent = line;
+    lastLineAt = Date.now();
     busy = false;
     renderMarks();
     return line;
@@ -188,6 +205,7 @@ async function main() {
     sendBtn.disabled = locked;
     orderBtn.disabled = locked || ordered;
     billBtn.disabled = locked;
+    skipBtn.hidden = !canSkip || !kitchen.timer || served;
   }
 
   function renderMarks() {
@@ -255,14 +273,52 @@ async function main() {
     // ponytail: she dodged the waiter. whatever dish she named
     // last is what she gets, or the kitchen picks
     if (!picks.her) picks.her = mentioned || dishes[Math.floor(Math.random() * dishes.length)][1];
-    for (const who of ['me', 'her']) {
-      document.getElementById(who === 'me' ? 'plateMe' : 'plateHer').textContent = dishes.find(d => d[1] === picks[who])[0];
-    }
-    document.body.classList.add('ordered', 'served');
+    const dish = (who) => dishes.find(d => d[1] === picks[who]);
+    const cook = Math.max(dish('me')[4], dish('her')[4]) * (0.85 + Math.random() * 0.3);
+    kitchen.start = Date.now();
+    kitchen.due = kitchen.start + cook * 1000;
+    kitchen.timer = setInterval(tickKitchen, 1000);
+    document.body.classList.add('ordered');
     orderBtn.hidden = true;
-    billBtn.hidden = false;
+    ticket.hidden = false;
+    tickKitchen();
     setComposer();
     await say(line);
+  }
+
+  // one clock for the whole wait. the food only lands between
+  // turns, never on top of a reply that's still streaming, and if
+  // he goes quiet she fills the silence. twice max, after that
+  // it's his problem
+  function tickKitchen() {
+    if (served) return;
+    const now = Date.now();
+    const left = Math.max(0, kitchen.due - now);
+    ticket.style.setProperty('--done', String(Math.min(1, (now - kitchen.start) / (kitchen.due - kitchen.start))));
+    const text = left > 90e3 ? `The kitchen's on it · about ${Math.round(left / 60e3)} min`
+      : left > 25e3 ? "The kitchen's on it · almost ready" : 'Coming out now';
+    if (ticketText.textContent !== text) ticketText.textContent = text;
+    if (busy || !ready) return;
+    if (!left) { serve(); return; }
+    if (kitchen.lulls < 2 && left > 20e3 && now - lastLineAt > 40e3 && !input.value.trim() && !document.hidden) {
+      kitchen.lulls++;
+      ask(note('lull'), FALLBACK.lull).then(say);
+    }
+  }
+
+  async function serve() {
+    served = true;
+    clearInterval(kitchen.timer);
+    for (const who of ['me', 'her']) {
+      const food = document.createElementNS('http://www.w3.org/2000/svg', 'use');
+      food.setAttribute('href', '#fd-' + dishes.find(d => d[1] === picks[who])[0]);
+      document.getElementById(who === 'me' ? 'plateMe' : 'plateHer').replaceChildren(food);
+    }
+    document.body.classList.add('served');
+    ticket.hidden = true;
+    billBtn.hidden = false;
+    setComposer();
+    say(await ask(note('served'), FALLBACK.served));
   }
 
   async function goHome() {
@@ -283,6 +339,7 @@ async function main() {
   const trip = await api('trip.php')
     .then(r => r.ok ? r.json() : null).catch(() => null);
   if (trip && trip.gated && trip.where !== 'date') { location.replace('index.html'); return; }
+  canSkip = me.user?.role === 'admin' || !!trip?.can_force;
   // mount AFTER the gate. otherwise a bounced user sits through the
   // whole walk just to get redirected at the end of it
   TripLoader.mount();
@@ -293,7 +350,7 @@ async function main() {
   venue = VENUES[Math.abs(seed) % VENUES.length];
   document.body.dataset.venue = venue.scene.replace(/^diner-|\.svg$/g, '');
   Scene.inject('.room', 'scene/' + venue.scene + '?v=2');
-  Scene.inject('.table', 'scene/table.svg?v=2');
+  Scene.inject('.table', 'scene/table.svg?v=3');
   conversationId = trip ? Number(trip.conversation_id) || 0 : 0;
 
   await Prefs.pullFromServer();
@@ -323,6 +380,10 @@ async function main() {
   });
   orderBtn.addEventListener('click', callWaiter);
   billBtn.addEventListener('click', goHome);
+  skipBtn.addEventListener('click', () => {
+    kitchen.due = Date.now();
+    tickKitchen();
+  });
 
   try {
     await Live2D.init({

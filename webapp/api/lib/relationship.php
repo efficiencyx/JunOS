@@ -17,7 +17,10 @@ function ban_active(int $userId): ?array {
         if (!$row) return null;
         $until = (int)$row['until'];
         if ($until <= time()) return null;
-        return ['until' => $until, 'reason' => (string)($row['reason'] ?? ''), 'seconds_left' => $until - time()];
+        // a reason that won't open costs the reason, NOT the ban.
+        // let dec throw up to the catch below and she's back early.
+        try { $reason = (string)dec($row['reason']); } catch (Throwable $e) { $reason = ''; }
+        return ['until' => $until, 'reason' => $reason, 'seconds_left' => $until - time()];
     } catch (Throwable $e) {
         log_event(['msg' => 'ban_active_error', 'err' => $e->getMessage()]);
         return null;
@@ -37,11 +40,12 @@ function ban_apply(int $userId, string $reason): array {
         $strikes++;
         $minutes = (int)min(30, 5 * (2 ** ($strikes - 1)));
         $until = $now + $minutes * 60;
+        $reason = mb_substr(trim($reason), 0, 300);
         db()->prepare(
             'INSERT INTO user_bans (user_id, until, strikes, last_ban, reason) VALUES (?, ?, ?, ?, ?)
              ON CONFLICT(user_id) DO UPDATE SET until=excluded.until, strikes=excluded.strikes,
                                                 last_ban=excluded.last_ban, reason=excluded.reason'
-        )->execute([$userId, $until, $strikes, $now, mb_substr(trim($reason), 0, 300)]);
+        )->execute([$userId, $until, $strikes, $now, crypt_key() !== null ? enc($reason) : null]);
         return ['until' => $until, 'minutes' => $minutes];
     } catch (Throwable $e) {
         log_event(['msg' => 'ban_apply_error', 'err' => $e->getMessage()]);

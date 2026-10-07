@@ -9,9 +9,10 @@ how to report something you find.
 **What the design assumes**
 
 * One person, one trusted machine. The first account on a fresh database can be
-  created without the registration key. Later accounts require
-  `OMEGA_REGISTRATION_KEY` unless you deliberately leave it empty, so claim the
-  first account before making the install reachable by anyone else.
+  created without the registration key, but only while `BIND_ADDR` is
+  loopback. Later accounts, and the first one on an install that is already
+  listening off loopback, require `OMEGA_REGISTRATION_KEY` unless you
+  deliberately leave it empty.
 * The person installing it is the machine's administrator, and is allowed to
   install Docker, Python and PHP on it.
 * Whatever a model says is untrusted input. Lore, web search results, song
@@ -76,13 +77,32 @@ how to report something you find.
   go quiet for a turn, or walk out on you (which, with
   `FLEE_BANS=on`, locks *your* account out of chat for 5-30 minutes). That
   limit is what actually holds, not her judgment.
-* The first person to reach an unclaimed install after you set
-  `BIND_ADDR=0.0.0.0`. The first signup intentionally does not ask for the
-  registration key.
+* The first person to reach an unclaimed install through a tunnel or reverse
+  proxy you point at a loopback bind. PHP only sees `BIND_ADDR`, so it still
+  lets the first signup through without the key. Claim the account before
+  you open the tunnel.
 * Multi-tenant hosting. If you host her for other people, their chats are on
   your box and that is a different job than this file covers. more info in README.md.
 
 ## Install-time supply chain
+
+The Linux installer changes two things outside its own folder, and records
+both in `.install-changes` so `uninstall.sh` can offer to undo them:
+
+* **The `docker` group.** Membership is root without a password for every
+  process you run. Express adds you. Custom asks, defaulting to no. An
+  unattended run (`JUN_YES=1` without Express, or no terminal) leaves
+  Docker behind `sudo` unless `JUN_DOCKER_GROUP=1` is set.
+* **`net.ipv4.ip_unprivileged_port_start=80`**, only with rootless Docker,
+  written to `/etc/sysctl.d/99-jun-unprivileged-ports.conf`. Rootless Docker
+  can't publish `:80` without it. It applies system-wide, so any program can
+  then bind ports 80 and up. The uninstaller restores the previous value.
+
+Installs from before `.install-changes` existed have nothing recorded, so
+`uninstall.sh` reverts nothing for them. Undo the changes by hand with
+`sudo gpasswd -d "$USER" docker`, then
+`sudo rm /etc/sysctl.d/99-jun-unprivileged-ports.conf`, then
+`sudo sysctl net.ipv4.ip_unprivileged_port_start=1024`.
 
 The installers fetch code from other people and run it. What is checked:
 
@@ -191,7 +211,7 @@ your own use only - see the NOTICE in [LICENSE](LICENSE).
 ## Encryption and recovery
 
 The PHP application encrypts message content, conversation titles and summaries,
-saved preferences, welcome messages and memory files with a random 32-byte key
+saved preferences, welcome messages, walk-out reasons and memory files with a random 32-byte key
 per account. Stored values use `v1:` followed by base64-encoded nonce and sodium
 secretbox ciphertext. This is application-level encryption of selected content,
 not whole-database or end-to-end encryption, and does not describe the separate

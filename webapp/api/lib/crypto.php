@@ -71,7 +71,8 @@ function crypt_key(?string $dek = null, bool $bind = false): ?string {
 }
 
 // enc/dec for anything with his words in it: message content,
-// titles, summaries, prefs, the welcome queue, every memory file.
+// titles, summaries, prefs, the welcome queue, walkout reasons,
+// every memory file.
 // dec passes a value without the v1: prefix straight through, that
 // is how rows from before migration 016 keep reading until
 // crypt_encrypt_backlog rewrites them, and how the <audio>

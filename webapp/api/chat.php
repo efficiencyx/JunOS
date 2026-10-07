@@ -177,11 +177,19 @@ for ($round = 0; $round < 3; $round++) {
         $assistantBuffer .= "\n\n";
     }
 
-    $messages[] = [
+    $callTurn = [
         'role' => 'assistant',
         'content' => $roundContent,
         'tool_calls' => $toolCalls,
     ];
+    // v8 trains the trace ON the call turn, and the next round has to
+    // see it again or she re-decides cold from the tool result. only
+    // ollama's gemma4 renderer prints it back (jun-mtp path), the gguf
+    // jinja path drops it, the openai protocol might choke on the key
+    if (!provider_uses_openai_protocol($PROVIDER) && $result['thinking'] !== '') {
+        $callTurn['thinking'] = $result['thinking'];
+    }
+    $messages[] = $callTurn;
     foreach (array_slice($toolCalls, 0, 4) as $call) {
         $name = (string)($call['function']['name'] ?? '');
         $args = tool_call_args($call);

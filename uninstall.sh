@@ -7,12 +7,20 @@
 #   2. optionally delete the Docker volumes (accounts, chats,
 #      settings, downloaded model weights) and images. The state
 #      volume is saved to ~/jun-backup-<date>.tar.gz first.
-#   3. delete this folder
+#   3. undo the system changes install.sh recorded in
+#      .install-changes: removing you from the docker group if the
+#      installer added you, and restoring
+#      net.ipv4.ip_unprivileged_port_start if it lowered it for
+#      rootless Docker
+#   4. delete this folder
 #
 # Docker itself, git and Python are left alone, since they're
-# general-purpose tools you may use elsewhere. Your docker group
-# membership is left alone too. Remove them with your package
-# manager if you want.
+# general-purpose tools you may use elsewhere. Remove them with your
+# package manager if you want. Installs from before .install-changes
+# existed have nothing recorded; undo those by hand:
+#   sudo gpasswd -d "$USER" docker
+#   sudo rm /etc/sysctl.d/99-jun-unprivileged-ports.conf
+#   sudo sysctl net.ipv4.ip_unprivileged_port_start=1024
 #
 #   ./uninstall.sh          # interactive
 #   ./uninstall.sh -y       # no prompts
@@ -26,6 +34,14 @@ root="$(pwd)"
 
 yes=0
 case "${1:-}" in -y|--yes) yes=1 ;; esac
+
+if [ "$(id -u)" -eq 0 ]; then
+    SUDO=""
+elif command -v sudo >/dev/null 2>&1; then
+    SUDO="sudo"
+else
+    SUDO=""
+fi
 
 confirm() {
     [ "$yes" -eq 1 ] && return 0
@@ -61,6 +77,29 @@ if command -v docker >/dev/null 2>&1 && [ -f docker-compose.yml ]; then
         down+=(--rmi all)
     fi
     [ "${#down[@]}" -eq 0 ] || docker compose -f docker-compose.yml down "${down[@]}"
+fi
+
+recorded() {
+    sed -n "s/^$1=//p" .install-changes 2>/dev/null | head -n 1
+}
+
+group_user="$(recorded docker_group)"
+if [ -n "$group_user" ] && confirm "Remove $group_user from the docker group (the installer added it)?"; then
+    if $SUDO gpasswd -d "$group_user" docker >/dev/null; then
+        echo "Removed $group_user from the docker group. It takes effect at the next login."
+    else
+        echo "Could not remove $group_user from the docker group. Run: sudo gpasswd -d $group_user docker" >&2
+    fi
+fi
+
+port_start="$(recorded unprivileged_port_start)"
+if [ -n "$port_start" ] && confirm "Restore net.ipv4.ip_unprivileged_port_start to $port_start (the installer lowered it to 80)?"; then
+    if $SUDO rm -f /etc/sysctl.d/99-jun-unprivileged-ports.conf \
+        && $SUDO sysctl -q net.ipv4.ip_unprivileged_port_start="$port_start"; then
+        echo "Restored net.ipv4.ip_unprivileged_port_start to $port_start."
+    else
+        echo "Could not restore it. Run: sudo rm /etc/sysctl.d/99-jun-unprivileged-ports.conf && sudo sysctl net.ipv4.ip_unprivileged_port_start=$port_start" >&2
+    fi
 fi
 
 # From outside the folder, since this script lives inside it.

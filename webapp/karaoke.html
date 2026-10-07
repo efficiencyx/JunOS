@@ -6,14 +6,15 @@
 <meta name="color-scheme" content="dark">
 <title>Karaoke with Jun</title>
 <link rel="icon" type="image/png" href="favicon.png?v=1">
-<link rel="stylesheet" href="css/boot.css?v=1">
-<link rel="stylesheet" href="styles.css?v=13">
-<link rel="stylesheet" href="css/pages/karaoke.css?v=5">
+<link rel="stylesheet" href="css/boot.css?v=5">
+<link rel="stylesheet" href="styles.css?v=55">
+<link rel="stylesheet" href="css/pages/karaoke.css?v=6">
+<link rel="stylesheet" href="css/head-home.css?v=1">
 <link rel="stylesheet" href="css/trip-loader.css?v=1">
 </head>
 <body>
 <div class="music-room" aria-hidden="true"></div>
-<a id="karaokeBackLink" class="karaoke-page-back" href="index.html" aria-label="Back to chat">← Back to chat</a>
+<a id="karaokeBackLink" class="head-home" href="index.html"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="19" y1="12" x2="5" y2="12"/><polyline points="12 19 5 12 12 5"/></svg>Head home</a>
 <div id="stage" aria-label="Live2D stage"></div>
 <div id="karaokeMic" class="stage-microphone" aria-hidden="true" hidden></div>
 <div class="music-room music-room-front" aria-hidden="true"></div>
@@ -22,7 +23,7 @@
 <div id="toasts" aria-live="polite" aria-atomic="false"></div>
 
 <div id="karaokeOverlay" class="karaoke-overlay" hidden>
-  <button id="karaokeOverlayClose" class="voice-overlay-btn voice-overlay-close" type="button" aria-label="Back to chat" title="Back to chat">
+  <button id="karaokeOverlayClose" class="voice-overlay-btn voice-overlay-close" type="button" aria-label="Head home" title="Head home">
     <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
   </button>
 
@@ -130,6 +131,6 @@
 <script defer src="vendor/pixi.min.js"></script>
 <script defer src="vendor/pixi-unsafe-eval.min.js"></script>
 <script defer src="vendor/cubism4.min.js"></script>
-<script type="module" src="js/karaoke-page.js?v=15"></script>
+<script type="module" src="js/karaoke-page.js?v=18"></script>
 </body>
 </html>

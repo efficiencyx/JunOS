@@ -3,6 +3,7 @@
 function provider_stream_state(): array {
     return [
         'content' => '',
+        'thinking' => '',
         'tool_calls' => [],
         'stats' => null,
         'done_reason' => '',
@@ -46,7 +47,10 @@ function provider_parse_ollama_chunk(string $chunk, string &$buf, array &$state,
         }
 
         $thinking = (string)($obj['message']['thinking'] ?? '');
-        if ($thinking !== '') $emit(['thinking' => $thinking]);
+        if ($thinking !== '') {
+            $emit(['thinking' => $thinking]);
+            $state['thinking'] .= $thinking;
+        }
 
         $calls = $obj['message']['tool_calls'] ?? null;
         if (is_array($calls) && $calls) {

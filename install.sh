@@ -11,6 +11,7 @@ OS="$(uname -s)"
 NEED_SG=0
 NEED_SUDO=0
 DOCKER_JUST_INSTALLED=0
+ADDED_DOCKER_GROUP=""
 # 1 only when a person picked Express, at the prompt or with
 # JUN_EXPRESS=1. JUN_YES on its own can mean an unattended run,
 # and the two want opposite things the moment something needs
@@ -986,11 +987,15 @@ prepare_docker() {
     id -nG "$me" 2>/dev/null | tr ' ' '\n' | grep -qx docker && return
     # the docker socket is root. anyone in the docker group can
     # mount / into a container and own the box, no password asked,
-    # forever. so it's opt in. express says yes because express
-    # asks nothing, everyone else defaults to sudo.
+    # forever. so it's opt in. express says yes because a person
+    # picked "recommended settings". a headless run (JUN_YES alone,
+    # no tty) has nobody to pick anything, so it stays on sudo
+    # unless JUN_DOCKER_GROUP=1 says otherwise.
     local a=""
-    if [ "$EXPRESS" = 1 ] || [ "${JUN_YES:-}" = "1" ] || [ ! -r /dev/tty ]; then
+    if [ "$EXPRESS" = 1 ] || [ "${JUN_DOCKER_GROUP:-}" = "1" ]; then
         a=y
+    elif [ "${JUN_YES:-}" = "1" ] || [ ! -r /dev/tty ]; then
+        a=n
     else
         printf '     %s$%s add %s to the docker group? %s(root without a password, for any process running as you)%s %s[y/N]%s %s→%s ' \
             "$OK" "$R" "$me" "$WARN" "$R" "$DIM" "$R" "$ACCENT" "$R" > /dev/tty
@@ -998,7 +1003,7 @@ prepare_docker() {
     fi
     case "$a" in
         y|Y|yes|YES)
-            $SUDO usermod -aG docker "$me" 2>/dev/null || true
+            $SUDO usermod -aG docker "$me" 2>/dev/null && ADDED_DOCKER_GROUP="$me"
             command -v sg >/dev/null 2>&1 && NEED_SG=1
             ;;
         *)
@@ -1014,6 +1019,14 @@ docker_run() {
     else "$@"; fi
 }
 
+# what this install changed outside its own folder, one key=value
+# per line, so uninstall.sh can put it back. the folder outlives a
+# re-run, so append and never repeat a key.
+record_change() {
+    grep -q "^$1=" .install-changes 2>/dev/null && return 0
+    printf '%s=%s\n' "$1" "$2" >> .install-changes
+}
+
 # rootless Docker (Bazzite/Fedora Atomic, brew) can't bind :80.
 # RootlessKit refuses privileged ports unless the host lowers
 # ip_unprivileged_port_start. the rootless netns (its own network
@@ -1025,9 +1038,11 @@ allow_privileged_ports() {
     start="$(sysctl -n net.ipv4.ip_unprivileged_port_start 2>/dev/null || echo 1024)"
     [ "$start" -le 80 ] && return 0
     note "rootless Docker needs unprivileged ports to start at 80 (for the web UI)"
+    note "that's system-wide: any program can then bind 80 and up. ./uninstall.sh puts it back to $start"
     if printf 'net.ipv4.ip_unprivileged_port_start=80\n' \
             | $SUDO tee /etc/sysctl.d/99-jun-unprivileged-ports.conf >/dev/null 2>&1 \
         && $SUDO sysctl -q net.ipv4.ip_unprivileged_port_start=80; then
+        record_change unprivileged_port_start "$start"
         systemctl --user restart docker 2>/dev/null || true
         ok "allowed rootless Docker to bind port 80"
     else
@@ -1257,6 +1272,7 @@ cd "$DIR"
 # the one still sitting there world-readable.
 [ -f .env ] || cp .env.example .env
 chmod 600 .env 2>/dev/null || true
+[ -n "$ADDED_DOCKER_GROUP" ] && record_change docker_group "$ADDED_DOCKER_GROUP"
 
 configure
 

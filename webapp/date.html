@@ -6,11 +6,12 @@
 <title>Out to eat</title>
 <link rel="icon" type="image/png" href="jun_os.png">
 <link rel="stylesheet" href="css/trip-loader.css?v=1">
-<link rel="stylesheet" href="css/pages/date.css?v=1">
+<link rel="stylesheet" href="css/pages/date.css?v=13">
+<link rel="stylesheet" href="css/head-home.css?v=1">
 </head>
 <body>
 <main class="date-layout">
-  <a class="date-back" href="index.html">← Back to chat</a>
+  <a class="head-home" href="index.html"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="19" y1="12" x2="5" y2="12"/><polyline points="12 19 5 12 12 5"/></svg>Head home</a>
   <section class="restaurant" aria-label="Your table">
     <div class="room" aria-hidden="true"></div>
     <div id="stage"></div>
@@ -31,12 +32,14 @@
   </section>
 
   <form class="composer" id="composer" autocomplete="off">
+    <p class="kitchen" id="kitchen" hidden><span id="kitchenText" aria-live="polite"></span><span class="kitchen-bar" aria-hidden="true"></span></p>
     <p class="last-line" id="lastLine" aria-live="polite"></p>
     <div class="composer-row">
       <input id="sayInput" type="text" maxlength="500" placeholder="Say something…" aria-label="Say something" disabled>
       <button type="submit" id="sendBtn" disabled>Say</button>
       <button type="button" id="orderBtn" disabled>Call the waiter</button>
       <button type="button" id="billBtn" hidden>Ask for the bill</button>
+      <button type="button" id="skipBtn" hidden>Skip the wait</button>
     </div>
   </form>
 </main>
@@ -45,6 +48,6 @@
 <script defer src="vendor/pixi.min.js"></script>
 <script defer src="vendor/pixi-unsafe-eval.min.js"></script>
 <script defer src="vendor/cubism4.min.js"></script>
-<script type="module" src="js/date.js?v=11"></script>
+<script type="module" src="js/date.js?v=16"></script>
 </body>
 </html>

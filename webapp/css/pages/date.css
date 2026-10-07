@@ -18,17 +18,14 @@ button:disabled { cursor: default; }
 .room svg { display: block; width: 100%; height: 100%; }
 /* the venues range from a near black trattoria to a pale tiled cafe,
    so this needs its own backing or it vanishes in half of them */
-.date-back { position: absolute; z-index: 9; top: max(26px, env(safe-area-inset-top)); right: 20px; padding: 5px 10px; border-radius: 4px; background: #1d1a17b8; color: #e6ddc8; font-size: 11px; text-decoration: none; }
-.date-back:hover { background: #2c2823d9; color: var(--cream); }
-.date-back:focus-visible { outline: 2px solid var(--wine); outline-offset: 4px; }
 #stage { position: absolute; inset: -22% 0 0; }
 #stage canvas { display: block; }
 .table { position: absolute; z-index: 2; pointer-events: none; left: -9%; right: -9%; top: 68%; bottom: -3%; filter: drop-shadow(0 -10px 20px #1a100e33); }
 .table svg { display: block; width: 100%; height: 100%; overflow: visible; }
 .flame { transform-origin: 268px 94px; animation: candlelight 3s ease-in-out infinite; }
 @keyframes candlelight { 50% { transform: scale(.85, 1.08); opacity: .8; } }
-.table text { opacity: 0; transition: opacity .6s, transform .6s; transform: translateY(-7px); }
-body.served .table text { opacity: 1; transform: translateY(0); }
+.table .food { opacity: 0; transition: opacity .6s, transform .6s; transform: translateY(-7px); }
+body.served .table .food { opacity: 1; transform: translateY(0); }
 #stageStatus { position: absolute; z-index: 6; top: calc(max(30px, env(safe-area-inset-top)) + 26px); right: 20px; max-width: min(46%, 360px); font-size: 12px; background: #211c19dd; border-radius: 4px; padding: 6px 10px; }
 #stageStatus:empty { display: none; }
 #stage .wardrobe-reaction { z-index: 4; }
@@ -73,8 +70,11 @@ body.ordered .menu-card { transform: translate(-50%, 70px); opacity: 0; pointer-
 .composer button { min-height: 42px; padding: 0 16px; border: 1px solid var(--wine); border-radius: 4px; background: var(--wine); color: #fff4df; font-size: 12px; white-space: nowrap; }
 .composer button:not(:disabled):hover { background: #603039; }
 .composer button:disabled { opacity: .45; }
-#sendBtn { background: transparent; border-color: #6b5a4a; color: var(--cream); }
-#sendBtn:not(:disabled):hover { background: #3a302a; }
+#sendBtn, #skipBtn { background: transparent; border-color: #6b5a4a; color: var(--cream); }
+#sendBtn:not(:disabled):hover, #skipBtn:hover { background: #3a302a; }
+.kitchen { align-self: center; display: flex; align-items: center; gap: 10px; margin: 0; padding: 5px 12px; border: 1px dashed #b9a582; border-radius: 3px; background: var(--cream); color: var(--ink); font: italic 12px/1.3 var(--serif); box-shadow: 0 6px 18px #0006; }
+.kitchen-bar { width: 64px; height: 3px; border-radius: 2px; background: #b9a58266; overflow: hidden; }
+.kitchen-bar::after { content: ""; display: block; height: 100%; width: calc(var(--done, 0) * 100%); background: var(--wine); transition: width 1s linear; }
 @media (max-width: 760px) {
   #stageStatus { top: auto; bottom: calc(100px + env(safe-area-inset-bottom)); right: 12px; max-width: 60%; }
   #stage { inset: -12% 0 0; }

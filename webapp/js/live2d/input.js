@@ -1,4 +1,4 @@
-import { cameraPreset, fitModel, savePos } from './camera.js?v=12';
+import { cameraPreset, fitModel, savePos } from './camera.js?v=13';
 import { isInteractiveTarget, isOverModel } from './geometry.js?v=12';
 import { S } from './state.js?v=11';
 

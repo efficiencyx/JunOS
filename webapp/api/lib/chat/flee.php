@@ -66,9 +66,11 @@ TXT;
 // [A:flee] tag both land here. $via is only for the log.
 function chat_flee(array $ctx, array &$state, string $reason, string $destination, string $via): array {
     $verdict = flee_adjudicate($ctx['provider'], $ctx['model'], $ctx['req']['body']['messages'], $reason, $destination);
+    // no reason, no why. both are his words retold and the log
+    // isn't encrypted.
     log_event(['msg' => 'flee_adjudication', 'user_id' => (int)$ctx['user']['id'],
                'conversation_id' => $ctx['conv_id'], 'via' => $via,
-               'can_leave' => $verdict['can_leave'], 'why' => $verdict['why'], 'reason' => $reason]);
+               'can_leave' => $verdict['can_leave']]);
     if ($verdict['can_leave']) {
         $state['fled'] = flee_bans_enabled()
             ? ban_apply((int)$ctx['user']['id'], $reason)

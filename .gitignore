@@ -31,6 +31,8 @@ unsloth_compiled_cache/
 # dataset generation tools
 tools/dataset_v5
 tools/dataset_v6
+tools/dataset_v7
+tools/dataset_v8
 
 # the LoRA training pipeline (LoRA = the small adapter trained on
 # top of the base model) and its debug scratch. runs on the
@@ -68,6 +70,7 @@ webapp/lore_meta.json
 
 # deploy state (created at runtime)
 /data/
+/.install-changes
 letsencrypt/
 
 # local .env snapshots kept while switching backends
@@ -96,6 +99,16 @@ webapp/showcase-mod/
 webapp/showcase-tiktok.html
 webapp/showcase-tiktok.css
 webapp/js/showcase-tiktok.js
+
+# the landing page is tracked here, publish.sh keeps the whole
+# folder out of the public tree. the stills are renders of her
+# rig, so are the clips, so same deal as webapp/assets/.
+# landing/capture.html rebuilds both. audio/ is her lines,
+# make-audio.sh rebuilds those off the running tts sidecar
+webapp/landing/stills/
+webapp/landing/clips/
+webapp/landing/clips-raw/
+webapp/landing/audio/
 .consider
 .this
 .one

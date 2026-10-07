@@ -192,6 +192,7 @@ if ($Action -eq 'start' -and $BindAddr -notin @('127.0.0.1', 'localhost', '::1')
     # second waits out the first reply's whole stream. docker doesn't
     # have this problem, php-fpm forks.
     Note 'one request at a time on windows - a second device waits for the first reply to finish'
+    Note 'off loopback even the first account needs OMEGA_REGISTRATION_KEY from .env'
     Confirm-FirewallRule $Port
 }
 

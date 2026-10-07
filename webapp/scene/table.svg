@@ -8,8 +8,9 @@
      anyway in perspective, the cutlery is tapered rather than
      round, the glasses are wide.
 
-     #plateHer and #plateMe are written by date.js when the food
-     arrives. do not rename them. -->
+     #plateHer and #plateMe get a <use href="#fd-<dish>"> from
+     date.js when the food arrives. do not rename them, or the
+     fd-* ids, the menu in date.js is keyed on them. -->
 <defs>
   <linearGradient id="tb-linen" x1=".3" y1="0" x2=".62" y2="1">
     <stop offset="0" stop-color="#e2d0ab"/><stop offset=".26" stop-color="#c3a67e"/>
@@ -66,6 +67,172 @@
     <path d="M-24-4Q-22 0 0 1Q22 0 24-4Q0 1-24-4" fill="#9c4353" opacity=".7"/>
     <path d="M-16-26Q-21-10-17 4" fill="none" stroke="#fff6e0" stroke-opacity=".7" stroke-width="2.4"/>
   </g>
+  <!-- the food. plate-local coordinates, (0 0) is the plate's
+       centre and the inner ring is rx 78 ry 26, so anything that
+       stands up goes into negative y. ids are fd-<menu key> -->
+  <ellipse id="fd-shadow" cy="12" rx="62" ry="11" fill="#4a3526" opacity=".2"/>
+  <clipPath id="fd-wedge"><path d="M-30 14 0-46 30 14Z"/></clipPath>
+  <g id="fd-club-wedge">
+    <g clip-path="url(#fd-wedge)">
+      <path d="M-30-46h60v38h-60z" fill="#efd29b"/>
+      <path d="M-30-8q6-4 12 0t12 0 12 0 12 0 12 0v7h-60z" fill="#78a548"/>
+      <path d="M-30-1h60v5h-60z" fill="#cf4b3b"/>
+      <path d="M-30 4h60v4h-60z" fill="#f0bba6"/>
+      <path d="M-30 8h60v6h-60z" fill="#efd29b"/>
+    </g>
+    <path d="M-30 14 0-46 30 14" fill="none" stroke="#b98a4e" stroke-width="4" stroke-linejoin="round"/>
+  </g>
+  <g id="fd-club">
+    <use href="#fd-shadow"/>
+    <use href="#fd-club-wedge" x="-24"/>
+    <use href="#fd-club-wedge" x="26" y="3"/>
+    <path d="M-24-46v-16M26-43v-16" stroke="#d8b77a" stroke-width="2.4"/>
+    <circle cx="-24" cy="-62" r="4" fill="#5b7a2c"/><circle cx="26" cy="-59" r="4" fill="#5b7a2c"/>
+  </g>
+  <g id="fd-ramen">
+    <path d="M-64-10Q-60 24 0 27Q60 24 64-10Z" fill="#7c2a26"/>
+    <path d="M-50 4Q-30 15 0 16Q30 15 50 4" fill="none" stroke="#e8c27a" stroke-width="2.6" opacity=".7"/>
+    <ellipse cy="-10" rx="64" ry="15" fill="#5f201d"/>
+    <ellipse cy="-10" rx="58" ry="12.5" fill="#d79a4e"/>
+    <path d="M-46-7q8-6 16 0t16 0 16 0 16 0 16 0M-34-14q8-5 16 0t16 0 16 0" fill="none" stroke="#f3dca0" stroke-width="3"/>
+    <ellipse cx="-24" cy="-14" rx="12" ry="5.5" fill="#dca58e" stroke="#9a5a44" stroke-width="1.6"/>
+    <ellipse cx="22" cy="-13" rx="11" ry="6" fill="#fbf4e2"/><ellipse cx="22" cy="-13" rx="5.5" ry="3.2" fill="#f0a23a"/>
+    <path d="M38-36 52-31 48-6 34-11Z" fill="#26392b"/>
+    <g fill="#7fb24a"><circle cx="-4" cy="-9" r="2.4"/><circle cx="4" cy="-16" r="2.4"/><circle cx="-10" cy="-18" r="2.4"/><circle cx="8" cy="-5" r="2.4"/></g>
+  </g>
+  <g id="fd-omurice">
+    <use href="#fd-shadow"/>
+    <path d="M-58 8Q-56-22 0-26Q56-22 58 8Q30 18 0 18Q-30 18-58 8Z" fill="#f1c13e"/>
+    <path d="M-58 8Q-30 18 0 18Q30 18 58 8Q30 12 0 12Q-30 12-58 8Z" fill="#d9a12a"/>
+    <path d="M-40-8Q-20-20 10-20" fill="none" stroke="#fde48a" stroke-width="5" stroke-linecap="round"/>
+    <path d="M-34-4q8-10 16 0t16 0 16 0 16 0" fill="none" stroke="#c4302b" stroke-width="5" stroke-linecap="round" stroke-linejoin="round"/>
+    <g fill="#5f8f34"><circle cx="40" cy="-6" r="2"/><circle cx="-42" cy="2" r="2"/></g>
+  </g>
+  <g id="fd-curry">
+    <use href="#fd-shadow"/>
+    <path d="M-8 8Q-6-12 32-14Q70-12 72 6Q40 18-8 8Z" fill="#8a4a1c"/>
+    <g fill="#e07a2e"><rect x="40" y="-2" width="7" height="5" rx="1"/><rect x="56" y="2" width="6" height="5" rx="1"/></g>
+    <path d="M-70 10Q-66-22-34-24Q-4-22-2 10Q-36 18-70 10Z" fill="#f7f1e3"/>
+    <path d="M-56-6q4-3 8 0M-40-14q4-3 8 0M-30-2q4-3 8 0M-50 4q4-3 8 0" fill="none" stroke="#ddd3bd" stroke-width="1.6"/>
+    <g transform="rotate(-8)" fill="#d99a3c" stroke="#a8661f" stroke-width="1.6">
+      <rect x="-8" y="-28" width="15" height="21" rx="3"/><rect x="8" y="-27" width="15" height="21" rx="3"/>
+      <rect x="24" y="-26" width="15" height="21" rx="3"/><rect x="40" y="-25" width="13" height="20" rx="3"/>
+    </g>
+  </g>
+  <g id="fd-salad">
+    <use href="#fd-shadow"/>
+    <g fill="#6e9e3a"><ellipse cx="-30" cy="-6" rx="24" ry="13" transform="rotate(-14 -30 -6)"/><ellipse cx="22" cy="-8" rx="26" ry="13" transform="rotate(12 22 -8)"/></g>
+    <g fill="#8cbd4f"><ellipse cx="-6" cy="-14" rx="24" ry="12"/><ellipse cx="38" cy="2" rx="18" ry="9"/></g>
+    <ellipse cx="-40" cy="4" rx="16" ry="8" fill="#8a3555"/>
+    <g fill="#d9e8b0" stroke="#5d8a34" stroke-width="2"><ellipse cx="10" cy="4" rx="8" ry="5"/><ellipse cx="-20" cy="6" rx="8" ry="5"/></g>
+    <g fill="#d23a2e"><circle cx="-14" cy="-10" r="7"/><circle cx="28" cy="-12" r="7"/><circle cx="44" cy="-6" r="6"/></g>
+    <g fill="#fff" opacity=".5"><circle cx="-16" cy="-12" r="2"/><circle cx="26" cy="-14" r="2"/></g>
+    <g fill="#d7ad6a"><rect x="-2" y="-4" width="8" height="7" rx="1.5"/><rect x="-34" y="-16" width="7" height="6" rx="1.5"/></g>
+  </g>
+  <g id="fd-pizza">
+    <use href="#fd-shadow"/>
+    <path d="M-56-13Q0-27 56-13L4 17Q0 20-4 17Z" fill="#f2c048"/>
+    <path d="M-56-13 -4 17Q0 20 4 17L56-13" fill="none" stroke="#e08a3a" stroke-width="2"/>
+    <path d="M-58-14Q0-30 58-14" fill="none" stroke="#c98b45" stroke-width="10" stroke-linecap="round"/>
+    <g fill="#b23a2c"><ellipse cx="-24" cy="-11" rx="8" ry="4"/><ellipse cx="18" cy="-13" rx="8" ry="4"/><ellipse cx="0" cy="1" rx="7" ry="3.5"/></g>
+    <ellipse cx="-4" cy="-14" rx="5" ry="2.6" fill="#3f7a35"/>
+  </g>
+  <g id="fd-tall-glass">
+    <ellipse cy="16" rx="26" ry="6" fill="#4a3526" opacity=".2"/>
+    <path d="M-22-62 22-62 17 14Q0 19-17 14Z" fill="url(#tb-glass)" stroke="#f3e0bd" stroke-opacity=".6"/>
+    <ellipse cy="-62" rx="22" ry="5" fill="none" stroke="#f3e0bd" stroke-opacity=".6"/>
+  </g>
+  <g id="fd-coffee">
+    <use href="#fd-tall-glass"/>
+    <path d="M-20-44 20-44 17 13Q0 18-17 13Z" fill="#6b4226" opacity=".9"/>
+    <path d="M-20-44Q0-39 20-44L19.3-34Q0-29-19.3-34Z" fill="#c79b6c"/>
+    <g fill="#fff" opacity=".4"><rect x="-14" y="-40" width="13" height="12" rx="2" transform="rotate(-12 -8 -34)"/><rect x="2" y="-30" width="12" height="11" rx="2" transform="rotate(14 8 -24)"/></g>
+    <path d="M8-30 18-84" stroke="#2f6f6a" stroke-width="4" stroke-linecap="round"/>
+  </g>
+  <g id="fd-lemonade">
+    <use href="#fd-tall-glass"/>
+    <path d="M-20-48 20-48 17 13Q0 18-17 13Z" fill="#f5e7a6" opacity=".85"/>
+    <g fill="#fff" opacity=".45"><rect x="-12" y="-44" width="12" height="11" rx="2" transform="rotate(10 -6 -38)"/></g>
+    <path d="M-6-36 4-86" stroke="#d4607a" stroke-width="4" stroke-linecap="round"/>
+    <circle cx="-20" cy="-62" r="12" fill="#f6d743" stroke="#e3b42a" stroke-width="2"/>
+    <path d="M-20-62v-10M-20-62h10M-20-62l-7-7M-20-62l7-7" stroke="#fbeba0" stroke-width="1.6"/>
+  </g>
+  <g id="fd-steak">
+    <use href="#fd-shadow"/>
+    <path d="M-60 0Q-62-22-32-24Q-2-28 6-12Q12 2-8 10Q-42 16-60 0Z" fill="#6a3019"/>
+    <path d="M-58-4Q-60-22-32-22Q-4-25 3-12Q8-2-10 4Q-42 10-58-4Z" fill="#8a4428"/>
+    <path d="M-48-6-30-20M-34-2-14-18M-20 2-2-12" stroke="#3e1d10" stroke-width="3" stroke-linecap="round"/>
+    <g fill="#f0c050" stroke="#c9922c" stroke-width="1.4">
+      <rect x="14" y="-14" width="40" height="6" rx="3" transform="rotate(-10 34 -11)"/>
+      <rect x="18" y="-6" width="42" height="6" rx="3" transform="rotate(8 39 -3)"/>
+      <rect x="12" y="2" width="38" height="6" rx="3" transform="rotate(-4 31 5)"/>
+      <rect x="24" y="-20" width="34" height="6" rx="3" transform="rotate(16 41 -17)"/>
+    </g>
+  </g>
+  <g id="fd-carbonara">
+    <use href="#fd-shadow"/>
+    <ellipse cy="-2" rx="52" ry="19" fill="#e6c97c"/>
+    <path d="M-44 0Q-40-18 0-18Q40-18 44 0M-30 2Q-28-12 0-12Q28-12 30 2M-16 0Q-14-7 0-7Q14-7 16 0M-48 4Q0 18 48 4" fill="none" stroke="#fbe8b0" stroke-width="3"/>
+    <g fill="#c86b55"><rect x="-26" y="-12" width="9" height="5" rx="1.5"/><rect x="14" y="-6" width="9" height="5" rx="1.5"/><rect x="-6" y="2" width="8" height="5" rx="1.5"/><rect x="26" y="-14" width="8" height="4" rx="1.5"/></g>
+    <g fill="#2a2018"><circle cx="-12" cy="-4" r="1.3"/><circle cx="6" cy="-14" r="1.3"/><circle cx="20" cy="2" r="1.3"/><circle cx="-34" cy="-2" r="1.3"/><circle cx="0" cy="-4" r="1.3"/></g>
+  </g>
+  <g id="fd-nigiri">
+    <ellipse rx="14" ry="7" fill="#f7f3ea"/>
+    <path d="M-16-3Q-14-11 0-11Q14-11 16-3Q14 1 0 1Q-14 1-16-3Z"/>
+  </g>
+  <g id="fd-sushi">
+    <use href="#fd-shadow"/>
+    <use href="#fd-nigiri" x="-46" y="-4" fill="#f08a5d"/>
+    <use href="#fd-nigiri" x="-14" y="-8" fill="#c43a3f"/>
+    <use href="#fd-nigiri" x="16" y="-4" fill="#f5c84a"/>
+    <path d="M14-15v12" stroke="#1f2a22" stroke-width="5"/>
+    <path d="M-52-9q3-3 6 0t6 0" fill="none" stroke="#fde0cc" stroke-width="1.4"/>
+    <g transform="translate(46 -6)"><ellipse rx="11" ry="7" fill="#1f2a22"/><ellipse cy="-1" rx="8" ry="4.6" fill="#f7f3ea"/><ellipse cy="-1" rx="3.4" ry="2" fill="#f08a5d"/></g>
+    <g transform="translate(48 10)"><ellipse rx="11" ry="7" fill="#1f2a22"/><ellipse cy="-1" rx="8" ry="4.6" fill="#f7f3ea"/><ellipse cy="-1" rx="3.4" ry="2" fill="#7fb24a"/></g>
+    <path d="M-30 12q4-6 9-1q2 4-4 5z" fill="#8fbf4a"/>
+    <path d="M-10 14q6-7 12-1q-4 5-12 1z" fill="#f2b5b0"/>
+  </g>
+  <g id="fd-risotto">
+    <use href="#fd-shadow"/>
+    <path d="M-56 6Q-52-18 0-20Q52-18 56 6Q28 16 0 16Q-28 16-56 6Z" fill="#e9d6a4"/>
+    <g fill="#f6e9c4"><circle cx="-30" cy="-4" r="2"/><circle cx="-10" cy="-12" r="2"/><circle cx="18" cy="-8" r="2"/><circle cx="34" cy="0" r="2"/><circle cx="-4" cy="4" r="2"/><circle cx="12" cy="8" r="2"/></g>
+    <g fill="#8b6440"><path d="M-26-12q8-8 16 0q-3 2-6 2v6h-4v-6q-3 0-6-2z"/><path d="M10 0q8-8 16 0q-3 2-6 2v6h-4v-6q-3 0-6-2z"/><path d="M-40 4q7-7 14 0q-3 2-5 2v5h-4v-5q-2 0-5-2z"/></g>
+    <g fill="#5f8f34"><circle cx="-14" cy="0" r="2"/><circle cx="28" cy="-10" r="2"/><circle cx="2" cy="-6" r="2"/></g>
+  </g>
+  <g id="fd-fish">
+    <use href="#fd-shadow"/>
+    <path d="M42-6 66-21 60-6 66 9Z" fill="#8e7357"/>
+    <path d="M-58-6Q-30-26 14-18Q34-14 44-6Q34 4 14 6Q-30 12-58-6Z" fill="#b39673"/>
+    <path d="M-58-6Q-30-26 14-18Q34-14 44-6Q14-10-58-6Z" fill="#8a6f52"/>
+    <path d="M-30-14-38 2M-14-16-22 4M2-16-6 4M18-14 10 3" stroke="#4e3a26" stroke-width="2.6" stroke-linecap="round"/>
+    <circle cx="-46" cy="-8" r="3" fill="#2a2018"/><circle cx="-47" cy="-9" r="1" fill="#fff"/>
+    <path d="M-10 10Q6 4 18 14Q4 20-10 10Z" fill="#f6d743" stroke="#e3b42a" stroke-width="1.6"/>
+  </g>
+  <g id="fd-wine">
+    <ellipse cy="13" rx="28" ry="7" fill="#4a3526" opacity=".25"/>
+    <use href="#tb-glassware" y="-48"/>
+  </g>
+  <g id="fd-tiramisu">
+    <use href="#fd-shadow"/>
+    <path d="M36-30 52-40 52 2 36 12Z" fill="#a88a63"/>
+    <path d="M-36-30h72v6h-72z" fill="#4b2a18"/>
+    <path d="M-36-24h72v12h-72z" fill="#f3e6c8"/>
+    <path d="M-36-12h72v6h-72z" fill="#9a6337"/>
+    <path d="M-36-6h72v10h-72z" fill="#f3e6c8"/>
+    <path d="M-36 4h72v8h-72z" fill="#9a6337"/>
+    <path d="M-36-30-20-40H52L36-30Z" fill="#5b3420"/>
+    <path d="M8-36q6-6 12 0q-6 4-12 0z" fill="#5f8f34"/>
+  </g>
+  <g id="fd-cheesecake">
+    <use href="#fd-shadow"/>
+    <path d="M30-16 50-28V0L30 12Z" fill="#e2cda1"/>
+    <path d="M30 6 50-6V0L30 12Z" fill="#a8763f"/>
+    <path d="M-50-16H30v28h-80z" fill="#f6e7c3"/>
+    <path d="M-50 6H30v6h-80z" fill="#b5844a"/>
+    <path d="M-50-16 30-16 50-28 -18-28Z" fill="#fbf0d4"/>
+    <path d="M-40-18Q-20-26 0-20T44-26" fill="none" stroke="#a5233a" stroke-width="5" stroke-linecap="round"/>
+    <circle cx="16" cy="-27" r="5.5" fill="#c4304a"/>
+  </g>
 </defs>
 
 <ellipse cx="500" cy="292" rx="640" ry="248" fill="#241a14"/>
@@ -104,6 +271,8 @@
   <path d="M268 93Q262 87 269 76Q276 87 268 93" fill="#fff8d4"/>
 </g>
 
-<text id="plateHer" x="505" y="117" text-anchor="middle" font-size="34"></text>
-<text id="plateMe" x="402" y="333" text-anchor="middle" font-size="57"></text>
+<!-- same transforms as the two plates above. the inner g is
+     what fades in, a CSS transform on it would wipe the attribute -->
+<g transform="translate(505 111) scale(.78)"><g id="plateHer" class="food"></g></g>
+<g transform="translate(402 322) scale(1.32)"><g id="plateMe" class="food"></g></g>
 </svg>

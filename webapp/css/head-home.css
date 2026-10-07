@@ -1,0 +1,25 @@
+.head-home {
+  position: fixed;
+  top: calc(18px + env(safe-area-inset-top, 0px));
+  left: calc(18px + env(safe-area-inset-left, 0px));
+  z-index: 60;
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  margin: 0;
+  padding: 8px 14px 8px 11px;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--bg-2) 88%, transparent);
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+  color: var(--muted);
+  font: 500 13px/1.2 system-ui, sans-serif;
+  white-space: nowrap;
+  text-decoration: none;
+  cursor: pointer;
+  transition: color .15s, background .15s, border-color .15s;
+}
+.head-home:hover { color: var(--fg); background: var(--bg-3); border-color: var(--border-2); }
+.head-home:focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; }
+.head-home svg { flex: none; }

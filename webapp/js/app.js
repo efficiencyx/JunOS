@@ -22,7 +22,7 @@ if (!me) {
   // main.js's module graph side by side. nothing in that graph
   // touches PIXI or marked at import, boot() is the first to
   const [{ boot }] = await Promise.all([
-    import('./app/main.js?v=3'),
+    import('./app/main.js?v=6'),
     loadScripts([
       ['vendor/pixi.min.js', 'vendor/live2dcubismcore.min.js',
        'vendor/marked.min.js', 'vendor/purify.min.js?v=4'],

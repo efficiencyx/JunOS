@@ -156,7 +156,8 @@ bind_addr="${bind_addr:-127.0.0.1}"
 export BIND_ADDR="$bind_addr"
 case "$bind_addr" in
   127.0.0.1|localhost|::1) echo "listening on: $bind_addr (this machine only)" ;;
-  *) echo "listening on: $bind_addr - anything that can reach this box can open Jun" ;;
+  *) echo "listening on: $bind_addr - anything that can reach this box can open Jun"
+     echo "off loopback even the first account needs OMEGA_REGISTRATION_KEY from .env" ;;
 esac
 
 # install.sh and install.ps1 both write this on first run, but
@@ -167,7 +168,7 @@ esac
 if [ -f .env ] && ! grep -qE '^OMEGA_REGISTRATION_KEY=' .env; then
   reg_key="$(openssl rand -hex 16 2>/dev/null || head -c16 /dev/urandom | od -An -tx1 | tr -d ' \n')"
   printf 'OMEGA_REGISTRATION_KEY=%s\n' "$reg_key" >> .env
-  echo "registration key: $reg_key (written to .env, the first account skips it, everyone after needs it)"
+  echo "registration key: $reg_key (written to .env, the first account skips it while listening on loopback only, everyone after needs it)"
 fi
 # same shape for the header php shows the tts/karaoke sidecars.
 # an empty SIDECAR_SECRET= is honoured too, the sidecar then runs

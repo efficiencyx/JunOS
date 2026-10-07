@@ -57,10 +57,23 @@ function textEntryFocused() {
   ));
 }
 
+// the stage is the whole window and the composer sits on top of
+// its bottom edge, so fitting to the full height puts her feet on
+// the input. measured off the composer's own height + the area's
+// bottom padding, NOT its position. on an empty chat it floats
+// mid-screen, and she'd rescale the moment the first message docks it
+function dockedComposerHeight() {
+  const composer = document.querySelector('.composer-area .composer');
+  if (!composer || !composer.offsetHeight) return 0;
+  const area = composer.closest('.composer-area');
+  return composer.offsetHeight + (parseFloat(getComputedStyle(area).paddingBottom) || 0);
+}
+
 function usableStage(mode = S.cameraMode) {
   const screen = stageScreen();
   const full = { x: 0, y: 0, width: screen.width, height: screen.height };
-  if (mode !== 'phone' || !app || !app.view) return full;
+  if (mode !== 'phone') return { ...full, height: Math.max(1, full.height - dockedComposerHeight()) };
+  if (!app || !app.view) return full;
 
   let visual;
   try { visual = MobileViewport.getVisualRect(); } catch (e) { return full; }

@@ -23,7 +23,7 @@ case 'me':
 
 case 'signup_info':
     json_out([
-        'registration_key_required' => env_str('OMEGA_REGISTRATION_KEY') !== '' && !no_users_yet(),
+        'registration_key_required' => env_str('OMEGA_REGISTRATION_KEY') !== '' && !first_signup_keyless(),
     ]);
 
 case 'signup':
@@ -44,16 +44,17 @@ case 'signup':
     $db = db();
     $keys = user_keys_mint($password);
 
-    // empty users table = fresh install, so the very first signup
-    // skips the key. otherwise whoever just ran install.sh has to go
-    // dig the generated key out of .env to make their own account, on
-    // their own box. no.
+    // empty users table on a loopback-only box = the very first
+    // signup skips the key. otherwise whoever just ran install.sh has
+    // to go dig the generated key out of .env to make their own
+    // account, on their own box. no. first_signup_keyless has the
+    // rule for when it's NOT their own box.
     // BEGIN IMMEDIATE takes the write lock before the check, so two
     // signups racing on a fresh box can't both see an empty table
     // and both walk past the key. fail() exits, sqlite rolls back.
     $db->exec('BEGIN IMMEDIATE');
     $regKey = env_str('OMEGA_REGISTRATION_KEY');
-    if ($regKey !== '' && !no_users_yet()) {
+    if ($regKey !== '' && !first_signup_keyless()) {
         $given = (string)($body['registration_key'] ?? '');
         if ($given === '') fail(403, 'registration_closed');
         if (!hash_equals($regKey, $given)) fail(403, 'invalid_registration_key');
@@ -91,7 +92,15 @@ case 'login':
     $st->execute([$email]);
     $user = $st->fetch();
 
-    if (!$user || !password_verify($password, $user['password_hash'])) {
+    // unknown email still pays for one bcrypt, or the fast 401
+    // tells anyone with a stopwatch who has an account. a hash, not
+    // a verify against a fixed dummy, so the cost follows
+    // PASSWORD_DEFAULT when php bumps it.
+    if (!$user) {
+        password_hash($password, PASSWORD_DEFAULT);
+        fail(401, 'invalid_credentials');
+    }
+    if (!password_verify($password, $user['password_hash'])) {
         fail(401, 'invalid_credentials');
     }
 
@@ -145,7 +154,7 @@ case 'recover':
         ? crypt_open((string)$user['recovery_wrapped_dek'], crypt_recovery_key($code))
         : null;
     if ($dek === null) {
-        log_event(['msg' => 'recover_failed', 'email' => $email]);
+        log_event(['msg' => 'recover_failed']);
         fail(401, 'invalid_recovery_code');
     }
 
