@@ -115,6 +115,10 @@ Or plain text scrolling by:
 powershell irm https://raw.githubusercontent.com/efficiencyx/JunOS/main/install.ps1 -OutFile install.ps1; powershell -ExecutionPolicy Bypass -File .\install.ps1
 ```
 
+Rather double-click something? Every [release](https://github.com/efficiencyx/JunOS/releases) carries its own **`JunSetup-<version>.exe`**, the same window-and-buttons installer in one file. Each one is welded to its version 🔩: `JunSetup-v1.0.0.exe` installs v1.0.0 and nothing else, and checks the exact commit before it sets anything up.
+
+If anything goes wrong, the installer stops, tells you what in plain words, and keeps the window open until you've read it. Fix that one thing and paste the same line again: it picks up where it left off. 🩹
+
 ### 🐧 On Linux, macOS or WSL
 
 Needs `git` and Docker. Don't have them? The script installs them for you.
@@ -132,9 +136,25 @@ The step-by-step commands for it, every provider, and the manual compose invocat
 Exactly one question: **Express** or **Custom**.
 
 - **Express** - press Enter and forget about it. It figures out your hardware on its own and rebuilds her Live2D model from your game copy. The only thing it might still ask is *where* the game is, and only if it can't find it by itself.
-- **Custom** - walks you through which provider, which model, which voice, and whether to turn on [MTP](#faster-tokens-mtp).
+- **Custom** - walks you through which [release channel](#-which-jun-you-get), which provider, which model, which voice, and whether to turn on [MTP](#faster-tokens-mtp).
 
 Installing on a machine you can't sit in front of? `JUN_YES=1` (on Windows, `$env:JUN_YES='1'`) skips the question entirely. On Linux nobody's there to say yes to the docker group either, so Docker stays behind `sudo` unless you also pass `JUN_DOCKER_GROUP=1`.
+
+### 🚦 Which Jun you get
+
+The installer doesn't just grab whatever's on `main` anymore. There are three channels:
+
+| Channel | What lands on your disk | Good for |
+|---|---|---|
+| **Stable** *(default)* | the latest full [release](https://github.com/efficiencyx/JunOS/releases) | everyone |
+| **Latest** | the newest release, pre-releases included | early birds and bug hunters 🐛 |
+| **Experimental** | straight from `main`, whatever got pushed today | people who enjoy fixing things |
+
+Express goes Stable, Custom asks. While there's no full release out yet, Stable takes the newest pre-release instead.
+
+Updating is the same line again: it finds the install you already have and moves it along its channel, which it remembers as `JUN_CHANNEL` in `.env`. To switch, put `JUN_CHANNEL=latest` in front of the Linux line, or run `set JUN_CHANNEL=latest` in the Command Prompt before the Windows one (or just pick Custom). She never steps *backwards* on her own: if you're ahead of your channel, she stays put until it catches up. ⏩
+
+Installed her before channels were a thing? You were on `main` all along, so you stay on Experimental until you pick something else. Need one exact version? `JUN_REF=v1.0.0` pins it and skips the channel lookup.
 
 ### Then say hi 🎉
 
@@ -285,6 +305,7 @@ Everything is environment variables in `.env` - the full reference is [`docs/con
 | `OMEGA_STATE_DIR` / `MEMORY_DIR` | Where the database, rate-limit state and memory notes live | `/var/lib/omega` |
 | `OMEGA_REGISTRATION_KEY` | Sign-ups need this key. The installer generates one for you; empty it to let anyone in | *(generated)* |
 | `OMEGA_DEV_KEY` | ? Figure it out yourself? | ??? |
+| `JUN_CHANNEL` | Installer only: which [release channel](#-which-jun-you-get) a re-run updates her along - `stable`, `latest` or `experimental` | `stable` |
 
 ### Who gets in 🔑
 
@@ -391,6 +412,17 @@ Everything ships from her own origin, so a clean install produces none - if you 
 The model-server and voice containers are profile-gated. `./start.sh` derives `COMPOSE_PROFILES` from your `.env`; a bare `docker compose up -d` needs `COMPOSE_PROFILES=ollama,voice` (or `llamacpp,voice`, plus `karaoke` if you want it) set in `.env` or the shell.
 </details>
 
+<details>
+<summary><b>Re-running the installer didn't update her</b></summary>
+
+Read the line under **existing install**, it says which of these it was:
+
+- *"files were changed by hand"* - you edited something tracked by git, so the installer leaves the code alone rather than stomp on it. `git status` in her folder shows what; `git stash` (or undo it) and run again.
+- *"newer than stable ... staying until it catches up"* - you're on a newer release than your channel points at, usually from trying **Latest** and switching back. Working as intended, she doesn't downgrade herself.
+- *"couldn't ask GitHub which release is current"* - offline, or GitHub's 60-requests-an-hour limit for anonymous lookups. Wait a bit and run again.
+- Still on `main` after picking Stable? Check `JUN_CHANNEL` in `.env`, that's what a re-run follows.
+</details>
+
 ## Where everything lives
 
 ```
@@ -414,13 +446,13 @@ The model-server and voice containers are profile-gated. `./start.sh` derives `C
 │   ├── wardrobe.html · karaoke.html · date.html   The outing pages
 │   └── system_prompt.txt
 ├── install.sh · install.ps1     One-line bootstrap (Docker · bare metal)
-├── installer-gui.ps1            The Windows click-through window (ships as JunSetup.exe)
+├── installer-gui.ps1            The Windows click-through window (ships as JunSetup-<version>.exe)
 ├── uninstall.sh · uninstall.ps1 Takes her off the box again
 ├── start.sh · start.ps1         Launchers, and the stop/status/logs control panel
 ├── mtp-autotune.sh · .ps1       Measures the MTP draft depth and writes the winner to .env
 ├── sync-webapp.sh               The dev loop
 ├── colab.ipynb                  The free-GPU notebook
-├── .github/workflows/           CI (syntax, stream-buffer tests, a chat turn against a fake Ollama) + the JunSetup.exe release
+├── .github/workflows/           CI (syntax, stream-buffer tests, a chat turn against a fake Ollama) + the draft release with JunSetup-<version>.exe
 └── docker-compose*.yml          Base (CPU) + nvidia / amd overlays, llamacpp-local / llamacpp-mtp add-ons
 ```
 
@@ -432,4 +464,4 @@ And of course [**Incontinent Cell**](https://itch.io/profile/incontinentcell), c
 
 ## License
 
-Apache-2.0 - see [LICENSE](LICENSE). Unofficial, non-commercial fan project; all *Factorial Omega* rights belong to their respective owners.
+Apache-2.0 - see [LICENSE](LICENSE) and [NOTICE](NOTICE). Unofficial, non-commercial fan project; all *Factorial Omega* rights belong to their respective owners.

@@ -108,11 +108,12 @@ The installers fetch code from other people and run it. What is checked:
 
 | What | From | Verified how |
 | --- | --- | --- |
-| The repo itself | `github.com` over https | TLS, and `JUN_REPO` pointing anywhere but upstream needs `JUN_ALLOW_FORK=1` or an interactive yes. `JUN_REF` picks a branch or tag. Nothing pins a revision, so `main` is what you get by default and `main` moves. |
+| The repo itself | `github.com` over https | TLS, and `JUN_REPO` pointing anywhere but upstream needs `JUN_ALLOW_FORK=1` or an interactive yes. By default you get the tag of the newest full release (`JUN_CHANNEL=stable`); `latest` follows pre-releases too, `experimental` follows `main`, which moves. Release tags are immutable on GitHub. `JUN_REF` picks an exact branch or tag. A versioned `JunSetup-<tag>.exe` also carries the tag's commit hash (`JUN_PIN_SHA`) and refuses to install code whose commit doesn't match, checked before checkout. |
 | Docker (Linux, only if missing) | `get.docker.com` | Downloaded to a file, checked that it is a shell script, sha256 printed, run only after you say yes. `JUN_DOCKER_SCRIPT_SHA256=<digest>` turns that into a hard check. It is never piped into a root shell. |
 | Portable PHP (Windows) | `windows.php.net` | sha256 from `releases.json`, checked before unpacking. Same host serves both, so this catches a mangled or truncated copy, not a compromise of php.net itself. |
 | CA bundle (Windows) | `curl.se` | sha256 from `cacert.pem.sha256`. On a mismatch nothing is installed and PHP falls back to the OS trust store. |
 | git, Python, llama.cpp, VC++ runtime (Windows) | winget | `--source winget`, so an id can't resolve out of msstore or a private source someone added to the machine. Package signatures are winget's job. |
+| Which release is current | `api.github.com` (anonymous, read-only) | TLS. One or two requests to the releases endpoint per run to turn the channel into a tag, skipped for `experimental` and when `JUN_REF` is set. Drafts are invisible to anonymous requests. |
 | Ollama (Windows) | `ollama.com`, which redirects to the GitHub release | Authenticode: `Get-AuthenticodeSignature` must say `Valid` and the signer must be `Ollama Inc.` before `OllamaSetup.exe` runs. Nothing pins a version, you get the latest. |
 | winget itself, if absent | PSGallery | Not automatic. It asks first, or takes `JUN_BOOTSTRAP_WINGET=1`. |
 | Python packages | PyPI, `download.pytorch.org` | Exact versions in `tts/requirements*.txt` and `tools/requirements-recovery.txt`. Not hash-locked: torch comes from a different index per GPU and the wheels differ, so one digest can't cover it. Transitive deps float. |
@@ -121,15 +122,18 @@ The installers fetch code from other people and run it. What is checked:
 | MTP drafters | Hugging Face, third-party uploads (`Janvitos/...`, `amaranus/...` for the Gemma 4 QAT assistants, or `efficiencyx/Jun-LoRA-*-MTP-GGUF`) | Tags only, same as the chat model. Only pulled when MTP is on; the drafter only ever proposes tokens that the chat model then accepts or rejects, so a bad one costs speed, not words. |
 | Title model (Ollama only) | Hugging Face, `efficiencyx/Titlewen-GGUF` | Tags only. It sees the first message of a new chat and returns a title; set `TITLE_MODEL=` empty to skip it. |
 
-The one-liner install (`curl ... | bash`) runs whatever `main` says at that
-moment, unread. Cloning first, reading `install.sh`, and running it from the
-checkout is the recommended path, and the only one where what you read is 100% what
-you ran. `JUN_REF` holds the clone to a tag or branch, which is as close to a
-pin as this gets.
+The one-liner install (`curl ... | bash`) runs whatever `main`'s `install.sh`
+says at that moment, unread. That script only gets as far as the clone: it then
+hands off to the `install.sh` inside the release it checked out, which does the
+rest. Cloning first, reading `install.sh`, and running it from the checkout is
+still the recommended path, and the only one where what you read is 100% what
+you ran. Every release also carries the three install scripts and a
+`SHA256SUMS` file. On Windows, a versioned `JunSetup-<tag>.exe` is a real pin:
+tag plus commit hash, verified.
 
 ## What talks to the internet
 
-**During install:** github.com, your distro's package mirrors or Homebrew,
+**During install:** github.com and api.github.com (which release is current), your distro's package mirrors or Homebrew,
 `get.docker.com` (Linux, only when Docker is missing), Docker Hub and ghcr.io
 for base images, `windows.php.net`, `curl.se` and `ollama.com` (Windows), winget
 and PSGallery (Windows), PyPI and `download.pytorch.org` when voice or karaoke is on.

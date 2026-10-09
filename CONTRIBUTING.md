@@ -34,7 +34,7 @@ Create a branch from `main`, copy `.env.example` to `.env`, and use the installa
 
 Use `./sync-webapp.sh -s` only when every changed file is static. PHP opcache does not watch timestamps, so PHP changes require the full command. After moving or deleting files, add `--clean` so the old paths are removed from the containers. Hard-refresh the browser after synchronizing.
 
-The Windows installation is managed by `install.ps1` and `start.ps1`. `installer-gui.ps1` is a WPF front end over the same `install.ps1`: it collects answers, exports the matching `JUN_*` variables plus `JUN_YES=1`, and runs the script, so installer behavior changes belong in `install.ps1` and only the questions belong in the GUI. `tools/build-installer-exe.ps1` compiles it into `JunSetup.exe` with `install.ps1` embedded as base64, and `.github/workflows/release-installer.yml` attaches that exe to tagged releases. The Colab deployment lives in `colab.ipynb`, and `android/` is a separate Gradle project. See [the architecture guide](docs/architecture.md) before changing a cross-service flow.
+The Windows installation is managed by `install.ps1` and `start.ps1`. `installer-gui.ps1` is a WPF front end over the same `install.ps1`: it collects answers, exports the matching `JUN_*` variables plus `JUN_YES=1`, and runs the script, so installer behavior changes belong in `install.ps1` and only the questions belong in the GUI. `tools/build-installer-exe.ps1` compiles it into `JunSetup.exe` with `install.ps1` embedded as base64; with `-PinRef`/`-PinSha` it also bakes in a tag and that tag's commit, and the exe then installs that exact commit and nothing else. Both installers resolve a release channel (`JUN_CHANNEL`: stable, latest, experimental) to a tag through the GitHub releases API, and after cloning they hand off to the `install.ps1`/`install.sh` inside the checkout (`JUN_HANDOFF=1`), so the installer that configures a release is always the one that shipped with it. Keep that handoff working when you change either script. The Colab deployment lives in `colab.ipynb`, and `android/` is a separate Gradle project. See [the architecture guide](docs/architecture.md) before changing a cross-service flow.
 
 ## Project invariants
 
@@ -72,11 +72,21 @@ For Compose changes, validate every affected overlay and profile. For runtime ch
 
 Do not say a check passed if it was not run. Record missing hardware or unavailable services plainly.
 
+## Cutting a release
+
+Releases live on the public repo and are immutable once published: the tag can't move and nothing can be attached afterwards. So the order matters.
+
+1. Push a `v*` tag (`vX.Y.Z` for a full release, anything with a `-`, like `vX.Y.Z-beta`, for a pre-release).
+2. `.github/workflows/release-installer.yml` builds `JunSetup-<tag>.exe` pinned to that tag's commit, and puts it, `install.sh`, `install.ps1`, `installer-gui.ps1` and `SHA256SUMS` on a **draft** release for the tag. A draft you already made in the UI for that tag is reused.
+3. Write the notes, check the pre-release box is right, publish. Stable installs follow the newest full release, Latest follows the newest of either kind.
+
+Publishing before the workflow finishes leaves the release without its exe for good. Delete nothing: fix forward with the next tag.
+
 ## Pull requests
 
 Keep each pull request to one coherent change and avoid unrelated formatting or cleanup. Complete the pull request template, link related issues, and include screenshots or recordings for visual changes without exposing copyrighted assets or private conversations.
 
 Match the surrounding code style. Prefer clear naming and small control flow over explanatory comments; comments should record only constraints or behavior that would otherwise be easy to break.
 
-By contributing, you agree that your contribution is provided under this repository's [Apache License 2.0](LICENSE).
+By contributing, you agree that your contribution is provided under this repository's [Apache License 2.0](LICENSE) (section 5 of the license covers contributions).
 

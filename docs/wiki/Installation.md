@@ -65,6 +65,8 @@ cd /d D:\Games
 
 (replace `D:\Games` with the folder you want)
 
+If the window is a system folder (an *Administrator* Command Prompt opens in `C:\Windows\System32`) or inside OneDrive, the installer won't put her there and uses your user folder instead. It says so when it does.
+
 ### Step 3 - Run the installer
 
 Pick **one** of these two lines. They do the same install; one shows a window with buttons, the other prints text as it goes.
@@ -83,12 +85,16 @@ powershell irm https://raw.githubusercontent.com/efficiencyx/JunOS/main/install.
 
 Copy the whole line, right-click inside the terminal window to paste it, press **Enter**.
 
+**Or skip the terminal:** download `JunSetup-<version>.exe` from the [releases page](https://github.com/efficiencyx/JunOS/releases) and double-click it. Each one installs exactly the version in its name.
+
+If something goes wrong the installer stops, says what in plain words, and waits for Enter before the window closes. Fix that one thing and paste the same line again: it picks up where it stopped.
+
 ### Step 4 - Answer the one question
 
 The installer asks **how should I install?**
 
 * Press **Enter** for **Express**. It looks at your hardware, picks a model that fits your graphics card, turns on the voice, and rebuilds her body from your game. This is the right answer for almost everyone.
-* Type `2` and press Enter for **Custom** if you want to choose the AI provider, the model, whether the voice is on, and so on. Every question has a default, pressing Enter takes it.
+* Type `2` and press Enter for **Custom** if you want to choose the release channel, the AI provider, the model, whether the voice is on, and so on. Every question has a default, pressing Enter takes it.
 
 ### Step 5 - Let it work
 
@@ -416,7 +422,17 @@ Signup shows a recovery code once. Keep it somewhere private, separate from your
 
 ### Updating her
 
-Run the same one-liner from Step 3 / Step 4 again. It finds the existing install, pulls the newest code, and restarts. Your `.env`, accounts and chats are kept.
+Run the same one-liner from Step 3 / Step 4 again. It finds the existing install, moves it to the newest version on its channel, and restarts. Your `.env`, accounts and chats are kept.
+
+Which version it updates to depends on the **release channel**:
+
+* **Stable** (the default): the newest full release.
+* **Latest**: the newest release, pre-releases included.
+* **Experimental**: the `main` branch, whatever was pushed today.
+
+The channel is saved in `.env` as `JUN_CHANNEL`. To switch, edit that line, or set it for one run: `JUN_CHANNEL=latest` in front of the Linux line, or `set JUN_CHANNEL=latest` in Command Prompt before the Windows line. She never moves backwards to an older release on her own. If you installed her before channels existed you were on `main`, so you stay on Experimental until you pick something else.
+
+`JUN_REF=v1.0.0` installs one exact version and skips the channel. If you changed files in her folder yourself, the update leaves the code alone and tells you.
 
 ---
 

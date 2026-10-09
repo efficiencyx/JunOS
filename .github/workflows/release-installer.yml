@@ -1,7 +1,17 @@
 name: Release installer
 
-# push a tag and the exe shows up on the release. nothing else here is
-# automated, the release notes are still yours to write.
+# push a v* tag and this builds JunSetup-<tag>.exe and puts it, the
+# three install scripts and their SHA256SUMS on a DRAFT release for
+# that tag. the exe is pinned: it carries the tag and the commit the
+# tag points at, and install.ps1 refuses to set up anything else.
+# a tag with a - in it (v1.2.0-beta) drafts as a pre-release. the
+# notes and the publish button are still yours.
+#
+# draft, not published, because the repo has immutable releases on.
+# once a release is published nothing can be attached to it anymore,
+# so everything goes on while it's still a draft. a draft you made
+# by hand in the UI for the same tag gets the files too. publish it
+# first and this job fails, on purpose.
 on:
   push:
     tags: ['v*']
@@ -25,22 +35,61 @@ jobs:
         # a tag name can hold $( ) and powershell would run it.
         env:
           JUN_RELEASE_REF: ${{ github.ref_name }}
+          JUN_RELEASE_IS_TAG: ${{ github.ref_type == 'tag' }}
         run: |
-          $tag = $env:JUN_RELEASE_REF -replace '^v', ''
+          $pin = @{}
+          $out = 'dist\JunSetup.exe'
+          if ($env:JUN_RELEASE_IS_TAG -eq 'true') {
+            # HEAD, not github.sha. for an annotated tag the checkout is
+            # the commit, and that's the hash install.ps1 compares against.
+            $pin = @{ PinRef = $env:JUN_RELEASE_REF; PinSha = (git rev-parse HEAD).Trim() }
+            $out = "dist\JunSetup-$($env:JUN_RELEASE_REF).exe"
+          }
+          $tag = $env:JUN_RELEASE_REF -replace '^v', '' -replace '-.*$', ''
           # ps2exe wants a 4 part numeric version and a tag like v1.2 is not
           # one. pad it, and fall back for workflow_dispatch where ref_name is
           # a branch.
           if ($tag -notmatch '^\d+(\.\d+)*$') { $tag = '0.0.0' }
           $parts = @($tag -split '\.') + @('0', '0', '0', '0')
-          ./tools/build-installer-exe.ps1 -Version ($parts[0..3] -join '.')
+          ./tools/build-installer-exe.ps1 -Version ($parts[0..3] -join '.') -OutputPath $out @pin
 
       - uses: actions/upload-artifact@v4
         with:
           name: JunSetup
-          path: dist/JunSetup.exe
+          path: dist/JunSetup*.exe
 
-      - name: Attach to release
-        if: startsWith(github.ref, 'refs/tags/')
-        uses: softprops/action-gh-release@v2
+  draft:
+    name: Draft release
+    needs: installer
+    if: startsWith(github.ref, 'refs/tags/')
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/download-artifact@v4
         with:
-          files: dist/JunSetup.exe
+          name: JunSetup
+          path: dist
+
+      - name: Attach to the draft
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ github.ref_name }}
+        run: |
+          exe="JunSetup-$TAG.exe"
+          [ -f "dist/$exe" ] || { echo "::error::dist/$exe missing, the build job named it something else"; exit 1; }
+          cp install.sh install.ps1 installer-gui.ps1 dist/
+          (cd dist && sha256sum "$exe" install.sh install.ps1 installer-gui.ps1 > SHA256SUMS)
+
+          # gh release view finds drafts by tag too, the plain API doesn't
+          if gh release view "$TAG" --json isDraft --jq .isDraft > state 2>/dev/null; then
+            if [ "$(cat state)" != true ]; then
+              echo "::error::$TAG is already published. immutable releases take no new assets, push the tag BEFORE publishing."
+              exit 1
+            fi
+          else
+            pre=""
+            case "$TAG" in *-*) pre="--prerelease" ;; esac
+            gh release create "$TAG" --draft --verify-tag --title "$TAG" --generate-notes $pre
+          fi
+          gh release upload "$TAG" "dist/$exe" dist/install.sh dist/install.ps1 dist/installer-gui.ps1 dist/SHA256SUMS --clobber

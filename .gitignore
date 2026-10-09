@@ -99,6 +99,7 @@ webapp/showcase-mod/
 webapp/showcase-tiktok.html
 webapp/showcase-tiktok.css
 webapp/js/showcase-tiktok.js
+tools/*showcase*
 
 # the landing page is tracked here, publish.sh keeps the whole
 # folder out of the public tree. the stills are renders of her

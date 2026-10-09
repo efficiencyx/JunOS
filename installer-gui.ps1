@@ -30,6 +30,10 @@ $script:IsCompiled = $PSCommandPath -and $PSCommandPath.EndsWith('.exe', 'Ordina
 # and the exact assignment shape alone or the build stops
 # embedding and says nothing about it.
 $script:EmbeddedInstaller = '' # JUN_EMBEDDED_INSTALLER
+# same deal, a release build writes its tag and commit in here.
+# set = this exe installs exactly that version, no channel pick.
+$script:PinnedRef = '' # JUN_PINNED_REF
+$script:PinnedSha = '' # JUN_PINNED_SHA
 
 # install.ps1 git clones the repo itself, so the exe doesn't have
 # to carry one. embedding that single script is the whole
@@ -477,6 +481,15 @@ public sealed class InstallerProcessOutput
 
                         <Border x:Name="CustomOptions" Background="#1A1D24" BorderBrush="#343945" BorderThickness="1" CornerRadius="6" Padding="18" Margin="0,16,0,0" Visibility="Collapsed">
                             <StackPanel>
+                                <StackPanel x:Name="ChannelPanel" Margin="0,0,0,16">
+                                    <TextBlock Text="Release channel" FontWeight="SemiBold" />
+                                    <ComboBox x:Name="ChannelCombo" Margin="0,7,0,0">
+                                        <ComboBoxItem Content="Stable — the latest full release" Tag="stable" IsSelected="True" />
+                                        <ComboBoxItem Content="Latest — the newest release, pre-releases included" Tag="latest" />
+                                        <ComboBoxItem Content="Experimental — straight from main, can break any day" Tag="experimental" />
+                                    </ComboBox>
+                                </StackPanel>
+
                                 <TextBlock Text="AI provider" FontWeight="SemiBold" />
                                 <ComboBox x:Name="ProviderCombo" Margin="0,7,0,0">
                                     <ComboBoxItem Content="Ollama — local and fully managed" Tag="ollama" IsSelected="True" />
@@ -608,7 +621,7 @@ $controlNames = @(
     'HeaderSubtitle', 'StepText', 'WelcomePage', 'OptionsPage', 'AssetsPage',
     'ReviewPage', 'InstallPage', 'InstallLocation', 'BrowseInstallButton',
     'HardwareText', 'ExpressRadio', 'CustomRadio', 'ExpressSummary', 'ExpressSummaryText',
-    'CustomOptions', 'ProviderCombo',
+    'CustomOptions', 'ChannelPanel', 'ChannelCombo', 'ProviderCombo',
     'OpenRouterPanel', 'OpenRouterKey', 'OpenRouterModel', 'LlamaPanel', 'LlamaUrl',
     'LocalModelPanel', 'ModelCombo', 'TensorParallelCheck', 'TensorParallelHint', 'VoiceCheck',
     'KaraokeCheck', 'MtpCheck', 'MtpDepthPanel', 'MtpDepthCombo', 'ExtractCheck',
@@ -717,7 +730,12 @@ function Select-Model([string]$modelRef) {
 $script:recommendedModel = Get-RecommendedModel $false
 Select-Model $script:recommendedModel
 $recommendedLabel = ($modelChoices | Where-Object { $_.Ref -eq $script:recommendedModel } | Select-Object -First 1).Label
-$ExpressSummaryText.Text = "Ollama with $recommendedLabel`nVoice conversation and karaoke enabled`nMulti-token prediction on, draft depth measured after install`nLive2D asset recovery offered separately"
+$versionLine = if ($script:PinnedRef) { "Jun OS $($script:PinnedRef) (this installer's version)" } else { 'Stable release channel' }
+if ($script:PinnedRef) {
+    $ChannelPanel.Visibility = 'Collapsed'
+    $window.Title = "Jun OS Setup $($script:PinnedRef)"
+}
+$ExpressSummaryText.Text = "$versionLine`nOllama with $recommendedLabel`nVoice conversation and karaoke enabled`nMulti-token prediction on, draft depth measured after install`nLive2D asset recovery offered separately"
 
 if ($script:gpuVendor -eq 'cpu') {
     $HardwareText.Text = 'No NVIDIA or AMD GPU was detected. The CPU-friendly Jun E2B model is recommended; local inference will still work.'
@@ -844,6 +862,9 @@ function Get-SetupValues {
     $model = if ($express) { $script:recommendedModel } else { Get-SelectedTag $ModelCombo }
     return @{
         Express = $express
+        # Express leaves it to install.ps1: stable for a new folder,
+        # whatever an existing install already follows.
+        Channel = if ($express -or $script:PinnedRef) { '' } else { Get-SelectedTag $ChannelCombo }
         Provider = $provider
         Model = $model
         TensorParallel = (-not $express -and $TensorParallelCheck.IsChecked -eq $true)
@@ -869,6 +890,7 @@ function Update-Review {
     $lines = @(
         "Folder       $path",
         "Setup        $(if ($values.Express) { 'Express' } else { 'Custom' })",
+        "Version      $(if ($script:PinnedRef) { "$($script:PinnedRef), pinned" } elseif ($values.Channel) { $values.Channel.Substring(0, 1).ToUpper() + $values.Channel.Substring(1) + ' channel' } else { 'Stable channel' })",
         "Provider     $($providerNames[$values.Provider])",
         "Model        $modelText",
         "Voice        $(if ($values.Voice) { 'On' } else { 'Off' })",
@@ -1040,7 +1062,7 @@ function Start-Installation {
     $info.StandardErrorEncoding = [Text.Encoding]::UTF8
 
     $managedKeys = @(
-        'JUN_YES', 'JUN_EXPRESS', 'JUN_DIR', 'JUN_PROVIDER', 'JUN_MODEL',
+        'JUN_YES', 'JUN_EXPRESS', 'JUN_DIR', 'JUN_CHANNEL', 'JUN_REF', 'JUN_PIN_SHA', 'JUN_PROVIDER', 'JUN_MODEL',
         'JUN_TENSOR_PARALLEL', 'JUN_MTP', 'JUN_MTP_DEPTH', 'JUN_KARAOKE',
         'JUN_EXTRACT', 'JUN_GAME_DIR', 'JUN_BOOTSTRAP_WINGET', 'VOICE',
         'KARAOKE', 'OPENROUTER_API_KEY', 'OPENROUTER_MODEL', 'LLAMACPP_URL'
@@ -1049,6 +1071,11 @@ function Start-Installation {
 
     $info.EnvironmentVariables['JUN_YES'] = '1'
     $info.EnvironmentVariables['JUN_DIR'] = $script:installPath
+    if ($values.Channel) { $info.EnvironmentVariables['JUN_CHANNEL'] = $values.Channel }
+    if ($script:PinnedRef) {
+        $info.EnvironmentVariables['JUN_REF'] = $script:PinnedRef
+        $info.EnvironmentVariables['JUN_PIN_SHA'] = $script:PinnedSha
+    }
     $info.EnvironmentVariables['JUN_PROVIDER'] = $values.Provider
     $info.EnvironmentVariables['JUN_MODEL'] = $values.Model
     $info.EnvironmentVariables['JUN_TENSOR_PARALLEL'] = if ($values.TensorParallel) { 'on' } else { 'off' }

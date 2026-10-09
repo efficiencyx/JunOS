@@ -20,7 +20,15 @@ try {
 $repoUpstream = 'https://github.com/efficiencyx/JunOS.git'
 $repo = if ($env:JUN_REPO) { $env:JUN_REPO } else { $repoUpstream }
 $dir  = if ($env:JUN_DIR)  { $env:JUN_DIR }  else { 'JunOS' }
-$ref  = if ($env:JUN_REF)  { $env:JUN_REF }  else { 'main' }
+# JUN_REF pins an exact branch or tag and skips the channel
+# lookup. without it JUN_CHANNEL (or the .env of an existing
+# install) decides, see Resolve-Channel.
+$ref  = if ($env:JUN_REF)  { $env:JUN_REF }  else { '' }
+# JUN_PIN_SHA is the commit $ref has to be. a versioned
+# JunSetup-<tag>.exe sets both, so that exe installs its own
+# version and nothing else, even if the tag moved under it.
+$pinSha = "$env:JUN_PIN_SHA".Trim().ToLower()
+$handoff = $env:JUN_HANDOFF -eq '1'
 
 # windows terminal, VS Code and modern conhost all handle VT
 # sequences (the ANSI escape codes behind the colours).
@@ -77,8 +85,56 @@ function Fail_([string]$msg)   { Write-Host "    ${DANGER}✗${R} ${DANGER}${msg
 # on the end.
 function Read-Styled([string]$prompt) {
     Write-Host -NoNewline $prompt
-    try { return [Console]::ReadLine() }
-    catch { return (Read-Host) }
+    try { $line = [Console]::ReadLine() }
+    catch { $line = Read-Host }
+    # " 2 " and "Y " are still a 2 and a yes. ReadLine is $null on a
+    # closed stdin, which every caller already treats as Enter.
+    if ($null -eq $line) { return '' }
+    return $line.Trim()
+}
+
+# "Run with PowerShell" opens a window that closes the moment we
+# exit. error included. so on a failure we wait for Enter. not
+# when the GUI drives us (output redirected, it shows the log
+# itself) and not in a handoff child, the parent waits for it.
+function Exit-Install([int]$code) {
+    if ($code -ne 0 -and -not $handoff -and [Environment]::UserInteractive) {
+        $redirected = $true
+        try { $redirected = [Console]::IsInputRedirected -or [Console]::IsOutputRedirected } catch {}
+        if (-not $redirected) {
+            Write-Host ''
+            Read-Styled "    ${DIM}press Enter to exit${R} " | Out-Null
+        }
+    }
+    exit $code
+}
+
+# anything nobody caught. without this PowerShell dumps a red
+# stack trace, and from "Run with PowerShell" the window is gone
+# before anyone reads it.
+trap {
+    Write-Host ''
+    Fail_ ("setup stopped: {0}" -f $_.Exception.Message)
+    Note 'fix what it says above, then run the same install line again. it picks up where it stopped.'
+    Note 'still stuck? open an issue with this whole window copied in: https://github.com/efficiencyx/JunOS/issues'
+    Exit-Install 1
+}
+
+# git through here, never bare with 2>&1. Windows PowerShell 5.1
+# with $ErrorActionPreference='Stop' turns the first stderr line of
+# a native command into a terminating NativeCommandError, and git
+# writes progress and hints to stderr even when it works. output
+# comes back as plain strings, $LASTEXITCODE is git's.
+function Invoke-Git {
+    $prev = $ErrorActionPreference
+    $ErrorActionPreference = 'Continue'
+    try {
+        return @(& git @args 2>&1 | ForEach-Object {
+            if ($_ -is [Management.Automation.ErrorRecord]) { $_.Exception.Message } else { "$_" }
+        })
+    } finally {
+        $ErrorActionPreference = $prev
+    }
 }
 
 # ollama isn't here on purpose, Install-Ollama fetches it
@@ -221,9 +277,9 @@ function Set-EnvKey([string]$key, [string]$val) {
     Set-Content -Path .env -Value $lines
 }
 
-function Get-EnvValue([string]$key) {
-    if (-not (Test-Path .env)) { return '' }
-    $line = Get-Content .env | Where-Object { $_ -match "^$key=" } | Select-Object -Last 1
+function Get-EnvValue([string]$key, [string]$file = '.env') {
+    if (-not (Test-Path -LiteralPath $file)) { return '' }
+    $line = Get-Content -LiteralPath $file | Where-Object { $_ -match "^$key=" } | Select-Object -Last 1
     if (-not $line) { return '' }
     return $line.Substring($line.IndexOf('=') + 1)
 }
@@ -270,7 +326,7 @@ function Test-Sha256([string]$path, [string]$expected) {
 function Confirm-RepoSource {
     if ($repo -notmatch '^https://') {
         Fail_ "JUN_REPO must be an https:// URL - refusing to clone $repo"
-        exit 1
+        Exit-Install 1
     }
     if ($repo -eq $repoUpstream) { return }
 
@@ -283,10 +339,10 @@ function Confirm-RepoSource {
     }
     if (-not [Environment]::UserInteractive) {
         Fail_ "set `$env:JUN_ALLOW_FORK='1' to install from a fork non-interactively."
-        exit 1
+        Exit-Install 1
     }
     $a = Read-Styled "     ${OK}▸${R} clone from it anyway? ${DIM}[y/N]${R} ${ACCENT}›${R} "
-    if ($a -notmatch '^(y|yes)$') { Fail_ 'aborted.'; exit 1 }
+    if ($a -notmatch '^(y|yes)$') { Fail_ 'aborted.'; Exit-Install 1 }
 }
 
 # .env holds the OpenRouter key once somebody types one in.
@@ -315,9 +371,16 @@ function Protect-EnvFile {
 # JUN_YES=1. Custom walks the prompts. JUN_EXPRESS=1 picks
 # Express before we even ask.
 function Choose-InstallMode {
+    # a handoff child takes the answer the parent already got.
+    if ($handoff -and $env:JUN_EXPRESS -eq '1') {
+        $script:interactive = $false
+        $script:expressInteractive = [Environment]::UserInteractive
+        return
+    }
+    if ($handoff -and $env:JUN_EXPRESS -eq '0') { return }
     if ($env:JUN_YES -eq '1') { return }
     if ($env:JUN_EXPRESS -match '^(1|on|yes|true)$') {
-        $env:JUN_YES = '1'; $script:interactive = $false
+        $env:JUN_YES = '1'; $env:JUN_EXPRESS = '1'; $script:interactive = $false
         $script:expressInteractive = [Environment]::UserInteractive
         return
     }
@@ -328,9 +391,10 @@ function Choose-InstallMode {
     Write-Host "       ${ACCENT}[2]${R}  Custom   ${DIM}- pick the provider, model, voice, and more${R}"
     $ans = Read-Styled "     ${OK}▸${R} choice ${DIM}[Enter = Express]${R} ${ACCENT}›${R} "
     if ($ans -match '^(2|custom)$') {
+        $env:JUN_EXPRESS = '0'
         Note "custom install - I'll ask about each option below"
     } else {
-        $env:JUN_YES = '1'; $script:interactive = $false
+        $env:JUN_YES = '1'; $env:JUN_EXPRESS = '1'; $script:interactive = $false
         $script:expressInteractive = $true
         Ok 'express install - using recommended settings'
     }
@@ -362,6 +426,7 @@ function Ask-ModelRef {
                 '2' { $alias = 'e4b' }
                 '3' { $alias = 'e2b' }
                 ''  { $alias = $rec }
+                { $_ -match '^(12b|e4b|e2b)$' } { $alias = $ans }
                 default { Warn_ 'unrecognized choice, using recommended model'; $alias = $rec }
             }
         } else {
@@ -485,10 +550,11 @@ function Configure-Jun {
             Write-Host "       ${ACCENT}[2]${R}  OpenRouter  ${DIM}- cloud API - needs an API key; chats leave this machine${R}"
             Write-Host "       ${ACCENT}[3]${R}  llama.cpp   ${DIM}- local llama-server${R}"
             $ans = Read-Styled "     ${OK}▸${R} choice ${DIM}[Enter = Ollama]${R} ${ACCENT}›${R} "
-            $provider = switch ($ans) {
-                '2' { 'openrouter' }
-                '3' { 'llamacpp' }
-                default { 'ollama' }
+            $provider = switch -Regex ($ans) {
+                '^(2|openrouter)$'               { 'openrouter' }
+                '^(3|llama|llamacpp|llama\.cpp)$' { 'llamacpp' }
+                '^(1|ollama)?$'                  { 'ollama' }
+                default { Warn_ "unrecognized choice '$ans', using Ollama"; 'ollama' }
             }
         } else {
             $provider = 'ollama'
@@ -697,7 +763,7 @@ function Install-Ollama {
     } catch {
         Fail_ $_.Exception.Message
         Note ("install it yourself from {0} and re-run this installer." -f $manualUrls.ollama)
-        exit 1
+        Exit-Install 1
     } finally {
         Remove-Item -LiteralPath $tmp -Force -ErrorAction SilentlyContinue
     }
@@ -709,7 +775,7 @@ function Assert-OnPath([string]$command) {
     if (Get-Command $command -ErrorAction SilentlyContinue) { return }
     Fail_ "$command still not on PATH"
     Note 'open a NEW terminal (so PATH refreshes) and run the one-liner again; setup will resume.'
-    exit 1
+    Exit-Install 1
 }
 
 # install the named tools, after warning that these are the only
@@ -727,21 +793,21 @@ function Install-MachineTools([string[]]$missing, [switch]$Optional) {
     if (($missing | Where-Object { $wingetIds[$_] }) -and -not (Ensure-Winget)) {
         Fail_ "winget (App Installer) isn't available - install them manually and re-run:"
         foreach ($c in $missing) { Write-Host ("       ${ACCENT}{0,-7}${R} ${DIM}{1}${R}" -f $c, $manualUrls[$c]) }
-        if ($Optional) { return } else { exit 1 }
+        if ($Optional) { return } else { Exit-Install 1 }
     }
 
     $proceed = $env:JUN_YES -eq '1'
     if (-not $proceed) {
         if (-not [Environment]::UserInteractive) {
             Note "re-run in an interactive terminal (or set `$env:JUN_YES='1') to install them."
-            if ($Optional) { return } else { exit 1 }
+            if ($Optional) { return } else { Exit-Install 1 }
         }
         $answer = Read-Styled ("     ${OK}▸${R} install {0} now? ${DIM}[y/N]${R} ${ACCENT}›${R} " -f ($missing -join ' and '))
         $proceed = $answer -match '^(y|yes)$'
     }
     if (-not $proceed) {
         Note 'okay, leaving it to you - install the tools above and re-run this installer.'
-        if ($Optional) { return } else { exit 1 }
+        if ($Optional) { return } else { Exit-Install 1 }
     }
 
     foreach ($c in $missing) {
@@ -1145,15 +1211,418 @@ function Find-JunInstall {
         if (Test-JunCheckout $d) { return $d }
         $d = Split-Path -Parent $d
     }
+    # where Resolve-FreshDir puts her when the terminal sat somewhere
+    # bad. a re-run from any other folder still has to find her.
+    $inHome = Join-Path $HOME $dir
+    if (Test-JunCheckout $inHome) { return $inHome }
     return $null
 }
 
-Show-Banner
+function Test-UnderPath([string]$path, [string[]]$roots) {
+    foreach ($r in $roots) {
+        if (-not $r) { continue }
+        $r = $r.TrimEnd('\')
+        if ($path -ieq $r -or $path.StartsWith($r + '\', [StringComparison]::OrdinalIgnoreCase)) { return $true }
+    }
+    return $false
+}
+
+function Test-Writable([string]$path) {
+    $probe = Join-Path $path ('.jun-write-test-' + [guid]::NewGuid().ToString('N'))
+    try {
+        [IO.File]::WriteAllText($probe, '')
+        Remove-Item -LiteralPath $probe -Force
+        return $true
+    } catch {
+        return $false
+    }
+}
+
+# where a fresh clone goes. JUN_DIR is a decision and wins.
+# otherwise next to wherever the terminal is, unless that's
+# somewhere she can't live. an admin terminal opens in System32,
+# Program Files wants admin for every write, and OneDrive syncs
+# the live SQLite file and GBs of runtime while she runs (locked
+# DB, full cloud). those go to the home folder instead.
+function Resolve-FreshDir {
+    $syncRoots = @($env:OneDrive, $env:OneDriveConsumer, $env:OneDriveCommercial)
+    if ($env:JUN_DIR) {
+        $full = $ExecutionContext.SessionState.Path.GetUnresolvedProviderPathFromPSPath($dir)
+        if (Test-UnderPath $full $syncRoots) {
+            Warn_ "$full is inside OneDrive. her database and runtime will sync while she runs."
+            Note 'it works, but a folder outside OneDrive (like your home folder) is the safer pick.'
+        }
+        return $full
+    }
+    $here = (Get-Location).ProviderPath
+    $system = @($env:SystemRoot, $env:ProgramFiles, ${env:ProgramFiles(x86)}, $env:ProgramData)
+    if (-not (Test-UnderPath $here ($system + $syncRoots)) -and (Test-Writable $here)) {
+        return (Join-Path $here $dir)
+    }
+    $target = Join-Path $HOME $dir
+    Note "not installing inside $here - using $target instead (JUN_DIR picks another folder)"
+    return $target
+}
+
+# one cheap request before anything big. without it a dead
+# connection shows up three steps later as a git or winget error
+# nobody can read.
+function Test-GitHub {
+    try {
+        Invoke-WebRequest -Uri 'https://github.com' -Method Head -UseBasicParsing -TimeoutSec 20 | Out-Null
+        return $true
+    } catch {
+        return $false
+    }
+}
+
+# models land in the profile (ollama keeps them in
+# %USERPROFILE%\.ollama), runtime and venvs in the install folder,
+# so both drives get looked at. ~20 GB is Ollama + the 12B model +
+# voice + karaoke with a bit of room, E2B gets by on less. rough
+# numbers, source: trust me bro.
+function Confirm-FreeSpace([string]$installPath) {
+    $low = @{}
+    foreach ($p in @($installPath, $HOME)) {
+        $root = [IO.Path]::GetPathRoot($p)
+        if (-not $root -or $low.ContainsKey($root)) { continue }
+        try { $free = ([IO.DriveInfo]::new($root)).AvailableFreeSpace } catch { continue }
+        if ($free -lt 20GB) { $low[$root] = $free }
+    }
+    if ($low.Count -eq 0) { return }
+    foreach ($root in $low.Keys) {
+        Warn_ ("only {0:N1} GB free on {1} - a full local install wants about 20 GB" -f ($low[$root] / 1GB), $root)
+    }
+    Note 'a model download that runs out of space fails halfway and has to start over.'
+    if (-not ($interactive -or $script:expressInteractive)) { return }
+    $a = Read-Styled "     ${OK}▸${R} carry on anyway? ${DIM}[y/N]${R} ${ACCENT}›${R} "
+    if ($a -notmatch '^(y|yes)$') {
+        Note 'free some space (or set JUN_DIR to a roomier drive) and run this again.'
+        Exit-Install 1
+    }
+}
+
+# the checks that turn "it broke somewhere" into one clear line
+# before anything gets installed.
+function Test-Preflight {
+    if ([Environment]::OSVersion.Version.Build -lt 17763) {
+        Warn_ 'this Windows is older than Windows 10 1809. winget and current Ollama need'
+        Warn_ '1809 or newer, so expect the next steps to fail. Windows Update first.'
+    }
+    $me = [Security.Principal.WindowsIdentity]::GetCurrent()
+    $admin = ([Security.Principal.WindowsPrincipal]$me).IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)
+    if (-not $admin) { return }
+    # elevated as yourself is fine. elevated as a DIFFERENT account
+    # (typed the admin password of another user at the UAC prompt)
+    # installs Ollama, the models and her folder into that other
+    # profile, and none of it is there when you log in normally.
+    $console = ''
+    try { $console = [string](Get-CimInstance Win32_ComputerSystem -ErrorAction Stop).UserName } catch {}
+    if (-not $console -or $console -ieq $me.Name) { return }
+    Warn_ "this terminal runs as $($me.Name), but $console is the one logged in."
+    Note "she would get installed for $($me.Name) and not show up for $console."
+    Note 'no admin terminal needed - a normal PowerShell window works.'
+    if (-not ($interactive -or $script:expressInteractive)) { return }
+    $a = Read-Styled "     ${OK}▸${R} install for $($me.Name) anyway? ${DIM}[y/N]${R} ${ACCENT}›${R} "
+    if ($a -notmatch '^(y|yes)$') { Exit-Install 1 }
+}
+
+# stable = newest full release, latest = newest release of any
+# kind (pre-releases count), experimental = main.
+function ConvertTo-Channel([string]$name) {
+    switch -Regex ($name.Trim().ToLower()) {
+        '^(stable|release)$'                    { return 'stable' }
+        '^(latest|pre-?release|beta|preview)$'  { return 'latest' }
+        '^(experimental|main|dev|nightly)$'     { return 'experimental' }
+    }
+    return ''
+}
+
+# JUN_CHANNEL, else what the install recorded in its .env, else
+# stable. Custom asks, with that as the default.
+function Resolve-Channel([string]$existing) {
+    if ($env:JUN_CHANNEL) {
+        $c = ConvertTo-Channel $env:JUN_CHANNEL
+        if ($c) { return $c }
+        Warn_ "JUN_CHANNEL='$($env:JUN_CHANNEL)' isn't a channel (stable, latest or experimental)"
+    }
+    $current = 'stable'
+    if ($existing) {
+        $saved = ConvertTo-Channel (Get-EnvValue 'JUN_CHANNEL' (Join-Path $existing '.env'))
+        if ($saved) {
+            $current = $saved
+        } elseif (Test-Path (Join-Path $existing '.git')) {
+            # installs from before channels all sit on main. moving them
+            # to a release now could mean OLDER code than they run, so they
+            # stay experimental until somebody picks otherwise.
+            Invoke-Git -C $existing symbolic-ref -q HEAD | Out-Null
+            if ($LASTEXITCODE -eq 0) { $current = 'experimental' }
+        }
+    }
+    if (-not $interactive) { return $current }
+    Write-Host ''
+    Write-Host "     ${B}which release channel?${R}"
+    Write-Host "       ${ACCENT}[1]${R}  Stable        ${DIM}- the latest full release${R}"
+    Write-Host "       ${ACCENT}[2]${R}  Latest        ${DIM}- the newest release, pre-releases included${R}"
+    Write-Host "       ${ACCENT}[3]${R}  Experimental  ${DIM}- straight from main, can break any day${R}"
+    $ans = Read-Styled "     ${OK}▸${R} choice ${DIM}[Enter = $current]${R} ${ACCENT}›${R} "
+    switch -Regex ($ans) {
+        '^$'  { return $current }
+        '^1$' { return 'stable' }
+        '^2$' { return 'latest' }
+        '^3$' { return 'experimental' }
+    }
+    $c = ConvertTo-Channel $ans
+    if ($c) { return $c }
+    Warn_ "unrecognized choice, staying on $current"
+    return $current
+}
+
+function Get-GitHubSlug([string]$url) {
+    if ($url -match '^https://github\.com/([^/]+)/([^/]+?)(\.git)?/?$') { return "$($matches[1])/$($matches[2])" }
+    return ''
+}
+
+# the tag a release channel points at right now. '' = no release
+# of that kind exists, $null = GitHub couldn't be asked (offline,
+# rate limited at 60 an hour per IP, not a github URL). anonymous
+# requests never see drafts, so a draft never gets installed.
+function Get-ReleaseTag([string]$channel) {
+    $slug = Get-GitHubSlug $repo
+    if (-not $slug) { return $null }
+    $api = "https://api.github.com/repos/$slug/releases"
+    $headers = @{ 'User-Agent' = 'JunOS-installer'; 'Accept' = 'application/vnd.github+json' }
+    try {
+        if ($channel -eq 'stable') {
+            try {
+                return [string](Invoke-RestMethod -Uri "$api/latest" -Headers $headers -UseBasicParsing).tag_name
+            } catch {
+                if ([int]$_.Exception.Response.StatusCode -ne 404) { throw }
+            }
+        }
+        # assigned first on purpose. 5.1 hands a JSON array down the
+        # pipeline as ONE object, piping it straight on would filter
+        # the array as a whole.
+        $list = Invoke-RestMethod -Uri "$api`?per_page=10" -Headers $headers -UseBasicParsing
+        $newest = $list | Where-Object { -not $_.draft } | Select-Object -First 1
+        if (-not $newest) { return '' }
+        if ($channel -eq 'stable') { Note "no full release yet - using the newest pre-release, $($newest.tag_name)" }
+        return [string]$newest.tag_name
+    } catch {
+        return $null
+    }
+}
+
+# the ref to put on disk, or $null for "leave it alone".
+function Resolve-TargetRef([string]$channel, [bool]$fresh) {
+    if ($channel -eq 'experimental') { return 'main' }
+    $tag = Get-ReleaseTag $channel
+    if ($tag) { return $tag }
+    if ($null -ne $tag) {
+        Note 'no releases published yet - using main'
+        return 'main'
+    }
+    Warn_ "couldn't ask GitHub which release is current"
+    if ($fresh) {
+        Note "installing from main for now. run this again later and she moves to $channel."
+        return 'main'
+    }
+    Note "keeping the code that's on disk"
+    return $null
+}
+
+# semver-ish, -1/0/1. v1.2.0 beats v1.2.0-beta, two pre-releases
+# of the same version compare as plain strings.
+function Compare-JunVersion([string]$a, [string]$b) {
+    $pa = Split-JunVersion $a
+    $pb = Split-JunVersion $b
+    for ($i = 0; $i -lt 4; $i++) {
+        if ($pa.Core[$i] -ne $pb.Core[$i]) { return [Math]::Sign($pa.Core[$i] - $pb.Core[$i]) }
+    }
+    if ($pa.Pre -eq $pb.Pre) { return 0 }
+    if (-not $pa.Pre) { return 1 }
+    if (-not $pb.Pre) { return -1 }
+    return [Math]::Sign([string]::CompareOrdinal($pa.Pre, $pb.Pre))
+}
+
+function Split-JunVersion([string]$v) {
+    $core, $pre = ($v -replace '^v', '') -split '-', 2
+    $nums = @($core -split '\.' | ForEach-Object { $n = 0; [void][int]::TryParse($_, [ref]$n); $n }) + @(0, 0, 0, 0)
+    return @{ Core = $nums[0..3]; Pre = "$pre" }
+}
+
+# into a side folder first, renamed once git is done. a clone that
+# died halfway (Ctrl+C, wifi, antivirus) otherwise leaves a folder
+# that isn't a checkout but isn't empty either, and every re-run
+# after that trips over it.
+function Copy-JunRepo([string]$target, [string]$into) {
+    if (Test-Path -LiteralPath $into) {
+        if (@(Get-ChildItem -LiteralPath $into -Force).Count -gt 0) {
+            Fail_ "$into already exists and isn't a Jun install"
+            Note 'move or rename that folder (or set JUN_DIR to another one), then run this again.'
+            Exit-Install 1
+        }
+        Remove-Item -LiteralPath $into -Force
+    }
+    $staging = "$into.partial"
+    if (Test-Path -LiteralPath $staging) { Remove-Item -LiteralPath $staging -Recurse -Force }
+    $parent = Split-Path -Parent $into
+    if ($parent -and -not (Test-Path -LiteralPath $parent)) { New-Item -ItemType Directory -Force -Path $parent | Out-Null }
+
+    Note "downloading $target from $repo"
+    # core.longpaths because a deep install folder plus the repo's
+    # own nesting can pass windows' 260 character MAX_PATH, and then
+    # git fails the checkout halfway.
+    $out = Invoke-Git -c core.longpaths=true -c advice.detachedHead=false clone -q --depth 1 --branch $target $repo $staging
+    if ($LASTEXITCODE -ne 0) {
+        $out | ForEach-Object { Write-Host "      $_" }
+        Remove-Item -LiteralPath $staging -Recurse -Force -ErrorAction SilentlyContinue
+        Fail_ "couldn't download Jun ($target)"
+        Note 'check the connection (and any VPN, proxy or antivirus in the way), then run this again.'
+        Exit-Install 1
+    }
+    if (-not (Test-PinnedRev $staging 'HEAD')) {
+        Remove-Item -LiteralPath $staging -Recurse -Force -ErrorAction SilentlyContinue
+        Exit-Install 1
+    }
+    Invoke-Git -C $staging config core.longpaths true | Out-Null
+    Move-Item -LiteralPath $staging -Destination $into
+    Ok "Jun $target"
+}
+
+# moves an existing checkout to $target. a tree with edits in it
+# stays exactly where it is, same as the old pull --ff-only did.
+function Update-JunRepo([string]$path, [string]$target, [bool]$isTag) {
+    $dirty = Invoke-Git -C $path status --porcelain --untracked-files=no
+    if ($LASTEXITCODE -ne 0 -or $dirty) {
+        Warn_ "files in $path were changed by hand - keeping the code that's on disk"
+        Note "see what changed with: git -C `"$path`" status"
+        return
+    }
+    $branch = (Invoke-Git -C $path symbolic-ref -q --short HEAD) -join ''
+    if ($LASTEXITCODE -ne 0) { $branch = '' }
+
+    if ($target -eq 'main' -and $branch) {
+        Invoke-Git -C $path pull -q --ff-only | Out-Null
+        if ($LASTEXITCODE -eq 0) {
+            Ok "up to date with $branch"
+        } else {
+            # local commits or a branch of their own. not a reason to
+            # stop, the rest still fixes .env, deps and the stack.
+            Warn_ "couldn't fast-forward $branch - keeping the code that's on disk"
+            Note "pull it yourself with: git -C `"$path`" pull"
+        }
+        return
+    }
+
+    $current = (Invoke-Git -C $path describe --tags --exact-match HEAD) -join ''
+    if ($LASTEXITCODE -ne 0) { $current = '' }
+    if ($current -and $current -eq $target) { Ok "already on $target"; return }
+    if ($isTag -and $current -and (Compare-JunVersion $target $current) -lt 0) {
+        $what = if ($script:channel) { "$($script:channel) ($target)" } else { $target }
+        Ok "on $current, newer than $what - staying until it catches up"
+        return
+    }
+    if ($isTag -and $branch) {
+        Warn_ "moving from $branch to the $target release - that can be older code than you had."
+        Note 'your chats and settings stay. JUN_CHANNEL=experimental takes you back.'
+    }
+
+    if ($target -eq 'main') {
+        # a tag clone only fetches that one tag. point origin at main
+        # again so a later plain `git pull` works too.
+        Invoke-Git -C $path config --replace-all remote.origin.fetch '+refs/heads/main:refs/remotes/origin/main' | Out-Null
+        $out = Invoke-Git -C $path fetch -q --depth 1 origin
+        if ($LASTEXITCODE -eq 0) { $out = Invoke-Git -C $path checkout -q -B main origin/main }
+        if ($LASTEXITCODE -eq 0) { $out = Invoke-Git -C $path branch -q --set-upstream-to=origin/main main }
+    } elseif ($isTag) {
+        $out = Invoke-Git -C $path fetch -q --depth 1 origin "+refs/tags/${target}:refs/tags/${target}"
+        if ($LASTEXITCODE -eq 0 -and -not (Test-PinnedRev $path "refs/tags/$target")) { return }
+        if ($LASTEXITCODE -eq 0) { $out = Invoke-Git -C $path -c advice.detachedHead=false checkout -q "refs/tags/$target" }
+    } else {
+        $out = Invoke-Git -C $path fetch -q --depth 1 origin $target
+        if ($LASTEXITCODE -eq 0 -and -not (Test-PinnedRev $path 'FETCH_HEAD')) { return }
+        if ($LASTEXITCODE -eq 0) { $out = Invoke-Git -C $path -c advice.detachedHead=false checkout -q --detach FETCH_HEAD }
+    }
+    if ($LASTEXITCODE -ne 0) {
+        $out | ForEach-Object { Write-Host "      $_" }
+        Warn_ "couldn't move to $target - keeping the code that's on disk"
+        return
+    }
+    Ok "now on $target"
+}
+
+# checked BEFORE a checkout or the rename into place, so code that
+# isn't the pinned commit never lands where start.ps1 would run it.
+function Test-PinnedRev([string]$path, [string]$rev) {
+    if (-not $pinSha) { return $true }
+    $got = ((Invoke-Git -C $path rev-parse "$rev^{commit}") -join '').Trim().ToLower()
+    if ($got -eq $pinSha) { return $true }
+    Fail_ "$ref should be commit $pinSha, but GitHub handed over $got"
+    Note 'not installing code this installer was not built for.'
+    Note 'get JunSetup again from the releases page, or tell us in an issue if it keeps happening.'
+    return $false
+}
+
+# a pinned run ends on the pinned commit or not at all. that
+# covers every way Update-JunRepo can leave the old code in place
+# (edited files, a newer release already there, a failed fetch).
+function Assert-PinnedCheckout([string]$path) {
+    if (-not $pinSha) { return }
+    $head = ''
+    if (Test-Path (Join-Path $path '.git')) { $head = ((Invoke-Git -C $path rev-parse HEAD) -join '').Trim().ToLower() }
+    if ($head -eq $pinSha) { Ok "commit $($pinSha.Substring(0, 12)) matches this installer"; return }
+    Fail_ "this installer only sets up $ref, and $path is on something else"
+    Note 'a newer version there? use a newer JunSetup, or the install line from the README.'
+    Exit-Install 1
+}
+
+# the installer that came with the code finishes the job, not
+# whichever copy got started (main's one-liner, an older exe). a
+# release's start.ps1 and .env keys match ITS install.ps1. the
+# child skips the banner, the questions already answered and the
+# git step. installers from before JUN_HANDOFF existed don't know
+# any of that, those we don't hand to.
+function Invoke-Handoff([string]$path) {
+    if ($handoff) { return }
+    $theirs = Join-Path $path 'install.ps1'
+    if (-not (Test-Path -LiteralPath $theirs)) { return }
+    if (-not (Select-String -LiteralPath $theirs -Pattern 'JUN_HANDOFF' -SimpleMatch -Quiet)) { return }
+    if ($PSCommandPath -and (Test-Path -LiteralPath $PSCommandPath) -and
+        (Get-FileHash -LiteralPath $PSCommandPath).Hash -eq (Get-FileHash -LiteralPath $theirs).Hash) { return }
+    $env:JUN_HANDOFF = '1'
+    $env:JUN_DIR = $path
+    if ($script:channel) { $env:JUN_CHANNEL = $script:channel }
+    $psExe = (Get-Process -Id $PID).MainModule.FileName
+    & $psExe -NoProfile -ExecutionPolicy Bypass -File $theirs
+    Exit-Install $LASTEXITCODE
+}
+
+# the x86 PowerShell is still in the start menu. from there
+# System32 quietly means SysWOW64: the VC++ runtime check finds
+# the 32 bit dll and PHP dies anyway, nvidia-smi isn't found so
+# she gets the CPU model. hop to the 64 bit one.
+if ([Environment]::Is64BitOperatingSystem -and -not [Environment]::Is64BitProcess) {
+    $native = Join-Path $env:SystemRoot 'Sysnative\WindowsPowerShell\v1.0\powershell.exe'
+    if ($PSCommandPath -and (Test-Path -LiteralPath $native)) {
+        & $native -NoProfile -ExecutionPolicy Bypass -File $PSCommandPath
+        exit $LASTEXITCODE
+    }
+    Fail_ 'this is the 32-bit (x86) PowerShell. open the normal "Windows PowerShell" and run the install line there.'
+    Exit-Install 1
+}
+if (-not [Environment]::Is64BitOperatingSystem) {
+    Fail_ 'Jun needs 64-bit Windows. PHP, Caddy and Ollama have no 32-bit builds.'
+    Exit-Install 1
+}
+
+if (-not $handoff) { Show-Banner }
 Choose-InstallMode
 $existing = Find-JunInstall
 # nothing gets cloned when she's already here, so the fork
 # warning has nothing to warn about.
 if (-not $existing) { Confirm-RepoSource }
+if (-not $handoff) { Test-Preflight }
 
 Step 'check dependencies'
 
@@ -1164,29 +1633,41 @@ if (-not (Get-Command git -ErrorAction SilentlyContinue)) {
 Assert-OnPath git
 Ok 'git found'
 
+$script:channel = ''
+if ($handoff) {
+    $script:channel = ConvertTo-Channel "$env:JUN_CHANNEL"
+} elseif (-not $ref) {
+    $script:channel = Resolve-Channel $existing
+    Ok "channel $($script:channel)"
+}
+
 if ($existing) {
     $dir = $existing
     Step 'existing install'
     Ok "found Jun in $dir - updating instead of cloning"
-    if (Test-Path (Join-Path $dir '.git')) {
-        git -C $dir pull --ff-only 2>&1 | Out-Null
-        if ($LASTEXITCODE -eq 0) {
-            Ok 'repo up to date'
-        } else {
-            # Local commits, a dirty tree or a branch of their own all
-            # block a fast-forward. None of that is a reason to abort.
-            # The rest of the installer still fixes .env, deps and the
-            # stack.
-            Warn_ "couldn't fast-forward $dir - keeping the code that's on disk"
-            Note "pull it yourself with: git -C $dir pull"
-        }
-    } else {
+    if ($handoff) {
+        Ok 'code already updated'
+    } elseif (-not (Test-Path (Join-Path $dir '.git'))) {
         Note 'not a git checkout, nothing to pull - re-running setup on what is here'
+    } elseif (-not (Test-GitHub)) {
+        Warn_ "can't reach github.com - keeping the code that's on disk"
+    } else {
+        $target = if ($ref) { $ref } else { Resolve-TargetRef $script:channel $false }
+        if ($target) { Update-JunRepo $dir $target ((-not $ref -and $target -ne 'main') -or [bool]$pinSha) }
     }
+    if (-not $handoff) { Assert-PinnedCheckout $dir }
 } else {
-    Step 'clone repository'
-    git clone --depth 1 --branch $ref $repo $dir
-    Ok "$repo ($ref)"
+    $dir = Resolve-FreshDir
+    if (-not (Test-GitHub)) {
+        Fail_ "can't reach github.com"
+        Note 'check the internet connection, then any VPN, proxy or firewall, and that the'
+        Note "PC's date and time are right (a wrong clock breaks every https download)."
+        Exit-Install 1
+    }
+    Confirm-FreeSpace $dir
+    $target = if ($ref) { $ref } else { Resolve-TargetRef $script:channel $true }
+    Step 'download Jun'
+    Copy-JunRepo $target $dir
 }
 
 Set-Location -LiteralPath $dir
@@ -1195,6 +1676,8 @@ if (-not (Test-Path .env)) { Copy-Item .env.example .env }
 # exactly the one still sitting there with the folder's inherited
 # ACL on it.
 Protect-EnvFile
+if ($script:channel) { Set-EnvKey 'JUN_CHANNEL' $script:channel }
+Invoke-Handoff (Get-Location).ProviderPath
 
 $cfg = Configure-Jun
 $voice = $cfg.voice
@@ -1285,7 +1768,7 @@ if ($script:mtpAutotune -and $startCode -eq 0) {
         Warn_ 'autotune failed - drafting 1 token ahead, re-run .\mtp-autotune.ps1 anytime'
     }
 }
-exit $startCode
+Exit-Install $startCode
 
 #                                 -                                 
 #                                 ==:                               

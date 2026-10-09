@@ -4,7 +4,13 @@ set -euo pipefail
 REPO_UPSTREAM="https://github.com/efficiencyx/JunOS.git"
 REPO="${JUN_REPO:-$REPO_UPSTREAM}"
 DIR="${JUN_DIR:-JunOS}"
-REF="${JUN_REF:-main}"
+# JUN_REF pins an exact branch or tag and skips the channel
+# lookup. without it JUN_CHANNEL (or the .env of an existing
+# install) decides, see choose_channel.
+REF="${JUN_REF:-}"
+HANDOFF="${JUN_HANDOFF:-0}"
+CHANNEL=""
+TARGET=""
 DOCKER_SCRIPT_URL="https://get.docker.com"
 DOCKER_SCRIPT=""
 OS="$(uname -s)"
@@ -17,6 +23,11 @@ ADDED_DOCKER_GROUP=""
 # and the two want opposite things the moment something needs
 # asking.
 EXPRESS=0
+if [ "$HANDOFF" = 1 ]; then
+    NEED_SG="${JUN_NEED_SG:-0}"
+    NEED_SUDO="${JUN_NEED_SUDO:-0}"
+    DOCKER_JUST_INSTALLED="${JUN_DOCKER_JUST_INSTALLED:-0}"
+fi
 
 if [ "$(id -u)" -eq 0 ]; then
     SUDO=""
@@ -1161,9 +1172,16 @@ confirm_deps() {
 # it. Custom walks through the provider/model/voice prompts.
 # JUN_EXPRESS=1 picks Express up front.
 choose_install_mode() {
+    # a handoff child takes the answer the parent already got
+    if [ "$HANDOFF" = 1 ]; then
+        case "${JUN_EXPRESS:-}" in
+            1) EXPRESS=1; return ;;
+            0) return ;;
+        esac
+    fi
     [ "${JUN_YES:-}" = "1" ] && return
     case "$(printf '%s' "${JUN_EXPRESS:-}" | tr '[:upper:]' '[:lower:]')" in
-        1|on|yes|true) JUN_YES=1; export JUN_YES; EXPRESS=1; return ;;
+        1|on|yes|true) JUN_YES=1; JUN_EXPRESS=1; export JUN_YES JUN_EXPRESS; EXPRESS=1; return ;;
     esac
     # a readable /dev/tty node can still fail to open when there's
     # no controlling terminal. so actually open it, the mode bits
@@ -1178,8 +1196,8 @@ choose_install_mode() {
     } > /dev/tty
     read -r ans < /dev/tty || ans=""
     case "$ans" in
-        2|custom|Custom|CUSTOM) note "custom install - I'll ask about each option below" ;;
-        *) JUN_YES=1; export JUN_YES; EXPRESS=1; ok "express install - using recommended settings" ;;
+        2|custom|Custom|CUSTOM) JUN_EXPRESS=0; export JUN_EXPRESS; note "custom install - I'll ask about each option below" ;;
+        *) JUN_YES=1; JUN_EXPRESS=1; export JUN_YES JUN_EXPRESS; EXPRESS=1; ok "express install - using recommended settings" ;;
     esac
 }
 
@@ -1233,7 +1251,242 @@ locate_install() {
     done
 }
 
-banner
+# stable = newest full release, latest = newest release of any
+# kind (pre-releases count), experimental = main.
+channel_name() {
+    case "$(printf '%s' "$1" | tr '[:upper:]' '[:lower:]' | tr -d '[:space:]')" in
+        stable|release) echo stable ;;
+        latest|prerelease|pre-release|beta|preview) echo latest ;;
+        experimental|main|dev|nightly) echo experimental ;;
+    esac
+}
+
+# JUN_CHANNEL, else what the install recorded in its .env, else
+# stable. Custom asks, with that as the default. sets $CHANNEL.
+choose_channel() {
+    local existing="$1" saved ans c
+    if [ -n "${JUN_CHANNEL:-}" ]; then
+        CHANNEL="$(channel_name "$JUN_CHANNEL")"
+        [ -n "$CHANNEL" ] && return 0
+        warn_ "JUN_CHANNEL='$JUN_CHANNEL' isn't a channel (stable, latest or experimental)"
+    fi
+    CHANNEL=stable
+    if [ -n "$existing" ]; then
+        saved="$(grep -E '^JUN_CHANNEL=' "$existing/.env" 2>/dev/null | tail -1 | cut -d= -f2- || true)"
+        saved="$(channel_name "$saved")"
+        if [ -n "$saved" ]; then
+            CHANNEL="$saved"
+        elif git -C "$existing" symbolic-ref -q HEAD >/dev/null 2>&1; then
+            # installs from before channels all sit on main. moving
+            # them to a release now could mean OLDER code than they
+            # run, so they stay experimental until somebody picks.
+            CHANNEL=experimental
+        fi
+    fi
+    [ "${JUN_YES:-}" = "1" ] && return 0
+    { true >/dev/tty; } 2>/dev/null || return 0
+    {
+        printf '\n     %swhich release channel?%s\n' "$B" "$R"
+        printf '       %s1%s  Stable        %s-%s the latest full release\n' "$ACCENT" "$R" "$DIM" "$R"
+        printf '       %s2%s  Latest        %s-%s the newest release, pre-releases included\n' "$ACCENT" "$R" "$DIM" "$R"
+        printf '       %s3%s  Experimental  %s-%s straight from main, can break any day\n' "$ACCENT" "$R" "$DIM" "$R"
+        printf '     %s$%s choice %s[enter = %s]%s %s→%s ' "$OK" "$R" "$DIM" "$CHANNEL" "$R" "$ACCENT" "$R"
+    } > /dev/tty
+    read -r ans < /dev/tty || ans=""
+    case "$ans" in
+        "") ;;
+        1) CHANNEL=stable ;;
+        2) CHANNEL=latest ;;
+        3) CHANNEL=experimental ;;
+        *)
+            c="$(channel_name "$ans")"
+            if [ -n "$c" ]; then CHANNEL="$c"; else warn_ "unrecognized choice, staying on $CHANNEL"; fi
+            ;;
+    esac
+}
+
+github_slug() {
+    printf '%s\n' "$1" | sed -nE 's#^https://github\.com/([^/]+)/([^/]+)/?$#\1/\2#p' | sed 's/\.git$//'
+}
+
+gh_get() {  # url file -> http status on stdout, 000 when nothing answered
+    curl --proto '=https' --tlsv1.2 -sS --retry 2 -o "$2" -w '%{http_code}' \
+        -H 'Accept: application/vnd.github+json' -H 'User-Agent: JunOS-installer' "$1" 2>/dev/null || true
+}
+
+# no jq on a fresh box, so the tag comes out with grep and sed
+first_tag() {
+    grep -o '"tag_name": *"[^"]*"' "$1" 2>/dev/null | head -1 | sed 's/.*"\([^"]*\)"$/\1/' || true
+}
+
+# the tag a release channel points at right now, on stdout.
+# returns 1 when no release of that kind exists, 2 when GitHub
+# couldn't be asked (offline, rate limited at 60 an hour per IP,
+# not a github URL). anonymous requests never see drafts, so a
+# draft never gets installed.
+release_tag() {
+    local slug api body code tag=""
+    slug="$(github_slug "$REPO")"
+    [ -n "$slug" ] || return 2
+    api="https://api.github.com/repos/$slug/releases"
+    body="$(mktemp)"
+    if [ "$1" = stable ]; then
+        code="$(gh_get "$api/latest" "$body")"
+        if [ "$code" = 200 ]; then
+            tag="$(first_tag "$body")"
+            rm -f "$body"
+            [ -n "$tag" ] || return 1
+            echo "$tag"
+            return 0
+        fi
+        [ "$code" = 404 ] || { rm -f "$body"; return 2; }
+    fi
+    code="$(gh_get "$api?per_page=10" "$body")"
+    [ "$code" = 200 ] && tag="$(first_tag "$body")"
+    rm -f "$body"
+    [ "$code" = 200 ] || return 2
+    [ -n "$tag" ] || return 1
+    [ "$1" = stable ] && note "no full release yet - using the newest pre-release, $tag" >&2
+    echo "$tag"
+}
+
+# the ref to put on disk in $TARGET. empty = leave the code alone.
+resolve_target() {  # 1 = fresh install
+    local rc=0
+    TARGET=""
+    if [ -n "${JUN_REF:-}" ]; then TARGET="$JUN_REF"; return 0; fi
+    if [ "$CHANNEL" = experimental ]; then TARGET=main; return 0; fi
+    TARGET="$(release_tag "$CHANNEL")" || rc=$?
+    [ "$rc" = 0 ] && return 0
+    TARGET=""
+    if [ "$rc" = 1 ]; then
+        note "no releases published yet - using main"
+        TARGET=main
+        return 0
+    fi
+    warn_ "couldn't ask GitHub which release is current"
+    if [ "$1" = 1 ]; then
+        note "installing from main for now. run this again later and she moves to $CHANNEL."
+        TARGET=main
+    else
+        note "keeping the code that's on disk"
+    fi
+}
+
+# semver-ish. v1.2.0 beats v1.2.0-beta, two pre-releases of the
+# same version compare as plain strings.
+version_lt() {
+    local a="${1#v}" b="${2#v}" ac bc ap="" bp="" i x y
+    ac="${a%%-*}"; bc="${b%%-*}"
+    [ "$ac" != "$a" ] && ap="${a#*-}"
+    [ "$bc" != "$b" ] && bp="${b#*-}"
+    for i in 1 2 3 4; do
+        x="$(printf '%s' "$ac" | cut -d. -f"$i")"; y="$(printf '%s' "$bc" | cut -d. -f"$i")"
+        case "$x" in ''|*[!0-9]*) x=0 ;; esac
+        case "$y" in ''|*[!0-9]*) y=0 ;; esac
+        [ "$x" -lt "$y" ] && return 0
+        [ "$x" -gt "$y" ] && return 1
+    done
+    [ -z "$ap" ] && return 1
+    [ -z "$bp" ] && return 0
+    [[ "$ap" < "$bp" ]]
+}
+
+git_move() {  # dir is_tag
+    if [ "$TARGET" = main ]; then
+        # a tag clone only fetches that one tag. point origin at main
+        # again so a later plain `git pull` works too.
+        git -C "$1" config --replace-all remote.origin.fetch '+refs/heads/main:refs/remotes/origin/main' &&
+        git -C "$1" fetch -q --depth 1 origin &&
+        git -C "$1" checkout -q -B main origin/main &&
+        git -C "$1" branch -q --set-upstream-to=origin/main main
+    elif [ "$2" = 1 ]; then
+        git -C "$1" fetch -q --depth 1 origin "+refs/tags/$TARGET:refs/tags/$TARGET" &&
+        git -C "$1" -c advice.detachedHead=false checkout -q "refs/tags/$TARGET"
+    else
+        git -C "$1" fetch -q --depth 1 origin "$TARGET" &&
+        git -C "$1" -c advice.detachedHead=false checkout -q --detach FETCH_HEAD
+    fi
+}
+
+# moves an existing checkout to $TARGET. a tree with edits in it
+# stays exactly where it is, same as the old pull --ff-only did.
+update_checkout() {  # dir is_tag
+    local d="$1" is_tag="$2" branch current log
+    if [ -n "$(git -C "$d" status --porcelain --untracked-files=no 2>/dev/null || echo x)" ]; then
+        warn_ "files in $d were changed by hand - keeping the code that's on disk"
+        note "see what changed with: git -C $d status"
+        return 0
+    fi
+    branch="$(git -C "$d" symbolic-ref -q --short HEAD 2>/dev/null || true)"
+    if [ "$TARGET" = main ] && [ -n "$branch" ]; then
+        if git -C "$d" pull -q --ff-only >/dev/null 2>&1; then
+            ok "up to date with $branch"
+        else
+            # local commits or a branch of their own. not a reason to
+            # stop, the rest still fixes .env, deps and the stack.
+            warn_ "couldn't fast-forward $branch - keeping the code that's on disk"
+            note "pull it yourself with: git -C $d pull"
+        fi
+        return 0
+    fi
+    current="$(git -C "$d" describe --tags --exact-match HEAD 2>/dev/null || true)"
+    if [ -n "$current" ] && [ "$current" = "$TARGET" ]; then
+        ok "already on $TARGET"
+        return 0
+    fi
+    if [ "$is_tag" = 1 ] && [ -n "$current" ] && version_lt "$TARGET" "$current"; then
+        ok "on $current, newer than $CHANNEL ($TARGET) - staying until it catches up"
+        return 0
+    fi
+    if [ "$is_tag" = 1 ] && [ -n "$branch" ]; then
+        warn_ "moving from $branch to the $TARGET release - that can be older code than you had."
+        note "your chats and settings stay. JUN_CHANNEL=experimental takes you back."
+    fi
+    log="$(mktemp)"
+    if git_move "$d" "$is_tag" >"$log" 2>&1; then
+        ok "now on $TARGET"
+    else
+        sed 's/^/       /' "$log" >&2
+        warn_ "couldn't move to $TARGET - keeping the code that's on disk"
+    fi
+    rm -f "$log"
+}
+
+# into a side folder first, renamed once git is done. a clone
+# that died halfway (Ctrl+C, flaky wifi) otherwise leaves a folder
+# that isn't a checkout but isn't empty either, and every re-run
+# after that trips over it.
+clone_into() {
+    if [ -e "$DIR" ] && [ -n "$(ls -A "$DIR" 2>/dev/null)" ]; then
+        fail_ "$DIR already exists and isn't a Jun install"
+        note "move or rename it (or set JUN_DIR to another folder), then run this again."
+        exit 1
+    fi
+    rm -rf "$DIR.partial"
+    rmdir "$DIR" 2>/dev/null || true
+    run "$REPO ($TARGET)" git -c advice.detachedHead=false clone -q --depth 1 --branch "$TARGET" "$REPO" "$DIR.partial"
+    mv "$DIR.partial" "$DIR"
+}
+
+# the installer that came with the code finishes the job, not
+# whichever copy got started (main's one-liner, a stale saved
+# copy). a release's start.sh and .env keys match ITS install.sh.
+# the child skips the banner, the questions already answered and
+# the git step, and gets what confirm_deps found out about docker.
+# installers from before JUN_HANDOFF don't know any of that, those
+# we don't hand to.
+hand_off() {
+    [ "$HANDOFF" = 1 ] && return 0
+    { [ -f install.sh ] && grep -q JUN_HANDOFF install.sh; } || return 0
+    [ -f "$0" ] && cmp -s "$0" install.sh && return 0
+    export JUN_HANDOFF=1 JUN_DIR="$PWD" JUN_CHANNEL="$CHANNEL" \
+        JUN_NEED_SG="$NEED_SG" JUN_NEED_SUDO="$NEED_SUDO" \
+        JUN_DOCKER_JUST_INSTALLED="$DOCKER_JUST_INSTALLED"
+    exec bash ./install.sh
+}
+
+[ "$HANDOFF" = 1 ] || banner
 choose_install_mode
 EXISTING=""
 locate_install || true
@@ -1242,27 +1495,33 @@ locate_install || true
 [ -n "$EXISTING" ] || check_repo_source
 confirm_deps
 
+if [ "$HANDOFF" = 1 ]; then
+    CHANNEL="$(channel_name "${JUN_CHANNEL:-}")"
+elif [ -z "$REF" ]; then
+    choose_channel "$EXISTING"
+    ok "channel $CHANNEL"
+fi
+
 if [ -n "$EXISTING" ]; then
     DIR="$EXISTING"
     step "existing install"
     ok "found Jun in $DIR - updating instead of cloning"
-    if [ -d "$DIR/.git" ]; then
-        if git -C "$DIR" pull --ff-only >/dev/null 2>&1; then
-            ok "repo up to date"
-        else
-            # Local commits, a dirty tree or a branch of their own all
-            # stop a pull from fast-forwarding. That is not a reason to
-            # stop the install. The rest of the installer still fixes
-            # .env, deps and the stack.
-            warn_ "couldn't fast-forward $DIR - keeping the code that's on disk"
-            note "pull it yourself with: git -C $DIR pull"
-        fi
-    else
+    if [ "$HANDOFF" = 1 ]; then
+        ok "code already updated"
+    elif [ ! -d "$DIR/.git" ]; then
         note "not a git checkout, nothing to pull - re-running setup on what's here"
+    else
+        resolve_target 0
+        if [ -n "$TARGET" ]; then
+            is_tag=0
+            [ -z "$REF" ] && [ "$TARGET" != main ] && is_tag=1
+            update_checkout "$DIR" "$is_tag"
+        fi
     fi
 else
+    resolve_target 1
     step "clone repository"
-    run "$REPO ($REF)" git clone --depth 1 --branch "$REF" "$REPO" "$DIR"
+    clone_into
 fi
 
 cd "$DIR"
@@ -1273,6 +1532,8 @@ cd "$DIR"
 [ -f .env ] || cp .env.example .env
 chmod 600 .env 2>/dev/null || true
 [ -n "$ADDED_DOCKER_GROUP" ] && record_change docker_group "$ADDED_DOCKER_GROUP"
+[ -n "$CHANNEL" ] && set_env JUN_CHANNEL "$CHANNEL"
+hand_off
 
 configure
 
