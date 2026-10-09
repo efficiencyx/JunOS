@@ -15,6 +15,9 @@ export function setOnMissingParam(cb) { onMissingParam = cb; }
 export function knows(param) { return paramIndex.has(param); }
 
 function reportMissing(param) {
+  // no rig loaded (placeholder art), so every param is "missing"
+  // and that's not news
+  if (!raw) return;
   if (reportedMissing.has(param)) return;
   reportedMissing.add(param);
   if (onMissingParam) onMissingParam(param);

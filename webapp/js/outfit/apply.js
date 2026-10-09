@@ -1,11 +1,11 @@
-import * as Live2D from '../live2d/live2d.js?v=76';
-import * as Mods from '../mods/mods.js?v=77';
+import * as Live2D from '../live2d/live2d.js?v=77';
+import * as Mods from '../mods/mods.js?v=78';
 import { ALWAYS_HIDDEN, COLOR_GROUPS, ITEMS, VARIANTS, VARIANT_OWNER } from './catalog.js?v=1';
-import { applyGlassesTexture, applyStockingTexture, cancelStockingTexture, stockingColorMode } from './composite.js?v=6';
+import { applyGlassesTexture, applyStockingTexture, cancelStockingTexture, stockingColorMode } from './composite.js?v=7';
 import { colors, state, variantState } from './current.js?v=1';
 import { hexToRgb01, normalizeHex } from './colors.js?v=1';
-import { queueWardrobe, saveColors, textureAvailable } from './sync.js?v=6';
-import { snapshot } from './chat-tools.js?v=6';
+import { queueWardrobe, saveColors, textureAvailable } from './sync.js?v=7';
+import { snapshot } from './chat-tools.js?v=7';
 import { hooks } from './hooks.js?v=1';
 
 export const itemPatterns = (it) => it.colorPatterns || it.visibilityPatterns || [];

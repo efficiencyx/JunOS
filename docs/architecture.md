@@ -168,6 +168,12 @@ The clean text emerging from the action buffer passes through a second streaming
 
 `webapp/js/live2d/live2d.js` wraps `pixi-live2d-display` with direct parameter control.
 
+### Placeholder when the rig is missing
+
+The rig is gitignored game art, so a fresh clone or a skipped extraction has no `webapp/assets/`. Before it creates the PIXI application, `init()` calls `GET /api/assets.php?probe`. That request is session-gated like the rest of `assets.php` and returns `{"model": bool}`, which is true only when `interaction_model.moc3` and `texture_00..02.png` are all on disk. On `model: false` no WebGL context is created and the four asset URLs are never requested. Instead `live2d/placeholder.js` mounts `webapp/placeholder/jun.svg` in `#stage`, in the same box `fitModel()` would use (0.92 margin, the 26% desktop offset on the chat page) and with the same face framing for `setCameraPreset('face')`. `init()` returns `{ paramIds: [], placeholder: true }`.
+
+Every other entry point is a no-op from there on. The param maps are empty, so `setTarget`/`startLoop` return false. Missing-param reports are suppressed while `raw` is null. Drawable, tint and texture calls already return early without a model. `faceAnchor()` falls back to the SVG's drawn rect, so the face bubble, the date speech card and the karaoke mic still find her head and mouth. `hasModel()` gates the asset fetches that sit outside the rig: the stocking and glasses composites, the baked-tile manifest, and the wardrobe variant thumbs, which show a `?` tile instead of a broken image. Any probe answer other than an explicit `false` (a 401, a 500, a network error) falls through to the normal load, so a broken server still shows the real error.
+
 ### Disabling internal updaters
 
 pixi-live2d-display ships motion, expression, breath, eyeBlink, physics, pose, and focusController subsystems. All are disabled after model load:

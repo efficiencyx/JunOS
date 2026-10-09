@@ -1,6 +1,6 @@
-import * as Live2D from '../live2d/live2d.js?v=76';
+import * as Live2D from '../live2d/live2d.js?v=77';
 import { GLASSES_STYLES, VARIANTS } from './catalog.js?v=1';
-import { availableAssets, textureAvailable } from './sync.js?v=6';
+import { availableAssets, textureAvailable } from './sync.js?v=7';
 import { colors, variantState } from './current.js?v=1';
 import { hexToRgb01 } from './colors.js?v=1';
 
@@ -58,6 +58,7 @@ let stockingsJob = 0;
 export function cancelStockingTexture() { stockingsJob++; }
 
 export async function applyStockingTexture() {
+  if (!Live2D.hasModel()) return;
   const index = variantState.sock_style || 0;
   const variant = VARIANTS.find(v => v.key === 'sock_style');
   const opt = variant.options[index];
@@ -106,6 +107,7 @@ export async function applyStockingTexture() {
 let glassesJob = 0;
 
 export async function applyGlassesTexture() {
+  if (!Live2D.hasModel()) return;
   const style = GLASSES_STYLES[variantState.glasses_style || 0];
   if (!style) return;
   if (style.layers.some(([part]) =>

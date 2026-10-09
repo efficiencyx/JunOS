@@ -459,6 +459,19 @@ function Ask-Karaoke([string]$voice) {
     return $(if ($v -match '^(n|no)$') { 'off' } else { 'on' })
 }
 
+# JUN_SHORTCUTS first, then what .env says from last time, so a
+# no in Custom sticks across re-runs instead of Express quietly
+# putting the icons back.
+function Ask-Shortcuts {
+    $preset = if ($env:JUN_SHORTCUTS) { $env:JUN_SHORTCUTS } else { Get-EnvValue 'JUN_SHORTCUTS' }
+    if ($preset) {
+        return $(if ($preset.ToLower() -match '^(off|0|false|no|n)$') { 'off' } else { 'on' })
+    }
+    if (-not $interactive) { return 'on' }
+    $v = Read-Styled "     ${OK}▸${R} put a Jun OS shortcut on the desktop and in the Start menu? ${DIM}[Y/n]${R} ${ACCENT}›${R} "
+    return $(if ($v -match '^(n|no)$') { 'off' } else { 'on' })
+}
+
 # MTP is multi-token prediction, the drafter guesses tokens and
 # Jun checks every one of them. so it only changes speed, what she
 # actually says comes out the same. how much speed depends on the
@@ -667,11 +680,15 @@ function Configure-Jun {
     }
     Ok "karaoke $karaoke"
 
+    $shortcuts = Ask-Shortcuts
+    Set-EnvKey 'JUN_SHORTCUTS' $shortcuts
+    Ok "shortcuts $shortcuts"
+
     Add-EnvKeyIfMissing 'OMEGA_REGISTRATION_KEY'
     Add-EnvKeyIfMissing 'SIDECAR_SECRET'
     Ok 'registration key ready'
 
-    return @{ provider = $provider; voice = $voice; karaoke = $karaoke
+    return @{ provider = $provider; voice = $voice; karaoke = $karaoke; shortcuts = $shortcuts
               needsOllama = $needsOllama; needsLlamacpp = $needsLlamacpp }
 }
 
@@ -1039,6 +1056,139 @@ function Install-Caddy {
         Remove-Item -LiteralPath $tmpDir -Recurse -Force -ErrorAction SilentlyContinue
     }
     Ok 'Caddy ready'
+}
+
+# a JunOS.exe that's running is locked for writing, but windows
+# still lets you rename it. so the old one steps aside and the new
+# one takes its name. the .old goes on the next run.
+function Set-ManagerExe([string]$source, [string]$exe) {
+    $old = "$exe.old"
+    Remove-Item -LiteralPath $old -Force -ErrorAction SilentlyContinue
+    if (Test-Path -LiteralPath $exe) { Move-Item -LiteralPath $exe -Destination $old -Force }
+    Copy-Item -LiteralPath $source -Destination $exe
+    Remove-Item -LiteralPath $old -Force -ErrorAction SilentlyContinue
+}
+
+# JunOS.exe is the start/stop/update window. JunSetup carries one
+# from its own build and hands it over in JUN_MANAGER_EXE, that
+# goes first. otherwise CI compiles it per release, so take the
+# one from the release this checkout is on.
+# on main (or any branch) the newest release's one is fine, it
+# only drives start.ps1, install.ps1 and uninstall.ps1 next to it.
+# checked against SHA256SUMS from the same release, which is
+# immutable once published. returns the exe, or $null when
+# there's none to get (releases before it, forks, offline) and
+# the shortcut runs jun-manager.ps1 instead.
+function Install-Manager {
+    $exe = Join-Path (Get-Location).ProviderPath 'JunOS.exe'
+    if ($env:JUN_MANAGER_EXE -and (Test-Path -LiteralPath $env:JUN_MANAGER_EXE)) {
+        try {
+            Set-ManagerExe $env:JUN_MANAGER_EXE $exe
+            Ok 'JunOS.exe (from JunSetup)'
+            return $exe
+        } catch {
+            Warn_ ("couldn't copy JunOS.exe from JunSetup: {0}" -f $_.Exception.Message)
+        }
+    }
+    $slug = Get-GitHubSlug $repo
+    $tag = (Invoke-Git describe --tags --exact-match HEAD) -join ''
+    if ($LASTEXITCODE -ne 0) { $tag = Get-ReleaseTag 'latest' }
+    if (-not $slug -or -not $tag) {
+        Note 'no release to take JunOS.exe from - using jun-manager.ps1 instead'
+        return $null
+    }
+
+    Step "download the Jun OS app ($tag)"
+    $tmpDir = Join-Path $env:TEMP ('jun-manager-' + [guid]::NewGuid().ToString('N'))
+    New-Item -ItemType Directory -Force -Path $tmpDir | Out-Null
+    try {
+        $base = "https://github.com/$slug/releases/download/$tag"
+        $tmpExe = Join-Path $tmpDir 'JunOS.exe'
+        $sums = Join-Path $tmpDir 'SHA256SUMS'
+        try {
+            Invoke-WebRequest -Uri "$base/JunOS.exe" -OutFile $tmpExe -UseBasicParsing
+            Invoke-WebRequest -Uri "$base/SHA256SUMS" -OutFile $sums -UseBasicParsing
+        } catch {
+            Note "release $tag has no JunOS.exe - using jun-manager.ps1 instead"
+            return $null
+        }
+        $want = Get-Content -LiteralPath $sums | ForEach-Object {
+            if ($_ -match '^([0-9a-fA-F]{64})\s+\*?JunOS\.exe$') { $matches[1] }
+        } | Select-Object -First 1
+        if (-not (Test-Sha256 $tmpExe $want)) {
+            Warn_ "JunOS.exe doesn't match the SHA256SUMS of $tag - not installing it"
+            return $null
+        }
+        Set-ManagerExe $tmpExe $exe
+        Ok "JunOS.exe $tag"
+        return $exe
+    } catch {
+        Warn_ ("couldn't set up JunOS.exe: {0} - using jun-manager.ps1 instead" -f $_.Exception.Message)
+        return $null
+    } finally {
+        Remove-Item -LiteralPath $tmpDir -Recurse -Force -ErrorAction SilentlyContinue
+    }
+}
+
+# an .ico can just wrap a PNG, so Jun's app icon goes in as-is with
+# the 22 byte header in front. 0x0 in the header means 256, the
+# format only has one byte per side, so icon-512.png gets scaled.
+# only for the shortcut that has no JunOS.exe to take its icon from.
+function New-JunIcon([string]$root) {
+    $png = Join-Path $root 'webapp\icon-512.png'
+    $ico = Join-Path $root 'runtime\jun.ico'
+    if (-not (Test-Path -LiteralPath $png)) { return $null }
+    try {
+        Add-Type -AssemblyName System.Drawing
+        $src = [Drawing.Image]::FromFile($png)
+        $bmp = [Drawing.Bitmap]::new(256, 256)
+        $g = [Drawing.Graphics]::FromImage($bmp)
+        $g.InterpolationMode = [Drawing.Drawing2D.InterpolationMode]::HighQualityBicubic
+        $g.DrawImage($src, 0, 0, 256, 256)
+        $g.Dispose(); $src.Dispose()
+        $ms = [IO.MemoryStream]::new()
+        $bmp.Save($ms, [Drawing.Imaging.ImageFormat]::Png)
+        $bmp.Dispose()
+        $bytes = $ms.ToArray()
+        $out = [IO.MemoryStream]::new()
+        $w = [IO.BinaryWriter]::new($out)
+        $w.Write([uint16]0); $w.Write([uint16]1); $w.Write([uint16]1)
+        $w.Write([byte]0); $w.Write([byte]0); $w.Write([byte]0); $w.Write([byte]0)
+        $w.Write([uint16]1); $w.Write([uint16]32)
+        $w.Write([uint32]$bytes.Length); $w.Write([uint32]22)
+        $w.Write($bytes)
+        $w.Flush()
+        New-Item -ItemType Directory -Force -Path (Split-Path -Parent $ico) | Out-Null
+        [IO.File]::WriteAllBytes($ico, $out.ToArray())
+        return $ico
+    } catch {
+        return $null
+    }
+}
+
+# per-user Desktop and Start menu, no admin needed. without the exe
+# the shortcut runs jun-manager.ps1 through a hidden powershell, -STA
+# because WPF won't start without it.
+function New-JunShortcuts([string]$managerExe) {
+    $root = (Get-Location).ProviderPath
+    $icon = if ($managerExe) { "$managerExe,0" } else { New-JunIcon $root }
+    $shell = New-Object -ComObject WScript.Shell
+    foreach ($folder in @([Environment]::GetFolderPath('Desktop'), [Environment]::GetFolderPath('Programs'))) {
+        if (-not $folder -or -not (Test-Path -LiteralPath $folder)) { continue }
+        $lnk = $shell.CreateShortcut((Join-Path $folder 'Jun OS.lnk'))
+        if ($managerExe) {
+            $lnk.TargetPath = $managerExe
+            $lnk.Arguments = ''
+        } else {
+            $lnk.TargetPath = (Get-Process -Id $PID).MainModule.FileName
+            $lnk.Arguments = "-NoProfile -ExecutionPolicy Bypass -WindowStyle Hidden -STA -File `"$(Join-Path $root 'jun-manager.ps1')`""
+        }
+        if ($icon) { $lnk.IconLocation = $icon }
+        $lnk.WorkingDirectory = $root
+        $lnk.Description = 'Start, stop and update Jun OS'
+        $lnk.Save()
+    }
+    Ok 'Jun OS shortcut on the desktop and in the Start menu'
 }
 
 function Install-Tts([string]$Karaoke = 'off') {
@@ -1517,7 +1667,14 @@ function Update-JunRepo([string]$path, [string]$target, [bool]$isTag) {
 
     $current = (Invoke-Git -C $path describe --tags --exact-match HEAD) -join ''
     if ($LASTEXITCODE -ne 0) { $current = '' }
-    if ($current -and $current -eq $target) { Ok "already on $target"; return }
+    # the tag NAME matching isn't enough for a pinned exe. a local tag
+    # can be stale (a draft's tag that got moved before release), and
+    # then only a fetch gets the commit the pin wants.
+    $headSha = ((Invoke-Git -C $path rev-parse HEAD) -join '').Trim().ToLower()
+    if ($current -and $current -eq $target -and (-not $pinSha -or $headSha -eq $pinSha)) {
+        Ok "already on $target"
+        return
+    }
     if ($isTag -and $current -and (Compare-JunVersion $target $current) -lt 0) {
         $what = if ($script:channel) { "$($script:channel) ($target)" } else { $target }
         Ok "on $current, newer than $what - staying until it catches up"
@@ -1692,6 +1849,8 @@ if ($cfg.needsLlamacpp) { Assert-OnPath llama-server }
 Install-Php
 Install-Caddy
 if ($voice -eq 'on') { Install-Tts $cfg.karaoke }
+$managerExe = Install-Manager
+if ($cfg.shortcuts -eq 'on') { New-JunShortcuts $managerExe }
 
 Step 'asset policy'
 Warn_ "Jun's Live2D model & textures belong to the creator of"
@@ -1738,6 +1897,11 @@ if ($cfg.needsOllama) { $machineWide += ', Ollama' }
 if ($cfg.needsLlamacpp) { $machineWide += ', llama.cpp' }
 if ($voice -eq 'on' -or $extract) { $machineWide += ', possibly Python' }
 Note "machine-wide (Settings > Apps): ${machineWide}"
+if ($cfg.shortcuts -eq 'on') {
+    Note 'to start, stop or update her later: the Jun OS shortcut on the desktop'
+} elseif ($managerExe) {
+    Note "to start, stop or update her later: $managerExe"
+}
 Note 'to remove everything later: ./uninstall.ps1'
 
 $regKey = Get-EnvValue 'OMEGA_REGISTRATION_KEY'

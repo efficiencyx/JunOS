@@ -221,18 +221,22 @@ jobs:
             Invoke-ScriptAnalyzer -Path $f -Severity Error -EnableExit
           }
 
-      - name: Build JunSetup.exe
+      - name: Build JunSetup.exe and JunOS.exe
         # ps2exe spits out a .NET Framework WPF binary, so this only
         # builds on a windows runner. there's no cross compile from
         # the linux jobs. powershell (5.1), not pwsh: ps2exe targets
         # the framework host.
         shell: powershell
-        run: ./tools/build-installer-exe.ps1 -Version "1.0.${{ github.run_number }}.0"
+        run: |
+          ./tools/build-installer-exe.ps1 -Manager -Version "1.0.${{ github.run_number }}.0"
+          ./tools/build-installer-exe.ps1 -Version "1.0.${{ github.run_number }}.0" -EmbedManager dist\JunOS.exe
 
       - uses: actions/upload-artifact@v4
         with:
           name: JunSetup
-          path: dist/JunSetup.exe
+          path: |
+            dist/JunSetup.exe
+            dist/JunOS.exe
 
   android:
     name: android

@@ -164,7 +164,7 @@ Open your browser at **<https://localhost>** - or **<https://127.0.0.1:8080>** i
 
 For a complete guide on how to manage her follow the steps in the **[wiki](https://github.com/efficiencyx/JunOS/wiki)**.
 
-Windows: 
+Windows: double-click **Jun OS** on your desktop (or in the Start menu) 🖱️. That little window starts and stops her, opens her in the browser, shows the logs, updates her and uninstalls her. Said no to the shortcut? `JunOS.exe` sits in her folder. Terminal people still get:
 Start her: `powershell .\JunOS\start.ps1`
 Stop her: `powershell .\JunOS\start.ps1 stop`
 
@@ -342,7 +342,7 @@ The gory version - the action state machine, the tick loop, the memory pipeline 
 
 > 📦 **How this repo gets updated.** Day-to-day work happens in a development repo - that's where the extracted Live2D art lives, plus the dataset tooling and a pile of half-finished experiments nobody needs to see. What lands here is snapshots: working states, pushed when something's actually done, reviewed and CI passes. So the commits are chunky and the timestamps come in bursts.
 
-> 🎨 **Her art isn't in here** and won't be - see [NOTICE](NOTICE). `tools/recover_assets.py` rebuilds `webapp/assets/` from your own copy of the game, which is the only way it's allowed to work. Fresh clone looks a bit naked until you run it.
+> 🎨 **Her art isn't in here** and won't be - see [NOTICE](NOTICE). `tools/recover_assets.py` rebuilds `webapp/assets/` from your own copy of the game, which is the only way it's allowed to work. Until you run it she's a placeholder - chat, voice and outings all still work, she just doesn't move or change clothes.
 
 The house rules, the invariants you can break without noticing, and what CI checks are in [`CONTRIBUTING.md`](CONTRIBUTING.md). Stuck rather than hacking? [`SUPPORT.md`](SUPPORT.md). Found a hole? [`SECURITY.md`](SECURITY.md).
 
@@ -371,9 +371,15 @@ Check GPU residency first: `docker exec omega-ollama ollama ps`. Anything short 
 </details>
 
 <details>
+<summary><b>Jun is a lavender cardboard cutout</b></summary>
+
+That's the placeholder 💜 - the server couldn't find her rig. It wants all four of `webapp/assets/interaction_model.moc3` and `texture_00.png`..`texture_02.png`; one missing and you get the stand-in. Run the extraction (see [her body isn't in this repo](#her-body-isnt-in-this-repo)), then reload.
+</details>
+
+<details>
 <summary><b>Jun is invisible</b></summary>
 
-Open the console - a missing texture shows up as a 404. Confirm `webapp/assets/*.png` exist (see [her body isn't in this repo](#her-body-isnt-in-this-repo)) and that nginx's root points at `/var/www/omega/`.
+Not even the placeholder? Open the console. Confirm nginx's root points at `/var/www/omega/` and that `/api/assets.php?probe` answers while you're logged in.
 </details>
 
 <details>
@@ -449,10 +455,11 @@ Read the line under **existing install**, it says which of these it was:
 ├── installer-gui.ps1            The Windows click-through window (ships as JunSetup-<version>.exe)
 ├── uninstall.sh · uninstall.ps1 Takes her off the box again
 ├── start.sh · start.ps1         Launchers, and the stop/status/logs control panel
+├── jun-manager.ps1              The Windows start/stop/update window (ships as JunOS.exe, the desktop shortcut)
 ├── mtp-autotune.sh · .ps1       Measures the MTP draft depth and writes the winner to .env
 ├── sync-webapp.sh               The dev loop
 ├── colab.ipynb                  The free-GPU notebook
-├── .github/workflows/           CI (syntax, stream-buffer tests, a chat turn against a fake Ollama) + the draft release with JunSetup-<version>.exe
+├── .github/workflows/           CI (syntax, stream-buffer tests, a chat turn against a fake Ollama) + the draft release with JunSetup-<version>.exe and JunOS.exe
 └── docker-compose*.yml          Base (CPU) + nvidia / amd overlays, llamacpp-local / llamacpp-mtp add-ons
 ```
 

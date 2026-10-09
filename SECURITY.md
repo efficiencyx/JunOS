@@ -129,7 +129,12 @@ rest. Cloning first, reading `install.sh`, and running it from the checkout is
 still the recommended path, and the only one where what you read is 100% what
 you ran. Every release also carries the three install scripts and a
 `SHA256SUMS` file. On Windows, a versioned `JunSetup-<tag>.exe` is a real pin:
-tag plus commit hash, verified.
+tag plus commit hash, verified. `JunSetup` carries `JunOS.exe` (the start/stop/update window) from its own build
+and hands it to `install.ps1`. Otherwise `install.ps1` downloads `JunOS.exe`
+from the release the checkout is on, or the newest
+release when it's on `main`, and installs it only when it matches that
+release's `SHA256SUMS`. Without a match it skips it and the shortcut runs
+`jun-manager.ps1` from the checkout instead.
 
 ## What talks to the internet
 
@@ -210,7 +215,9 @@ localStorage holds UI preferences. Mods are never uploaded, the server only ever
 sees item names.
 
 **Extracted game assets** land in `webapp/assets/`, are gitignored, and are for
-your own use only - see [NOTICE](NOTICE).
+your own use only - see [NOTICE](NOTICE). `/api/assets.php?probe` tells a
+logged-in session whether the rig files are there (one boolean, no paths); the
+page shows placeholder art when they are not.
 
 ## Encryption and recovery
 

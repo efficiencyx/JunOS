@@ -1,5 +1,5 @@
-import * as Live2D from './live2d.js?v=76';
-import * as Outfit from '../outfit/outfit.js?v=76';
+import * as Live2D from './live2d.js?v=77';
+import * as Outfit from '../outfit/outfit.js?v=77';
 
 // Jun still fires off old [ACTION:...] tags sometimes,
 // so both forms stay. forever probably.

@@ -77,7 +77,7 @@ Do not say a check passed if it was not run. Record missing hardware or unavaila
 Releases live on the public repo and are immutable once published: the tag can't move and nothing can be attached afterwards. So the order matters.
 
 1. Push a `v*` tag (`vX.Y.Z` for a full release, anything with a `-`, like `vX.Y.Z-beta`, for a pre-release).
-2. `.github/workflows/release-installer.yml` builds `JunSetup-<tag>.exe` pinned to that tag's commit, and puts it, `install.sh`, `install.ps1`, `installer-gui.ps1` and `SHA256SUMS` on a **draft** release for the tag. A draft you already made in the UI for that tag is reused.
+2. `.github/workflows/release-installer.yml` builds `JunSetup-<tag>.exe` pinned to that tag's commit and `JunOS.exe` (the manager window from `jun-manager.ps1`, compiled with `tools/build-installer-exe.ps1 -Manager` first and embedded into the setup exe with `-EmbedManager`), and puts them, `install.sh`, `install.ps1`, `installer-gui.ps1` and `SHA256SUMS` on a **draft** release for the tag. A draft you already made in the UI for that tag is reused.
 3. Write the notes, check the pre-release box is right, publish. Stable installs follow the newest full release, Latest follows the newest of either kind.
 
 Publishing before the workflow finishes leaves the release without its exe for good. Delete nothing: fix forward with the next tag.

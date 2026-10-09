@@ -1,7 +1,7 @@
-import * as Live2D from '../live2d/live2d.js?v=76';
-import { $, active, hooks } from './karaoke.js?v=11';
-import { mode, setStatus, track } from './setup.js?v=4';
-import { startRecording, stopRecording } from './recorder.js?v=4';
+import * as Live2D from '../live2d/live2d.js?v=77';
+import { $, active, hooks } from './karaoke.js?v=12';
+import { mode, setStatus, track } from './setup.js?v=5';
+import { startRecording, stopRecording } from './recorder.js?v=5';
 import { clamp } from '../core/util.js?v=1';
 
 // queue both stems (the split vocal and backing tracks) 0.1

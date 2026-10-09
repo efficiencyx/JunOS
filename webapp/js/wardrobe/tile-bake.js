@@ -1,7 +1,7 @@
-import * as Live2D from '../live2d/live2d.js?v=76';
+import * as Live2D from '../live2d/live2d.js?v=77';
 import { ITEMS, VARIANTS, VARIANT_OWNER } from '../outfit/catalog.js?v=1';
-import { applyChanged, exportPreset, loadPresetState } from '../outfit/presets.js?v=6';
-import { itemPatterns } from '../outfit/apply.js?v=6';
+import { applyChanged, exportPreset, loadPresetState } from '../outfit/presets.js?v=7';
+import { itemPatterns } from '../outfit/apply.js?v=7';
 import { state, variantState } from '../outfit/current.js?v=1';
 
 // tiles baked by tools/bake-items.html, sitting in the gitignored
@@ -12,6 +12,7 @@ import { state, variantState } from '../outfit/current.js?v=1';
 let bakedTiles = new Set();
 
 export async function loadBakedTiles() {
+  if (!Live2D.hasModel()) return;
   try {
     const r = await fetch('assets/items/manifest.json', { credentials: 'same-origin' });
     if (r.ok) bakedTiles = new Set(await r.json());
@@ -101,6 +102,9 @@ export function itemThumb(it) {
 }
 
 export function variantThumb(v, opt) {
+  // every url below is under assets/, which isn't there on a
+  // placeholder run. a '?' tile beats a broken image
+  if (!Live2D.hasModel()) return null;
   // a baked shot is the whole garment on its own, so it reads fine
   // even when the variant isn't worn. the drawable crop further
   // down only shows anything while the model is actually wearing

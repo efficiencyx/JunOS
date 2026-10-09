@@ -1,13 +1,13 @@
-import * as Live2D from './live2d/live2d.js?v=76';
+import * as Live2D from './live2d/live2d.js?v=77';
 import * as MobileViewport from './core/viewport.js?v=1';
 import * as Names from './core/names.js?v=1';
 import { api } from './core/api.js?v=1';
-import * as Outfit from './outfit/outfit.js?v=76';
+import * as Outfit from './outfit/outfit.js?v=77';
 import * as Scene from './trip/scene.js?v=1';
 import { startSkybox } from './trip/skybox.js?v=2';
 import * as TripLoader from './trip/trip-loader.js?v=1';
-import { armCurtains } from './wardrobe/curtains.js?v=4';
-import { openWardrobe } from './wardrobe/panel.js?v=7';
+import { armCurtains } from './wardrobe/curtains.js?v=5';
+import { openWardrobe } from './wardrobe/panel.js?v=8';
 
 const status = document.getElementById('stageStatus');
 const HEAD_HOME_ICON = '<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="19" y1="12" x2="5" y2="12"/><polyline points="12 19 5 12 12 5"/></svg>';

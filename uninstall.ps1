@@ -76,6 +76,26 @@ if (Get-Command ollama -ErrorAction SilentlyContinue) {
     }
 }
 
+# Only shortcuts that point into this folder. Another install may
+# own a "Jun OS" shortcut of its own.
+$shell = New-Object -ComObject WScript.Shell
+foreach ($folder in @([Environment]::GetFolderPath('Desktop'), [Environment]::GetFolderPath('Programs'))) {
+    if (-not $folder) { continue }
+    $path = Join-Path $folder 'Jun OS.lnk'
+    if (-not (Test-Path -LiteralPath $path)) { continue }
+    $lnk = $shell.CreateShortcut($path)
+    if ($lnk.WorkingDirectory -ieq $root -or $lnk.TargetPath.StartsWith($root, [StringComparison]::OrdinalIgnoreCase)) {
+        Remove-Item -LiteralPath $path -Force
+        Write-Host "Removed shortcut $path"
+    }
+}
+
+# JunOS.exe can still be running if it was opened again after the
+# uninstall started. It would keep the folder from being deleted.
+Get-Process JunOS -ErrorAction SilentlyContinue |
+    Where-Object { $_.Path -and $_.Path.StartsWith($root, [StringComparison]::OrdinalIgnoreCase) } |
+    Stop-Process -Force -ErrorAction SilentlyContinue
+
 # From outside the folder, since this script lives inside it.
 Set-Location $env:USERPROFILE
 Remove-Item -LiteralPath $root -Recurse -Force

@@ -85,6 +85,10 @@ tools/clothing-render.js
 # `gh run download` drops wherever you run it
 dist/
 JunSetup*.exe
+# install.ps1 downloads this into her folder, and renames a running
+# one aside while it swaps it
+JunOS.exe
+JunOS.exe.old
 
 
 # the promo reels, landscape and vertical. both drive the real

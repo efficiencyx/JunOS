@@ -1,9 +1,9 @@
 import { ITEMS, VARIANTS } from './catalog.js?v=1';
-import { Presets, applyPreset } from './presets.js?v=6';
-import { queueWardrobe } from './sync.js?v=6';
-import { setDraftItem } from './apply.js?v=6';
+import { Presets, applyPreset } from './presets.js?v=7';
+import { queueWardrobe } from './sync.js?v=7';
+import { setDraftItem } from './apply.js?v=7';
 import { state, variantState } from './current.js?v=1';
-import * as Mods from '../mods/mods.js?v=77';
+import * as Mods from '../mods/mods.js?v=78';
 
 export function describe() {
   const clothes = ITEMS.filter(it => !it.section);

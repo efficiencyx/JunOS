@@ -3,20 +3,21 @@
 // builds a second copy of the module graph, and the two copies
 // don't share state.
 
-import { resetIdle, renderIfDirty, setFidgetsEnabled, setMood, setMouthOverride, startIdle, stopIdle, tick } from './anim.js?v=75';
+import { resetIdle, renderIfDirty, setFidgetsEnabled, setMood, setMouthOverride, startIdle, stopIdle, tick } from './anim.js?v=76';
 import { bakeThumb } from './bake.js?v=1';
-import { cameraStates, captureCameraState, currentCameraMode, fitModel, loadPos, measureStage, rendererResolution, setCameraPreset, watchStageSize, writeCameraStates } from './camera.js?v=13';
-import { drawableAt, faceAnchor, findDrawables, hitTest, isOverModel } from './geometry.js?v=12';
-import { installStageInput } from './input.js?v=2';
-import { cancelPending, debugParam, knows, scheduleSequence, setNow, setOnMissingParam, setTarget, startLoop, stopAllLoops, stopLoop } from './params.js?v=1';
+import { cameraStates, captureCameraState, currentCameraMode, fitModel, loadPos, measureStage, rendererResolution, setCameraPreset as setRigCameraPreset, watchStageSize, writeCameraStates } from './camera.js?v=75';
+import { drawableAt, faceAnchor, findDrawables, hitTest, isOverModel } from './geometry.js?v=75';
+import { installStageInput } from './input.js?v=3';
+import { mountPlaceholder, setPlaceholderPreset } from './placeholder.js?v=2';
+import { cancelPending, debugParam, knows, scheduleSequence, setNow, setOnMissingParam, setTarget, startLoop, stopAllLoops, stopLoop } from './params.js?v=2';
 import { installColorShaderPatch, patchRenderer } from './renderer.js?v=1';
 import { S, app, currentValues, model, paramDefault, paramIndex, paramMax, paramMin, publicTint, raw, setApp, setModel, setParamRanges, setRaw } from './state.js?v=11';
-import { drawableThumb, getDrawableTint, installVariantCompositor, listDrawables, opacityByPattern, screenByPattern, setDrawableOpacity, setDrawableOrderBelow, setDrawableScreen, setDrawableTexture, setDrawableTextures, setDrawableTint, texturesSettled, tintByPattern } from './textures.js?v=13';
+import { drawableThumb, getDrawableTint, installVariantCompositor, listDrawables, opacityByPattern, screenByPattern, setDrawableOpacity, setDrawableOrderBelow, setDrawableScreen, setDrawableTexture, setDrawableTextures, setDrawableTint, texturesSettled, tintByPattern } from './textures.js?v=75';
 
 export {
   bakeThumb, cancelPending, debugParam, drawableAt, drawableThumb, faceAnchor, findDrawables, fitModel,
   getDrawableTint, hitTest, isOverModel, knows, listDrawables, opacityByPattern, resetIdle, scheduleSequence,
-  screenByPattern, setCameraPreset, setDrawableOpacity, setDrawableOrderBelow, setDrawableScreen,
+  screenByPattern, setDrawableOpacity, setDrawableOrderBelow, setDrawableScreen,
   setDrawableTexture, setDrawableTextures, setDrawableTint, setFidgetsEnabled, setMood, setMouthOverride,
   setNow, setOnMissingParam, setTarget, startIdle, startLoop, stopAllLoops, stopIdle, stopLoop,
   texturesSettled, tintByPattern,
@@ -33,6 +34,26 @@ function getRaw(m) {
 }
 
 
+export function hasModel() { return !!model; }
+
+export function setCameraPreset(preset) {
+  if (model) setRigCameraPreset(preset);
+  else setPlaceholderPreset(preset);
+}
+
+// anything but a clear "no" means try the real rig, so a probe
+// that 500s still lands on the loud error path and doesn't hide
+// behind the placeholder
+async function rigInstalled() {
+  try {
+    const r = await fetch('api/assets.php?probe', { credentials: 'same-origin' });
+    if (!r.ok) return true;
+    return (await r.json()).model !== false;
+  } catch (e) {
+    return true;
+  }
+}
+
 async function fetchAsDataURL(url, mime) {
   const resp = await fetch(url);
   if (!resp.ok) throw new Error(`fetch ${url} failed: ${resp.status}`);
@@ -48,11 +69,21 @@ async function fetchAsDataURL(url, mime) {
 export async function init({ stageEl, onStatus, ignoreSavedPos }) {
   const { Live2DModel, Cubism4ModelSettings } = PIXI.live2d;
   onStatus = onStatus || (() => { });
-  onStatus('Initializing PIXI...');
 
   S.stageElement = stageEl;
   S.cameraMode = currentCameraMode();
   S.cameraPersistenceEnabled = !ignoreSavedPos;
+
+  if (!await rigInstalled()) {
+    // empty maps, not null. every setTarget/startLoop then just
+    // says no and the rest of the page never has to know
+    setParamRanges(new Map(), new Map(), new Map(), new Map());
+    mountPlaceholder(stageEl);
+    onStatus('Live2D assets not installed, placeholder art');
+    return { paramIds: [], placeholder: true };
+  }
+
+  onStatus('Initializing PIXI...');
   const initialSize = measureStage();
 
   // drawing at 2x is already supersampling, which is what the

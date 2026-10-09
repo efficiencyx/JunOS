@@ -1,31 +1,31 @@
-import { IDLE_AFTER_REPLY_MS, TYPING_POLL_MS, consolidating, reportActivity, resetIdleNudge, scheduleIdleNudge, showConsolidatingBubble, syncConsolidationStatus } from './consolidation.js?v=77';
+import { IDLE_AFTER_REPLY_MS, TYPING_POLL_MS, consolidating, reportActivity, resetIdleNudge, scheduleIdleNudge, showConsolidatingBubble, syncConsolidationStatus } from './consolidation.js?v=78';
 import { chatInput, devNoIdleChk, missingParamsEl, modelSelect, narrowSidebarQuery, reasoningSelect, sendBtn, siteVolumeInput, stageEl, thinkChk } from './dom.js?v=11';
-import { faceBubble, hideFaceBubble, latestAssistantReply, restartFaceBubbleHide, scheduleFaceBubblePosition, setLatestAssistantReply } from './face-bubble.js?v=76';
+import { faceBubble, hideFaceBubble, latestAssistantReply, restartFaceBubbleHide, scheduleFaceBubblePosition, setLatestAssistantReply } from './face-bubble.js?v=77';
 import { logAction, logMissing, setStageStatus } from './logging.js?v=11';
-import { loadMood } from './mood.js?v=76';
-import { applyProviderCapabilities, applyRoleGates, setSiteVolume, syncThinkToggle, updateSiteVolumeLabel, wireNameSettings } from './settings.js?v=77';
-import { loadConversation, refreshSidebar, setSidebarOpen } from './sidebar.js?v=77';
+import { loadMood } from './mood.js?v=77';
+import { applyProviderCapabilities, applyRoleGates, setSiteVolume, syncThinkToggle, updateSiteVolumeLabel, wireNameSettings } from './settings.js?v=78';
+import { loadConversation, refreshSidebar, setSidebarOpen } from './sidebar.js?v=78';
 import { escapeHtml, mealNow } from '../core/util.js?v=1';
-import { wireTts } from './wire-tts.js?v=77';
-import { wireVoice } from './wire-voice.js?v=77';
-import { WELCOME_TIERS, fetchWelcome, playWelcome, previewWelcome } from './welcome.js?v=76';
+import { wireTts } from './wire-tts.js?v=78';
+import { wireVoice } from './wire-voice.js?v=78';
+import { WELCOME_TIERS, fetchWelcome, playWelcome, previewWelcome } from './welcome.js?v=77';
 import * as Names from '../core/names.js?v=1';
 import * as Prefs from '../core/prefs.js?v=1';
 import * as ui from '../core/ui.js?v=1';
 import * as ChatAPI from '../core/chat-api.js?v=2';
 import * as MobileViewport from '../core/viewport.js?v=1';
-import * as Actions from '../live2d/actions.js?v=76';
-import * as Live2D from '../live2d/live2d.js?v=76';
-import * as ModelTouch from '../live2d/touch.js?v=76';
-import * as Outfit from '../outfit/outfit.js?v=76';
-import { playIntro } from '../wardrobe/reactions.js?v=75';
+import * as Actions from '../live2d/actions.js?v=77';
+import * as Live2D from '../live2d/live2d.js?v=77';
+import * as ModelTouch from '../live2d/touch.js?v=77';
+import * as Outfit from '../outfit/outfit.js?v=77';
+import { playIntro } from '../wardrobe/reactions.js?v=76';
 import * as BootFX from './boot-fx.js?v=1';
-import * as Cards from './cards.js?v=11';
+import * as Cards from './cards.js?v=12';
 import * as History from './history.js?v=1';
 import { startSkybox } from '../trip/skybox.js?v=2';
 import * as TripLoader from '../trip/trip-loader.js?v=1';
 import { DevHud, abortFn, currentConversationId, setDevHud } from './session.js?v=1';
-import { rerenderBubbleStream, sendMessage, sendTouchEvent } from './chat.js?v=5';
+import { rerenderBubbleStream, sendMessage, sendTouchEvent } from './chat.js?v=6';
 
 // the one app global left, on purpose. it's a console handle,
 // Welcome.preview('panicked') replays that welcome scene
@@ -228,7 +228,7 @@ export async function boot(me) {
 
     const actionMap = await Actions.load('action_map.json');
 
-    validateActionMap(live2dInfo.paramIds, actionMap);
+    if (!live2dInfo.placeholder) validateActionMap(live2dInfo.paramIds, actionMap);
 
     await Outfit.load();
     Outfit.applyAll();

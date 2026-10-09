@@ -1,3 +1,4 @@
+import { placeholderAnchor } from './placeholder.js?v=2';
 import { S, app, forcedDrawableOpacity, model, publicTint, raw } from './state.js?v=11';
 
 const MOUTH_DRAWABLES = ['HitAreaOpenMouth', 'HitAreaCloseMouth', 'InnerMouth', 'SkinLipUpper'];
@@ -39,7 +40,7 @@ function drawableBox(candidates) {
 }
 
 export function faceAnchor() {
-  if (!model || !app) return null;
+  if (!model || !app) return placeholderAnchor();
   const r = app.view.getBoundingClientRect();
   const b = model.getBounds();
   const anchor = {

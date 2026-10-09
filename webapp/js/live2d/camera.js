@@ -69,7 +69,7 @@ function dockedComposerHeight() {
   return composer.offsetHeight + (parseFloat(getComputedStyle(area).paddingBottom) || 0);
 }
 
-function usableStage(mode = S.cameraMode) {
+export function usableStage(mode = S.cameraMode) {
   const screen = stageScreen();
   const full = { x: 0, y: 0, width: screen.width, height: screen.height };
   if (mode !== 'phone') return { ...full, height: Math.max(1, full.height - dockedComposerHeight()) };
@@ -316,8 +316,8 @@ let savedCamera = null;
 export let cameraTween = null;
 
 const FACE_CENTER_FRAC = 0.12;
-const FACE_SCREEN_Y = 0.42;
-const FACE_HEAD_FRAC = 0.30;
+export const FACE_SCREEN_Y = 0.42;
+export const FACE_HEAD_FRAC = 0.30;
 
 function computeFaceCamera() {
   const usable = usableStage();

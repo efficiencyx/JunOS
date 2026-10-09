@@ -1,8 +1,9 @@
 name: Release installer
 
-# push a v* tag and this builds JunSetup-<tag>.exe and puts it, the
-# three install scripts and their SHA256SUMS on a DRAFT release for
-# that tag. the exe is pinned: it carries the tag and the commit the
+# push a v* tag and this builds JunSetup-<tag>.exe and JunOS.exe
+# (the start/stop/update window install.ps1 downloads) and puts
+# them, the three install scripts and their SHA256SUMS on a DRAFT
+# release for that tag. the exe is pinned: it carries the tag and the commit the
 # tag points at, and install.ps1 refuses to set up anything else.
 # a tag with a - in it (v1.2.0-beta) drafts as a pre-release. the
 # notes and the publish button are still yours.
@@ -51,12 +52,16 @@ jobs:
           # a branch.
           if ($tag -notmatch '^\d+(\.\d+)*$') { $tag = '0.0.0' }
           $parts = @($tag -split '\.') + @('0', '0', '0', '0')
-          ./tools/build-installer-exe.ps1 -Version ($parts[0..3] -join '.') -OutputPath $out @pin
+          # manager first, the setup exe carries a copy of it
+          ./tools/build-installer-exe.ps1 -Manager -Version ($parts[0..3] -join '.') -OutputPath dist\JunOS.exe
+          ./tools/build-installer-exe.ps1 -Version ($parts[0..3] -join '.') -OutputPath $out -EmbedManager dist\JunOS.exe @pin
 
       - uses: actions/upload-artifact@v4
         with:
           name: JunSetup
-          path: dist/JunSetup*.exe
+          path: |
+            dist/JunSetup*.exe
+            dist/JunOS.exe
 
   draft:
     name: Draft release
@@ -77,9 +82,11 @@ jobs:
           TAG: ${{ github.ref_name }}
         run: |
           exe="JunSetup-$TAG.exe"
-          [ -f "dist/$exe" ] || { echo "::error::dist/$exe missing, the build job named it something else"; exit 1; }
+          for f in "$exe" JunOS.exe; do
+            [ -f "dist/$f" ] || { echo "::error::dist/$f missing, the build job named it something else"; exit 1; }
+          done
           cp install.sh install.ps1 installer-gui.ps1 dist/
-          (cd dist && sha256sum "$exe" install.sh install.ps1 installer-gui.ps1 > SHA256SUMS)
+          (cd dist && sha256sum "$exe" JunOS.exe install.sh install.ps1 installer-gui.ps1 > SHA256SUMS)
 
           # gh release view finds drafts by tag too, the plain API doesn't
           if gh release view "$TAG" --json isDraft --jq .isDraft > state 2>/dev/null; then
@@ -92,4 +99,4 @@ jobs:
             case "$TAG" in *-*) pre="--prerelease" ;; esac
             gh release create "$TAG" --draft --verify-tag --title "$TAG" --generate-notes $pre
           fi
-          gh release upload "$TAG" "dist/$exe" dist/install.sh dist/install.ps1 dist/installer-gui.ps1 dist/SHA256SUMS --clobber
+          gh release upload "$TAG" "dist/$exe" dist/JunOS.exe dist/install.sh dist/install.ps1 dist/installer-gui.ps1 dist/SHA256SUMS --clobber

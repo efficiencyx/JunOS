@@ -123,7 +123,9 @@ The first message can take a minute while the model warms up.
 
 ### Starting and stopping her later
 
-Open a terminal (Step 1), then:
+Double-click **Jun OS** on your desktop or in the Start menu. The window shows whether she's running and has buttons to **Start**, **Stop**, **Open Jun OS** in the browser, open her **folder** and her **logs**, **Update** her and **Uninstall** her. No shortcut (you unticked it)? Double-click `JunOS.exe` inside her folder.
+
+Rather use a terminal? Open one (Step 1), then:
 
 * **Start:** `powershell .\JunOS\start.ps1`
 * **Stop:** `powershell .\JunOS\start.ps1 stop`

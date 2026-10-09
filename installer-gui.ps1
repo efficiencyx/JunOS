@@ -34,6 +34,10 @@ $script:EmbeddedInstaller = '' # JUN_EMBEDDED_INSTALLER
 # set = this exe installs exactly that version, no channel pick.
 $script:PinnedRef = '' # JUN_PINNED_REF
 $script:PinnedSha = '' # JUN_PINNED_SHA
+# and JunOS.exe, base64, from the same build. a draft release can't
+# be downloaded, a fork has none, and without it the shortcut ends
+# up pointing at powershell.exe.
+$script:EmbeddedManager = '' # JUN_EMBEDDED_MANAGER
 
 # install.ps1 git clones the repo itself, so the exe doesn't have
 # to carry one. embedding that single script is the whole
@@ -54,6 +58,15 @@ function Resolve-InstallerScript {
     return $temp
 }
 $script:tempInstaller = $null
+
+function Resolve-ManagerExe {
+    if (-not $script:EmbeddedManager) { return $null }
+    $temp = Join-Path ([IO.Path]::GetTempPath()) ("jun-manager-$PID.exe")
+    [IO.File]::WriteAllBytes($temp, [Convert]::FromBase64String($script:EmbeddedManager))
+    $script:tempManager = $temp
+    return $temp
+}
+$script:tempManager = $null
 
 if ([Threading.Thread]::CurrentThread.GetApartmentState() -ne [Threading.ApartmentState]::STA) {
     if (-not $PSCommandPath) { throw 'Run installer-gui.ps1 from a file so it can start in STA mode.' }
@@ -522,6 +535,7 @@ public sealed class InstallerProcessOutput
                                 <Separator Margin="0,16,0,8" Background="#343945" />
                                 <CheckBox x:Name="VoiceCheck" Content="Voice conversation (TTS and speech recognition)" IsChecked="True" />
                                 <CheckBox x:Name="KaraokeCheck" Content="Karaoke and singing features (adds a few GB)" IsChecked="True" Margin="22,7,0,0" />
+                                <CheckBox x:Name="ShortcutCheck" Content="Jun OS shortcut on the desktop and in the Start menu" IsChecked="True" />
                                 <CheckBox x:Name="MtpCheck" Content="Experimental multi-token prediction" />
                                 <StackPanel x:Name="MtpDepthPanel" Orientation="Horizontal" Margin="22,7,0,0" Visibility="Collapsed">
                                     <TextBlock Text="Draft depth" VerticalAlignment="Center" Margin="0,0,12,0" />
@@ -624,7 +638,7 @@ $controlNames = @(
     'CustomOptions', 'ChannelPanel', 'ChannelCombo', 'ProviderCombo',
     'OpenRouterPanel', 'OpenRouterKey', 'OpenRouterModel', 'LlamaPanel', 'LlamaUrl',
     'LocalModelPanel', 'ModelCombo', 'TensorParallelCheck', 'TensorParallelHint', 'VoiceCheck',
-    'KaraokeCheck', 'MtpCheck', 'MtpDepthPanel', 'MtpDepthCombo', 'ExtractCheck',
+    'KaraokeCheck', 'ShortcutCheck', 'MtpCheck', 'MtpDepthPanel', 'MtpDepthCombo', 'ExtractCheck',
     'AssetOptions', 'GameLocation', 'BrowseGameButton', 'AssetAgreement',
     'ReviewText', 'DependencyAgreement', 'InstallHeading', 'InstallStatus',
     'InstallProgress', 'InstallLog', 'CompletionActions', 'OpenFolderButton',
@@ -735,7 +749,7 @@ if ($script:PinnedRef) {
     $ChannelPanel.Visibility = 'Collapsed'
     $window.Title = "Jun OS Setup $($script:PinnedRef)"
 }
-$ExpressSummaryText.Text = "$versionLine`nOllama with $recommendedLabel`nVoice conversation and karaoke enabled`nMulti-token prediction on, draft depth measured after install`nLive2D asset recovery offered separately"
+$ExpressSummaryText.Text = "$versionLine`nOllama with $recommendedLabel`nVoice conversation and karaoke enabled`nMulti-token prediction on, draft depth measured after install`nJun OS shortcut on the desktop and in the Start menu`nLive2D asset recovery offered separately"
 
 if ($script:gpuVendor -eq 'cpu') {
     $HardwareText.Text = 'No NVIDIA or AMD GPU was detected. The CPU-friendly Jun E2B model is recommended; local inference will still work.'
@@ -789,6 +803,7 @@ function Update-Mode {
         $TensorParallelCheck.IsChecked = $false
         $VoiceCheck.IsChecked = $true
         $KaraokeCheck.IsChecked = $true
+        $ShortcutCheck.IsChecked = $true
         $KaraokeCheck.Visibility = 'Visible'
         $MtpCheck.IsChecked = $true
         $MtpDepthPanel.Visibility = 'Visible'
@@ -872,6 +887,7 @@ function Get-SetupValues {
         TensorParallel = (-not $express -and $TensorParallelCheck.IsChecked -eq $true)
         Voice = ($express -or $VoiceCheck.IsChecked -eq $true)
         Karaoke = ($express -or $KaraokeCheck.IsChecked -eq $true)
+        Shortcuts = ($express -or $ShortcutCheck.IsChecked -eq $true)
         Mtp = ($express -or $MtpCheck.IsChecked -eq $true)
         MtpDepth = (Get-SelectedTag $MtpDepthCombo)
         Extract = ($ExtractCheck.IsChecked -eq $true)
@@ -897,6 +913,7 @@ function Update-Review {
         "Model        $modelText",
         "Voice        $(if ($values.Voice) { 'On' } else { 'Off' })",
         "Karaoke      $(if ($values.Karaoke) { 'On' } else { 'Off' })",
+        "Shortcut     $(if ($values.Shortcuts) { 'Desktop and Start menu' } else { 'None' })",
         "Live2D       $(if ($values.Extract) { 'Recover from your game copy' } else { 'Use placeholders for now' })"
     )
     if ($values.TensorParallel) { $lines += 'Multi-GPU    On' }
@@ -968,10 +985,11 @@ function Get-JunUrl {
 
 function Complete-Installation([int]$exitCode) {
     $script:installing = $false
-    if ($script:tempInstaller) {
-        Remove-Item -LiteralPath $script:tempInstaller -Force -ErrorAction SilentlyContinue
-        $script:tempInstaller = $null
+    foreach ($temp in @($script:tempInstaller, $script:tempManager)) {
+        if ($temp) { Remove-Item -LiteralPath $temp -Force -ErrorAction SilentlyContinue }
     }
+    $script:tempInstaller = $null
+    $script:tempManager = $null
     $InstallProgress.IsIndeterminate = $false
     $InstallProgress.Value = if ($exitCode -eq 0) { 100 } else { 0 }
     $CancelButton.Content = 'Close'
@@ -1003,8 +1021,11 @@ $script:pollTimer.Interval = [TimeSpan]::FromMilliseconds(150)
 $script:pollTimer.Add_Tick({
     Drain-InstallerOutput
     if ($null -eq $script:process -or -not $script:process.HasExited) { return }
-    $script:process.WaitForExit()
-    Drain-InstallerOutput
+    # NO plain WaitForExit() here. with async reads it also waits for
+    # the output pipe to close, and it never does: php, caddy, ollama
+    # and the sidecar that start.ps1 launched inherited it and keep
+    # running. that froze the whole window after every install.
+    # HasExited is already true, the exit code is there.
     $script:pollTimer.Stop()
     if ($script:installing) { Complete-Installation $script:process.ExitCode }
 })
@@ -1066,7 +1087,7 @@ function Start-Installation {
     $managedKeys = @(
         'JUN_YES', 'JUN_EXPRESS', 'JUN_DIR', 'JUN_CHANNEL', 'JUN_REF', 'JUN_PIN_SHA', 'JUN_PROVIDER', 'JUN_MODEL',
         'JUN_TENSOR_PARALLEL', 'JUN_MTP', 'JUN_MTP_DEPTH', 'JUN_KARAOKE',
-        'JUN_EXTRACT', 'JUN_GAME_DIR', 'JUN_BOOTSTRAP_WINGET', 'VOICE',
+        'JUN_EXTRACT', 'JUN_SHORTCUTS', 'JUN_MANAGER_EXE', 'JUN_GAME_DIR', 'JUN_BOOTSTRAP_WINGET', 'VOICE',
         'KARAOKE', 'OPENROUTER_API_KEY', 'OPENROUTER_MODEL', 'LLAMACPP_URL'
     )
     foreach ($key in $managedKeys) { $info.EnvironmentVariables.Remove($key) }
@@ -1086,6 +1107,9 @@ function Start-Installation {
     $info.EnvironmentVariables['JUN_MTP'] = if ($values.Mtp) { 'on' } else { 'off' }
     $info.EnvironmentVariables['JUN_MTP_DEPTH'] = $values.MtpDepth
     $info.EnvironmentVariables['JUN_EXTRACT'] = if ($values.Extract) { 'on' } else { 'off' }
+    $info.EnvironmentVariables['JUN_SHORTCUTS'] = if ($values.Shortcuts) { 'on' } else { 'off' }
+    $managerExe = Resolve-ManagerExe
+    if ($managerExe) { $info.EnvironmentVariables['JUN_MANAGER_EXE'] = $managerExe }
     $info.EnvironmentVariables['JUN_BOOTSTRAP_WINGET'] = '1'
 
     if ($values.Extract -and $GameLocation.Text.Trim()) {

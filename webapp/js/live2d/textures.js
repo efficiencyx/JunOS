@@ -1,5 +1,5 @@
 import { markDirty, model, publicTint, raw } from './state.js?v=11';
-import { findDrawables } from './geometry.js?v=12';
+import { findDrawables } from './geometry.js?v=75';
 
 export function tintByPattern(includes, excludes, rgb) {
   if (!publicTint) return [];
