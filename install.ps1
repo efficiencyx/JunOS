@@ -1214,7 +1214,7 @@ Step 'asset policy'
 Warn_ "Jun's Live2D model & textures belong to the creator of"
 Warn_ 'My Dystopian Robot Girlfriend. tools/recover_assets.py rebuilds'
 Warn_ 'them from YOUR game copy, for personal use only - do NOT'
-Warn_ 'republish them (public fork, release, mirror). See NOTICE in LICENSE.'
+Warn_ 'republish them (public fork, release, mirror). See the NOTICE file.'
 
 # extract only from the user's own game install. nothing
 # downloads or leaves the box. Express enables it, Custom asks.

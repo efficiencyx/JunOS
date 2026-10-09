@@ -1,3 +1,4 @@
+
                                  Apache License
                            Version 2.0, January 2004
                         http://www.apache.org/licenses/
@@ -199,38 +200,3 @@
    WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
    See the License for the specific language governing permissions and
    limitations under the License.
-
---------------------------------------------------------------------------------
-
-NOTICE - Third-party game assets
-
-The Apache License 2.0 above covers the source code in this repository ONLY.
-
-It does NOT cover the Live2D model, textures, or any other art assets belonging
-to the game "My Dystopian Robot Girlfriend" and its creator. Those assets are
-NOT included in this repository. They are rebuilt on your own machine from your
-own copy of the game by tools/recover_assets.py, and remain the property of
-their original author.
-
-You may extract these assets for local, personal use with this project. You may
-NOT redistribute or republish them - do not commit them to a public fork, a
-release, a mirror, or any other public location. If you fork this project, keep
-webapp/assets/ out of your published tree (it is already in .gitignore for this
-reason). Respect the wishes of the original creator.
-
-NOTICE - Vendored third-party libraries
-
-webapp/vendor/ holds unmodified copies of libraries that used to be loaded from
-a CDN, so that a Jun OS install boots without internet access. Each remains
-under its own license, not the Apache License 2.0 above:
-
-  pixi.min.js                 pixi.js 6.5.10                       MIT
-  cubism4.min.js              pixi-live2d-display 0.4.0            MIT
-  marked.min.js               marked 12.0.2                        MIT
-  purify.min.js               DOMPurify 3.0.11                     Apache-2.0 / MPL-2.0
-  live2dcubismcore.min.js     Live2D Cubism Core                   Live2D Proprietary
-                                                                   Software License
-
-The Cubism Core is redistributed under the Live2D Proprietary Software License,
-which permits bundling it with an application. It is not Apache-2.0 and cannot be
-relicensed: https://www.live2d.com/eula/live2d-proprietary-software-license-agreement_en.html

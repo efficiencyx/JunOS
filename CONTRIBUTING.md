@@ -21,7 +21,7 @@ The source code is Apache-2.0 licensed, but the original game's art and other as
 - model weights or private training data;
 - `.env` files, API keys, registration keys, recovery codes, session/data-key cookies, passwords, chat history, memory notes, or journals.
 
-The complete asset terms are in the NOTICE section of [LICENSE](LICENSE). Use synthetic or self-created fixtures when a test needs media.
+The complete asset terms are in [NOTICE](NOTICE). Use synthetic or self-created fixtures when a test needs media.
 
 ## Development setup
 

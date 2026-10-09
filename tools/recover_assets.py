@@ -661,7 +661,7 @@ def main():
     print("NOTE: these are the game's art assets, rebuilt for your own local")
     print("use. They belong to the creator of My Dystopian Robot Girlfriend -")
     print("please don't republish them (public fork, release, mirror). See the")
-    print("NOTICE in LICENSE. (webapp/assets/ is gitignored so it won't push.)")
+    print("NOTICE file. (webapp/assets/ is gitignored so it won't push.)")
 
 
 if __name__ == "__main__":

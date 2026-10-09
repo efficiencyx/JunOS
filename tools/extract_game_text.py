@@ -3,7 +3,7 @@
 
 her canonical lines and the other scripted dialogue give the V5
 generator her cadence, plus a curated set of verbatim rows.
-Personal-use only per the NOTICE in LICENSE. Outputs are
+Personal-use only per NOTICE. Outputs are
 gitignored. Do not republish game text.
 
 the game is an IL2CPP build (the C# compiled down to native

@@ -70,7 +70,7 @@ rm -rf "$tmp"
 
 echo "nothing that must not be in the repo"
 # the extractor is personal-use only per the agreement with the
-# game dev (see the NOTICE in LICENSE). ripped assets must never
+# game dev (see NOTICE). ripped assets must never
 # end up in a commit.
 leaked=$(git ls-files 'webapp/assets/*' '*.moc3' '*.model3.json' '*.motion3.json' '*.cmo3' '*.bank' '*.unity3d' || true)
 if [ -n "$leaked" ]; then

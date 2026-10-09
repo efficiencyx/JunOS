@@ -206,7 +206,7 @@ localStorage holds UI preferences. Mods are never uploaded, the server only ever
 sees item names.
 
 **Extracted game assets** land in `webapp/assets/`, are gitignored, and are for
-your own use only - see the NOTICE in [LICENSE](LICENSE).
+your own use only - see [NOTICE](NOTICE).
 
 ## Encryption and recovery
 

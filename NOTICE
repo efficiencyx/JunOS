@@ -1,0 +1,98 @@
+Jun OS
+Copyright 2026 efficiencyx
+
+The source code in this repository is licensed under the Apache License,
+Version 2.0 (see LICENSE). This NOTICE file is part of that distribution and
+must travel with any redistributed copy or derivative work (section 4 of the
+license).
+
+================================================================================
+1. Third-party game assets
+================================================================================
+
+The Apache License 2.0 in this repository applies to the source code ONLY.
+
+It does NOT apply to the Live2D model, textures, or any other art assets from
+the game "My Dystopian Robot Girlfriend" (the "Game Assets"). The Game Assets
+are the property of their original creator. They are NOT included in this
+repository and are NOT licensed to you by this project.
+
+tools/recover_assets.py rebuilds the Game Assets on your own machine from your
+own legitimately obtained copy of the game. This project does not grant any
+rights over them; the conditions below describe the uses the original creator
+has agreed to tolerate. If in doubt, do not do it.
+
+ALLOWED
+  - Extracting the Game Assets for personal use with this project.
+  - Copying or transferring the Game Assets to machines, services, or
+    storage you control and that only you can access (e.g. your own PC,
+    home server, a VPS / cloud instance rented by you, a private Git
+    repository with no other collaborators, or personal backups and
+    snapshots), for the purpose of running this project, provided they are
+    used only for PRIVATE hosting as defined in section 2.
+  - Running this project with the Game Assets on a PRIVATE server.
+
+NOT ALLOWED
+  - Redistributing the Game Assets, original or modified. "Redistributing"
+    means making them available to any person other than you, or placing
+    them anywhere others can access them, except as described under
+    EXCEPTION below.
+  - Committing or uploading the Game Assets to any repository, fork,
+    release, package, container image, mirror, shared drive, or other
+    location that anyone other than you can access. If such a location
+    later becomes accessible to others (e.g. a private repository made
+    public or shared with a collaborator), you must remove the Game Assets
+    from it first, including from its history.
+  - Running this project with the Game Assets on a PUBLIC server.
+    A web server sends the assets to every client that connects, so serving
+    them publicly counts as redistribution.
+
+EXCEPTION
+  Transmission of the Game Assets from a PRIVATE server to its authorized
+  users, solely as required for this project to function, is not considered
+  redistribution. This exception does not allow those users to save,
+  extract, or further share the Game Assets.
+
+If you fork this project, keep webapp/assets/ out of your published tree.
+It is listed in .gitignore for this reason; do not remove that entry.
+
+================================================================================
+2. Private vs. public hosting
+================================================================================
+
+A server is PRIVATE only if ALL of the following are true:
+  a) Access is restricted by at least one technical control:
+       - a VPN or private network not reachable from the internet, OR
+       - an authentication layer in front of the app (e.g. reverse proxy
+         auth, SSO), OR
+       - a firewall / WAF / IP allowlist limited to specific addresses;
+  b) No more than 10 people can access it;
+  c) Every person with access is known to you personally; and
+  d) It is not advertised, listed, or shared publicly (including links).
+
+Any server that does not meet ALL of the above is PUBLIC.
+
+Please respect the wishes of the original creator.
+
+================================================================================
+3. Vendored third-party libraries
+================================================================================
+
+webapp/vendor/ contains unmodified copies of libraries that were previously
+loaded from a CDN, so that Jun OS can run without internet access. Each file
+remains under its own license, NOT the Apache License 2.0 of this repository:
+
+  File                       Library                    License
+  -------------------------  -------------------------  ----------------------
+  pixi.min.js                pixi.js 6.5.10             MIT
+  cubism4.min.js             pixi-live2d-display 0.4.0  MIT
+  marked.min.js              marked 12.0.2              MIT
+  purify.min.js              DOMPurify 3.0.11           Apache-2.0 / MPL-2.0
+  live2dcubismcore.min.js    Live2D Cubism Core         Live2D Proprietary
+                                                        Software License
+
+Live2D Cubism Core is redistributed under the Live2D Proprietary Software
+License Agreement, which permits bundling it with an application. It is NOT
+covered by the Apache License 2.0 and may not be relicensed. By using this software
+you must also comply with that agreement:
+https://www.live2d.com/eula/live2d-proprietary-software-license-agreement_en.html

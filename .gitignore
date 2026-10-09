@@ -21,7 +21,7 @@ runtime/
 Junk/
 
 # game-ripped Live2D assets, rebuilt with tools/recover_assets.py.
-# personal use only, NEVER redistribute (see the NOTICE in LICENSE).
+# personal use only, NEVER redistribute (see NOTICE).
 webapp/assets/
 
 # generated library cache from unsloth (the fine-tuning lib),
