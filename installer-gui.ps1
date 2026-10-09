@@ -755,7 +755,9 @@ if ($script:gpuVendor -eq 'cpu') {
 $TensorParallelCheck.Visibility = if ($script:gpuVendor -eq 'nvidia' -and $script:gpuMemory.Count -ge 2) { 'Visible' } else { 'Collapsed' }
 $TensorParallelHint.Visibility = $TensorParallelCheck.Visibility
 
-$defaultLocation = if (Test-Path (Join-Path $PSScriptRoot '.git')) {
+# JunSetup.exe has no $PSScriptRoot, and Join-Path on '' throws
+# before the window even opens.
+$defaultLocation = if ($PSScriptRoot -and (Test-Path -LiteralPath (Join-Path $PSScriptRoot '.git'))) {
     $PSScriptRoot
 } else {
     Join-Path ([Environment]::GetFolderPath('UserProfile')) 'JunOS'

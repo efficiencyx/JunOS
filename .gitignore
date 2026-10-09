@@ -81,8 +81,10 @@ letsencrypt/
 tools/clothing-render.html
 tools/clothing-render.js
 
-# build output from tools/build-installer-exe.ps1
+# build output from tools/build-installer-exe.ps1, and the exe
+# `gh run download` drops wherever you run it
 dist/
+JunSetup*.exe
 
 
 # the promo reels, landscape and vertical. both drive the real
