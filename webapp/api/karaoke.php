@@ -23,11 +23,15 @@ function karaoke_purge_jobs(PDO $db): void {
 }
 
 // give the LLM's VRAM back before demucs (the vocal/instrument
-// splitter) starts, so the two don't fight over the GPU. Ollama
-// only, /api/ps and keep_alive:0 are Ollama things. we try once
-// and move on. a failed eviction must NEVER stop the separation,
-// worst case they both want the card.
+// splitter) starts, so the two don't fight over the GPU. we try
+// once and move on. a failed eviction must NEVER stop the
+// separation, worst case they both want the card. both servers
+// load her back on the next message.
 function evict_chat_model(): void {
+    if (ai_provider() === 'llamacpp') {
+        llamacpp_unload_chat_models();
+        return;
+    }
     if (ai_provider() !== 'ollama') return;
     $name = ollama_api_json('/api/ps', null, 5)['models'][0]['name'] ?? null;
     if (!is_string($name) || $name === '') return;
@@ -73,6 +77,7 @@ if ($action === 'separate') {
          VALUES (?, ?, ?, ?)'
     )->execute([hash('sha256', $token), $user['id'], $sidecarToken, time() + KARAOKE_JOB_TTL]);
     $payload['token'] = $token;
+    ach_add((int)$user['id'], 'songs');
 
     json_out($payload, $res['code']);
 }

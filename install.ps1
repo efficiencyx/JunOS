@@ -140,6 +140,12 @@ function Invoke-Git {
 # ollama isn't here on purpose, Install-Ollama fetches it
 # straight from ollama.com. see there for why.
 $wingetIds = @{ git = 'Git.Git'; python = 'Python.Python.3.11'; llamacpp = 'ggml.llamacpp' }
+# llama.cpp moves fast and start.ps1 runs it in router mode with
+# --fit, so it's pinned to the build docker runs (10438, winget
+# has no 10438, 10448 is the next one up). older than that and
+# llama-server starts, then dies on --models-preset.
+$wingetVersions = @{ llamacpp = 'b10448' }
+$LlamacppMinBuild = 10448
 $manualUrls = @{
     git      = 'https://git-scm.com/download/win'
     ollama   = 'https://ollama.com/download/windows'
@@ -799,6 +805,13 @@ function Assert-OnPath([string]$command) {
 # machine-wide pieces. each keeps its own uninstaller in Settings
 # > Apps. anything with a winget id goes through winget, ollama
 # goes through Install-Ollama.
+# missing counts as too old too, see $LlamacppMinBuild
+function Test-LlamaServerBuild {
+    if (-not (Get-Command llama-server -ErrorAction SilentlyContinue)) { return $false }
+    $out = (& llama-server --version 2>&1 | Out-String)
+    return ($out -match 'build (\d+)') -and ([int]$matches[1] -ge $LlamacppMinBuild)
+}
+
 function Install-MachineTools([string[]]$missing, [switch]$Optional) {
     if ($missing.Count -eq 0) { return }
 
@@ -833,7 +846,8 @@ function Install-MachineTools([string[]]$missing, [switch]$Optional) {
         # --source winget on purpose. without it the id can resolve out of
         # msstore or any private source somebody added to this machine, and
         # we'd install whatever answers to that name over there.
-        winget install -e --id $wingetIds[$c] --source winget `
+        $pin = if ($wingetVersions[$c]) { @('--version', $wingetVersions[$c]) } else { @() }
+        winget install -e --id $wingetIds[$c] @pin --source winget `
             --accept-source-agreements --accept-package-agreements
         if ($LASTEXITCODE -ne 0) {
             Warn_ ("winget returned {0} for {1} - carrying on, the PATH check below decides." -f $LASTEXITCODE, $c)
@@ -1559,8 +1573,32 @@ function Get-ReleaseTag([string]$channel) {
         if ($channel -eq 'stable') { Note "no full release yet - using the newest pre-release, $($newest.tag_name)" }
         return [string]$newest.tag_name
     } catch {
+        # the API said no. on latest that means a full release where a
+        # newer pre-release might exist, which is still a release and
+        # never main. Update-JunRepo won't step back to it either.
+        $tag = Get-WebLatestTag $slug
+        if ($tag) { Note "GitHub's API didn't answer - going by the newest full release, $tag" }
+        return $tag
+    }
+}
+
+# the website, not the API, so no 60-an-hour cap. /releases/latest
+# 302s to /releases/tag/<newest full release>, or to plain
+# /releases when there's no full release. it never sees drafts or
+# pre-releases. (releases.atom is NOT a fallback, it lists bare
+# tags too, draft ones included)
+function Get-WebLatestTag([string]$slug) {
+    try {
+        $req = [Net.HttpWebRequest]::Create("https://github.com/$slug/releases/latest")
+        $req.AllowAutoRedirect = $false
+        $req.UserAgent = 'JunOS-installer'
+        $resp = $req.GetResponse()
+        try { $loc = [string]$resp.Headers['Location'] } finally { $resp.Close() }
+    } catch {
         return $null
     }
+    if ($loc -match '/releases/tag/([^/?#]+)$') { return $matches[1] }
+    return $null
 }
 
 # the ref to put on disk, or $null for "leave it alone".
@@ -1568,17 +1606,18 @@ function Resolve-TargetRef([string]$channel, [bool]$fresh) {
     if ($channel -eq 'experimental') { return 'main' }
     $tag = Get-ReleaseTag $channel
     if ($tag) { return $tag }
+    # main is NEVER the fallback. it's whatever got pushed today,
+    # and the only way onto it is asking for experimental.
     if ($null -ne $tag) {
-        Note 'no releases published yet - using main'
-        return 'main'
+        if (-not $fresh) { Note "no $channel release published yet - keeping the code that's on disk"; return $null }
+        Fail_ 'no release of Jun is published yet'
+    } else {
+        Warn_ "couldn't ask GitHub which release is current"
+        if (-not $fresh) { Note "keeping the code that's on disk"; return $null }
+        Note 'offline, or rate limited (GitHub answers 60 of these an hour per IP). give it a bit and run this again.'
     }
-    Warn_ "couldn't ask GitHub which release is current"
-    if ($fresh) {
-        Note "installing from main for now. run this again later and she moves to $channel."
-        return 'main'
-    }
-    Note "keeping the code that's on disk"
-    return $null
+    Note 'JUN_REF=<tag> installs a release you name, JUN_CHANNEL=experimental installs main on purpose.'
+    Exit-Install 1
 }
 
 # semver-ish, -1/0/1. v1.2.0 beats v1.2.0-beta, two pre-releases
@@ -1841,7 +1880,7 @@ $voice = $cfg.voice
 
 $missing = @()
 if ($cfg.needsOllama -and -not (Get-Command ollama -ErrorAction SilentlyContinue)) { $missing += 'ollama' }
-if ($cfg.needsLlamacpp -and -not (Get-Command llama-server -ErrorAction SilentlyContinue)) { $missing += 'llamacpp' }
+if ($cfg.needsLlamacpp -and -not (Test-LlamaServerBuild)) { $missing += 'llamacpp' }
 Install-MachineTools $missing
 if ($cfg.needsOllama) { Assert-OnPath ollama }
 if ($cfg.needsLlamacpp) { Assert-OnPath llama-server }

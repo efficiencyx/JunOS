@@ -11,6 +11,7 @@ import * as Names from '../core/names.js?v=1';
 import * as Live2D from '../live2d/live2d.js?v=77';
 import * as Scene from '../trip/scene.js?v=1';
 import * as VoiceMode from '../voice/voicemode.js?v=77';
+import * as Achievements from '../achievements/achievements.js?v=8';
 
 const SUITS = ['♠', '♥', '♦', '♣'];
 const RANKS = ['A', '2', '3', '4', '5', '6', '7', '8', '9', '10', 'J', 'Q', 'K'];
@@ -149,6 +150,7 @@ function settle(winner, how) {
   phase = 'done';
   if (winner === 'you') score.you++;
   if (winner === 'her') score.her++;
+  if (winner !== 'push') Achievements.bump(winner === 'you' ? 'bj_won' : 'bj_lost');
   render();
   const won = winner === 'push' ? 'Nobody wins the hand.' : (winner === 'you' ? 'Anon wins the hand.' : `${bot()} wins the hand.`);
   setStatus(won);

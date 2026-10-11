@@ -12,5 +12,10 @@ if (require_method('GET', 'PUT') === 'GET') {
 
 rate_limit('outfit_change_' . $userId, 2, 1);
 $state = wardrobe_canonical_state(read_json_body(32 * 1024));
+$before = wardrobe_state($userId);
 wardrobe_save_state($userId, $state);
+// the first save is the page setting up, not a change. and the
+// browser re-saves after her change_outfit tool, which counted it
+// already, the same state twice is not a second change
+if (ach_worn_changed($before, $state)) ach_add($userId, 'outfits');
 json_out(['state' => $state]);

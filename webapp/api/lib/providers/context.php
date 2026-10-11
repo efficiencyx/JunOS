@@ -81,10 +81,21 @@ function default_num_ctx(): int {
 // how many tokens the window holds, before anything is put in it.
 // zero for openrouter, the model behind it is whatever the user
 // picked and we have no idea what its window is.
-function provider_window_tokens(string $provider): int {
-    if ($provider === 'llamacpp') return 16384;
+function provider_window_tokens(string $provider, string $model = ''): int {
+    if ($provider === 'llamacpp') return llamacpp_window_tokens($model !== '' ? $model : default_chat_model());
     if ($provider === 'openrouter') return 0;
     return default_num_ctx();
+}
+
+// whatever --fit gave her, read back off the server. capped at 16k
+// (or OMEGA_NUM_CTX) because the 16k ceiling in the preset only
+// lands on gemma4 GGUFs, a GGUF of your own can come up at 40k+
+// and then we'd happily send 40k of history
+function llamacpp_window_tokens(string $model): int {
+    $cap = (int)env_str('OMEGA_NUM_CTX', '0');
+    if ($cap <= 0) $cap = CTX_TIERS[count(CTX_TIERS) - 1];
+    $n = llamacpp_num_ctx($model);
+    return $n > 0 ? min($n, $cap) : $cap;
 }
 
 // overflow drops the FRONT of the prompt, system rules included.
@@ -113,7 +124,7 @@ function fit_messages_to_context(array $messages, int $numCtx, int $reserve = 10
 }
 
 function provider_context_size(string $provider, array $payload): int {
-    if ($provider === 'llamacpp') return 16384;
+    if ($provider === 'llamacpp') return llamacpp_window_tokens((string)($payload['model'] ?? default_chat_model()));
     if (provider_uses_openai_protocol($provider)) return 0;
     return (int)($payload['options']['num_ctx'] ?? 0);
 }

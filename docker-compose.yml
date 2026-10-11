@@ -111,7 +111,6 @@ services:
     build:
       context: .
       dockerfile: docker/ollama.Dockerfile
-      network: host
     container_name: omega-ollama
     profiles: [ollama]
     restart: unless-stopped
@@ -162,14 +161,23 @@ services:
     read_only: true
     tmpfs:
       - /tmp:size=256m,mode=1777
+    # router mode, the preset file comes out of these on every start
+    entrypoint: ["/bin/sh", "/jun/llamacpp-entrypoint.sh"]
     environment:
-      LLAMA_ARG_HF_REPO: "${LLAMACPP_MODEL_HF:-efficiencyx/Jun-LoRA-E2B-GGUF:Q4_K_M}"
-      LLAMA_ARG_CTX_SIZE: "16384"
-      LLAMA_ARG_JINJA: "1"           # enables template processing for tool calls
-      LLAMA_ARG_HOST: "0.0.0.0"
-      LLAMA_ARG_PORT: "8080"
+      LLAMACPP_MODEL_HF: "${LLAMACPP_MODEL_HF:-efficiencyx/Jun-LoRA-E2B-GGUF:Q4_K_M}"
+      LLAMACPP_MODEL_FILE: "${LLAMACPP_MODEL_FILE:-}"
+      LLAMACPP_MODEL_ALIAS: "${LLAMACPP_MODEL_ALIAS:-jun-local}"
+      LLAMACPP_MTP: "${LLAMACPP_MTP:-}"
+      LLAMACPP_MTP_N_MAX: "${LLAMACPP_MTP_N_MAX:-4}"
+      TITLE_MODEL: "${TITLE_MODEL-hf.co/efficiencyx/Titlewen-GGUF:F16}"
+      OMEGA_NUM_CTX: "${OMEGA_NUM_CTX:-}"
+      # -hf downloads land in the HF hub layout under HF_HOME now,
+      # not ~/.cache/llama.cpp. the root fs is read-only, so without
+      # this every download dies on "Read-only file system"
+      HF_HOME: /root/.cache/llama.cpp/huggingface
     volumes:
       - llamacpp_cache:/root/.cache/llama.cpp
+      - ./docker/llamacpp-entrypoint.sh:/jun/llamacpp-entrypoint.sh:ro
     healthcheck:
       test: ["CMD", "curl", "-fsS", "http://127.0.0.1:8080/health"]
       interval: 10s
@@ -185,7 +193,6 @@ services:
     build:
       context: .
       dockerfile: docker/tts.Dockerfile
-      network: host
       args:
         TORCH_INDEX: "${TTS_TORCH_INDEX:-https://download.pytorch.org/whl/cpu}"
     container_name: omega-tts
@@ -231,7 +238,6 @@ services:
     build:
       context: .
       dockerfile: docker/karaoke.Dockerfile
-      network: host
       args:
         TORCH_INDEX: "${KARAOKE_TORCH_INDEX:-https://download.pytorch.org/whl/cpu}"
     container_name: omega-karaoke

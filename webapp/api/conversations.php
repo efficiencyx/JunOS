@@ -58,7 +58,9 @@ switch ($action) {
         $db->prepare(
             'INSERT INTO conversations (user_id, title, created_at, updated_at) VALUES (?, NULL, ?, ?)'
         )->execute([$userId, $now, $now]);
-        json_out(['id' => (int)$db->lastInsertId()]);
+        $id = (int)$db->lastInsertId();
+        ach_add($userId, 'chats');
+        json_out(['id' => $id]);
 
     case 'messages':
         require_method('GET');

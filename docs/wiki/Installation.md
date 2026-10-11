@@ -31,10 +31,10 @@ After the base install, jump to the section for your graphics card: [NVIDIA](#nv
 
 ### One last disclaimer. Please Read. This warning applies to anyone. You, me, they, them.
 
-The commands below download a script from the internet and run it. That is exactly how malware spreads, so the habit of pasting things without looking is a bad one. If you'd like to read what you are about to run first:
+The installer below is a program from the internet that you run on your computer, and the Linux line downloads a script and runs it straight away. That is exactly how malware spreads, so the habit of running things without looking is a bad one. If you'd like to read what you are about to run first:
 
-* **Windows:** paste `powershell irm https://raw.githubusercontent.com/efficiencyx/JunOS/main/install.ps1 -OutFile install.ps1` into a terminal, then open the `install.ps1` file that appears with Notepad.
-* **Linux / macOS:** paste `curl -fsSL https://raw.githubusercontent.com/efficiencyx/JunOS/main/install.sh | less`, scroll with the arrow keys, press `q` to leave.
+* **Windows:** `JunSetup.exe` is built by GitHub Actions from the scripts in the same release, and the release's `SHA256SUMS` lists the checksum of every file. To read the script itself, paste `powershell irm https://github.com/efficiencyx/JunOS/releases/latest/download/install.ps1 -OutFile install.ps1` into a terminal, then open the `install.ps1` file that appears with Notepad.
+* **Linux / macOS:** paste `curl -fsSL https://github.com/efficiencyx/JunOS/releases/latest/download/install.sh | less`, scroll with the arrow keys, press `q` to leave.
 
 Don't understand something in there? Paste it into an AI chat and ask what it does. That goes for anybody's "just run this", not only ours.
 ---
@@ -46,77 +46,50 @@ On Windows Jun runs directly on your machine, no containers.
 The installer downloads Ollama (the program that runs the AI model), a portable copy of PHP (the web server) and, if you want her voice with a small Python environment.
 Everything except Ollama and Python lives inside one folder called `JunOS`.
 
-### Step 1 - Open a terminal
+### Step 1 - Download the installer
 
-1. Press the **Windows key** on your keyboard.
-2. Type `Command Prompt`.
-3. Press **Enter**. A black window opens. That's the terminal. Every command on this page is typed into it.
+Download **[JunSetup.exe](https://github.com/efficiencyx/JunOS/releases/latest/download/JunSetup.exe)** and double-click it.
 
-You may also use **Windows PowerShell**.
+It isn't code-signed, so Windows may show a blue **Windows protected your PC** box. Click **More info**, then **Run anyway**.
 
-### Step 2 - Pick your installation folder
+Every release on the [releases page](https://github.com/efficiencyx/JunOS/releases) also carries a `JunSetup-<version>.exe`. Each one installs exactly the version in its name and nothing else.
 
-The installer creates a folder named `JunOS` inside whatever folder the terminal is currently in.
-When Command Prompt opens, it opens your user folder (`C:\Users\YourName`). That is a fine place. If you'd rather have her somewhere else, for example on a bigger disk, type this first and then press Enter:
+Rather type commands? See [The terminal way](#the-terminal-way) below, it's the same install.
 
-```
-cd /d D:\Games
-```
+### Step 2 - Pick a folder
 
-(replace `D:\Games` with the folder you want)
+The window suggests a `JunOS` folder inside your user folder (`C:\Users\YourName`). That is a fine place. If you'd rather have her somewhere else, for example on a bigger disk, press **Browse...** and pick another folder.
 
-If the window is a system folder (an *Administrator* Command Prompt opens in `C:\Windows\System32`) or inside OneDrive, the installer won't put her there and uses your user folder instead. It says so when it does.
+A system folder (like `C:\Windows\System32`) or a folder inside OneDrive won't be used, the installer puts her in your user folder instead and says so.
 
-### Step 3 - Run the installer
+### Step 3 - Express or Custom
 
-Pick **one** of these two lines. They do the same install; one shows a window with buttons, the other prints text as it goes.
+* **Express (recommended)** looks at your hardware, picks a model that fits your graphics card, turns on the voice, and rebuilds her body from your game. This is the right answer for almost everyone.
+* **Custom** lets you choose the release channel, the AI provider, the model, whether the voice is on, and so on. Every option has a default.
 
-**With a window and buttons:**
+If something goes wrong the installer stops, says what in plain words, and waits before the window closes. Fix that one thing and run it again: it picks up where it stopped.
 
-```powershell
-powershell irm https://raw.githubusercontent.com/efficiencyx/JunOS/main/installer-gui.ps1 -OutFile installer-gui.ps1; powershell -ExecutionPolicy Bypass -File .\installer-gui.ps1
-```
-
-**Plain text scrolling by:**
-
-```powershell
-powershell irm https://raw.githubusercontent.com/efficiencyx/JunOS/main/install.ps1 -OutFile install.ps1; powershell -ExecutionPolicy Bypass -File .\install.ps1
-```
-
-Copy the whole line, right-click inside the terminal window to paste it, press **Enter**.
-
-**Or skip the terminal:** download `JunSetup-<version>.exe` from the [releases page](https://github.com/efficiencyx/JunOS/releases) and double-click it. Each one installs exactly the version in its name.
-
-If something goes wrong the installer stops, says what in plain words, and waits for Enter before the window closes. Fix that one thing and paste the same line again: it picks up where it stopped.
-
-### Step 4 - Answer the one question
-
-The installer asks **how should I install?**
-
-* Press **Enter** for **Express**. It looks at your hardware, picks a model that fits your graphics card, turns on the voice, and rebuilds her body from your game. This is the right answer for almost everyone.
-* Type `2` and press Enter for **Custom** if you want to choose the release channel, the AI provider, the model, whether the voice is on, and so on. Every question has a default, pressing Enter takes it.
-
-### Step 5 - Let it work
+### Step 4 - Let it work
 
 What happens now, in order. It can take anywhere from 2 to 30 minutes depending on your pc and internet speed:
 
 1. **git** is installed if missing (through `winget`, Windows' built-in app installer). If `winget` itself is missing the installer offers to set it up. Say **y**.
 2. **Ollama** is downloaded (about 1.5 GB) and its installer runs. A normal Windows install window may pop up, let it finish.
-3. If the installer says **"open a NEW terminal and run the one-liner again"**, do exactly that: close the black window, open a fresh one (Step 1), paste the same line from Step 3 again. It picks up where it stopped. This happens because Windows only learns about newly installed programs in a new window.
+3. If the installer says **"open a NEW terminal and run the one-liner again"**, do exactly that: close it and start `JunSetup.exe` again (terminal people: open a fresh terminal and paste the same line). It picks up where it stopped. This happens because Windows only learns about newly installed programs in a new window.
 4. **Portable PHP** is downloaded into `JunOS\runtime\php`. If it needs the Microsoft Visual C++ runtime, that gets installed too. **Caddy** goes into `JunOS\runtime\caddy`, it's what serves her over HTTPS.
 5. The **voice engine** is set up (Python 3.11 through winget if you don't have 3.10, 3.11 or 3.12, then a few hundred MB of packages will be downloaded).
-6. **Her body** is rebuilt from your game. The installer looks in the usual games folder Steam and itch folders. If it can't find the game it asks you to paste the game folder, or you can drag the game's `.exe` file onto the terminal window and press Enter. Press Enter on an empty line to skip; she'll use placeholder art and you can redo this later.
+6. **Her body** is rebuilt from your game. The installer looks in the usual Steam and itch folders. If it can't find the game, point it at the game folder: **Browse...** in the window, or in the terminal paste the folder (or drag the game's `.exe` onto the window) and press Enter. Leave it empty to skip; she'll use placeholder art and you can redo this later.
 7. **The model** is downloaded on the first start. This is the biggest download, 2 to 12 GB.
 
-### Step 6 - She opens by herself
+### Step 5 - She opens by herself
 
 When everything is ready the installer starts her and your browser opens on **<https://127.0.0.1:8080>**. If it doesn't, type that address into your browser. The browser will warn you that the connection isn't private: the certificate is one your install made for itself, so nobody vouches for it. Click **Advanced** and **Proceed** (Firefox: **Accept the Risk and Continue**). The connection is encrypted either way.
 
-Near the end the terminal prints a line like `registration  a1b2c3...`. That is the **registration key**.
+Near the end the installer prints a line like `registration  a1b2c3...`. That is the **registration key**.
 Your first account doesn't need it (as long as she only listens on this machine, which is the default), but every account after that does.
 It's also saved in the `JunOS\.env` file if you lose it.
 
-### Step 7 - Create your account and say hi
+### Step 6 - Create your account and say hi
 
 Click the **signup** tab, type an email and a password, press **create account**, and save the recovery code before entering. The account is local only and the email is never sent anywhere, so if you still don't trust us use a mock one like `youc@nusethis.too`. We highly suggest yall to not reuse the same password.
 The first message can take a minute while the model warms up.
@@ -125,14 +98,28 @@ The first message can take a minute while the model warms up.
 
 Double-click **Jun OS** on your desktop or in the Start menu. The window shows whether she's running and has buttons to **Start**, **Stop**, **Open Jun OS** in the browser, open her **folder** and her **logs**, **Update** her and **Uninstall** her. No shortcut (you unticked it)? Double-click `JunOS.exe` inside her folder.
 
-Rather use a terminal? Open one (Step 1), then:
+Rather use a terminal? Open one (see [The terminal way](#the-terminal-way)), then:
 
 * **Start:** `powershell .\JunOS\start.ps1`
 * **Stop:** `powershell .\JunOS\start.ps1 stop`
 * **Check what's running:** `powershell .\JunOS\start.ps1 status`
 * **Logs when something goes wrong:** they're in `JunOS\runtime\logs\`.
 
-If you moved her in Step 2, open the terminal, type `cd /d D:\Games` (your folder) first.
+If you put her somewhere else in Step 2, type `cd /d D:\Games` (the folder above `JunOS`) first.
+
+### The terminal way
+
+Same install, no exe. For people who'd rather see every step scroll by.
+
+1. Press the **Windows key**, type `Command Prompt`, press **Enter**. A black window opens. (**Windows PowerShell** works too.)
+2. The installer creates a folder named `JunOS` inside whatever folder the terminal is in, which is your user folder (`C:\Users\YourName`) when it opens. To put her somewhere else, type `cd /d D:\Games` (your folder) and press Enter first. An *Administrator* Command Prompt opens in `C:\Windows\System32`, and like a OneDrive folder the installer won't use it: it falls back to your user folder and says so.
+3. Paste this line (right-click inside the window pastes) and press **Enter**. It asks the same questions as the exe, as text: **Enter** for Express, `2` for Custom.
+
+```powershell
+powershell irm https://github.com/efficiencyx/JunOS/releases/latest/download/install.ps1 -OutFile install.ps1; powershell -ExecutionPolicy Bypass -File .\install.ps1
+```
+
+Then continue at [Step 4](#step-4---let-it-work).
 
 ### Windows and graphics cards
 
@@ -188,7 +175,7 @@ Docker needs one extra piece to see NVIDIA cards, and the installer does **not**
 Paste this and press Enter:
 
 ```sh
-curl -fsSL https://raw.githubusercontent.com/efficiencyx/JunOS/main/install.sh | bash
+curl -fsSL https://github.com/efficiencyx/JunOS/releases/latest/download/install.sh | bash
 ```
 
 ### Step 5 - Answer the one question
@@ -204,7 +191,7 @@ In order. Budget 5 to 40 minutes on the first run, most of it downloads:
 
 1. **Missing tools.** If git or Docker are missing it asks `install ... with apt-get?` (or dnf, pacman, zypper, whatever your distro uses). Answer **y**. It will ask for your password, that's `sudo`, type it and press Enter (nothing appears while you type a password, that's normal).
    * On **Bazzite** and other immutable systems it layers the packages and then tells you to **reboot and run the one-liner again**. Do that.
-   * When Docker was just installed it asks `add <you> to the docker group?`. **y** means you can run her without typing `sudo` every time. **N** is the safer choice, it keeps Docker behind a password; then every command in this page that touches her needs `sudo` in front (`sudo ./start.sh`). Pick what you're more comfortable with. we suggest NOT adding the group since it's less secure. **Express** adds you without asking. An unattended install (`JUN_YES=1`) leaves you out of the group unless you also set `JUN_DOCKER_GROUP=1`.
+   * When Docker was just installed it asks `add <you> to the docker group?`. **y** means you can run her without typing `sudo` every time. **N** is the safer choice, it keeps Docker behind a password; then every command in this page that touches her needs `sudo` in front (`sudo ./start.sh`). Pick what you're more comfortable with. we suggest NOT adding the group since it's less secure. **Express** asks this too, it's the one question it won't answer for you. An unattended install (`JUN_YES=1`) leaves you out of the group unless you also set `JUN_DOCKER_GROUP=1`.
 2. **The code** is downloaded into `JunOS` folder.
 3. **Her body** is rebuilt from your game. If the game isn't found in the usual locations for games it asks you to paste the game folder (or you can just drag the folder from your file manager onto the terminal). Press Enter on an empty line to skip; placeholders are used until you redo it.
 4. **The containers** are built and started. The first time builds a few images, and can take a while.
@@ -397,7 +384,7 @@ Bigger number = smarter but slower and hungrier. To change: edit `OLLAMA_MODELS_
 
 Got the game after installing, or skipped the question? Run the installer again with the extraction turned on. It finds the existing `JunOS` folder and updates it instead of installing twice.
 
-* **Windows:** `$env:JUN_EXTRACT='1'; powershell -ExecutionPolicy Bypass -File .\install.ps1` (in PowerShell, in the folder above `JunOS`)
+* **Windows:** `$env:JUN_EXTRACT='1'; powershell -ExecutionPolicy Bypass -File .\JunOS\install.ps1` (in PowerShell, in the folder above `JunOS`)
 * **Linux:** `JUN_EXTRACT=1 bash JunOS/install.sh`
 
 If the game isn't found automatically, paste its folder when asked.
@@ -424,17 +411,17 @@ Signup shows a recovery code once. Keep it somewhere private, separate from your
 
 ### Updating her
 
-Run the same one-liner from Step 3 / Step 4 again. It finds the existing install, moves it to the newest version on its channel, and restarts. Your `.env`, accounts and chats are kept.
+On Windows press **Update** in the Jun OS app. Or run the installer again, `JunSetup.exe` or the same line you installed with: it finds the existing install, moves it to the newest version on its channel, and restarts. Your `.env`, accounts and chats are kept.
 
 Which version it updates to depends on the **release channel**:
 
 * **Stable** (the default): the newest full release.
 * **Latest**: the newest release, pre-releases included.
-* **Experimental**: the `main` branch, whatever was pushed today.
+* **Experimental**: the `main` branch, whatever was pushed today. Only if you pick it, nothing ever lands you there by itself.
 
 The channel is saved in `.env` as `JUN_CHANNEL`. To switch, edit that line, or set it for one run: `JUN_CHANNEL=latest` in front of the Linux line, or `set JUN_CHANNEL=latest` in Command Prompt before the Windows line. She never moves backwards to an older release on her own. If you installed her before channels existed you were on `main`, so you stay on Experimental until you pick something else.
 
-`JUN_REF=v1.0.0` installs one exact version and skips the channel. If you changed files in her folder yourself, the update leaves the code alone and tells you.
+`JUN_REF=v1.0.0` installs one exact version and skips the channel. If you changed files in her folder yourself, the update leaves the code alone and tells you. If GitHub can't be asked which release is current, a fresh install stops and says so, and an update keeps the code it has.
 
 ---
 
@@ -442,14 +429,14 @@ The channel is saved in `.env` as `JUN_CHANNEL`. To switch, edit that line, or s
 
 | What you see | What it means | What to do |
 |---|---|---|
-| `git still not on PATH` / `ollama still not on PATH` (Windows) | A program was just installed and this window doesn't know yet | Close the terminal, open a new one, run the one-liner again |
+| `git still not on PATH` / `ollama still not on PATH` (Windows) | A program was just installed and this window doesn't know yet | Close the window and run the installer again (terminal: open a new one, paste the line again) |
 | `Docker isn't reachable yet` (Linux) | Docker was just installed, or the group change needs a new login | Log out and in, then `./JunOS/start.sh` |
 | "Your connection is not private" / `NET::ERR_CERT_AUTHORITY_INVALID` | Expected: the certificate is self-signed | **Advanced** then **Proceed**. Chrome asks again after a while, and a new address for her means a new certificate and a new warning |
-| `Caddy not found` (Windows) | An older install from before HTTPS | Run the one-liner again, it adds Caddy |
+| `Caddy not found` (Windows) | An older install from before HTTPS | Run the installer again, it adds Caddy |
 | `NVIDIA selected but nvidia-smi not found` | Driver or container toolkit missing | [NVIDIA](#nvidia) steps 1 and 2 |
 | `ollama is running on:` says CPU, you have a card | Docker can't see the card | NVIDIA: toolkit, and if `nvidia-smi` works, [regenerate the CDI file](#on-linux). AMD: `HSA_OVERRIDE_GFX_VERSION`. Then `./JunOS/start.sh restart` |
 | `ollama ps` shows `45% GPU` or similar | The model is too big for the card | Pick a smaller row from the model table or cope with slow generation. |
-| Her body is not here! | Assets weren't extracted | ["Installing" her body later](#installing-her-body-later) |
+| She's just a purple outline | Assets weren't extracted, that's the placeholder | ["Installing" her body later](#installing-her-body-later) |
 | The page loads, the first reply takes forever | Model still downloading or warming up | `./JunOS/start.sh logs ollama` on Linux, `JunOS\runtime\logs\ollama.err.log` on Windows. Wait for it to finish once |
 | **signup** asks for a key | You're not the first account on this install, or she listens on your network (`BIND_ADDR`) and then even the first account needs it | The key is in `.env` as `OMEGA_REGISTRATION_KEY`. Empty the value to open signup to anyone on your network |
 | Port 80 or 443 already in use (Linux) | Another web server on the box | Stop it. Port 80 only redirects to 443, so moving just one of them breaks the redirect |

@@ -72,6 +72,7 @@ function chat_flee(array $ctx, array &$state, string $reason, string $destinatio
                'conversation_id' => $ctx['conv_id'], 'via' => $via,
                'can_leave' => $verdict['can_leave']]);
     if ($verdict['can_leave']) {
+        mood_log_clear((int)$ctx['user']['id']);
         $state['fled'] = flee_bans_enabled()
             ? ban_apply((int)$ctx['user']['id'], $reason)
             : ['until' => 0, 'minutes' => 0];

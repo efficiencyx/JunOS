@@ -53,11 +53,12 @@ function chat_parse_request(string $provider): array {
     }
     $model = ollama_resolve_chat_model($model);
 
-    // llama.cpp runs with no mmproj here (the multimodal projector,
-    // the file that lets her hear), and OpenRouter + the Android
-    // build can't take audio at all. client hears this and falls
-    // back to stt.php
-    if ($audioB64 !== '' && ($provider !== 'ollama' || !ollama_model_supports_audio($model))) {
+    // she hears through the mmproj (the multimodal projector) that
+    // sits next to the GGUF. ollama and llama.cpp both say whether
+    // the loaded one does audio, OpenRouter + the Android build
+    // can't take it at all. client hears this and falls back to
+    // stt.php
+    if ($audioB64 !== '' && !provider_model_hears($provider, $model)) {
         sse_fail('audio_unsupported');
     }
 
@@ -94,6 +95,10 @@ function chat_parse_request(string $provider): array {
         $clientTime = trim(mb_substr(preg_replace('/[\x00-\x1F\x7F]+/u', ' ', $body['client_time']), 0, 80));
     }
 
+    // minutes east of UTC, so the achievement day and the 2-5 am
+    // window are Anon's and not the container's
+    $tz = isset($body['tz']) && is_int($body['tz']) ? $body['tz'] : 0;
+
     $idle = isset($body['idle']) && $body['idle'] === true;
     $ephemeral = !empty($body['ephemeral']);
     $invite = isset($body['invite']) && in_array($body['invite'], TRIP_TOOLS, true) ? (string)$body['invite'] : '';
@@ -101,7 +106,7 @@ function chat_parse_request(string $provider): array {
     return [
         'body' => $body, 'dropped_oldest' => $droppedOldest, 'audio' => $audioB64, 'spoken' => $spoken,
         'model' => $model, 'reasoning' => $reasoning, 'outfit_context' => $outfitContext,
-        'mod_items' => $modItems, 'client_time' => $clientTime, 'idle' => $idle,
+        'mod_items' => $modItems, 'client_time' => $clientTime, 'tz' => $tz, 'idle' => $idle,
         'ephemeral' => $ephemeral, 'invite' => $invite,
     ];
 }

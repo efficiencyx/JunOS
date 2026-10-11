@@ -70,7 +70,7 @@ https://github.com/user-attachments/assets/f27859ad-9fee-467b-84a8-4f7630d2e2b6
 
 - **She reacts as she talks.** Gestures and expressions land on the word, not two seconds later.
 - **She has a voice**, and her mouth actually follows it.
-- **You can talk back.** Turn on the mic and it's a hands-free conversation. She can hear audio directly with a compatible Ollama model, or use local speech-to-text. The **Hear everything** switch skips her attempt to ignore side-talk.
+- **You can talk back.** Turn on the mic and it's a hands-free conversation. She can hear audio directly (Ollama or llama.cpp, the Jun models ship the bit that lets her hear), or use local speech-to-text. The **Hear everything** switch skips her attempt to ignore side-talk.
 - **She has feelings about you.** Affection, trust and tension move with every exchange, and she treats you accordingly. Push her far enough and she goes quiet, or walks out - and the door stays shut for a few minutes.
 - **She can think before she answers.** A reasoning knob (auto / low / medium / high) and a toggle to watch the chain of thought stream by.
 - **She remembers.** She'll bring up things you said in other chats, and quietly keeps notes and a journal between sessions.
@@ -79,6 +79,7 @@ https://github.com/user-attachments/assets/f27859ad-9fee-467b-84a8-4f7630d2e2b6
 - **Dress her up.** A whole wardrobe to toggle and recolor - she'll tell you what she thinks of it.
 - **Take her out.** 🍝 Shopping at Annalie's, karaoke night, lunch or dinner at a restaurant, a few hands of blackjack. Ask her (the buttons in Settings, or just type "wanna grab dinner?") and it's *her* call - if she says yes she takes you there. She'll ask you out herself now and then too.
 - **Make you regret every bad decision** Jun reacts to the way you treat her, for better or worse. Treat her well and she'll return it. Treat her badly and don't expect her to forget it.
+- **Collect achievements.** 🏆 25 of them, from *Yapper* to *Door Slammed*, each climbing Bronze → Silver → Gold → Diamond. They don't unlock anything, they're just for bragging. Some stay hidden until you stumble into them 👀
 - **Bring your mods.** Game-mod zips load straight into the browser.
 - **It's yours.** She runs on your machine. No external account, no cloud inference by default, no analytics, nothing reporting back to us - the only things that leave your box are the ones you ask for: [The full list](SECURITY.md#what-talks-to-the-internet).
 
@@ -86,46 +87,42 @@ Curious how any of it works? [Under the hood](#under-the-hood).
 
 ## Meet her in five minutes
 
-You don't need to know how any of this works. You copy one line, paste it into a black window, and wait. That line installs whatever your computer is missing, downloads her brain, rebuilds her body from your own copy of the game, and starts her up.
-
-**The black window.**
-On Windows Press the Start button, type `Command Prompt`, hit Enter.
-On Linux you should already know. Paste with `Ctrl + Shift + V`, then hit Enter.
-
-> ⚠️ **Before you paste anything, anywhere.** The commands below download a script off the internet and run it on your computer. That's a lot of trust to hand a stranger, and the habit of doing it without looking is how people get malware. If you don't understand a command, don't run it - paste it into ChatGPT or Claude and ask what it does. Same goes for the next person's "just run this", not only ours.
->
-> Want to read our script first? Good. 👀 Grab it without running it:
->
-> - **Windows:** `powershell irm https://raw.githubusercontent.com/efficiencyx/JunOS/main/install.ps1 -OutFile install.ps1` - then open `install.ps1` in **Notepad**.
-> - **Linux / macOS:** `curl -fsSL https://raw.githubusercontent.com/efficiencyx/JunOS/main/install.sh | less` - press `q` to quit when you're done reading.
+You don't need to know how any of this works. On Windows you double-click one file, on Linux you paste one line. Either way it installs whatever your computer is missing, downloads her brain, rebuilds her body from your own copy of the game, and starts her up.
 
 ### 🪟 On Windows
 
-She runs directly on Windows, no Docker (Docker on Windows is a pain). Pick **one** of these two lines - both do the same install, they just look different while they work.
+Download **[JunSetup.exe](https://github.com/efficiencyx/JunOS/releases/latest/download/JunSetup.exe)** and double-click it. That's it. 🎉
 
-With a window and buttons:
+She runs directly on Windows, no Docker (Docker on Windows is a pain). The setup window walks you through it, and when it's done you get a **Jun OS** shortcut on your desktop and in the Start menu to start, stop and update her.
+
+The exe is built by GitHub Actions straight from the tagged scripts, and every [release](https://github.com/efficiencyx/JunOS/releases) lists its checksum in `SHA256SUMS`. It isn't code-signed, so if Windows SmartScreen pops up: **More info → Run anyway**. Each release also carries a **`JunSetup-<version>.exe`** welded to its version 🔩: `JunSetup-v1.0.0.exe` installs v1.0.0 and nothing else, and checks the exact commit before it sets anything up.
+
+If anything goes wrong, the installer stops, tells you what in plain words, and keeps the window open until you've read it. Fix that one thing and run it again: it picks up where it left off. 🩹
+
+<details>
+<summary>Rather use a terminal?</summary>
+
+Press Start, type `Command Prompt`, hit Enter, and paste this. Same install as the exe, just plain text scrolling by instead of a window:
 
 ```powershell
-powershell irm https://raw.githubusercontent.com/efficiencyx/JunOS/main/installer-gui.ps1 -OutFile installer-gui.ps1; powershell -ExecutionPolicy Bypass -File .\installer-gui.ps1
+powershell irm https://github.com/efficiencyx/JunOS/releases/latest/download/install.ps1 -OutFile install.ps1; powershell -ExecutionPolicy Bypass -File .\install.ps1
 ```
 
-Or plain text scrolling by:
+Want to read it first? Good. 👀 Run just the part before the `;`, then open `install.ps1` in **Notepad**.
 
-```powershell
-powershell irm https://raw.githubusercontent.com/efficiencyx/JunOS/main/install.ps1 -OutFile install.ps1; powershell -ExecutionPolicy Bypass -File .\install.ps1
-```
-
-Rather double-click something? Every [release](https://github.com/efficiencyx/JunOS/releases) carries its own **`JunSetup-<version>.exe`**, the same window-and-buttons installer in one file. Each one is welded to its version 🔩: `JunSetup-v1.0.0.exe` installs v1.0.0 and nothing else, and checks the exact commit before it sets anything up.
-
-If anything goes wrong, the installer stops, tells you what in plain words, and keeps the window open until you've read it. Fix that one thing and paste the same line again: it picks up where it left off. 🩹
+</details>
 
 ### 🐧 On Linux, macOS or WSL
 
-Needs `git` and Docker. Don't have them? The script installs them for you.
+Needs `git` and Docker. Don't have them? The script installs them for you. Open a terminal, paste with `Ctrl + Shift + V`, hit Enter:
 
 ```sh
-curl -fsSL https://raw.githubusercontent.com/efficiencyx/JunOS/main/install.sh | bash
+curl -fsSL https://github.com/efficiencyx/JunOS/releases/latest/download/install.sh | bash
 ```
+
+> ⚠️ **Before you paste anything, anywhere.** That line downloads a script off the internet and runs it on your computer. That's a lot of trust to hand a stranger, and the habit of doing it without looking is how people get malware. If you don't understand a command, don't run it - paste it into ChatGPT or Claude and ask what it does. Same goes for the next person's "just run this", not only ours.
+>
+> Want to read our script first? Good. 👀 `curl -fsSL https://github.com/efficiencyx/JunOS/releases/latest/download/install.sh | less`, then press `q` to quit when you're done reading.
 
 ### Doing it manually without the installer
 
@@ -133,16 +130,16 @@ The step-by-step commands for it, every provider, and the manual compose invocat
 
 ### What it asks you
 
-Exactly one question: **Express** or **Custom**.
+One question: **Express** or **Custom**.
 
-- **Express** - press Enter and forget about it. It figures out your hardware on its own and rebuilds her Live2D model from your game copy. The only thing it might still ask is *where* the game is, and only if it can't find it by itself.
+- **Express** - press Enter and forget about it. It figures out your hardware on its own and rebuilds her Live2D model from your game copy. The only things it might still ask are *where* the game is, if it can't find it by itself, and on Linux whether to add you to the docker group when it just installed Docker (that one's root without a password, so it's your call, not ours. We'd say no).
 - **Custom** - walks you through which [release channel](#-which-jun-you-get), which provider, which model, which voice, and whether to turn on [MTP](#faster-tokens-mtp).
 
 Installing on a machine you can't sit in front of? `JUN_YES=1` (on Windows, `$env:JUN_YES='1'`) skips the question entirely. On Linux nobody's there to say yes to the docker group either, so Docker stays behind `sudo` unless you also pass `JUN_DOCKER_GROUP=1`.
 
 ### 🚦 Which Jun you get
 
-The installer doesn't just grab whatever's on `main` anymore. There are three channels:
+The install line and the setup exe both come from the newest release, never from `main`. There are three channels:
 
 | Channel | What lands on your disk | Good for |
 |---|---|---|
@@ -150,9 +147,9 @@ The installer doesn't just grab whatever's on `main` anymore. There are three ch
 | **Latest** | the newest release, pre-releases included | early birds and bug hunters 🐛 |
 | **Experimental** | straight from `main`, whatever got pushed today | people who enjoy fixing things |
 
-Express goes Stable, Custom asks. While there's no full release out yet, Stable takes the newest pre-release instead.
+Express goes Stable, Custom asks. Experimental is only ever there because somebody picked it. If GitHub can't be asked which release is current (offline, or rate limited), the installer stops and says so instead of guessing.
 
-Updating is the same line again: it finds the install you already have and moves it along its channel, which it remembers as `JUN_CHANNEL` in `.env`. To switch, put `JUN_CHANNEL=latest` in front of the Linux line, or run `set JUN_CHANNEL=latest` in the Command Prompt before the Windows one (or just pick Custom). She never steps *backwards* on her own: if you're ahead of your channel, she stays put until it catches up. ⏩
+Updating is the **Update** button in the Jun OS app on Windows, or the same line again: it finds the install you already have and moves it along its channel, which it remembers as `JUN_CHANNEL` in `.env`. To switch, put `JUN_CHANNEL=latest` in front of the Linux line, or run `set JUN_CHANNEL=latest` in the Command Prompt before the Windows one (or just pick Custom). She never steps *backwards* on her own: if you're ahead of your channel, she stays put until it catches up. ⏩
 
 Installed her before channels were a thing? You were on `main` all along, so you stay on Experimental until you pick something else. Need one exact version? `JUN_REF=v1.0.0` pins it and skips the channel lookup.
 
@@ -261,10 +258,10 @@ Gemma 4 ships a tiny *drafter* that guesses the next few tokens; Jun checks the 
 | Provider | What it is | Non-interactive install |
 |---|---|---|
 | **Ollama** *(default)* | Local inference, models pulled and pre-warmed for you | `JUN_YES=1 ./install.sh` |
-| **llama.cpp** | A local [`llama-server`](https://github.com/ggml-org/llama.cpp) - managed for you, or point at one you already run | `JUN_PROVIDER=llamacpp ./install.sh` |
+| **llama.cpp** | A local [`llama-server`](https://github.com/ggml-org/llama.cpp) - managed for you, or point at one you already run. Same Jun as Ollama: same prompt byte for byte, her voice input, chat titles, the model picker, context sized to your card | `JUN_PROVIDER=llamacpp ./install.sh` |
 | **OpenRouter** | Any cloud model; needs a key, and **your chats leave the machine** | `JUN_PROVIDER=openrouter OPENROUTER_API_KEY=sk-... ./install.sh` |
 
-llama.cpp can also serve a GGUF straight off your disk (`LLAMACPP_MODELS_DIR` + `LLAMACPP_MODEL_FILE`), and `LLAMACPP_TOOLS=off` exists for fine-tunes whose tool-call syntax llama-server can't parse.
+llama.cpp can also serve a GGUF straight off your disk (`LLAMACPP_MODELS_DIR` + `LLAMACPP_MODEL_FILE`), offer several models in the picker (comma-separate `LLAMACPP_MODEL_HF`, the first is the default), and `LLAMACPP_TOOLS=off` exists for fine-tunes whose tool-call syntax llama-server can't parse.
 
 **No retrieval model:** lore lookup and cross-chat recall are plain text matching - keyword/IDF over the corpus, word matching over your decrypted history - so lore and recall need no embedding model, whichever provider you choose. The only extra model in the stack is the Ollama-only chat titler (`TITLE_MODEL`, a 0.6B fine-tune pinned to the CPU so it never fights her for VRAM; set it empty and titles fall back to your first message).
 
@@ -292,7 +289,7 @@ Everything is environment variables in `.env` - the full reference is [`docs/con
 | `AI_PROVIDER` | `ollama` \| `llamacpp` \| `openrouter` | `ollama` |
 | `OLLAMA_MODELS_TO_PULL` | Pulled on first boot; the **first** one is pre-warmed | `hf.co/efficiencyx/Jun-LoRA-E2B-GGUF:Q4_K_M` |
 | `LLAMACPP_MODEL_HF` / `LLAMACPP_MODEL_FILE` | Model for the managed llama-server: pull from HF, or serve one off disk | `efficiencyx/Jun-LoRA-E2B-GGUF:Q4_K_M` |
-| `TITLE_MODEL` | Ollama only. The little CPU-pinned model that names new chats; empty disables it | `hf.co/efficiencyx/Titlewen-GGUF:F16` |
+| `TITLE_MODEL` | The little CPU-pinned model that names new chats (Ollama and llama.cpp); empty disables it | `hf.co/efficiencyx/Titlewen-GGUF:F16` |
 | `OLLAMA_MTP` / `LLAMACPP_MTP` | HF repo of the [MTP](#faster-tokens-mtp) drafter; empty = off. `MTP_AUTOTUNE=off` stops the re-tune after a GPU change | *(empty)* · `on` |
 | `COMPOSE_PROFILES` | Optional containers: `ollama`, `llamacpp`, `voice`, `karaoke`, `prod`. `start.sh` derives them from the knobs below, you only set this by hand for `prod` | `ollama` |
 | `VOICE` | `off` skips the voice sidecar: the `tts` container under Docker (`voice` profile), the sidecar process on bare-metal Windows. Chat degrades to text-only | `on` |
@@ -425,7 +422,7 @@ Read the line under **existing install**, it says which of these it was:
 
 - *"files were changed by hand"* - you edited something tracked by git, so the installer leaves the code alone rather than stomp on it. `git status` in her folder shows what; `git stash` (or undo it) and run again.
 - *"newer than stable ... staying until it catches up"* - you're on a newer release than your channel points at, usually from trying **Latest** and switching back. Working as intended, she doesn't downgrade herself.
-- *"couldn't ask GitHub which release is current"* - offline, or GitHub's 60-requests-an-hour limit for anonymous lookups. Wait a bit and run again.
+- *"couldn't ask GitHub which release is current"* - offline, most likely. When GitHub's API hits its 60-requests-an-hour limit the installer already asks the website instead, so both said no. Wait a bit and run again. On a fresh install this stops the installer: it won't fall back to `main` behind your back.
 - Still on `main` after picking Stable? Check `JUN_CHANNEL` in `.env`, that's what a re-run follows.
 </details>
 
@@ -442,8 +439,8 @@ Read the line under **existing install**, it says which of these it was:
 │   ├── api/          chat.php, auth.php, memory.php, outfit.php, karaoke.php, trip.php, migrations/, …
 │   │   └── lib/      the shared stuff: bootstrap, db, crypto, memory, providers/, chat/, consolidation/ (never served)
 │   ├── js/           one entry per page (app.js is just the login gate) + the folders they share:
-│   │                 core/, app/, live2d/, outfit/, wardrobe/, mods/, voice/, karaoke/, trip/
-│   ├── css/          base, shell, chat, stage, sidebar, settings, widgets, welcome, voice-karaoke, cards, subpage, responsive
+│   │                 core/, app/, live2d/, outfit/, wardrobe/, mods/, voice/, karaoke/, trip/, achievements/
+│   ├── css/          base, shell, chat, stage, sidebar, settings, widgets, welcome, voice-karaoke, cards, achievements, subpage, responsive
 │   │   ├── boot.css  Critical CSS, inlined into index.html at sync time
 │   │   └── pages/    one sheet each for the date, wardrobe, karaoke and privacy pages
 │   ├── scene/        The rooms she goes out to (shop, karaoke lounge, restaurants, card table) as SVG
@@ -460,7 +457,7 @@ Read the line under **existing install**, it says which of these it was:
 ├── sync-webapp.sh               The dev loop
 ├── colab.ipynb                  The free-GPU notebook
 ├── .github/workflows/           CI (syntax, stream-buffer tests, a chat turn against a fake Ollama) + the draft release with JunSetup-<version>.exe and JunOS.exe
-└── docker-compose*.yml          Base (CPU) + nvidia / amd overlays, llamacpp-local / llamacpp-mtp add-ons
+└── docker-compose*.yml          Base (CPU) + nvidia / amd overlays, llamacpp-local add-on
 ```
 
 ## Standing on the shoulders of

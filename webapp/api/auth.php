@@ -201,7 +201,8 @@ case 'factory_reset':
         $db->prepare('DELETE FROM messages WHERE conversation_id IN (SELECT id FROM conversations WHERE user_id = ?)')
            ->execute([$userId]);
         foreach (['conversations', 'preferences', 'relationship', 'memory_consolidation',
-                  'user_bans', 'wardrobe_presets', 'wardrobe_state', 'welcome_queue', 'trips'] as $table) {
+                  'user_bans', 'wardrobe_presets', 'wardrobe_state', 'welcome_queue', 'trips',
+                  'achievement_stats', 'achievement_seen'] as $table) {
             $db->prepare('DELETE FROM ' . $table . ' WHERE user_id = ?')->execute([$userId]);
         }
         $token = (string)($_COOKIE['omega_session'] ?? '');

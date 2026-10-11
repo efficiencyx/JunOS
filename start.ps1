@@ -378,8 +378,15 @@ $oldPids = Read-Pids
 function Start-Tracked([string]$name, [string]$exe, [string[]]$exeArgs) {
     $out = Join-Path $LogDir "$name.log"
     $err = Join-Path $LogDir "$name.err.log"
-    $p = Start-Process -FilePath $exe -ArgumentList $exeArgs -WindowStyle Hidden `
+    # -ArgumentList just joins the array with spaces, no quoting. so
+    # an install under C:\Users\Some Name\ hands php `-t C:\Users\Some`
+    # and it dies with "Directory ... does not exist". quote it ourselves
+    $quoted = $exeArgs | ForEach-Object { if ($_ -match '\s') { "`"$_`"" } else { $_ } }
+    $p = Start-Process -FilePath $exe -ArgumentList $quoted -WindowStyle Hidden `
         -RedirectStandardOutput $out -RedirectStandardError $err -PassThru
+    # touch Handle NOW. without an open handle ExitCode comes back
+    # empty once the process is gone, "exited (code )" tells nobody anything
+    $null = $p.Handle
     $script:newPids[$name] = $p.Id
     return $p
 }
@@ -460,6 +467,42 @@ if ($chatModel -and $Provider -eq 'ollama') {
 }
 }
 
+# the same preset docker/llamacpp-entrypoint.sh writes, see there
+# for why the 16k ceiling is an override-kv and not a ctx-size.
+# LLAMACPP_MODEL_FILE is a docker thing, it isn't read here.
+function Write-LlamacppPresets([string]$path, [string[]]$chatModels) {
+    $lines = @()
+    $first = $true
+    foreach ($m in $chatModels) {
+        $lines += "[$m]", "hf-repo = $m"
+        if ($env:OMEGA_NUM_CTX) { $lines += "ctx-size = $($env:OMEGA_NUM_CTX)" }
+        else { $lines += 'override-kv = gemma4.context_length=int:16384', 'fit-ctx = 6144' }
+        $lines += 'fit-target = 2048'
+        if ($TensorParallel) { $lines += 'split-mode = row' }
+        if ($first -and $env:LLAMACPP_MTP) {
+            $nMax = if ($env:LLAMACPP_MTP_N_MAX) { $env:LLAMACPP_MTP_N_MAX } else { '4' }
+            $lines += 'spec-type = draft-mtp', "spec-draft-hf = $($env:LLAMACPP_MTP)", "spec-draft-n-max = $nMax"
+        }
+        $lines += ''
+        $first = $false
+    }
+    $title = if ($env:TITLE_MODEL) { $env:TITLE_MODEL } else { 'hf.co/efficiencyx/Titlewen-GGUF:F16' }
+    $title = $title -replace '^hf\.co/', ''
+    if ($title -match '/') {
+        $lines += "[$title]", "hf-repo = $title", 'n-gpu-layers = 0', 'ctx-size = 2048', 'mmproj-auto = false', ''
+    }
+    [IO.File]::WriteAllLines($path, [string[]]$lines)
+}
+
+function Get-LlamacppStatus([string]$model) {
+    try {
+        $list = Invoke-RestMethod -Uri "$LlamacppUrl/v1/models" -TimeoutSec 5
+        $entry = @($list.data) | Where-Object { $_.id -eq $model } | Select-Object -First 1
+        if ($entry -and $entry.status) { return [string]$entry.status.value }
+    } catch {}
+    return ''
+}
+
 # only when AI_PROVIDER=llamacpp and LLAMACPP_URL points at this
 # machine. a remote/custom URL means the user runs their own
 # server. weights cache under runtime\llama-cache so they go away
@@ -473,31 +516,38 @@ if ($Provider -eq 'llamacpp' -and $LlamacppUrl -match '://(127\.0\.0\.1|localhos
         if (-not (Get-Command llama-server -ErrorAction SilentlyContinue)) {
             throw 'llama-server is not installed. Run install.ps1 first (it installs llama.cpp via winget).'
         }
-        $hfRef = if ($env:LLAMACPP_MODEL_HF) { $env:LLAMACPP_MODEL_HF } else { 'efficiencyx/Jun-LoRA-E2B-GGUF:Q4_K_M' }
-        Step "start llama-server ($hfRef)"
+        $hfList = if ($env:LLAMACPP_MODEL_HF) { $env:LLAMACPP_MODEL_HF } else { 'efficiencyx/Jun-LoRA-E2B-GGUF:Q4_K_M' }
+        $chatModels = @($hfList -split ',' | ForEach-Object { $_.Trim() } | Where-Object { $_ })
+        $presets = Join-Path $Runtime 'llamacpp-models.ini'
+        Write-LlamacppPresets $presets $chatModels
+        Step "start llama-server ($($chatModels[0]))"
         Note 'first run downloads the model'
+        # this build caches -hf downloads in the HF hub layout under
+        # HF_HOME, LLAMA_CACHE alone doesn't keep them in the folder
         $env:LLAMA_CACHE = Join-Path $Runtime 'llama-cache'
-        $llamaArgs = @('-hf', $hfRef, '--host', '127.0.0.1', '--port', $LlamaPort, '-c', '16384', '--jinja')
-        if ($TensorParallel) { $llamaArgs += @('-sm', 'row') }
-        # Gemma 4's multi-token prediction. the assistant model guesses
-        # the next few tokens, the real model checks them all in one
-        # pass, and the ones it got right came almost free. LLAMACPP_MTP
-        # holds the drafter's HF repo, the first run downloads that one
-        # too.
-        if ($env:LLAMACPP_MTP) {
-            $nMax = if ($env:LLAMACPP_MTP_N_MAX) { $env:LLAMACPP_MTP_N_MAX } else { '4' }
-            $llamaArgs += @('--spec-type', 'draft-mtp', '-hfd', $env:LLAMACPP_MTP, '--spec-draft-n-max', $nMax)
-        }
+        $env:HF_HOME = Join-Path $Runtime 'llama-cache\huggingface'
+        $llamaArgs = @('--models-preset', $presets, '--models-max', '2', '--host', '127.0.0.1', '--port', $LlamaPort)
         $llamaProc = Start-Tracked 'llamacpp' 'llama-server' $llamaArgs
 
-        # generous deadline, the first boot downloads the GGUF before
-        # /health goes green. a dead process fails fast instead of
-        # waiting it out.
-        $deadline = (Get-Date).AddMinutes(15)
+        $deadline = (Get-Date).AddMinutes(2)
         while (-not (Test-Http "$LlamacppUrl/health")) {
             if ($llamaProc.HasExited) { throw "llama-server exited (code $($llamaProc.ExitCode)) - see runtime\logs\llamacpp.err.log" }
             if ((Get-Date) -gt $deadline) { throw "llama-server did not come up on $LlamacppUrl (see runtime\logs\llamacpp.err.log)" }
             Start-Sleep -Seconds 2
+        }
+
+        # router mode loads a model on its first request, which would
+        # make her first reply a 2-12 GB download. load her now, with
+        # a generous deadline for exactly that download.
+        try {
+            Invoke-RestMethod -Method Post -Uri "$LlamacppUrl/models/load" -ContentType 'application/json' `
+                -Body (@{ model = $chatModels[0] } | ConvertTo-Json) -TimeoutSec 10 | Out-Null
+        } catch {}
+        $deadline = (Get-Date).AddMinutes(30)
+        while ((Get-LlamacppStatus $chatModels[0]) -ne 'loaded') {
+            if ($llamaProc.HasExited) { throw "llama-server exited (code $($llamaProc.ExitCode)) - see runtime\logs\llamacpp.err.log" }
+            if ((Get-Date) -gt $deadline) { Warn_ "$($chatModels[0]) still isn't loaded, she loads on the first message instead"; break }
+            Start-Sleep -Seconds 3
         }
         Ok 'llama-server ready'
     }

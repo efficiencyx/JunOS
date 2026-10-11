@@ -5,14 +5,20 @@ name: Release installer
 # them, the three install scripts and their SHA256SUMS on a DRAFT
 # release for that tag. the exe is pinned: it carries the tag and the commit the
 # tag points at, and install.ps1 refuses to set up anything else.
-# a tag with a - in it (v1.2.0-beta) drafts as a pre-release. the
-# notes and the publish button are still yours.
+# JunSetup.exe is the same file again under a name that never
+# changes, so releases/latest/download/JunSetup.exe is a link the
+# README can keep forever.
+# a tag with a - in it (v1.2.0-beta) drafts as a pre-release. untick
+# that before publishing if the one-liners should get it, they come
+# from releases/latest/download/ and /latest skips pre-releases.
+# the notes and the publish button are still yours.
 #
-# draft, not published, because the repo has immutable releases on.
-# once a release is published nothing can be attached to it anymore,
-# so everything goes on while it's still a draft. a draft you made
-# by hand in the UI for the same tag gets the files too. publish it
-# first and this job fails, on purpose.
+# draft, not published. re-pushing the tag refills the same draft
+# (--clobber), that's how a draft gets new code. a draft you made
+# by hand in the UI for the same tag gets the files too. a
+# published release makes this job fail ON PURPOSE: people already
+# downloaded those files and checked them against SHA256SUMS.
+# put it back to draft first if you really mean to replace them.
 on:
   push:
     tags: ['v*']
@@ -86,12 +92,13 @@ jobs:
             [ -f "dist/$f" ] || { echo "::error::dist/$f missing, the build job named it something else"; exit 1; }
           done
           cp install.sh install.ps1 installer-gui.ps1 dist/
-          (cd dist && sha256sum "$exe" JunOS.exe install.sh install.ps1 installer-gui.ps1 > SHA256SUMS)
+          cp "dist/$exe" dist/JunSetup.exe
+          (cd dist && sha256sum "$exe" JunSetup.exe JunOS.exe install.sh install.ps1 installer-gui.ps1 > SHA256SUMS)
 
           # gh release view finds drafts by tag too, the plain API doesn't
           if gh release view "$TAG" --json isDraft --jq .isDraft > state 2>/dev/null; then
             if [ "$(cat state)" != true ]; then
-              echo "::error::$TAG is already published. immutable releases take no new assets, push the tag BEFORE publishing."
+              echo "::error::$TAG is already published, not overwriting files people already downloaded. set it back to draft first if you mean it."
               exit 1
             fi
           else
@@ -99,4 +106,4 @@ jobs:
             case "$TAG" in *-*) pre="--prerelease" ;; esac
             gh release create "$TAG" --draft --verify-tag --title "$TAG" --generate-notes $pre
           fi
-          gh release upload "$TAG" "dist/$exe" dist/JunOS.exe dist/install.sh dist/install.ps1 dist/installer-gui.ps1 dist/SHA256SUMS --clobber
+          gh release upload "$TAG" "dist/$exe" dist/JunSetup.exe dist/JunOS.exe dist/install.sh dist/install.ps1 dist/installer-gui.ps1 dist/SHA256SUMS --clobber

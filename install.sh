@@ -998,14 +998,14 @@ prepare_docker() {
     id -nG "$me" 2>/dev/null | tr ' ' '\n' | grep -qx docker && return
     # the docker socket is root. anyone in the docker group can
     # mount / into a container and own the box, no password asked,
-    # forever. so it's opt in. express says yes because a person
-    # picked "recommended settings". a headless run (JUN_YES alone,
-    # no tty) has nobody to pick anything, so it stays on sudo
-    # unless JUN_DOCKER_GROUP=1 says otherwise.
+    # forever. so it's opt in, and Express asks too, that's the one
+    # question it doesn't get to answer for you. a headless run
+    # (JUN_YES alone, no tty) has nobody to ask, so it stays on
+    # sudo unless JUN_DOCKER_GROUP=1 says otherwise.
     local a=""
-    if [ "$EXPRESS" = 1 ] || [ "${JUN_DOCKER_GROUP:-}" = "1" ]; then
+    if [ "${JUN_DOCKER_GROUP:-}" = "1" ]; then
         a=y
-    elif [ "${JUN_YES:-}" = "1" ] || [ ! -r /dev/tty ]; then
+    elif [ ! -r /dev/tty ] || { [ "${JUN_YES:-}" = "1" ] && [ "$EXPRESS" != 1 ]; }; then
         a=n
     else
         printf '     %s$%s add %s to the docker group? %s(root without a password, for any process running as you)%s %s[y/N]%s %s→%s ' \
@@ -1319,6 +1319,21 @@ first_tag() {
     grep -o '"tag_name": *"[^"]*"' "$1" 2>/dev/null | head -1 | sed 's/.*"\([^"]*\)"$/\1/' || true
 }
 
+# the website, not the API, so no 60-an-hour cap. /releases/latest
+# 302s to /releases/tag/<newest full release>, or to plain
+# /releases when there's no full release. it never sees drafts
+# or pre-releases. (releases.atom is NOT a fallback, it lists
+# bare tags too, draft ones included)
+web_latest_tag() {  # slug
+    local loc
+    loc="$(curl --proto '=https' --tlsv1.2 -sS -o /dev/null -w '%{redirect_url}' \
+        "https://github.com/$1/releases/latest" 2>/dev/null || true)"
+    case "$loc" in
+        */releases/tag/?*) printf '%s\n' "${loc##*/releases/tag/}" ;;
+        *) return 1 ;;
+    esac
+}
+
 # the tag a release channel points at right now, on stdout.
 # returns 1 when no release of that kind exists, 2 when GitHub
 # couldn't be asked (offline, rate limited at 60 an hour per IP,
@@ -1339,14 +1354,24 @@ release_tag() {
             echo "$tag"
             return 0
         fi
-        [ "$code" = 404 ] || { rm -f "$body"; return 2; }
+        [ "$code" = 404 ] || { rm -f "$body"; release_tag_web "$slug"; return; }
     fi
     code="$(gh_get "$api?per_page=10" "$body")"
     [ "$code" = 200 ] && tag="$(first_tag "$body")"
     rm -f "$body"
-    [ "$code" = 200 ] || return 2
+    [ "$code" = 200 ] || { release_tag_web "$slug"; return; }
     [ -n "$tag" ] || return 1
     [ "$1" = stable ] && note "no full release yet - using the newest pre-release, $tag" >&2
+    echo "$tag"
+}
+
+# the API said no. on latest that means a full release where a
+# newer pre-release might exist, which is still a release and
+# never main. update_checkout won't step back to it either.
+release_tag_web() {  # slug
+    local tag
+    tag="$(web_latest_tag "$1")" || return 2
+    note "GitHub's API didn't answer - going by the newest full release, $tag" >&2
     echo "$tag"
 }
 
@@ -1359,18 +1384,19 @@ resolve_target() {  # 1 = fresh install
     TARGET="$(release_tag "$CHANNEL")" || rc=$?
     [ "$rc" = 0 ] && return 0
     TARGET=""
+    # main is NEVER the fallback. it's whatever got pushed today,
+    # and the only way onto it is asking for experimental.
     if [ "$rc" = 1 ]; then
-        note "no releases published yet - using main"
-        TARGET=main
-        return 0
-    fi
-    warn_ "couldn't ask GitHub which release is current"
-    if [ "$1" = 1 ]; then
-        note "installing from main for now. run this again later and she moves to $CHANNEL."
-        TARGET=main
+        [ "$1" = 1 ] && fail_ "no release of Jun is published yet"
+        [ "$1" = 1 ] || note "no $CHANNEL release published yet - keeping the code that's on disk"
     else
-        note "keeping the code that's on disk"
+        warn_ "couldn't ask GitHub which release is current"
+        [ "$1" = 1 ] && note "offline, or rate limited (GitHub answers 60 of these an hour per IP). give it a bit and run this again."
+        [ "$1" = 1 ] || note "keeping the code that's on disk"
     fi
+    [ "$1" = 1 ] || return 0
+    note "JUN_REF=<tag> installs a release you name, JUN_CHANNEL=experimental installs main on purpose."
+    exit 1
 }
 
 # semver-ish. v1.2.0 beats v1.2.0-beta, two pre-releases of the

@@ -25,7 +25,6 @@ services:
               count: ${NVIDIA_GPU_COUNT:-all}
               capabilities: [gpu]
     environment:
-      - LLAMA_ARG_N_GPU_LAYERS=999
       - CUDA_VISIBLE_DEVICES
       - LLAMA_ARG_SPLIT_MODE
       - LLAMA_ARG_TENSOR_SPLIT

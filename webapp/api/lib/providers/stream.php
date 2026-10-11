@@ -178,6 +178,14 @@ function stream_turn_deadline(): float {
 }
 
 function provider_stream_round(string $provider, array $payload, callable $emit, int $round = 0): array {
+    // ollama throws the trace away on think:false. llama.cpp hands
+    // back whatever reasoning_content it parsed out anyway, so the
+    // browser would get thinking on turns that asked for none
+    if ($provider === 'llamacpp' && empty($payload['chat_template_kwargs']['enable_thinking'])) {
+        $emit = function (array $out) use ($emit) {
+            if (!isset($out['thinking'])) $emit($out);
+        };
+    }
     $openai = provider_uses_openai_protocol($provider);
     $state = provider_stream_state();
     $buf = '';

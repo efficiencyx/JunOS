@@ -92,7 +92,10 @@ function default_chat_model(): string {
         case 'openrouter':
             return env_str('OPENROUTER_MODEL', 'openrouter/auto');
         case 'llamacpp':
-            return env_str('LLAMACPP_MODEL_HF', 'efficiencyx/Jun-LoRA-E2B-GGUF:Q4_K_M');
+            // the router names her preset after the GGUF alias or the
+            // first HF repo in the list, see docker/llamacpp-entrypoint.sh
+            if (env_str('LLAMACPP_MODEL_FILE') !== '') return env_str('LLAMACPP_MODEL_ALIAS', 'jun-local');
+            return trim(explode(',', env_str('LLAMACPP_MODEL_HF', 'efficiencyx/Jun-LoRA-E2B-GGUF:Q4_K_M'))[0]);
         default:
             // with MTP on, the ollama entrypoint derives a model carrying
             // the drafter as a DRAFT layer, and chat has to ask for that
@@ -111,6 +114,12 @@ function default_chat_model(): string {
 
             return 'hf.co/efficiencyx/Jun-LoRA-E2B-GGUF:Q4_K_M';
     }
+}
+
+function provider_model_hears(string $provider, string $model): bool {
+    if ($provider === 'ollama') return ollama_model_supports_audio($model);
+    if ($provider === 'llamacpp') return llamacpp_model_supports_audio($model);
+    return false;
 }
 
 function provider_tools_enabled(): bool {

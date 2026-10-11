@@ -234,8 +234,12 @@ function Tune-Ollama {
 
 function Measure-Llamacpp([string]$url) {
     $tok = 0; $ms = 0.0
+    # router mode wants the model named, same pick as start.ps1
+    $hf = Get-EnvKey 'LLAMACPP_MODEL_HF'
+    $model = if ($hf) { ($hf -split ',')[0].Trim() } else { 'efficiencyx/Jun-LoRA-E2B-GGUF:Q4_K_M' }
     foreach ($p in $Prompts) {
         $body = @{
+            model = $model
             stream = $false
             messages = Get-Messages $p
             temperature = 0; max_tokens = $Tokens

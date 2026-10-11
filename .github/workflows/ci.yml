@@ -162,7 +162,6 @@ jobs:
           # it, so pass throwaway values to get the file parsed.
           LLAMACPP_MODELS_DIR=/tmp/models LLAMACPP_MODEL_FILE=model.gguf \
             docker compose -f docker-compose.yml -f docker-compose.llamacpp-local.yml config -q
-          docker compose -f docker-compose.yml -f docker-compose.llamacpp-mtp.yml config -q
           # the karaoke container only exists under its profile, and start.sh is
           # what turns KARAOKE=on into that profile.
           KARAOKE=on docker compose -f docker-compose.yml --profile karaoke config -q

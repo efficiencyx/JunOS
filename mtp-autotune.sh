@@ -271,10 +271,27 @@ tune_ollama() {
     sync_php_env
 }
 
+# the model llama-server serves her as, same pick as start.sh
+llamacpp_chat_model() {
+    _file="$(env_get LLAMACPP_MODEL_FILE)"
+    if [ -n "$_file" ]; then
+        _alias="$(env_get LLAMACPP_MODEL_ALIAS)"
+        echo "${_alias:-jun-local}"
+        return
+    fi
+    _hf="$(env_get LLAMACPP_MODEL_HF)"
+    _hf="${_hf:-efficiencyx/Jun-LoRA-E2B-GGUF:Q4_K_M}"
+    echo "${_hf%%,*}"
+}
+
+# router mode loads models on demand, so healthy only means the
+# router is up. wait for HER, or the first bench row times the load.
 wait_llamacpp() {
+    _model="$(llamacpp_chat_model)"
     i=0
-    while [ "$i" -lt 90 ]; do
-        docker exec omega-llamacpp curl -fsS http://127.0.0.1:8080/health >/dev/null 2>&1 && return 0
+    while [ "$i" -lt 300 ]; do
+        docker exec omega-llamacpp curl -fsS http://127.0.0.1:8080/v1/models 2>/dev/null \
+            | sed 's/{"id":/\n&/g' | grep -F "{\"id\":\"$_model\"" | grep -q '"value":"loaded"' && return 0
         i=$((i + 1))
         sleep 2
     done
@@ -284,8 +301,8 @@ wait_llamacpp() {
 bench_llamacpp() {
     _tok=0; _ms=0
     for _p in "$P1" "$P2"; do
-        _body=$(printf '{"stream":false,"messages":[%s],"temperature":0,"max_tokens":%s}' \
-            "$(messages_json "$_p")" "$TOKENS")
+        _body=$(printf '{"model":"%s","stream":false,"messages":[%s],"temperature":0,"max_tokens":%s}' \
+            "$(llamacpp_chat_model)" "$(messages_json "$_p")" "$TOKENS")
         _out=$(printf '%s' "$_body" | docker exec -i omega-llamacpp sh -c 'cat > /tmp/mtp_req.json && curl -s --max-time 300 http://127.0.0.1:8080/v1/chat/completions -H "Content-Type: application/json" -d @/tmp/mtp_req.json' 2>/dev/null || true)
         _c=$(printf '%s' "$_out" | json_num completion_tokens)
         _t=$(printf '%s' "$_out" | json_num predicted_ms)

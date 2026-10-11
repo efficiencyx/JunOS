@@ -621,13 +621,13 @@ html[data-pre-auth] #app { visibility: hidden; }
    (the page's allowlist for what may run) forbids the usual
    media="print" onload= trick. and blocking on the full sheet
    costs a round trip the auth screen doesn't even need. -->
-<link rel="preload" as="style" href="styles.css?v=55">
+<link rel="preload" as="style" href="styles.css?v=61">
 <link rel="preload" as="style" href="css/trip-loader.css?v=1">
-<noscript><link rel="stylesheet" href="styles.css?v=55"></noscript>
+<noscript><link rel="stylesheet" href="styles.css?v=61"></noscript>
 
 <script type="module" src="js/core/pwa.js?v=1"></script>
-<script src="js/boot-gate.js?v=9"></script>
-<script type="module" src="js/app.js?v=80"></script>
+<script src="js/boot-gate.js?v=15"></script>
+<script type="module" src="js/app.js?v=88"></script>
 </head>
 <body>
 
@@ -1236,6 +1236,10 @@ html[data-pre-auth] #app { visibility: hidden; }
         <button class="sidebar-item" id="searchChatsBtn" title="Search chats" type="button">
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="11" cy="11" r="7"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
           <span>Search chats</span>
+        </button>
+        <button class="sidebar-item" id="achievementsBtn" title="Achievements" type="button">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M8 21h8"/><path d="M12 17v4"/><path d="M7 4h10v5a5 5 0 0 1-10 0z"/><path d="M17 5h3v2a3 3 0 0 1-3 3"/><path d="M7 5H4v2a3 3 0 0 0 3 3"/></svg>
+          <span>Achievements</span>
         </button>
       </div>
 

@@ -1,17 +1,18 @@
-import { armIdleAfterReply, cancelActiveIdleNudge, cancelAutoReset, cancelIdleNudge, composerPlaceholder, consolidating, fleeActive, reportActivity, resetIdleNudge, scheduleAutoReset, setCancelActiveIdleNudge, setConsolidating, showConsolidatingBubble, startFleeLock, syncConsolidationStatus } from './consolidation.js?v=78';
+import { armIdleAfterReply, cancelActiveIdleNudge, cancelAutoReset, cancelIdleNudge, composerPlaceholder, consolidating, fleeActive, reportActivity, resetIdleNudge, scheduleAutoReset, setCancelActiveIdleNudge, setConsolidating, showConsolidatingBubble, startFleeLock, syncConsolidationStatus } from './consolidation.js?v=86';
 import { chatInput, debugSystemPromptEl, messagesEl, modelSelect, reasoningSelect, sendBtn, sendButtonIdleMarkup, sendButtonStopMarkup, thinkChk } from './dom.js?v=11';
 import { announceMobileReply, hideFaceBubble, scheduleFaceBubbleHide, setLatestAssistantReply, showFaceBubble } from './face-bubble.js?v=77';
 import { appendRaw, logToolStatus } from './logging.js?v=11';
 import { loadMood } from './mood.js?v=77';
-import { refreshSidebar } from './sidebar.js?v=78';
+import { refreshSidebar } from './sidebar.js?v=86';
 import { makeNameFilter, makeStreamBuffer } from './stream-filters.js?v=78';
 import { localTimeString, phoneMode } from '../core/util.js?v=1';
 import * as Names from '../core/names.js?v=1';
 import * as ui from '../core/ui.js?v=1';
-import * as ChatAPI from '../core/chat-api.js?v=2';
+import * as ChatAPI from '../core/chat-api.js?v=3';
 import * as Mods from '../mods/mods.js?v=78';
 import * as Outfit from '../outfit/outfit.js?v=77';
-import * as Cards from './cards.js?v=12';
+import * as Cards from './cards.js?v=20';
+import * as Achievements from '../achievements/achievements.js?v=8';
 import * as History from './history.js?v=1';
 import * as TTS from '../voice/tts.js?v=78';
 import * as Voice from '../voice/voice.js?v=78';
@@ -342,7 +343,7 @@ export function runChat({ idle, ephemeral, audio, voice, invite = '', onOverhear
       mod_items: Mods.itemNames(),
       conversation_id: currentConversationId,
       idle: !!idle, ephemeral: !!ephemeral, client_time: localTimeString(),
-      audio, voice: !!voice, invite,
+      audio, voice: !!voice, invite, tts: TTS.isEnabled(),
       hear_all: !!Voice.hearAll() },
     {
       onDebug: (dbg) => {
@@ -436,6 +437,7 @@ export function runChat({ idle, ephemeral, audio, voice, invite = '', onOverhear
           History.compact(currentConversationId).catch(() => {});
         }
         reply(silenced ? '' : visible);
+        Achievements.check();
         await refreshSidebar();
         if (trip === 'cards') Cards.open();
         else if (trip) leaveFor(trip);

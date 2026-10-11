@@ -54,6 +54,7 @@ function chat_apply_bookkeeping_tags(string $buffer, int $userId, array $rel): s
             }
             if (!preg_match('/\bmemory\s*=\s*(.+)$/is', $args, $mem)) continue;
             $res = memory_note_add($userId, $category, trim($mem[1]));
+            if (!empty($res['ok'])) ach_add($userId, 'notes');
             sse_send(['tool_status' => [
                 'name' => 'memory_write', 'state' => 'done', 'duration_ms' => 0,
                 'result' => json_encode($res, JSON_UNESCAPED_UNICODE),

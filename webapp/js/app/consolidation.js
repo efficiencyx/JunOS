@@ -1,5 +1,5 @@
 import { abortFn, currentConversationId } from './session.js?v=1';
-import { runChat } from './chat.js?v=6';
+import { runChat } from './chat.js?v=14';
 import { chatInput, consolidationBanner, consolidationSub, consolidationTitle, devNoIdleChk, fleeEtaEl, fleeOverlay, fleeReasonEl, sendBtn, voiceChk } from './dom.js?v=11';
 import { showFaceBubble } from './face-bubble.js?v=77';
 import { logAction } from './logging.js?v=11';

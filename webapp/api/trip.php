@@ -39,6 +39,8 @@ if ($action === 'home') {
             log_event(['msg' => 'trip_note_error', 'err' => $e->getMessage()]);
         }
     }
+    if ($trip && $trip['where'] === 'date') ach_add($userId, 'dates');
+    if ($trip && $trip['where'] === 'shop') ach_add($userId, 'shops');
     trip_clear($userId);
     json_out(['ok' => true]);
 }

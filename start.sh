@@ -113,12 +113,6 @@ case "$provider" in
       llamacpp_alias="$(env_get LLAMACPP_MODEL_ALIAS)"
       [ -z "$llamacpp_alias" ] || export LLAMACPP_MODEL_ALIAS="$llamacpp_alias"
     fi
-    llamacpp_mtp="$(env_get LLAMACPP_MTP)"
-    if [ -n "$llamacpp_mtp" ]; then
-      export LLAMACPP_MTP="$llamacpp_mtp"
-      llamacpp_mtp_n_max="$(env_get LLAMACPP_MTP_N_MAX)"
-      [ -z "$llamacpp_mtp_n_max" ] || export LLAMACPP_MTP_N_MAX="$llamacpp_mtp_n_max"
-    fi
     ;;
   openrouter) : ;;
   *)
@@ -241,7 +235,6 @@ export SEP_DEVICE="$sep_device"
 gpu="$(detect_gpu)"
 files=(-f docker-compose.yml)
 [ -z "${LLAMACPP_MODEL_FILE:-}" ] || files+=(-f docker-compose.llamacpp-local.yml)
-[ -z "${LLAMACPP_MTP:-}" ] || files+=(-f docker-compose.llamacpp-mtp.yml)
 
 case "$gpu" in
   nvidia)
@@ -348,7 +341,11 @@ wait_for_ollama() {
 report_gpu_placement() {
   local i line
   [ "$gpu" != cpu ] || return 0
-  case ",${profiles}," in *,ollama,*) ;; *) return 0 ;; esac
+  case ",${profiles}," in
+    *,ollama,*) ;;
+    *,llamacpp,*) report_llamacpp_devices; return 0 ;;
+    *) return 0 ;;
+  esac
   for i in $(seq 1 10); do
     line="$(docker logs omega-ollama 2>&1 | grep 'inference compute' || true)"
     [ -n "$line" ] && break
@@ -375,6 +372,76 @@ report_gpu_placement() {
     return 0
   fi
   echo "  wrong card? pin it with GPU_DEVICES= in .env, biggest-VRAM-first is only our guess."
+}
+
+# same question on llama.cpp. it doesn't log the card at its
+# default verbosity any more, but --list-devices asks the exact
+# backend the server runs on, inside its container with its
+# CUDA_VISIBLE_DEVICES, and prints `CUDA0: <name> (<MiB>, ...)` or
+# `(none)`.
+report_llamacpp_devices() {
+  local devs
+  devs="$(docker exec omega-llamacpp /app/llama-server --list-devices 2>/dev/null \
+    | sed -n '/Available devices/,$p' | tail -n +2 || true)"
+  [ -n "$devs" ] || return 0
+  echo "llama.cpp is running on:"
+  if printf '%s\n' "$devs" | grep -q '(none)'; then
+    echo "  CPU. no GPU at all, llama.cpp found no card"
+    [ "$gpu" = nvidia ] && echo "  nvidia-smi working != CUDA working. regen the CDI spec: sudo nvidia-ctk cdi generate --output=/etc/cdi/nvidia.yaml" >&2
+    return 0
+  fi
+  printf '%s\n' "$devs" | sed 's/^ */  /'
+  echo "  wrong card? pin it with GPU_DEVICES= in .env, biggest-VRAM-first is only our guess."
+}
+
+# llama-server runs in router mode and loads a model on its first
+# request, which would make the first chat a 2-12 GB download. so
+# load her right after `up`, same moment ollama pulls hers.
+llamacpp_chat_model() {
+  local file alias hf
+  file="$(env_get LLAMACPP_MODEL_FILE)"
+  if [ -n "$file" ]; then
+    alias="$(env_get LLAMACPP_MODEL_ALIAS)"
+    echo "${alias:-jun-local}"
+    return
+  fi
+  hf="$(env_get LLAMACPP_MODEL_HF)"
+  hf="${hf:-efficiencyx/Jun-LoRA-E2B-GGUF:Q4_K_M}"
+  echo "${hf%%,*}"
+}
+
+# loaded / loading / unloaded, empty when the router doesn't answer.
+# no jq on a fresh box, the JSON is split one model per line
+llamacpp_status() {
+  docker exec omega-llamacpp curl -fsS http://127.0.0.1:8080/v1/models 2>/dev/null \
+    | sed 's/{"id":/\n&/g' | grep -F "{\"id\":\"$1\"" | grep -o '"value":"[a-z]*"' | head -n1 | cut -d'"' -f4 || true
+}
+
+load_llamacpp() {
+  local model i
+  case ",${profiles}," in *,llamacpp,*) ;; *) return 0 ;; esac
+  model="$(llamacpp_chat_model)"
+  for i in $(seq 1 45); do
+    docker exec omega-llamacpp curl -fsS http://127.0.0.1:8080/health >/dev/null 2>&1 && break
+    sleep 2
+  done
+  [ "$(llamacpp_status "$model")" = loaded ] && return 0
+  docker exec omega-llamacpp curl -fsS -X POST http://127.0.0.1:8080/models/load \
+    -H 'Content-Type: application/json' -d "{\"model\":\"$model\"}" >/dev/null 2>&1 \
+    || echo "warning: llama.cpp didn't take the load for $model, she loads on the first message instead" >&2
+  echo "llama.cpp: loading $model (the first start downloads it, 2-12 GB. ./start.sh logs llamacpp to watch)"
+}
+
+# for the karaoke stagger. the model has to be ON the card before
+# karaoke's torch starts grabbing VRAM, see wait_for_ollama
+wait_for_llamacpp_model() {
+  local model i
+  model="$(llamacpp_chat_model)"
+  for i in $(seq 1 450); do
+    [ "$(llamacpp_status "$model")" = loaded ] && return 0
+    sleep 2
+  done
+  echo "warning: $model still isn't loaded after 15 minutes; starting karaoke anyway" >&2
 }
 
 # The draft depth in .env is a measurement, and it only describes
@@ -471,10 +538,17 @@ staged_up() {
     *) return 1 ;;
   esac
   case ",${profiles}," in
-    *,ollama,*) ;;
+    *,ollama,*|*,llamacpp,*) ;;
     *) return 1 ;;
   esac
   [ "$#" -eq 0 ]
+}
+
+wait_for_model_server() {
+  case ",${profiles}," in
+    *,llamacpp,*) load_llamacpp; wait_for_llamacpp_model ;;
+    *) wait_for_ollama ;;
+  esac
 }
 
 # No exec here. it replaces the shell, so nothing after the
@@ -485,6 +559,7 @@ up_and_check() {
   set -x; docker compose "${files[@]}" up -d --build "$@"
   { set +x; } 2>/dev/null
   report_gpu_placement
+  load_llamacpp
   mtp_recheck
 }
 
@@ -501,7 +576,7 @@ case "${1:-up}" in
                 set -x
                 docker compose "${files[@]}" up -d --build --scale karaoke=0
                 { set +x; } 2>/dev/null
-                wait_for_ollama
+                wait_for_model_server
                 set -x
               fi
               up_and_check "$@" ;;

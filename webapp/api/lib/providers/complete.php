@@ -53,6 +53,7 @@ function provider_complete_tools(string $provider, string $model, array $message
         ];
         if ($tools) $payload['tools'] = $tools;
         if ($think && $provider === 'openrouter') $payload['reasoning'] = ['effort' => $reasoning];
+        if ($provider === 'llamacpp') $payload['chat_template_kwargs'] = ['enable_thinking' => $think];
     } else {
         $payload = [
             'model' => $model,
@@ -90,13 +91,16 @@ function provider_complete_tools(string $provider, string $model, array $message
 }
 
 function generate_chat_title(string $userMessage): ?string {
-    if (ai_provider() !== 'ollama') return null;
-    $model = title_model();
+    $provider = ai_provider();
+    if ($provider === 'openrouter') return null;
+    $model = $provider === 'llamacpp' ? llamacpp_title_model() : title_model();
     if ($model === '') return null;
 
     $msg = spoken_text($userMessage);
     if ($msg === '') return null;
     $msg = substr($msg, 0, 500);
+
+    if ($provider === 'llamacpp') return clean_chat_title(llamacpp_title($model, $msg));
 
     // num_gpu=0 keeps it on the CPU, keep_alive=-1 keeps it loaded.
     // it must NEVER take VRAM or a GPU slot off the pinned chat
@@ -125,7 +129,11 @@ function generate_chat_title(string $userMessage): ?string {
         ],
     ], 20);
 
-    $title = trim(provider_strip_think((string)($result['message']['content'] ?? '')));
+    return clean_chat_title((string)($result['message']['content'] ?? ''));
+}
+
+function clean_chat_title(string $raw): ?string {
+    $title = trim(provider_strip_think($raw));
     if ($title === '') return null;
     $title = trim(strtok($title, "\n"));
     $title = trim($title, " \t\n\r\0\x0B\"'");

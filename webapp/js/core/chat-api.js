@@ -6,13 +6,14 @@ export async function listModels() {
   return r.json();
 }
 
-export function chat({ messages, model, reasoning, think, outfit_context, mod_items, conversation_id, idle, ephemeral, client_time, audio, voice, hear_all, invite }, { onToken, onThinking, onDone, onError, onDebug, onStats, onToolStatus, onOutfit, onGo, onSilence, onFled }) {
+export function chat({ messages, model, reasoning, think, outfit_context, mod_items, conversation_id, idle, ephemeral, client_time, audio, voice, hear_all, invite, tts }, { onToken, onThinking, onDone, onError, onDebug, onStats, onToolStatus, onOutfit, onGo, onSilence, onFled }) {
   const ctrl = new AbortController();
 
   (async () => {
     try {
       const res = await apiJson('chat.php',
-        { messages, model, reasoning, think, outfit_context, mod_items, conversation_id, idle, ephemeral, client_time, audio, voice, hear_all, invite },
+        { messages, model, reasoning, think, outfit_context, mod_items, conversation_id, idle, ephemeral, client_time, audio, voice, hear_all, invite, tts: !!tts,
+          tz: -new Date().getTimezoneOffset() },
         { signal: ctrl.signal });
       if (!res.ok || !res.body) {
         const error = new Error(`http ${res.status}`);

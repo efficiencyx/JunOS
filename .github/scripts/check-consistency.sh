@@ -26,6 +26,18 @@ else
 	pass 'every .env.example knob is read somewhere'
 fi
 
+# and the other way round. a knob nobody wrote down is one people
+# find by reading compose files, which is not a thing people do.
+undoc=""
+for v in $(grep -oE '^#?[[:space:]]*[A-Z][A-Z0-9_]+=' .env.example | tr -d '#= \t' | sort -u); do
+	grep -qF "\`$v\`" docs/configuration.md || undoc="$undoc $v"
+done
+if [ -n "$undoc" ]; then
+	fail "docs/configuration.md never mentions these .env.example knobs:$undoc"
+else
+	pass 'every .env.example knob is in docs/configuration.md'
+fi
+
 echo "migrations"
 # db() in api/lib/db.php picks migrations with glob + sort and compares the
 # leading number against MAX(v) in schema_version. a duplicate

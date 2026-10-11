@@ -63,9 +63,11 @@ if ($provider === 'openrouter') {
     header('Cache-Control: public, max-age=10');
     $data = http_get_json(chat_api_base() . '/models', chat_request_headers());
     if (is_array($data['data'] ?? null)) {
+        $titleModel = llamacpp_title_model();
         $models = [];
         foreach ($data['data'] as $m) {
-            if (isset($m['id']) && is_string($m['id'])) $models[] = $m['id'];
+            if (!isset($m['id']) || !is_string($m['id']) || $m['id'] === $titleModel) continue;
+            $models[] = $m['id'];
         }
     }
 } else {

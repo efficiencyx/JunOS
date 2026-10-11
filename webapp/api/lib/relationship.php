@@ -106,7 +106,57 @@ function relationship_apply(int $userId, array $cur, array $deltas): void {
     $clampDelta = fn($d) => max(-50, min(50, (int)$d));
     $next = [];
     foreach (['affection', 'trust', 'tension'] as $k) {
-        $next[$k] = $cur[$k] + $clampDelta($deltas[$k] ?? 0);
+        $next[$k] = max(0, min(100, $cur[$k] + $clampDelta($deltas[$k] ?? 0)));
     }
     relationship_set($userId, $next);
+    mood_log_add($userId, $deltas);
+    ach_on_relationship($userId, $cur, $next);
+}
+
+// the last 3 mood shifts, and how many of the 9 gauge moves in them
+// went the wrong way (tension up, trust down, affection down).
+// 5 of 9 is the point where we tell her leaving is on the table.
+// the 30 min window is so an old fight doesn't nag her on the next
+// visit.
+const MOOD_SOUR_TURNS = 3;
+const MOOD_SOUR_MOVES = 5;
+const MOOD_SOUR_WINDOW = 1800;
+
+function mood_log_add(int $userId, array $deltas): void {
+    try {
+        $d = fn($k) => max(-50, min(50, (int)($deltas[$k] ?? 0)));
+        db()->prepare('INSERT INTO mood_log (user_id, affection, trust, tension, at) VALUES (?, ?, ?, ?, ?)')
+            ->execute([$userId, $d('affection'), $d('trust'), $d('tension'), time()]);
+        db()->prepare('DELETE FROM mood_log WHERE user_id=? AND id NOT IN
+                       (SELECT id FROM mood_log WHERE user_id=? ORDER BY id DESC LIMIT 10)')
+            ->execute([$userId, $userId]);
+    } catch (Throwable $e) {
+        log_event(['msg' => 'mood_log_add_error', 'err' => $e->getMessage()]);
+    }
+}
+
+function mood_log_clear(int $userId): void {
+    try {
+        db()->prepare('DELETE FROM mood_log WHERE user_id=?')->execute([$userId]);
+    } catch (Throwable $e) {
+        log_event(['msg' => 'mood_log_clear_error', 'err' => $e->getMessage()]);
+    }
+}
+
+function mood_is_souring(int $userId): bool {
+    try {
+        $st = db()->prepare('SELECT affection, trust, tension, at FROM mood_log WHERE user_id=? ORDER BY id DESC LIMIT ' . MOOD_SOUR_TURNS);
+        $st->execute([$userId]);
+        $rows = $st->fetchAll();
+        $st->closeCursor();
+        if (count($rows) < MOOD_SOUR_TURNS || time() - (int)$rows[count($rows) - 1]['at'] > MOOD_SOUR_WINDOW) return false;
+        $bad = 0;
+        foreach ($rows as $r) {
+            $bad += ((int)$r['tension'] > 0) + ((int)$r['trust'] < 0) + ((int)$r['affection'] < 0);
+        }
+        return $bad >= MOOD_SOUR_MOVES;
+    } catch (Throwable $e) {
+        log_event(['msg' => 'mood_is_souring_error', 'err' => $e->getMessage()]);
+        return false;
+    }
 }

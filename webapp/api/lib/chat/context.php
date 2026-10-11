@@ -220,6 +220,13 @@ function chat_live_context(array $req, array $user, string $lastUserMsg, string 
             . "Do not call enter_shop, enter_karaoke, play_cards or go_out_to_eat yet - only once he says yes.";
     }
 
+    // v8 barely saw flee in training so she almost never reaches for
+    // it. same flat OOC shape as the invite line. flee_adjudicate()
+    // still has the last word, this only puts the tool in her head
+    if ($toolsOffered && !$req['idle'] && !$req['ephemeral'] && $invite === '' && mood_is_souring((int)$user['id'])) {
+        $contextParts[] = "(OOC stage direction, not spoken by Anon: You should consider invoking the tool flee, else if it's not appropriate use the tool stay_silent)";
+    }
+
     // same trap, other direction. with the notes already listed above
     // she decides saving is Done and answers without ever calling
     // memory_write

@@ -77,10 +77,12 @@ if (is_admin($user)) {
 }
 
 $userRowId = chat_save_user_message($convId, $req, $lastUserMsg);
+if ($userRowId) ach_on_user_message((int)$user['id'], $req, $lastUserMsg);
 
 ollama_evict_if_partially_offloaded($model);
+if ($PROVIDER === 'llamacpp') llamacpp_unload_chat_models($model);
 
-$messages = fit_messages_to_context($messages, provider_window_tokens($PROVIDER));
+$messages = fit_messages_to_context($messages, provider_window_tokens($PROVIDER, $model));
 
 $upstreamPayload = provider_chat_payload($PROVIDER, $model, $messages, $reasoning, $think);
 
@@ -256,6 +258,7 @@ if ($state['silenced']) {
     // reject a dangling user turn on the next request.
     $assistantBuffer = '...';
     sse_send(['silence' => ['reason' => $state['silence_reason'], 'overheard' => $state['overheard']]]);
+    if (!$state['overheard']) ach_add((int)$user['id'], 'silent');
 } elseif ($state['fled'] !== null) {
     if (trim($assistantBuffer) === '') $assistantBuffer = '...';
     sse_send(['fled' => [
@@ -263,6 +266,7 @@ if ($state['silenced']) {
         'minutes' => $state['fled']['minutes'],
         'reason' => $state['fled']['reason'],
     ]]);
+    ach_add((int)$user['id'], 'fled');
 }
 
 if ($stats !== null) {
@@ -278,6 +282,7 @@ if (!$sawError && $assistantBuffer === '') {
 
 if (!$sawError && $assistantBuffer !== '') {
     $assistantBuffer = chat_apply_bookkeeping_tags($assistantBuffer, (int)$user['id'], $rel);
+    if (!empty($req['body']['tts']) && !$state['silenced'] && !$state['overheard']) ach_add((int)$user['id'], 'tts');
 
     if ($req['ephemeral']) { sse_done(); exit; }
 

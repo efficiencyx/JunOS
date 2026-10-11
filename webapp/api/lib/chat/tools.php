@@ -266,11 +266,19 @@ function chat_run_tool(string $name, array $args, array $ctx, array &$state): st
     }
 
     if ($name === 'change_outfit') {
-        $outfit = wardrobe_tool_change($args, (int)$ctx['user']['id'], $ctx['req']['mod_items']);
+        $userId = (int)$ctx['user']['id'];
+        $before = wardrobe_state($userId) ?? wardrobe_default_state();
+        $outfit = wardrobe_tool_change($args, $userId, $ctx['req']['mod_items']);
         // the browser owns what's on screen. so it gets the change
         // as its own frame, instead of digging it back out of the
         // tool result that's meant for her
         if ($outfit['apply'] !== null) sse_send(['outfit' => $outfit['apply']]);
+        // a saved look comes back changed:true even when she's already
+        // in it, so that one only counts if the stored state moved. mod
+        // items never touch the stored state, they count off changed
+        $lookChanged = isset($outfit['apply']['look']) && ach_worn_changed($before, wardrobe_state($userId));
+        $itemsChanged = !isset($outfit['apply']['look']) && !empty($outfit['reply']['changed']);
+        if ($lookChanged || $itemsChanged) ach_add($userId, 'outfits');
         return json_encode($outfit['reply'], JSON_UNESCAPED_UNICODE);
     }
 
@@ -427,6 +435,7 @@ function run_tool_call(string $name, array $args, array $user, int $convId, ?str
             $limit = max(1, min(6, (int)($args['limit'] ?? 4)));
             if ($query === '') return json_encode(['error' => 'query_required']);
             $facts = array_map(fn($h) => $h['answer'], lore_search($query, $limit, true));
+            ach_add((int)$user['id'], 'lore');
             if (!$facts) {
                 return json_encode(['facts' => [], 'found' => false, 'note' => 'Nothing in your world matches this. You do not know it. Say so instead of inventing a detail.'], JSON_UNESCAPED_UNICODE);
             }
@@ -435,7 +444,9 @@ function run_tool_call(string $name, array $args, array $user, int $convId, ?str
         if ($name === 'memory_write') {
             $memory = (string)($args['memory'] ?? '');
             $category = (string)($args['category'] ?? 'general');
-            return json_encode(memory_note_add((int)$user['id'], $category, $memory), JSON_UNESCAPED_UNICODE);
+            $res = memory_note_add((int)$user['id'], $category, $memory);
+            if (!empty($res['ok'])) ach_add((int)$user['id'], 'notes');
+            return json_encode($res, JSON_UNESCAPED_UNICODE);
         }
         if ($name === 'web_search') {
             if ($approvedWebSearchQuery === null) {
@@ -443,6 +454,7 @@ function run_tool_call(string $name, array $args, array $user, int $convId, ?str
             }
             $query = $approvedWebSearchQuery;
             $approvedWebSearchQuery = null;
+            ach_add((int)$user['id'], 'searches');
             return json_encode(web_search_public($query), JSON_UNESCAPED_UNICODE);
         }
         return json_encode(['error' => 'unknown_tool']);

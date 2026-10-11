@@ -45,6 +45,13 @@ function provider_chat_payload(
     if ($provider === 'openrouter' && $think) {
         $payload['reasoning'] = ['effort' => $reasoning];
     }
+    // the GGUF's jinja with enable_thinking:X renders byte for byte
+    // what ollama's gemma4 renderer does with think:X, <|think|> in
+    // the system turn or not. so same switch, same prompt.
+    if ($provider === 'llamacpp') {
+        $payload['chat_template_kwargs'] = ['enable_thinking' => $think];
+        $payload['messages'] = array_map('llamacpp_audio_parts', $messages);
+    }
     return $payload;
 }
 
@@ -70,4 +77,21 @@ function tool_call_args(array $call): array {
     $args = $call['function']['arguments'] ?? [];
     if (is_string($args)) $args = json_decode($args, true);
     return is_array($args) ? $args : [];
+}
+
+// prompt.php hangs the recording off `images` because that's the
+// only field ollama reads media from. llama.cpp wants openai parts
+// instead. audio FIRST, ollama puts the media tag in front of the
+// text too. done here, last thing, so everything upstream keeps
+// treating content as a string.
+function llamacpp_audio_parts(array $message): array {
+    if (empty($message['images'])) return $message;
+    $parts = [];
+    foreach ($message['images'] as $wav) {
+        $parts[] = ['type' => 'input_audio', 'input_audio' => ['data' => $wav, 'format' => 'wav']];
+    }
+    $parts[] = ['type' => 'text', 'text' => (string)($message['content'] ?? '')];
+    $message['content'] = $parts;
+    unset($message['images']);
+    return $message;
 }

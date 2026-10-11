@@ -90,7 +90,7 @@ The Linux installer changes two things outside its own folder, and records
 both in `.install-changes` so `uninstall.sh` can offer to undo them:
 
 * **The `docker` group.** Membership is root without a password for every
-  process you run. Express adds you. Custom asks, defaulting to no. An
+  process you run. Express and Custom both ask, defaulting to no. An
   unattended run (`JUN_YES=1` without Express, or no terminal) leaves
   Docker behind `sudo` unless `JUN_DOCKER_GROUP=1` is set.
 * **`net.ipv4.ip_unprivileged_port_start=80`**, only with rootless Docker,
@@ -108,19 +108,20 @@ The installers fetch code from other people and run it. What is checked:
 
 | What | From | Verified how |
 | --- | --- | --- |
-| The repo itself | `github.com` over https | TLS, and `JUN_REPO` pointing anywhere but upstream needs `JUN_ALLOW_FORK=1` or an interactive yes. By default you get the tag of the newest full release (`JUN_CHANNEL=stable`); `latest` follows pre-releases too, `experimental` follows `main`, which moves. Release tags are immutable on GitHub. `JUN_REF` picks an exact branch or tag. A versioned `JunSetup-<tag>.exe` also carries the tag's commit hash (`JUN_PIN_SHA`) and refuses to install code whose commit doesn't match, checked before checkout. |
+| The installer you start | `github.com/<repo>/releases/latest/download/` (`JunSetup.exe`, `install.sh`, `install.ps1`) | TLS. Always a published release's own assets, never `main`. The release's `SHA256SUMS` lists every file, but it sits in the same release, so it catches a broken download, not a compromised account. |
+| The repo itself | `github.com` over https | TLS, and `JUN_REPO` pointing anywhere but upstream needs `JUN_ALLOW_FORK=1` or an interactive yes. By default you get the tag of the newest full release (`JUN_CHANNEL=stable`); `latest` follows pre-releases too, `experimental` follows `main`, which moves, and is only used when you pick it. While Jun is in beta, release tags are not locked on GitHub and can still be moved. `JUN_REF` picks an exact branch or tag. A versioned `JunSetup-<tag>.exe` also carries the tag's commit hash (`JUN_PIN_SHA`) and refuses to install code whose commit doesn't match, checked before checkout. |
 | Docker (Linux, only if missing) | `get.docker.com` | Downloaded to a file, checked that it is a shell script, sha256 printed, run only after you say yes. `JUN_DOCKER_SCRIPT_SHA256=<digest>` turns that into a hard check. It is never piped into a root shell. |
 | Portable PHP (Windows) | `windows.php.net` | sha256 from `releases.json`, checked before unpacking. Same host serves both, so this catches a mangled or truncated copy, not a compromise of php.net itself. |
 | CA bundle (Windows) | `curl.se` | sha256 from `cacert.pem.sha256`. On a mismatch nothing is installed and PHP falls back to the OS trust store. |
-| git, Python, llama.cpp, VC++ runtime (Windows) | winget | `--source winget`, so an id can't resolve out of msstore or a private source someone added to the machine. Package signatures are winget's job. |
-| Which release is current | `api.github.com` (anonymous, read-only) | TLS. One or two requests to the releases endpoint per run to turn the channel into a tag, skipped for `experimental` and when `JUN_REF` is set. Drafts are invisible to anonymous requests. |
+| git, Python, llama.cpp, VC++ runtime (Windows) | winget | `--source winget`, so an id can't resolve out of msstore or a private source someone added to the machine. llama.cpp is pinned to `b10448`, the winget build closest to the one the Docker images run. Package signatures are winget's job. |
+| Which release is current | `api.github.com` (anonymous, read-only), then `github.com/<repo>/releases/latest` | TLS. One or two requests to the releases endpoint per run to turn the channel into a tag, skipped for `experimental` and when `JUN_REF` is set. When the API doesn't answer, the website's `/releases/latest` redirect names the newest full release instead. Drafts are invisible to both. If neither answers, a fresh install stops rather than fall back to `main`. |
 | Ollama (Windows) | `ollama.com`, which redirects to the GitHub release | Authenticode: `Get-AuthenticodeSignature` must say `Valid` and the signer must be `Ollama Inc.` before `OllamaSetup.exe` runs. Nothing pins a version, you get the latest. |
 | winget itself, if absent | PSGallery | Not automatic. It asks first, or takes `JUN_BOOTSTRAP_WINGET=1`. |
 | Python packages | PyPI, `download.pytorch.org` | Exact versions in `tts/requirements*.txt` and `tools/requirements-recovery.txt`. Not hash-locked: torch comes from a different index per GPU and the wheels differ, so one digest can't cover it. Transitive deps float. |
 | Base images | Docker Hub, ghcr.io | Exact version tags (`php:8.2.33-fpm-alpine`, `nginx:1.30.4-alpine`, `python:3.11.13-slim`, `certbot/certbot:v5.7.0`, `ollama/ollama:0.32.6` - the floor for the MTP drafter's `gemma4-assistant` architecture, and the AMD/Colab pins move with it). The llama.cpp server images are pinned by sha256 digest in the compose files. A tag is still mutable upstream; the digest is not. |
 | Models | Hugging Face, via Ollama or llama.cpp | Tags only. Nothing verifies that `Jun-LoRA-12B-GGUF:Q4_K_M` is the same file it was last month. |
 | MTP drafters | Hugging Face, third-party uploads (`Janvitos/...`, `amaranus/...` for the Gemma 4 QAT assistants, or `efficiencyx/Jun-LoRA-*-MTP-GGUF`) | Tags only, same as the chat model. Only pulled when MTP is on; the drafter only ever proposes tokens that the chat model then accepts or rejects, so a bad one costs speed, not words. |
-| Title model (Ollama only) | Hugging Face, `efficiencyx/Titlewen-GGUF` | Tags only. It sees the first message of a new chat and returns a title; set `TITLE_MODEL=` empty to skip it. |
+| Title model (Ollama and llama.cpp) | Hugging Face, `efficiencyx/Titlewen-GGUF` | Tags only. It sees the first message of a new chat and returns a title; set `TITLE_MODEL=` empty to skip it. |
 
 The one-liner install (`curl ... | bash`) runs whatever `main`'s `install.sh`
 says at that moment, unread. That script only gets as far as the clone: it then
