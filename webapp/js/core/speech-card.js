@@ -1,9 +1,9 @@
-import * as Live2D from '../live2d/live2d.js?v=77';
+import * as Live2D from '../live2d/live2d.js?v=81';
 import { apiGet } from './api.js?v=1';
 import { gaugeTier } from './mood-tier.js?v=2';
 import * as Names from './names.js?v=1';
 import * as MobileViewport from './viewport.js?v=1';
-import * as TTS from '../voice/tts.js?v=78';
+import * as TTS from '../voice/tts.js?v=81';
 
 export let affection = 0;
 export let trust = 0;
@@ -155,27 +155,27 @@ export function openMood() {
 function openGesture(mood) {
   const seq = {
     cold: [
-      { dt_ms: 0, params: { ParamAngleX: -16, ParamAngleZ: 6, ParamBodyAngleX: -5 } },
-      { dt_ms: 900, params: { ParamAngleX: -6, ParamAngleY: -4 } },
-      { dt_ms: 1200, params: { ParamAngleX: 0, ParamAngleY: 0, ParamAngleZ: 0, ParamBodyAngleX: 0 } },
+      { dt_ms: 0, params: { ParamHeadX: -0.53, ParamHeadZ: 0.2, ParamBodyX: -0.25 } },
+      { dt_ms: 900, params: { ParamHeadX: -0.2, ParamHeadY: -0.13 } },
+      { dt_ms: 1200, params: { ParamHeadX: 0, ParamHeadY: 0, ParamHeadZ: 0, ParamBodyX: 0 } },
     ],
     shy: [
-      { dt_ms: 0, params: { ParamAngleY: -10, ParamAngleZ: -7, ParamBodyAngleX: 3 } },
-      { dt_ms: 900, params: { ParamAngleY: -4, ParamAngleX: 6 } },
-      { dt_ms: 1200, params: { ParamAngleX: 0, ParamAngleY: 0, ParamAngleZ: 0, ParamBodyAngleX: 0 } },
+      { dt_ms: 0, params: { ParamHeadY: -0.33, ParamHeadZ: -0.23, ParamBodyX: 0.15 } },
+      { dt_ms: 900, params: { ParamHeadY: -0.13, ParamHeadX: 0.2 } },
+      { dt_ms: 1200, params: { ParamHeadX: 0, ParamHeadY: 0, ParamHeadZ: 0, ParamBodyX: 0 } },
     ],
     warm: [
-      { dt_ms: 0, params: { ParamAngleX: 8, ParamAngleY: 5, ParamAngleZ: -5, ParamBodyAngleX: 6 } },
-      { dt_ms: 900, params: { ParamAngleZ: 4 } },
-      { dt_ms: 1200, params: { ParamAngleX: 0, ParamAngleY: 0, ParamAngleZ: 0, ParamBodyAngleX: 0 } },
+      { dt_ms: 0, params: { ParamHeadX: 0.27, ParamHeadY: 0.17, ParamHeadZ: -0.17, ParamBodyX: 0.3 } },
+      { dt_ms: 900, params: { ParamHeadZ: 0.13 } },
+      { dt_ms: 1200, params: { ParamHeadX: 0, ParamHeadY: 0, ParamHeadZ: 0, ParamBodyX: 0 } },
     ],
     tease: [
-      { dt_ms: 0, params: { ParamAngleX: 12, ParamAngleZ: 9, ParamBodyAngleX: 5 } },
-      { dt_ms: 900, params: { ParamAngleX: 4, ParamAngleZ: -4 } },
-      { dt_ms: 1200, params: { ParamAngleX: 0, ParamAngleZ: 0, ParamBodyAngleX: 0 } },
+      { dt_ms: 0, params: { ParamHeadX: 0.4, ParamHeadZ: 0.3, ParamBodyX: 0.25 } },
+      { dt_ms: 900, params: { ParamHeadX: 0.13, ParamHeadZ: -0.13 } },
+      { dt_ms: 1200, params: { ParamHeadX: 0, ParamHeadZ: 0, ParamBodyX: 0 } },
     ],
   }[mood];
-  if (seq) Live2D.scheduleSequence(seq);
+  if (seq) Live2D.playSequence(seq);
 }
 
 export function present(line, mood) {

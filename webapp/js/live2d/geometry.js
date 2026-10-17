@@ -1,5 +1,5 @@
-import { placeholderAnchor } from './placeholder.js?v=2';
-import { S, app, forcedDrawableOpacity, model, publicTint, raw } from './state.js?v=11';
+import { placeholderAnchor } from './placeholder.js?v=3';
+import { S, app, forcedDrawableOpacity, model, publicTint, raw } from './state.js?v=75';
 
 const MOUTH_DRAWABLES = ['HitAreaOpenMouth', 'HitAreaCloseMouth', 'InnerMouth', 'SkinLipUpper'];
 const FACE_DRAWABLES = ['HitAreaFaceStroke', 'SkinFace', 'ModdableFace'];

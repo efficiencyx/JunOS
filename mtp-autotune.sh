@@ -236,6 +236,15 @@ tune_ollama() {
         *) die "could not find the drafter blob for $drafter - is it pulled?" ;;
     esac
 
+    # same rule as docker/ollama-entrypoint.sh. ollama sizes the
+    # gemma4 renderer off the name, jun-mtp has none and lands on
+    # small, which is where her empty think-off replies come from
+    renderer=""
+    case "$(printf '%s' "$chat" | tr '[:upper:]' '[:lower:]')" in
+        *e2b*|*e4b*) ;;
+        *12b*|*26b*|*31b*) renderer="RENDERER gemma4-large" ;;
+    esac
+
     printf '\n     %smeasuring%s %s(a few seconds per row)%s\n' "$B" "$R" "$DIM" "$R"
     base="$(bench_ollama "$chat")"
     printf '       %sno drafter%s   %s tok/s\n' "$DIM" "$R" "$base"
@@ -243,7 +252,7 @@ tune_ollama() {
 
     best_n=0; best="$base"
     for n in 1 2 3 4; do
-        printf 'FROM %s\nDRAFT %s\nPARAMETER draft_num_predict %s\n' "$chat" "$blob" "$n" \
+        printf 'FROM %s\nDRAFT %s\nPARAMETER draft_num_predict %s\n%s\n' "$chat" "$blob" "$n" "$renderer" \
             | ollama_exec 'cat > /tmp/Modelfile.tune && ollama create jun-mtp-tune -f /tmp/Modelfile.tune' >/dev/null 2>&1 \
             || { warn_ "depth $n failed to build, skipping"; continue; }
         got="$(bench_ollama jun-mtp-tune)"
@@ -261,7 +270,7 @@ tune_ollama() {
         return
     fi
 
-    printf 'FROM %s\nDRAFT %s\nPARAMETER draft_num_predict %s\n' "$chat" "$blob" "$best_n" \
+    printf 'FROM %s\nDRAFT %s\nPARAMETER draft_num_predict %s\n%s\n' "$chat" "$blob" "$best_n" "$renderer" \
         | ollama_exec "cat > /tmp/Modelfile.mtp && ollama create '$mtp_model' -f /tmp/Modelfile.mtp" >/dev/null 2>&1 \
         || die "could not rebuild $mtp_model at depth $best_n"
 

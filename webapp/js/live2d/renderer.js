@@ -1,4 +1,4 @@
-import { app, forcedDrawableOpacity, markDirty, model, raw, setPublicTint } from './state.js?v=11';
+import { app, forcedDrawableOpacity, markDirty, model, raw, setPublicTint } from './state.js?v=75';
 
 const drawableHighlights = new Map();
 

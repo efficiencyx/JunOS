@@ -67,11 +67,25 @@ if [ -n "${OLLAMA_MTP:-}" ] && [ -n "$CHAT_MODEL" ]; then
       # draft_num_predict has to be baked in too. it defaults to 4, but
       # ollama zeroes it for any model that didn't ask for it by name,
       # and 0 turns speculation back off without a word about it.
-      printf 'FROM %s\nDRAFT %s\nPARAMETER draft_num_predict %s\n' \
-        "$CHAT_MODEL" "$DRAFT_GGUF" "$DRAFT_N" > /tmp/Modelfile.mtp
+      # ollama picks gemma4-small or -large off the NAME first
+      # (e2b/e4b small, 12b/26b/31b large), the parameter count
+      # only after that, cutoff 12B. "jun-mtp" has no size in it
+      # and the 12B is 11.9B on paper, so the derived model got
+      # small while the hf.co one it's built from gets large.
+      # small ends a think:false prompt on a bare <|turn>model, she
+      # opens a thought channel anyway, now and then never closes
+      # it, and the parser files her whole reply as thinking. which
+      # think:false throws away = empty reply. large closes an
+      # empty one for her. every other byte is the same
+      RENDERER=""
+      case "$(printf '%s' "$CHAT_MODEL" | tr '[:upper:]' '[:lower:]')" in
+        *e2b*|*e4b*) ;;
+        *12b*|*26b*|*31b*) RENDERER="RENDERER gemma4-large" ;;
+      esac
+      printf 'FROM %s\nDRAFT %s\nPARAMETER draft_num_predict %s\n%s\n' \
+        "$CHAT_MODEL" "$DRAFT_GGUF" "$DRAFT_N" "$RENDERER" > /tmp/Modelfile.mtp
       if ollama create "$OLLAMA_MTP_MODEL" -f /tmp/Modelfile.mtp; then
         echo "[ollama-entrypoint] MTP model $OLLAMA_MTP_MODEL built on $CHAT_MODEL"
-        CHAT_MODEL="$OLLAMA_MTP_MODEL"
       else
         echo "[ollama-entrypoint] MTP create failed, staying on $CHAT_MODEL"
       fi
@@ -89,30 +103,17 @@ if [ -n "${TITLE_MODEL:-}" ]; then
   # CPU only and pinned with keep_alive -1. titling must NEVER take
   # VRAM off the chat model.
   echo "[ollama-entrypoint] pinning $TITLE_MODEL to CPU..."
-  curl -s -X POST "http://127.0.0.1:11434/api/generate" \
+  curl -fsS -X POST "http://127.0.0.1:11434/api/generate" \
     -H 'Content-Type: application/json' \
     -d "{\"model\":\"$TITLE_MODEL\",\"prompt\":\"\",\"stream\":false,\"keep_alive\":-1,\"options\":{\"num_gpu\":0}}" >/dev/null \
     && echo "[ollama-entrypoint] title model pinned" \
     || echo "[ollama-entrypoint] title model pin failed (non-fatal)"
 fi
 
-# Warm it up. get the chat model into VRAM NOW so the first
-# message you send doesn't sit through the ~2 min cold load.
-# only with the exact num_ctx (context window size) php will
-# send. ollama treats a different num_ctx as a different runner
-# and reloads, so a warm at the default 4096 never gets reused,
-# and if you've already sent a message it evicts the runner you
-# were on. php works the context out from OMEGA_NUM_CTX or the
-# card size, we only see OMEGA_NUM_CTX here, so no override
-# means no warm.
-if [ -n "$CHAT_MODEL" ] && [ "${OMEGA_NUM_CTX:-0}" -gt 0 ] 2>/dev/null; then
-  echo "[ollama-entrypoint] pre-warming $CHAT_MODEL at num_ctx $OMEGA_NUM_CTX..."
-  curl -s -X POST "http://127.0.0.1:11434/api/generate" \
-    -H 'Content-Type: application/json' \
-    -d "{\"model\":\"$CHAT_MODEL\",\"prompt\":\"\",\"stream\":false,\"keep_alive\":-1,\"options\":{\"num_ctx\":$OMEGA_NUM_CTX}}" >/dev/null \
-    && echo "[ollama-entrypoint] pre-warm done" \
-    || echo "[ollama-entrypoint] pre-warm failed (non-fatal)"
-fi
+# no pre-warm here. only php knows the num_ctx chat sends, so
+# api/prewarm.php does it (php-entrypoint.sh starts it). install.sh
+# waits for this line.
+echo "[ollama-entrypoint] models ready"
 
 # Give the foreground to ollama so a SIGTERM from `docker stop`
 # gets to it.

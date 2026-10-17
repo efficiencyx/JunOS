@@ -193,6 +193,13 @@ function Tune-Ollama {
         Where-Object { $_ -match '^FROM ' } | Select-Object -First 1) -replace '^FROM\s+', ''
     if (-not $blob -or -not (Test-Path $blob)) { Die "could not find the drafter blob for $drafter - is it pulled?" }
 
+    # same rule as docker/ollama-entrypoint.sh. ollama sizes the
+    # gemma4 renderer off the name, jun-mtp has none and lands on
+    # small, which is where her empty think-off replies come from
+    $renderer = ''
+    $lc = $chat.ToLower()
+    if ($lc -notmatch 'e2b|e4b' -and $lc -match '12b|26b|31b') { $renderer = "`nRENDERER gemma4-large" }
+
     Write-Host ''
     Write-Host "     ${B}measuring${R} ${DIM}(a few seconds per row)${R}"
     $base = Measure-Ollama $chat $url
@@ -206,7 +213,7 @@ function Tune-Ollama {
     $bestN = 0; $best = $base
     $mf = Join-Path $env:TEMP 'Modelfile.tune'
     foreach ($n in 1..4) {
-        "FROM $chat`nDRAFT $blob`nPARAMETER draft_num_predict $n" | Set-Content -Path $mf -Encoding UTF8
+        "FROM $chat`nDRAFT $blob`nPARAMETER draft_num_predict $n$renderer" | Set-Content -Path $mf -Encoding UTF8
         & ollama create jun-mtp-tune -f $mf 2>$null | Out-Null
         if ($LASTEXITCODE -ne 0) { Warn_ "depth $n failed to build, skipping"; continue }
         $got = Measure-Ollama 'jun-mtp-tune' $url
@@ -223,7 +230,7 @@ function Tune-Ollama {
         return
     }
 
-    "FROM $chat`nDRAFT $blob`nPARAMETER draft_num_predict $bestN" | Set-Content -Path $mf -Encoding UTF8
+    "FROM $chat`nDRAFT $blob`nPARAMETER draft_num_predict $bestN$renderer" | Set-Content -Path $mf -Encoding UTF8
     & ollama create $mtpModel -f $mf 2>$null | Out-Null
     if ($LASTEXITCODE -ne 0) { Die "could not rebuild $mtpModel at depth $bestN" }
 

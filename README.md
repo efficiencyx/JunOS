@@ -41,7 +41,7 @@ Basically, an AI wrapper with 50 other systems working together to make her feel
 > Jun OS is based on an **18+ game**. *Factorial Omega* contains mature and NSFW themes, and Jun OS can support similar content depending on how you configure and use it.
 >
 
-> ⚠️ **Unofficial fan project**
+> **Unofficial fan project**
 >
 > Jun OS is not affiliated with, endorsed by, or associated with **Incontinent Cell** or the *Factorial Omega* development team.
 >
@@ -75,11 +75,11 @@ https://github.com/user-attachments/assets/f27859ad-9fee-467b-84a8-4f7630d2e2b6
 - **She can think before she answers.** A reasoning knob (auto / low / medium / high) and a toggle to watch the chain of thought stream by.
 - **She remembers.** She'll bring up things you said in other chats, and quietly keeps notes and a journal between sessions.
 - **She knows her lore.** Ask her about the game's world and she stays in canon.
-- **She'll sing with you.** 🎤 Load a song, get timed lyrics, and see how close you got.
+- **She'll sing with you.** Load a song, get timed lyrics, and see how close you got.
 - **Dress her up.** A whole wardrobe to toggle and recolor - she'll tell you what she thinks of it.
-- **Take her out.** 🍝 Shopping at Annalie's, karaoke night, lunch or dinner at a restaurant, a few hands of blackjack. Ask her (the buttons in Settings, or just type "wanna grab dinner?") and it's *her* call - if she says yes she takes you there. She'll ask you out herself now and then too.
+- **Take her out.** Shopping at Annalie's, karaoke night, lunch or dinner at a restaurant, a few hands of blackjack. Ask her (the buttons in Settings, or just type "wanna grab dinner?") and it's *her* call - if she says yes she takes you there. She'll ask you out herself now and then too.
 - **Make you regret every bad decision** Jun reacts to the way you treat her, for better or worse. Treat her well and she'll return it. Treat her badly and don't expect her to forget it.
-- **Collect achievements.** 🏆 25 of them, from *Yapper* to *Door Slammed*, each climbing Bronze → Silver → Gold → Diamond. They don't unlock anything, they're just for bragging. Some stay hidden until you stumble into them 👀
+- **Collect achievements.** 25 of them, from *Yapper* to *Door Slammed*, each climbing Bronze → Silver → Gold → Diamond. They don't unlock anything, they're just for bragging. Some stay hidden until you stumble into them.
 - **Bring your mods.** Game-mod zips load straight into the browser.
 - **It's yours.** She runs on your machine. No external account, no cloud inference by default, no analytics, nothing reporting back to us - the only things that leave your box are the ones you ask for: [The full list](SECURITY.md#what-talks-to-the-internet).
 
@@ -89,15 +89,15 @@ Curious how any of it works? [Under the hood](#under-the-hood).
 
 You don't need to know how any of this works. On Windows you double-click one file, on Linux you paste one line. Either way it installs whatever your computer is missing, downloads her brain, rebuilds her body from your own copy of the game, and starts her up.
 
-### 🪟 On Windows
+### On Windows
 
-Download **[JunSetup.exe](https://github.com/efficiencyx/JunOS/releases/latest/download/JunSetup.exe)** and double-click it. That's it. 🎉
+Download **[JunSetup.exe](https://github.com/efficiencyx/JunOS/releases/latest/download/JunSetup.exe)** and double-click it. That's it.
 
 She runs directly on Windows, no Docker (Docker on Windows is a pain). The setup window walks you through it, and when it's done you get a **Jun OS** shortcut on your desktop and in the Start menu to start, stop and update her.
 
-The exe is built by GitHub Actions straight from the tagged scripts, and every [release](https://github.com/efficiencyx/JunOS/releases) lists its checksum in `SHA256SUMS`. It isn't code-signed, so if Windows SmartScreen pops up: **More info → Run anyway**. Each release also carries a **`JunSetup-<version>.exe`** welded to its version 🔩: `JunSetup-v1.0.0.exe` installs v1.0.0 and nothing else, and checks the exact commit before it sets anything up.
+The exe is built by GitHub Actions straight from the tagged scripts, and every [release](https://github.com/efficiencyx/JunOS/releases) lists its checksum in `SHA256SUMS`. It isn't code-signed, so if Windows SmartScreen pops up: **More info → Run anyway**. Each release also carries a **`JunSetup-<version>.exe`** welded to its version: `JunSetup-v1.0.0.exe` installs v1.0.0 and nothing else, and checks the exact commit before it sets anything up.
 
-If anything goes wrong, the installer stops, tells you what in plain words, and keeps the window open until you've read it. Fix that one thing and run it again: it picks up where it left off. 🩹
+If anything goes wrong, the installer stops, tells you what in plain words, and keeps the window open until you've read it. Fix that one thing and run it again: it picks up where it left off.
 
 <details>
 <summary>Rather use a terminal?</summary>
@@ -108,11 +108,11 @@ Press Start, type `Command Prompt`, hit Enter, and paste this. Same install as t
 powershell irm https://github.com/efficiencyx/JunOS/releases/latest/download/install.ps1 -OutFile install.ps1; powershell -ExecutionPolicy Bypass -File .\install.ps1
 ```
 
-Want to read it first? Good. 👀 Run just the part before the `;`, then open `install.ps1` in **Notepad**.
+Want to read it first? Good. Run just the part before the `;`, then open `install.ps1` in **Notepad**.
 
 </details>
 
-### 🐧 On Linux, macOS or WSL
+### On Linux, macOS or WSL
 
 Needs `git` and Docker. Don't have them? The script installs them for you. Open a terminal, paste with `Ctrl + Shift + V`, hit Enter:
 
@@ -122,7 +122,7 @@ curl -fsSL https://github.com/efficiencyx/JunOS/releases/latest/download/install
 
 > ⚠️ **Before you paste anything, anywhere.** That line downloads a script off the internet and runs it on your computer. That's a lot of trust to hand a stranger, and the habit of doing it without looking is how people get malware. If you don't understand a command, don't run it - paste it into ChatGPT or Claude and ask what it does. Same goes for the next person's "just run this", not only ours.
 >
-> Want to read our script first? Good. 👀 `curl -fsSL https://github.com/efficiencyx/JunOS/releases/latest/download/install.sh | less`, then press `q` to quit when you're done reading.
+> Want to read our script first? Good. `curl -fsSL https://github.com/efficiencyx/JunOS/releases/latest/download/install.sh | less`, then press `q` to quit when you're done reading.
 
 ### Doing it manually without the installer
 
@@ -133,18 +133,18 @@ The step-by-step commands for it, every provider, and the manual compose invocat
 One question: **Express** or **Custom**.
 
 - **Express** - press Enter and forget about it. It figures out your hardware on its own and rebuilds her Live2D model from your game copy. The only things it might still ask are *where* the game is, if it can't find it by itself, and on Linux whether to add you to the docker group when it just installed Docker (that one's root without a password, so it's your call, not ours. We'd say no).
-- **Custom** - walks you through which [release channel](#-which-jun-you-get), which provider, which model, which voice, and whether to turn on [MTP](#faster-tokens-mtp).
+- **Custom** - walks you through which [release channel](#which-jun-you-get), which provider, which model, which voice, and whether to turn on [MTP](#faster-tokens-mtp).
 
 Installing on a machine you can't sit in front of? `JUN_YES=1` (on Windows, `$env:JUN_YES='1'`) skips the question entirely. On Linux nobody's there to say yes to the docker group either, so Docker stays behind `sudo` unless you also pass `JUN_DOCKER_GROUP=1`.
 
-### 🚦 Which Jun you get
+### Which Jun you get
 
 The install line and the setup exe both come from the newest release, never from `main`. There are three channels:
 
 | Channel | What lands on your disk | Good for |
 |---|---|---|
 | **Stable** *(default)* | the latest full [release](https://github.com/efficiencyx/JunOS/releases) | everyone |
-| **Latest** | the newest release, pre-releases included | early birds and bug hunters 🐛 |
+| **Latest** | the newest release, pre-releases included | early birds and bug hunters |
 | **Experimental** | straight from `main`, whatever got pushed today | people who enjoy fixing things |
 
 Express goes Stable, Custom asks. Experimental is only ever there because somebody picked it. If GitHub can't be asked which release is current (offline, or rate limited), the installer stops and says so instead of guessing.
@@ -153,15 +153,15 @@ Updating is the **Update** button in the Jun OS app on Windows, or the same line
 
 Installed her before channels were a thing? You were on `main` all along, so you stay on Experimental until you pick something else. Need one exact version? `JUN_REF=v1.0.0` pins it and skips the channel lookup.
 
-### Then say hi 🎉
+### Then say hi
 
-Open your browser at **<https://localhost>** - or **<https://127.0.0.1:8080>** if you're on Windows. It's always HTTPS 🔒, with a certificate your own install made for itself, so the browser grumbles about it (*Advanced → Proceed*). That's expected: nobody vouched for the cert, but the traffic is encrypted all the same. Plain `http://` just redirects you over.
+Open your browser at **<https://localhost>** - or **<https://127.0.0.1:8080>** if you're on Windows. It's always HTTPS, with a certificate your own install made for itself, so the browser grumbles about it (*Advanced → Proceed*). That's expected: nobody vouched for the cert, but the traffic is encrypted all the same. Plain `http://` just redirects you over.
 
 ### Managing Her
 
 For a complete guide on how to manage her follow the steps in the **[wiki](https://github.com/efficiencyx/JunOS/wiki)**.
 
-Windows: double-click **Jun OS** on your desktop (or in the Start menu) 🖱️. That little window starts and stops her, opens her in the browser, shows the logs, updates her and uninstalls her. Said no to the shortcut? `JunOS.exe` sits in her folder. Terminal people still get:
+Windows: double-click **Jun OS** on your desktop (or in the Start menu). That little window starts and stops her, opens her in the browser, shows the logs, updates her and uninstalls her. Said no to the shortcut? `JunOS.exe` sits in her folder. Terminal people still get:
 Start her: `powershell .\JunOS\start.ps1`
 Stop her: `powershell .\JunOS\start.ps1 stop`
 
@@ -173,12 +173,12 @@ Stop her: `./JunOS/start.sh stop`
 
 The very first boot downloads her brain - whatever model is listed in `OLLAMA_MODELS_TO_PULL`, by default `hf.co/efficiencyx/Jun-LoRA-E2B-GGUF:Q4_K_M`, which is the one that runs fine without a fancy graphics card. It's a big file. On Ollama it also grabs the tiny model that names your chats (`TITLE_MODEL`, ~1.2 GB, lives on the CPU) and, if you said yes to MTP, the drafter. Watch it all crawl in with `./start.sh logs ollama`.
 
-She's ready once everything reports **healthy**. After that first download it's usually 30-90 seconds. 💤
+She's ready once everything reports **healthy**. After that first download it's usually 30-90 seconds.
 
 
 > ### Her body isn't in this repo
 >
-> The Live2D model and textures belong to *My Dystopian Robot Girlfriend* and aren't redistributed here - you rebuild them from your own copy of the game. Express does this for you; under Custom, answer **yes** when the installer offers. Either way it sets up a local `runtime/asset-recovery-venv` (UnityPy + Pillow, no global `pip install`) and runs the recovery script. 🔧
+> The Live2D model and textures belong to *My Dystopian Robot Girlfriend* and aren't redistributed here - you rebuild them from your own copy of the game. Express does this for you; under Custom, answer **yes** when the installer offers. Either way it sets up a local `runtime/asset-recovery-venv` (UnityPy + Pillow, no global `pip install`) and runs the recovery script.
 >
 > Can't find the game? It'll ask you to paste the folder or drag the game onto the terminal - Express included, press Enter to skip. No game on that machine at all? Nothing breaks, she just wears the placeholders and the install carries on. Want it later, or don't want it at all? `JUN_EXTRACT=1` re-runs it, `JUN_EXTRACT=0` tells Express to leave it alone (`$env:JUN_EXTRACT='1'; .\install.ps1` on Windows). If auto-detection misses the game, paste its folder when asked, or set `JUN_GAME_DIR` for scripted installs.
 >
@@ -197,7 +197,7 @@ Run the whole stack on a **free Colab T4** - nothing installed, nothing on your 
 
 Two knobs in the cells: **Model** (`auto` takes the 12B since Colab can hold it) and **Voice** (adds ~2 min on first run). The link comes from Colab's own proxy - if it 404s briefly, wait 30 s and reload.
 
-> ⚠️ **It's a disposable demo.** Colab wipes the session when it ends: accounts, chat history and weights don't survive. Run her locally for anything persistent.
+> **It's a disposable demo.** Colab wipes the session when it ends: accounts, chat history and weights don't survive. Run her locally for anything persistent.
 
 ### Putting her on the internet [NOT RECOMMENDED]
 
@@ -217,7 +217,7 @@ BIND_ADDR=0.0.0.0 DOMAIN=yourdomain.com EMAIL=you@yourdomain.com TLS_MODE=on COM
 
 `BIND_ADDR` is the deliberate step: out of the box nginx publishes on `127.0.0.1` only, so a fresh install isn't reachable from the next machine on the wifi. Opening it up is a thing you type, not a default you inherit. Let's Encrypt also can't reach the challenge until you do.
 
-### 📱 Just want her on your phone, on your own wifi?
+### Just want her on your phone, on your own wifi?
 
 You don't need a domain or a real certificate for that. Set one line in `.env` and restart:
 
@@ -227,7 +227,7 @@ BIND_ADDR=0.0.0.0
 
 The launcher works out this machine's address on the network by itself and prints it - `reachable as: https://192.168.X.X` on Linux, `on your phone: https://192.168.X.X:8080` on Windows - and that's the URL you type into the phone. On Windows it also adds a firewall rule for the port on **private** networks only (it needs an admin PowerShell to do it, otherwise it prints the one-liner for you to run). One request at a time on Windows, so the phone and the desktop take turns.
 
-The phone gets the same self-signed warning. Your password and every word she says cross the wifi encrypted, but a self-signed cert can't prove to the phone that it's really talking to your box, so keep it to networks you trust and **never** port-forward it to the internet - that's what the certbot setup above is for. 🔒 DHCP moves addresses around, so if she stops answering after a few days, restart the launcher and read the new one (the new address gets a fresh cert, so one more warning).
+The phone gets the same self-signed warning. Your password and every word she says cross the wifi encrypted, but a self-signed cert can't prove to the phone that it's really talking to your box, so keep it to networks you trust and **never** port-forward it to the internet - that's what the certbot setup above is for. DHCP moves addresses around, so if she stops answering after a few days, restart the launcher and read the new one (the new address gets a fresh cert, so one more warning).
 
 The `prod` profile adds the certbot sidecar. On a fresh box nginx comes up first on a throwaway self-signed cert (so for the first minute or so your browser will complain - that's expected), certbot then runs `certbot certonly --webroot` and nginx swaps the real cert in by itself, no restart. If issuance fails (usually DNS not pointing at the box yet, or port 80 blocked) certbot keeps retrying after 1, 4 and 16 minutes, then hourly - `./start.sh logs certbot` tells you why. After that it's `certbot renew` every 12 hours, and nginx picks up renewed certs on its own too. Certs live in the `letsencrypt` volume, nginx serves 443 with HSTS. Mind Let's Encrypt's 5-duplicate-issuances-per-week limit while testing.
 
@@ -287,7 +287,7 @@ Everything is environment variables in `.env` - the full reference is [`docs/con
 | `DOMAIN` / `EMAIL` / `TLS_MODE` | Hostname, Let's Encrypt contact, Let's Encrypt on/off (`off` still serves HTTPS, on a self-signed cert) | `localhost` · `admin@localhost` · `off` |
 | `BIND_ADDR` | Where nginx (Caddy on Windows) listens. `0.0.0.0` for the phone on your wifi | `127.0.0.1` |
 | `AI_PROVIDER` | `ollama` \| `llamacpp` \| `openrouter` | `ollama` |
-| `OLLAMA_MODELS_TO_PULL` | Pulled on first boot; the **first** one is pre-warmed | `hf.co/efficiencyx/Jun-LoRA-E2B-GGUF:Q4_K_M` |
+| `OLLAMA_MODELS_TO_PULL` | Downloaded on first boot and re-checked on every start, so a new upload under the same tag arrives with your next restart; the **first** one is pre-warmed | `hf.co/efficiencyx/Jun-LoRA-E2B-GGUF:Q4_K_M` |
 | `LLAMACPP_MODEL_HF` / `LLAMACPP_MODEL_FILE` | Model for the managed llama-server: pull from HF, or serve one off disk | `efficiencyx/Jun-LoRA-E2B-GGUF:Q4_K_M` |
 | `TITLE_MODEL` | The little CPU-pinned model that names new chats (Ollama and llama.cpp); empty disables it | `hf.co/efficiencyx/Titlewen-GGUF:F16` |
 | `OLLAMA_MTP` / `LLAMACPP_MTP` | HF repo of the [MTP](#faster-tokens-mtp) drafter; empty = off. `MTP_AUTOTUNE=off` stops the re-tune after a GPU change | *(empty)* · `on` |
@@ -302,13 +302,13 @@ Everything is environment variables in `.env` - the full reference is [`docs/con
 | `OMEGA_STATE_DIR` / `MEMORY_DIR` | Where the database, rate-limit state and memory notes live | `/var/lib/omega` |
 | `OMEGA_REGISTRATION_KEY` | Sign-ups need this key. The installer generates one for you; empty it to let anyone in | *(generated)* |
 | `OMEGA_DEV_KEY` | ? Figure it out yourself? | ??? |
-| `JUN_CHANNEL` | Installer only: which [release channel](#-which-jun-you-get) a re-run updates her along - `stable`, `latest` or `experimental` | `stable` |
+| `JUN_CHANNEL` | Installer only: which [release channel](#which-jun-you-get) a re-run updates her along - `stable`, `latest` or `experimental` | `stable` |
 
-### Who gets in 🔑
+### Who gets in
 
-**Save your recovery code.** 🔐 Signup shows it once; older accounts get one on their first login after the encryption upgrade. Chats, saved preferences and her memory are encrypted under your account's data key. If you forget your password, use **forgot password?** with your email and recovery code. Lose both and a backup alone cannot unlock encrypted data. This protects stored content, not a compromised running machine; [the security notes](SECURITY.md#encryption-and-recovery) spell out the limits.
+**Save your recovery code.** Signup shows it once; older accounts get one on their first login after the encryption upgrade. Chats, saved preferences and her memory are encrypted under your account's data key. If you forget your password, use **forgot password?** with your email and recovery code. Lose both and a backup alone cannot unlock encrypted data. This protects stored content, not a compromised running machine; [the security notes](SECURITY.md#encryption-and-recovery) spell out the limits.
 
-**The registration key** is written into `.env` by the installer and printed when it finishes. The very first account on a fresh install skips it (it's your box, you just ran the installer) - but only while she listens on this machine alone. Flip `BIND_ADDR=0.0.0.0` before you've made yours and even the first signup needs the key 🔒. Every account after that has to type it, so nobody who reaches the page later can make themselves a login. Don't want the lock? Empty the value (`OMEGA_REGISTRATION_KEY=`) and sign-ups are open to whoever can reach the page. 🔑 Lost it? It's sitting in plain text in your own `.env` - read it back, or change it to whatever you like and restart.
+**The registration key** is written into `.env` by the installer and printed when it finishes. The very first account on a fresh install skips it (it's your box, you just ran the installer) - but only while she listens on this machine alone. Flip `BIND_ADDR=0.0.0.0` before you've made yours and even the first signup needs the key. Every account after that has to type it, so nobody who reaches the page later can make themselves a login. Don't want the lock? Empty the value (`OMEGA_REGISTRATION_KEY=`) and sign-ups are open to whoever can reach the page. Lost it? It's sitting in plain text in your own `.env` - read it back, or change it to whatever you like and restart.
 
 Normal accounts get **Factory Reset** in the same panel - one button that erases every conversation, memory and setting and hands the account back the way it came.
 
@@ -330,16 +330,16 @@ Browser ──HTTP/SSE──▶ nginx ──FastCGI──▶ php-fpm ──HTTP�
 2. PHP assembles the prompt in two halves. The cached half - `system_prompt.txt` and her journal - stays byte-identical between turns so the KV prompt cache keeps hitting. Everything that moves goes in a live-context block glued *after* your question in the last user turn: clock, matched lore facts, durable notes, outfit, relationship gauges. Dead last comes a `<think:low|med|high>` marker telling her how hard to think this turn.
 3. The model streams back (NDJSON from Ollama, OpenAI-style SSE from the others); `api/lib/providers/` normalizes both and PHP re-frames each token as an SSE event and flushes it immediately. If she reaches for a tool (search her notes, change outfit, look something up, take you out, walk out) PHP runs it and streams another round, up to three.
 4. `js/app/stream-filters.js` watches the stream for `[A:` markers, holds back any half-typed marker so it never renders, and fires the action the instant its `]` arrives.
-5. `js/live2d/live2d.js` lerps the model toward the new pose; if voice is on, `js/voice/tts.js` fetches audio per sentence and drives `ParamMouthOpen` from the analyser's RMS.
+5. `js/live2d/live2d.js` springs the model into the new pose, holds it a few seconds and eases her back to idle; if voice is on, `js/voice/tts.js` fetches audio per sentence and drives `ParamMouthOpen` from the analyser's RMS.
 6. Bookkeeping happens after generation has finished and every reply token has already streamed, right before `[DONE]` - so it can't delay a word she says, only the final `[DONE]`: her hidden `[A:mood_shift|...]` tag moves the gauges, the reply gets saved, and a new chat gets its title (that one is a call to the titling model, so on a chat's very first turn `[DONE]` can trail the last word by a moment). Wander off and the consolidation worker rewrites her notes and journal.
 
 The gory version - the action state machine, the tick loop, the memory pipeline - is in [`docs/architecture.md`](docs/architecture.md).
 
 ### Contributing or Tweaking her?
 
-> 📦 **How this repo gets updated.** Day-to-day work happens in a development repo - that's where the extracted Live2D art lives, plus the dataset tooling and a pile of half-finished experiments nobody needs to see. What lands here is snapshots: working states, pushed when something's actually done, reviewed and CI passes. So the commits are chunky and the timestamps come in bursts.
+> **How this repo gets updated.** Day-to-day work happens in a development repo - that's where the extracted Live2D art lives, plus the dataset tooling and a pile of half-finished experiments nobody needs to see. What lands here is snapshots: working states, pushed when something's actually done, reviewed and CI passes. So the commits are chunky and the timestamps come in bursts.
 
-> 🎨 **Her art isn't in here** and won't be - see [NOTICE](NOTICE). `tools/recover_assets.py` rebuilds `webapp/assets/` from your own copy of the game, which is the only way it's allowed to work. Until you run it she's a placeholder - chat, voice and outings all still work, she just doesn't move or change clothes.
+> **Her art isn't in here** and won't be - see [NOTICE](NOTICE). `tools/recover_assets.py` rebuilds `webapp/assets/` from your own copy of the game, which is the only way it's allowed to work. Until you run it she's a placeholder - chat, voice and outings all still work, she just doesn't move or change clothes.
 
 The house rules, the invariants you can break without noticing, and what CI checks are in [`CONTRIBUTING.md`](CONTRIBUTING.md). Stuck rather than hacking? [`SUPPORT.md`](SUPPORT.md). Found a hole? [`SECURITY.md`](SECURITY.md).
 
@@ -364,13 +364,13 @@ Something's buffering the SSE. The `/api/chat.php` location needs `proxy_bufferi
 <details>
 <summary><b>She's not broken, just slow</b></summary>
 
-Check GPU residency first: `docker exec omega-ollama ollama ps`. Anything short of 100% GPU means something is elbowing her out of VRAM - usually `TTS_DEVICE=cuda` (~2 GB for a speedup you won't hear) or a too-generous `num_ctx`; pin it with `OMEGA_NUM_CTX`. The `UNTIL` column should read `Forever`; a five-minute expiry means the keep-alive pin didn't take and the next quiet stretch costs you a full reload plus re-prefill.
+Check GPU residency first: `docker exec omega-ollama ollama ps`. Anything short of 100% GPU means something is elbowing her out of VRAM - usually `TTS_DEVICE=cuda` (~2 GB for a speedup you won't hear) or a too-generous `num_ctx`; pin it with `OMEGA_NUM_CTX`. The `UNTIL` column should read `Forever`; a five-minute expiry means the keep-alive pin didn't take and the next quiet stretch costs you a full reload plus re-prefill. If the very first reply after a start crawls, see whether the pre-warm made it: `docker logs omega-php | grep prewarm` (`runtime\logs\prewarm.log` on Windows). A `failed:` line there with something else holding the card means she loaded on your first message instead.
 </details>
 
 <details>
 <summary><b>Jun is a lavender cardboard cutout</b></summary>
 
-That's the placeholder 💜 - the server couldn't find her rig. It wants all four of `webapp/assets/interaction_model.moc3` and `texture_00.png`..`texture_02.png`; one missing and you get the stand-in. Run the extraction (see [her body isn't in this repo](#her-body-isnt-in-this-repo)), then reload.
+That's the placeholder - the server couldn't find her rig. It wants all four of `webapp/assets/interaction_model.moc3` and `texture_00.png`..`texture_02.png`; one missing and you get the stand-in. Run the extraction (see [her body isn't in this repo](#her-body-isnt-in-this-repo)), then reload.
 </details>
 
 <details>

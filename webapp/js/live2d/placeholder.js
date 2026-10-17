@@ -1,5 +1,5 @@
-import { FACE_HEAD_FRAC, FACE_SCREEN_Y, currentCameraMode, usableStage } from './camera.js?v=75';
-import { S } from './state.js?v=11';
+import { FACE_HEAD_FRAC, FACE_SCREEN_Y, currentCameraMode, usableStage } from './camera.js?v=76';
+import { S } from './state.js?v=75';
 
 // no rig on disk (webapp/assets/ is gitignored game art, a fresh
 // clone has none until tools/recover_assets.py runs), so she's a

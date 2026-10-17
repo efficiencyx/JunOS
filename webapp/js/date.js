@@ -14,10 +14,10 @@ import { api, apiJson } from './core/api.js?v=1';
 import * as ChatAPI from './core/chat-api.js?v=3';
 import * as Names from './core/names.js?v=1';
 import * as Prefs from './core/prefs.js?v=1';
-import { say } from './core/speech-card.js?v=6';
+import { say } from './core/speech-card.js?v=9';
 import { localTimeString, mealNow } from './core/util.js?v=1';
-import * as Live2D from './live2d/live2d.js?v=77';
-import * as Outfit from './outfit/outfit.js?v=77';
+import * as Live2D from './live2d/live2d.js?v=81';
+import * as Outfit from './outfit/outfit.js?v=80';
 import * as Scene from './trip/scene.js?v=1';
 import { startSkybox } from './trip/skybox.js?v=2';
 import * as TripLoader from './trip/trip-loader.js?v=1';
@@ -77,7 +77,7 @@ async function main() {
   document.body.dataset.meal = meal;
   const FALLBACK = {
     arrive: "Okay. It's nicer than I expected. Don't make it weird.",
-    talk: "...Say that again. I was reading.",
+    talk: "Sorry anon... I wasn't paying attention, could you say that again?",
     order: "Fine. Let's see if the kitchen is as good as the menu makes it sound.",
     lull: "...Are they growing it back there? Because it feels like they're growing it.",
     served: 'Oh. Okay. That actually looks good. Hands off mine.',

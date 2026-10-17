@@ -175,8 +175,9 @@ server {
         fastcgi_pass  $php_upstream;
     }
 
-    # Long-running CLI worker. It must never be reachable over HTTP.
+    # CLI-only scripts. They must never be reachable over HTTP.
     location = /api/consolidation-worker.php { return 404; }
+    location = /api/prewarm.php { return 404; }
     location = /system_prompt.txt { return 404; }
     location ^~ /api/migrations/ { return 404; }
     location ^~ /api/lib/ { return 404; }

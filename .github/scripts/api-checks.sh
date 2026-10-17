@@ -71,10 +71,11 @@ check 'GET / serves the app'            200 "$BASE/"
 body_has 'index.html looks like the app' '<html'
 check 'GET a module'                    200 "$BASE/js/app.js"
 check 'unknown path 404s'               404 "$BASE/nope.html"
-# the four that a plain docroot would hand straight out.
+# the ones a plain docroot would hand straight out.
 check 'system_prompt.txt is not public' 404 "$BASE/system_prompt.txt"
 check 'migrations are not public'       404 "$BASE/api/migrations/001_init.sql"
 check 'cli worker is not reachable'     404 "$BASE/api/consolidation-worker.php"
+check 'cli prewarm is not reachable'    404 "$BASE/api/prewarm.php"
 check 'helper libs are not reachable'   404 "$BASE/api/lib/bootstrap.php"
 check 'dotfiles are not public'         404 "$BASE/.env"
 # nginx rejects the traversal itself with 400, the php router

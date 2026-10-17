@@ -1,5 +1,5 @@
 import * as MobileViewport from '../core/viewport.js?v=1';
-import { S, app, markDirty, model } from './state.js?v=11';
+import { S, app, markDirty, model } from './state.js?v=75';
 
 const CAMERA_STORAGE_KEY = 'l2d.camera';
 const CAMERA_STORAGE_VERSION = 2;

@@ -69,27 +69,32 @@ function consolidation_touch(int $userId, ?bool $enabled = null): void {
     )->execute([$userId, $enabled ? time() : 0, $enabled ? 1 : 0]);
 }
 
-// lines consolidation decided Jun wants to say next time Anon
-// turns up. the queue empties WHEN you read it, a refresh two
-// minutes later must not replay the same thing.
-const WELCOME_MAX_MESSAGES = 3;
-
+// her texts for every milestone of the absence, written by the
+// idle pass before any of them were "sent". the queue empties when
+// a welcome actually shows, a refresh two minutes later must not
+// replay the same thread.
 const WELCOME_MAX_CHARS = 240;
 
-function welcome_queue_set(int $userId, array $messages): void {
+// $tiers is tier name => list of texts, already capped per tier by
+// welcome.php. the old shape was one flat list and some of those
+// are still sitting in the table, read() turns them into 'missed'.
+function welcome_queue_set(int $userId, array $tiers): void {
     $clean = [];
-    foreach ($messages as $message) {
-        if (!is_string($message)) continue;
-        $text = trim(preg_replace('/\s+/', ' ', $message));
-        if ($text === '') continue;
-        $clean[] = mb_substr($text, 0, WELCOME_MAX_CHARS);
-        if (count($clean) >= WELCOME_MAX_MESSAGES) break;
+    foreach ($tiers as $tier => $texts) {
+        $kept = [];
+        foreach ((array)$texts as $text) {
+            if (!is_string($text)) continue;
+            $text = trim(preg_replace('/\s+/', ' ', $text));
+            if ($text !== '') $kept[] = mb_substr($text, 0, WELCOME_MAX_CHARS);
+        }
+        if ($kept) $clean[(string)$tier] = $kept;
     }
     if (!$clean) return;
+    $json = json_encode(['v' => 2, 'tiers' => $clean], JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
     db()->prepare(
         'INSERT INTO welcome_queue (user_id, messages, generated_at) VALUES (?, ?, ?)
          ON CONFLICT(user_id) DO UPDATE SET messages = excluded.messages, generated_at = excluded.generated_at'
-    )->execute([$userId, enc(json_encode($clean, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES)), time()]);
+    )->execute([$userId, enc($json), time()]);
 }
 
 function welcome_queue_read(int $userId, bool $drain = true): array {
@@ -99,9 +104,15 @@ function welcome_queue_read(int $userId, bool $drain = true): array {
         $raw = $stmt->fetchColumn();
         if ($raw === false) return [];
         if ($drain) db()->prepare('DELETE FROM welcome_queue WHERE user_id = ?')->execute([$userId]);
-        $messages = json_decode((string)dec((string)$raw), true);
-        if (!is_array($messages)) return [];
-        return array_values(array_filter($messages, fn($m) => is_string($m) && trim($m) !== ''));
+        $decoded = json_decode((string)dec((string)$raw), true);
+        if (!is_array($decoded)) return [];
+        $tiers = ($decoded['v'] ?? null) === 2 ? (array)($decoded['tiers'] ?? []) : ['missed' => $decoded];
+        $out = [];
+        foreach ($tiers as $tier => $texts) {
+            $kept = array_values(array_filter((array)$texts, fn($m) => is_string($m) && trim($m) !== ''));
+            if ($kept) $out[(string)$tier] = $kept;
+        }
+        return $out;
     } catch (Throwable $e) {
         log_event(['msg' => 'welcome_queue_read_error', 'user_id' => $userId, 'err' => $e->getMessage()]);
         return [];

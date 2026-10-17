@@ -86,7 +86,7 @@ $Runtime  = Join-Path $PSScriptRoot 'runtime'
 $LogDir   = Join-Path $Runtime 'logs'
 $PidFile  = Join-Path $Runtime 'pids.json'
 $StateDir = Join-Path $Runtime 'state'
-$Services = 'caddy', 'php', 'memory', 'tts', 'ollama', 'llamacpp'
+$Services = 'caddy', 'php', 'memory', 'prewarm', 'tts', 'ollama', 'llamacpp'
 
 # read KEY=VALUE pairs in as env vars, but ONLY when they aren't
 # set already, so you can still override one for a single run.
@@ -434,7 +434,6 @@ if (-not (Test-Http "$OllamaUrl/api/tags")) {
     if ($p) { $newPids['ollama'] = $p.Id }
 }
 
-$chatModel = ''
 if ($env:OLLAMA_MODELS_TO_PULL) {
     foreach ($raw in $env:OLLAMA_MODELS_TO_PULL -split ',') {
         $m = $raw.Trim()
@@ -449,22 +448,9 @@ if ($env:OLLAMA_MODELS_TO_PULL) {
             & ollama pull $m
         }
         if ($LASTEXITCODE -ne 0) { Warn_ "pull failed: $m (continuing)" }
-        if (-not $chatModel) { $chatModel = $m }
     }
 }
 
-# pre-warm. an empty-prompt generate makes ollama load the chat
-# model NOW, so the first real message doesn't eat the cold-load
-# cost. fire and forget, the short timeout aborts OUR wait, not
-# the server-side load.
-if ($chatModel -and $Provider -eq 'ollama') {
-    Step "pre-warm $chatModel"
-    Note 'loading model in the background'
-    try {
-        Invoke-RestMethod -Method Post -Uri "$OllamaUrl/api/generate" -ContentType 'application/json' `
-            -Body (@{ model = $chatModel; prompt = ''; stream = $false } | ConvertTo-Json) -TimeoutSec 5 | Out-Null
-    } catch {}
-}
 }
 
 # the same preset docker/llamacpp-entrypoint.sh writes, see there
@@ -651,6 +637,14 @@ if ($LASTEXITCODE -ne 0) { throw 'database migration failed' }
 $oldMemory = Get-TrackedProcess $oldPids 'memory'
 if ($oldMemory) { Stop-Process -Id $oldMemory.Id -Force -ErrorAction SilentlyContinue }
 Start-Tracked 'memory' $phpExe @((Join-Path $PSScriptRoot 'webapp\api\consolidation-worker.php')) | Out-Null
+# pre-warm. php does it because only php knows the num_ctx chat
+# sends, a warm at any other one gets thrown out and reloaded on
+# the first message. it waits out the pull too. logs\prewarm.log
+if ($Provider -eq 'ollama') {
+    Step 'pre-warm'
+    Note 'loading her in the background'
+    Start-Tracked 'prewarm' $phpExe @((Join-Path $PSScriptRoot 'webapp\api\prewarm.php')) | Out-Null
+}
 # PHP honors this on unix ONLY. on windows the built-in server
 # stays single-worker, so requests made while a chat reply is
 # streaming (TTS, say) just queue until it finishes. fine for a

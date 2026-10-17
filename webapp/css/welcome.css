@@ -1,131 +1,347 @@
-/* blur the chrome ITSELF, not a backdrop-filter overlay. the
-   Live2D canvas sits between the chrome and that overlay, so a
-   backdrop blur would blur Jun along with the background. */
+/* welcome back: the landing outside his door, his hand, his
+   phone. lock screen first, then her thread. app/welcome.js
+   builds it. the room
+   and both hand layers are scene/*.svg INLINED, so --scene-tint
+   and the sky properties skybox.js puts on :root reach them. */
 
-body.welcome-scene .app-header,
-body.welcome-scene .conv-sidebar,
-body.welcome-scene .chat-panel {
-  filter: blur(7px) saturate(.55) brightness(.7);
-  opacity: .5;
-  transition: filter .5s ease, opacity .5s ease;
-  pointer-events: none;
-}
-.app-header,
-.conv-sidebar,
-.chat-panel { transition: filter .45s ease, opacity .45s ease; }
-
-.welcome-scene-fx {
+.welcome-phone-scene {
+  /* --pw is the phone's width, everything else is cut from it.
+     40dvh keeps the 2.05:1 phone inside a short landscape window */
+  --pw: min(74vw, 330px, 40dvh);
+  --px: 50%;
   position: fixed;
   inset: 0;
-  /* above the stage at 40, below the dialogue box at 55. */
-  z-index: 45;
+  /* over the face bubble (55) and the confirm dialogs (300),
+     under the boot overlay (9999) it starts behind */
+  z-index: 400;
+  overflow: hidden;
+  background: var(--bg);
+  color: var(--fg);
+  opacity: 0;
+  transition: opacity .4s ease;
+}
+.welcome-phone-scene.is-open { opacity: 1; }
+.welcome-phone-scene.is-closing { opacity: 0; transition: opacity .45s ease .3s; }
+.welcome-phone-scene:focus { outline: none; }
+/* wide screens park the phone over the stairs on the left. the
+   door sits at ~61% across, put the phone there and you never see
+   the door you're about to walk through */
+@media (min-width: 900px) {
+  .welcome-phone-scene { --px: 34%; }
+}
+
+.wp-room,
+.wp-room > svg,
+.wp-hand,
+.wp-hand > svg {
+  position: absolute;
+  inset: 0;
+  display: block;
+  width: 100%;
+  height: 100%;
+}
+.wp-hand { pointer-events: none; }
+
+.welcome-phone-scene[data-tier="panicked"] .lamp-glow,
+.welcome-phone-scene[data-tier="panicked"] .bulb {
+  animation: wpFlicker 3.4s steps(1, end) infinite;
+}
+@keyframes wpFlicker {
+  0%, 100% { opacity: 1; }
+  38% { opacity: .3; }
+  40% { opacity: 1; }
+  44% { opacity: .15; }
+  46% { opacity: 1; }
+  81% { opacity: .55; }
+  82% { opacity: 1; }
+}
+
+/* the rig is the 520x1000 box both hand svgs are drawn in, and
+   the phone sits at exactly x 100-400, y 100-715 of it. so the
+   rig is pw * 520/300 wide, the phone's centre is .8333pw from
+   its left edge, and .95pw of rig hangs under the phone. that
+   part goes off the bottom, 3dvh of air is left under the chin */
+.wp-rig {
+  position: absolute;
+  left: calc(var(--px) - var(--pw) * .8333);
+  bottom: calc(3dvh - var(--pw) * .95);
+  width: calc(var(--pw) * 520 / 300);
+  aspect-ratio: 520 / 1000;
+  transform: translateY(110%);
+  transition: transform .6s cubic-bezier(.2, .7, .2, 1) .15s;
+}
+.is-open .wp-rig { transform: none; }
+.is-closing .wp-rig {
+  transform: translateY(110%);
+  transition: transform .45s cubic-bezier(.5, 0, .8, .4);
+}
+
+.wp-phone {
+  position: absolute;
+  left: 19.231%;
+  top: 10%;
+  width: 57.692%;
+  height: 61.5%;
+  display: flex;
+  flex-direction: column;
+  padding: calc(var(--pw) * .13) calc(var(--pw) * .035) 0;
+  border-radius: calc(var(--pw) * .13);
+  background: color-mix(in srgb, var(--bg) 45%, black);
+  box-shadow: inset 0 0 0 1px var(--border-2), 0 20px 50px rgb(0 0 0 / .55);
+  font-size: max(12px, calc(var(--pw) * .046));
+  line-height: 1.35;
+}
+.wp-phone::before {
+  content: "";
+  position: absolute;
+  top: calc(var(--pw) * .06);
+  left: 50%;
+  width: calc(var(--pw) * .2);
+  height: calc(var(--pw) * .018);
+  translate: -50% 0;
+  border-radius: var(--radius-pill);
+  background: var(--bg-4);
+}
+
+.wp-screen {
+  position: relative;
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  border-radius: 3px;
+  background: var(--bg);
+}
+.wp-app {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  transition: opacity .38s ease, transform .38s cubic-bezier(.2, .7, .2, 1);
+}
+.is-locked .wp-app { opacity: 0; transform: scale(.96); }
+
+/* the lock screen sits over the whole screen, status bar too, and
+   slides up and away when the notification gets tapped */
+.wp-lock {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 2.4em .7em .8em;
+  background: var(--bg);
+  transition: opacity .38s ease, transform .38s cubic-bezier(.5, 0, .7, .4);
+}
+.wp-screen:not(.is-locked) .wp-lock {
+  opacity: 0;
+  transform: translateY(-14%);
   pointer-events: none;
-  opacity: 0;
-  transition: opacity .55s ease;
 }
-body.welcome-scene .welcome-scene-fx { opacity: 1; }
-.welcome-scene-fx[hidden] { display: none; }
-
-/* app/welcome.js sets --scene-tint per tier (TIER_TINT) and
-   drops it for the rest, which fall back to --accent, painted
-   off the relationship by app/mood.js. so this file doesn't
-   need to know a thing about the tiers. */
-.welcome-scene-fx::before {
-  content: "";
-  position: absolute;
-  inset: 0;
-  background:
-    radial-gradient(120% 90% at 50% 45%, transparent 38%,
-      color-mix(in srgb, var(--bg) 72%, transparent) 78%,
-      color-mix(in srgb, #000 82%, transparent) 100%),
-    radial-gradient(60% 45% at 50% 42%,
-      color-mix(in srgb, var(--scene-tint, var(--accent)) 22%, transparent) 0%,
-      transparent 70%);
+.wp-lock-time {
+  font-size: 3.4em;
+  font-weight: 300;
+  line-height: 1;
+  font-variant-numeric: tabular-nums;
 }
-
-.welcome-scene-fx::after {
-  content: "";
-  position: absolute;
-  inset: 0;
-  background:
-    linear-gradient(to bottom, #000 0 var(--bar), transparent var(--bar)),
-    linear-gradient(to top, #000 0 var(--bar), transparent var(--bar));
-  --bar: 0px;
-  transition: --bar .6s ease;
+.wp-lock-date {
+  margin-top: .35em;
+  font-size: .82em;
+  color: var(--muted);
 }
-body.welcome-scene .welcome-scene-fx::after { --bar: 7vh; }
-
-@property --bar {
-  syntax: "<length>";
-  inherits: false;
-  initial-value: 0px;
+.wp-notes {
+  align-self: stretch;
+  display: flex;
+  flex-direction: column;
+  gap: .4em;
+  margin-top: 2em;
 }
-
-.welcome-scene-sweep {
-  position: absolute;
-  left: 0;
-  right: 0;
-  height: 2px;
-  top: 0;
-  background: linear-gradient(90deg, transparent,
-    color-mix(in srgb, var(--scene-tint, var(--accent)) 85%, transparent), transparent);
-  opacity: 0;
+.wp-notes .wp-note {
+  display: flex;
+  align-items: flex-start;
+  gap: .55em;
+  width: 100%;
+  padding: .55em .65em;
+  border: 0;
+  border-radius: .9em;
+  background: var(--bg-4);
+  color: var(--fg);
+  font: inherit;
+  text-align: left;
 }
-body.welcome-scene .welcome-scene-sweep { animation: welcomeSweep 1.15s ease-out .15s both; }
-
-@keyframes welcomeSweep {
-  0%   { opacity: 0; transform: translateY(0); }
-  15%  { opacity: .9; }
-  100% { opacity: 0; transform: translateY(100vh); }
+.wp-notes .wp-note:hover { filter: none; background: var(--bg-hover); }
+.wp-notes .wp-note.is-pressed { background: var(--bg-hover); transform: scale(.97); }
+.wp-note .wp-avatar { flex: none; width: 2.2em; height: 2.2em; }
+.wp-note-body {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
 }
-
-/* keep the dialogue readable over the vignette. */
-body.welcome-scene .face-bubble {
-  filter: drop-shadow(0 10px 28px rgb(0 0 0 / .75));
+.wp-note-top {
+  display: flex;
+  justify-content: space-between;
+  gap: .5em;
 }
-body.welcome-scene .fb-name {
-  border-left-color: color-mix(in srgb, var(--scene-tint, var(--accent)) 80%, #ec0054);
+.wp-note-top time {
+  font-size: .8em;
+  color: var(--dim);
+  font-variant-numeric: tabular-nums;
+}
+.wp-note-line { font-size: .9em; }
+.wp-note-preview {
+  font-size: .9em;
+  color: var(--muted);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
-/* welcome.js replays .intro for every line. without that only
-   the first box opens and the rest just swap their text. */
-body.welcome-scene .face-bubble.intro .fb-name {
-  animation: welcomeNameIn .26s cubic-bezier(.16, 1.1, .3, 1) both;
+.wp-chin {
+  flex: 0 0 calc(var(--pw) * .2);
+  display: grid;
+  place-items: center;
 }
-body.welcome-scene .face-bubble.intro .fb-text {
-  transform-origin: top;
-  animation: welcomeBoxOpen .34s cubic-bezier(.16, 1.25, .3, 1) .16s both;
+.wp-chin .wp-home {
+  width: calc(var(--pw) * .14);
+  height: calc(var(--pw) * .14);
+  padding: 0;
+  border: 2px solid var(--border-2);
+  border-radius: 50%;
+  background: transparent;
 }
-body.welcome-scene .face-bubble.intro .fb-text > * {
-  animation: welcomeTextIn .3s ease .34s both;
+.wp-chin .wp-home:hover { border-color: var(--muted); filter: none; }
+
+.wp-status {
+  padding: .3em 0 .15em;
+  text-align: center;
+  font-size: .75em;
+  font-weight: 600;
+  color: var(--muted);
+  font-variant-numeric: tabular-nums;
 }
 
-@keyframes welcomeNameIn {
-  from { opacity: 0; transform: translateX(-14px); clip-path: inset(0 100% 0 0); }
-  to   { opacity: 1; transform: none; clip-path: inset(0 0 0 0); }
+.wp-head {
+  display: flex;
+  align-items: center;
+  gap: .5em;
+  padding: .3em .7em .5em .5em;
+  border-bottom: 1px solid var(--border);
+  background: var(--bg-elev);
 }
-/* 1.07 overshoots so the panel SNAPS open instead of easing. */
-@keyframes welcomeBoxOpen {
-  0%   { transform: scaleY(0);    opacity: .35; }
-  70%  { transform: scaleY(1.07); opacity: 1; }
-  100% { transform: scaleY(1);    opacity: 1; }
+.wp-back {
+  display: inline-flex;
+  align-items: center;
+  gap: .15em;
+  min-width: 2.4em;
+  color: var(--accent);
+  font-variant-numeric: tabular-nums;
 }
-@keyframes welcomeTextIn {
-  from { opacity: 0; transform: translateY(4px); }
-  to   { opacity: 1; transform: none; }
+.wp-back svg { width: .6em; height: 1em; }
+.wp-avatar {
+  width: 2em;
+  height: 2em;
+  border-radius: 50%;
+  object-fit: cover;
 }
+.wp-name { font-weight: 600; }
+
+.wp-thread {
+  position: relative;
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  margin: 0;
+  padding: .6em .7em .9em;
+  list-style: none;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+.wp-thread:focus-visible { outline-offset: -2px; }
+.wp-thread > li { margin-top: .45em; }
+.wp-thread > li:first-child { margin-top: 0; }
+
+.wp-msg {
+  max-width: 80%;
+  padding: .42em .75em;
+  border-radius: 1.1em;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+.wp-her { align-self: flex-start; background: var(--bg-4); }
+.wp-his {
+  align-self: flex-end;
+  background: color-mix(in srgb, var(--accent) 30%, var(--bg-4));
+}
+.wp-thread > .wp-cont { margin-top: 3px; }
+.wp-her.wp-cont { border-top-left-radius: .35em; }
+.wp-his.wp-cont { border-top-right-radius: .35em; }
+.wp-thread > .wp-msg[data-tier="panicked"] { padding-block: .28em; }
+.wp-thread > .wp-cont[data-tier="panicked"] { margin-top: 2px; }
+
+.wp-thread > .wp-divider {
+  align-self: center;
+  margin-top: 1em;
+  font-size: .72em;
+  color: var(--dim);
+}
+.wp-thread > .wp-divider:first-child { margin-top: 0; }
+.wp-thread > .wp-unread-mark {
+  align-self: stretch;
+  padding-top: .35em;
+  border-top: 1px solid color-mix(in srgb, var(--accent) 40%, transparent);
+  text-align: center;
+  color: var(--accent);
+}
+
+.wp-call {
+  align-self: center;
+  font-size: .78em;
+  color: var(--dim);
+}
+.wp-call span { color: var(--danger); font-weight: 600; }
+
+/* the thumb from hand-front.svg comes in over the right edge
+   at about this height, the extra right padding keeps the send
+   button out from under it */
+.wp-composer {
+  display: flex;
+  align-items: center;
+  gap: .4em;
+  padding: .45em 1.5em .5em .6em;
+  border-top: 1px solid var(--border);
+  background: var(--bg-elev);
+}
+.wp-composer .wp-input {
+  flex: 1;
+  min-width: 0;
+  padding: .35em .8em;
+  border-color: var(--border-2);
+  border-radius: var(--radius-pill);
+  /* under 16px and iOS zooms the whole page on focus */
+  font-size: max(16px, 1em);
+}
+.wp-composer .wp-send {
+  flex: none;
+  display: grid;
+  place-items: center;
+  width: 2em;
+  height: 2em;
+  padding: 0;
+  color: var(--bg);
+}
+.wp-send svg { width: 1em; height: 1em; }
 
 @media (prefers-reduced-motion: reduce) {
-  body.welcome-scene .face-bubble.intro .fb-name,
-  body.welcome-scene .face-bubble.intro .fb-text,
-  body.welcome-scene .face-bubble.intro .fb-text > * { animation: none; }
-}
-
-@media (prefers-reduced-motion: reduce) {
-  .welcome-scene-fx,
-  body.welcome-scene .app-header,
-  body.welcome-scene .conv-sidebar,
-  body.welcome-scene .chat-panel { transition: none; }
-  body.welcome-scene .welcome-scene-fx::after { --bar: 0px; transition: none; }
-  body.welcome-scene .welcome-scene-sweep { animation: none; }
+  .welcome-phone-scene,
+  .welcome-phone-scene.is-closing { transition: opacity .2s ease; }
+  .wp-rig,
+  .is-open .wp-rig,
+  .is-closing .wp-rig { transform: none; transition: none; }
+  .wp-app,
+  .wp-lock { transition: none; }
+  .welcome-phone-scene[data-tier="panicked"] .lamp-glow,
+  .welcome-phone-scene[data-tier="panicked"] .bulb { animation: none; }
 }

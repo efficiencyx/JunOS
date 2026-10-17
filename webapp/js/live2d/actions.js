@@ -1,5 +1,5 @@
-import * as Live2D from './live2d.js?v=77';
-import * as Outfit from '../outfit/outfit.js?v=77';
+import * as Live2D from './live2d.js?v=81';
+import * as Outfit from '../outfit/outfit.js?v=80';
 
 // Jun still fires off old [ACTION:...] tags sometimes,
 // so both forms stay. forever probably.
@@ -34,6 +34,7 @@ const POS_KEYS = {
   speak:       ['duration'],
   lean:        ['dir', 'amount'],
   breath:      ['style'],
+  tail_wiggle: ['speed'],
   heavy_breath:['style'],
   ear:         ['side', 'state'],
   spread_legs: ['intensity'],
@@ -46,6 +47,21 @@ const POS_KEYS = {
   mood:        ['level'],
 };
 
+// how long a tag keeps what it set before idle eases it back.
+// tags used to stick until something else overwrote them, so one
+// [A:look|away] early in a reply had her staring at the wall for
+// the rest of the chat. face stuff lasts about a sentence, glances
+// and gestures less.
+const DEFAULT_HOLD_MS = 6000;
+const HOLD_MS = {
+  look: 2500, look_at: 2000, tilt_head: 3500, lean: 3500,
+  arm_gesture: 2500, close_eyes: 2500, open_eyes: 1500,
+  shocked: 2000, pupil_wiggle: 2000, heart_eyes: 3500,
+  ear: 3000, ear_wiggle: 1500, tail_wiggle: 4000, breath: 8000,
+};
+// clothes and hands stay where they're put
+const PERSISTENT = new Set(['outfit', 'skirt_up', 'panties_aside', 'handhold', 'mood']);
+
 const DEFAULTS = {
   look_at:   { target: 'user' },
   tilt_head: { amount: '0.3' },
@@ -54,6 +70,7 @@ const DEFAULTS = {
   ear:       { side: 'both' },
   handhold:  { side: 'both', enable: 'true' },
   breath:    { style: 'calm' },
+  tail_wiggle: { speed: 'normal' },
   moan:      { type: 'soft' },
 };
 
@@ -213,7 +230,11 @@ function scaleFactor(node, kwargs) {
   return f;
 }
 
-function applyNode(node, kwargs, depth) {
+function put(param, value, holdMs) {
+  if (Live2D.setTarget(param, value) && holdMs) Live2D.hold(param, holdMs);
+}
+
+function applyNode(node, kwargs, depth, holdMs) {
   if (depth > 4) return;
   if (!node || typeof node !== 'object') return;
 
@@ -222,7 +243,7 @@ function applyNode(node, kwargs, depth) {
   if (Array.isArray(node._compose)) {
     for (const path of node._compose) {
       const sub = lookupPath(path);
-      if (sub) applyNode(sub, kwargs, depth + 1);
+      if (sub) applyNode(sub, kwargs, depth + 1, holdMs);
       else log('warn', `compose path mancante: ${path}`);
     }
   }
@@ -231,32 +252,28 @@ function applyNode(node, kwargs, depth) {
   // is a no-op right now, without param read-back there's nothing
   // to add a delta to, so relative and absolute do the exact same
   // thing here.
-  if (node._param) {
-    Live2D.setTarget(node._param, scale);
-  }
+  if (node._param) put(node._param, scale, holdMs);
 
   for (const [k, v] of Object.entries(node)) {
     if (!k.startsWith('Param')) continue;
     if (typeof v !== 'number') continue;
-    Live2D.setTarget(k, v * scale);
+    put(k, v * scale, holdMs);
   }
 
   if (node._loop_param) {
     const amp = (node._amplitude !== undefined ? node._amplitude : 0.5) * (scale || 1);
     const per = node._period_ms || 1500;
-    Live2D.startLoop(node._loop_param, amp, per);
+    if (Live2D.startLoop(node._loop_param, amp, per) && holdMs) Live2D.hold(node._loop_param, holdMs);
   }
 
-  if (Array.isArray(node._sequence)) {
-    const steps = sequenceToSteps(node._sequence, scale);
-    Live2D.scheduleSequence(steps);
-  }
+  const play = holdMs ? Live2D.playSequence : Live2D.scheduleSequence;
+  if (Array.isArray(node._sequence)) play(sequenceToSteps(node._sequence, scale));
 
   if (Array.isArray(node._loop)) {
     const repeats = node._repeats || 3;
     const steps = [];
     for (let r = 0; r < repeats; r++) steps.push(...sequenceToSteps(node._loop, scale));
-    Live2D.scheduleSequence(steps);
+    play(steps);
   }
 }
 
@@ -282,12 +299,17 @@ export function applyAction({ name, kwargs }) {
     Outfit.wearLook(kwargs.name);
     return;
   }
+  if (name === 'idle') {
+    Live2D.releaseAll();
+    log('ok', '▶ idle');
+    return;
+  }
   const node = resolveAction(name, kwargs);
   if (!node) {
     if (name === 'outfit') Outfit.syncFromAction(name, kwargs, false);
     return;
   }
-  applyNode(node, kwargs, 0);
+  applyNode(node, kwargs, 0, PERSISTENT.has(name) ? 0 : (HOLD_MS[name] ?? DEFAULT_HOLD_MS));
   // the map already knew this one, so it is vanilla and Outfit must
   // not go looking for a mod called "skirt up"
   Outfit.syncFromAction(name, kwargs, true);

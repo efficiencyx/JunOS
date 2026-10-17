@@ -3,20 +3,20 @@
 // builds a second copy of the module graph, and the two copies
 // don't share state.
 
-import { resetIdle, renderIfDirty, setFidgetsEnabled, setMood, setMouthOverride, startIdle, stopIdle, tick } from './anim.js?v=76';
-import { bakeThumb } from './bake.js?v=1';
-import { cameraStates, captureCameraState, currentCameraMode, fitModel, loadPos, measureStage, rendererResolution, setCameraPreset as setRigCameraPreset, watchStageSize, writeCameraStates } from './camera.js?v=75';
-import { drawableAt, faceAnchor, findDrawables, hitTest, isOverModel } from './geometry.js?v=75';
-import { installStageInput } from './input.js?v=3';
-import { mountPlaceholder, setPlaceholderPreset } from './placeholder.js?v=2';
-import { cancelPending, debugParam, knows, scheduleSequence, setNow, setOnMissingParam, setTarget, startLoop, stopAllLoops, stopLoop } from './params.js?v=2';
-import { installColorShaderPatch, patchRenderer } from './renderer.js?v=1';
-import { S, app, currentValues, model, paramDefault, paramIndex, paramMax, paramMin, publicTint, raw, setApp, setModel, setParamRanges, setRaw } from './state.js?v=11';
-import { drawableThumb, getDrawableTint, installVariantCompositor, listDrawables, opacityByPattern, screenByPattern, setDrawableOpacity, setDrawableOrderBelow, setDrawableScreen, setDrawableTexture, setDrawableTextures, setDrawableTint, texturesSettled, tintByPattern } from './textures.js?v=75';
+import { playSequence, releaseAll, resetIdle, renderIfDirty, setFidgetsEnabled, setMood, setMouthOverride, startIdle, stopIdle, tick } from './anim.js?v=80';
+import { bakeThumb } from './bake.js?v=2';
+import { cameraStates, captureCameraState, currentCameraMode, fitModel, loadPos, measureStage, rendererResolution, setCameraPreset as setRigCameraPreset, watchStageSize, writeCameraStates } from './camera.js?v=76';
+import { drawableAt, faceAnchor, findDrawables, hitTest, isOverModel } from './geometry.js?v=76';
+import { installStageInput } from './input.js?v=4';
+import { mountPlaceholder, setPlaceholderPreset } from './placeholder.js?v=3';
+import { cancelPending, debugParam, hold, knows, scheduleSequence, setNow, setOnMissingParam, setTarget, startLoop, stopAllLoops, stopLoop } from './params.js?v=4';
+import { installColorShaderPatch, patchRenderer } from './renderer.js?v=2';
+import { S, app, currentValues, model, paramDefault, paramIndex, paramMax, paramMin, publicTint, raw, setApp, setModel, setParamRanges, setRaw } from './state.js?v=75';
+import { drawableThumb, getDrawableTint, installVariantCompositor, listDrawables, opacityByPattern, screenByPattern, setDrawableOpacity, setDrawableOrderBelow, setDrawableScreen, setDrawableTexture, setDrawableTextures, setDrawableTint, texturesSettled, tintByPattern } from './textures.js?v=76';
 
 export {
   bakeThumb, cancelPending, debugParam, drawableAt, drawableThumb, faceAnchor, findDrawables, fitModel,
-  getDrawableTint, hitTest, isOverModel, knows, listDrawables, opacityByPattern, resetIdle, scheduleSequence,
+  getDrawableTint, hitTest, hold, isOverModel, knows, listDrawables, opacityByPattern, playSequence, releaseAll, resetIdle, scheduleSequence,
   screenByPattern, setDrawableOpacity, setDrawableOrderBelow, setDrawableScreen,
   setDrawableTexture, setDrawableTextures, setDrawableTint, setFidgetsEnabled, setMood, setMouthOverride,
   setNow, setOnMissingParam, setTarget, startIdle, startLoop, stopAllLoops, stopIdle, stopLoop,

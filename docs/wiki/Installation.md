@@ -437,7 +437,7 @@ The channel is saved in `.env` as `JUN_CHANNEL`. To switch, edit that line, or s
 | `ollama is running on:` says CPU, you have a card | Docker can't see the card | NVIDIA: toolkit, and if `nvidia-smi` works, [regenerate the CDI file](#on-linux). AMD: `HSA_OVERRIDE_GFX_VERSION`. Then `./JunOS/start.sh restart` |
 | `ollama ps` shows `45% GPU` or similar | The model is too big for the card | Pick a smaller row from the model table or cope with slow generation. |
 | She's just a purple outline | Assets weren't extracted, that's the placeholder | ["Installing" her body later](#installing-her-body-later) |
-| The page loads, the first reply takes forever | Model still downloading or warming up | `./JunOS/start.sh logs ollama` on Linux, `JunOS\runtime\logs\ollama.err.log` on Windows. Wait for it to finish once |
+| The page loads, the first reply takes forever | Model still downloading or warming up | `./JunOS/start.sh logs ollama` on Linux, `JunOS\runtime\logs\ollama.err.log` on Windows. Wait for it to finish once. `docker logs omega-php \| grep prewarm` (Windows: `JunOS\runtime\logs\prewarm.log`) says whether she got loaded ahead of time, a `failed:` line means something else had the graphics card |
 | **signup** asks for a key | You're not the first account on this install, or she listens on your network (`BIND_ADDR`) and then even the first account needs it | The key is in `.env` as `OMEGA_REGISTRATION_KEY`. Empty the value to open signup to anyone on your network |
 | Port 80 or 443 already in use (Linux) | Another web server on the box | Stop it. Port 80 only redirects to 443, so moving just one of them breaks the redirect |
 

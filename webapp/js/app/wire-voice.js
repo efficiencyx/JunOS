@@ -1,13 +1,13 @@
 import { renderVoiceDraft, stopActiveStream } from './session.js?v=1';
-import { sendAudioFromVoice, sendFromVoice } from './chat.js?v=14';
+import { sendAudioFromVoice, sendFromVoice } from './chat.js?v=17';
 import { voiceBargeChk, voiceChk, voiceHearAllChk, voiceSilenceInput, voiceState } from './dom.js?v=11';
-import { hideFaceBubble } from './face-bubble.js?v=77';
+import { hideFaceBubble } from './face-bubble.js?v=80';
 import { logAction } from './logging.js?v=11';
-import { syncVoiceDeps, updateVoiceSilenceLabel } from './settings.js?v=86';
+import { syncVoiceDeps, updateVoiceSilenceLabel } from './settings.js?v=89';
 import * as Prefs from '../core/prefs.js?v=1';
 import * as ui from '../core/ui.js?v=1';
-import * as Voice from '../voice/voice.js?v=78';
-import * as VoiceMode from '../voice/voicemode.js?v=77';
+import * as Voice from '../voice/voice.js?v=81';
+import * as VoiceMode from '../voice/voicemode.js?v=80';
 
 const VOICE_STATE_LABELS = {
   idle: 'off',

@@ -319,7 +319,8 @@ fi
 # api/lib/providers/). so a model that loads while the karaoke
 # sidecar's CUDA torch is still initialising stays mostly on the
 # CPU. that's ~1000x slower on prefill, the pass that reads the
-# prompt in. karaoke waits until the model server answers.
+# prompt in. karaoke waits until the model server answers, then
+# until she's loaded (wait_for_ollama_model).
 wait_for_ollama() {
   local i status
   for i in $(seq 1 90); do
@@ -544,10 +545,19 @@ staged_up() {
   [ "$#" -eq 0 ]
 }
 
+# /api/tags answers long before she's on the card, so that alone
+# lets karaoke's torch in mid-load. php-entrypoint.sh already
+# started the same warm, a second one just waits for that load
+wait_for_ollama_model() {
+  wait_for_ollama
+  docker exec omega-php php /var/www/omega/api/prewarm.php \
+    || echo "warning: she didn't load ahead of time; starting karaoke anyway" >&2
+}
+
 wait_for_model_server() {
   case ",${profiles}," in
     *,llamacpp,*) load_llamacpp; wait_for_llamacpp_model ;;
-    *) wait_for_ollama ;;
+    *) wait_for_ollama_model ;;
   esac
 }
 

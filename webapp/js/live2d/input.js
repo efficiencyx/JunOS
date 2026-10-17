@@ -1,6 +1,6 @@
-import { cameraPreset, fitModel, savePos } from './camera.js?v=75';
-import { isInteractiveTarget, isOverModel } from './geometry.js?v=75';
-import { S } from './state.js?v=11';
+import { cameraPreset, fitModel, savePos } from './camera.js?v=76';
+import { isInteractiveTarget, isOverModel } from './geometry.js?v=76';
+import { S } from './state.js?v=75';
 
 // scroll moves her up and down, shift+scroll zooms, dragging
 // moves her around. saved per camera mode by camera.js.

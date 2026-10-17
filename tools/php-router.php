@@ -136,7 +136,7 @@ foreach ($segments as $segment) {
 
 $route = strtolower($path);
 if ($route === '/system_prompt.txt' || str_starts_with($route, '/api/migrations/')
-    || $route === '/api/consolidation-worker.php') {
+    || $route === '/api/consolidation-worker.php' || $route === '/api/prewarm.php') {
     router_fail(404, 'not found');
 }
 

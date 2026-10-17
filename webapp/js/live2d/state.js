@@ -13,10 +13,6 @@ export const S = {
   userZoom: 1,
 };
 
-// tau, the smoothing time constant: how fast params approach
-// targets
-export const LERP_TAU_MS = 150;
-
 // the loaded model and everything read off it. init() in
 // live2d.js fills these in through the setters below, once,
 // every other module only reads them.
@@ -44,6 +40,12 @@ export function setPublicTint(value) { publicTint = value; }
 
 export const targetParams = new Map();
 export const currentValues = new Map();
+// per param, units per second. the smoothing is a spring, so it
+// needs to remember how fast each param was already going
+export const velocities = new Map();
+// param -> performance.now() deadline. a tag or a fidget owns the
+// param until then, after that idle takes it back
+export const holds = new Map();
 export const loops = new Map();
 export const pendingSequences = [];
 export const forcedPartOpacity = new Map();

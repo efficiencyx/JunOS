@@ -1,5 +1,5 @@
 {
-  "_comment": "Maps semantic actions -> Live2D parameters of the interaction_model. The frontend must lerp from the current value to the target over 'duration' ms. Parameter values are in the [-1,1] or [0,1] range per standard Cubism conventions. Nonexistent parameters are simply ignored.",
+  "_comment": "Maps semantic actions -> Live2D parameters of the interaction_model. Values are in the rig's own ranges, NOT the stock Cubism ones: ParamEyeOpen is -1 (shut) to 0 (open), ParamHeadX/Y/Z are -1..1 (HeadZ -1 is a ~25 degree roll), ParamBrowLRot/RRot are -30..30, ParamMouthOpen -1..2, ParamBlush 0..2. Anything outside gets clamped, which is how close_eyes used to open them. Tags are transient: actions.js holds what a tag set for a few seconds (HOLD_MS) and then idle eases it back. Nonexistent parameters are simply ignored.",
 
   "look_at": {
     "user": {
@@ -13,20 +13,20 @@
     "down":  { "ParamEyeballLY": -1, "ParamEyeballRY": -1, "ParamHeadY": -0.3 },
     "left":  { "ParamEyeballLX": -1, "ParamEyeballRX": -1, "ParamHeadX": -0.3 },
     "right": { "ParamEyeballLX":  1, "ParamEyeballRX":  1, "ParamHeadX":  0.3 },
-    "away":  { "ParamEyeballLX":  0.7, "ParamEyeballRX": 0.7, "ParamHeadX": 0.4, "ParamHeadZ": -10 }
+    "away":  { "ParamEyeballLX":  0.7, "ParamEyeballRX": 0.7, "ParamHeadX": 0.4, "ParamHeadZ": -0.3 }
   },
 
   "tilt_head": {
-    "left":  { "ParamHeadZ": -15, "_scale": ["amount"] },
-    "right": { "ParamHeadZ":  15, "_scale": ["amount"] }
+    "left":  { "ParamHeadZ": -1, "_scale": ["amount"] },
+    "right": { "ParamHeadZ":  1, "_scale": ["amount"] }
   },
   "nod":        { "_sequence": [ {"ParamHeadY": -0.4, "_t": 200}, {"ParamHeadY": 0.2, "_t": 200}, {"ParamHeadY": 0, "_t": 200} ] },
   "shake_head": { "_sequence": [ {"ParamHeadX": -0.4, "_t": 180}, {"ParamHeadX": 0.4, "_t": 180}, {"ParamHeadX": -0.3, "_t": 180}, {"ParamHeadX": 0, "_t": 180} ] },
 
-  "blink":      { "_sequence": [ {"ParamEyeOpen": 0, "_t": 80}, {"ParamEyeOpen": 1, "_t": 120} ] },
-  "close_eyes": { "ParamEyeOpen": 0 },
-  "open_eyes":  { "ParamEyeOpen": 1 },
-  "happy_eyes": { "ParamEyesHappy": 1, "ParamEyeOpen": 0.3 },
+  "blink":      { "_sequence": [ {"ParamEyeOpen": -1, "_t": 80}, {"ParamEyeOpen": 0, "_t": 120} ] },
+  "close_eyes": { "ParamEyeOpen": -1 },
+  "open_eyes":  { "ParamEyeOpen": 0 },
+  "happy_eyes": { "ParamEyesHappy": 1, "ParamEyeOpen": -0.4 },
   "shocked":    { "ParamEyeRShock": 1, "ParamEyeLShock": 1, "ParamIrisZoom": -1 },
   "heart_eyes": { "ParamHeart": 1, "ParamIrisZoom": 0.5 },
   "pupil_wiggle": { "ParamPupilWiggle": 1 },
@@ -34,9 +34,9 @@
   "brow": {
     "happy":     { "ParamBrowLEmote":  0.6, "ParamBrowREmote":  0.6, "ParamBrowLY":  0.3, "ParamBrowRY":  0.3 },
     "sad":       { "ParamBrowLEmote": -0.6, "ParamBrowREmote": -0.6, "ParamBrowLY": -0.3, "ParamBrowRY": -0.3 },
-    "angry":     { "ParamBrowLEmote": -1,   "ParamBrowREmote": -1,   "ParamBrowLRot": -0.5, "ParamBrowRRot": 0.5 },
+    "angry":     { "ParamBrowLEmote": -1,   "ParamBrowREmote": -1,   "ParamBrowLRot": -15, "ParamBrowRRot": 15 },
     "surprised": { "ParamBrowLY":  0.8, "ParamBrowRY":  0.8 },
-    "worried":   { "ParamBrowLEmote": -0.4, "ParamBrowREmote": -0.4, "ParamBrowLRot": 0.3, "ParamBrowRRot": -0.3 },
+    "worried":   { "ParamBrowLEmote": -0.4, "ParamBrowREmote": -0.4, "ParamBrowLRot": 9, "ParamBrowRRot": -9 },
     "neutral":   { "ParamBrowLEmote": 0, "ParamBrowREmote": 0, "ParamBrowLY": 0, "ParamBrowRY": 0, "ParamBrowLRot": 0, "ParamBrowRRot": 0 }
   },
 
@@ -57,15 +57,15 @@
 
   "emote": {
     "happy":       { "_compose": ["brow.happy", "mouth.smile", "happy_eyes"] },
-    "sad":         { "_compose": ["brow.sad", "mouth.frown"], "ParamEyeOpen": 0.5 },
+    "sad":         { "_compose": ["brow.sad", "mouth.frown"], "ParamEyeOpen": -0.3 },
     "angry":       { "_compose": ["brow.angry", "mouth.frown"], "ParamMouthOpen": 0.2 },
-    "surprised":   { "_compose": ["brow.surprised", "mouth.open"], "ParamEyeOpen": 1, "ParamIrisZoom": -0.3 },
+    "surprised":   { "_compose": ["brow.surprised", "mouth.open"], "ParamEyeOpen": 0, "ParamIrisZoom": -0.3 },
     "embarrassed": { "_compose": ["brow.worried"], "ParamBlush": 1, "ParamMouthForm": -0.3 },
-    "sleepy":      { "ParamEyeOpen": 0.2, "ParamMouthForm": -0.2, "ParamBrowLY": -0.2, "ParamBrowRY": -0.2 },
+    "sleepy":      { "ParamEyeOpen": -0.55, "ParamMouthForm": -0.2, "ParamBrowLY": -0.2, "ParamBrowRY": -0.2 },
     "excited":     { "_compose": ["brow.happy", "mouth.grin", "happy_eyes"], "ParamBlush": 0.4 },
-    "smug":        { "ParamMouthForm": 0.6, "ParamEyeOpen": 0.5, "ParamBrowLEmote": 0.3, "ParamBrowREmote": 0.3 },
-    "pout":        { "_compose": ["mouth.pout", "brow.angry"], "ParamHeadZ": -8 },
-    "crying":      { "_compose": ["brow.sad", "mouth.frown"], "ParamEyeOpen": 0.3, "ParamBlush": 0.3 },
+    "smug":        { "ParamMouthForm": 0.6, "ParamEyeOpen": -0.3, "ParamBrowLEmote": 0.3, "ParamBrowREmote": 0.3 },
+    "pout":        { "_compose": ["mouth.pout", "brow.angry"], "ParamHeadZ": -0.25 },
+    "crying":      { "_compose": ["brow.sad", "mouth.frown"], "ParamEyeOpen": -0.5, "ParamBlush": 0.3 },
     "laughing":    { "_compose": ["happy_eyes", "mouth.grin"], "_sequence": [{"ParamHeadY": -0.2,"_t":150},{"ParamHeadY":0.1,"_t":150},{"ParamHeadY":0,"_t":150}] }
   },
 
@@ -79,7 +79,7 @@
   "idle": {
     "ParamHeadX": 0, "ParamHeadY": 0, "ParamHeadZ": 0,
     "ParamBodyX": 0, "ParamBodyY": 0, "ParamBodyZ": 0,
-    "ParamEyeOpen": 1, "ParamMouthOpen": 0, "ParamMouthForm": 0,
+    "ParamEyeOpen": 0, "ParamMouthOpen": 0, "ParamMouthForm": 0,
     "ParamBrowLEmote": 0, "ParamBrowREmote": 0,
     "ParamBlush": 0, "ParamHeart": 0, "ParamEyesHappy": 0
   },
@@ -105,7 +105,7 @@
     "_sequence": [
       {"ParamArmLUp": 1, "ParamArmLGesture": 2, "_t": 280},
       {"ParamArmLUp": 0, "ParamArmLGesture": 1, "ParamArmLCuddleUp": 1, "_t": 240},
-      {"ParamArmLCuddleUp": 0, "ParamArmLCuddleDown": 1, "ParamHeadZ": 8, "_t": 170},
+      {"ParamArmLCuddleUp": 0, "ParamArmLCuddleDown": 1, "ParamHeadZ": 0.25, "_t": 170},
       {"ParamArmLCuddleDown": 0, "ParamHeadZ": 0, "_t": 140}
     ]
   },

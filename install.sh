@@ -1603,11 +1603,17 @@ if docker_run docker info >/dev/null 2>&1; then
     if docker_run docker ps --format '{{.Names}}' | grep -qx omega-ollama; then
         note "model pull (first run can take a while):"
         # `logs -f` never exits on its own. awk bails once the
-        # entrypoint reports the pull/pre-warm outcome, and SIGPIPE
-        # kills the follow.
+        # entrypoint reports the pull outcome, and SIGPIPE kills
+        # the follow.
         docker_run docker logs -f omega-ollama 2>&1 \
-            | awk '{ print "       " $0; fflush() } /pre-warm (done|failed)|pull failed/ { exit }' || true
+            | awk '{ print "       " $0; fflush() } /models ready|pull failed/ { exit }' || true
         ok "models ready"
+        note "loading her into memory:"
+        if docker_run docker exec omega-php php /var/www/omega/api/prewarm.php 2>&1 | sed 's/^/       /'; then
+            ok "she's awake"
+        else
+            warn_ "she'll load on your first message instead (a minute or two)"
+        fi
     fi
     # has to run here, not in configure(). every row it measures is
     # a real generation, so the models have to be pulled and the

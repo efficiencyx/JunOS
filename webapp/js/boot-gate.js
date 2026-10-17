@@ -6,7 +6,7 @@ document.documentElement.setAttribute('data-pre-auth', '1');
 
 // Done here and not with <link> tags so they don't block the parser. the
 // pre-app screens are covered by the inlined critical CSS until these land.
-for (const href of ['styles.css?v=61', 'css/trip-loader.css?v=1']) {
+for (const href of ['styles.css?v=63', 'css/trip-loader.css?v=1']) {
   const link = document.createElement('link');
   link.rel = 'stylesheet';
   link.href = href;

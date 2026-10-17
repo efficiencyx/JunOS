@@ -110,6 +110,7 @@ for ($round = 0; $round < 3; $round++) {
     $roundContent = '';
     $toolCalls = [];
     $retriedWithoutTools = false;
+    $rerolledEmpty = false;
 
     do {
         $retryRound = false;
@@ -168,6 +169,21 @@ for ($round = 0; $round < 3; $round++) {
                 $stats['eval_duration'] = $result['duration_ns'];
                 $stats['total_duration'] = $result['duration_ns'];
             }
+        }
+
+        // she still writes a trace with thinking off, and every so
+        // often she writes the WHOLE reply inside <|channel>thought
+        // and stops without ever closing it. the gemma4 parser files
+        // all of it as thinking, think:false throws thinking away, so
+        // the round comes back empty with done_reason stop. can't
+        // rescue it, leaving think out isn't the same prompt (adds
+        // <|think|>). nothing reached the browser yet, so roll again
+        if (!$retryRound && !$think && !$rerolledEmpty && !$sawError && !$toolCalls
+            && trim($roundContent) === '') {
+            log_event(['msg' => 'empty_round_reroll', 'model' => $model, 'round' => $round,
+                       'done_reason' => $result['done_reason']]);
+            $rerolledEmpty = true;
+            $retryRound = true;
         }
     } while ($retryRound);
 

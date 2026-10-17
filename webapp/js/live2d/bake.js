@@ -1,4 +1,4 @@
-import { app, currentValues, forcedDrawableOpacity, markDirty, model, paramIndex, raw, targetParams } from './state.js?v=11';
+import { app, currentValues, forcedDrawableOpacity, markDirty, model, paramIndex, raw, targetParams, velocities } from './state.js?v=75';
 
 // how tall the model is rendered for a bake, in pixels. the
 // model's bounds run several times taller than anything drawn
@@ -57,12 +57,13 @@ export function bakeThumb(keepIds, maxSize = 192) {
     const unscaled = model.height / (model.scale.y || 1);
     if (unscaled > 0) model.scale.set(BAKE_HEIGHT / unscaled);
     model.updateTransform();
-    // every item param eases toward its target over LERP_TAU_MS, and
+    // every item param springs toward its target over ~120ms, and
     // a bake is one frame. so jump the smoothing to the target first,
     // otherwise the garment is still fading up when the shot goes off
     // and most tiles come back empty.
     for (const [id, target] of targetParams) {
       currentValues.set(id, target);
+      velocities.set(id, 0);
       const idx = paramIndex.get(id);
       if (idx !== undefined) raw.parameters.values[idx] = target;
     }

@@ -167,7 +167,20 @@ PROMPT;
     }
 }
 
+// the welcome pass runs AFTER the lock is released, see
+// consolidation_write_welcome for why. and only on idle runs, a
+// manual run means he's sitting right there and the batch would
+// get binned by the came-back check anyway.
 function consolidation_run(int $userId, ?int $idleBefore = null): array {
+    $welcomeLines = null;
+    $result = consolidation_run_locked($userId, $idleBefore, $welcomeLines);
+    if (!empty($result['ok']) && $idleBefore !== null && $welcomeLines) {
+        consolidation_write_welcome($userId, $welcomeLines, $idleBefore);
+    }
+    return $result;
+}
+
+function consolidation_run_locked(int $userId, ?int $idleBefore, ?array &$welcomeLines): array {
     $lockPath = consolidation_lock_path($userId);
     $startedAt = time();
     $lockExpiry = $startedAt + 600;
@@ -185,6 +198,12 @@ function consolidation_run(int $userId, ?int $idleBefore = null): array {
             $activity = $db->prepare('SELECT last_activity, enabled FROM memory_consolidation WHERE user_id = ?');
             $activity->execute([$userId]);
             $state = $activity->fetch();
+            // close BOTH of these. an open cursor keeps sqlite's read
+            // snapshot alive, then one activity touch from another
+            // connection and the final upsert dies with 'database is
+            // locked', busy_timeout or not. whole pass lost, retry in
+            // 600 s.
+            $activity->closeCursor();
             if (!$state || !(int)$state['enabled'] || (int)$state['last_activity'] > $idleBefore) {
                 return ['skipped' => true];
             }
@@ -192,6 +211,7 @@ function consolidation_run(int $userId, ?int $idleBefore = null): array {
         $watermark = $db->prepare('SELECT upto_id FROM memory_consolidation WHERE user_id = ?');
         $watermark->execute([$userId]);
         $uptoId = (int)($watermark->fetchColumn() ?: 0);
+        $watermark->closeCursor();
 
         $stmt = $db->prepare(
             'SELECT m.id, m.role, m.content, c.title
@@ -222,8 +242,7 @@ function consolidation_run(int $userId, ?int $idleBefore = null): array {
         $noteCount = count(memory_list($userId));
         consolidation_lock_write($userId, $lockExpiry, $startedAt, 'journal');
         $journalResult = consolidation_write_journal($userId, $lines);
-        consolidation_lock_write($userId, $lockExpiry, $startedAt, 'welcome');
-        $welcomeResult = consolidation_write_welcome($userId, $lines);
+        $welcomeLines = $lines;
 
         $db->prepare(
             'INSERT INTO memory_consolidation (user_id, upto_id, last_run, last_status, last_note_count)
@@ -238,7 +257,6 @@ function consolidation_run(int $userId, ?int $idleBefore = null): array {
             'note_count' => $noteCount,
             'note_operations' => $noteResult['counts'],
             'journal_operations' => $journalResult['counts'],
-            'welcome_lines' => $welcomeResult['count'],
         ]);
         return ['ok' => true];
     } catch (Throwable $e) {
