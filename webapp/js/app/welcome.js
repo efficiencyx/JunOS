@@ -233,7 +233,7 @@ function buildScene(tier, milestones, locked) {
   const root = el('div', 'welcome-phone-scene');
   root.setAttribute('role', 'dialog');
   root.setAttribute('aria-modal', 'true');
-  root.setAttribute('aria-label', 'Messages from ' + bot);
+  root.setAttribute('aria-label', `Messages from ${bot}`);
   root.tabIndex = -1;
   root.dataset.tier = tier;
   if (TIER_TINT[tier]) root.style.setProperty('--scene-tint', TIER_TINT[tier]);
