@@ -141,7 +141,8 @@ jobs:
           # android won't install a lower versionCode over a higher
           # one. commit count only goes up as long as nobody rewrites
           # the history of the repo that pushes the tags.
-          export JUN_ANDROID_VERSION_CODE="$(git rev-list --count HEAD)"
+          JUN_ANDROID_VERSION_CODE="$(git rev-list --count HEAD)"
+          export JUN_ANDROID_VERSION_CODE
           name="${REF#v}"
           case "$name" in [0-9]*) ;; *) name="0.0.0-${name//\//-}" ;; esac
           export JUN_ANDROID_VERSION_NAME="$name"
@@ -152,7 +153,7 @@ jobs:
           out="$GITHUB_WORKSPACE/dist"
           mkdir -p "$out"
           if [ -n "${JUN_ANDROID_KEYSTORE:-}" ]; then
-            apksigner="$(ls -d "$ANDROID_HOME"/build-tools/* | sort -V | tail -1)/apksigner"
+            apksigner="$(printf '%s\n' "$ANDROID_HOME"/build-tools/* | sort -V | tail -1)/apksigner"
             "$apksigner" verify --print-certs app/build/outputs/apk/release/app-release.apk
             cp app/build/outputs/apk/release/app-release.apk "$out/JunOS-${REF//\//-}.apk"
           else
