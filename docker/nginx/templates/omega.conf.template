@@ -1,4 +1,4 @@
-# self-signed HTTPS, for TLS_MODE=off (the default). :80 only
+# HTTPS on the local CA's cert, for TLS_MODE=off (the default). :80 only
 # redirects to it.
 # Expanded by nginx envsubst at container boot.
 

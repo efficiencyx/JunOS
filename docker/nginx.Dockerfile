@@ -1,7 +1,7 @@
 FROM nginx:1.30.4-alpine
 
-# curl for the healthcheck. openssl makes the self signed
-# localhost cert
+# curl for the healthcheck. openssl makes the local CA and
+# her cert
 RUN apk add --no-cache curl openssl
 
 RUN rm -f /etc/nginx/conf.d/default.conf

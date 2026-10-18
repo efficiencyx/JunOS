@@ -664,6 +664,52 @@ foreach ($choice in $modelChoices) {
     $null = $ModelCombo.Items.Add($item)
 }
 
+# no nvidia-smi on the AMD side, so we ask Windows. and Windows
+# gets it wrong in two places.
+#
+# AdapterRAM (WMI) is 32 bit, every card past 4GB comes back as
+# 4095 MB. the real size is the registry's 64 bit
+# HardwareInformation.qwMemorySize under Control\Video\{guid}\000x.
+# finding the right key is the cursed part. AdapterString is
+# REG_BINARY on some drivers and a generic "AMD Radeon Graphics
+# Processor (0x7550)" on others, so matching it against the WMI
+# name missed a 9070 XT and the installer sized a 16GB card as 4GB.
+# match on the PCI vendor+device id instead (MatchingDeviceId vs
+# PNPDeviceID), DriverDesc as the backup.
+#
+# one lookup per card, so an iGPU that matches can't hide the dGPU
+# that didn't. a capped AdapterRAM only says "4GB or more", that's
+# not a size, it gets dropped. under 1GB is an APU carveout, not a
+# card (same rule as amd_vram_mb_list in install.sh).
+#
+# keep this byte for byte the same as the copy in install.ps1.
+function Get-AmdMemoryMb([object[]]$controllers) {
+    $entries = @(Get-ItemProperty -Path 'HKLM:\SYSTEM\CurrentControlSet\Control\Video\*\000*' -ErrorAction SilentlyContinue)
+    $capMb = 4095
+    return @($controllers | ForEach-Object {
+        $card = $_
+        $pci = if ([string]$card.PNPDeviceID -match '(?i)^PCI\\VEN_[0-9A-F]{4}&DEV_[0-9A-F]{4}') { $Matches[0] } else { '' }
+        $keys = @($entries | Where-Object {
+            ($pci -and ([string]$_.MatchingDeviceId) -like "$pci*") -or
+            ([string]$_.DriverDesc -eq [string]$card.Name)
+        })
+        $mb = @($keys | ForEach-Object {
+            $memory = $_.'HardwareInformation.qwMemorySize'
+            if ($memory -is [byte[]] -and $memory.Length -ge 8) {
+                [BitConverter]::ToUInt64($memory, 0)
+            } elseif ($null -ne $memory -and $memory -isnot [byte[]]) {
+                [uint64]$memory
+            }
+        } | Where-Object { $_ -gt 0 } | ForEach-Object { [int]($_ / 1MB) } |
+            Sort-Object -Descending | Select-Object -First 1)
+        if ($mb.Count -eq 0 -and $card.AdapterRAM -gt 0) {
+            $wmiMb = [int]([uint64]$card.AdapterRAM / 1MB)
+            if ($wmiMb -lt $capMb) { $mb = @($wmiMb) }
+        }
+        $mb
+    } | Where-Object { $_ -ge 1024 })
+}
+
 $script:gpuVendor = 'cpu'
 $script:gpuNames = @()
 $script:gpuMemory = @()
@@ -689,26 +735,7 @@ if ($script:gpuVendor -eq 'cpu') {
         if ($amdControllers.Count -gt 0) {
             $script:gpuVendor = 'amd'
             $script:gpuNames = @($amdControllers | ForEach-Object { $_.Name } | Sort-Object -Unique)
-
-            $registryMemory = @(Get-ItemProperty -Path 'HKLM:\SYSTEM\CurrentControlSet\Control\Video\*\0000' -ErrorAction SilentlyContinue |
-                Where-Object {
-                    $adapter = [string]$_.'HardwareInformation.AdapterString'
-                    $script:gpuNames -contains $adapter
-                } | ForEach-Object {
-                    $memory = $_.'HardwareInformation.qwMemorySize'
-                    if ($memory -is [byte[]] -and $memory.Length -ge 8) {
-                        [BitConverter]::ToUInt64($memory, 0)
-                    } elseif ($null -ne $memory) {
-                        [uint64]$memory
-                    }
-                } | Where-Object { $_ -gt 0 } | Sort-Object -Unique)
-
-            if ($registryMemory.Count -gt 0) {
-                $script:gpuMemory = @($registryMemory | ForEach-Object { [int]($_ / 1MB) })
-            } else {
-                $script:gpuMemory = @($amdControllers | Where-Object { $_.AdapterRAM -gt 0 } |
-                    ForEach-Object { [int]([uint64]$_.AdapterRAM / 1MB) })
-            }
+            $script:gpuMemory = @(Get-AmdMemoryMb $amdControllers)
         }
     } catch {}
 }
@@ -1087,7 +1114,7 @@ function Start-Installation {
     $managedKeys = @(
         'JUN_YES', 'JUN_EXPRESS', 'JUN_DIR', 'JUN_CHANNEL', 'JUN_REF', 'JUN_PIN_SHA', 'JUN_PROVIDER', 'JUN_MODEL',
         'JUN_TENSOR_PARALLEL', 'JUN_MTP', 'JUN_MTP_DEPTH', 'JUN_KARAOKE',
-        'JUN_EXTRACT', 'JUN_SHORTCUTS', 'JUN_MANAGER_EXE', 'JUN_GAME_DIR', 'JUN_BOOTSTRAP_WINGET', 'VOICE',
+        'JUN_EXTRACT', 'JUN_SHORTCUTS', 'JUN_TRUST_CA', 'JUN_MANAGER_EXE', 'JUN_GAME_DIR', 'JUN_BOOTSTRAP_WINGET', 'VOICE',
         'KARAOKE', 'OPENROUTER_API_KEY', 'OPENROUTER_MODEL', 'LLAMACPP_URL'
     )
     foreach ($key in $managedKeys) { $info.EnvironmentVariables.Remove($key) }

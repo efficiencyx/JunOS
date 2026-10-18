@@ -13,7 +13,7 @@ set -eu
 BASE=${1:?usage: api-checks.sh BASE_URL}
 ORIGIN=$BASE
 # every curl here takes -k. the stack answers on https with the
-# self-signed cert, and there's nothing to verify it against.
+# local CA's cert, and the runner doesn't trust that CA.
 work=${work:-$(mktemp -d)}
 cookies="$work/cookies.txt"
 rm -f "$cookies"

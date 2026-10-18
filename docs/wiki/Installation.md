@@ -83,7 +83,7 @@ What happens now, in order. It can take anywhere from 2 to 30 minutes depending 
 
 ### Step 5 - She opens by herself
 
-When everything is ready the installer starts her and your browser opens on **<https://127.0.0.1:8080>**. If it doesn't, type that address into your browser. The browser will warn you that the connection isn't private: the certificate is one your install made for itself, so nobody vouches for it. Click **Advanced** and **Proceed** (Firefox: **Accept the Risk and Continue**). The connection is encrypted either way.
+When everything is ready the installer starts her and your browser opens on **<https://127.0.0.1:8080>**. If it doesn't, type that address into your browser. Just before that the installer asks whether to trust her certificate on this PC, and Windows shows a security warning about installing a certificate from "Jun OS local CA". That one is made by your install, on your PC, and it can only vouch for local addresses, so click **Yes** and the browser opens her without complaining. Clicked **No**? The browser warns that the connection isn't private: click **Advanced** and **Proceed**, the connection is encrypted either way. `powershell .\JunOS\start.ps1 trust` from the folder above `JunOS` asks again whenever you like. Firefox on Windows may keep warning even after you said yes, see [Common Fixes](9-Common-Fixes#your-connection-is-not-private).
 
 Near the end the installer prints a line like `registration  a1b2c3...`. That is the **registration key**.
 Your first account doesn't need it (as long as she only listens on this machine, which is the default), but every account after that does.
@@ -103,6 +103,7 @@ Rather use a terminal? Open one (see [The terminal way](#the-terminal-way)), the
 * **Start:** `powershell .\JunOS\start.ps1`
 * **Stop:** `powershell .\JunOS\start.ps1 stop`
 * **Check what's running:** `powershell .\JunOS\start.ps1 status`
+* **Make the browser trust her certificate:** `powershell .\JunOS\start.ps1 trust`
 * **Logs when something goes wrong:** they're in `JunOS\runtime\logs\`.
 
 If you put her somewhere else in Step 2, type `cd /d D:\Games` (the folder above `JunOS`) first.
@@ -196,6 +197,7 @@ In order. Budget 5 to 40 minutes on the first run, most of it downloads:
 3. **Her body** is rebuilt from your game. If the game isn't found in the usual locations for games it asks you to paste the game folder (or you can just drag the folder from your file manager onto the terminal). Press Enter on an empty line to skip; placeholders are used until you redo it.
 4. **The containers** are built and started. The first time builds a few images, and can take a while.
 5. **The model** is downloaded inside the Ollama container, 2 to 12 GB. The installer shows the progress and waits.
+6. **Her certificate.** It asks `trust her certificate on this machine?`. **Y** (the default) puts the certificate authority your install just made into the system and your browsers, so they stop warning about her. It asks for your `sudo` password for the system part. Browsers that are open need a restart to notice. To get Chrome and Firefox it needs `certutil` (`libnss3-tools` on Ubuntu/Debian, `nss-tools` on Fedora, `nss` on Arch); if that's missing it says so, install it and run `./JunOS/start.sh trust`.
 
 If the installer ends with **"Docker isn't reachable yet"**: log out and back in (the docker group only applies to new logins), then run `./JunOS/start.sh` yourself.
 
@@ -216,6 +218,7 @@ From the terminal, in the folder above `JunOS` (that's your home folder unless y
 * **Start:** `./JunOS/start.sh`
 * **Stop:** `./JunOS/start.sh stop`
 * **Check what's running:** `./JunOS/start.sh status`
+* **Make the browser trust her certificate:** `./JunOS/start.sh trust`
 * **Watch the logs:** `./JunOS/start.sh logs` (Ctrl + C to stop watching), or `./JunOS/start.sh logs ollama` for just the model server.
 
 Add `sudo` in front if you said no to the docker group.
@@ -399,7 +402,7 @@ Out of the box she only answers on the computer she's installed on. Opening her 
 BIND_ADDR=0.0.0.0
 ```
 
-The next start prints the address to type on the phone (`reachable as: https://192.168.x.x` on Linux, `on your phone: https://192.168.x.x:8080` on Windows). The phone shows the same certificate warning, click through it. Windows also adds a firewall rule for you, or prints the command if the terminal isn't running as administrator.
+The next start prints the address to type on the phone (`reachable as: https://192.168.x.x` on Linux, `on your phone: https://192.168.x.x:8080` on Windows). The phone shows a certificate warning (trusting her certificate only covered the computer), click through it. Windows also adds a firewall rule for you, or prints the command if the terminal isn't running as administrator.
 
 PLEASE Do **not** forward that port on your router or run her behind a reverse proxy unless you know what you are doing and you are following the following instructions. She's built for your living room, not the open internet.
 
@@ -431,7 +434,7 @@ The channel is saved in `.env` as `JUN_CHANNEL`. To switch, edit that line, or s
 |---|---|---|
 | `git still not on PATH` / `ollama still not on PATH` (Windows) | A program was just installed and this window doesn't know yet | Close the window and run the installer again (terminal: open a new one, paste the line again) |
 | `Docker isn't reachable yet` (Linux) | Docker was just installed, or the group change needs a new login | Log out and in, then `./JunOS/start.sh` |
-| "Your connection is not private" / `NET::ERR_CERT_AUTHORITY_INVALID` | Expected: the certificate is self-signed | **Advanced** then **Proceed**. Chrome asks again after a while, and a new address for her means a new certificate and a new warning |
+| "Your connection is not private" / `NET::ERR_CERT_AUTHORITY_INVALID` | Her certificate isn't trusted on this device yet | `./JunOS/start.sh trust` (Windows: `powershell .\JunOS\start.ps1 trust`) and restart the browser. Or **Advanced** then **Proceed**, on a phone that's the only option |
 | `Caddy not found` (Windows) | An older install from before HTTPS | Run the installer again, it adds Caddy |
 | `NVIDIA selected but nvidia-smi not found` | Driver or container toolkit missing | [NVIDIA](#nvidia) steps 1 and 2 |
 | `ollama is running on:` says CPU, you have a card | Docker can't see the card | NVIDIA: toolkit, and if `nvidia-smi` works, [regenerate the CDI file](#on-linux). AMD: `HSA_OVERRIDE_GFX_VERSION`. Then `./JunOS/start.sh restart` |
@@ -472,7 +475,7 @@ Then:
 ./start.sh
 ```
 
-`start.sh` detects the card, writes a registration key into `.env` if there's none, and starts the containers. Force a backend with `GPU=nvidia ./start.sh`, `GPU=amd ./start.sh` or `GPU=cpu ./start.sh`. Watch the model download with `./start.sh logs ollama`, then open <https://localhost> and click through the self-signed certificate warning.
+`start.sh` detects the card, writes a registration key into `.env` if there's none, and starts the containers. Force a backend with `GPU=nvidia ./start.sh`, `GPU=amd ./start.sh` or `GPU=cpu ./start.sh`. Watch the model download with `./start.sh logs ollama`, then run `./start.sh trust` once so the browser trusts her certificate (or click through the warning) and open <https://localhost>.
 
 Without `start.sh` at all, it's plain compose with the overlay for your card and the `ollama` profile:
 

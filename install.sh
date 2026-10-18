@@ -1622,6 +1622,32 @@ if docker_run docker info >/dev/null 2>&1; then
         step "tune multi-token prediction"
         docker_run ./mtp-autotune.sh || warn_ "autotune failed - drafting 1 token ahead, re-run ./mtp-autotune.sh anytime"
     fi
+    # her cert is signed by a CA made on this box, for local names
+    # and private addresses only. trusting it is what makes the
+    # browser warning go away for good, even when the LAN address
+    # changes. JUN_TRUST_CA=1 forces it, 0 opts out.
+    trust=1
+    case "$(printf '%s' "${JUN_TRUST_CA:-}" | tr '[:upper:]' '[:lower:]')" in
+        1|on|yes|true) trust=1 ;;
+        0|off|no|false) trust=0 ;;
+        *)
+            if [ "${JUN_YES:-}" != "1" ] && [ -r /dev/tty ]; then
+                printf '     %s$%s trust her certificate on this machine, so the browser stops warning? %s[Y/n]%s %s→%s ' \
+                    "$OK" "$R" "$DIM" "$R" "$ACCENT" "$R" > /dev/tty
+                read -r t < /dev/tty || t=""
+                case "$t" in n|N|no|NO) trust=0 ;; esac
+            fi
+            ;;
+    esac
+    step "trust her certificate"
+    if [ "$trust" = 0 ]; then
+        note "skipped - ./start.sh trust does it anytime."
+    elif docker_run ./start.sh trust 2>&1 | sed 's/^/       /'; then
+        ok "trusted"
+    else
+        warn_ "not everywhere, see above. ./start.sh trust tries again."
+    fi
+
     reg_key="$(env_value OMEGA_REGISTRATION_KEY)"
     printf '\n'
     step "access keys"

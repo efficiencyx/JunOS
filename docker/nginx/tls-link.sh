@@ -2,7 +2,7 @@
 # sourced by 10-pick-config.sh and 30-cert-watch.sh, never run.
 # the TLS template reads its certificate from /etc/nginx/tls/.
 # these point that at the letsencrypt cert for $DOMAIN once certbot
-# has one, and at the self-signed placeholder until then. without
+# has one, and at the local-CA placeholder until then. without
 # the placeholder nginx can't start on a fresh volume, and without
 # nginx on :80 certbot can't answer the challenge that would get
 # the real cert. each one waiting on the other, forever.

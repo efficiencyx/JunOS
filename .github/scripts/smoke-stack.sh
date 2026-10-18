@@ -157,8 +157,20 @@ san=$(docker run --rm --entrypoint sh -e OMEGA_EXTRA_HOSTS='192.168.1.42 jun.loc
 	'/docker-entrypoint.d/10-pick-config.sh >/dev/null && openssl x509 -noout -ext subjectAltName -in /etc/nginx/selfsigned/fullchain.pem' 2>/dev/null || true)
 case $san in
 *'IP Address:192.168.1.42'*'DNS:jun.local'* | *'DNS:jun.local'*'IP Address:192.168.1.42'*)
-	pass 'the self-signed cert names the LAN hosts' ;;
-*) fail "the self-signed cert is missing OMEGA_EXTRA_HOSTS: $san" ;;
+	pass 'the cert names the LAN hosts' ;;
+*) fail "the cert is missing OMEGA_EXTRA_HOSTS: $san" ;;
+esac
+# the CA has to sign her leaf and refuse anything outside its
+# nameConstraints, or trusting it trusts it for every site.
+ca=$(docker run --rm --entrypoint sh "$img" -c \
+	'/docker-entrypoint.d/10-pick-config.sh >/dev/null && d=/etc/nginx/selfsigned &&
+	openssl verify -CAfile $d/ca.pem -purpose sslserver $d/fullchain.pem >/dev/null && echo leaf-ok;
+	openssl req -x509 -new -newkey rsa:2048 -nodes -keyout /dev/null -CA $d/ca.pem -CAkey $d/ca.key -days 1 \
+		-subj /CN=example.com -addext subjectAltName=DNS:example.com -out /tmp/x.pem 2>/dev/null &&
+	openssl verify -CAfile $d/ca.pem /tmp/x.pem >/dev/null 2>&1 || echo outside-refused' 2>/dev/null || true)
+case $ca in
+*leaf-ok*outside-refused*) pass 'the local CA signs her cert and nothing outside its names' ;;
+*) fail "local CA check: $ca" ;;
 esac
 
 echo "tls bootstrap"

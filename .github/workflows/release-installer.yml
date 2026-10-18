@@ -1,13 +1,14 @@
 name: Release installer
 
-# push a v* tag and this builds JunSetup-<tag>.exe and JunOS.exe
-# (the start/stop/update window install.ps1 downloads) and puts
-# them, the three install scripts and their SHA256SUMS on a DRAFT
-# release for that tag. the exe is pinned: it carries the tag and the commit the
+# push a v* tag and this builds JunSetup-<tag>.exe, JunOS.exe
+# (the start/stop/update window install.ps1 downloads) and
+# JunOS-<tag>.apk (the android app) and puts them, the three
+# install scripts and their SHA256SUMS on a DRAFT release for
+# that tag. the exe is pinned: it carries the tag and the commit the
 # tag points at, and install.ps1 refuses to set up anything else.
 # JunSetup.exe is the same file again under a name that never
 # changes, so releases/latest/download/JunSetup.exe is a link the
-# README can keep forever.
+# README can keep forever. JunOS.apk is the same trick for the apk.
 # a tag with a - in it (v1.2.0-beta) drafts as a pre-release. untick
 # that before publishing if the one-liners should get it, they come
 # from releases/latest/download/ and /latest skips pre-releases.
@@ -69,9 +70,103 @@ jobs:
             dist/JunSetup*.exe
             dist/JunOS.exe
 
+  android:
+    name: JunOS.apk
+    runs-on: ubuntu-latest
+    # the signing secrets live in the release environment, which only
+    # lets v* tags in. a dispatch from a branch would get the job
+    # rejected outright, so it skips the environment and builds
+    # unsigned instead (the Keystore step below warns about it)
+    environment: ${{ github.ref_type == 'tag' && 'release' || '' }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          # the versionCode is the commit count, a shallow clone says 1
+          fetch-depth: 0
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - uses: actions/setup-python@v5
+        id: python312
+        with:
+          python-version: '3.12'
+
+      - name: Point Chaquopy at python 3.12
+        run: echo "JUN_PYTHON_312=${{ steps.python312.outputs.python-path }}" >> "$GITHUB_ENV"
+
+      - uses: actions/cache@v4
+        with:
+          path: ~/.gradle/junos-bootstrap
+          key: gradle-bootstrap-8.13
+
+      - uses: actions/cache@v4
+        with:
+          path: |
+            ~/.gradle/caches
+            ~/.gradle/wrapper
+          key: android-gradle-${{ hashFiles('android/**/*.gradle.kts', 'android/gradle/wrapper/gradle-wrapper.properties') }}
+
+      - name: Keystore
+        # every apk ever shipped has to be signed by this SAME key.
+        # android refuses an update signed by anything else, and the
+        # only way out is uninstall, which takes her chats and the
+        # 2.5 GB model with it. so a tag without the secret fails here
+        # instead of shipping an unsigned apk nobody can install.
+        env:
+          KEYSTORE_BASE64: ${{ secrets.JUN_ANDROID_KEYSTORE_BASE64 }}
+          IS_TAG: ${{ github.ref_type == 'tag' }}
+        run: |
+          if [ -z "$KEYSTORE_BASE64" ]; then
+            if [ "$IS_TAG" = true ]; then
+              echo "::error::no JUN_ANDROID_KEYSTORE_BASE64 secret, not shipping an unsigned apk"
+              exit 1
+            fi
+            echo "::warning::no JUN_ANDROID_KEYSTORE_BASE64 secret, the apk is unsigned"
+            exit 0
+          fi
+          echo "$KEYSTORE_BASE64" | base64 -d > "$RUNNER_TEMP/release.jks"
+          echo "JUN_ANDROID_KEYSTORE=$RUNNER_TEMP/release.jks" >> "$GITHUB_ENV"
+
+      - name: Build
+        working-directory: android
+        env:
+          JUN_ANDROID_STORE_PASSWORD: ${{ secrets.JUN_ANDROID_STORE_PASSWORD }}
+          JUN_ANDROID_KEY_ALIAS: ${{ secrets.JUN_ANDROID_KEY_ALIAS }}
+          JUN_ANDROID_KEY_PASSWORD: ${{ secrets.JUN_ANDROID_KEY_PASSWORD }}
+          REF: ${{ github.ref_name }}
+        run: |
+          # android won't install a lower versionCode over a higher
+          # one. commit count only goes up as long as nobody rewrites
+          # the history of the repo that pushes the tags.
+          export JUN_ANDROID_VERSION_CODE="$(git rev-list --count HEAD)"
+          name="${REF#v}"
+          case "$name" in [0-9]*) ;; *) name="0.0.0-${name//\//-}" ;; esac
+          export JUN_ANDROID_VERSION_NAME="$name"
+          # verifyReleaseContents builds the release apk and fails it on
+          # model files, game assets or anything past 180 MiB
+          sh ./gradlew :app:verifyReleaseContents --no-daemon
+
+          out="$GITHUB_WORKSPACE/dist"
+          mkdir -p "$out"
+          if [ -n "${JUN_ANDROID_KEYSTORE:-}" ]; then
+            apksigner="$(ls -d "$ANDROID_HOME"/build-tools/* | sort -V | tail -1)/apksigner"
+            "$apksigner" verify --print-certs app/build/outputs/apk/release/app-release.apk
+            cp app/build/outputs/apk/release/app-release.apk "$out/JunOS-${REF//\//-}.apk"
+          else
+            cp app/build/outputs/apk/release/app-release-unsigned.apk "$out/JunOS-${REF//\//-}-unsigned.apk"
+          fi
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: JunOS-android
+          path: dist/JunOS-*.apk
+
   draft:
     name: Draft release
-    needs: installer
+    needs: [installer, android]
     if: startsWith(github.ref, 'refs/tags/')
     runs-on: ubuntu-latest
     steps:
@@ -82,18 +177,25 @@ jobs:
           name: JunSetup
           path: dist
 
+      - uses: actions/download-artifact@v4
+        with:
+          name: JunOS-android
+          path: dist
+
       - name: Attach to the draft
         env:
           GH_TOKEN: ${{ github.token }}
           TAG: ${{ github.ref_name }}
         run: |
           exe="JunSetup-$TAG.exe"
-          for f in "$exe" JunOS.exe; do
+          apk="JunOS-$TAG.apk"
+          for f in "$exe" JunOS.exe "$apk"; do
             [ -f "dist/$f" ] || { echo "::error::dist/$f missing, the build job named it something else"; exit 1; }
           done
           cp install.sh install.ps1 installer-gui.ps1 dist/
           cp "dist/$exe" dist/JunSetup.exe
-          (cd dist && sha256sum "$exe" JunSetup.exe JunOS.exe install.sh install.ps1 installer-gui.ps1 > SHA256SUMS)
+          cp "dist/$apk" dist/JunOS.apk
+          (cd dist && sha256sum "$exe" JunSetup.exe JunOS.exe "$apk" JunOS.apk install.sh install.ps1 installer-gui.ps1 > SHA256SUMS)
 
           # gh release view finds drafts by tag too, the plain API doesn't
           if gh release view "$TAG" --json isDraft --jq .isDraft > state 2>/dev/null; then
@@ -106,4 +208,4 @@ jobs:
             case "$TAG" in *-*) pre="--prerelease" ;; esac
             gh release create "$TAG" --draft --verify-tag --title "$TAG" --generate-notes $pre
           fi
-          gh release upload "$TAG" "dist/$exe" dist/JunSetup.exe dist/JunOS.exe dist/install.sh dist/install.ps1 dist/installer-gui.ps1 dist/SHA256SUMS --clobber
+          gh release upload "$TAG" "dist/$exe" dist/JunSetup.exe dist/JunOS.exe "dist/$apk" dist/JunOS.apk dist/install.sh dist/install.ps1 dist/installer-gui.ps1 dist/SHA256SUMS --clobber

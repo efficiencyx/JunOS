@@ -4,7 +4,9 @@
 # Settings > Apps, so removal is:
 #   1. stop the running processes (start.ps1 stop)
 #   2. optionally uninstall Ollama / llama.cpp (machine-wide apps)
-#   3. delete this folder (webapp, PHP, TTS venv, model weights,
+#   3. take Jun's local certificate authority back out of your
+#      Windows trust store, if start.ps1 put it there
+#   4. delete this folder (webapp, PHP, TTS venv, model weights,
 #      chat data)
 #
 # git (and Python, if voice or asset recovery installed it) are
@@ -72,6 +74,26 @@ if (Get-Command ollama -ErrorAction SilentlyContinue) {
             if (Confirm-Step "Also delete $store (~${gb} GB of models)?") {
                 Remove-Item $store -Recurse -Force
             }
+        }
+    }
+}
+
+# runtime\caddy\tls\trusted holds the thumbprint start.ps1 added
+# to the current user's Root store. Windows asks to confirm the
+# removal.
+$trustMark = Join-Path $root 'runtime\caddy\tls\trusted'
+if (Test-Path -LiteralPath $trustMark) {
+    $thumb = (Get-Content -LiteralPath $trustMark -Raw).Trim()
+    if ($thumb -and (Confirm-Step "Remove Jun's local certificate authority from your trust store?")) {
+        $store = [Security.Cryptography.X509Certificates.X509Store]::new('Root', 'CurrentUser')
+        $store.Open('ReadWrite')
+        try {
+            foreach ($c in $store.Certificates.Find('FindByThumbprint', $thumb, $false)) { $store.Remove($c) }
+            Write-Host 'Removed the local certificate authority.'
+        } catch {
+            Write-Host "Could not remove it ($($_.Exception.Message)). Remove ""Jun OS local CA"" from certmgr.msc > Trusted Root Certification Authorities."
+        } finally {
+            $store.Close()
         }
     }
 }

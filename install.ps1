@@ -210,37 +210,50 @@ function Get-MtpBudgetMb([string]$modelRef) {
     }
 }
 
-# no nvidia-smi equivalent on the AMD side, so we ask Windows.
-# AdapterRAM is a 32 bit field and anything past 4GB comes back
-# wrong, which is why the registry's qwMemorySize goes first and
-# AdapterRAM is only the fallback. same order and same keys as
-# installer-gui.ps1.
-function Get-AmdMemoryMb {
-    try {
-        $controllers = @(Get-CimInstance Win32_VideoController -ErrorAction Stop |
-            Where-Object { $_.Name -match '(?i)AMD|Radeon' })
-        if ($controllers.Count -eq 0) { return @() }
-        $names = @($controllers | ForEach-Object { $_.Name } | Sort-Object -Unique)
-
-        $registryMemory = @(Get-ItemProperty -Path 'HKLM:\SYSTEM\CurrentControlSet\Control\Video\*\0000' -ErrorAction SilentlyContinue |
-            Where-Object { $names -contains [string]$_.'HardwareInformation.AdapterString' } |
-            ForEach-Object {
-                $memory = $_.'HardwareInformation.qwMemorySize'
-                if ($memory -is [byte[]] -and $memory.Length -ge 8) {
-                    [BitConverter]::ToUInt64($memory, 0)
-                } elseif ($null -ne $memory) {
-                    [uint64]$memory
-                }
-            } | Where-Object { $_ -gt 0 } | Sort-Object -Unique)
-
-        if ($registryMemory.Count -gt 0) {
-            return @($registryMemory | ForEach-Object { [int]($_ / 1MB) })
+# no nvidia-smi on the AMD side, so we ask Windows. and Windows
+# gets it wrong in two places.
+#
+# AdapterRAM (WMI) is 32 bit, every card past 4GB comes back as
+# 4095 MB. the real size is the registry's 64 bit
+# HardwareInformation.qwMemorySize under Control\Video\{guid}\000x.
+# finding the right key is the cursed part. AdapterString is
+# REG_BINARY on some drivers and a generic "AMD Radeon Graphics
+# Processor (0x7550)" on others, so matching it against the WMI
+# name missed a 9070 XT and the installer sized a 16GB card as 4GB.
+# match on the PCI vendor+device id instead (MatchingDeviceId vs
+# PNPDeviceID), DriverDesc as the backup.
+#
+# one lookup per card, so an iGPU that matches can't hide the dGPU
+# that didn't. a capped AdapterRAM only says "4GB or more", that's
+# not a size, it gets dropped. under 1GB is an APU carveout, not a
+# card (same rule as amd_vram_mb_list in install.sh).
+#
+# keep this byte for byte the same as the copy in installer-gui.ps1.
+function Get-AmdMemoryMb([object[]]$controllers) {
+    $entries = @(Get-ItemProperty -Path 'HKLM:\SYSTEM\CurrentControlSet\Control\Video\*\000*' -ErrorAction SilentlyContinue)
+    $capMb = 4095
+    return @($controllers | ForEach-Object {
+        $card = $_
+        $pci = if ([string]$card.PNPDeviceID -match '(?i)^PCI\\VEN_[0-9A-F]{4}&DEV_[0-9A-F]{4}') { $Matches[0] } else { '' }
+        $keys = @($entries | Where-Object {
+            ($pci -and ([string]$_.MatchingDeviceId) -like "$pci*") -or
+            ([string]$_.DriverDesc -eq [string]$card.Name)
+        })
+        $mb = @($keys | ForEach-Object {
+            $memory = $_.'HardwareInformation.qwMemorySize'
+            if ($memory -is [byte[]] -and $memory.Length -ge 8) {
+                [BitConverter]::ToUInt64($memory, 0)
+            } elseif ($null -ne $memory -and $memory -isnot [byte[]]) {
+                [uint64]$memory
+            }
+        } | Where-Object { $_ -gt 0 } | ForEach-Object { [int]($_ / 1MB) } |
+            Sort-Object -Descending | Select-Object -First 1)
+        if ($mb.Count -eq 0 -and $card.AdapterRAM -gt 0) {
+            $wmiMb = [int]([uint64]$card.AdapterRAM / 1MB)
+            if ($wmiMb -lt $capMb) { $mb = @($wmiMb) }
         }
-        return @($controllers | Where-Object { $_.AdapterRAM -gt 0 } |
-            ForEach-Object { [int]([uint64]$_.AdapterRAM / 1MB) })
-    } catch {
-        return @()
-    }
+        $mb
+    } | Where-Object { $_ -ge 1024 })
 }
 
 function Get-GpuMemoryMb {
@@ -249,7 +262,13 @@ function Get-GpuMemoryMb {
         $mb = @($out | Where-Object { $_ -match '\d' } | ForEach-Object { [int]($_.Trim()) })
         if ($mb.Count -gt 0) { return $mb }
     }
-    return @(Get-AmdMemoryMb)
+    try {
+        $amd = @(Get-CimInstance Win32_VideoController -ErrorAction Stop |
+            Where-Object { $_.Name -match '(?i)AMD|Radeon' })
+        return @(Get-AmdMemoryMb $amd)
+    } catch {
+        return @()
+    }
 }
 
 function Get-VramMb {
@@ -1952,6 +1971,25 @@ if ($regKey) {
 } else {
     Note 'registration key is empty, anyone who reaches the page can sign up.'
 }
+# her cert is signed by a CA made on this PC, for local names and
+# private addresses only. start.ps1 does the trusting, because the
+# CA doesn't exist until its first run. Express says yes, windows
+# still shows its own "install this certificate?" dialog.
+# JUN_TRUST_CA=1 forces it, 0 opts out.
+$trust = $true
+switch -Regex ($env:JUN_TRUST_CA) {
+    '^(1|on|yes|true)$'  { $trust = $true }
+    '^(0|off|no|false)$' { $trust = $false }
+    default {
+        if ($env:JUN_YES -ne '1' -and $interactive) {
+            $t = Read-Styled "     ${OK}▸${R} trust her certificate on this PC, so the browser stops warning? ${DIM}[Y/n]${R} ${ACCENT}›${R} "
+            $trust = $t -notmatch '^(n|no)$'
+        }
+    }
+}
+$env:JUN_TRUST_CA = if ($trust) { '1' } else { '0' }
+if (-not $trust) { Note 'certificate not trusted - ./start.ps1 trust does it anytime.' }
+
 Write-Host ''
 Write-Host "  ${OK}▸${R} ${B}${OK}starting${R} ${DIM}-${R} launching start.ps1"
 # re-launch via the same PowerShell with Bypass so the machine's

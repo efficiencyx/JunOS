@@ -12,7 +12,10 @@
 #      installer added you, and restoring
 #      net.ipv4.ip_unprivileged_port_start if it lowered it for
 #      rootless Docker
-#   4. delete this folder
+#   4. take Jun's local certificate authority back out of the
+#      system and browser trust stores, if `./start.sh trust` put
+#      it there (runtime/jun-ca.pem)
+#   5. delete this folder
 #
 # Docker itself, git and Python are left alone, since they're
 # general-purpose tools you may use elsewhere. Remove them with your
@@ -100,6 +103,10 @@ if [ -n "$port_start" ] && confirm "Restore net.ipv4.ip_unprivileged_port_start 
     else
         echo "Could not restore it. Run: sudo rm /etc/sysctl.d/99-jun-unprivileged-ports.conf && sudo sysctl net.ipv4.ip_unprivileged_port_start=$port_start" >&2
     fi
+fi
+
+if [ -s runtime/jun-ca.pem ] && confirm "Remove Jun's local certificate authority from this machine's trust stores?"; then
+    tools/trust-ca.sh remove runtime/jun-ca.pem || echo 'Some stores still have it. Look for "Jun OS local CA" in the browser certificate settings.' >&2
 fi
 
 # From outside the folder, since this script lives inside it.

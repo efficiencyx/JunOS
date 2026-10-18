@@ -1,6 +1,6 @@
 ﻿[CmdletBinding()]
 param(
-    [ValidateSet('start', 'stop', 'status')]
+    [ValidateSet('start', 'stop', 'status', 'trust')]
     [string]$Action = 'start',
     [switch]$NoBrowser
 )
@@ -86,6 +86,8 @@ $Runtime  = Join-Path $PSScriptRoot 'runtime'
 $LogDir   = Join-Path $Runtime 'logs'
 $PidFile  = Join-Path $Runtime 'pids.json'
 $StateDir = Join-Path $Runtime 'state'
+$CaddyDir = Join-Path $Runtime 'caddy'
+$CertDir  = Join-Path $CaddyDir 'tls'
 $Services = 'caddy', 'php', 'memory', 'prewarm', 'tts', 'ollama', 'llamacpp'
 
 # read KEY=VALUE pairs in as env vars, but ONLY when they aren't
@@ -242,9 +244,9 @@ function Test-Http([string]$url, [int]$timeoutSec = 2) {
 }
 
 # PS 5.1's Invoke-WebRequest has no -SkipCertificateCheck and our
-# cert is self-signed, so it just refuses caddy. a bare handshake
-# that takes any cert answers the only question we have: is caddy
-# up on the port and doing TLS.
+# cert comes from a local CA it may not trust, so it just refuses
+# caddy. a bare handshake that takes any cert answers the only
+# question we have: is caddy up on the port and doing TLS.
 function Test-Tls([string]$port) {
     $tcp = [Net.Sockets.TcpClient]::new()
     try {
@@ -350,6 +352,62 @@ if ($Action -eq 'stop') {
     Write-Host ''
     Ok 'all services stopped'
     exit 0
+}
+
+# the CA goes in the user's Root store, not the machine's. no
+# admin needed, windows asks on its own with a "do you want to
+# install this certificate" dialog, and that dialog is the consent.
+# chrome and edge read that store. firefox only when it imports
+# windows roots (security.enterprise_roots.enabled).
+# tls\trusted is the thumbprint we added, so a new CA swaps the old
+# one out and uninstall.ps1 knows which one to take back.
+function Update-CaTrust([bool]$firstTime) {
+    $caFile = Join-Path $CertDir 'ca.pem'
+    $mark = Join-Path $CertDir 'trusted'
+    if (-not (Test-Path $caFile)) { return $false }
+    $ca = [Security.Cryptography.X509Certificates.X509Certificate2]::new($caFile)
+    $old = if (Test-Path $mark) { (Get-Content $mark -Raw).Trim() } else { '' }
+    if (-not $old -and -not $firstTime) { return $false }
+    $store = [Security.Cryptography.X509Certificates.X509Store]::new('Root', 'CurrentUser')
+    $store.Open('ReadWrite')
+    try {
+        if ($store.Certificates.Find('FindByThumbprint', $ca.Thumbprint, $false).Count -gt 0) {
+            Set-Content $mark $ca.Thumbprint
+            return $true
+        }
+        # same thumbprint and gone from the store = someone took it
+        # out by hand. that's a no, don't ask on every start.
+        if ($old -eq $ca.Thumbprint -and -not $firstTime) {
+            Remove-Item $mark
+            return $false
+        }
+        if ($old -and $old -ne $ca.Thumbprint) {
+            Note 'the local CA changed, swapping the old one out of the windows trust store'
+            foreach ($c in $store.Certificates.Find('FindByThumbprint', $old, $false)) { $store.Remove($c) }
+        }
+        Remove-Item $mark -ErrorAction SilentlyContinue
+        Note "windows will ask whether to install a certificate from `"$($ca.GetNameInfo('SimpleName', $false))`". yes = no more browser warning"
+        try {
+            $store.Add($ca)
+        } catch {
+            Warn_ "not trusted ($($_.Exception.Message)). ./start.ps1 trust asks again"
+            return $false
+        }
+        Set-Content $mark $ca.Thumbprint
+        Ok 'trusted - restart the browser if it was open'
+        return $true
+    } finally {
+        $store.Close()
+    }
+}
+
+if ($Action -eq 'trust') {
+    Step 'trust the local CA'
+    if (-not (Test-Path (Join-Path $CertDir 'ca.pem'))) {
+        Warn_ 'no CA yet. start her once first: ./start.ps1'
+        exit 1
+    }
+    if (Update-CaTrust $true) { exit 0 } else { exit 1 }
 }
 
 if ($Action -eq 'status') {
@@ -659,14 +717,12 @@ $newPids | ConvertTo-Json | Set-Content $PidFile
 Wait-Up 'php' $phpProc { Test-Http $PhpUrl }
 
 # the cert names every host in the allowlist, so the phone on
-# https://192.168.1.42 gets the self-signed warning and not a
-# name mismatch on top. same host list next boot = same cert.
-# a new one is a new warning in every browser that already
-# clicked through the old one.
-$caddyDir = Join-Path $Runtime 'caddy'
-$certDir  = Join-Path $caddyDir 'tls'
-& $phpExe (Join-Path $PSScriptRoot 'tools\selfsigned-cert.php') $certDir @SiteHosts
-if ($LASTEXITCODE -ne 0) { throw 'could not make the self-signed certificate (see above)' }
+# https://192.168.1.42 gets the untrusted warning and not a
+# name mismatch on top. a new host list is a new leaf from the
+# same local CA, so a box that trusts the CA never notices.
+& $phpExe (Join-Path $PSScriptRoot 'tools\local-cert.php') $CertDir @SiteHosts
+if ($LASTEXITCODE -ne 0) { throw 'could not make the certificate (see above)' }
+$null = Update-CaTrust ($env:JUN_TRUST_CA -match '^(1|on|yes|true)$')
 
 # admin off: the admin API would want :2019 and we never
 #   reconfigure a running caddy anyway.
@@ -677,9 +733,9 @@ if ($LASTEXITCODE -ne 0) { throw 'could not make the self-signed certificate (se
 # flush_interval -1: every write php makes goes straight out.
 #   the chat reply is SSE, one token at a time, and a buffered
 #   proxy hands her whole reply over at the end.
-$caddyfile = Join-Path $caddyDir 'Caddyfile'
-$certPem = (Join-Path $certDir 'fullchain.pem').Replace('\', '/')
-$keyPem  = (Join-Path $certDir 'privkey.pem').Replace('\', '/')
+$caddyfile = Join-Path $CaddyDir 'Caddyfile'
+$certPem = (Join-Path $CertDir 'fullchain.pem').Replace('\', '/')
+$keyPem  = (Join-Path $CertDir 'privkey.pem').Replace('\', '/')
 [IO.File]::WriteAllText($caddyfile, @"
 {
 	admin off
@@ -704,8 +760,8 @@ https://:$Port {
 # %AppData%\Caddy otherwise. inside runtime\ they go away with
 # the install. only for caddy's own launch, nothing after it
 # should inherit them.
-$env:XDG_CONFIG_HOME = $caddyDir
-$env:XDG_DATA_HOME   = $caddyDir
+$env:XDG_CONFIG_HOME = $CaddyDir
+$env:XDG_DATA_HOME   = $CaddyDir
 $caddyProc = Start-Tracked 'caddy' $caddyExe @('run', '--config', $caddyfile, '--adapter', 'caddyfile')
 Remove-Item env:XDG_CONFIG_HOME, env:XDG_DATA_HOME -ErrorAction SilentlyContinue
 $newPids | ConvertTo-Json | Set-Content $PidFile
@@ -721,7 +777,9 @@ Write-Host "  ${OK}▸${R} ${B}${OK}ready${R} ${DIM}-${R} open ${B}${ACCENT}${Si
 foreach ($lan in $LanHosts) {
     Write-Host "    ${DIM}on your phone:${R} ${ACCENT}https://${lan}:${Port}${R} ${DIM}(same wifi)${R}"
 }
-Note 'the certificate is self-signed, so the browser warns about it. click through, the traffic is encrypted either way'
+if (-not (Test-Path (Join-Path $CertDir 'trusted'))) {
+    Note 'the browser warns about the certificate until you trust it: ./start.ps1 trust. or click through, the traffic is encrypted either way'
+}
 Note 'stop with: ./start.ps1 stop   |   logs: runtime\logs\'
 if (-not $NoBrowser) { Start-Process $SiteUrl }
 exit 0

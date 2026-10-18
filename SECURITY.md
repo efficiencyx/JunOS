@@ -98,6 +98,25 @@ both in `.install-changes` so `uninstall.sh` can offer to undo them:
   can't publish `:80` without it. It applies system-wide, so any program can
   then bind ports 80 and up. The uninstaller restores the previous value.
 
+Both installers can also add one thing to your trust stores, and ask first
+(default yes, `JUN_TRUST_CA=0` skips it):
+
+* **Jun's local certificate authority.** Every install makes its own CA and
+  signs the HTTPS certificate with it. Trusting it is what removes the
+  browser warning. On Linux it goes in the system store (needs `sudo`) and
+  in every Chrome/Chromium and Firefox NSS database under your home
+  (`certutil`), on macOS in the System keychain, and on Windows and WSL in
+  the current user's Root store, where Windows shows its own confirmation
+  dialog. The CA carries critical `nameConstraints`: it can only vouch for
+  `localhost`, `.local`, `.lan`, `.internal`, `.home.arpa`, loopback,
+  private, link-local and CGNAT addresses, plus the hosts that were in the
+  certificate when the CA was made. A browser refuses anything else it
+  signs, so its key (in the `selfsigned` volume, `runtime\caddy\tls\ca.key`
+  on Windows) can't be used to impersonate a public site. The uninstallers
+  remove it again, from `runtime/jun-ca.pem` on Linux and the thumbprint in
+  `runtime\caddy\tls\trusted` on Windows. By hand, look for
+  "Jun OS local CA" in the browser's or the OS certificate manager.
+
 Installs from before `.install-changes` existed have nothing recorded, so
 `uninstall.sh` reverts nothing for them. Undo the changes by hand with
 `sudo gpasswd -d "$USER" docker`, then
@@ -194,7 +213,7 @@ Discord: effx__
 
 Model weights sit in their own volumes (`ollama_data`, `tts_cache`,
 `karaoke_cache`, `llamacpp_cache`), certificates in `letsencrypt` /
-`selfsigned`.
+`selfsigned` (the local CA's key included).
 
 **Windows bare metal:** all of it under `runtime\` in the install folder -
 `runtime\state` for the same database and memory files, `runtime\php`,
@@ -269,11 +288,13 @@ If you put her on the internet:
   not the first.
 * Do not expose an install that has the original game assets in it. You risk legal action.
 * Use `TLS_MODE=on` with the `prod` profile. The default is HTTPS on a
-  self-signed certificate (nginx on Docker, Caddy in front of `php -S` on
-  Windows), and plain http only ever redirects to it. That keeps the traffic
-  encrypted, but the browser has no way to tell your box from someone sitting
-  between it and you, so a click-through warning is fine on your own network
-  and not on one you don't own.
+  certificate from the install's own local CA (nginx on Docker, Caddy in
+  front of `php -S` on Windows), and plain http only ever redirects to it.
+  That keeps the traffic encrypted, but a browser that hasn't trusted the CA
+  has no way to tell your box from someone sitting between it and you, so a
+  click-through warning is fine on your own network and not on one you
+  don't own. The CA's name constraints also keep it from covering a public
+  domain.
 * Set `TRUST_PROXY=1` only when a proxy you control sets
   `X-Forwarded-For`. The last entry in that header is used (the one your proxy
   appended). Without that, rate limiting counts every request as coming from the

@@ -48,7 +48,7 @@ server {
     listen 443 ssl default_server;
     server_name "";
     # Symlinks, not the letsencrypt paths. Before the first issuance
-    # they point at a self-signed placeholder so nginx can start and
+    # they point at a local-CA placeholder so nginx can start and
     # answer the ACME challenge on :80. 30-cert-watch.sh repoints them
     # and reloads once certbot has a certificate, and after renewals.
     ssl_certificate     /etc/nginx/tls/fullchain.pem;

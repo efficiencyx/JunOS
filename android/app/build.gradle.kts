@@ -19,8 +19,8 @@ android {
         applicationId = "com.efficiencyx.junos"
         minSdk = 29
         targetSdk = 35
-        versionCode = 1
-        versionName = "0.1.0"
+        versionCode = providers.environmentVariable("JUN_ANDROID_VERSION_CODE").orNull?.toInt() ?: 1
+        versionName = providers.environmentVariable("JUN_ANDROID_VERSION_NAME").orNull ?: "0.1.0"
 
         ndk { abiFilters += "arm64-v8a" }
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"

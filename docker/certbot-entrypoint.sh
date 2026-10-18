@@ -6,7 +6,7 @@ if [ -z "$DOMAIN" ] || [ "$DOMAIN" = "localhost" ]; then
     sleep infinity
 fi
 
-# nginx is up on a self-signed placeholder by the time we get here
+# nginx is up on a local-CA placeholder by the time we get here
 # (compose waits for it to be healthy), serving the challenge dir on
 # :80. its 30-cert-watch.sh swaps the real cert in once this lands.
 #

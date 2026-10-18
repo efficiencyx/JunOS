@@ -155,7 +155,7 @@ Installed her before channels were a thing? You were on `main` all along, so you
 
 ### Then say hi
 
-Open your browser at **<https://localhost>** - or **<https://127.0.0.1:8080>** if you're on Windows. It's always HTTPS, with a certificate your own install made for itself, so the browser grumbles about it (*Advanced → Proceed*). That's expected: nobody vouched for the cert, but the traffic is encrypted all the same. Plain `http://` just redirects you over.
+Open your browser at **<https://localhost>** - or **<https://127.0.0.1:8080>** if you're on Windows. It's always HTTPS, on a certificate signed by a tiny certificate authority your install made for itself. The installer offers to put that CA in this computer's trust stores, say yes and the browser just opens her. Said no, or started her by hand with `./start.sh`? `./JunOS/start.sh trust` (`powershell .\JunOS\start.ps1 trust` on Windows) does it whenever you like. Until then the browser grumbles (*Advanced → Proceed*), the traffic is encrypted all the same. The CA is only allowed to vouch for local names and private addresses (`localhost`, `*.local`, `192.168.x.x` and friends), so even if its key leaked it couldn't fake your bank. Plain `http://` just redirects you over.
 
 ### Managing Her
 
@@ -227,9 +227,11 @@ BIND_ADDR=0.0.0.0
 
 The launcher works out this machine's address on the network by itself and prints it - `reachable as: https://192.168.X.X` on Linux, `on your phone: https://192.168.X.X:8080` on Windows - and that's the URL you type into the phone. On Windows it also adds a firewall rule for the port on **private** networks only (it needs an admin PowerShell to do it, otherwise it prints the one-liner for you to run). One request at a time on Windows, so the phone and the desktop take turns.
 
-The phone gets the same self-signed warning. Your password and every word she says cross the wifi encrypted, but a self-signed cert can't prove to the phone that it's really talking to your box, so keep it to networks you trust and **never** port-forward it to the internet - that's what the certbot setup above is for. DHCP moves addresses around, so if she stops answering after a few days, restart the launcher and read the new one (the new address gets a fresh cert, so one more warning).
+Want her *on* the phone instead, no computer at all? Every [release](https://github.com/efficiencyx/JunOS/releases) carries **`JunOS.apk`**, the Android app, still a work in progress. arm64 phones on Android 10 or newer, and the first start downloads a ~2.6 GB model.
 
-The `prod` profile adds the certbot sidecar. On a fresh box nginx comes up first on a throwaway self-signed cert (so for the first minute or so your browser will complain - that's expected), certbot then runs `certbot certonly --webroot` and nginx swaps the real cert in by itself, no restart. If issuance fails (usually DNS not pointing at the box yet, or port 80 blocked) certbot keeps retrying after 1, 4 and 16 minutes, then hourly - `./start.sh logs certbot` tells you why. After that it's `certbot renew` every 12 hours, and nginx picks up renewed certs on its own too. Certs live in the `letsencrypt` volume, nginx serves 443 with HSTS. Mind Let's Encrypt's 5-duplicate-issuances-per-week limit while testing.
+The phone still gets the certificate warning, trusting the CA only covers the computer you did it on. Your password and every word she says cross the wifi encrypted, but a cert the phone doesn't trust can't prove it's really talking to your box, so keep it to networks you trust and **never** port-forward it to the internet - that's what the certbot setup above is for. DHCP moves addresses around, so if she stops answering after a few days, restart the launcher and read the new one (the new address gets a fresh cert from the same CA, so a computer that trusts it doesn't notice, and the phone clicks through once more).
+
+The `prod` profile adds the certbot sidecar. On a fresh box nginx comes up first on a throwaway local cert (so for the first minute or so your browser will complain - that's expected), certbot then runs `certbot certonly --webroot` and nginx swaps the real cert in by itself, no restart. If issuance fails (usually DNS not pointing at the box yet, or port 80 blocked) certbot keeps retrying after 1, 4 and 16 minutes, then hourly - `./start.sh logs certbot` tells you why. After that it's `certbot renew` every 12 hours, and nginx picks up renewed certs on its own too. Certs live in the `letsencrypt` volume, nginx serves 443 with HSTS. Mind Let's Encrypt's 5-duplicate-issuances-per-week limit while testing.
 
 > **Hosting her for other people?** Their chats now live on *your* box (encrypted) and *you're* responsible for them. Encrypt the machine and its backups, don't hand the database around, and edit [`webapp/privacy.html`](webapp/privacy.html) to say what you actually store. In the EU that also makes you a *deployer* under the AI Act (art. 50 transparency, in force since 2 August 2026) - Jun ships the disclosure side already (age gate, permanent `AI` badge, provenance metadata on generated speech), so please don't strip it out of your fork.
 
@@ -284,7 +286,7 @@ Everything is environment variables in `.env` - the full reference is [`docs/con
 
 | Variable | What it does | Default |
 |---|---|---|
-| `DOMAIN` / `EMAIL` / `TLS_MODE` | Hostname, Let's Encrypt contact, Let's Encrypt on/off (`off` still serves HTTPS, on a self-signed cert) | `localhost` · `admin@localhost` · `off` |
+| `DOMAIN` / `EMAIL` / `TLS_MODE` | Hostname, Let's Encrypt contact, Let's Encrypt on/off (`off` still serves HTTPS, on a cert from the install's own local CA) | `localhost` · `admin@localhost` · `off` |
 | `BIND_ADDR` | Where nginx (Caddy on Windows) listens. `0.0.0.0` for the phone on your wifi | `127.0.0.1` |
 | `AI_PROVIDER` | `ollama` \| `llamacpp` \| `openrouter` | `ollama` |
 | `OLLAMA_MODELS_TO_PULL` | Downloaded on first boot and re-checked on every start, so a new upload under the same tag arrives with your next restart; the **first** one is pre-warmed | `hf.co/efficiencyx/Jun-LoRA-E2B-GGUF:Q4_K_M` |
@@ -456,7 +458,7 @@ Read the line under **existing install**, it says which of these it was:
 ├── mtp-autotune.sh · .ps1       Measures the MTP draft depth and writes the winner to .env
 ├── sync-webapp.sh               The dev loop
 ├── colab.ipynb                  The free-GPU notebook
-├── .github/workflows/           CI (syntax, stream-buffer tests, a chat turn against a fake Ollama) + the draft release with JunSetup-<version>.exe and JunOS.exe
+├── .github/workflows/           CI (syntax, stream-buffer tests, a chat turn against a fake Ollama) + the draft release with JunSetup-<version>.exe, JunOS.exe and JunOS.apk
 └── docker-compose*.yml          Base (CPU) + nvidia / amd overlays, llamacpp-local add-on
 ```
 

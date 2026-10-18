@@ -571,6 +571,51 @@ up_and_check() {
   report_gpu_placement
   load_llamacpp
   mtp_recheck
+  check_trusted_ca
+}
+
+# runtime/jun-ca.pem is the copy of the CA we put in the trust
+# stores. the real one lives in the nginx volume, so this copy is
+# also what uninstall.sh takes back out after the volume is gone.
+trusted_ca=runtime/jun-ca.pem
+
+# healthy, not just running. 10-pick-config.sh mints the CA before
+# nginx starts, and the healthcheck only passes once nginx is up.
+current_ca() {
+  for _ in $(seq 1 60); do
+    [ "$(docker inspect -f '{{.State.Health.Status}}' "$(docker compose "${files[@]}" ps -q nginx)" 2>/dev/null)" = healthy ] && break
+    sleep 1
+  done
+  docker compose "${files[@]}" exec -T nginx cat /etc/nginx/selfsigned/ca.pem 2>/dev/null
+}
+
+# a host outside the CA's names (or 10 years) makes a new CA, and
+# every browser that trusted the old one is back to the warning.
+check_trusted_ca() {
+  [ -s "$trusted_ca" ] || return 0
+  current_ca | cmp -s - "$trusted_ca" && return 0
+  echo "the local CA changed since it was trusted. run ./start.sh trust to swap it in the trust stores" >&2
+}
+
+trust_ca() {
+  local new
+  new="$(mktemp runtime/jun-ca.XXXXXX)"
+  if ! current_ca >"$new" || [ ! -s "$new" ]; then
+    rm -f "$new"
+    echo "no local CA from nginx. start her first (./start.sh), it makes one on boot" >&2
+    return 1
+  fi
+  if [ -s "$trusted_ca" ] && ! cmp -s "$new" "$trusted_ca"; then
+    tools/trust-ca.sh remove "$trusted_ca" || true
+  fi
+  # kept even when some stores said no. the ones that said yes still
+  # have it, and uninstall.sh needs this copy to take it back out.
+  local rc=0
+  tools/trust-ca.sh install "$new" || rc=$?
+  mv "$new" "$trusted_ca"
+  chmod 644 "$trusted_ca"
+  [ "$rc" -eq 0 ] && echo "trusted. restart the browser if it was open"
+  return "$rc"
 }
 
 # a bare first word is a lifecycle subcommand. anything else (a
@@ -582,6 +627,7 @@ case "${1:-up}" in
               up_and_check "$@" ;;
   status|ps)  shift; set -x; exec docker compose "${files[@]}" ps "$@" ;;
   logs)       shift; set -x; exec docker compose "${files[@]}" logs -f "$@" ;;
+  trust)      mkdir -p runtime; trust_ca ;;
   *)          if staged_up "$@"; then
                 set -x
                 docker compose "${files[@]}" up -d --build --scale karaoke=0
