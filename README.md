@@ -130,10 +130,11 @@ The step-by-step commands for it, every provider, and the manual compose invocat
 
 ### What it asks you
 
-One question: **Express** or **Custom**.
+One question: **Express**, **Custom** or **Cloud**.
 
 - **Express** - press Enter and forget about it. It figures out your hardware on its own and rebuilds her Live2D model from your game copy. The only things it might still ask are *where* the game is, if it can't find it by itself, and on Linux whether to add you to the docker group when it just installed Docker (that one's root without a password, so it's your call, not ours. We'd say no).
 - **Custom** - walks you through which [release channel](#which-jun-you-get), which provider, which model, which voice, and whether to turn on [MTP](#faster-tokens-mtp).
+- **Cloud** - everything except her brain, which lives on the [Colab notebook](#no-gpu-or-you-just-want-to-test-the-waters-no-problem) in inference-only mode. It asks for the lines the notebook prints (or you add them later), and whether you want voice and karaoke. Your chats go to the notebook for this one.
 
 Installing on a machine you can't sit in front of? `JUN_YES=1` (on Windows, `$env:JUN_YES='1'`) skips the question entirely. On Linux nobody's there to say yes to the docker group either, so Docker stays behind `sudo` unless you also pass `JUN_DOCKER_GROUP=1`.
 
@@ -186,18 +187,22 @@ She's ready once everything reports **healthy**. After that first download it's 
 
 ### No GPU or you just want to test the waters? No problem
 
-Run the whole stack on a **free Colab T4** - nothing installed, nothing on your machine, just a Google account.
+Run the whole stack on Colab - nothing installed, nothing on your machine, just a Google account. Grab a **TPU** if Colab offers you one: she answers way faster there than on the free T4.
 
 [![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/efficiencyx/JunOS/blob/main/colab.ipynb)
 
 1. Open [`colab.ipynb`](colab.ipynb) with the badge.
-2. **Runtime → Change runtime type → T4 GPU → Save.**
+2. **Runtime → Change runtime type → TPU → Save** (a v6e-1 or a v5e-1), or **T4 GPU** if you can't get a TPU (see below).
 3. **Runtime → Run all**, wait for the ✅s (first run downloads a few GB, ~3–6 min).
 4. Click the public link printed at **Step 3**.
 
-Two knobs in the cells: **Model** (`auto` takes the 12B since Colab can hold it) and **Voice** (adds ~2 min on first run). The link comes from Colab's own proxy - if it 404s briefly, wait 30 s and reload.
+Knobs in the cells: **Mode** (everything in the notebook, or inference only), **Model** (`auto` takes the 12B since Colab can hold it), **TPU_Model** (`auto`, the full 12B, the INT8 12B or any repo you type) / **Context** for a TPU, and **Voice** (adds ~2 min on first run). The link comes from Colab's own proxy - if it 404s briefly, wait 30 s and reload.
 
 > **It's a disposable demo.** Colab wipes the session when it ends: accounts, chat history and weights don't survive. Run her locally for anything persistent.
+
+**She already lives on your PC but your card can't hold the model you want?** Pick **Inference only** in Step 1. Jun stays home, chats and memories included, and the notebook only lends her its GPU or TPU. Step 3 prints a few lines (`OLLAMA_URL` + `OLLAMA_API_KEY` on a GPU, `AI_PROVIDER=vllm` + `VLLM_*` on a TPU). Hand them over with `./start.sh link` on Linux or the **Notebook link** button in the manager on Windows (or pick **Cloud** when installing), start her, and she thinks on Google's hardware. Every notebook run makes a new URL and key; when the old ones stop answering, starting her asks for the new lines by itself. **Kaggle** works the same way, inference only. Your messages do leave the machine for this: they go through a Cloudflare tunnel to the notebook, locked with a key that changes every run.
+
+**On a TPU** she runs on [vLLM](https://github.com/vllm-project/tpu-inference) instead of Ollama, from a safetensors build. `TPU_Model` on `auto` takes the full-precision [`efficiencyx/Jun-LoRA-12B-Safetensor`](https://huggingface.co/efficiencyx/Jun-LoRA-12B-Safetensor) on a **v6e-1** (32 GB) or bigger, and the [INT8 build](https://huggingface.co/efficiencyx/Jun-LoRA-12B-Safetensor-INT8) on a 16 GB **v5e-1**, where she gets 6144 tokens of context. Step 2 says so before downloading anything if a model you picked won't fit. Kaggle's v5e-8 has room for much bigger models. The first start compiles her for the TPU, give it 10-20 minutes.
 
 ### Putting her on the internet [NOT RECOMMENDED]
 
@@ -262,6 +267,7 @@ Gemma 4 ships a tiny *drafter* that guesses the next few tokens; Jun checks the 
 | **Ollama** *(default)* | Local inference, models pulled and pre-warmed for you | `JUN_YES=1 ./install.sh` |
 | **llama.cpp** | A local [`llama-server`](https://github.com/ggml-org/llama.cpp) - managed for you, or point at one you already run. Same Jun as Ollama: same prompt byte for byte, her voice input, chat titles, the model picker, context sized to your card | `JUN_PROVIDER=llamacpp ./install.sh` |
 | **OpenRouter** | Any cloud model; needs a key, and **your chats leave the machine** | `JUN_PROVIDER=openrouter OPENROUTER_API_KEY=sk-... ./install.sh` |
+| **vLLM** | A model served somewhere else, usually a TPU in the [Colab notebook](#no-gpu-or-you-just-want-to-test-the-waters-no-problem) in inference-only mode. Nothing runs here; **your chats travel to that machine** | paste the `AI_PROVIDER=vllm` + `VLLM_*` lines Step 3 prints into `.env` |
 
 llama.cpp can also serve a GGUF straight off your disk (`LLAMACPP_MODELS_DIR` + `LLAMACPP_MODEL_FILE`), offer several models in the picker (comma-separate `LLAMACPP_MODEL_HF`, the first is the default), and `LLAMACPP_TOOLS=off` exists for fine-tunes whose tool-call syntax llama-server can't parse.
 
@@ -288,12 +294,13 @@ Everything is environment variables in `.env` - the full reference is [`docs/con
 |---|---|---|
 | `DOMAIN` / `EMAIL` / `TLS_MODE` | Hostname, Let's Encrypt contact, Let's Encrypt on/off (`off` still serves HTTPS, on a cert from the install's own local CA) | `localhost` · `admin@localhost` · `off` |
 | `BIND_ADDR` | Where nginx (Caddy on Windows) listens. `0.0.0.0` for the phone on your wifi | `127.0.0.1` |
-| `AI_PROVIDER` | `ollama` \| `llamacpp` \| `openrouter` | `ollama` |
+| `AI_PROVIDER` | `ollama` \| `llamacpp` \| `openrouter` \| `vllm` | `ollama` |
+| `OLLAMA_URL` + `OLLAMA_API_KEY` / `VLLM_*` | Her brain on another machine, like the Colab notebook in inference-only mode, which prints all of them | this machine |
 | `OLLAMA_MODELS_TO_PULL` | Downloaded on first boot and re-checked on every start, so a new upload under the same tag arrives with your next restart; the **first** one is pre-warmed | `hf.co/efficiencyx/Jun-LoRA-E2B-GGUF:Q4_K_M` |
 | `LLAMACPP_MODEL_HF` / `LLAMACPP_MODEL_FILE` | Model for the managed llama-server: pull from HF, or serve one off disk | `efficiencyx/Jun-LoRA-E2B-GGUF:Q4_K_M` |
 | `TITLE_MODEL` | The little CPU-pinned model that names new chats (Ollama and llama.cpp); empty disables it | `hf.co/efficiencyx/Titlewen-GGUF:F16` |
 | `OLLAMA_MTP` / `LLAMACPP_MTP` | HF repo of the [MTP](#faster-tokens-mtp) drafter; empty = off. `MTP_AUTOTUNE=off` stops the re-tune after a GPU change | *(empty)* · `on` |
-| `COMPOSE_PROFILES` | Optional containers: `ollama`, `llamacpp`, `voice`, `karaoke`, `prod`. `start.sh` derives them from the knobs below, you only set this by hand for `prod` | `ollama` |
+| `COMPOSE_PROFILES` | Optional containers: `ollama`, `llamacpp`, `voice`, `karaoke`, `prod`. `start.sh` derives them from the knobs below (an `ollama` or `llamacpp` written here is ignored), you only set this by hand for `prod` | `ollama` |
 | `VOICE` | `off` skips the voice sidecar: the `tts` container under Docker (`voice` profile), the sidecar process on bare-metal Windows. Chat degrades to text-only | `on` |
 | `FLEE_BANS` | When she walks out of a scene, `on` locks that account out of chat for 5 min, doubling per repeat up to 30. `off` lets her leave without the lockout | `on` |
 | `FREE_ROAM` | Going out is her call: the shop, karaoke and date pages bounce home unless she agreed in chat. `on` drops that gate and gives everyone the "Force her" buttons and the restaurant's "Skip the wait" (admins have them regardless) | `off` |
@@ -367,6 +374,12 @@ Something's buffering the SSE. The `/api/chat.php` location needs `proxy_bufferi
 <summary><b>She's not broken, just slow</b></summary>
 
 Check GPU residency first: `docker exec omega-ollama ollama ps`. Anything short of 100% GPU means something is elbowing her out of VRAM - usually `TTS_DEVICE=cuda` (~2 GB for a speedup you won't hear) or a too-generous `num_ctx`; pin it with `OMEGA_NUM_CTX`. The `UNTIL` column should read `Forever`; a five-minute expiry means the keep-alive pin didn't take and the next quiet stretch costs you a full reload plus re-prefill. If the very first reply after a start crawls, see whether the pre-warm made it: `docker logs omega-php | grep prewarm` (`runtime\logs\prewarm.log` on Windows). A `failed:` line there with something else holding the card means she loaded on your first message instead.
+</details>
+
+<details>
+<summary><b>Her brain is on Colab and she stopped answering</b></summary>
+
+The notebook's tunnel URL and key are new every time Step 3 runs, and the session itself ends when Colab decides you're idle (Kaggle after its time limit). Re-run Step 3, paste the fresh lines over the old ones in `.env`, restart her. A `401` in `docker logs omega-php` (`runtime\logs` on Windows) means the key is stale, a timeout means the session is gone.
 </details>
 
 <details>
@@ -457,7 +470,7 @@ Read the line under **existing install**, it says which of these it was:
 ├── jun-manager.ps1              The Windows start/stop/update window (ships as JunOS.exe, the desktop shortcut)
 ├── mtp-autotune.sh · .ps1       Measures the MTP draft depth and writes the winner to .env
 ├── sync-webapp.sh               The dev loop
-├── colab.ipynb                  The free-GPU notebook
+├── colab.ipynb                  The Colab/Kaggle notebook (GPU or TPU, whole app or just her brain)
 ├── .github/workflows/           CI (syntax, stream-buffer tests, a chat turn against a fake Ollama) + the draft release with JunSetup-<version>.exe, JunOS.exe and JunOS.apk
 └── docker-compose*.yml          Base (CPU) + nvidia / amd overlays, llamacpp-local add-on
 ```

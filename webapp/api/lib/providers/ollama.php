@@ -6,11 +6,11 @@ function ollama_api_json(string $path, ?array $post = null, int $timeout = 3): a
         CURLOPT_RETURNTRANSFER => true,
         CURLOPT_CONNECTTIMEOUT => 2,
         CURLOPT_TIMEOUT => $timeout,
+        CURLOPT_HTTPHEADER => chat_request_headers('ollama'),
     ];
     if ($post !== null) {
         $opts[CURLOPT_POST] = true;
         $opts[CURLOPT_POSTFIELDS] = json_encode($post);
-        $opts[CURLOPT_HTTPHEADER] = ['Content-Type: application/json'];
     }
     curl_setopt_array($ch, $opts);
     $response = curl_exec($ch);

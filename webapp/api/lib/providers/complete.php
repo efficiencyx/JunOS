@@ -9,6 +9,7 @@
 // the working one down with it.
 function provider_post_chat(string $provider, array $payload, ?string &$error = null): ?array {
     $error = null;
+    if ($provider === 'vllm') $payload = vllm_fit_max_tokens($payload);
     for ($attempt = 0; $attempt < 2; $attempt++) {
         $ch = curl_init(provider_chat_endpoint($provider));
         curl_setopt_array($ch, [
@@ -53,7 +54,7 @@ function provider_complete_tools(string $provider, string $model, array $message
         ];
         if ($tools) $payload['tools'] = $tools;
         if ($think && $provider === 'openrouter') $payload['reasoning'] = ['effort' => $reasoning];
-        if ($provider === 'llamacpp') $payload['chat_template_kwargs'] = ['enable_thinking' => $think];
+        if ($provider === 'llamacpp' || $provider === 'vllm') $payload['chat_template_kwargs'] = ['enable_thinking' => $think];
     } else {
         $payload = [
             'model' => $model,
@@ -92,7 +93,8 @@ function provider_complete_tools(string $provider, string $model, array $message
 
 function generate_chat_title(string $userMessage): ?string {
     $provider = ai_provider();
-    if ($provider === 'openrouter') return null;
+    // vllm serves her and nothing else, no title model next to her
+    if ($provider === 'openrouter' || $provider === 'vllm') return null;
     $model = $provider === 'llamacpp' ? llamacpp_title_model() : title_model();
     if ($model === '') return null;
 

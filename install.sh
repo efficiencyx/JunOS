@@ -23,6 +23,9 @@ ADDED_DOCKER_GROUP=""
 # and the two want opposite things the moment something needs
 # asking.
 EXPRESS=0
+# 1 for Cloud: the model runs on colab.ipynb (or Kaggle) in
+# inference only mode, everything else here
+CLOUD=0
 if [ "$HANDOFF" = 1 ]; then
     NEED_SG="${JUN_NEED_SG:-0}"
     NEED_SUDO="${JUN_NEED_SUDO:-0}"
@@ -281,6 +284,14 @@ env_value() {
     grep -E "^$1=" .env 2>/dev/null | tail -1 | cut -d= -f2- || true
 }
 
+# Cloud is Express apart from its own three questions (the
+# notebook lines, voice, karaoke). JUN_CLOUD_ASK=1 is what still
+# asks those under the JUN_YES=1 Express runs on.
+can_ask() {
+    [ -r /dev/tty ] || return 1
+    [ "${JUN_YES:-}" != "1" ] || [ "${JUN_CLOUD_ASK:-}" = "1" ]
+}
+
 gen_key() {
     if command -v openssl >/dev/null 2>&1; then
         openssl rand -hex 16
@@ -342,7 +353,7 @@ ask_karaoke() {
         case "$(printf '%s' "$preset" | tr '[:upper:]' '[:lower:]')" in
             off|0|false|no|n) KARAOKE=off ;; *) KARAOKE=on ;;
         esac
-    elif [ "${JUN_YES:-}" = "1" ] || [ ! -r /dev/tty ]; then
+    elif ! can_ask; then
         KARAOKE=on
     else
         printf '     %s$%s enable karaoke %s(sing along - adds a few GB)%s %s[Y/n]%s %s→%s ' \
@@ -529,6 +540,65 @@ configure_mtp() {
     fi
 }
 
+# what colab.ipynb prints in inference only mode. only these
+# names get into .env, the rest of a paste is dropped.
+CLOUD_KEYS="AI_PROVIDER OLLAMA_URL OLLAMA_API_KEY OLLAMA_MODELS_TO_PULL TITLE_MODEL OMEGA_NUM_CTX VLLM_URL VLLM_API_KEY VLLM_MODEL"
+
+cloud_line() {
+    local key="${1%%=*}" val="${1#*=}"
+    [ "$key" != "$1" ] || return 1
+    case " $CLOUD_KEYS " in
+        *" $key "*) set_env "$key" "$val" ;;
+        *) note "skipped $key, the notebook never prints that one"; return 1 ;;
+    esac
+}
+
+# sets $CLOUD_PROVIDER. the lines come from a paste, or from the
+# environment on an unattended run (same names). no paste keeps
+# whatever a previous run left in .env.
+configure_cloud() {
+    local line key val url
+    if can_ask; then
+        {
+            printf '\n     %spaste the lines from the notebook%s\n' "$B" "$R"
+            printf '     %scolab.ipynb or Kaggle with Mode = inference only, Step 3 prints them.%s\n' "$DIM" "$R"
+            printf '     %sthen enter on an empty line. no notebook yet? just enter, they go in .env later%s\n' "$DIM" "$R"
+        } > /dev/tty
+        while IFS= read -r line < /dev/tty; do
+            line="$(printf '%s' "$line" | tr -d '\r' | sed 's/^[[:space:]]*//; s/[[:space:]]*$//')"
+            [ -n "$line" ] || break
+            cloud_line "$line" || true
+        done
+    else
+        for key in $CLOUD_KEYS; do
+            val="$(printenv "$key" || true)"
+            [ -z "$val" ] || set_env "$key" "$val"
+        done
+    fi
+
+    CLOUD_PROVIDER="$(env_value AI_PROVIDER)"
+    case "$CLOUD_PROVIDER" in
+        vllm) url="$(env_value VLLM_URL)" ;;
+        ollama)
+            url="$(env_value OLLAMA_URL)"
+            case "$url" in ''|*://ollama[:/]*|*://localhost[:/]*|*://127.0.0.1[:/]*) url="" ;; esac
+            ;;
+        *) url="" ;;
+    esac
+    if [ -n "$url" ]; then
+        ok "her brain at $url"
+    else
+        # ollama with the default URL boots a local ollama and pulls
+        # the 12B into it. vllm with no URL starts nothing. until the
+        # lines arrive her replies just fail.
+        CLOUD_PROVIDER=vllm
+        warn_ "no notebook link yet - ./start.sh link takes Step 3's lines later"
+    fi
+    # a remote ollama has no jun-mtp, php would ask it for one
+    # anyway when an old local install left this set
+    set_env OLLAMA_MTP ""
+}
+
 # TELEMETRY and TELEMETRY_INSTALL_ID in an old .env do nothing,
 # delete them. they were for a chat sharing feature that never
 # shipped and isn't planned, nothing in the app ever read them.
@@ -538,7 +608,9 @@ configure() {
 
     step "configure"
 
-    if [ -n "${JUN_PROVIDER:-}" ]; then
+    if [ "$CLOUD" = 1 ]; then
+        provider=cloud
+    elif [ -n "${JUN_PROVIDER:-}" ]; then
         provider="$(printf '%s' "$JUN_PROVIDER" | tr '[:upper:]' '[:lower:]')"
     elif [ "${JUN_YES:-}" = "1" ] || [ ! -r /dev/tty ]; then
         provider=ollama
@@ -559,15 +631,16 @@ configure() {
         esac
     fi
     case "$provider" in
-        ollama|openrouter|llamacpp) ;;
+        ollama|openrouter|llamacpp|cloud) ;;
         *) printf '     %s✗%s unknown provider "%s", using Ollama\n' "$DANGER" "$R" "$provider" > /dev/tty 2>/dev/null || true
            provider=ollama ;;
     esac
 
     TENSOR_PARALLEL=off
-    if [ "$provider" != openrouter ]; then
-        ask_tensor_parallel
-    fi
+    case "$provider" in
+        openrouter|cloud) ;;
+        *) ask_tensor_parallel ;;
+    esac
 
     case "$provider" in
     ollama)
@@ -634,6 +707,12 @@ configure() {
             configure_mtp llamacpp
         fi
         ;;
+
+    cloud)
+        configure_cloud
+        provider="$CLOUD_PROVIDER"
+        profiles=""
+        ;;
     esac
 
     set_env AI_PROVIDER "$provider"
@@ -644,7 +723,7 @@ configure() {
         case "$(printf '%s' "$VOICE" | tr '[:upper:]' '[:lower:]')" in
             off|0|false|no) voice=off ;; *) voice=on ;;
         esac
-    elif [ "${JUN_YES:-}" = "1" ] || [ ! -r /dev/tty ]; then
+    elif ! can_ask; then
         voice=on
     else
         printf '     %s$%s enable voice %s(TTS)%s %s[Y/n]%s %s→%s ' \
@@ -1170,14 +1249,25 @@ confirm_deps() {
 # and runs the whole install on detected defaults. the one thing
 # it still asks is the game folder, when extraction can't find
 # it. Custom walks through the provider/model/voice prompts.
-# JUN_EXPRESS=1 picks Express up front.
+# Cloud is Express minus the model. JUN_EXPRESS=1 / JUN_CLOUD=1
+# pick one up front.
 choose_install_mode() {
+    case "$(printf '%s' "${JUN_CLOUD:-}" | tr '[:upper:]' '[:lower:]')" in
+        1|on|yes|true) CLOUD=1 ;;
+    esac
     # a handoff child takes the answer the parent already got
     if [ "$HANDOFF" = 1 ]; then
         case "${JUN_EXPRESS:-}" in
             1) EXPRESS=1; return ;;
             0) return ;;
         esac
+    fi
+    if [ "$CLOUD" = 1 ]; then
+        JUN_CLOUD=1; export JUN_CLOUD
+        [ "${JUN_YES:-}" = "1" ] && return
+        { true >/dev/tty; } 2>/dev/null || return 0
+        cloud_mode
+        return
     fi
     [ "${JUN_YES:-}" = "1" ] && return
     case "$(printf '%s' "${JUN_EXPRESS:-}" | tr '[:upper:]' '[:lower:]')" in
@@ -1192,13 +1282,23 @@ choose_install_mode() {
         printf '\n     %show should I install?%s\n' "$B" "$R"
         printf '       %s1%s  Express  %s-%s everything with recommended settings %s(default)%s\n' "$ACCENT" "$R" "$DIM" "$R" "$DIM" "$R"
         printf '       %s2%s  Custom   %s-%s pick the provider, model, voice, and more\n' "$ACCENT" "$R" "$DIM" "$R"
+        printf '       %s3%s  Cloud    %s-%s everything but the model, she thinks on a Colab/Kaggle notebook. chats go there\n' "$ACCENT" "$R" "$DIM" "$R"
         printf '     %s$%s choice %s[enter = Express]%s %s→%s ' "$OK" "$R" "$DIM" "$R" "$ACCENT" "$R"
     } > /dev/tty
     read -r ans < /dev/tty || ans=""
     case "$ans" in
         2|custom|Custom|CUSTOM) JUN_EXPRESS=0; export JUN_EXPRESS; note "custom install - I'll ask about each option below" ;;
+        3|cloud|Cloud|CLOUD) cloud_mode ;;
         *) JUN_YES=1; JUN_EXPRESS=1; export JUN_YES JUN_EXPRESS; EXPRESS=1; ok "express install - using recommended settings" ;;
     esac
+}
+
+# a person at the keyboard picked Cloud. Express for the rest.
+cloud_mode() {
+    CLOUD=1; EXPRESS=1
+    JUN_YES=1; JUN_EXPRESS=1; JUN_CLOUD=1; JUN_CLOUD_ASK=1
+    export JUN_YES JUN_EXPRESS JUN_CLOUD JUN_CLOUD_ASK
+    ok "cloud install - no model here, I'll ask for the notebook's lines"
 }
 
 # JUN_REPO allows forks, so non-upstream code needs HTTPS and an
@@ -1504,6 +1604,13 @@ clone_into() {
 # we don't hand to.
 hand_off() {
     [ "$HANDOFF" = 1 ] && return 0
+    # an installer from before Cloud reads JUN_YES=1 as plain
+    # Express and pulls her into a local ollama. 8 GB, for nothing
+    if [ "$CLOUD" = 1 ] && ! grep -q JUN_CLOUD install.sh 2>/dev/null; then
+        fail_ "the Jun this installs doesn't know cloud installs yet"
+        note "re-run with JUN_CHANNEL=experimental, or pick Express or Custom"
+        exit 1
+    fi
     { [ -f install.sh ] && grep -q JUN_HANDOFF install.sh; } || return 0
     [ -f "$0" ] && cmp -s "$0" install.sh && return 0
     export JUN_HANDOFF=1 JUN_DIR="$PWD" JUN_CHANNEL="$CHANNEL" \
@@ -1659,6 +1766,9 @@ if docker_run docker info >/dev/null 2>&1; then
     fi
     printf '\n   %s$%s %s%sready%s %s-%s open %shttps://localhost%s\n' \
         "$OK" "$R" "$B" "$OK" "$R" "$DIM" "$R" "$B$ACCENT" "$R"
+    if [ "$CLOUD" = 1 ]; then
+        note "the notebook's URL and key change every run. ./start.sh asks for the new lines when the old ones stop answering"
+    fi
     printf '   %sstop:%s ./start.sh stop   %s·%s   %sstatus:%s ./start.sh status\n\n' \
         "$DIM" "$R" "$DIM" "$R" "$DIM" "$R"
     [ "$NEED_SUDO" = 1 ] && note "you're not in the docker group, so prefix those with sudo."

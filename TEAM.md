@@ -59,7 +59,7 @@ Want to help: [CONTRIBUTING.md](CONTRIBUTING.md).
 
 ### September 2025, attempt zero
 
-The idea of Jun as a chatbot started in September 2024. I was obsessed, the story fucked my brain, and i was barely decent at coding. The first version was a simple chat UI with 4 static AI generated images of Jun, and node_modules was somehow 300MB. After a couple messages with GPT-OSS-20B i got bored and left it to rot. My coding got better fast after that, but i had to focus on other things that ended up costing way too much money and life.
+The idea of Jun as a chatbot started in September 2024. It was just an idea, something like chatgpt but just for Jun. One year later September 2025 I decided to actually create something like that. At that time i was obsessed, the story fucked my brain, and i was barely decent at coding. The first version was a simple chat UI with 4 static AI generated images of Jun, and node_modules was somehow 300MB. After a couple messages with GPT-OSS-20B i got bored and left it to rot. My coding got better fast after that, but i had to focus on other things that ended up costing way too much money and life.
 
 ### November 2025, doing her properly
 
@@ -107,6 +107,15 @@ In the end i had a decent product. I made a small showcase, showed it to Sheep a
 I was happy. Till i wasn't. I went on a security deep dive with Claude and GPT and fixed every edge case we could find. Not enough. Added a new feature. Not enough. I had release anxiety. I still do, there's a reason the project still isn't released as of 18/10/2026.
 
 But i kinda got over it, at least enough to make the repo public. So the project is tecnically out there, and the anxiety got easier to manage.
+
+### Digging her back up
+
+On 19/10/2026 i wanted to see the first Jun again, so i went through git instead of my memory. Turns out git remembers better than me:
+
+- JunWeb is older than i thought. The repo was created on 30/04/2025, and the commits that survive are from 18 to 26/11/2025. React + Vite, a model called `jun` built on GPT-OSS, and every reply had to start with `[Emotion: jealous]` (or angry, happy, love, tired, sad) so the page knew which picture of her to show. That tag is the great-grandparent of the `[A:...]` action tags she uses today. On 25/11 the pictures got swapped, and the last commit added a 2 second rate limit.
+- This repo starts on 13/05/2026 with stock `qwen2.5:7b`, a debug panel in italian and her in greyscale. The chat UI most of you know showed up 16 days later, in a commit literally called "idk".
+- The first finetune was the 7B, a QLoRA from mid May 2026. The 14B came on 29/05, trained on 1700 conversations. Both got deleted from Hugging Face at some point and no copy survived anywhere, not on my disks, not in docker, not on Drive.
+- The dataset did survive. So the same day i retrained the 7B with the original settings and put it back up as Jun-LoRA-v0. Same recipe, same overfitting. It's supposed to be a bit overfitted.
 
 ### The present
 

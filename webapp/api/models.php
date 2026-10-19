@@ -59,11 +59,11 @@ if ($provider === 'openrouter') {
             $models = json_decode((string)file_get_contents($cacheFile), true);
         }
     }
-} elseif ($provider === 'llamacpp') {
+} elseif ($provider === 'llamacpp' || $provider === 'vllm') {
     header('Cache-Control: public, max-age=10');
     $data = http_get_json(chat_api_base() . '/models', chat_request_headers());
     if (is_array($data['data'] ?? null)) {
-        $titleModel = llamacpp_title_model();
+        $titleModel = $provider === 'llamacpp' ? llamacpp_title_model() : '';
         $models = [];
         foreach ($data['data'] as $m) {
             if (!isset($m['id']) || !is_string($m['id']) || $m['id'] === $titleModel) continue;
@@ -72,7 +72,7 @@ if ($provider === 'openrouter') {
     }
 } else {
     header('Cache-Control: public, max-age=10');
-    $data = http_get_json(chat_api_base('ollama') . '/api/tags');
+    $data = http_get_json(chat_api_base('ollama') . '/api/tags', chat_request_headers('ollama'));
     if (is_array($data['models'] ?? null)) {
         $titleModel = title_model();
         // neither of these goes in the picker. the drafter (the small

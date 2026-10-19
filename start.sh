@@ -89,9 +89,101 @@ add_profile() {
   case ",${profiles}," in *,"$1",*) ;; *) profiles="${profiles:+$profiles,}$1" ;; esac
 }
 
+# her brain on another machine, mostly colab.ipynb in inference
+# only mode. the quick tunnel URL and the gate key are new every
+# notebook run, so a link that stopped answering is how we find
+# out it changed. ask for Step 3's lines instead of making people
+# hand edit .env. only these names get in, the rest of a paste is
+# dropped.
+CLOUD_KEYS="AI_PROVIDER OLLAMA_URL OLLAMA_API_KEY OLLAMA_MODELS_TO_PULL TITLE_MODEL OMEGA_NUM_CTX VLLM_URL VLLM_API_KEY VLLM_MODEL"
+
+env_set() {
+  local tmp
+  tmp="$(mktemp .env.XXXXXX)"
+  grep -vE "^$1=" .env > "$tmp" 2>/dev/null || true
+  printf '%s=%s\n' "$1" "$2" >> "$tmp"
+  chmod 600 "$tmp"
+  mv "$tmp" .env
+}
+
+# "url|key|probe-path" of a model server off this machine, nothing
+# when it's ours. loopback and the compose names are ours.
+cloud_link() {
+  local url
+  case "$(env_get AI_PROVIDER)" in
+    vllm) printf '%s|%s|/v1/models' "$(env_get VLLM_URL)" "$(env_get VLLM_API_KEY)" ;;
+    openrouter|llamacpp) ;;
+    *)
+      url="$(env_get OLLAMA_URL)"
+      case "$url" in ''|*://ollama[:/]*|*://localhost[:/]*|*://127.0.0.1[:/]*|*://host.docker.internal[:/]*) ;;
+        *) printf '%s|%s|/api/tags' "$url" "$(env_get OLLAMA_API_KEY)" ;;
+      esac
+      ;;
+  esac
+}
+
+cloud_paste() {
+  local line key n=0
+  echo "paste the lines Step 3 of the notebook printed, then enter on an empty line."
+  echo "(just enter keeps what .env has)"
+  while IFS= read -r line < /dev/tty; do
+    line="$(printf '%s' "$line" | tr -d '\r' | sed 's/^[[:space:]]*//; s/[[:space:]]*$//')"
+    [ -n "$line" ] || break
+    key="${line%%=*}"
+    [ "$key" != "$line" ] || continue
+    case " $CLOUD_KEYS " in
+      *" $key "*) env_set "$key" "${line#*=}"; n=$((n + 1)) ;;
+      *) echo "skipped $key, the notebook never prints that one" ;;
+    esac
+  done
+  [ "$n" -eq 0 ] || echo "saved $n line(s) to .env"
+}
+
+# 8 s, a tunnel that's alive answers in under one. a dead quick
+# tunnel is a DNS failure or a cloudflare 530, a stale key is the
+# gate's 401. same thing to us, the lines are old.
+check_cloud_link() {
+  local url="" key="" probe="" auth=()
+  IFS='|' read -r url key probe <<<"$(cloud_link)" || true
+  [ -n "$probe" ] || return 0
+  command -v curl >/dev/null 2>&1 || return 0
+  [ -z "$key" ] || auth=(-H "Authorization: Bearer $key")
+  if [ -n "$url" ] && curl -fsS -o /dev/null -m 8 ${auth[@]+"${auth[@]}"} "${url%/}$probe" 2>/dev/null; then
+    return 0
+  fi
+  if [ -z "$url" ]; then
+    echo "no link to her model server in .env yet (VLLM_URL is empty)" >&2
+  else
+    echo "her model server at $url isn't answering. a new notebook run means a new URL and key" >&2
+  fi
+  if [ -t 1 ] && { true >/dev/tty; } 2>/dev/null; then
+    cloud_paste
+  else
+    echo "./start.sh link takes the new lines" >&2
+  fi
+}
+
+case "${1:-up}" in
+  link)
+    { true >/dev/tty; } 2>/dev/null || { echo "./start.sh link needs a terminal" >&2; exit 1; }
+    cloud_paste
+    echo "./start.sh to restart her with them"
+    exit 0
+    ;;
+  stop|down|status|ps|logs|trust) ;;
+  *) check_cloud_link ;;
+esac
+
 profiles="${COMPOSE_PROFILES:-}"
 file_profiles="$(env_get COMPOSE_PROFILES)"
-for p in ${file_profiles//,/ }; do add_profile "$p"; done
+# except the model server ones. those come from AI_PROVIDER and
+# the URLs below. install.sh writes COMPOSE_PROFILES=ollama, so
+# pointing OLLAMA_URL at the colab tunnel later would still boot
+# a local ollama nobody talks to, and it'd pull the 12B into it.
+# 8 GB. for nothing.
+for p in ${file_profiles//,/ }; do
+  case "$p" in ollama|llamacpp) ;; *) add_profile "$p" ;; esac
+done
 
 provider="$(env_get AI_PROVIDER)"; provider="${provider:-ollama}"
 llamacpp_url="$(env_get LLAMACPP_URL)"
@@ -114,7 +206,9 @@ case "$provider" in
       [ -z "$llamacpp_alias" ] || export LLAMACPP_MODEL_ALIAS="$llamacpp_alias"
     fi
     ;;
-  openrouter) : ;;
+  # vllm is never ours to run, it's the colab/kaggle TPU (or a
+  # server of your own) behind VLLM_URL
+  openrouter|vllm) : ;;
   *)
     # We run ollama ourselves unless you pointed us at your own.
     case "$(env_get OLLAMA_URL)" in

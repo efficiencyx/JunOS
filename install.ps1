@@ -338,6 +338,12 @@ $interactive = [Environment]::UserInteractive -and ($env:JUN_YES -ne '1')
 # the unattended run want opposite things. a person can answer.
 # a redirected run just Hangs on Read-Host with nobody to see it.
 $script:expressInteractive = $false
+# Cloud: the model runs on colab.ipynb (or Kaggle) in inference
+# only mode, everything else here. cloudAsk is a person at the
+# keyboard, who still gets asked the notebook lines, voice and
+# karaoke while the rest goes Express.
+$script:cloud = $env:JUN_CLOUD -match '^(1|on|yes|true)$'
+$script:cloudAsk = $handoff -and $env:JUN_CLOUD_ASK -eq '1'
 
 function Test-Sha256([string]$path, [string]$expected) {
     if (-not $expected) { return $false }
@@ -393,9 +399,24 @@ function Protect-EnvFile {
 
 # the first thing someone non technical sees. Express installs
 # the lot with what we detected and asks nothing else, same as
-# JUN_YES=1. Custom walks the prompts. JUN_EXPRESS=1 picks
-# Express before we even ask.
+# JUN_YES=1. Custom walks the prompts. Cloud is Express minus
+# the model. JUN_EXPRESS=1 / JUN_CLOUD=1 pick one before we even
+# ask.
+function Enter-CloudMode {
+    $env:JUN_YES = '1'; $env:JUN_EXPRESS = '1'; $env:JUN_CLOUD = '1'; $env:JUN_CLOUD_ASK = '1'
+    $script:interactive = $false
+    $script:expressInteractive = $true
+    $script:cloud = $true; $script:cloudAsk = $true
+    Ok "cloud install - no model here, I'll ask for the notebook's lines"
+}
+
 function Choose-InstallMode {
+    if ($script:cloud -and -not $handoff) {
+        $env:JUN_CLOUD = '1'
+        if ($env:JUN_YES -eq '1' -or -not [Environment]::UserInteractive) { return }
+        Enter-CloudMode
+        return
+    }
     # a handoff child takes the answer the parent already got.
     if ($handoff -and $env:JUN_EXPRESS -eq '1') {
         $script:interactive = $false
@@ -414,10 +435,13 @@ function Choose-InstallMode {
     Write-Host "     ${B}how should I install?${R}"
     Write-Host "       ${ACCENT}[1]${R}  Express  ${DIM}- everything with recommended settings${R} ${DIM}(default)${R}"
     Write-Host "       ${ACCENT}[2]${R}  Custom   ${DIM}- pick the provider, model, voice, and more${R}"
+    Write-Host "       ${ACCENT}[3]${R}  Cloud    ${DIM}- everything but the model, she thinks on a Colab/Kaggle notebook. chats go there${R}"
     $ans = Read-Styled "     ${OK}▸${R} choice ${DIM}[Enter = Express]${R} ${ACCENT}›${R} "
     if ($ans -match '^(2|custom)$') {
         $env:JUN_EXPRESS = '0'
         Note "custom install - I'll ask about each option below"
+    } elseif ($ans -match '^(3|cloud)$') {
+        Enter-CloudMode
     } else {
         $env:JUN_YES = '1'; $env:JUN_EXPRESS = '1'; $script:interactive = $false
         $script:expressInteractive = $true
@@ -479,7 +503,7 @@ function Ask-Karaoke([string]$voice) {
         return $(if ($preset.ToLower() -match '^(off|0|false|no|n)$') { 'off' } else { 'on' })
     }
     if ($voice -ne 'on') { return 'off' }
-    if (-not $interactive) { return 'on' }
+    if (-not ($interactive -or $script:cloudAsk)) { return 'on' }
     $v = Read-Styled "     ${OK}▸${R} enable karaoke ${DIM}(sing along - adds a few GB)${R} ${DIM}[Y/n]${R} ${ACCENT}›${R} "
     return $(if ($v -match '^(n|no)$') { 'off' } else { 'on' })
 }
@@ -578,8 +602,63 @@ function Configure-Mtp([string]$provider, [string]$modelRef) {
     return $autotune
 }
 
+# what colab.ipynb prints in inference only mode. only these
+# names get into .env, the rest of a paste is dropped.
+$CloudKeys = @('AI_PROVIDER', 'OLLAMA_URL', 'OLLAMA_API_KEY', 'OLLAMA_MODELS_TO_PULL', 'TITLE_MODEL',
+               'OMEGA_NUM_CTX', 'VLLM_URL', 'VLLM_API_KEY', 'VLLM_MODEL')
+
+# the lines come from a paste, or from the environment on an
+# unattended run (same names, the GUI sends them that way). no
+# paste keeps whatever a previous run left in .env.
+function Configure-Cloud {
+    if ($script:cloudAsk) {
+        Write-Host ''
+        Write-Host "     ${B}paste the lines from the notebook${R}"
+        Write-Host "     ${DIM}colab.ipynb or Kaggle with Mode = inference only, Step 3 prints them.${R}"
+        Write-Host "     ${DIM}then Enter on an empty line. no notebook yet? just Enter, they go in .env later${R}"
+        while ($true) {
+            $line = Read-Styled '       '
+            if (-not $line) { break }
+            $eq = $line.IndexOf('=')
+            if ($eq -lt 1) { continue }
+            $key = $line.Substring(0, $eq)
+            if ($key -cnotin $CloudKeys) { Note "skipped $key, the notebook never prints that one"; continue }
+            Set-EnvKey $key $line.Substring($eq + 1)
+        }
+    } else {
+        foreach ($key in $CloudKeys) {
+            $val = [Environment]::GetEnvironmentVariable($key)
+            if ($val) { Set-EnvKey $key $val }
+        }
+    }
+
+    $provider = (Get-EnvValue 'AI_PROVIDER').ToLower()
+    $url = switch ($provider) {
+        'vllm'   { Get-EnvValue 'VLLM_URL' }
+        'ollama' { Get-EnvValue 'OLLAMA_URL' }
+        default  { '' }
+    }
+    # start.ps1 only leaves ollama alone when the URL is off this PC.
+    # ollama:11434 is .env.example's docker default, start.ps1 drops
+    # that one and goes local too
+    if ($provider -eq 'ollama' -and $url -match '://(127\.0\.0\.1|localhost|\[::1\]|ollama)(:|/|$)') { $url = '' }
+    if ($url) {
+        Ok "her brain at $url"
+    } else {
+        # vllm with no URL starts nothing. ollama would get installed
+        # and pull her onto this PC. until the lines arrive her
+        # replies just fail.
+        $provider = 'vllm'
+        Warn_ "no notebook link yet - the manager's Notebook link button takes Step 3's lines later"
+    }
+    # a remote ollama has no jun-mtp, php would ask it for one
+    # anyway when an old local install left this set
+    Set-EnvKey 'OLLAMA_MTP' ''
+    return $provider
+}
+
 function Configure-Jun {
-    $provider = if ($env:JUN_PROVIDER) { $env:JUN_PROVIDER.ToLower() } else { '' }
+    $provider = if ($script:cloud) { 'cloud' } elseif ($env:JUN_PROVIDER) { $env:JUN_PROVIDER.ToLower() } else { '' }
     if (-not $provider) {
         if ($interactive) {
             Write-Host ''
@@ -598,7 +677,7 @@ function Configure-Jun {
             $provider = 'ollama'
         }
     }
-    if ($provider -notin 'ollama', 'openrouter', 'llamacpp') {
+    if ($provider -notin 'ollama', 'openrouter', 'llamacpp', 'cloud') {
         Warn_ "unknown provider '$provider', using Ollama"
         $provider = 'ollama'
     }
@@ -607,7 +686,7 @@ function Configure-Jun {
 
     # we ask this before the model question. splitting across cards
     # changes how much VRAM we get to assume when recommending one.
-    $script:tensorParallel = if ($provider -eq 'openrouter') { 'off' } else { Ask-TensorParallel }
+    $script:tensorParallel = if ($provider -in 'openrouter', 'cloud') { 'off' } else { Ask-TensorParallel }
 
     $needsOllama = ($provider -eq 'ollama')
     $needsLlamacpp = $false
@@ -665,6 +744,9 @@ function Configure-Jun {
                 $script:mtpAutotune = Configure-Mtp 'llamacpp' $modelRef
             }
         }
+        'cloud' {
+            $provider = Configure-Cloud
+        }
     }
     Set-EnvKey 'AI_PROVIDER' $provider
     Ok "provider $provider"
@@ -675,7 +757,7 @@ function Configure-Jun {
     $voice = $env:VOICE
     if ($voice) {
         $voice = if ($voice.ToLower() -match '^(off|0|false|no)$') { 'off' } else { 'on' }
-    } elseif ($interactive) {
+    } elseif ($interactive -or $script:cloudAsk) {
         $v = Read-Styled "     ${OK}▸${R} enable voice ${DIM}(TTS)${R} ${DIM}[Y/n]${R} ${ACCENT}›${R} "
         $voice = if ($v -match '^(n|no)$') { 'off' } else { 'on' }
     } else {
@@ -1801,6 +1883,14 @@ function Assert-PinnedCheckout([string]$path) {
 function Invoke-Handoff([string]$path) {
     if ($handoff) { return }
     $theirs = Join-Path $path 'install.ps1'
+    # an installer from before Cloud reads JUN_YES=1 as plain
+    # Express, installs ollama and pulls her onto this PC. 8 GB, for nothing
+    if ($script:cloud -and -not ((Test-Path -LiteralPath $theirs) -and
+            (Select-String -LiteralPath $theirs -Pattern 'JUN_CLOUD' -SimpleMatch -Quiet))) {
+        Fail_ "the Jun this installs doesn't know cloud installs yet"
+        Note "re-run with `$env:JUN_CHANNEL='experimental', or pick Express or Custom"
+        Exit-Install 1
+    }
     if (-not (Test-Path -LiteralPath $theirs)) { return }
     if (-not (Select-String -LiteralPath $theirs -Pattern 'JUN_HANDOFF' -SimpleMatch -Quiet)) { return }
     if ($PSCommandPath -and (Test-Path -LiteralPath $PSCommandPath) -and
@@ -1961,6 +2051,7 @@ if ($cfg.shortcuts -eq 'on') {
     Note "to start, stop or update her later: $managerExe"
 }
 Note 'to remove everything later: ./uninstall.ps1'
+if ($script:cloud) { Note "the notebook's URL and key change every run. Start in the manager asks for the new lines when the old ones stop answering" }
 
 $regKey = Get-EnvValue 'OMEGA_REGISTRATION_KEY'
 Write-Host ''

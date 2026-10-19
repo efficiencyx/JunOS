@@ -141,6 +141,8 @@ The installers fetch code from other people and run it. What is checked:
 | Models | Hugging Face, via Ollama or llama.cpp | Tags only. Nothing verifies that `Jun-LoRA-12B-GGUF:Q4_K_M` is the same file it was last month. |
 | MTP drafters | Hugging Face, third-party uploads (`Janvitos/...`, `amaranus/...` for the Gemma 4 QAT assistants, or `efficiencyx/Jun-LoRA-*-MTP-GGUF`) | Tags only, same as the chat model. Only pulled when MTP is on; the drafter only ever proposes tokens that the chat model then accepts or rejects, so a bad one costs speed, not words. |
 | Title model (Ollama and llama.cpp) | Hugging Face, `efficiencyx/Titlewen-GGUF` | Tags only. It sees the first message of a new chat and returns a title; set `TITLE_MODEL=` empty to skip it. |
+| vLLM (Colab/Kaggle notebook, TPU only) | PyPI | `vllm-tpu==0.30.0`, installed into its own venv. Not hash-locked, transitive deps (jax, torch) float. |
+| cloudflared (notebook, inference-only mode) | GitHub release | Version and sha256 pinned in `colab.ipynb`; the download is refused when the digest differs. |
 
 The one-liner install (`curl ... | bash`) runs whatever `main`'s `install.sh`
 says at that moment, unread. That script only gets as far as the clone: it then
@@ -179,6 +181,18 @@ first install or a GPU change talks only to your own model server.
 * `openrouter.ai` - **only** if you chose OpenRouter as the provider, and then
   your messages go to their cloud. That is the whole point of the option, and it
   is not the default nor recommended.
+* `*.trycloudflare.com` - **only** if you pointed `OLLAMA_URL` or `VLLM_URL` at
+  `colab.ipynb` running in inference-only mode (by hand, with `start.sh link`,
+  the manager's Notebook link button, or the installer's Cloud option). Each
+  start also sends that URL one `GET /api/tags` or `/v1/models` with the key,
+  to notice a link that went stale. Every prompt then goes to your
+  notebook on Google's machine through Cloudflare, with what rides along with
+  it: the recent history, recalled memories and lore. Your account, the
+  database and the memory files stay here. The tunnel ends at
+  `tools/inference-gate.py`, which wants a per-run 256-bit bearer key, compares
+  it in constant time and only passes chat and read endpoints, so somebody who
+  finds the URL can't use the GPU or touch the model store. Cloudflare
+  terminates TLS on a quick tunnel, so it can read that traffic in transit.
 
 **Never:** there is no analytics, no crash reporting, no usage ping, no update
 check, and nothing reports back to this project. An older build had a
@@ -225,7 +239,10 @@ other deployment configuration. The installers restrict it to your user
 (`chmod 600`, or an ACL on Windows). It is gitignored.
 
 **Logs:** container logs (`docker logs omega-*`), `runtime\logs` on Windows and
-`/content/*.log` on Colab hold request ids, sizes and error codes. The voice
+`/content/*.log` on Colab (`/kaggle/working/*.log` on Kaggle) hold request
+ids, sizes and error codes, plus the `Host` name of any request the bare-metal
+router refused. The notebook's `gate.log` holds method and status only, no
+paths or headers. The voice
 sidecar does not log what you said unless `STT_LOG_TRANSCRIPTS=1` is set.
 Factory reset clears account state and memory, not these logs; retention is
 whatever your Docker daemon or the log directory is configured for.

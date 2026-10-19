@@ -478,17 +478,31 @@ public sealed class InstallerProcessOutput
                 <ScrollViewer VerticalScrollBarVisibility="Auto">
                     <StackPanel MaxWidth="720" HorizontalAlignment="Left">
                         <TextBlock Text="Choose your setup" FontSize="28" FontWeight="SemiBold" />
-                        <TextBlock Text="Express uses hardware-aware defaults. Custom exposes providers and optional features." TextWrapping="Wrap" Foreground="#C1C6D0" Margin="0,8,0,16" />
+                        <TextBlock Text="Express uses hardware-aware defaults. Custom exposes providers and optional features. Cloud installs everything but the model, which runs on your Colab or Kaggle notebook." TextWrapping="Wrap" Foreground="#C1C6D0" Margin="0,8,0,16" />
 
                         <StackPanel Orientation="Horizontal">
                             <RadioButton x:Name="ExpressRadio" GroupName="Mode" Content="Express (recommended)" IsChecked="True" />
                             <RadioButton x:Name="CustomRadio" GroupName="Mode" Content="Custom" />
+                            <RadioButton x:Name="CloudRadio" GroupName="Mode" Content="Cloud inference" />
                         </StackPanel>
 
                         <Border x:Name="ExpressSummary" Background="#16242B" BorderBrush="#315467" BorderThickness="1" CornerRadius="6" Padding="18" Margin="0,16,0,0">
                             <StackPanel>
                                 <TextBlock Text="Recommended setup" FontWeight="SemiBold" Foreground="#CBEFFF" />
                                 <TextBlock x:Name="ExpressSummaryText" TextWrapping="Wrap" Foreground="#C1C6D0" Margin="0,8,0,0" LineHeight="22" />
+                            </StackPanel>
+                        </Border>
+
+                        <Border x:Name="CloudOptions" Background="#1A1D24" BorderBrush="#343945" BorderThickness="1" CornerRadius="6" Padding="18" Margin="0,16,0,0" Visibility="Collapsed">
+                            <StackPanel>
+                                <TextBlock Text="Lines from the notebook" FontWeight="SemiBold" />
+                                <TextBlock Text="Run colab.ipynb (or the Kaggle copy) with Mode set to inference only. Step 3 prints a few lines starting with AI_PROVIDER=, paste them here. No notebook yet? Leave it empty, the Notebook link button in the Jun OS manager takes them later." TextWrapping="Wrap" Foreground="#8D95A5" FontSize="12" Margin="0,6,0,0" />
+                                <TextBox x:Name="CloudLines" AcceptsReturn="True" TextWrapping="NoWrap" FontFamily="Consolas" Height="118" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Auto" Margin="0,8,0,0" />
+                                <TextBlock Text="Your messages travel to the notebook through a Cloudflare tunnel. The link and key change every time Step 3 runs." TextWrapping="Wrap" Foreground="#FFC46B" FontSize="12" Margin="0,8,0,0" />
+
+                                <Separator Margin="0,16,0,8" Background="#343945" />
+                                <CheckBox x:Name="CloudVoiceCheck" Content="Voice conversation (TTS and speech recognition)" IsChecked="True" />
+                                <CheckBox x:Name="CloudKaraokeCheck" Content="Karaoke and singing features (adds a few GB)" IsChecked="True" Margin="22,7,0,0" />
                             </StackPanel>
                         </Border>
 
@@ -634,7 +648,8 @@ $window = [Windows.Markup.XamlReader]::Load($reader)
 $controlNames = @(
     'HeaderSubtitle', 'StepText', 'WelcomePage', 'OptionsPage', 'AssetsPage',
     'ReviewPage', 'InstallPage', 'InstallLocation', 'BrowseInstallButton',
-    'HardwareText', 'ExpressRadio', 'CustomRadio', 'ExpressSummary', 'ExpressSummaryText',
+    'HardwareText', 'ExpressRadio', 'CustomRadio', 'CloudRadio', 'ExpressSummary', 'ExpressSummaryText',
+    'CloudOptions', 'CloudLines', 'CloudVoiceCheck', 'CloudKaraokeCheck',
     'CustomOptions', 'ChannelPanel', 'ChannelCombo', 'ProviderCombo',
     'OpenRouterPanel', 'OpenRouterKey', 'OpenRouterModel', 'LlamaPanel', 'LlamaUrl',
     'LocalModelPanel', 'ModelCombo', 'TensorParallelCheck', 'TensorParallelHint', 'VoiceCheck',
@@ -822,8 +837,10 @@ function Show-Message([string]$message, [string]$title = 'Jun OS Setup') {
 
 function Update-Mode {
     $custom = $CustomRadio.IsChecked -eq $true
-    $ExpressSummary.Visibility = if ($custom) { 'Collapsed' } else { 'Visible' }
+    $cloud = $CloudRadio.IsChecked -eq $true
+    $ExpressSummary.Visibility = if ($custom -or $cloud) { 'Collapsed' } else { 'Visible' }
     $CustomOptions.Visibility = if ($custom) { 'Visible' } else { 'Collapsed' }
+    $CloudOptions.Visibility = if ($cloud) { 'Visible' } else { 'Collapsed' }
     if (-not $custom) {
         $ProviderCombo.SelectedIndex = 0
         Select-Model $script:recommendedModel
@@ -873,7 +890,34 @@ function Resolve-InstallLocation {
     return $path
 }
 
+# only the names the notebook prints, the same list install.ps1
+# takes. a stray line from the paste never reaches .env.
+$CloudKeys = @('AI_PROVIDER', 'OLLAMA_URL', 'OLLAMA_API_KEY', 'OLLAMA_MODELS_TO_PULL', 'TITLE_MODEL',
+               'OMEGA_NUM_CTX', 'VLLM_URL', 'VLLM_API_KEY', 'VLLM_MODEL')
+
+function Get-CloudValues {
+    $values = [ordered]@{}
+    foreach ($raw in ($CloudLines.Text -split "`r?`n")) {
+        $line = $raw.Trim()
+        $eq = $line.IndexOf('=')
+        if ($eq -lt 1) { continue }
+        $key = $line.Substring(0, $eq)
+        if ($key -cin $CloudKeys) { $values[$key] = $line.Substring($eq + 1) }
+    }
+    return $values
+}
+
 function Validate-Options {
+    if ($CloudRadio.IsChecked -eq $true) {
+        if ($CloudLines.Text.Trim()) {
+            $cloud = Get-CloudValues
+            $url = if ($cloud['AI_PROVIDER'] -eq 'vllm') { $cloud['VLLM_URL'] } else { $cloud['OLLAMA_URL'] }
+            if (-not $url) {
+                throw 'Those lines have no AI_PROVIDER and URL in them. Copy everything Step 3 printed, or leave the box empty.'
+            }
+        }
+        return
+    }
     $provider = Get-SelectedTag $ProviderCombo
     if ($provider -eq 'openrouter') {
         if ([string]::IsNullOrWhiteSpace($OpenRouterKey.Password)) {
@@ -902,20 +946,22 @@ function Validate-Assets {
 
 function Get-SetupValues {
     $express = $ExpressRadio.IsChecked -eq $true
-    $provider = if ($express) { 'ollama' } else { Get-SelectedTag $ProviderCombo }
+    $cloud = $CloudRadio.IsChecked -eq $true
+    $provider = if ($cloud) { 'cloud' } elseif ($express) { 'ollama' } else { Get-SelectedTag $ProviderCombo }
     $model = if ($express) { $script:recommendedModel } else { Get-SelectedTag $ModelCombo }
     return @{
         Express = $express
-        # Express leaves it to install.ps1: stable for a new folder,
-        # whatever an existing install already follows.
-        Channel = if ($express -or $script:PinnedRef) { '' } else { Get-SelectedTag $ChannelCombo }
+        Cloud = $cloud
+        # Express and Cloud leave it to install.ps1: stable for a new
+        # folder, whatever an existing install already follows.
+        Channel = if ($express -or $cloud -or $script:PinnedRef) { '' } else { Get-SelectedTag $ChannelCombo }
         Provider = $provider
         Model = $model
-        TensorParallel = (-not $express -and $TensorParallelCheck.IsChecked -eq $true)
-        Voice = ($express -or $VoiceCheck.IsChecked -eq $true)
-        Karaoke = ($express -or $KaraokeCheck.IsChecked -eq $true)
-        Shortcuts = ($express -or $ShortcutCheck.IsChecked -eq $true)
-        Mtp = ($express -or $MtpCheck.IsChecked -eq $true)
+        TensorParallel = (-not $express -and -not $cloud -and $TensorParallelCheck.IsChecked -eq $true)
+        Voice = if ($cloud) { $CloudVoiceCheck.IsChecked -eq $true } else { $express -or $VoiceCheck.IsChecked -eq $true }
+        Karaoke = if ($cloud) { $CloudKaraokeCheck.IsChecked -eq $true } else { $express -or $KaraokeCheck.IsChecked -eq $true }
+        Shortcuts = ($express -or $cloud -or $ShortcutCheck.IsChecked -eq $true)
+        Mtp = (-not $cloud -and ($express -or $MtpCheck.IsChecked -eq $true))
         MtpDepth = (Get-SelectedTag $MtpDepthCombo)
         Extract = ($ExtractCheck.IsChecked -eq $true)
     }
@@ -924,8 +970,12 @@ function Get-SetupValues {
 function Update-Review {
     $values = Get-SetupValues
     $path = Resolve-InstallLocation
-    $providerNames = @{ ollama = 'Ollama (local)'; openrouter = 'OpenRouter (cloud)'; llamacpp = 'llama.cpp (local)' }
-    $modelText = if ($values.Provider -eq 'openrouter') {
+    $providerNames = @{ ollama = 'Ollama (local)'; openrouter = 'OpenRouter (cloud)'; llamacpp = 'llama.cpp (local)'; cloud = 'Your Colab or Kaggle notebook' }
+    $modelText = if ($values.Cloud) {
+        $cloud = Get-CloudValues
+        $url = if ($cloud['AI_PROVIDER'] -eq 'vllm') { $cloud['VLLM_URL'] } else { $cloud['OLLAMA_URL'] }
+        if ($url) { "On the notebook, at $url" } else { 'On the notebook, link goes in .env later' }
+    } elseif ($values.Provider -eq 'openrouter') {
         $OpenRouterModel.Text.Trim()
     } elseif ($values.Provider -eq 'llamacpp' -and $LlamaUrl.Text.Trim()) {
         "Existing server at $($LlamaUrl.Text.Trim())"
@@ -934,7 +984,7 @@ function Update-Review {
     }
     $lines = @(
         "Folder       $path",
-        "Setup        $(if ($values.Express) { 'Express' } else { 'Custom' })",
+        "Setup        $(if ($values.Express) { 'Express' } elseif ($values.Cloud) { 'Cloud inference' } else { 'Custom' })",
         "Version      $(if ($script:PinnedRef) { "$($script:PinnedRef), pinned" } elseif ($values.Channel) { $values.Channel.Substring(0, 1).ToUpper() + $values.Channel.Substring(1) + ' channel' } else { 'Stable channel' })",
         "Provider     $($providerNames[$values.Provider])",
         "Model        $modelText",
@@ -1115,8 +1165,8 @@ function Start-Installation {
         'JUN_YES', 'JUN_EXPRESS', 'JUN_DIR', 'JUN_CHANNEL', 'JUN_REF', 'JUN_PIN_SHA', 'JUN_PROVIDER', 'JUN_MODEL',
         'JUN_TENSOR_PARALLEL', 'JUN_MTP', 'JUN_MTP_DEPTH', 'JUN_KARAOKE',
         'JUN_EXTRACT', 'JUN_SHORTCUTS', 'JUN_TRUST_CA', 'JUN_MANAGER_EXE', 'JUN_GAME_DIR', 'JUN_BOOTSTRAP_WINGET', 'VOICE',
-        'KARAOKE', 'OPENROUTER_API_KEY', 'OPENROUTER_MODEL', 'LLAMACPP_URL'
-    )
+        'KARAOKE', 'OPENROUTER_API_KEY', 'OPENROUTER_MODEL', 'LLAMACPP_URL', 'JUN_CLOUD', 'JUN_CLOUD_ASK'
+    ) + $CloudKeys
     foreach ($key in $managedKeys) { $info.EnvironmentVariables.Remove($key) }
 
     $info.EnvironmentVariables['JUN_YES'] = '1'
@@ -1149,6 +1199,11 @@ function Start-Installation {
     if ($values.Provider -eq 'llamacpp' -and $LlamaUrl.Text.Trim()) {
         $info.EnvironmentVariables['LLAMACPP_URL'] = $LlamaUrl.Text.Trim()
     }
+    if ($values.Cloud) {
+        $info.EnvironmentVariables['JUN_CLOUD'] = '1'
+        $cloud = Get-CloudValues
+        foreach ($key in $cloud.Keys) { $info.EnvironmentVariables[$key] = $cloud[$key] }
+    }
 
     $script:process = [Diagnostics.Process]::new()
     $script:process.StartInfo = $info
@@ -1176,6 +1231,7 @@ $BrowseGameButton.Add_Click({
 
 $ExpressRadio.Add_Checked({ Update-Mode })
 $CustomRadio.Add_Checked({ Update-Mode })
+$CloudRadio.Add_Checked({ Update-Mode })
 $ProviderCombo.Add_SelectionChanged({ Update-ProviderPanels })
 $LlamaUrl.Add_TextChanged({ Update-ProviderPanels })
 $TensorParallelCheck.Add_Click({ Select-Model (Get-RecommendedModel ($TensorParallelCheck.IsChecked -eq $true)) })
@@ -1183,6 +1239,11 @@ $VoiceCheck.Add_Click({
     $voiceEnabled = $VoiceCheck.IsChecked -eq $true
     $KaraokeCheck.Visibility = if ($voiceEnabled) { 'Visible' } else { 'Collapsed' }
     if (-not $voiceEnabled) { $KaraokeCheck.IsChecked = $false }
+})
+$CloudVoiceCheck.Add_Click({
+    $voiceEnabled = $CloudVoiceCheck.IsChecked -eq $true
+    $CloudKaraokeCheck.Visibility = if ($voiceEnabled) { 'Visible' } else { 'Collapsed' }
+    if (-not $voiceEnabled) { $CloudKaraokeCheck.IsChecked = $false }
 })
 $MtpCheck.Add_Click({
     $MtpDepthPanel.Visibility = if ($MtpCheck.IsChecked -eq $true) { 'Visible' } else { 'Collapsed' }

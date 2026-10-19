@@ -31,8 +31,11 @@ const PLAIN_MAX_TOKENS = 512;
 
 // what's left on the card once the weights and a bit of working
 // room are gone. zero when we don't know the GPU size, see
-// OMEGA_GPU_VRAM_MB in start.sh.
+// OMEGA_GPU_VRAM_MB in start.sh. also zero when ollama lives on
+// another machine, OMEGA_GPU_VRAM_MB is THIS box's card. a remote
+// one gets OMEGA_NUM_CTX instead, colab.ipynb prints it
 function gpu_ctx_headroom_mb(): int {
+    if (model_server_is_remote()) return 0;
     $vram = (int)env_str('OMEGA_GPU_VRAM_MB', '0');
     if ($vram <= 0) return 0;
     $weights = ollama_model_weights_mb(default_chat_model());
@@ -83,6 +86,7 @@ function default_num_ctx(): int {
 // picked and we have no idea what its window is.
 function provider_window_tokens(string $provider, string $model = ''): int {
     if ($provider === 'llamacpp') return llamacpp_window_tokens($model !== '' ? $model : default_chat_model());
+    if ($provider === 'vllm') return vllm_window_tokens($model !== '' ? $model : default_chat_model());
     if ($provider === 'openrouter') return 0;
     return default_num_ctx();
 }
@@ -125,6 +129,7 @@ function fit_messages_to_context(array $messages, int $numCtx, int $reserve = 10
 
 function provider_context_size(string $provider, array $payload): int {
     if ($provider === 'llamacpp') return llamacpp_window_tokens((string)($payload['model'] ?? default_chat_model()));
+    if ($provider === 'vllm') return vllm_window_tokens((string)($payload['model'] ?? default_chat_model()));
     if (provider_uses_openai_protocol($provider)) return 0;
     return (int)($payload['options']['num_ctx'] ?? 0);
 }

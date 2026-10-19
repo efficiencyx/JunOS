@@ -102,7 +102,24 @@ foreach (preg_split('/[\s,]+/', getenv('OMEGA_ALLOWED_HOSTS') ?: 'localhost,127.
     $host = strtolower(trim($host, " \t\n\r\0\x0B[]"));
     if ($host !== '') $allowedHosts[] = $host;
 }
-if (!in_array(router_request_host(), $allowedHosts, true)) router_fail(421, 'invalid host');
+// leading dot = the domain and everything under it, same rule as
+// host_is_allowed() in webapp/api/lib/guards.php
+$hostAllowed = false;
+$requestHost = router_request_host();
+foreach ($allowedHosts as $entry) {
+    if ($requestHost === $entry || ($entry[0] === '.' && $requestHost !== ''
+            && ($requestHost === substr($entry, 1) || str_ends_with($requestHost, $entry)))) {
+        $hostAllowed = true;
+        break;
+    }
+}
+if (!$hostAllowed) {
+    // the name goes in the log or nobody can tell what to add to
+    // OMEGA_ALLOWED_HOSTS. it's already been through parse_url, no
+    // spaces or control chars left to forge a log line with
+    error_log('invalid host: ' . router_request_host());
+    router_fail(421, 'invalid host');
+}
 
 header('X-Content-Type-Options: nosniff');
 header('X-Frame-Options: DENY');

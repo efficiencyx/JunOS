@@ -18,6 +18,7 @@ require_once __DIR__ . '/achievements.php';
 require_once __DIR__ . '/providers/config.php';
 require_once __DIR__ . '/providers/ollama.php';
 require_once __DIR__ . '/providers/llamacpp.php';
+require_once __DIR__ . '/providers/vllm.php';
 require_once __DIR__ . '/providers/context.php';
 require_once __DIR__ . '/providers/payload.php';
 require_once __DIR__ . '/providers/complete.php';

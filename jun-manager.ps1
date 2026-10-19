@@ -137,6 +137,7 @@ public sealed class JunProcessOutput
             <Button x:Name="OpenButton" Content="Open Jun OS" />
             <Button x:Name="FolderButton" Content="Open folder" />
             <Button x:Name="LogsButton" Content="Logs" />
+            <Button x:Name="LinkButton" Content="Notebook link" />
             <Button x:Name="UpdateButton" Content="Update" />
             <Button x:Name="UninstallButton" Content="Uninstall" />
         </WrapPanel>
@@ -150,7 +151,7 @@ public sealed class JunProcessOutput
 
 $window = [Windows.Markup.XamlReader]::Load([Xml.XmlNodeReader]::new($xaml))
 foreach ($name in 'FolderText', 'StateText', 'DetailText', 'StartButton', 'StopButton', 'OpenButton',
-        'FolderButton', 'LogsButton', 'UpdateButton', 'UninstallButton', 'OutputBox') {
+        'FolderButton', 'LogsButton', 'LinkButton', 'UpdateButton', 'UninstallButton', 'OutputBox') {
     Set-Variable -Name $name -Value $window.FindName($name) -Scope Script
 }
 $FolderText.Text = $script:Root
@@ -246,6 +247,7 @@ function Invoke-StartScript([string]$action) {
     $info.RedirectStandardError = $true
     $info.StandardOutputEncoding = [Text.Encoding]::UTF8
     $info.StandardErrorEncoding = [Text.Encoding]::UTF8
+    if ($action -eq 'start') { $info.EnvironmentVariables['JUN_LINK_CHECKED'] = '1' }
 
     $OutputBox.Clear()
     $script:process = [Diagnostics.Process]::new()
@@ -296,7 +298,102 @@ $timer.Add_Tick({
     if ($script:ticks % 15 -eq 0) { Update-Status }
 })
 
-$StartButton.Add_Click({ Invoke-StartScript 'start' })
+# start.ps1 runs hidden from here and can't ask for the notebook's
+# new lines when its tunnel URL or key changed (every notebook run).
+# so the same check as start.ps1 happens here, with a box to paste
+# into, and JUN_LINK_CHECKED tells start.ps1 it's been done.
+$CloudKeys = @('AI_PROVIDER', 'OLLAMA_URL', 'OLLAMA_API_KEY', 'OLLAMA_MODELS_TO_PULL', 'TITLE_MODEL',
+               'OMEGA_NUM_CTX', 'VLLM_URL', 'VLLM_API_KEY', 'VLLM_MODEL')
+
+function Get-CloudLink {
+    switch ((Get-EnvValue 'AI_PROVIDER' 'ollama').ToLower()) {
+        'vllm' { return @{ Url = (Get-EnvValue 'VLLM_URL' ''); Key = (Get-EnvValue 'VLLM_API_KEY' ''); Probe = '/v1/models' } }
+        'ollama' {
+            $url = Get-EnvValue 'OLLAMA_URL' ''
+            # ollama:11434 is .env.example's docker default, start.ps1 runs a local one for it
+            if (-not $url -or $url -match '://(127\.0\.0\.1|localhost|\[::1\]|ollama)(:|/|$)') { return $null }
+            return @{ Url = $url; Key = (Get-EnvValue 'OLLAMA_API_KEY' ''); Probe = '/api/tags' }
+        }
+    }
+    return $null
+}
+
+function Test-CloudLink($link) {
+    if (-not $link.Url) { return $false }
+    [Net.ServicePointManager]::SecurityProtocol = [Net.ServicePointManager]::SecurityProtocol -bor [Net.SecurityProtocolType]::Tls12
+    $headers = @{}
+    if ($link.Key) { $headers['Authorization'] = "Bearer $($link.Key)" }
+    try {
+        Invoke-WebRequest -UseBasicParsing -Uri ($link.Url.TrimEnd('/') + $link.Probe) -Headers $headers -TimeoutSec 8 | Out-Null
+        return $true
+    } catch {
+        return $false
+    }
+}
+
+function Save-CloudLines([string]$text) {
+    $envPath = Join-Path $script:Root '.env'
+    $lines = @(Get-Content -LiteralPath $envPath)
+    foreach ($raw in ($text -split "`r?`n")) {
+        $line = $raw.Trim()
+        $eq = $line.IndexOf('=')
+        if ($eq -lt 1) { continue }
+        $key = $line.Substring(0, $eq)
+        if ($key -cnotin $CloudKeys) { continue }
+        $lines = @($lines | Where-Object { $_ -notmatch "^$key=" }) + $line
+    }
+    Set-Content -LiteralPath $envPath -Value $lines
+}
+
+# true = go ahead (saved, or start anyway), false = the box got closed
+function Show-CloudDialog([string]$reason, [string]$saveLabel, [string]$skipLabel) {
+    [xml]$dialogXaml = @'
+<Window xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="Jun OS" Width="560" SizeToContent="Height" WindowStartupLocation="CenterOwner" ResizeMode="NoResize"
+        Background="#111318" Foreground="#F3F4F6" FontFamily="Segoe UI" FontSize="14">
+    <StackPanel Margin="24,20,24,16">
+        <TextBlock x:Name="ReasonText" TextWrapping="Wrap" />
+        <TextBlock Text="Paste the lines Step 3 of the notebook printed." Foreground="#AEB5C2" Margin="0,10,0,0" />
+        <TextBox x:Name="LinesBox" AcceptsReturn="True" TextWrapping="NoWrap" Height="120"
+                 FontFamily="Consolas" FontSize="12" Background="#0C0E12" Foreground="#C1C6D0" BorderBrush="#343945"
+                 VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Auto" Padding="6" Margin="0,8,0,16" />
+        <StackPanel Orientation="Horizontal" HorizontalAlignment="Right">
+            <Button x:Name="SaveButton" Padding="14,8" Margin="0,0,8,0" />
+            <Button x:Name="AnywayButton" Padding="14,8" />
+        </StackPanel>
+    </StackPanel>
+</Window>
+'@
+    $dialog = [Windows.Markup.XamlReader]::Load([Xml.XmlNodeReader]::new($dialogXaml))
+    $dialog.Owner = $window
+    $dialog.FindName('ReasonText').Text = $reason
+    $dialog.FindName('SaveButton').Content = $saveLabel
+    $dialog.FindName('AnywayButton').Content = $skipLabel
+    $box = $dialog.FindName('LinesBox')
+    $dialog.FindName('SaveButton').Add_Click({
+        if ($box.Text.Trim()) { Save-CloudLines $box.Text }
+        $dialog.DialogResult = $true
+    })
+    $dialog.FindName('AnywayButton').Add_Click({ $dialog.DialogResult = $skipLabel -ne 'Cancel' })
+    return $dialog.ShowDialog() -eq $true
+}
+
+function Confirm-CloudLink {
+    $link = Get-CloudLink
+    if (-not $link -or (Test-CloudLink $link)) { return $true }
+    $reason = if ($link.Url) {
+        "Her model server at $($link.Url) isn't answering. A new notebook run means a new URL and key."
+    } else {
+        'There is no link to her model server in .env yet.'
+    }
+    return Show-CloudDialog $reason 'Save and start' 'Start anyway'
+}
+
+$StartButton.Add_Click({ if (Confirm-CloudLink) { Invoke-StartScript 'start' } })
+$LinkButton.Add_Click({
+    [void](Show-CloudDialog 'Lend her brain to the Colab or Kaggle notebook in inference only mode. Stop then Start afterwards to use it.' 'Save' 'Cancel')
+})
 $StopButton.Add_Click({ Invoke-StartScript 'stop' })
 $OpenButton.Add_Click({ Start-Process (Get-SiteUrl) })
 $FolderButton.Add_Click({ Start-Process explorer.exe -ArgumentList "`"$($script:Root)`"" })

@@ -97,9 +97,18 @@
         <h2>Other services this app can talk to</h2>
         <p>Whichever AI provider you pick is where your messages go. With the bundled Ollama or
         llama.cpp that is your own machine, and nothing leaves it. If you configure a hosted
-        provider instead (<strong>OpenRouter</strong> is the one shipped today), your prompts are
-        sent to that provider, and its terms and retention apply to them. Review those before
-        enabling it. Voice and karaoke run locally in sidecar containers. A message beginning with
+        provider instead (<strong>OpenRouter</strong>), your prompts are sent to that provider, and
+        its terms and retention apply to them. Review those before enabling it.</p>
+        <p>If you point Jun at a model server on another machine, usually the
+        <strong>Colab or Kaggle notebook</strong> in inference-only mode (the installers' Cloud
+        option), every prompt goes to that machine with what Jun sends along with it: the recent
+        conversation, recalled memories, lore and, for voice turns, the recording. Your account, the
+        database and the memory files stay on your machine. The notebook runs on Google's servers
+        under your own Google or Kaggle account, and their terms apply. Requests reach it through a
+        Cloudflare quick tunnel, where Cloudflare terminates TLS and can read them in transit. Each
+        start also sends that address one request with its key to check that the link still
+        works.</p>
+        <p>Voice and karaoke run locally in sidecar containers. A message beginning with
         <code>/search </code> sends the exact text after that prefix to DuckDuckGo once; Jun cannot
         add conversation or memory text to it. Karaoke can send song title, artist, album and duration
         to LRCLIB for a lyrics lookup.</p>

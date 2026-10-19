@@ -31,9 +31,22 @@ function allowed_request_hosts(): array {
     return array_values(array_unique($hosts));
 }
 
+// a leading dot means that domain and everything under it, same as
+// in nginx's server_name, which gets this list on docker. colab
+// needs it: on a TPU runtime the proxy sends the VM's own
+// <vm>.<zone>.c.<project>.internal name, and the notebook sits in
+// a container that can't look that name up
+function host_is_allowed(string $host, array $allowed): bool {
+    foreach ($allowed as $entry) {
+        if ($host === $entry) return true;
+        if ($entry[0] === '.' && ($host === substr($entry, 1) || str_ends_with($host, $entry))) return true;
+    }
+    return false;
+}
+
 function require_allowed_host(): void {
     $host = request_host();
-    if ($host === '' || !in_array($host, allowed_request_hosts(), true)) {
+    if ($host === '' || !host_is_allowed($host, allowed_request_hosts())) {
         log_event(['msg' => 'invalid_host', 'host' => $host]);
         fail(421, 'invalid_host');
     }

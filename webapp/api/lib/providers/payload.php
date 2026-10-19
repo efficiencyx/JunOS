@@ -47,9 +47,12 @@ function provider_chat_payload(
     }
     // the GGUF's jinja with enable_thinking:X renders byte for byte
     // what ollama's gemma4 renderer does with think:X, <|think|> in
-    // the system turn or not. so same switch, same prompt.
-    if ($provider === 'llamacpp') {
+    // the system turn or not. so same switch, same prompt. vllm reads
+    // the same kwarg off the safetensors repo's chat_template.jinja
+    if ($provider === 'llamacpp' || $provider === 'vllm') {
         $payload['chat_template_kwargs'] = ['enable_thinking' => $think];
+    }
+    if ($provider === 'llamacpp') {
         $payload['messages'] = array_map('llamacpp_audio_parts', $messages);
     }
     return $payload;

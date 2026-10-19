@@ -63,6 +63,7 @@ services:
     environment:
       AI_PROVIDER: "${AI_PROVIDER:-ollama}"
       OLLAMA_URL: "${OLLAMA_URL:-http://ollama:11434}"
+      OLLAMA_API_KEY: "${OLLAMA_API_KEY:-}"
       OLLAMA_MODELS_TO_PULL: "${OLLAMA_MODELS_TO_PULL:-hf.co/efficiencyx/Jun-LoRA-E2B-GGUF:Q4_K_M}"
       TITLE_MODEL: "${TITLE_MODEL-hf.co/efficiencyx/Titlewen-GGUF:F16}"
       OLLAMA_MTP: "${OLLAMA_MTP:-}"
@@ -70,6 +71,9 @@ services:
       OPENROUTER_API_KEY: "${OPENROUTER_API_KEY:-}"
       OPENROUTER_MODEL: "${OPENROUTER_MODEL:-}"
       LLAMACPP_URL: "${LLAMACPP_URL:-http://llamacpp:8080}"
+      VLLM_URL: "${VLLM_URL:-}"
+      VLLM_API_KEY: "${VLLM_API_KEY:-}"
+      VLLM_MODEL: "${VLLM_MODEL:-}"
       OMEGA_NUM_CTX: "${OMEGA_NUM_CTX:-}"
       OMEGA_TURN_TIMEOUT_S: "${OMEGA_TURN_TIMEOUT_S:-}"
       OMEGA_STREAM_IDLE_S: "${OMEGA_STREAM_IDLE_S:-}"

@@ -28,6 +28,7 @@ function karaoke_purge_jobs(PDO $db): void {
 // separation, worst case they both want the card. both servers
 // load her back on the next message.
 function evict_chat_model(): void {
+    if (model_server_is_remote()) return;
     if (ai_provider() === 'llamacpp') {
         llamacpp_unload_chat_models();
         return;

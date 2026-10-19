@@ -62,10 +62,11 @@ The window suggests a `JunOS` folder inside your user folder (`C:\Users\YourName
 
 A system folder (like `C:\Windows\System32`) or a folder inside OneDrive won't be used, the installer puts her in your user folder instead and says so.
 
-### Step 3 - Express or Custom
+### Step 3 - Express, Custom or Cloud inference
 
 * **Express (recommended)** looks at your hardware, picks a model that fits your graphics card, turns on the voice, and rebuilds her body from your game. This is the right answer for almost everyone.
 * **Custom** lets you choose the release channel, the AI provider, the model, whether the voice is on, and so on. Every option has a default.
+* **Cloud inference** installs everything except the model. Her brain runs on the [Colab notebook](#already-installed-but-your-graphics-card-is-too-small) in inference-only mode instead, so your messages go there. Paste the lines its Step 3 printed into the box (or leave it empty and add them later), and pick whether you want the voice and karaoke.
 
 If something goes wrong the installer stops, says what in plain words, and waits before the window closes. Fix that one thing and run it again: it picks up where it stopped.
 
@@ -114,7 +115,7 @@ Same install, no exe. For people who'd rather see every step scroll by.
 
 1. Press the **Windows key**, type `Command Prompt`, press **Enter**. A black window opens. (**Windows PowerShell** works too.)
 2. The installer creates a folder named `JunOS` inside whatever folder the terminal is in, which is your user folder (`C:\Users\YourName`) when it opens. To put her somewhere else, type `cd /d D:\Games` (your folder) and press Enter first. An *Administrator* Command Prompt opens in `C:\Windows\System32`, and like a OneDrive folder the installer won't use it: it falls back to your user folder and says so.
-3. Paste this line (right-click inside the window pastes) and press **Enter**. It asks the same questions as the exe, as text: **Enter** for Express, `2` for Custom.
+3. Paste this line (right-click inside the window pastes) and press **Enter**. It asks the same questions as the exe, as text: **Enter** for Express, `2` for Custom, `3` for Cloud.
 
 ```powershell
 powershell irm https://github.com/efficiencyx/JunOS/releases/latest/download/install.ps1 -OutFile install.ps1; powershell -ExecutionPolicy Bypass -File .\install.ps1
@@ -185,6 +186,7 @@ curl -fsSL https://github.com/efficiencyx/JunOS/releases/latest/download/install
 
 * Press **Enter** for **Express**. Hardware is detected, a model that fits your card is picked, voice is enabled, her body gets rebuilt from your game.
 * Type `2` for **Custom** to choose provider, model, voice, karaoke and so on yourself. Every question has a default.
+* Type `3` for **Cloud** to install everything except the model, which runs on the [Colab notebook](#already-installed-but-your-graphics-card-is-too-small) instead. It asks you to paste the lines the notebook printed (an empty line skips that), then about voice and karaoke.
 
 ### Step 6 - Let it work
 
@@ -356,12 +358,23 @@ Things worth knowing on CPU:
 
 ## No computer? Google Colab
 
-Run the whole thing on Google's free T4 GPU without installing anything. It's pratically a free demo: Colab wipes accounts, chats and downloads when the session ends.
+Run the whole thing on Google Colab without installing anything. It's pratically a free demo: Colab wipes accounts, chats and downloads when the session ends.
 
 1. Open <https://colab.research.google.com/github/efficiencyx/JunOS/blob/main/colab.ipynb>.
-2. **Runtime > Change runtime type > T4 GPU > Save.**
-3. **Runtime > Run all**. Wait for the green checkmarks, 3 to 15 minutes the first time. (Yes, that fast! they give 10Gbps links :O)
+2. **Runtime > Change runtime type**, pick a **TPU** if Colab offers you one, then **Save**. She answers way faster on a TPU than on the free **T4 GPU**, which is the fallback. A v6e-1 runs the full 12B. A v5e-1 runs a slightly compressed copy of it with a shorter memory, the notebook picks that one for you.
+3. **Runtime > Run all**. Wait for the green checkmarks, 3 to 15 minutes the first time. (Yes, that fast! they give 10Gbps links :O) A TPU adds 10-20 minutes the first time while it compiles her.
 4. Click the link printed under **Step 3** in the notebook. If it 404s, wait 30 seconds and reload.
+
+### Already installed, but your graphics card is too small?
+
+The same notebook can lend Jun just its GPU or TPU while everything else stays on your computer, chats and memories included. It also works on Kaggle (Add-ons > Secrets for the GitHub credentials, Internet switched on in the notebook settings).
+
+1. In **Step 1** set **Mode** to *Inference only (Jun runs on my PC)* and run all three steps.
+2. **Step 3** prints a few lines starting with `AI_PROVIDER=`. Copy them.
+3. Give them to Jun. On Linux run `./start.sh link` in the `JunOS` folder and paste. On Windows press **Notebook link** in the manager and paste. (Installing from scratch? Pick **Cloud** in the installer, it asks for them.)
+4. Restart Jun: `./start.sh` on Linux, **Stop** then **Start** in the manager on Windows.
+
+Keep the notebook tab open. The URL and key in those lines change every time Step 3 runs. You don't have to remember that: when you start Jun and the old link doesn't answer, `./start.sh` (or **Start** in the manager) says so and asks for the new lines. Your messages travel to the notebook through a Cloudflare tunnel while this is on; switch back by restoring your old `AI_PROVIDER` and `OLLAMA_URL` lines in `.env` (or deleting them) and restarting.
 
 ---
 

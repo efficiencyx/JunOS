@@ -2,12 +2,11 @@
 
 function ai_provider(): string {
     $p = strtolower(env_str('AI_PROVIDER', 'ollama'));
-    return in_array($p, ['ollama', 'openrouter', 'llamacpp'], true) ? $p : 'ollama';
+    return in_array($p, ['ollama', 'openrouter', 'llamacpp', 'vllm'], true) ? $p : 'ollama';
 }
 
 function provider_uses_openai_protocol(?string $p = null): bool {
-    $p = $p ?? ai_provider();
-    return $p === 'openrouter' || $p === 'llamacpp';
+    return in_array($p ?? ai_provider(), ['openrouter', 'llamacpp', 'vllm'], true);
 }
 
 function chat_api_base(?string $provider = null): string {
@@ -16,6 +15,8 @@ function chat_api_base(?string $provider = null): string {
             return rtrim(env_str('OPENROUTER_BASE_URL', 'https://openrouter.ai/api/v1'), '/');
         case 'llamacpp':
             return rtrim(env_str('LLAMACPP_URL', 'http://127.0.0.1:8081'), '/') . '/v1';
+        case 'vllm':
+            return rtrim(env_str('VLLM_URL', 'http://127.0.0.1:8002'), '/') . '/v1';
         default:
             return rtrim(env_str('OLLAMA_URL', 'http://localhost:11434'), '/');
     }
@@ -24,13 +25,29 @@ function chat_api_base(?string $provider = null): string {
 function chat_request_headers(?string $provider = null): array {
     $provider = $provider ?? ai_provider();
     $h = ['Content-Type: application/json'];
+    $key = match ($provider) {
+        'openrouter' => env_str('OPENROUTER_API_KEY'),
+        'ollama' => env_str('OLLAMA_API_KEY'),
+        'vllm' => env_str('VLLM_API_KEY'),
+        default => '',
+    };
+    if ($key !== '') $h[] = 'Authorization: Bearer ' . $key;
     if ($provider === 'openrouter') {
-        $key = env_str('OPENROUTER_API_KEY');
-        if ($key !== '') $h[] = 'Authorization: Bearer ' . $key;
         $h[] = 'HTTP-Referer: https://github.com/efficiencyx/JunOS';
         $h[] = 'X-Title: Jun OS';
     }
     return $h;
+}
+
+// loopback, the compose service or the docker host is this
+// machine. anything else (a colab tunnel, a box on the LAN) has its
+// own GPU, so our VRAM numbers mean nothing for it and evicting
+// her over there to free OUR card for karaoke just costs a reload
+function model_server_is_remote(?string $provider = null): bool {
+    $provider = $provider ?? ai_provider();
+    if ($provider === 'openrouter') return true;
+    $host = strtolower(trim((string)parse_url(chat_api_base($provider), PHP_URL_HOST), '[]'));
+    return !in_array($host, ['localhost', '127.0.0.1', '::1', 'ollama', 'llamacpp', 'host.docker.internal'], true);
 }
 
 // the MTP model when speculative decoding is on, empty when it's
@@ -96,6 +113,9 @@ function default_chat_model(): string {
             // first HF repo in the list, see docker/llamacpp-entrypoint.sh
             if (env_str('LLAMACPP_MODEL_FILE') !== '') return env_str('LLAMACPP_MODEL_ALIAS', 'jun-local');
             return trim(explode(',', env_str('LLAMACPP_MODEL_HF', 'efficiencyx/Jun-LoRA-E2B-GGUF:Q4_K_M'))[0]);
+        case 'vllm':
+            // colab.ipynb serves whatever repo you picked as --served-model-name jun
+            return env_str('VLLM_MODEL') ?: (array_key_first(vllm_models()) ?? 'jun');
         default:
             // with MTP on, the ollama entrypoint derives a model carrying
             // the drafter as a DRAFT layer, and chat has to ask for that

@@ -1,6 +1,6 @@
 ﻿[CmdletBinding()]
 param(
-    [ValidateSet('start', 'stop', 'status', 'trust')]
+    [ValidateSet('start', 'stop', 'status', 'trust', 'link')]
     [string]$Action = 'start',
     [switch]$NoBrowser
 )
@@ -118,12 +118,94 @@ if (Test-Path .env) {
 }
 $SidecarSecret = if ($env:SIDECAR_SECRET) { $env:SIDECAR_SECRET } else { '' }
 
+# her brain on another machine, mostly colab.ipynb in inference
+# only mode. the quick tunnel URL and the gate key are new every
+# notebook run, so a link that stopped answering is how we find
+# out it changed. ask for Step 3's lines instead of making people
+# hand edit .env. only these names get in, the rest of a paste is
+# dropped. the manager window can't answer a prompt, it asks with
+# its own box before it runs us and sets JUN_LINK_CHECKED.
+$CloudKeys = @('AI_PROVIDER', 'OLLAMA_URL', 'OLLAMA_API_KEY', 'OLLAMA_MODELS_TO_PULL', 'TITLE_MODEL',
+               'OMEGA_NUM_CTX', 'VLLM_URL', 'VLLM_API_KEY', 'VLLM_MODEL')
+
+function Get-CloudLink {
+    switch ("$env:AI_PROVIDER".ToLower()) {
+        'vllm' { return @{ Url = "$env:VLLM_URL"; Key = "$env:VLLM_API_KEY"; Probe = '/v1/models' } }
+        { $_ -in 'openrouter', 'llamacpp' } { return $null }
+    }
+    # unset is ours too, the loader above drops .env.example's ollama:11434
+    if (-not $env:OLLAMA_URL -or $env:OLLAMA_URL -match '://(127\.0\.0\.1|localhost|\[::1\])(:|/|$)') { return $null }
+    return @{ Url = $env:OLLAMA_URL; Key = "$env:OLLAMA_API_KEY"; Probe = '/api/tags' }
+}
+
+# 8 s, a live tunnel answers in under one. a dead quick tunnel is
+# a DNS failure or a cloudflare 530, a stale key the gate's 401.
+# same thing to us, the lines are old.
+function Test-CloudLink($link) {
+    if (-not $link.Url) { return $false }
+    # PS 5.1 still offers TLS 1.0 first and cloudflare won't talk to it
+    [Net.ServicePointManager]::SecurityProtocol = [Net.ServicePointManager]::SecurityProtocol -bor [Net.SecurityProtocolType]::Tls12
+    $headers = @{}
+    if ($link.Key) { $headers['Authorization'] = "Bearer $($link.Key)" }
+    try {
+        Invoke-WebRequest -UseBasicParsing -Uri ($link.Url.TrimEnd('/') + $link.Probe) -Headers $headers -TimeoutSec 8 | Out-Null
+        return $true
+    } catch {
+        return $false
+    }
+}
+
+function Read-CloudLines {
+    Write-Host "    paste the lines Step 3 of the notebook printed, then Enter on an empty line."
+    Write-Host "    ${DIM}(just Enter keeps what .env has)${R}"
+    $saved = 0
+    while ($true) {
+        $line = [Console]::ReadLine()
+        if ($null -eq $line) { break }
+        $line = $line.Trim()
+        if (-not $line) { break }
+        $eq = $line.IndexOf('=')
+        if ($eq -lt 1) { continue }
+        $key = $line.Substring(0, $eq)
+        if ($key -cnotin $CloudKeys) { Note "skipped $key, the notebook never prints that one"; continue }
+        $val = $line.Substring($eq + 1)
+        $kept = @(Get-Content .env | Where-Object { $_ -notmatch "^$key=" })
+        Set-Content -Path .env -Value ($kept + "$key=$val")
+        Set-Item "env:$key" $val
+        $saved++
+    }
+    if ($saved) { Ok "saved $saved line(s) to .env" }
+}
+
+if ($Action -eq 'link') {
+    Read-CloudLines
+    Note 'Stop then Start (or .\start.ps1) to bring her up with them'
+    exit 0
+}
+
+if ($Action -eq 'start' -and $env:JUN_LINK_CHECKED -ne '1') {
+    $link = Get-CloudLink
+    if ($link -and -not (Test-CloudLink $link)) {
+        if ($link.Url) {
+            Warn_ "her model server at $($link.Url) isn't answering. a new notebook run means a new URL and key"
+        } else {
+            Warn_ 'no link to her model server in .env yet (VLLM_URL is empty)'
+        }
+        if ([Environment]::UserInteractive -and -not [Console]::IsInputRedirected -and -not [Console]::IsOutputRedirected) {
+            Read-CloudLines
+        } else {
+            Note '.\start.ps1 link takes the new lines'
+        }
+    }
+}
+
 $Port      = if ($env:JUN_PORT) { $env:JUN_PORT } else { '8080' }
 # php -S speaks plain HTTP only, so it sits on loopback behind
 # caddy, which does the TLS on JUN_PORT. nothing but caddy should
 # ever talk to this one.
 $PhpPort   = if ($env:JUN_PHP_PORT) { $env:JUN_PHP_PORT } else { '8079' }
 $OllamaUrl = if ($env:OLLAMA_URL) { $env:OLLAMA_URL } else { 'http://127.0.0.1:11434' }
+$OllamaRemote = $OllamaUrl -notmatch '://(127\.0\.0\.1|localhost|\[::1\])(:|/|$)'
 # SiteUrl stays loopback whatever we bind to. it is what the
 # browser opens, and that's this machine talking to itself.
 $SiteUrl   = "https://127.0.0.1:$Port"
@@ -199,7 +281,7 @@ if ($Action -eq 'start' -and $BindAddr -notin @('127.0.0.1', 'localhost', '::1')
 }
 
 $Provider  = if ($env:AI_PROVIDER) { $env:AI_PROVIDER.ToLower() } else { 'ollama' }
-if ($Provider -notin 'ollama', 'openrouter', 'llamacpp') { $Provider = 'ollama' }
+if ($Provider -notin 'ollama', 'openrouter', 'llamacpp', 'vllm') { $Provider = 'ollama' }
 $LlamaPort = if ($env:LLAMACPP_PORT) { $env:LLAMACPP_PORT } else { '8081' }
 $LlamacppUrl = if ($env:LLAMACPP_URL) { $env:LLAMACPP_URL } else { "http://127.0.0.1:$LlamaPort" }
 
@@ -452,8 +534,12 @@ function Start-Tracked([string]$name, [string]$exe, [string[]]$exeArgs) {
 # if an Ollama server is already up (the desktop app autostarts
 # one) just use it. otherwise launch `ollama serve` ourselves,
 # with the model store inside the install folder so the weights
-# go away with it on uninstall.
-if ($Provider -eq 'ollama') {
+# go away with it on uninstall. an OLLAMA_URL off this machine (the
+# colab notebook's tunnel) gets none of that, no install check and
+# no 8 GB pull of weights that would never get used here.
+if ($Provider -eq 'ollama' -and $OllamaRemote) {
+    Ok "using Ollama at $OllamaUrl (not on this machine, nothing to start here)"
+} elseif ($Provider -eq 'ollama') {
 if (-not (Get-Command ollama -ErrorAction SilentlyContinue)) {
     throw 'ollama is not installed. Run install.ps1 first (it installs Ollama for you).'
 }

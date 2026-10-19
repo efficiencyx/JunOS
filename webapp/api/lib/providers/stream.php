@@ -178,10 +178,10 @@ function stream_turn_deadline(): float {
 }
 
 function provider_stream_round(string $provider, array $payload, callable $emit, int $round = 0): array {
-    // ollama throws the trace away on think:false. llama.cpp hands
-    // back whatever reasoning_content it parsed out anyway, so the
+    // ollama throws the trace away on think:false. llama.cpp and
+    // vllm hand back whatever reasoning they parsed out anyway, so the
     // browser would get thinking on turns that asked for none
-    if ($provider === 'llamacpp' && empty($payload['chat_template_kwargs']['enable_thinking'])) {
+    if (($provider === 'llamacpp' || $provider === 'vllm') && empty($payload['chat_template_kwargs']['enable_thinking'])) {
         $emit = function (array $out) use ($emit) {
             if (!isset($out['thinking'])) $emit($out);
         };
@@ -191,6 +191,7 @@ function provider_stream_round(string $provider, array $payload, callable $emit,
     $buf = '';
     $toolAcc = [];
     $started = microtime(true);
+    if ($provider === 'vllm') $payload = vllm_fit_max_tokens($payload);
 
     $ch = curl_init(provider_chat_endpoint($provider));
     curl_setopt($ch, CURLOPT_POST, true);
