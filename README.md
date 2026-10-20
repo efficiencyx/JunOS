@@ -383,7 +383,7 @@ The notebook's tunnel URL and key are new every time Step 3 runs, and the sessio
 </details>
 
 <details>
-<summary><b>Jun is a lavender cardboard cutout</b></summary>
+<summary><b>Jun shows "Placeholder" / "404 Assets not extracted"</b></summary>
 
 That's the placeholder - the server couldn't find her rig. It wants all four of `webapp/assets/interaction_model.moc3` and `texture_00.png`..`texture_02.png`; one missing and you get the stand-in. Run the extraction (see [her body isn't in this repo](#her-body-isnt-in-this-repo)), then reload.
 </details>

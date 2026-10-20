@@ -6,13 +6,13 @@
 import { playSequence, releaseAll, resetIdle, renderIfDirty, setFidgetsEnabled, setMood, setMouthOverride, startIdle, stopIdle, tick } from './anim.js?v=80';
 import { bakeThumb } from './bake.js?v=2';
 import { cameraStates, captureCameraState, currentCameraMode, fitModel, loadPos, measureStage, rendererResolution, setCameraPreset as setRigCameraPreset, watchStageSize, writeCameraStates } from './camera.js?v=76';
-import { drawableAt, faceAnchor, findDrawables, hitTest, isOverModel } from './geometry.js?v=76';
-import { installStageInput } from './input.js?v=4';
-import { mountPlaceholder, setPlaceholderPreset } from './placeholder.js?v=3';
+import { drawableAt, faceAnchor, findDrawables, hitTest, isOverModel } from './geometry.js?v=78';
+import { installStageInput } from './input.js?v=6';
+import { mountPlaceholder, setPlaceholderPreset } from './placeholder.js?v=5';
 import { cancelPending, debugParam, hold, knows, scheduleSequence, setNow, setOnMissingParam, setTarget, startLoop, stopAllLoops, stopLoop } from './params.js?v=4';
 import { installColorShaderPatch, patchRenderer } from './renderer.js?v=2';
 import { S, app, currentValues, model, paramDefault, paramIndex, paramMax, paramMin, publicTint, raw, setApp, setModel, setParamRanges, setRaw } from './state.js?v=75';
-import { drawableThumb, getDrawableTint, installVariantCompositor, listDrawables, opacityByPattern, screenByPattern, setDrawableOpacity, setDrawableOrderBelow, setDrawableScreen, setDrawableTexture, setDrawableTextures, setDrawableTint, texturesSettled, tintByPattern } from './textures.js?v=76';
+import { drawableThumb, getDrawableTint, installVariantCompositor, listDrawables, opacityByPattern, screenByPattern, setDrawableOpacity, setDrawableOrderBelow, setDrawableScreen, setDrawableTexture, setDrawableTextures, setDrawableTint, texturesSettled, tintByPattern } from './textures.js?v=78';
 
 export {
   bakeThumb, cancelPending, debugParam, drawableAt, drawableThumb, faceAnchor, findDrawables, fitModel,

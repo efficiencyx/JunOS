@@ -1,64 +1,71 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 400 900" fill="none">
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 400 900" fill="none" role="img" aria-labelledby="title desc">
+  <title id="title">Placeholder - 404 Assets not extracted</title>
+  <desc id="desc">An unfinished character in glasses, a hoodie, skirt and trainers stands in for Jun. You should be able to see this only if you haven't extracted the assets from your copy of the game or something broke. check /assets/ if the files are there open an issue.</desc>
   <defs>
-    <linearGradient id="fill" x1="0" y1="0" x2="0" y2="1">
-      <stop offset="0" stop-color="#c4a0f0" stop-opacity="0.34"/>
-      <stop offset="1" stop-color="#c4a0f0" stop-opacity="0.10"/>
+    <linearGradient id="cloth" x1="200" y1="240" x2="200" y2="530" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#40384f"/>
+      <stop offset="1" stop-color="#272331"/>
     </linearGradient>
-    <linearGradient id="hair" x1="0" y1="0" x2="0" y2="1">
-      <stop offset="0" stop-color="#8f6fc0" stop-opacity="0.55"/>
-      <stop offset="1" stop-color="#8f6fc0" stop-opacity="0.25"/>
+    <linearGradient id="hair" x1="200" y1="30" x2="200" y2="244" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#554960"/>
+      <stop offset="1" stop-color="#302b3a"/>
     </linearGradient>
-    <radialGradient id="glow" cx="0.5" cy="0.45" r="0.55">
-      <stop offset="0" stop-color="#c4a0f0" stop-opacity="0.16"/>
-      <stop offset="1" stop-color="#c4a0f0" stop-opacity="0"/>
-    </radialGradient>
+    <pattern id="untextured" width="24" height="24" patternUnits="userSpaceOnUse">
+      <path d="M0 0h12v12H0zm12 12h12v12H12z" fill="#e0c8fa" fill-opacity=".045"/>
+    </pattern>
   </defs>
 
-  <ellipse cx="200" cy="420" rx="200" ry="420" fill="url(#glow)"/>
-  <ellipse cx="200" cy="868" rx="110" ry="14" fill="#c4a0f0" fill-opacity="0.12"/>
+  <ellipse cx="200" cy="867" rx="110" ry="10" fill="#c4a0f0" fill-opacity=".12"/>
+  <path d="M86 64H64v22m250-22h22v22M64 824v22h22m250-22v22h-22" stroke="#c4a0f0" stroke-opacity=".35" stroke-width="2" stroke-linecap="round"/>
 
-  <g stroke="#c4a0f0" stroke-opacity="0.7" stroke-width="3" stroke-linejoin="round" stroke-linecap="round">
-    <path d="M246 520 C 300 540, 352 520, 360 460 C 366 414, 340 384, 316 392 C 300 398, 304 418, 320 420"
-          stroke-width="16" stroke-opacity="0.45"/>
-    <path d="M246 520 C 300 540, 352 520, 360 460 C 366 414, 340 384, 316 392 C 300 398, 304 418, 320 420"
-          stroke="#100d17" stroke-opacity="0.6" stroke-width="9"/>
+  <g stroke="#bba6cf" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M131 558c-4 56 1 97 13 136l-5 103 44 3 10-110 2-129m10 0 2 129 10 110 44-3-5-103c12-39 17-80 13-136" fill="#39333f"/>
+    <path d="M131 558c-4 56 1 97 13 136l-5 103 44 3 10-110 2-129m10 0 2 129 10 110 44-3-5-103c12-39 17-80 13-136" fill="url(#untextured)" stroke="none"/>
+    <path d="m145 693 12 12m98-12-12 12" stroke-opacity=".3"/>
 
-    <path d="M118 250 C 104 160, 128 70, 200 66 C 272 70, 296 160, 282 250 C 270 262, 252 260, 246 246 C 232 226, 168 226, 154 246 C 148 260, 130 262, 118 250 Z"
-          fill="url(#hair)"/>
+    <path d="m139 785-7 28c-15 15-22 32-15 42 9 14 56 13 64 1l5-34-3-30Zm122 0 7 28c15 15 22 32 15 42-9 14-56 13-64 1l-5-34 3-30Z" fill="#71667d"/>
+    <path d="M116 847c14 12 49 14 65 2m38 0c16 12 51 10 65-2" stroke="#d1c1df" stroke-width="5"/>
+    <path d="m142 797 27 4-6 38-33-6Zm116 0-27 4 6 38 33-6Z" fill="#494152"/>
+    <path d="m141 806 25 5m-28 6 26 5m-29 6 27 5m97-27-25 5m28 6-26 5m29 6-27 5" stroke="#e0d5ea" stroke-width="3"/>
 
-    <path d="M180 214 L 180 252 L 220 252 L 220 214" fill="url(#fill)"/>
+    <path d="m116 492-24 83c44 26 172 26 216 0l-24-83Z" fill="#302a3b"/>
+    <path d="m128 518-10 62m36-60-5 66m30-65-1 68m44-68 1 68m23-69 5 66m21-68 10 62" stroke="#9d88b4" stroke-opacity=".55"/>
+    <path d="M93 575c47 15 167 15 214 0" stroke-opacity=".4"/>
 
-    <path d="M150 268 C 170 256, 230 256, 250 268 L 266 282 C 252 330, 244 380, 238 420 C 262 470, 286 520, 294 572 C 236 590, 164 590, 106 572 C 114 520, 138 470, 162 420 C 156 380, 148 330, 134 282 Z"
-          fill="url(#fill)"/>
-    <path d="M162 420 C 186 430, 214 430, 238 420" stroke-opacity="0.5"/>
+    <path d="m65 475-5 34 5 28c3 8 12 5 11-2l-1-16 8 25c3 7 11 3 9-4l-6-26 8 10c5 5 12 0 8-6l-15-31Zm270 0 5 34-5 28c-3 8-12 5-11-2l1-16-8 25c-3 7-11 3-9-4l6-26-8 10c-5 5-12 0-8-6l15-31Z" fill="#8a7a98"/>
+    <path d="M154 239c-28-4-49 7-60 30-16 37-17 82-29 122l-14 89 40 13 28-79-8 89c43 24 135 24 178 0l-8-89 28 79 40-13-14-89c-12-40-13-85-29-122-11-23-32-34-60-30Z" fill="url(#cloth)"/>
+    <path d="M154 239c-28-4-49 7-60 30-16 37-17 82-29 122l-14 89 40 13 28-79-8 89c43 24 135 24 178 0l-8-89 28 79 40-13-14-89c-12-40-13-85-29-122-11-23-32-34-60-30Z" fill="url(#untextured)" stroke="none"/>
+    <path d="m53 466 42 14m210 0 42-14M113 489c47 18 127 18 174 0m-171-75 7-92m161 92-7-92" stroke-opacity=".35"/>
+    <path d="m155 465-16 20m106-20 16 20" stroke-opacity=".5"/>
 
-    <path d="M134 282 C 116 300, 110 360, 112 420 C 113 470, 116 510, 122 540 C 126 556, 142 556, 142 540 C 140 500, 138 450, 144 400"
-          fill="url(#fill)"/>
-    <path d="M266 282 C 284 300, 290 360, 288 420 C 287 470, 284 510, 278 540 C 274 556, 258 556, 258 540 C 260 500, 262 450, 256 400"
-          fill="url(#fill)"/>
+    <path d="M176 208v30l24 22 24-22v-30" fill="#8a7a98"/>
+    <path d="M155 231c-14 4-23 11-27 22l41 27 31-20-28-29m73 0c14 4 23 11 27 22l-41 27-31-20 28-29" fill="#302a3b"/>
+    <path d="m177 272-3 25m49-25 3 25" stroke="#dfc8f5" stroke-width="3"/>
 
-    <path d="M154 584 C 150 660, 156 760, 162 836 C 164 858, 196 858, 196 836 L 198 588" fill="url(#fill)"/>
-    <path d="M246 584 C 250 660, 244 760, 238 836 C 236 858, 204 858, 204 836 L 202 588" fill="url(#fill)"/>
+    <path d="M115 215c-18-36-17-94-3-129 16-40 47-60 88-60s72 20 88 60c14 35 15 93-3 129l10 29-40-16-15-27h-80l-15 27-40 16Z" fill="url(#hair)"/>
+    <path d="M134 123c0-46 132-46 132 0v35c0 42-30 72-66 72s-66-30-66-72Z" fill="#9d8ba9"/>
+    <path d="M134 123c0-46 132-46 132 0v35c0 42-30 72-66 72s-66-30-66-72Z" fill="url(#untextured)" stroke="none"/>
+    <path d="M124 166c-8-54 10-117 76-117 66 0 84 63 76 117l-20-50-18-30c-9 27-35 43-62 49l17-24c-18 18-38 28-59 31l-10 49Z" fill="url(#hair)"/>
+    <path d="M130 107c10-36 34-56 66-59m-78 89c-2 30 2 57 12 75m152-75c2 30-2 57-12 75" stroke="#d2b8e8" stroke-opacity=".25"/>
 
-    <ellipse cx="200" cy="156" rx="66" ry="74" fill="#1a1524"/>
-    <ellipse cx="200" cy="156" rx="66" ry="74" fill="url(#fill)"/>
-
-    <path d="M142 112 L 126 26 L 190 82 Z" fill="url(#hair)"/>
-    <path d="M258 112 L 274 26 L 210 82 Z" fill="url(#hair)"/>
-    <path d="M146 96 L 138 50 L 172 82" stroke-opacity="0.45" stroke-width="2"/>
-    <path d="M254 96 L 262 50 L 228 82" stroke-opacity="0.45" stroke-width="2"/>
-
-    <path d="M134 150 C 140 100, 170 80, 200 80 C 230 80, 260 100, 266 150 C 250 128, 236 116, 222 112 C 216 128, 206 136, 196 138 C 196 126, 192 116, 186 110 C 170 118, 152 132, 134 150 Z"
-          fill="url(#hair)"/>
+    <path d="M150 144q14-7 28-1m44 0q14-6 28 1" stroke="#504258"/>
+    <g stroke="#e0cbee" stroke-width="3">
+      <rect x="140" y="149" width="48" height="34" rx="14" fill="#282331" fill-opacity=".5"/>
+      <rect x="212" y="149" width="48" height="34" rx="14" fill="#282331" fill-opacity=".5"/>
+      <path d="M188 159q12-8 24 0m-78-4 6 3m120 0 6-3"/>
+    </g>
+    <path d="M155 165q8-9 16 0m58 0q8-9 16 0" stroke="#eee3f5" stroke-width="3"/>
+    <path d="m200 175-3 9h6m-16 18q13 9 26 0" stroke="#57455f"/>
+    <path d="m149 191 10 2m82-2-10 2" stroke="#c7a5d3" stroke-width="4"/>
   </g>
 
-  <g stroke="#e9e3f2" stroke-opacity="0.75" stroke-width="3.5" stroke-linecap="round">
-    <path d="M168 170 Q 178 178, 188 170"/>
-    <path d="M212 170 Q 222 178, 232 170"/>
-    <path d="M192 200 Q 200 206, 208 200" stroke-width="3"/>
-  </g>
-  <g fill="#f0a0c8" fill-opacity="0.22">
-    <ellipse cx="164" cy="190" rx="12" ry="6"/>
-    <ellipse cx="236" cy="190" rx="12" ry="6"/>
+  <path d="M105 244c-15 10-22 29-27 49L57 389l-14 96m252-241c15 10 22 29 27 49l21 96 14 96M121 565l7 123-8 102m159-225-7 123 8 102" stroke="#d9b9f4" stroke-opacity=".45" stroke-width="2" stroke-dasharray="5 7" stroke-linecap="round"/>
+
+  <g font-family="system-ui, -apple-system, 'Segoe UI', sans-serif" text-anchor="middle">
+    <text x="200" y="332" fill="#f2e8fa" font-size="29" font-weight="600" letter-spacing="-.6">Placeholder</text>
+    <path d="M133 347h134" stroke="#c4a0f0" stroke-opacity=".5" stroke-dasharray="3 5"/>
+    <text x="200" y="393" fill="#d8b9f1" font-family="ui-monospace, monospace" font-size="44" font-weight="700" letter-spacing="5">404</text>
+    <text x="200" y="422" fill="#eee2f7" font-size="19" font-weight="500">Assets not extracted</text>
+    <text x="200" y="450" fill="#bcabc9" font-size="15">Chat still works.</text>
   </g>
 </svg>

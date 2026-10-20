@@ -167,12 +167,14 @@ class AssetRecovery(private val context: Context) {
 
     private fun runPythonRecovery(gameRoot: File, output: File, progress: (Long, Long, String) -> Unit) {
         if (!Python.isStarted()) Python.start(AndroidPlatform(context.applicationContext))
-        val callback = object {
-            @Suppress("unused")
-            fun onProgress(done: Int, total: Int, message: String) = progress(done.toLong(), total.toLong(), message)
-        }
         Python.getInstance().getModule("jun_recovery")
-            .callAttr("recover", gameRoot.absolutePath, output.absolutePath, callback)
+            .callAttr("recover", gameRoot.absolutePath, output.absolutePath, RecoveryProgress(progress))
+    }
+
+    // python finds onProgress BY NAME through chaquopy. R8 sees no kotlin caller and
+    // renames it (or the whole anon class, hello 'd'), see the keep rule in proguard-rules.pro
+    class RecoveryProgress(private val progress: (Long, Long, String) -> Unit) {
+        fun onProgress(done: Int, total: Int, message: String) = progress(done.toLong(), total.toLong(), message)
     }
 
     private fun validateOutput(output: File) {

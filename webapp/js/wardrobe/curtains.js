@@ -1,4 +1,4 @@
-import * as Live2D from '../live2d/live2d.js?v=81';
+import * as Live2D from '../live2d/live2d.js?v=83';
 import { hooks } from '../outfit/hooks.js?v=1';
 
 const changes = [];

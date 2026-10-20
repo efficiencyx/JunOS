@@ -6,7 +6,7 @@ import { S } from './state.js?v=75';
 // flat svg instead. same box fitModel would give her, same 0.92
 // margin, same 26% shove to the right on the desktop chat page,
 // so the bubbles and the composer sit where they normally do.
-const ART = 'placeholder/jun.svg?v=1';
+const ART = 'placeholder/jun.svg?v=3';
 const MARGIN = 0.92;
 // jun.svg's viewBox, and where her mouth and face edge sit in it
 const VIEW_W = 400, VIEW_H = 900;
@@ -50,7 +50,7 @@ export function mountPlaceholder(stageEl) {
   const img = art = document.createElement('img');
   img.className = 'l2d-placeholder';
   img.src = ART;
-  img.alt = '';
+  img.alt = 'Placeholder - 404 Assets not extracted. Extract from your copy of the game, then reload. Chat still works.';
   img.draggable = false;
   img.style.cssText = 'position:absolute;object-fit:contain;pointer-events:none;user-select:none';
   stageEl.appendChild(img);

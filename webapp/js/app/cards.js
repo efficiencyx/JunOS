@@ -8,9 +8,9 @@
 // up on the face preset so her lines land in the face bubble.
 
 import * as Names from '../core/names.js?v=1';
-import * as Live2D from '../live2d/live2d.js?v=81';
+import * as Live2D from '../live2d/live2d.js?v=83';
 import * as Scene from '../trip/scene.js?v=1';
-import * as VoiceMode from '../voice/voicemode.js?v=80';
+import * as VoiceMode from '../voice/voicemode.js?v=82';
 import * as Achievements from '../achievements/achievements.js?v=8';
 
 const SUITS = ['♠', '♥', '♦', '♣'];

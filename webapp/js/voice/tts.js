@@ -1,4 +1,4 @@
-import * as Live2D from '../live2d/live2d.js?v=81';
+import * as Live2D from '../live2d/live2d.js?v=83';
 import { api, apiJson } from '../core/api.js?v=1';
 
 let enabled = false;
