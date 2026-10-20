@@ -91,11 +91,11 @@ You don't need to know how any of this works. On Windows you double-click one fi
 
 ### On Windows
 
-Download **[JunSetup.exe](https://github.com/efficiencyx/JunOS/releases/latest/download/JunSetup.exe)** and double-click it. That's it.
+Grab **`JunSetup-<version>.exe`** from the [latest release](https://github.com/efficiencyx/JunOS/releases/latest) and double-click it. That's it.
 
 She runs directly on Windows, no Docker (Docker on Windows is a pain). The setup window walks you through it, and when it's done you get a **Jun OS** shortcut on your desktop and in the Start menu to start, stop and update her.
 
-The exe is built by GitHub Actions straight from the tagged scripts, and every [release](https://github.com/efficiencyx/JunOS/releases) lists its checksum in `SHA256SUMS`. It isn't code-signed, so if Windows SmartScreen pops up: **More info → Run anyway**. Each release also carries a **`JunSetup-<version>.exe`** welded to its version: `JunSetup-v1.0.0.exe` installs v1.0.0 and nothing else, and checks the exact commit before it sets anything up.
+The exe is built by GitHub Actions straight from the tagged scripts, and every [release](https://github.com/efficiencyx/JunOS/releases) lists its checksum in `SHA256SUMS`. It isn't code-signed, so if Windows SmartScreen pops up: **More info → Run anyway**. Each exe is welded to its version: `JunSetup-v1.0.0.exe` installs v1.0.0 and nothing else, and checks the exact commit before it sets anything up.
 
 If anything goes wrong, the installer stops, tells you what in plain words, and keeps the window open until you've read it. Fix that one thing and run it again: it picks up where it left off.
 
@@ -232,7 +232,7 @@ BIND_ADDR=0.0.0.0
 
 The launcher works out this machine's address on the network by itself and prints it - `reachable as: https://192.168.X.X` on Linux, `on your phone: https://192.168.X.X:8080` on Windows - and that's the URL you type into the phone. On Windows it also adds a firewall rule for the port on **private** networks only (it needs an admin PowerShell to do it, otherwise it prints the one-liner for you to run). One request at a time on Windows, so the phone and the desktop take turns.
 
-Want her *on* the phone instead, no computer at all? Every [release](https://github.com/efficiencyx/JunOS/releases) carries **`JunOS.apk`**, the Android app, still a work in progress. arm64 phones on Android 10 or newer, and the first start downloads a ~2.6 GB model.
+Want her *on* the phone instead, no computer at all? Every [release](https://github.com/efficiencyx/JunOS/releases) carries **`JunOS-<version>.apk`**, the Android app, still a work in progress. arm64 phones on Android 10 or newer, and the first start downloads a ~2.6 GB model.
 
 The phone still gets the certificate warning, trusting the CA only covers the computer you did it on. Your password and every word she says cross the wifi encrypted, but a cert the phone doesn't trust can't prove it's really talking to your box, so keep it to networks you trust and **never** port-forward it to the internet - that's what the certbot setup above is for. DHCP moves addresses around, so if she stops answering after a few days, restart the launcher and read the new one (the new address gets a fresh cert from the same CA, so a computer that trusts it doesn't notice, and the phone clicks through once more).
 
@@ -471,7 +471,7 @@ Read the line under **existing install**, it says which of these it was:
 ├── mtp-autotune.sh · .ps1       Measures the MTP draft depth and writes the winner to .env
 ├── sync-webapp.sh               The dev loop
 ├── colab.ipynb                  The Colab/Kaggle notebook (GPU or TPU, whole app or just her brain)
-├── .github/workflows/           CI (syntax, stream-buffer tests, a chat turn against a fake Ollama) + the draft release with JunSetup-<version>.exe, JunOS.exe and JunOS.apk
+├── .github/workflows/           CI (syntax, stream-buffer tests, a chat turn against a fake Ollama) + the draft release with JunSetup-<version>.exe, JunOS.exe and JunOS-<version>.apk
 └── docker-compose*.yml          Base (CPU) + nvidia / amd overlays, llamacpp-local add-on
 ```
 

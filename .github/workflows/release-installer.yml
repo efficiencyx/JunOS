@@ -6,9 +6,10 @@ name: Release installer
 # install scripts and their SHA256SUMS on a DRAFT release for
 # that tag. the exe is pinned: it carries the tag and the commit the
 # tag points at, and install.ps1 refuses to set up anything else.
-# JunSetup.exe is the same file again under a name that never
-# changes, so releases/latest/download/JunSetup.exe is a link the
-# README can keep forever. JunOS.apk is the same trick for the apk.
+# versioned names ONLY. no unversioned JunSetup.exe / JunOS.apk
+# copy, so there's no releases/latest/download/ link for either,
+# the docs point at the releases/latest page and you pick the file.
+# JunOS.exe keeps its plain name, install.ps1 downloads it by that.
 # a tag with a - in it (v1.2.0-beta) drafts as a pre-release. untick
 # that before publishing if the one-liners should get it, they come
 # from releases/latest/download/ and /latest skips pre-releases.
@@ -194,9 +195,7 @@ jobs:
             [ -f "dist/$f" ] || { echo "::error::dist/$f missing, the build job named it something else"; exit 1; }
           done
           cp install.sh install.ps1 installer-gui.ps1 dist/
-          cp "dist/$exe" dist/JunSetup.exe
-          cp "dist/$apk" dist/JunOS.apk
-          (cd dist && sha256sum "$exe" JunSetup.exe JunOS.exe "$apk" JunOS.apk install.sh install.ps1 installer-gui.ps1 > SHA256SUMS)
+          (cd dist && sha256sum "$exe" JunOS.exe "$apk" install.sh install.ps1 installer-gui.ps1 > SHA256SUMS)
 
           # gh release view finds drafts by tag too, the plain API doesn't
           if gh release view "$TAG" --json isDraft --jq .isDraft > state 2>/dev/null; then
@@ -204,9 +203,14 @@ jobs:
               echo "::error::$TAG is already published, not overwriting files people already downloaded. set it back to draft first if you mean it."
               exit 1
             fi
+            # drafts from before the versioned-only switch still carry
+            # these, with old bytes and no line in SHA256SUMS
+            for old in JunSetup.exe JunOS.apk; do
+              gh release delete-asset "$TAG" "$old" --yes 2>/dev/null || true
+            done
           else
             pre=""
             case "$TAG" in *-*) pre="--prerelease" ;; esac
             gh release create "$TAG" --draft --verify-tag --title "$TAG" --generate-notes $pre
           fi
-          gh release upload "$TAG" "dist/$exe" dist/JunSetup.exe dist/JunOS.exe "dist/$apk" dist/JunOS.apk dist/install.sh dist/install.ps1 dist/installer-gui.ps1 dist/SHA256SUMS --clobber
+          gh release upload "$TAG" "dist/$exe" dist/JunOS.exe "dist/$apk" dist/install.sh dist/install.ps1 dist/installer-gui.ps1 dist/SHA256SUMS --clobber

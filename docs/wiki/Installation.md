@@ -33,7 +33,7 @@ After the base install, jump to the section for your graphics card: [NVIDIA](#nv
 
 The installer below is a program from the internet that you run on your computer, and the Linux line downloads a script and runs it straight away. That is exactly how malware spreads, so the habit of running things without looking is a bad one. If you'd like to read what you are about to run first:
 
-* **Windows:** `JunSetup.exe` is built by GitHub Actions from the scripts in the same release, and the release's `SHA256SUMS` lists the checksum of every file. To read the script itself, paste `powershell irm https://github.com/efficiencyx/JunOS/releases/latest/download/install.ps1 -OutFile install.ps1` into a terminal, then open the `install.ps1` file that appears with Notepad.
+* **Windows:** `JunSetup-<version>.exe` is built by GitHub Actions from the scripts in the same release, and the release's `SHA256SUMS` lists the checksum of every file. To read the script itself, paste `powershell irm https://github.com/efficiencyx/JunOS/releases/latest/download/install.ps1 -OutFile install.ps1` into a terminal, then open the `install.ps1` file that appears with Notepad.
 * **Linux / macOS:** paste `curl -fsSL https://github.com/efficiencyx/JunOS/releases/latest/download/install.sh | less`, scroll with the arrow keys, press `q` to leave.
 
 Don't understand something in there? Paste it into an AI chat and ask what it does. That goes for anybody's "just run this", not only ours.
@@ -48,7 +48,7 @@ Everything except Ollama and Python lives inside one folder called `JunOS`.
 
 ### Step 1 - Download the installer
 
-Download **[JunSetup.exe](https://github.com/efficiencyx/JunOS/releases/latest/download/JunSetup.exe)** and double-click it.
+Download **`JunSetup-<version>.exe`** from the [latest release](https://github.com/efficiencyx/JunOS/releases/latest) and double-click it.
 
 It isn't code-signed, so Windows may show a blue **Windows protected your PC** box. Click **More info**, then **Run anyway**.
 
@@ -76,7 +76,7 @@ What happens now, in order. It can take anywhere from 2 to 30 minutes depending 
 
 1. **git** is installed if missing (through `winget`, Windows' built-in app installer). If `winget` itself is missing the installer offers to set it up. Say **y**.
 2. **Ollama** is downloaded (about 1.5 GB) and its installer runs. A normal Windows install window may pop up, let it finish.
-3. If the installer says **"open a NEW terminal and run the one-liner again"**, do exactly that: close it and start `JunSetup.exe` again (terminal people: open a fresh terminal and paste the same line). It picks up where it stopped. This happens because Windows only learns about newly installed programs in a new window.
+3. If the installer says **"open a NEW terminal and run the one-liner again"**, do exactly that: close it and start `JunSetup-<version>.exe` again (terminal people: open a fresh terminal and paste the same line). It picks up where it stopped. This happens because Windows only learns about newly installed programs in a new window.
 4. **Portable PHP** is downloaded into `JunOS\runtime\php`. If it needs the Microsoft Visual C++ runtime, that gets installed too. **Caddy** goes into `JunOS\runtime\caddy`, it's what serves her over HTTPS.
 5. The **voice engine** is set up (Python 3.11 through winget if you don't have 3.10, 3.11 or 3.12, then a few hundred MB of packages will be downloaded).
 6. **Her body** is rebuilt from your game. The installer looks in the usual Steam and itch folders. If it can't find the game, point it at the game folder: **Browse...** in the window, or in the terminal paste the folder (or drag the game's `.exe` onto the window) and press Enter. Leave it empty to skip; she'll use placeholder art and you can redo this later.
@@ -427,7 +427,7 @@ Signup shows a recovery code once. Keep it somewhere private, separate from your
 
 ### Updating her
 
-On Windows press **Update** in the Jun OS app. Or run the installer again, `JunSetup.exe` or the same line you installed with: it finds the existing install, moves it to the newest version on its channel, and restarts. Your `.env`, accounts and chats are kept.
+On Windows press **Update** in the Jun OS app. Or run the installer again, the same line you installed with or the newest `JunSetup-<version>.exe` from the [latest release](https://github.com/efficiencyx/JunOS/releases/latest) (an exe only ever installs its own version, an old one won't move you forward): it finds the existing install, moves it to that version, and restarts. Your `.env`, accounts and chats are kept.
 
 Which version it updates to depends on the **release channel**:
 
