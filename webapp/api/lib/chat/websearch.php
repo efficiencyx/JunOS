@@ -102,7 +102,6 @@ function web_fetch_public(string $url): array {
         $err = curl_error($ch);
         $code = (int)curl_getinfo($ch, CURLINFO_RESPONSE_CODE);
         $ctype = (string)curl_getinfo($ch, CURLINFO_CONTENT_TYPE);
-        curl_close($ch);
         if ($ok === false) return ['error' => $tooLarge ? 'response_too_large' : 'fetch_failed', 'detail' => $err];
         if (in_array($code, [301, 302, 303, 307, 308], true) && $location !== '') {
             if ($hop === 3) return ['error' => 'too_many_redirects'];

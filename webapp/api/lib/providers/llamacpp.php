@@ -18,7 +18,6 @@ function llamacpp_api_json(string $path, ?array $post = null, int $timeout = 3):
     }
     curl_setopt_array($ch, $opts);
     $response = curl_exec($ch);
-    curl_close($ch);
     $data = is_string($response) ? json_decode($response, true) : null;
     return is_array($data) ? $data : [];
 }

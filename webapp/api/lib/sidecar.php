@@ -44,7 +44,6 @@ function sidecar_call(string $url, ?string $body = null, array $headers = [], in
         'code' => (int)curl_getinfo($ch, CURLINFO_HTTP_CODE),
         'type' => (string)curl_getinfo($ch, CURLINFO_CONTENT_TYPE),
     ];
-    curl_close($ch);
     return $out;
 }
 

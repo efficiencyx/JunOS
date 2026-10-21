@@ -155,7 +155,6 @@ if ($action === 'lyrics') {
         curl_setopt($ch, CURLOPT_TIMEOUT, 10);
         $res = curl_exec($ch);
         $code = curl_getinfo($ch, CURLINFO_HTTP_CODE);
-        curl_close($ch);
         return [$res, $code];
     };
 

@@ -261,7 +261,6 @@ function provider_stream_round(string $provider, array $payload, callable $emit,
     if ($state['http_status'] === 0) {
         $state['http_status'] = (int)curl_getinfo($ch, CURLINFO_RESPONSE_CODE);
     }
-    curl_close($ch);
     $state['duration_ns'] = (int)round((microtime(true) - $started) * 1e9);
 
     if ($openai) provider_finish_openai_tool_calls($toolAcc, $state, $round);

@@ -15,7 +15,6 @@ function vllm_models(): array {
         CURLOPT_TIMEOUT => 10,
     ]);
     $res = curl_exec($ch);
-    curl_close($ch);
     $data = is_string($res) ? json_decode($res, true) : null;
     $models = [];
     foreach ((is_array($data) ? ($data['data'] ?? []) : []) as $m) {

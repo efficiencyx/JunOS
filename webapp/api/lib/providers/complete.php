@@ -23,7 +23,6 @@ function provider_post_chat(string $provider, array $payload, ?string &$error = 
         $resp = curl_exec($ch);
         $status = (int)curl_getinfo($ch, CURLINFO_RESPONSE_CODE);
         $error = $resp === false ? curl_error($ch) : ($status >= 300 ? 'http_' . $status : null);
-        curl_close($ch);
         if ($error === null) {
             $obj = json_decode($resp, true);
             if (is_array($obj)) return $obj;

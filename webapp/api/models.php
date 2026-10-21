@@ -17,11 +17,9 @@ function http_get_json(string $url, array $headers = [], int $timeout = 10): ?ar
     $res = curl_exec($ch);
     if ($res === false) {
         log_event(['msg' => 'models_fetch_error', 'url' => $url, 'err' => curl_error($ch)]);
-        curl_close($ch);
         return null;
     }
     $status = (int)curl_getinfo($ch, CURLINFO_RESPONSE_CODE);
-    curl_close($ch);
     if ($status >= 400) {
         log_event(['msg' => 'models_fetch_http_error', 'url' => $url, 'status' => $status]);
         return null;
