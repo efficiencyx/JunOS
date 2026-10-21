@@ -108,10 +108,10 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        # 8.2 is what docker/php.Dockerfile ships. 8.4 is what a fresh
-        # bare metal install pulls down, and it is where the deprecations
-        # land first.
-        php: ['8.2', '8.4']
+        # 8.2 is what docker/php.Dockerfile ships. 8.5 is what a fresh
+        # bare metal install pulls down (and what an update moves an
+        # old one to), and it is where the deprecations land first.
+        php: ['8.2', '8.5']
     steps:
       - uses: actions/checkout@v4
 

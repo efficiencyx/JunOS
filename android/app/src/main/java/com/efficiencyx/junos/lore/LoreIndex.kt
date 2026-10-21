@@ -7,6 +7,7 @@ import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.Json
+import java.io.FileNotFoundException
 import kotlin.math.ln
 
 @Serializable
@@ -36,7 +37,17 @@ class LoreIndex(private val context: Context) {
     }
 
     private fun build(): Index {
-        val docs = context.assets.open("data/lore_dataset.jsonl").bufferedReader().useLines { lines ->
+        // a checkout without tools/lore_dataset.jsonl (the public
+        // tree, so every CI release apk) still builds, it just packs
+        // no data/lore_dataset.jsonl. no corpus = no lore, same
+        // as php skipping a missing lore_corpus.txt. NOT a crash
+        // on every single chat turn.
+        val stream = try {
+            context.assets.open("data/lore_dataset.jsonl")
+        } catch (_: FileNotFoundException) {
+            return Index(emptyList(), emptyMap(), emptySet())
+        }
+        val docs = stream.bufferedReader().useLines { lines ->
             lines.mapNotNull { line ->
                 runCatching { json.decodeFromString<LoreLine>(line) }.getOrNull()?.let { row ->
                     val question = row.messages.firstOrNull { it.role == "user" }?.content ?: return@let null

@@ -1,15 +1,26 @@
-FROM php:8.2.33-fpm-alpine
+FROM php:8.2.35-fpm-alpine
+
+ARG APCU_VERSION=5.1.28
+ARG APCU_SHA256=0e60ba9d0fa4021c57a70c071f3d8f71de236275d084e560d5959fec4edd8c32
 
 # what we need at runtime: curl for the health probe, fcgi for
 # the cgi-fcgi healthcheck binary. autoconf and build-base are
-# ONLY for `pecl install apcu` and get ripped back out after.
+# ONLY for building apcu and get ripped back out after.
+# apcu comes from its github tag, not `pecl install`. pecl.php.net
+# 504'd for hours the day a php RCE dropped (2026-10-21), and
+# every update runs `up --build`, so a dead pecl = nobody can
+# update. pinned + sha256 checked like everything else.
 RUN apk add --no-cache curl fcgi sqlite-libs \
  && apk add --no-cache --virtual .build-deps autoconf build-base sqlite-dev \
- && pecl install apcu \
- && docker-php-ext-enable apcu \
- && docker-php-ext-install opcache pdo_sqlite \
+ && curl -fsSL -o /tmp/apcu.tgz "https://github.com/krakjoe/apcu/archive/refs/tags/v${APCU_VERSION}.tar.gz" \
+ && echo "${APCU_SHA256}  /tmp/apcu.tgz" | sha256sum -c - \
+ && docker-php-source extract \
+ && mkdir -p /usr/src/php/ext/apcu \
+ && tar xzf /tmp/apcu.tgz -C /usr/src/php/ext/apcu --strip-components=1 \
+ && docker-php-ext-install apcu opcache pdo_sqlite \
+ && docker-php-source delete \
  && apk del .build-deps \
- && rm -rf /tmp/pear
+ && rm -f /tmp/apcu.tgz
 
 # post_max_size has to cover the biggest upload we take, the
 # audio body on /api/karaoke.php. the STT WAV sits well under it.

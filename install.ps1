@@ -1027,11 +1027,42 @@ function Install-Php {
             break
         }
     }
-    if ($phpReady) { return }
-    if (Test-Path $phpDir) { Warn_ 'portable PHP is incomplete - repairing it' }
+    $releases = $null
+    try {
+        $releases = Invoke-RestMethod 'https://windows.php.net/downloads/releases/releases.json' -UseBasicParsing
+    } catch {
+        if (-not $phpReady) { throw }
+    }
+    if ($phpReady) {
+        # an install used to keep the php it got on day one forever,
+        # updates included. that's how CVE-2026-109618/109619 (RCE in
+        # php itself, fixed in 8.5.12 / 8.4.27) would've stayed on
+        # every old box. so every run compares against releases.json
+        # and swaps php when it's behind. no releases.json = keep it.
+        if (-not $releases) {
+            Warn_ "couldn't ask windows.php.net for the newest PHP, keeping the one in runtime\php"
+            return
+        }
+        $newest = $releases.PSObject.Properties | Sort-Object { [version]$_.Name } | Select-Object -Last 1
+        $have = ''
+        try { $have = "$(& $phpExe -r 'echo PHP_VERSION;' 2>$null)".Trim() } catch {}
+        $haveVersion = $null
+        if (-not [version]::TryParse(($have -replace '[^0-9.].*$', ''), [ref]$haveVersion)) { $haveVersion = [version]'0.0' }
+        if ($haveVersion -ge [version]$newest.Value.version) { return }
+        Step "PHP $have is out of date, replacing it with $($newest.Value.version)"
+        # php.exe holds its own dlls open while she runs, and the swap
+        # below deletes that folder. so stop her first, the installer
+        # starts her again at the end anyway.
+        $starter = Join-Path (Get-Location) 'start.ps1'
+        if (Test-Path -LiteralPath $starter) {
+            $psExe = (Get-Process -Id $PID).MainModule.FileName
+            & $psExe -NoProfile -ExecutionPolicy Bypass -File $starter stop | Out-Null
+        }
+    } elseif (Test-Path $phpDir) {
+        Warn_ 'portable PHP is incomplete - repairing it'
+    }
 
     Step 'download portable PHP'
-    $releases = Invoke-RestMethod 'https://windows.php.net/downloads/releases/releases.json' -UseBasicParsing
     $branch = ($releases.PSObject.Properties.Name | Sort-Object { [version]$_ } | Select-Object -Last 1)
     $build = $releases.$branch.PSObject.Properties |
         Where-Object { $_.Name -match '^nts-.*-x64$' } | Select-Object -First 1

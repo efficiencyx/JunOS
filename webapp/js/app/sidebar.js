@@ -1,18 +1,18 @@
 import { currentConversationId, messages, setCurrentConversationId } from './session.js?v=1';
-import { appendMsg, renderMarkdown, updateEmptyState } from './messages.js?v=9';
-import { discardActiveResponse } from './chat.js?v=19';
-import { setConversationTitle } from './face-bubble.js?v=82';
-import { IDLE_AFTER_JOIN_MS, cancelAutoReset, reportActivity, resetIdleNudge, scheduleIdleNudge } from './consolidation.js?v=91';
+import { appendMsg, renderMarkdown, updateEmptyState } from './messages.js?v=10';
+import { discardActiveResponse } from './chat.js?v=20';
+import { setConversationTitle } from './face-bubble.js?v=83';
+import { IDLE_AFTER_JOIN_MS, cancelAutoReset, reportActivity, resetIdleNudge, scheduleIdleNudge } from './consolidation.js?v=92';
 import { conversationSidebar, messagesEl, mobileConversationTitle, mobileMenuBtn, narrowSidebarQuery, reloadPromptBtn, resetLive2DBtn, sidebarBackdrop, sidebarBackground } from './dom.js?v=11';
-import { announceMobileReply, faceBubble, hideFaceBubble, latestAssistantReply, scheduleFaceBubbleHide, setLatestAssistantReply, showFaceBubble } from './face-bubble.js?v=82';
+import { announceMobileReply, faceBubble, hideFaceBubble, latestAssistantReply, scheduleFaceBubbleHide, setLatestAssistantReply, showFaceBubble } from './face-bubble.js?v=83';
 import { logAction } from './logging.js?v=11';
-import { makeStreamBuffer } from './stream-filters.js?v=83';
+import { makeStreamBuffer } from './stream-filters.js?v=84';
 import { escapeHtml, phoneMode } from '../core/util.js?v=1';
 import * as Names from '../core/names.js?v=1';
 import * as ui from '../core/ui.js?v=1';
 import * as History from './history.js?v=1';
-import * as TTS from '../voice/tts.js?v=83';
-import * as Live2D from '../live2d/live2d.js?v=83';
+import * as TTS from '../voice/tts.js?v=84';
+import * as Live2D from '../live2d/live2d.js?v=84';
 
 const conversationTitles = new Map();
 let sidebarRefreshGeneration = 0;

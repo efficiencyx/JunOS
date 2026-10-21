@@ -7,7 +7,7 @@ import { playSequence, releaseAll, resetIdle, renderIfDirty, setFidgetsEnabled, 
 import { bakeThumb } from './bake.js?v=2';
 import { cameraStates, captureCameraState, currentCameraMode, fitModel, loadPos, measureStage, rendererResolution, setCameraPreset as setRigCameraPreset, watchStageSize, writeCameraStates } from './camera.js?v=76';
 import { drawableAt, faceAnchor, findDrawables, hitTest, isOverModel } from './geometry.js?v=78';
-import { installStageInput } from './input.js?v=6';
+import { installStageInput } from './input.js?v=7';
 import { mountPlaceholder, setPlaceholderPreset } from './placeholder.js?v=5';
 import { cancelPending, debugParam, hold, knows, scheduleSequence, setNow, setOnMissingParam, setTarget, startLoop, stopAllLoops, stopLoop } from './params.js?v=4';
 import { installColorShaderPatch, patchRenderer } from './renderer.js?v=2';

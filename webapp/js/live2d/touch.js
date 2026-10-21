@@ -1,5 +1,5 @@
-import * as Actions from './actions.js?v=82';
-import * as Live2D from './live2d.js?v=83';
+import * as Actions from './actions.js?v=83';
+import * as Live2D from './live2d.js?v=84';
 
 let sendEvent = null;
 let isBusy = () => false;
@@ -205,6 +205,12 @@ function onPointerEnd(e) {
 
 function onPointerDown(e) {
   if (e.button !== 0) return;
+  // a second finger is a pinch zoom (input.js), not a headpat
+  if (e.pointerType === 'touch' && (active || pending)) {
+    cancelPending();
+    end();
+    return;
+  }
   if (active || pending) return;
   if (document.body.classList.contains('wardrobe-open')) return;
   if (document.body.classList.contains('sidebar-open')) return;
