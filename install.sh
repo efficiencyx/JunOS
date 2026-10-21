@@ -907,7 +907,7 @@ python_command() {
     local candidate
     for candidate in python3 python; do
         if command -v "$candidate" >/dev/null 2>&1 \
-            && "$candidate" -c 'import ensurepip, sys, venv; assert sys.version_info >= (3, 9)' >/dev/null 2>&1; then
+            && "$candidate" -c 'import ensurepip, sys, venv; assert sys.version_info >= (3, 10)' >/dev/null 2>&1; then
             command -v "$candidate"
             return 0
         fi
@@ -920,7 +920,7 @@ ensure_recovery_python() {
 
     PM="$(pkg_manager)"
     if [ "$PM" = none ]; then
-        warn_ "Python 3.9+ is needed for asset recovery - install it from $(manual_url python), then re-run."
+        warn_ "Python 3.10+ is needed for asset recovery - install it from $(manual_url python), then re-run."
         return 1
     fi
     if [ "$PM" != brew ] && [ "$SUDO" = "" ] && [ "$(id -u)" -ne 0 ]; then
@@ -955,7 +955,7 @@ ensure_recovery_python() {
 
     run "install Python" install_python
     if ! python_command >/dev/null; then
-        warn_ "Python 3.9+ is still unavailable - re-run after installation finishes."
+        warn_ "Python 3.10+ is still unavailable - re-run after installation finishes."
         return 1
     fi
 }

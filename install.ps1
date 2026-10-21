@@ -991,7 +991,7 @@ function Get-PythonCandidates {
 # kokoro 0.9.4 declares Requires-Python <3.13 and pip on a 3.13+
 # interpreter just says "no matching distribution" and takes
 # voice down with it.
-function Get-UsablePython([string]$Min = '3.9', [string]$Below) {
+function Get-UsablePython([string]$Min = '3.10', [string]$Below) {
     $check = "import ensurepip, sys, venv; assert sys.version_info >= ({0})" -f ($Min -replace '\.', ', ')
     if ($Below) { $check += "; assert sys.version_info < ({0})" -f ($Below -replace '\.', ', ') }
 
@@ -1401,7 +1401,7 @@ function Install-AssetRecovery {
         Install-MachineTools @('python')
         $python = Get-UsablePython
         if (-not $python) {
-            throw 'Python 3.9 or newer is required for asset recovery. Re-run install.ps1 after installing it.'
+            throw 'Python 3.10 or newer is required for asset recovery. Re-run install.ps1 after installing it.'
         }
     }
 
