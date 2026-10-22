@@ -5,7 +5,19 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.serialization.json.JsonObject
 import java.io.Closeable
 
-data class ChatMessage(val role: String, val content: String)
+data class ChatMessage(
+    val role: String,
+    val content: String,
+    val toolCalls: List<ParsedToolCall> = emptyList(),
+    val toolName: String? = null,
+)
+
+data class ParsedToolCall(val name: String, val args: JsonObject)
+
+sealed interface TurnEvent {
+    data class Text(val text: String) : TurnEvent
+    data class Call(val call: ParsedToolCall) : TurnEvent
+}
 
 sealed interface EngineState {
     data object Idle : EngineState
@@ -22,5 +34,12 @@ interface InferenceEngine : Closeable {
 
     suspend fun ensureLoaded()
     fun generate(messages: List<ChatMessage>, maxTokens: Int = 768, temperature: Float = 0.8f): Flow<String>
+    fun turn(
+        messages: List<ChatMessage>,
+        tools: List<String>,
+        think: Boolean,
+        maxTokens: Int = 768,
+        temperature: Float = 0.8f,
+    ): Flow<TurnEvent>
     fun cancel()
 }

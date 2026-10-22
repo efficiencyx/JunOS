@@ -1,10 +1,10 @@
 {
-  "id": "jun-lora-e2b-litertlm",
-  "display_name": "Jun LoRA E2B (LiteRT)",
+  "id": "jun-lora-e2b-v8-litertlm",
+  "display_name": "Jun LoRA E2B v8 (LiteRT)",
   "repository": "efficiencyx/Jun-LoRA-E2B-LiteRT",
-  "quant": "int4",
+  "quant": "int4-b32",
   "filename": "model.litertlm",
-  "download_url": "https://huggingface.co/efficiencyx/Jun-LoRA-E2B-LiteRT/resolve/7cacdf5c5f85c86efdc920ed5228c7ea6e0543eb/model.litertlm?download=true",
-  "size": 2576996304,
-  "sha256": "1df91882f365087ff39950efc54080a0676fcd99dd80b70c49e4b1fb8346d40d"
+  "download_url": "https://huggingface.co/efficiencyx/Jun-LoRA-E2B-LiteRT/resolve/4abc8725314ddcad49829350e09d1cf5e8766a53/model.litertlm?download=true",
+  "size": 2859718800,
+  "sha256": "e3009757c4ec2c41888e76d15f54cbb489fca756c63523f44a6dcbbb68796d2f"
 }

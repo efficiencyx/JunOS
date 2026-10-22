@@ -163,6 +163,123 @@ check_cloud_link() {
   fi
 }
 
+is_on() {
+  case "$(printf '%s' "$1" | tr '[:upper:]' '[:lower:]')" in on|1|true|yes) return 0 ;; esac
+  return 1
+}
+
+# --ignore-security can sit anywhere on the line. it comes out
+# here so it never reaches compose as a service name
+ignore_security="${JUN_IGNORE_SECURITY:-$(env_get JUN_IGNORE_SECURITY)}"
+args=()
+for a in "$@"; do
+  case "$a" in --ignore-security) ignore_security=1 ;; *) args+=("$a") ;; esac
+done
+set -- ${args[@]+"${args[@]}"}
+
+# install.sh's version_lt() plus one rule. a -security tag sorts
+# right above the same tag without it, so v1.0.4-beeeta-security
+# beats v1.0.4-beeeta and v1.0.4-security beats v1.0.4.
+version_lt() {
+  local a="${1#v}" b="${2#v}" as=0 bs=0 ac bc ap="" bp="" i x y
+  case "$a" in *-security) a="${a%-security}"; as=1 ;; esac
+  case "$b" in *-security) b="${b%-security}"; bs=1 ;; esac
+  ac="${a%%-*}"; bc="${b%%-*}"
+  [ "$ac" != "$a" ] && ap="${a#*-}"
+  [ "$bc" != "$b" ] && bp="${b#*-}"
+  for i in 1 2 3 4; do
+    x="$(printf '%s' "$ac" | cut -d. -f"$i")"; y="$(printf '%s' "$bc" | cut -d. -f"$i")"
+    case "$x" in ''|*[!0-9]*) x=0 ;; esac
+    case "$y" in ''|*[!0-9]*) y=0 ;; esac
+    [ "$x" -lt "$y" ] && return 0
+    [ "$x" -gt "$y" ] && return 1
+  done
+  if [ "$ap" != "$bp" ]; then
+    [ -z "$ap" ] && return 1
+    [ -z "$bp" ] && return 0
+    [[ "$ap" < "$bp" ]]
+    return
+  fi
+  [ "$as" -lt "$bs" ]
+}
+
+# tag<TAB>prerelease, one release a line. no jq on a fresh box.
+# tag_name comes before prerelease in every release object and
+# a release body can't fake either key, its quotes come escaped
+release_rows() {
+  grep -oE '"(tag_name|prerelease)": *("[^"]*"|true|false)' "$1" \
+    | awk -F': *' '/"tag_name"/ { gsub(/"/, "", $2); t = $2; next } t != "" { print t "\t" $2; t = "" }'
+}
+
+# UPDATE_CHECK=on (the installer asks) and we're on a release
+# tag: ask GitHub once what's newer on our channel. a newer
+# -security release means the one we run has a hole bad enough
+# to stop her over (unauthenticated RCE class, see SECURITY.md),
+# so no boot unless --ignore-security / JUN_IGNORE_SECURITY=1.
+# anything else newer is one line after boot. it never updates
+# anything. main or a branch of your own is skipped, the fix for
+# a -security release lands on main first.
+update_note=""
+update_check() {
+  local current slug channel body code tag pre newest="" security=""
+  is_on "${UPDATE_CHECK:-$(env_get UPDATE_CHECK)}" || return 0
+  command -v curl >/dev/null 2>&1 || return 0
+  current="$(git describe --tags --exact-match HEAD 2>/dev/null || true)"
+  [ -n "$current" ] || return 0
+  slug="$(git remote get-url origin 2>/dev/null \
+    | sed -nE 's#^(https://github\.com/|git@github\.com:)([^/]+/[^/]+)$#\2#p' | sed 's#/$##; s#\.git$##')"
+  [ -n "$slug" ] || return 0
+  channel="$(env_get JUN_CHANNEL)"
+
+  body="$(mktemp)"
+  code="$(curl --proto '=https' --tlsv1.2 -sS -m 8 -o "$body" -w '%{http_code}' \
+    -H 'Accept: application/vnd.github+json' -H 'User-Agent: JunOS-update-check' \
+    "https://api.github.com/repos/$slug/releases?per_page=20" 2>/dev/null || true)"
+  if [ "$code" = 200 ]; then
+    while IFS=$'\t' read -r tag pre; do
+      [ "$channel" = latest ] || [ "$channel" = experimental ] || [ "$pre" = false ] || continue
+      version_lt "$current" "$tag" || continue
+      { [ -z "$newest" ] || version_lt "$newest" "$tag"; } && newest="$tag"
+      case "$tag" in *-security) security="$tag" ;; esac
+    done < <(release_rows "$body")
+  else
+    # 60 anonymous API calls an hour per IP. the website's
+    # /releases/latest redirect has no cap but only knows the
+    # newest full release
+    tag="$(curl --proto '=https' --tlsv1.2 -sS -m 8 -o /dev/null -w '%{redirect_url}' \
+      "https://github.com/$slug/releases/latest" 2>/dev/null || true)"
+    case "$tag" in
+      */releases/tag/?*) tag="${tag##*/releases/tag/}" ;;
+      *) rm -f "$body"; echo "update check: couldn't reach GitHub, skipped"; return 0 ;;
+    esac
+    if version_lt "$current" "$tag"; then
+      newest="$tag"
+      case "$tag" in *-security) security="$tag" ;; esac
+    fi
+  fi
+  rm -f "$body"
+
+  if [ -n "$security" ]; then
+    {
+      echo ""
+      echo "SECURITY: $security is out and fixes a vulnerability in the version you run ($current)."
+      echo "  details: https://github.com/$slug/releases/tag/$security"
+      echo "  update:  ./install.sh from this folder. it only moves the code, chats and settings stay."
+    } >&2
+    if is_on "$ignore_security"; then
+      echo "  starting anyway, --ignore-security / JUN_IGNORE_SECURITY is set. update soon." >&2
+      update_note="reminder: you're on $current with a security fix out ($security). ./install.sh updates her."
+      return 0
+    fi
+    {
+      echo "  NOT starting her on it. if she's still up from before, ./start.sh stop takes her down."
+      echo "  ./start.sh --ignore-security (or JUN_IGNORE_SECURITY=1) starts her anyway, at your own risk."
+    } >&2
+    exit 3
+  fi
+  [ -z "$newest" ] || update_note="update: $newest is out, you're on $current. ./install.sh from this folder updates her, chats and settings stay."
+}
+
 case "${1:-up}" in
   link)
     { true >/dev/tty; } 2>/dev/null || { echo "./start.sh link needs a terminal" >&2; exit 1; }
@@ -171,7 +288,7 @@ case "${1:-up}" in
     exit 0
     ;;
   stop|down|status|ps|logs|trust) ;;
-  *) check_cloud_link ;;
+  *) check_cloud_link; update_check ;;
 esac
 
 profiles="${COMPOSE_PROFILES:-}"
@@ -666,6 +783,7 @@ up_and_check() {
   load_llamacpp
   mtp_recheck
   check_trusted_ca
+  [ -z "$update_note" ] || echo "$update_note"
 }
 
 # runtime/jun-ca.pem is the copy of the CA we put in the trust

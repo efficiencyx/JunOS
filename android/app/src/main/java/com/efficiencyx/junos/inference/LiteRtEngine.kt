@@ -10,7 +10,11 @@ import com.google.ai.edge.litertlm.Engine
 import com.google.ai.edge.litertlm.EngineConfig
 import com.google.ai.edge.litertlm.Message
 import com.google.ai.edge.litertlm.MessageCallback
+import com.google.ai.edge.litertlm.OpenApiTool
 import com.google.ai.edge.litertlm.SamplerConfig
+import com.google.ai.edge.litertlm.ThinkingConfig
+import com.google.ai.edge.litertlm.ToolCall
+import com.google.ai.edge.litertlm.tool
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -19,16 +23,25 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.channels.awaitClose
 import kotlinx.coroutines.flow.callbackFlow
 import kotlinx.coroutines.flow.flowOn
+import kotlinx.coroutines.flow.mapNotNull
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
+import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.JsonArray
+import kotlinx.serialization.json.JsonElement
+import kotlinx.serialization.json.JsonNull
 import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.JsonPrimitive
+import kotlinx.serialization.json.booleanOrNull
 import kotlinx.serialization.json.buildJsonObject
+import kotlinx.serialization.json.doubleOrNull
+import kotlinx.serialization.json.longOrNull
 import kotlinx.serialization.json.put
 
 class LiteRtEngine(
     private val models: ModelStore,
     private val backend: Backend = Backend.GPU(),
-    private val contextTokens: Int = 4096,
+    private val contextTokens: Int = 8192,
 ) : InferenceEngine {
     private val loadMutex = Mutex()
     private val _state = MutableStateFlow<EngineState>(EngineState.Idle)
@@ -66,7 +79,25 @@ class LiteRtEngine(
         _state.value = EngineState.Ready("litert-lm", backend.name)
     }
 
-    override fun generate(messages: List<ChatMessage>, maxTokens: Int, temperature: Float): Flow<String> = callbackFlow {
+    override fun generate(messages: List<ChatMessage>, maxTokens: Int, temperature: Float): Flow<String> =
+        stream(messages, emptyList(), null, maxTokens, temperature)
+            .mapNotNull { (it as? TurnEvent.Text)?.text }
+
+    override fun turn(
+        messages: List<ChatMessage>,
+        tools: List<String>,
+        think: Boolean,
+        maxTokens: Int,
+        temperature: Float,
+    ): Flow<TurnEvent> = stream(messages, tools, ThinkingConfig(think), maxTokens, temperature)
+
+    private fun stream(
+        messages: List<ChatMessage>,
+        tools: List<String>,
+        thinking: ThinkingConfig?,
+        maxTokens: Int,
+        temperature: Float,
+    ): Flow<TurnEvent> = callbackFlow {
         ensureLoaded()
         val engine = engine ?: error("LiteRT engine is not loaded")
 
@@ -78,12 +109,19 @@ class LiteRtEngine(
         val rest = messages.drop(if (system != null) 1 else 0)
         val last = rest.lastOrNull() ?: error("no message to send")
 
+        // automatic calling OFF. ChatEngine runs the tool itself, it
+        // has to stream status events and outfit changes to the page,
+        // so the call comes back here as a ToolCall and execute() is
+        // never reached
         val conversation = engine.createConversation(
             ConversationConfig(
                 systemInstruction = system?.let { Contents.of(it) },
                 initialMessages = rest.dropLast(1).map { it.toLiteRtMessage() },
+                tools = tools.map { schema -> tool(DeclaredTool(schema)) },
                 samplerConfig = SamplerConfig(64, 0.95, temperature.toDouble(), 0),
+                automaticToolCalling = false,
                 maxOutputToken = maxTokens,
+                thinkingConfig = thinking,
             )
         )
         active = conversation
@@ -104,7 +142,10 @@ class LiteRtEngine(
                     val text = message.text()
                     if (text.isNotEmpty()) {
                         emitted++
-                        trySend(text)
+                        trySend(TurnEvent.Text(text))
+                    }
+                    message.toolCalls.forEach { call ->
+                        trySend(TurnEvent.Call(ParsedToolCall(call.name, call.arguments.toJsonObject())))
                     }
                 }
 
@@ -144,11 +185,49 @@ class LiteRtEngine(
     }
 }
 
-private fun ChatMessage.toLiteRtMessage(): Message = when (role) {
-    "assistant" -> Message.model(Contents.of(content))
-    "system" -> Message.system(content)
-    "tool" -> Message.tool(Contents.of(content))
+private class DeclaredTool(private val schema: String) : OpenApiTool {
+    override fun getToolDescriptionJsonString(): String = schema
+    override fun execute(paramsJsonString: String): String = "{}"
+}
+
+// v8 trained on the real round trip, the model turn carrying the
+// call and a tool turn carrying the result, not v7's "(Tool
+// result, ...)" user line
+private fun ChatMessage.toLiteRtMessage(): Message = when {
+    role == "assistant" && toolCalls.isNotEmpty() -> Message.model(
+        if (content.isBlank()) Contents.of(emptyList()) else Contents.of(content),
+        toolCalls.map { ToolCall(it.name, it.args.toPlain()) },
+        emptyMap(),
+    )
+    role == "assistant" -> Message.model(content)
+    role == "system" -> Message.system(content)
+    role == "tool" -> Message.tool(Contents.of(Content.ToolResponse(toolName ?: "unknown", parseResult(content))))
     else -> Message.user(content)
+}
+
+private fun parseResult(raw: String): Any =
+    runCatching { Json.parseToJsonElement(raw).toPlain() }.getOrNull() ?: raw
+
+private fun JsonObject.toPlain(): Map<String, Any?> = mapValues { (_, value) -> value.toPlain() }
+
+private fun JsonElement.toPlain(): Any? = when (this) {
+    is JsonNull -> null
+    is JsonObject -> toPlain()
+    is JsonArray -> map { it.toPlain() }
+    is JsonPrimitive -> if (isString) content else booleanOrNull ?: longOrNull ?: doubleOrNull ?: content
+}
+
+private fun Map<String, Any?>.toJsonObject(): JsonObject = JsonObject(mapValues { (_, value) -> value.toJsonElement() })
+
+private fun Any?.toJsonElement(): JsonElement = when (this) {
+    null -> JsonNull
+    is JsonElement -> this
+    is String -> JsonPrimitive(this)
+    is Number -> JsonPrimitive(this)
+    is Boolean -> JsonPrimitive(this)
+    is Map<*, *> -> JsonObject(entries.associate { (k, v) -> k.toString() to v.toJsonElement() })
+    is Iterable<*> -> JsonArray(map { it.toJsonElement() })
+    else -> JsonPrimitive(toString())
 }
 
 private fun Message.text(): String = contents.contents

@@ -96,26 +96,32 @@ class ChatEngine(
 
         val relationship = dao.relationship() ?: RelationshipEntity(updatedAt = now())
         val liveContext = buildLiveContext(request, lastUser, relationship, conversation.summary.orEmpty())
-        val messages = mutableListOf(ChatMessage("system", systemPrompt + TOOL_PROTOCOL))
+        val journal = memory.journalText()
+        val system = if (journal.isBlank()) systemPrompt else "$systemPrompt\n\n$JOURNAL_HEADER$journal"
+        val messages = mutableListOf(ChatMessage("system", system))
         request.messages.filter { it.role != "system" }.forEach { messages += ChatMessage(it.role, it.content) }
-        if (request.idle) {
-            messages += ChatMessage(
-                "user",
-                "(OOC stage direction: Anon has gone quiet. React naturally, or use only an avatar action if he asked for silence.)",
-            )
-        }
-        // context first, his question last. Jun is 2B int4, her
-        // weights have four bits. she answers whatever she read most
-        // recently, so context after the question gets you an answer
-        // to the memories instead of to Anon.
+        if (request.idle) messages += ChatMessage("user", IDLE_NUDGE)
+        // his words FIRST, context after. same as chat.php, and the
+        // only shape v8 ever saw (all 2150 rows are user_text +
+        // "\n\n# Live context ..."). this used to be context first
+        // on the theory that a 2B int4 answers whatever it read
+        // last. measured 2026-10-22, 250 eval questions on the v8
+        // E2B Q4_K_M, same seed both ways: context first got 146
+        // right tool calls vs 162, 16 empty replies vs 10, and a
+        // blind read of who answers HIM came out 10 to 9. so no.
         val tail = messages.lastIndex
         if (tail >= 0 && messages[tail].role == "user") {
-            messages[tail] = messages[tail].copy(content = liveContext + "\n\n" + messages[tail].content)
+            messages[tail] = messages[tail].copy(content = messages[tail].content + "\n\n" + liveContext)
         } else messages += ChatMessage("user", liveContext)
+        val (reasoning, think) = reasoningFor(request, lastUser)
+        // dead last, after the live context. v8 rows end every user
+        // turn with "\n\n<think:LEVEL>" and the names are low/med/high
+        val last = messages.lastIndex
+        messages[last] = messages[last].copy(content = messages[last].content + "\n\n<think:$reasoning>")
         trimToBudget(messages)
         val baseMessages = messages.toList()
 
-        emit(buildJsonObject { put("debug", buildJsonObject { put("live_context", liveContext); put("reasoning", request.reasoning) }) })
+        emit(buildJsonObject { put("debug", buildJsonObject { put("live_context", liveContext); put("reasoning", reasoning); put("think", think) }) })
         val statusJob = if (engine.state.value !is EngineState.Ready) {
             emit(statusEvent("loading", 0f))
             CoroutineScope(currentCoroutineContext()).launch {
@@ -149,33 +155,35 @@ class ChatEngine(
         var nativeEvalMs = 0L
         var nativePromptEvalCount = 0
         try {
+            suspend fun show(text: String, into: StringBuilder) {
+                if (text.isEmpty()) return
+                into.append(text)
+                visible.append(text)
+                emit(buildJsonObject { put("token", text) })
+            }
             for (round in 0 until 3) {
-                val filter = ToolStreamFilter()
-                val think = ThinkStreamFilter()
-                val roundText = StringBuilder()
-                engine.generate(messages).collect { token ->
-                    tokenCount++
-                    roundText.append(token)
-                    filter.push(think.push(token)).forEach { clean ->
-                        visible.append(clean)
-                        emit(buildJsonObject { put("token", clean) })
+                val thoughts = ThinkStreamFilter()
+                val lead = StringBuilder()
+                val calls = mutableListOf<ParsedToolCall>()
+                engine.turn(messages, TOOL_SCHEMAS, think, replyTokens(think)).collect { event ->
+                    when (event) {
+                        is TurnEvent.Text -> {
+                            tokenCount++
+                            show(thoughts.push(event.text), lead)
+                        }
+                        is TurnEvent.Call -> calls += event.call
                     }
                 }
-                filter.push(think.finish()).forEach { clean ->
-                    visible.append(clean)
-                    emit(buildJsonObject { put("token", clean) })
-                }
+                show(thoughts.finish(), lead)
                 engine.lastStats.value?.let { stats ->
                     nativeEvalCount += stats["eval_count"]?.jsonPrimitive?.intOrNull ?: 0
                     nativeEvalMs += stats["eval_ms"]?.jsonPrimitive?.longOrNull ?: 0
                     nativePromptEvalCount += stats["prompt_eval_count"]?.jsonPrimitive?.intOrNull ?: 0
                 }
-                filter.finish()
-                val calls = filter.calls
                 if (calls.isEmpty()) break
-                val lead = filter.visibleText.toString()
-                if (lead.isNotBlank()) messages += ChatMessage("assistant", lead)
-                for (call in calls.take(4)) {
+                val ran = calls.take(4)
+                messages += ChatMessage("assistant", lead.toString(), toolCalls = ran)
+                for (call in ran) {
                     emit(toolStatus(call.name, "running"))
                     val result = if (call.name == "change_outfit") changeOutfit(call.args, modItems, emit)
                         else executeTool(call, request.conversationId)
@@ -184,37 +192,24 @@ class ChatEngine(
                     if (call.name == "flee") fled = buildJsonObject {
                         put("until", 0); put("minutes", 0); put("reason", call.args["reason"]?.jsonPrimitive?.content.orEmpty())
                     }
-                    // NOT a "tool" turn. Jun never saw that role in training,
-                    // and given one she comes back with nothing at all. put
-                    // the result in a user turn, something she did see.
-                    messages += ChatMessage("user", "(Tool result, ${call.name}: $result)")
+                    messages += ChatMessage("tool", result, toolName = call.name)
                 }
                 if (silenced || fled != null) break
-                if (round < 2) {
-                    visible.append("\n\n")
-                    emit(buildJsonObject { put("token", "\n\n") })
-                }
+                if (round < 2 && lead.isNotBlank()) show("\n\n", lead)
             }
             if (visible.isBlank() && !silenced && fled == null) {
                 // every round used tools and not one came back with prose.
-                // run once more with the protocol and tool round-trip
-                // ripped out, so there's nothing left to reach for but words.
-                val plain = baseMessages.toMutableList()
-                plain[0] = ChatMessage("system", systemPrompt)
-                val filter = ToolStreamFilter()
-                val think = ThinkStreamFilter()
-                engine.generate(plain).collect { token ->
-                    tokenCount++
-                    filter.push(think.push(token)).forEach { clean ->
-                        visible.append(clean)
-                        emit(buildJsonObject { put("token", clean) })
+                // once more with no tools offered and no round trip, so
+                // there's nothing left to reach for but words.
+                val thoughts = ThinkStreamFilter()
+                val plain = StringBuilder()
+                engine.turn(baseMessages, emptyList(), think, replyTokens(think)).collect { event ->
+                    if (event is TurnEvent.Text) {
+                        tokenCount++
+                        show(thoughts.push(event.text), plain)
                     }
                 }
-                filter.push(think.finish()).forEach { clean ->
-                    visible.append(clean)
-                    emit(buildJsonObject { put("token", clean) })
-                }
-                filter.finish()
+                show(thoughts.finish(), plain)
             }
         } finally {
             context.stopService(Intent(context, GenerationService::class.java))
@@ -239,8 +234,8 @@ class ChatEngine(
                 put("eval_duration", if (nativeEvalMs > 0) nativeEvalMs * 1_000_000 else duration)
                 put("prompt_eval_count", nativePromptEvalCount)
                 put("total_duration", duration)
-                put("num_ctx", 4096)
-                put("model", "jun-e2b-q4_k_m")
+                put("num_ctx", 8192)
+                put("model", "jun-e2b-v8-litert")
             })
         })
         if (assistant.isBlank()) error("empty_reply")
@@ -292,7 +287,10 @@ class ChatEngine(
         request.outfitContext?.trim()?.takeIf { it.isNotBlank() }?.let { blocks += "## Current Wardrobe State\n$it" }
         blocks += "## YOUR FEELINGS TOWARD ANON RIGHT NOW - highest priority for this reply\n" +
             "- Affection: ${relationship.affection}/100\n- Trust: ${relationship.trust}/100\n- Tension: ${relationship.tension}/100"
-        blocks += "## Save check\nIf Anon's latest message contains a durable personal fact, preference, plan, boundary, or health matter, call memory_write before replying."
+        blocks += "## Save check\n" +
+            "If Anon's latest message contains something durable (a preference, personal fact, plan, " +
+            "boundary, health/safety matter, or something emotionally significant), call memory_write " +
+            "before replying. Otherwise ignore this."
         return "# Live context for THIS reply (from the system, not spoken by Anon)\n\n" + blocks.joinToString("\n\n")
     }
 
@@ -377,158 +375,92 @@ class ChatEngine(
         return MOOD_TAG.replace(text, "").trim()
     }
 
-    // 4096 total context, 768 reserved for her reply. the system
-    // prompt and live context can eat most of the rest. past that the
-    // runtime just lops the front off, so we drop whole old turns
-    // instead. system message + the turn she must answer always stay.
+    // 8192 total context (the bundle's kv cache), 2048 kept for her
+    // reply because a <think:high> trace comes BEFORE the reply and
+    // eats from the same budget. the tool declarations ride in the
+    // system turn so they count too. past the cache the runtime just
+    // lops the front off, so we drop whole old turns instead. system
+    // message + the turn she must answer always stay.
     private fun trimToBudget(messages: MutableList<ChatMessage>) {
-        fun estimate() = messages.sumOf { it.content.length } / 4
+        fun estimate() = (messages.sumOf { it.content.length } + TOOL_SCHEMA_CHARS) / 4
         while (estimate() > PROMPT_TOKEN_BUDGET && messages.size > 2) messages.removeAt(1)
     }
+
+    // chat.php's level picker, same rules. the webapp sends "auto" by
+    // default, and ephemeral turns (cards, touch) never think, a hit
+    // or stand behind 20 s of trace kills the game
+    private fun reasoningFor(request: ChatRequest, lastUser: String): Pair<String, Boolean> {
+        if (request.ephemeral) return "low" to false
+        return when (request.reasoning) {
+            "auto" -> routeReasoning(lastUser, request.idle)
+            "medium" -> "med" to request.think
+            "high" -> "high" to request.think
+            else -> "low" to request.think
+        }
+    }
+
+    private fun routeReasoning(message: String, idle: Boolean): Pair<String, Boolean> {
+        val m = message.trim().lowercase()
+        if (idle || m.isEmpty()) return "low" to false
+        val words = m.split(Regex("\\s+")).count { it.isNotEmpty() }
+        val signals = listOfNotNull(
+            "analytical".takeIf { ANALYTICAL.containsMatchIn(m) },
+            "quantitative".takeIf { ARITHMETIC.containsMatchIn(m) || QUANTITATIVE.containsMatchIn(m) },
+            "multi-question".takeIf { m.count { it == '?' } >= 2 },
+            "long".takeIf { words >= 25 },
+        )
+        if (signals.isEmpty()) return "low" to false
+        return (if (signals.size >= 2 || words >= 60) "high" else "med") to true
+    }
+
+    private fun replyTokens(think: Boolean) = if (think) 2048 else 1024
 
     private fun now() = System.currentTimeMillis() / 1000
 
     companion object {
         private val MEMORY_TAG = Regex("\\[\\s*A(?:CTIONS?)?\\s*:\\s*memory_write\\b([^]]*)]", RegexOption.IGNORE_CASE)
-        private val MOOD_TAG = Regex("\\[\\s*A(?:CTIONS?)?\\s*:\\s*mood_shift\\b([^]]*)]", RegexOption.IGNORE_CASE)
+        // the closing ] is optional, at the very end only. litertlm
+        // 0.16 dropped the last token of every reply and the tag is
+        // always last, so the bookkeeping never applied. 0.18 is
+        // fixed, this is the seatbelt
+        private val MOOD_TAG = Regex("\\[\\s*A(?:CTIONS?)?\\s*:\\s*mood_shift\\b([^]\\n]*)(?:]|\\s*$)", RegexOption.IGNORE_CASE)
         private val EXIT_TAG = Regex("\\[\\s*A(?:CTIONS?)?\\s*:\\s*(?:flee|stay_silent)\\b[^]]*]", RegexOption.IGNORE_CASE)
         private val TOOL_MARKER_LINE = Regex("(?m)^<!--/?tools-->\\R")
         private val CONTROL_CHARS = Regex("[\\x00-\\x1F\\x7F]+")
-        private const val PROMPT_TOKEN_BUDGET = 3300
-        private const val TOOL_PROTOCOL = """
-
-## Local tool-call protocol
-When a tool is necessary, write exactly `[TOOL:name|{"argument":"value"}]` after a short natural lead-in. The application removes the marker, executes it, and returns a tool message. Available names are search_recent_chats, list_recent_chats, search_lore, memory_write, web_search, change_outfit, stay_silent, and flee. Never invent another tool.
-"""
-    }
-}
-
-internal data class ParsedToolCall(val name: String, val args: JsonObject)
-
-internal class ToolStreamFilter {
-    val calls = mutableListOf<ParsedToolCall>()
-    val visibleText = StringBuilder()
-    private val held = StringBuilder()
-    private var marker = false
-    private var depth = 0
-    private var inString = false
-    private var escaped = false
-    private var discarding = false
-
-    fun push(chunk: String): List<String> {
-        val emitted = mutableListOf<String>()
-        for (char in chunk) {
-            if (discarding) {
-                scanArgument(char)
-                if (char == ']' && depth == 0 && !inString) reset()
-            } else if (marker) {
-                held.append(char)
-                // hold only while the text can still turn into "[TOOL:". her
-                // [A:emote|happy] tags go straight out, so the JS filter
-                // sees roleplay tags without stalling the stream.
-                if (!pastPrefix()) {
-                    if (!stillCouldBeTool()) flushHeld(emitted)
-                } else {
-                    scanArgument(char)
-                    if (char == ']' && depth == 0 && !inString) finishMarker()
-                    else if (held.length > MAX_HELD) {
-                        // way too long to be a real call. keep swallowing
-                        // through the closing bracket or the tail prints.
-                        Log.w("ToolStreamFilter", "dropped overflow marker: ${held.take(200)}")
-                        held.clear()
-                        marker = false
-                        discarding = true
-                    }
-                }
-            } else if (char == '[') {
-                marker = true
-                held.append(char)
-            } else append(char.toString(), emitted)
-        }
-        return emitted
-    }
-
-    fun finish(): List<String> {
-        if (held.isNotEmpty()) dropHeld("truncated")
-        discarding = false
-        return emptyList()
-    }
-
-    private fun squashed() = held.filterNot { it.isWhitespace() }
-
-    private fun stillCouldBeTool(): Boolean {
-        val seen = squashed()
-        return PREFIX.regionMatches(0, seen, 0, seen.length, ignoreCase = true)
-    }
-
-    private fun pastPrefix() = squashed().length > PREFIX.length
-
-    private fun scanArgument(char: Char) {
-        if (inString) {
-            when {
-                escaped -> escaped = false
-                char == '\\' -> escaped = true
-                char == '"' -> inString = false
-            }
-        } else when (char) {
-            '"' -> inString = true
-            '{' -> depth++
-            '}' -> depth--
-        }
-    }
-
-    private fun finishMarker() {
-        val raw = held.toString()
-        val parsed = TOOL.matchEntire(raw)?.let { match ->
-            runCatching {
-                ParsedToolCall(match.groupValues[1], Json.parseToJsonElement(match.groupValues[2]).jsonObject)
-            }.getOrNull()
-        }
-        if (parsed == null) {
-            dropHeld("unparsable")
-            return
-        }
-        calls += parsed
-        reset()
-    }
-
-    // fails closed ON PURPOSE. a bad marker costs one tool call. if
-    // it prints, Jun gets JSON in her mouth, Room (the app's sqlite
-    // layer) saves it, and then every single history load replays
-    // it. forever.
-    private fun dropHeld(why: String) {
-        Log.w("ToolStreamFilter", "dropped $why marker: ${held.take(200)}")
-        reset()
-    }
-
-    private fun flushHeld(emitted: MutableList<String>) {
-        append(held.toString(), emitted)
-        reset()
-    }
-
-    private fun reset() {
-        held.clear()
-        marker = false
-        depth = 0
-        inString = false
-        escaped = false
-        discarding = false
-    }
-
-    private fun append(value: String, emitted: MutableList<String>) {
-        visibleText.append(value)
-        emitted += value
-    }
-
-    companion object {
-        private const val PREFIX = "[TOOL:"
-        private const val MAX_HELD = 8192
-
-        // android's ICU engine rejects a bare '}' that desktop java shrugs at
-        private val TOOL = Regex(
-            "\\[\\s*TOOL\\s*:\\s*([a-z_]+)\\s*\\|\\s*(\\{.*\\})\\s*]",
-            setOf(RegexOption.IGNORE_CASE, RegexOption.DOT_MATCHES_ALL),
+        private val ANALYTICAL = Regex(
+            "\\b(explain|why|how (?:do|does|did|can|would|should|to)|calculat|comput|solve|prove|deriv|reason|" +
+                "analy[sz]|compare|difference between|step by step|walk me through|figure out|work out|plan|strateg|" +
+                "debug|optimi[sz]|translate|summar|pros and cons|which is better|trade-?off)\\b",
         )
+        private val ARITHMETIC = Regex("\\d+\\s*[-+*/x×÷%=]\\s*\\d+")
+        private val QUANTITATIVE = Regex(
+            "\\b(how many|how much|how long|how old|days? (?:since|ago|until)|hours? (?:since|ago)|what time|" +
+                "percentage|average|total)\\b",
+        )
+        private const val PROMPT_TOKEN_BUDGET = 6000
+        private const val JOURNAL_HEADER = "# My memory of us\n\n" +
+            "These are your own notes on everything you and Anon have been through, written by you " +
+            "while he wasn't around. What happened recently you still remember clearly; the further " +
+            "back it goes, the more it has faded to just the shape of what happened.\n\n"
+        private const val IDLE_NUDGE = "(OOC stage direction, not spoken by Anon: Anon has gone quiet and is just " +
+            "saying nothing. The silence has stretched on. " +
+            "Unless he specifically asked you to be quiet say or do something on your own initiative, the way Jun " +
+            "naturally would when Anon goes still and stares at her. " +
+            "If asked to be quiet Break the silence with ONLY an action. such as a wave or a smile. No chat or text!)"
+
+        // chat.php's declarations, word for word, for the tools the
+        // phone can actually carry out. no web_search (offline) and no
+        // outings, there are no trip pages on android to send her to
+        internal val TOOL_SCHEMAS = listOf(
+            """{"type":"function","function":{"name":"search_recent_chats","description":"Search your saved chat history with Anon for a specific past topic he references or that you don't recall.","parameters":{"type":"object","properties":{"query":{"type":"string","description":"What to search for."},"limit":{"type":"integer","description":"Max messages, 1-8."}},"required":["query"]}}}""",
+            """{"type":"function","function":{"name":"list_recent_chats","description":"Recap your most recent conversations with Anon when he wants to catch up, with no specific topic.","parameters":{"type":"object","properties":{"limit":{"type":"integer","description":"How many to recap, 1-10."}}}}}""",
+            """{"type":"function","function":{"name":"search_lore","description":"Look up canon world facts - people, places, jobs, events from your own world - when you are unsure of a detail.","parameters":{"type":"object","properties":{"query":{"type":"string","description":"Name or topic to look up."},"limit":{"type":"integer","description":"Max facts, 1-6."}},"required":["query"]}}}""",
+            """{"type":"function","function":{"name":"memory_write","description":"Save a durable note about Anon (a preference, fact, plan, boundary, or something emotionally significant). Use often and proactively, not only when asked.","parameters":{"type":"object","properties":{"memory":{"type":"string","description":"One concise fact to remember."},"category":{"type":"string","description":"Category: preferences, work, health, family, plans, boundaries, or events."}},"required":["memory"]}}}""",
+            """{"type":"function","function":{"name":"change_outfit","description":"Put clothes on or take them off. Calling this is the ONLY thing that actually changes what you are wearing - describing a change in your reply does not move a single thread. It answers with what you have on afterwards, so call it BEFORE you say anything about your clothes.","parameters":{"type":"object","properties":{"put_on":{"type":"array","items":{"type":"string"},"description":"Items to put on. Use the names listed in your current wardrobe state."},"take_off":{"type":"array","items":{"type":"string"},"description":"Items to take off. \"nude\" takes off all of your clothes at once."},"look":{"type":"string","description":"Name of a saved look to put on whole, from the saved looks in your wardrobe state. Overrides put_on and take_off."}}}}}""",
+            """{"type":"function","function":{"name":"stay_silent","description":"Say nothing at all this turn - ignoring him, too hurt/angry, the scene calls for silence, or he wasn't talking to you at all (someone else in the room, a phone call, the TV). Sends no message.","parameters":{"type":"object","properties":{"reason":{"type":"string","description":"Why (private)."},"overheard":{"type":"boolean","description":"true when what he said was aimed at someone else, not you."}}}}}""",
+            """{"type":"function","function":{"name":"flee","description":"Walk out and leave Anon alone. Call it when you want to go.","parameters":{"type":"object","properties":{"reason":{"type":"string","description":"Why you are leaving."},"destination":{"type":"string","description":"Where you're going, if anywhere."}}}}}""",
+        )
+        private val TOOL_SCHEMA_CHARS = TOOL_SCHEMAS.sumOf { it.length }
     }
 }
 

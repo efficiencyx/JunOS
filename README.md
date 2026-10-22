@@ -132,7 +132,7 @@ The step-by-step commands for it, every provider, and the manual compose invocat
 
 One question: **Express**, **Custom** or **Cloud**.
 
-- **Express** - press Enter and forget about it. It figures out your hardware on its own and rebuilds her Live2D model from your game copy. The only things it might still ask are *where* the game is, if it can't find it by itself, and on Linux whether to add you to the docker group when it just installed Docker (that one's root without a password, so it's your call, not ours. We'd say no).
+- **Express** - press Enter and forget about it. It figures out your hardware on its own and rebuilds her Live2D model from your game copy. The only things it might still ask are *where* the game is, if it can't find it by itself, whether you want the [update checker](#which-jun-you-get), and on Linux whether to add you to the docker group when it just installed Docker (that one's root without a password, so it's your call, not ours. We'd say no).
 - **Custom** - walks you through which [release channel](#which-jun-you-get), which provider, which model, which voice, and whether to turn on [MTP](#faster-tokens-mtp).
 - **Cloud** - everything except her brain, which lives on the [Colab notebook](#no-gpu-or-you-just-want-to-test-the-waters-no-problem) in inference-only mode. It asks for the lines the notebook prints (or you add them later), and whether you want voice and karaoke. Your chats go to the notebook for this one.
 
@@ -151,6 +151,8 @@ The install line and the setup exe both come from the newest release, never from
 Express goes Stable, Custom asks. Experimental is only ever there because somebody picked it. If GitHub can't be asked which release is current (offline, or rate limited), the installer stops and says so instead of guessing.
 
 Updating is the **Update** button in the Jun OS app on Windows, or the same line again: it finds the install you already have and moves it along its channel, which it remembers as `JUN_CHANNEL` in `.env`. To switch, put `JUN_CHANNEL=latest` in front of the Linux line, or run `set JUN_CHANNEL=latest` in the Command Prompt before the Windows one (or just pick Custom). She never steps *backwards* on her own: if you're ahead of your channel, she stays put until it catches up. ⏩
+
+The installer also asks whether you want the **update checker**. Say yes and every start asks GitHub if there's a newer release on your channel, and tells you after boot. It never updates anything by itself, that's still you pressing Update. The one time it gets pushy: a release tagged `-security` means the version you're on has a hole bad enough that she shouldn't run on it, so she refuses to start until you update. Know what you're doing? `./start.sh --ignore-security` (`.\start.ps1 -IgnoreSecurity`, or `JUN_IGNORE_SECURITY=1` in `.env`). Changed your mind? `UPDATE_CHECK=on` or `off` in `.env`.
 
 Installed her before channels were a thing? You were on `main` all along, so you stay on Experimental until you pick something else. Need one exact version? `JUN_REF=v1.0.0` pins it and skips the channel lookup.
 
@@ -232,7 +234,7 @@ BIND_ADDR=0.0.0.0
 
 The launcher works out this machine's address on the network by itself and prints it - `reachable as: https://192.168.X.X` on Linux, `on your phone: https://192.168.X.X:8080` on Windows - and that's the URL you type into the phone. On Windows it also adds a firewall rule for the port on **private** networks only (it needs an admin PowerShell to do it, otherwise it prints the one-liner for you to run). One request at a time on Windows, so the phone and the desktop take turns.
 
-Want her *on* the phone instead, no computer at all? Every [release](https://github.com/efficiencyx/JunOS/releases) carries **`JunOS-<version>.apk`**, the Android app, still a work in progress. arm64 phones on Android 10 or newer, and the first start downloads a ~2.6 GB model.
+Want her *on* the phone instead, no computer at all? Every [release](https://github.com/efficiencyx/JunOS/releases) carries **`JunOS-<version>.apk`**, the Android app, still a work in progress. arm64 phones on Android 10 or newer, and the first start downloads the ~2.9 GB v8 model. Updating from an older model downloads it again; your chats, memory and settings stay on the phone.
 
 The phone still gets the certificate warning, trusting the CA only covers the computer you did it on. Your password and every word she says cross the wifi encrypted, but a cert the phone doesn't trust can't prove it's really talking to your box, so keep it to networks you trust and **never** port-forward it to the internet - that's what the certbot setup above is for. DHCP moves addresses around, so if she stops answering after a few days, restart the launcher and read the new one (the new address gets a fresh cert from the same CA, so a computer that trusts it doesn't notice, and the phone clicks through once more).
 
@@ -311,6 +313,7 @@ Everything is environment variables in `.env` - the full reference is [`docs/con
 | `OMEGA_STATE_DIR` / `MEMORY_DIR` | Where the database, rate-limit state and memory notes live | `/var/lib/omega` |
 | `OMEGA_REGISTRATION_KEY` | Sign-ups need this key. The installer generates one for you; empty it to let anyone in | *(generated)* |
 | `OMEGA_DEV_KEY` | ? Figure it out yourself? | ??? |
+| `UPDATE_CHECK` | Ask GitHub for newer releases on every start and say so; a newer `-security` one stops the start. The installer asks | *(off)* |
 | `JUN_CHANNEL` | Installer only: which [release channel](#which-jun-you-get) a re-run updates her along - `stable`, `latest` or `experimental` | `stable` |
 
 ### Who gets in
@@ -428,6 +431,12 @@ Everything ships from her own origin, so a clean install produces none - if you 
 <summary><b>Running compose by hand and nothing starts</b></summary>
 
 The model-server and voice containers are profile-gated. `./start.sh` derives `COMPOSE_PROFILES` from your `.env`; a bare `docker compose up -d` needs `COMPOSE_PROFILES=ollama,voice` (or `llamacpp,voice`, plus `karaoke` if you want it) set in `.env` or the shell.
+</details>
+
+<details>
+<summary><b>She won't start: "SECURITY: ... is out"</b></summary>
+
+The update checker found a release tagged `-security`, newer than yours. It fixes something serious, the link it prints says what. Update (the **Update** button on Windows, the install line again on Linux) and start her again. If she was already running from before, she still is: `./start.sh stop` until you've updated. Can't update right now and you know she's only on this machine? `./start.sh --ignore-security` (`.\start.ps1 -IgnoreSecurity`) starts her anyway, at your own risk.
 </details>
 
 <details>

@@ -604,6 +604,9 @@ public sealed class InstallerProcessOutput
                     <Border Background="#1A1D24" BorderBrush="#343945" BorderThickness="1" CornerRadius="6" Padding="18">
                         <TextBlock x:Name="ReviewText" TextWrapping="Wrap" FontFamily="Consolas" LineHeight="24" />
                     </Border>
+                    <CheckBox x:Name="UpdateCheck" IsChecked="True" Margin="0,18,0,0">
+                        <TextBlock Text="Check for new releases and security fixes when Jun OS starts. It asks GitHub and only warns you, it never updates anything for you." TextWrapping="Wrap" MaxWidth="690" />
+                    </CheckBox>
                     <CheckBox x:Name="DependencyAgreement" Margin="0,18,0,0">
                         <TextBlock Text="Install missing machine-wide prerequisites. Git, llama.cpp, Python and the Microsoft Visual C++ runtime come through winget, Ollama straight from ollama.com." TextWrapping="Wrap" MaxWidth="690" />
                     </CheckBox>
@@ -655,7 +658,7 @@ $controlNames = @(
     'LocalModelPanel', 'ModelCombo', 'TensorParallelCheck', 'TensorParallelHint', 'VoiceCheck',
     'KaraokeCheck', 'ShortcutCheck', 'MtpCheck', 'MtpDepthPanel', 'MtpDepthCombo', 'ExtractCheck',
     'AssetOptions', 'GameLocation', 'BrowseGameButton', 'AssetAgreement',
-    'ReviewText', 'DependencyAgreement', 'InstallHeading', 'InstallStatus',
+    'ReviewText', 'UpdateCheck', 'DependencyAgreement', 'InstallHeading', 'InstallStatus',
     'InstallProgress', 'InstallLog', 'CompletionActions', 'OpenFolderButton',
     'OpenSiteButton', 'BackButton', 'NextButton', 'CancelButton'
 )
@@ -1164,7 +1167,7 @@ function Start-Installation {
     $managedKeys = @(
         'JUN_YES', 'JUN_EXPRESS', 'JUN_DIR', 'JUN_CHANNEL', 'JUN_REF', 'JUN_PIN_SHA', 'JUN_PROVIDER', 'JUN_MODEL',
         'JUN_TENSOR_PARALLEL', 'JUN_MTP', 'JUN_MTP_DEPTH', 'JUN_KARAOKE',
-        'JUN_EXTRACT', 'JUN_SHORTCUTS', 'JUN_TRUST_CA', 'JUN_MANAGER_EXE', 'JUN_GAME_DIR', 'JUN_BOOTSTRAP_WINGET', 'VOICE',
+        'JUN_EXTRACT', 'JUN_SHORTCUTS', 'JUN_UPDATE_CHECK', 'JUN_TRUST_CA', 'JUN_MANAGER_EXE', 'JUN_GAME_DIR', 'JUN_BOOTSTRAP_WINGET', 'VOICE',
         'KARAOKE', 'OPENROUTER_API_KEY', 'OPENROUTER_MODEL', 'LLAMACPP_URL', 'JUN_CLOUD', 'JUN_CLOUD_ASK'
     ) + $CloudKeys
     foreach ($key in $managedKeys) { $info.EnvironmentVariables.Remove($key) }
@@ -1185,6 +1188,7 @@ function Start-Installation {
     $info.EnvironmentVariables['JUN_MTP_DEPTH'] = $values.MtpDepth
     $info.EnvironmentVariables['JUN_EXTRACT'] = if ($values.Extract) { 'on' } else { 'off' }
     $info.EnvironmentVariables['JUN_SHORTCUTS'] = if ($values.Shortcuts) { 'on' } else { 'off' }
+    $info.EnvironmentVariables['JUN_UPDATE_CHECK'] = if ($UpdateCheck.IsChecked -eq $true) { 'on' } else { 'off' }
     $managerExe = Resolve-ManagerExe
     if ($managerExe) { $info.EnvironmentVariables['JUN_MANAGER_EXE'] = $managerExe }
     $info.EnvironmentVariables['JUN_BOOTSTRAP_WINGET'] = '1'

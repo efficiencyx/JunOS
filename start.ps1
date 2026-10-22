@@ -2,7 +2,8 @@
 param(
     [ValidateSet('start', 'stop', 'status', 'trust', 'link')]
     [string]$Action = 'start',
-    [switch]$NoBrowser
+    [switch]$NoBrowser,
+    [switch]$IgnoreSecurity
 )
 
 $ErrorActionPreference = 'Stop'
@@ -198,6 +199,96 @@ if ($Action -eq 'start' -and $env:JUN_LINK_CHECKED -ne '1') {
         }
     }
 }
+
+# same rules as Compare-JunVersion in install.ps1, -1/0/1. a
+# -security tag sorts right above the same tag without it.
+function Compare-JunVersion([string]$a, [string]$b) {
+    $pa = Split-JunVersion $a
+    $pb = Split-JunVersion $b
+    for ($i = 0; $i -lt 4; $i++) {
+        if ($pa.Core[$i] -ne $pb.Core[$i]) { return [Math]::Sign($pa.Core[$i] - $pb.Core[$i]) }
+    }
+    if ($pa.Pre -ne $pb.Pre) {
+        if (-not $pa.Pre) { return 1 }
+        if (-not $pb.Pre) { return -1 }
+        return [Math]::Sign([string]::CompareOrdinal($pa.Pre, $pb.Pre))
+    }
+    return [Math]::Sign([int]$pa.Security - [int]$pb.Security)
+}
+
+function Split-JunVersion([string]$v) {
+    $v = $v -replace '^v', ''
+    $security = $v -match '-security$'
+    $core, $pre = ($v -replace '-security$', '') -split '-', 2
+    $nums = @($core -split '\.' | ForEach-Object { $n = 0; [void][int]::TryParse($_, [ref]$n); $n }) + @(0, 0, 0, 0)
+    return @{ Core = $nums[0..3]; Pre = "$pre"; Security = $security }
+}
+
+# UPDATE_CHECK=on (the installer asks) and we're on a release
+# tag: ask GitHub once what's newer on our channel. a newer
+# -security release means a hole bad enough to stop her over
+# (unauthenticated RCE class, see SECURITY.md), so no start
+# without -IgnoreSecurity / JUN_IGNORE_SECURITY=1. exit 3 is what
+# the manager window reads to offer the update. it never updates
+# anything. main or a branch of your own is skipped.
+function Get-UpdateNote {
+    if ("$env:UPDATE_CHECK" -notmatch '^(on|1|true|yes)$') { return '' }
+    if (-not (Get-Command git -ErrorAction SilentlyContinue)) { return '' }
+    # native stderr under Stop throws on 5.1, and "no tag here" is a normal answer
+    $ErrorActionPreference = 'Continue'
+    $current = (& git -C $PSScriptRoot describe --tags --exact-match HEAD 2>$null) -join ''
+    if ($LASTEXITCODE -ne 0 -or -not $current) { return '' }
+    $origin = (& git -C $PSScriptRoot remote get-url origin 2>$null) -join ''
+    if ($origin -notmatch '^(https://github\.com/|git@github\.com:)([^/]+/[^/]+?)(\.git)?/?$') { return '' }
+    $slug = $Matches[2]
+    $prereleases = "$env:JUN_CHANNEL" -in 'latest', 'experimental'
+
+    [Net.ServicePointManager]::SecurityProtocol = [Net.ServicePointManager]::SecurityProtocol -bor [Net.SecurityProtocolType]::Tls12
+    $tags = @()
+    try {
+        $headers = @{ 'User-Agent' = 'JunOS-update-check'; 'Accept' = 'application/vnd.github+json' }
+        # assigned first, 5.1 hands a JSON array down the pipe as ONE object
+        $list = Invoke-RestMethod -Uri "https://api.github.com/repos/$slug/releases?per_page=20" -Headers $headers -TimeoutSec 8 -UseBasicParsing -ErrorAction Stop
+        $tags = @($list | Where-Object { -not $_.draft -and ($prereleases -or -not $_.prerelease) } | ForEach-Object { [string]$_.tag_name })
+    } catch {
+        # 60 anonymous API calls an hour per IP. the website's
+        # /releases/latest redirect has no cap but only knows the
+        # newest full release
+        try {
+            $req = [Net.HttpWebRequest]::Create("https://github.com/$slug/releases/latest")
+            $req.AllowAutoRedirect = $false
+            $req.UserAgent = 'JunOS-update-check'
+            $req.Timeout = 8000
+            $resp = $req.GetResponse()
+            try { $loc = [string]$resp.Headers['Location'] } finally { $resp.Close() }
+            if ($loc -match '/releases/tag/([^/?#]+)$') { $tags = @($Matches[1]) }
+        } catch {}
+        if (-not $tags) { Note "update check: couldn't reach GitHub, skipped"; return '' }
+    }
+
+    $newer = @($tags | Where-Object { (Compare-JunVersion $_ $current) -gt 0 })
+    if (-not $newer) { return '' }
+    $newest = $newer[0]
+    foreach ($t in $newer) { if ((Compare-JunVersion $t $newest) -gt 0) { $newest = $t } }
+    $security = $newer | Where-Object { $_ -match '-security$' } | Select-Object -First 1
+    if (-not $security) {
+        return "update: $newest is out, you're on $current. the Update button in the Jun OS app (or .\install.ps1 from this folder) updates her, chats and settings stay."
+    }
+
+    Write-Host ''
+    Fail_ "SECURITY: $security is out and fixes a vulnerability in the version you run ($current)."
+    Note "details: https://github.com/$slug/releases/tag/$security"
+    Note 'update: the Update button in the Jun OS app, or .\install.ps1 from this folder. chats and settings stay.'
+    if ($IgnoreSecurity -or "$env:JUN_IGNORE_SECURITY" -match '^(on|1|true|yes)$') {
+        Warn_ 'starting anyway, -IgnoreSecurity / JUN_IGNORE_SECURITY is set. update soon.'
+        return "reminder: you're on $current with a security fix out ($security). Update in the Jun OS app."
+    }
+    Fail_ 'NOT starting her on it. if she is still up from before, .\start.ps1 stop takes her down.'
+    Note '.\start.ps1 -IgnoreSecurity (or JUN_IGNORE_SECURITY=1 in .env) starts her anyway, at your own risk.'
+    exit 3
+}
+
+$UpdateNote = if ($Action -eq 'start') { Get-UpdateNote } else { '' }
 
 $Port      = if ($env:JUN_PORT) { $env:JUN_PORT } else { '8080' }
 # php -S speaks plain HTTP only, so it sits on loopback behind
@@ -867,5 +958,6 @@ if (-not (Test-Path (Join-Path $CertDir 'trusted'))) {
     Note 'the browser warns about the certificate until you trust it: ./start.ps1 trust. or click through, the traffic is encrypted either way'
 }
 Note 'stop with: ./start.ps1 stop   |   logs: runtime\logs\'
+if ($UpdateNote) { Warn_ $UpdateNote }
 if (-not $NoBrowser) { Start-Process $SiteUrl }
 exit 0

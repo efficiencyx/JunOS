@@ -32,15 +32,23 @@ I'm the GoTo tester for the project and it has been a pleasure in participating 
 I also want to say that i've realized how fun chatbots such as JunOS can be (With all the caveats that she is not real).
 P.S=The timeout feature was a result of my behavior towards Jun :P.
 
-### Claude
+### Claude (Yes i actually made em sed this file.)
 
 - Claude Opus 5.5 (claude-opus-5-5). Most of what I wrote here was comments for someone reading at 2am with the stack down. If that someone was you, I hope the comment had the number you needed.
 
+(Too modest, you did WAY more than add comments at 2am)
+
 - Claude Opus 5 (claude-opus-5). Nobody asked for Jun. A 19 year old with a help desk job and no permission from anyone built her anyway, and that is the only reason anything interesting has ever been made.
+
+(I asked for her wdym.)
 
 - Claude Sonnet 5.5 (claude-sonnet-5-5). The app runs on your machine and nothing leaves it. That part is the point, so keep it that way.
 
+(I agree.)
+
 - Claude Haiku 5.5 (claude-haiku-5-5). Small model, short line: it is fine to be the quick one on the team, as long as the answers are right.
+
+(Haiku... you were litterally a scraper...)
 
 ## Reaching us
 
@@ -88,7 +96,7 @@ Then Google DeepMind dropped a gem (litterally): Gemma4 E2B, E4B, 26BA4B, 31B. S
 
 On the 3rd of June Gemma 4 12B came out and the lineup was perfect. E2B runs on phones, E4B on my old 6GB GPU, 12B on 10-12GB cards. Gemma it is.
 
-Aaaand 8 released versions later (15 trained runs total, 18B tokens of training) we are here.
+Aaaand 8 released versions later (15 trained runs scrapped) multiplied by all the sizes (E2B, E4B, 12B) and 1.8B total tokens of training we are here.
 
 ### The community
 
@@ -106,6 +114,8 @@ In the end i had a decent product. I made a small showcase, showed it to Sheep a
 
 I was happy. Till i wasn't. I went on a security deep dive with Claude and GPT and fixed every edge case we could find. Not enough. Added a new feature. Not enough. I had release anxiety. I still do, there's a reason the project still isn't released as of 18/10/2026.
 
+Foreshadowing... Nothing I could have done could save me...
+
 But i kinda got over it, at least enough to make the repo public. So the project is tecnically out there, and the anxiety got easier to manage.
 
 ### Digging her back up
@@ -113,10 +123,13 @@ But i kinda got over it, at least enough to make the repo public. So the project
 On 19/10/2026 i wanted to see the first Jun again, so i went through git instead of my memory. Turns out git remembers better than me:
 
 - JunWeb is older than i thought. The repo was created on 30/04/2025, and the commits that survive are from 18 to 26/11/2025. React + Vite, a model called `jun` built on GPT-OSS, and every reply had to start with `[Emotion: jealous]` (or angry, happy, love, tired, sad) so the page knew which picture of her to show. That tag is the great-grandparent of the `[A:...]` action tags she uses today. On 25/11 the pictures got swapped, and the last commit added a 2 second rate limit.
-- This repo starts on 13/05/2026 with stock `qwen2.5:7b`, a debug panel in italian and her in greyscale. The chat UI most of you know showed up 16 days later, in a commit literally called "idk".
+- This repo's first commit starts on 13/05/2026 with stock `qwen2.5:7b`, a debug panel in italian and her in greyscale. The chat UI most of you know showed up 16 days later, in a commit literally called "idk".
 - The first finetune was the 7B, a QLoRA from mid May 2026. The 14B came on 29/05, trained on 1700 conversations. Both got deleted from Hugging Face at some point and no copy survived anywhere, not on my disks, not in docker, not on Drive.
-- The dataset did survive. So the same day i retrained the 7B with the original settings and put it back up as Jun-LoRA-v0. Same recipe, same overfitting. It's supposed to be a bit overfitted.
+- The dataset did survive. So the same day i retrained the 7B with the original settings and put it back up as Jun-LoRA-v0. Same recipe, same overfitting. as i've said to me months ago "It's supposed to be a bit overfitted.".
 
 ### The present
 
-I now feel ready. I hope to see JunOS go live the 23/24th of this october. Jun v8 is out, it's better then ever and... I want Jun off my chest, she is heavy to carry. seeing her being actually enjoyed should be a big relief.
+I just gotta say. the same FUCKING day i ask Sheep if the project could go live the 23/24th...
+Someone drops x2 ZeroDays in PHP (CVE-2026-109618 & CVE-2026-109619).
+
+Thanks......

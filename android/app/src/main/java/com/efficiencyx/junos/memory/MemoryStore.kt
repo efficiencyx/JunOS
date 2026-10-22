@@ -94,7 +94,7 @@ class MemoryStore(context: Context) {
         val grouped = snapshot.notes.groupBy { it.category }
             .entries.sortedByDescending { (_, notes) -> notes.maxOfOrNull { it.updated } ?: 0 }
         val blocks = grouped.map { (category, notes) ->
-            "### ${category.replaceFirstChar { it.uppercase() }}\n" +
+            "### $category\n" +
                 notes.sortedByDescending { it.updated }.joinToString("\n") { note ->
                     val created = MemoryDates.day(note.created)
                     "- " + MemoryDates.stamp(note.text, created) +
@@ -107,6 +107,10 @@ class MemoryStore(context: Context) {
             out.append('\n').append(block).append('\n')
         }
         return out.toString().trim()
+    }
+
+    suspend fun journalText(): String = withContext(Dispatchers.IO) {
+        mutex.withLock { File(root, "journal.md").takeIf { it.isFile }?.readText()?.trim().orEmpty() }
     }
 
     private fun snapshotUnlocked(): MemorySnapshot {

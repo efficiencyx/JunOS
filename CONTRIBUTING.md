@@ -76,7 +76,7 @@ Do not say a check passed if it was not run. Record missing hardware or unavaila
 
 Releases live on the public repo, and the installers and the README links read whatever the newest published one carries. So the order matters.
 
-1. Push a `v*` tag (`vX.Y.Z` for a full release, anything with a `-`, like `vX.Y.Z-beta`, for a pre-release).
+1. Push a `v*` tag (`vX.Y.Z` for a full release, anything with a `-`, like `vX.Y.Z-beta`, for a pre-release). A tag ending in `-security` (`vX.Y.Z-security`, `vX.Y.Z-beta-security`) drafts as a full release and makes every older install with the update checker on refuse to start until it updates, so it's only for the vulnerabilities [SECURITY.md](SECURITY.md#security-releases) describes. Publish the advisory with it and say in the notes what to do.
 2. `.github/workflows/release-installer.yml` builds `JunSetup-<tag>.exe` pinned to that tag's commit and `JunOS.exe` (the manager window from `jun-manager.ps1`, compiled with `tools/build-installer-exe.ps1 -Manager` first and embedded into the setup exe with `-EmbedManager`), plus `JunOS-<tag>.apk` (the signed release build of `android/`), and puts them, `install.sh`, `install.ps1`, `installer-gui.ps1` and `SHA256SUMS` on a **draft** release for the tag. A draft you already made in the UI for that tag is reused.
 3. Write the notes, check the pre-release box is right, publish. Stable installs follow the newest full release, Latest follows the newest of either kind.
 

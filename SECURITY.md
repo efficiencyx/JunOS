@@ -171,6 +171,15 @@ and STT weights. demucs pulls its `htdemucs` weights from Meta's public file
 host. All of it is cached, so it happens once. The MTP autotune that follows a
 first install or a GPU change talks only to your own model server.
 
+**On every start, only if you said yes to the update checker** (`UPDATE_CHECK=on`,
+the installers ask): one anonymous request to `api.github.com` for the release
+list of the repo you installed from, or `github.com/<repo>/releases/latest` when
+the API is rate limited. GitHub sees your IP and a `JunOS-update-check`
+user agent, nothing else is sent. The answer is only compared against the tag
+you're on: a newer release gets a line after boot, a newer `-security` release
+stops the start (see [Security releases](#security-releases)). It never
+downloads or changes anything.
+
 **While you use her:**
 
 * `html.duckduckgo.com` - only when your latest message begins with `/search `.
@@ -194,10 +203,30 @@ first install or a GPU change talks only to your own model server.
   finds the URL can't use the GPU or touch the model store. Cloudflare
   terminates TLS on a quick tunnel, so it can read that traffic in transit.
 
-**Never:** there is no analytics, no crash reporting, no usage ping, no update
-check, and nothing reports back to this project. An older build had a
+**Never:** there is no analytics, no crash reporting, no usage ping, no
+automatic update, and nothing reports back to this project. The update checker
+above is opt-in and only reads GitHub's public release list. An older build had a
 `TELEMETRY` knob in `.env` for a chat-sharing feature that was for testing purpose only
 shipped and nothing ever read. It is gone.
+
+## Security releases
+
+A release whose tag ends in `-security` (`v1.0.5-security`,
+`v1.0.5-beeeta-security`) fixes a vulnerability bad enough that running the
+old version is the bigger risk, the kind where the advisory says to stop her
+until you've updated. The bar is [GHSA-3p7p-m86h-9j93](https://github.com/efficiencyx/JunOS/security/advisories/GHSA-3p7p-m86h-9j93):
+unauthenticated remote code execution in the bundled PHP. A routine fix, a
+hardening change or a bug that needs an account or local access ships as a
+normal release.
+
+With the update checker on, `start.sh` and `start.ps1` refuse to start a
+version older than a published `-security` release on the install's channel,
+print the release link and exit with code 3. The Windows manager offers its
+Update button from there. `./start.sh --ignore-security`,
+`.\start.ps1 -IgnoreSecurity` or `JUN_IGNORE_SECURITY=1` start anyway. The release workflow
+drafts `-security` tags as full releases so Stable installs and the
+`releases/latest` one-liners get them. Installs on `main` are never stopped,
+the fix lands there first.
 
 ## Security contact
 

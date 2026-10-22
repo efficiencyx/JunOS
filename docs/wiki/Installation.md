@@ -68,6 +68,8 @@ A system folder (like `C:\Windows\System32`) or a folder inside OneDrive won't b
 * **Custom** lets you choose the release channel, the AI provider, the model, whether the voice is on, and so on. Every option has a default.
 * **Cloud inference** installs everything except the model. Her brain runs on the [Colab notebook](#already-installed-but-your-graphics-card-is-too-small) in inference-only mode instead, so your messages go there. Paste the lines its Step 3 printed into the box (or leave it empty and add them later), and pick whether you want the voice and karaoke.
 
+The last page, before anything downloads, has a box for the [update checker](#updating-her), ticked unless you untick it.
+
 If something goes wrong the installer stops, says what in plain words, and waits before the window closes. Fix that one thing and run it again: it picks up where it stopped.
 
 ### Step 4 - Let it work
@@ -187,6 +189,8 @@ curl -fsSL https://github.com/efficiencyx/JunOS/releases/latest/download/install
 * Press **Enter** for **Express**. Hardware is detected, a model that fits your card is picked, voice is enabled, her body gets rebuilt from your game.
 * Type `2` for **Custom** to choose provider, model, voice, karaoke and so on yourself. Every question has a default.
 * Type `3` for **Cloud** to install everything except the model, which runs on the [Colab notebook](#already-installed-but-your-graphics-card-is-too-small) instead. It asks you to paste the lines the notebook printed (an empty line skips that), then about voice and karaoke.
+
+Whichever you pick, it also asks whether to turn on the [update checker](#updating-her). Enter means yes.
 
 ### Step 6 - Let it work
 
@@ -439,6 +443,8 @@ The channel is saved in `.env` as `JUN_CHANNEL`. To switch, edit that line, or s
 
 `JUN_REF=v1.0.0` installs one exact version and skips the channel. If you changed files in her folder yourself, the update leaves the code alone and tells you. If GitHub can't be asked which release is current, a fresh install stops and says so, and an update keeps the code it has.
 
+The installer asks whether you want the **update checker**. With it on, every start asks GitHub whether a newer release is out on your channel, and says so once she's up. It never updates anything itself. A release whose name ends in `-security` is different: it fixes something serious in the version you have, so she won't start until you update. `./JunOS/start.sh --ignore-security` (Windows: `powershell .\JunOS\start.ps1 -IgnoreSecurity`, or `JUN_IGNORE_SECURITY=1` in `.env`) starts her anyway. Turn the checker on or off later with `UPDATE_CHECK=on` or `off` in `.env`. Installs on Experimental are never checked.
+
 ---
 
 ## When something goes wrong
@@ -455,6 +461,7 @@ The channel is saved in `.env` as `JUN_CHANNEL`. To switch, edit that line, or s
 | She shows "404 Assets not extracted" | Assets weren't extracted, that's the placeholder | ["Installing" her body later](#installing-her-body-later) |
 | The page loads, the first reply takes forever | Model still downloading or warming up | `./JunOS/start.sh logs ollama` on Linux, `JunOS\runtime\logs\ollama.err.log` on Windows. Wait for it to finish once. `docker logs omega-php \| grep prewarm` (Windows: `JunOS\runtime\logs\prewarm.log`) says whether she got loaded ahead of time, a `failed:` line means something else had the graphics card |
 | **signup** asks for a key | You're not the first account on this install, or she listens on your network (`BIND_ADDR`) and then even the first account needs it | The key is in `.env` as `OMEGA_REGISTRATION_KEY`. Empty the value to open signup to anyone on your network |
+| `SECURITY: ... is out and fixes a vulnerability` and she doesn't start | A `-security` release is out and you're on an older version | [Update her](#updating-her), then start her again. The Windows app offers the update right there. Still running from before? Stop her until you've updated |
 | Port 80 or 443 already in use (Linux) | Another web server on the box | Stop it. Port 80 only redirects to 443, so moving just one of them breaks the redirect |
 
 Still stuck? Grab the last 50 lines of the logs and open an issue. Say which OS, which card, and answer the questions the Issue Template asks you about.

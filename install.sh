@@ -343,6 +343,32 @@ ask_model_ref() {
     MODEL_REF="$(resolve_model "$alias")"
 }
 
+# start.sh asks GitHub about releases on every boot when this is
+# on, so somebody has to say yes. Express asks too. an unattended
+# run (JUN_YES without Express, or no terminal) writes nothing and
+# the check stays off until a run with a person in front of it.
+# a value already in .env is the answer from last time.
+ask_update_check() {
+    local ans val
+    case "$(printf '%s' "${JUN_UPDATE_CHECK:-}" | tr '[:upper:]' '[:lower:]')" in
+        1|on|yes|true) val=on ;;
+        0|off|no|false) val=off ;;
+        *) val="$(env_value UPDATE_CHECK)" ;;
+    esac
+    if [ -z "$val" ]; then
+        if [ ! -r /dev/tty ] || { [ "${JUN_YES:-}" = "1" ] && [ "$EXPRESS" != 1 ]; }; then
+            note "update check off - JUN_UPDATE_CHECK=on turns it on"
+            return 0
+        fi
+        printf '     %s$%s enable the update checker, for new releases and security fixes? %s(asks GitHub when she starts. it only warns you, it never updates anything for you)%s %s[Y/n]%s %s→%s ' \
+            "$OK" "$R" "$DIM" "$R" "$DIM" "$R" "$ACCENT" "$R" > /dev/tty
+        read -r ans < /dev/tty || ans=""
+        case "$ans" in n|N|no|NO) val=off ;; *) val=on ;; esac
+    fi
+    set_env UPDATE_CHECK "$val"
+    ok "update check $val"
+}
+
 # off skips the seperate demucs/CUDA/ROCm image (demucs is the
 # model that splits a song into stems). JUN_KARAOKE=on|off
 # defaults on and wins over KARAOKE, same as install.ps1.
@@ -763,6 +789,8 @@ configure() {
     ensure_key OMEGA_REGISTRATION_KEY
     ensure_key SIDECAR_SECRET
     ok "registration key ready"
+
+    ask_update_check
 }
 
 pkg_manager() {
@@ -1500,9 +1528,14 @@ resolve_target() {  # 1 = fresh install
 }
 
 # semver-ish. v1.2.0 beats v1.2.0-beta, two pre-releases of the
-# same version compare as plain strings.
+# same version compare as plain strings. a -security tag sorts
+# right above the same tag without it, or an install on v1.0.4
+# would read v1.0.4-security as a pre-release, stay put, and
+# start.sh would refuse to boot it forever.
 version_lt() {
-    local a="${1#v}" b="${2#v}" ac bc ap="" bp="" i x y
+    local a="${1#v}" b="${2#v}" as=0 bs=0 ac bc ap="" bp="" i x y
+    case "$a" in *-security) a="${a%-security}"; as=1 ;; esac
+    case "$b" in *-security) b="${b%-security}"; bs=1 ;; esac
     ac="${a%%-*}"; bc="${b%%-*}"
     [ "$ac" != "$a" ] && ap="${a#*-}"
     [ "$bc" != "$b" ] && bp="${b#*-}"
@@ -1513,9 +1546,13 @@ version_lt() {
         [ "$x" -lt "$y" ] && return 0
         [ "$x" -gt "$y" ] && return 1
     done
-    [ -z "$ap" ] && return 1
-    [ -z "$bp" ] && return 0
-    [[ "$ap" < "$bp" ]]
+    if [ "$ap" != "$bp" ]; then
+        [ -z "$ap" ] && return 1
+        [ -z "$bp" ] && return 0
+        [[ "$ap" < "$bp" ]]
+        return
+    fi
+    [ "$as" -lt "$bs" ]
 }
 
 git_move() {  # dir is_tag

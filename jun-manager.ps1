@@ -289,10 +289,16 @@ $timer.Add_Tick({
     # for the pipe to close freezes this window. same trap as setup.
     if ($script:busy -and $script:process -and $script:process.HasExited) {
         $script:busy = $false
-        if ($script:process.ExitCode -ne 0) {
-            Add-OutputLine "start.ps1 exited with code $($script:process.ExitCode). The Logs button has the details."
-        }
+        $code = $script:process.ExitCode
         Update-Status
+        # 3 = start.ps1 refused to start over a -security release
+        if ($code -eq 3) {
+            if (Confirm-Action "A release that fixes a security vulnerability is out, so Jun OS won't start on this version.`n`nUpdate now? The installer opens in its own window. Chats and settings stay.") {
+                Start-ConsoleScript 'install.ps1'
+            }
+        } elseif ($code -ne 0) {
+            Add-OutputLine "start.ps1 exited with code $code. The Logs button has the details."
+        }
     }
     $script:ticks++
     if ($script:ticks % 15 -eq 0) { Update-Status }

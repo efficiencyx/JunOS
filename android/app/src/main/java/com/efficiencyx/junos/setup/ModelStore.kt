@@ -47,11 +47,24 @@ class ModelStore(private val context: Context) {
     private val client = OkHttpClient.Builder().followRedirects(true).followSslRedirects(true).build()
     private val root = File(context.filesDir, "models").also { it.mkdirs() }
     val litertModelFile: File get() = File(root, "jun.litertlm")
-    val litertCacheDir: File get() = File(root, "litert-cache").also { it.mkdirs() }
+    // the xnnpack weight cache litertlm 0.16 wrote is one 0.18 can't
+    // open, engine creation just FAILS on it. new dir name, and the
+    // old one goes, it's ~2.6 GB of dead weights for the v7 bundle
+    val litertCacheDir: File get() {
+        File(root, "litert-cache").takeIf { it.exists() }?.deleteRecursively()
+        return File(root, "litert-cache-018").also { it.mkdirs() }
+    }
     val voiceRoot: File get() = File(root, "voice").also { it.mkdirs() }
 
     fun modelReady(): Boolean = litertReady()
-    fun litertReady(): Boolean = litertModelFile.isFile && litertModelFile.length() > 64L * 1024 * 1024
+
+    // matching the pinned size is what makes a phone that still holds
+    // the v7 bundle download v8. "big enough" said yes to both
+    fun litertReady(): Boolean {
+        if (!litertModelFile.isFile) return false
+        val size = litertSpec()?.size ?: return litertModelFile.length() > 64L * 1024 * 1024
+        return litertModelFile.length() == size
+    }
     fun voiceReady(): Boolean = File(voiceRoot, ".ready").isFile
 
     fun litertSpec(): ModelSpec? = runCatching {

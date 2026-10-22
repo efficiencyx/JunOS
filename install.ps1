@@ -521,6 +521,28 @@ function Ask-Shortcuts {
     return $(if ($v -match '^(n|no)$') { 'off' } else { 'on' })
 }
 
+# start.ps1 asks GitHub about releases on every start when this
+# is on, so somebody has to say yes. Express asks too. a run with
+# nobody to answer (JUN_YES alone, the GUI) writes nothing unless
+# JUN_UPDATE_CHECK says, and the check stays off.
+function Ask-UpdateCheck {
+    $val = switch -Regex ("$env:JUN_UPDATE_CHECK".ToLower()) {
+        '^(1|on|yes|true)$'  { 'on' }
+        '^(0|off|no|false)$' { 'off' }
+        default              { Get-EnvValue 'UPDATE_CHECK' }
+    }
+    if (-not $val) {
+        if (-not ($interactive -or $script:expressInteractive)) {
+            Note 'update check off - JUN_UPDATE_CHECK=on turns it on'
+            return
+        }
+        $a = Read-Styled "     ${OK}▸${R} enable the update checker, for new releases and security fixes? ${DIM}(asks GitHub when she starts. it only warns you, it never updates anything for you)${R} ${DIM}[Y/n]${R} ${ACCENT}›${R} "
+        $val = if ($a -match '^(n|no)$') { 'off' } else { 'on' }
+    }
+    Set-EnvKey 'UPDATE_CHECK' $val
+    Ok "update check $val"
+}
+
 # MTP is multi-token prediction, the drafter guesses tokens and
 # Jun checks every one of them. so it only changes speed, what she
 # actually says comes out the same. how much speed depends on the
@@ -794,6 +816,7 @@ function Configure-Jun {
     Add-EnvKeyIfMissing 'OMEGA_REGISTRATION_KEY'
     Add-EnvKeyIfMissing 'SIDECAR_SECRET'
     Ok 'registration key ready'
+    Ask-UpdateCheck
 
     return @{ provider = $provider; voice = $voice; karaoke = $karaoke; shortcuts = $shortcuts
               needsOllama = $needsOllama; needsLlamacpp = $needsLlamacpp }
@@ -1753,23 +1776,30 @@ function Resolve-TargetRef([string]$channel, [bool]$fresh) {
 }
 
 # semver-ish, -1/0/1. v1.2.0 beats v1.2.0-beta, two pre-releases
-# of the same version compare as plain strings.
+# of the same version compare as plain strings. a -security tag
+# sorts right above the same tag without it, or an install on
+# v1.0.4 would read v1.0.4-security as a pre-release, stay put,
+# and start.ps1 would refuse to boot it forever.
 function Compare-JunVersion([string]$a, [string]$b) {
     $pa = Split-JunVersion $a
     $pb = Split-JunVersion $b
     for ($i = 0; $i -lt 4; $i++) {
         if ($pa.Core[$i] -ne $pb.Core[$i]) { return [Math]::Sign($pa.Core[$i] - $pb.Core[$i]) }
     }
-    if ($pa.Pre -eq $pb.Pre) { return 0 }
-    if (-not $pa.Pre) { return 1 }
-    if (-not $pb.Pre) { return -1 }
-    return [Math]::Sign([string]::CompareOrdinal($pa.Pre, $pb.Pre))
+    if ($pa.Pre -ne $pb.Pre) {
+        if (-not $pa.Pre) { return 1 }
+        if (-not $pb.Pre) { return -1 }
+        return [Math]::Sign([string]::CompareOrdinal($pa.Pre, $pb.Pre))
+    }
+    return [Math]::Sign([int]$pa.Security - [int]$pb.Security)
 }
 
 function Split-JunVersion([string]$v) {
-    $core, $pre = ($v -replace '^v', '') -split '-', 2
+    $v = $v -replace '^v', ''
+    $security = $v -match '-security$'
+    $core, $pre = ($v -replace '-security$', '') -split '-', 2
     $nums = @($core -split '\.' | ForEach-Object { $n = 0; [void][int]::TryParse($_, [ref]$n); $n }) + @(0, 0, 0, 0)
-    return @{ Core = $nums[0..3]; Pre = "$pre" }
+    return @{ Core = $nums[0..3]; Pre = "$pre"; Security = $security }
 }
 
 # into a side folder first, renamed once git is done. a clone that

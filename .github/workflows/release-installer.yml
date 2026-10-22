@@ -13,6 +13,8 @@ name: Release installer
 # a tag with a - in it (v1.2.0-beta) drafts as a pre-release. untick
 # that before publishing if the one-liners should get it, they come
 # from releases/latest/download/ and /latest skips pre-releases.
+# a tag ending in -security (v1.2.1-security, v1.2.1-beta-security)
+# drafts as a full release, see SECURITY.md for when to cut one.
 # the notes and the publish button are still yours.
 #
 # draft, not published. re-pushing the tag refills the same draft
@@ -210,7 +212,10 @@ jobs:
             done
           else
             pre=""
-            case "$TAG" in *-*) pre="--prerelease" ;; esac
+            # a -security release has to reach Stable and the
+            # releases/latest one-liners, start scripts refuse to boot
+            # the version it fixes
+            case "$TAG" in *-security) ;; *-*) pre="--prerelease" ;; esac
             gh release create "$TAG" --draft --verify-tag --title "$TAG" --generate-notes $pre
           fi
           gh release upload "$TAG" "dist/$exe" dist/JunOS.exe "dist/$apk" dist/install.sh dist/install.ps1 dist/installer-gui.ps1 dist/SHA256SUMS --clobber
