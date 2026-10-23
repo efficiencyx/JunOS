@@ -18,7 +18,7 @@ function provider_chat_payload(
             'keep_alive' => -1,
             'options' => [
                 'reasoning_effort' => $reasoning,
-                'temperature' => 0.7,
+                'temperature' => CHAT_TEMPERATURE,
                 'top_p' => 0.95,
                 'top_k' => 80,
                 'min_p' => 0.01,
@@ -35,7 +35,7 @@ function provider_chat_payload(
         'model' => $model,
         'messages' => $messages,
         'stream' => true,
-        'temperature' => 0.7,
+        'temperature' => CHAT_TEMPERATURE,
         'top_p' => 0.95,
         'top_k' => 80,
         'min_p' => 0.01,

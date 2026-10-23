@@ -1,23 +1,23 @@
-import { IDLE_AFTER_REPLY_MS, TYPING_POLL_MS, consolidating, reportActivity, resetIdleNudge, scheduleIdleNudge, showConsolidatingBubble, syncConsolidationStatus } from './consolidation.js?v=92';
-import { chatInput, devNoIdleChk, missingParamsEl, modelSelect, narrowSidebarQuery, reasoningSelect, sendBtn, siteVolumeInput, stageEl, thinkChk } from './dom.js?v=11';
-import { faceBubble, hideFaceBubble, latestAssistantReply, restartFaceBubbleHide, scheduleFaceBubblePosition, setLatestAssistantReply } from './face-bubble.js?v=83';
-import { logAction, logMissing, setStageStatus } from './logging.js?v=11';
-import { loadMood } from './mood.js?v=83';
-import { applyProviderCapabilities, applyRoleGates, setSiteVolume, syncThinkToggle, updateSiteVolumeLabel, wireNameSettings } from './settings.js?v=92';
-import { loadConversation, refreshSidebar, setSidebarOpen } from './sidebar.js?v=92';
+import { IDLE_AFTER_REPLY_MS, TYPING_POLL_MS, consolidating, reportActivity, resetIdleNudge, runPassNow, scheduleIdleNudge, showConsolidatingBubble, syncConsolidationStatus } from './consolidation.js?v=93';
+import { chatInput, devNoIdleChk, missingParamsEl, modelSelect, narrowSidebarQuery, reasoningSelect, sendBtn, siteVolumeInput, stageEl, thinkChk } from './dom.js?v=75';
+import { faceBubble, hideFaceBubble, latestAssistantReply, restartFaceBubbleHide, scheduleFaceBubblePosition, setLatestAssistantReply } from './face-bubble.js?v=84';
+import { logAction, logMissing, setStageStatus } from './logging.js?v=75';
+import { loadMood } from './mood.js?v=84';
+import { applyProviderCapabilities, applyRoleGates, setSiteVolume, syncThinkToggle, updateSiteVolumeLabel, wireNameSettings } from './settings.js?v=93';
+import { loadConversation, refreshSidebar, setSidebarOpen } from './sidebar.js?v=93';
 import { escapeHtml, mealNow } from '../core/util.js?v=1';
-import { wireTts } from './wire-tts.js?v=92';
-import { wireVoice } from './wire-voice.js?v=92';
-import { WELCOME_TIERS, fetchWelcome, playWelcome, previewWelcome } from './welcome.js?v=89';
+import { wireTts } from './wire-tts.js?v=93';
+import { wireVoice } from './wire-voice.js?v=93';
+import { WELCOME_TIERS, fetchWelcome, playWelcome, previewWelcome } from './welcome.js?v=90';
 import * as Names from '../core/names.js?v=1';
-import * as Prefs from '../core/prefs.js?v=1';
+import * as Prefs from '../core/prefs.js?v=6';
 import * as ui from '../core/ui.js?v=1';
 import * as ChatAPI from '../core/chat-api.js?v=3';
 import * as MobileViewport from '../core/viewport.js?v=1';
-import * as Actions from '../live2d/actions.js?v=83';
+import * as Actions from '../live2d/actions.js?v=84';
 import * as Live2D from '../live2d/live2d.js?v=84';
-import * as ModelTouch from '../live2d/touch.js?v=83';
-import * as Outfit from '../outfit/outfit.js?v=83';
+import * as ModelTouch from '../live2d/touch.js?v=84';
+import * as Outfit from '../outfit/outfit.js?v=84';
 import { playIntro } from '../wardrobe/reactions.js?v=82';
 import * as BootFX from './boot-fx.js?v=1';
 import * as Cards from './cards.js?v=26';
@@ -25,7 +25,7 @@ import * as History from './history.js?v=1';
 import { startSkybox } from '../trip/skybox.js?v=2';
 import * as TripLoader from '../trip/trip-loader.js?v=1';
 import { DevHud, abortFn, currentConversationId, setDevHud } from './session.js?v=1';
-import { rerenderBubbleStream, sendMessage, sendTouchEvent } from './chat.js?v=20';
+import { rerenderBubbleStream, sendMessage, sendTouchEvent } from './chat.js?v=21';
 import * as Achievements from '../achievements/achievements.js?v=8';
 
 // the one app global left, on purpose. it's a console handle,
@@ -124,7 +124,7 @@ export async function boot(me) {
     .then(r => r.ok ? r.json() : null).catch(() => null);
 
   // devhud.js owns Ctrl+Shift+D, so only admins get that module
-  if (currentUser?.role === 'admin') setDevHud(await import('./devhud.js?v=1'));
+  if (currentUser?.role === 'admin') setDevHud(await import('./devhud.js?v=75'));
   startSkybox();
   // marked is a global and app.js's loadScripts only brings it in
   // side by side with this module. at module scope it's not there
@@ -430,6 +430,14 @@ async function wireDatesPanel(canForce) {
       location.href = 'date.html';
     });
   }
+
+  const runPassBtn = document.getElementById('devRunPassBtn');
+  if (runPassBtn) runPassBtn.addEventListener('click', async () => {
+    runPassBtn.disabled = true;
+    const started = await runPassNow();
+    runPassBtn.disabled = false;
+    if (!started) document.getElementById('devRunPassDesc').textContent = 'Nothing started in 30 s. Either the memory worker is down or you hit the limit of 6 runs per 10 minutes.';
+  });
 
   const cardsBtn = document.getElementById('forceCardsBtn');
   if (cardsBtn) cardsBtn.addEventListener('click', () => {

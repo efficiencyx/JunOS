@@ -18,6 +18,9 @@ export const debugSystemPromptEl = document.getElementById('debugSystemPrompt');
 export const consolidationBanner = document.getElementById('consolidationBanner');
 export const consolidationTitle = document.getElementById('consolidationTitle');
 export const consolidationSub = document.getElementById('consolidationSub');
+export const consolidationActions = document.getElementById('consolidationActions');
+export const sitWithHerBtn = document.getElementById('sitWithHerBtn');
+export const interruptPassBtn = document.getElementById('interruptPassBtn');
 export const moodInputs = {
   affection: document.getElementById('moodAffection'),
   trust: document.getElementById('moodTrust'),

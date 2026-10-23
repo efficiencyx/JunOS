@@ -7,7 +7,7 @@
 // imports. renumber the whole graph. and no example version
 // numbers in comments, a bulk renumber rewrites those too.
 
-import { showAuthScreen } from './app/auth-screen.js?v=13';
+import { showAuthScreen } from './app/auth-screen.js?v=76';
 import * as Auth from './core/auth.js?v=1';
 import { loadScripts } from './core/loader.js?v=1';
 // side effect only. it sets the phone-ui class and the viewport
@@ -22,7 +22,7 @@ if (!me) {
   // main.js's module graph side by side. nothing in that graph
   // touches PIXI or marked at import, boot() is the first to
   const [{ boot }] = await Promise.all([
-    import('./app/main.js?v=27'),
+    import('./app/main.js?v=29'),
     loadScripts([
       ['vendor/pixi.min.js', 'vendor/live2dcubismcore.min.js',
        'vendor/marked.min.js', 'vendor/purify.min.js?v=4'],

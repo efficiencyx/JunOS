@@ -1,8 +1,10 @@
 import { abortFn, currentConversationId } from './session.js?v=1';
-import { runChat } from './chat.js?v=20';
-import { chatInput, consolidationBanner, consolidationSub, consolidationTitle, devNoIdleChk, fleeEtaEl, fleeOverlay, fleeReasonEl, sendBtn, voiceChk } from './dom.js?v=11';
-import { showFaceBubble } from './face-bubble.js?v=83';
-import { logAction } from './logging.js?v=11';
+import { runChat } from './chat.js?v=21';
+import { chatInput, consolidationActions, consolidationBanner, consolidationSub, consolidationTitle, devNoIdleChk, fleeEtaEl, fleeOverlay, fleeReasonEl, interruptPassBtn, sendBtn, sitWithHerBtn, voiceChk } from './dom.js?v=75';
+import * as Feed from './consolidation-feed.js?v=2';
+import * as Cabinet from './cabinet.js?v=2';
+import { showFaceBubble } from './face-bubble.js?v=84';
+import { logAction } from './logging.js?v=75';
 import { escapeHtml, formatElapsed } from '../core/util.js?v=1';
 import * as Names from '../core/names.js?v=1';
 import * as TTS from '../voice/tts.js?v=84';
@@ -60,13 +62,9 @@ export const IDLE_AFTER_JOIN_MS  = 45000;
 export const TYPING_POLL_MS = 5000;
 const MAX_IDLE_NUDGES = 3;
 
-const CONSOLIDATION_PHASES = {
-  notes: 'Re-reading what you said and writing down what matters',
-  journal: 'Rewriting her journal of the two of you',
-  welcome: 'Deciding what she wants to tell you when you get back',
-};
 const CONSOLIDATION_PHASE_UNKNOWN = 'Working through everything since you last spoke';
-const CONSOLIDATION_SLOW_AFTER_S = 90;
+// under this much left, coming back drops you straight into the game
+const SHORT_PASS_S = 45;
 const CONSOLIDATION_OUTCOME_MS = 9000;
 const CONSOLIDATION_OUTCOME_MAX_AGE_S = 180;
 let idleTimer = null;
@@ -74,8 +72,10 @@ let activityTimer = null;
 let consolidationStatusTimer = null;
 let consolidationTicker = null;
 let consolidationOutcomeTimer = null;
-let consolidationPhase = '';
+let consolidationProgress = null;
 let consolidationStartedAt = 0;
+let offeredPassAt = 0;
+let statusSynced = false;
 export let consolidating = false;
 let previousBusyLine = -1;
 let idleNudgeStreak = 0;
@@ -183,17 +183,61 @@ function hideConsolidationBanner() {
   if (consolidationBanner) consolidationBanner.hidden = true;
 }
 
+function progressLine(p) {
+  if (!p) return CONSOLIDATION_PHASE_UNKNOWN;
+  if (p.step === 1) return p.title ? `Re-reading "${p.title}", ${p.i} of ${p.n}` : `Re-reading your chats, ${p.i} of ${p.n}`;
+  if (p.step === 2) return `Going over her old notes, ${p.i} of ${p.n}`;
+  return 'Writing in her journal';
+}
+
 function renderConsolidationBanner() {
   const elapsed = (Date.now() - consolidationStartedAt) / 1000;
-  const phase = CONSOLIDATION_PHASES[consolidationPhase] || CONSOLIDATION_PHASE_UNKNOWN;
-  const slow = elapsed >= CONSOLIDATION_SLOW_AFTER_S
-    ? ' · runs on your local model, so it can take a few minutes'
-    : '';
-  setConsolidationBanner('busy', botName() + ' is tidying her memory', phase + ' · ' + formatElapsed(elapsed) + slow);
+  setConsolidationBanner('busy', botName() + ' is tidying her memory', progressLine(consolidationProgress) + ' · ' + formatElapsed(elapsed));
 }
+
+// a guess from the pace so far. step 2 and 3 are short next to step 1
+function passIsShort() {
+  const p = consolidationProgress;
+  if (!p) return false;
+  if (p.step === 3) return true;
+  if (p.step === 2) return p.n - p.i <= 3;
+  if (p.i < 2) return false;
+  const elapsed = (Date.now() - consolidationStartedAt) / 1000;
+  return elapsed / (p.i - 1) * (p.n - p.i + 1) < SHORT_PASS_S;
+}
+
+export async function interruptPass() {
+  if (interruptPassBtn) interruptPassBtn.disabled = true;
+  await fetch('api/consolidate.php?action=interrupt', { method: 'POST', credentials: 'same-origin' }).catch(() => {});
+  setTimeout(syncConsolidationStatus, 1200);
+}
+
+// page load or tab back in front while she's busy
+function offerOnReturn() {
+  if (!consolidating || Cabinet.isActive() || offeredPassAt === consolidationStartedAt) return;
+  offeredPassAt = consolidationStartedAt;
+  if (passIsShort()) Cabinet.open({ ask: true, onStop: interruptPass });
+}
+
+Feed.subscribe((ev) => {
+  if (ev.type === 'step') {
+    consolidationProgress = { step: ev.step, i: ev.i, n: ev.n, title: ev.title };
+    if (consolidating) renderConsolidationBanner();
+  } else if (ev.type === 'done') {
+    setTimeout(syncConsolidationStatus, 500);
+  }
+});
+
+if (sitWithHerBtn) sitWithHerBtn.addEventListener('click', () => Cabinet.open({ ask: false, onStop: interruptPass }));
+if (interruptPassBtn) interruptPassBtn.addEventListener('click', interruptPass);
+document.addEventListener('visibilitychange', () => { if (!document.hidden) offerOnReturn(); });
 
 function showConsolidationOutcome(last) {
   if (!last || (Date.now() / 1000) - last.at > CONSOLIDATION_OUTCOME_MAX_AGE_S) {
+    hideConsolidationBanner();
+    return;
+  }
+  if (last.status === 'stopped') {
     hideConsolidationBanner();
     return;
   }
@@ -206,7 +250,7 @@ function showConsolidationOutcome(last) {
       'What the model gave back did not look right, so she left her notes exactly as they were.');
   } else {
     setConsolidationBanner('warn', botName() + " couldn't finish tidying",
-      'Something broke partway through. Nothing was changed, she will try again after the next lull.');
+      'Something broke partway through. She will pick up where she stopped after the next lull.');
   }
   if (consolidationOutcomeTimer) clearTimeout(consolidationOutcomeTimer);
   consolidationOutcomeTimer = setTimeout(() => {
@@ -225,7 +269,7 @@ export function setConsolidating(locked, status) {
       clearTimeout(consolidationOutcomeTimer);
       consolidationOutcomeTimer = null;
     }
-    if (status && status.phase) consolidationPhase = status.phase;
+    if (status && status.progress) consolidationProgress = status.progress;
     // tie the ticker to the elapsed the server hands us, so a tab
     // that only hears about the run from a 418, or joins half way
     // through, still counts from the real Start. we only re-tie when
@@ -239,6 +283,9 @@ export function setConsolidating(locked, status) {
       consolidationStartedAt = Date.now();
     }
     renderConsolidationBanner();
+    if (consolidationActions) consolidationActions.hidden = false;
+    if (interruptPassBtn) interruptPassBtn.disabled = false;
+    Feed.start();
     if (!consolidationTicker) consolidationTicker = setInterval(renderConsolidationBanner, 1000);
     return;
   }
@@ -247,8 +294,10 @@ export function setConsolidating(locked, status) {
     clearInterval(consolidationTicker);
     consolidationTicker = null;
   }
-  consolidationPhase = '';
+  consolidationProgress = null;
   consolidationStartedAt = 0;
+  if (consolidationActions) consolidationActions.hidden = true;
+  Feed.stop();
   if (wasLocked) showConsolidationOutcome(status && status.last);
   else if (!consolidationOutcomeTimer) hideConsolidationBanner();
 }
@@ -276,12 +325,25 @@ export async function syncConsolidationStatus() {
     setConsolidating(!!status.locked, status);
     if (response.ok) syncFleeLock(status);
     if (wasLocked && !status.locked) armIdleAfterReply();
+    if (!statusSynced && status.locked) offerOnReturn();
+    statusSynced = true;
   } catch (e) {
     setConsolidating(false);
   }
   // only keep asking while she's actually busy. a tab with no lock
   // finds out about a new one from the 418 on its next send.
   if (consolidating || fleeActive()) consolidationStatusTimer = setTimeout(syncConsolidationStatus, 3000);
+}
+
+// "run now" only queues it, the worker picks it up a second later
+export async function runPassNow() {
+  const response = await fetch('api/consolidate.php?action=run', { method: 'POST', credentials: 'same-origin' });
+  if (!response.ok) return false;
+  for (let i = 0; i < 15 && !consolidating; i++) {
+    await new Promise(r => setTimeout(r, 2000));
+    await syncConsolidationStatus();
+  }
+  return consolidating;
 }
 
 export function resetIdleNudge() {

@@ -1,14 +1,20 @@
 import { api } from '../core/api.js?v=1';
 import { clamp } from '../core/util.js?v=1';
+import * as Feed from './consolidation-feed.js?v=2';
+import { runPassNow } from './consolidation.js?v=93';
 
 const STORAGE_KEY = 'omega.devhud.v1';
 const GEOM_KEY = 'omega.devhud.geom.v1';
 const POLL_MS = 3000;
+const TERM_MAX_LINES = 400;
+const NOTE_SIGNS = { saved: '+', updated: '~', merged: '&', known: '=', dropped: '-', deleted: 'x' };
 
 let root = null;
 let fields = {};
 let pollTimer = null;
 let visible = false;
+let term = null;
+let liveLine = null;
 
 let gen = { t0: 0, tFirst: 0, tLast: 0, active: 0, chunks: 0, final: null };
 
@@ -43,6 +49,8 @@ function build() {
     '<div class="devhud-body">' +
       row('tok/s', 'tps') +
       row('TTFT', 'ttft') +
+      row('php prep', 'prep') +
+      row('prefill', 'prefill') +
       row('gen tok', 'gentok') +
       row('prompt tok', 'ptok') +
       row('context', 'ctx') +
@@ -51,9 +59,20 @@ function build() {
       row('model RAM', 'mram') +
       row('host RAM', 'hram') +
       row('model', 'model') +
-    '</div>';
+    '</div>' +
+    '<div class="devhud-term-head"><span>memory</span><button class="devhud-run" type="button">run now</button></div>' +
+    '<div class="devhud-term" role="log" aria-label="Memory pass"></div>';
   document.body.appendChild(root);
   root.querySelector('.devhud-close').addEventListener('click', () => set(false));
+  term = root.querySelector('.devhud-term');
+  const runBtn = root.querySelector('.devhud-run');
+  runBtn.addEventListener('click', async () => {
+    runBtn.disabled = true;
+    termLine('run requested', 'dim');
+    if (!(await runPassNow())) termLine('nothing started in 30 s', 'warn');
+    runBtn.disabled = false;
+  });
+  Feed.subscribe(onFeed);
   fields = {};
   root.querySelectorAll('.devhud-v').forEach((el) => { fields[el.id.replace('devhud-', '')] = el; });
 
@@ -112,6 +131,59 @@ function enableDrag(handle) {
 
 function put(id, text) { if (fields[id]) fields[id].textContent = text; }
 
+function termLine(text, kind = '') {
+  const stick = term.scrollTop + term.clientHeight >= term.scrollHeight - 8;
+  const line = document.createElement('div');
+  line.className = 'devhud-tl' + (kind ? ' devhud-tl--' + kind : '');
+  line.textContent = text;
+  term.append(line);
+  while (term.childElementCount > TERM_MAX_LINES) term.firstElementChild.remove();
+  if (stick) term.scrollTop = term.scrollHeight;
+  return line;
+}
+
+const clock = (at) => new Date((at || Date.now() / 1000) * 1000).toTimeString().slice(0, 8);
+
+function onFeed(ev) {
+  if (ev.type !== 'tok') liveLine = null;
+  switch (ev.type) {
+    case 'pass':
+      termLine(`${clock(ev.at)} pass · ${ev.chats} chats · ${ev.notes} notes`, 'head');
+      break;
+    case 'step': {
+      const where = ev.step === 1 ? `chat ${ev.i}/${ev.n} ${ev.title}` : ev.step === 2 ? `note ${ev.i}/${ev.n}` : `journal ${ev.i}/${ev.n}`;
+      termLine(`${clock(ev.at)} step ${ev.step}/3 · ${where}`, 'head');
+      break;
+    }
+    case 'call':
+      termLine(`  > ${ev.label}${ev.think ? ' (thinking)' : ''}`, 'dim');
+      break;
+    case 'tok':
+      if (!liveLine || liveLine.dataset.kind !== ev.kind) {
+        liveLine = termLine('    ', ev.kind);
+        liveLine.dataset.kind = ev.kind;
+      }
+      liveLine.textContent += ev.text;
+      if (term.scrollTop + term.clientHeight >= term.scrollHeight - 40) term.scrollTop = term.scrollHeight;
+      break;
+    case 'note':
+      termLine(`  ${NOTE_SIGNS[ev.action] || '?'} ${ev.action}${ev.category ? ' [' + ev.category + ']' : ''} ${ev.text}${ev.why ? ' (' + ev.why + ')' : ''}`, 'note');
+      break;
+    case 'check':
+      termLine(`  ? ${ev.text}`, 'dim');
+      break;
+    case 'journal':
+      termLine(`  journal ${ev.date}: ${ev.text}`);
+      break;
+    case 'stall':
+      termLine(ev.client ? '  !! nothing for 30 s, reconnecting' : `  !! stalled, restart ${ev.restart}`, 'warn');
+      break;
+    case 'done':
+      termLine(`${clock(ev.at)} done · ${ev.status}${ev.notes != null ? ' · ' + ev.notes + ' notes' : ''}`, 'head');
+      break;
+  }
+}
+
 function set(on) {
   visible = !!on;
   if (root) root.hidden = !visible;
@@ -149,7 +221,7 @@ async function poll() {
 
 export function beginGen() {
   gen = { t0: performance.now(), tFirst: 0, tLast: 0, active: 0, chunks: 0, final: null };
-  put('tps', '…'); put('ttft', '…'); put('gentok', '~0'); put('ptok', '-'); put('ctx', '-');
+  put('tps', '…'); put('ttft', '…'); put('prep', '-'); put('prefill', '-'); put('gentok', '~0'); put('ptok', '-'); put('ctx', '-');
 }
 
 // counts stream CHUNKS, not tokens. on the ollama path they're
@@ -180,6 +252,11 @@ export function setGenStats(s) {
     put('gentok', String(s.eval_count));
   }
   if (s.prompt_eval_count) put('ptok', String(s.prompt_eval_count));
+  if (s.prep_ms != null) put('prep', s.prep_ms + ' ms');
+  if (s.prompt_eval_duration) {
+    const ms = Math.round(s.prompt_eval_duration / 1e6) + ' ms';
+    put('prefill', s.prompt_new != null ? `${ms} (${s.prompt_new} new)` : ms);
+  }
   if (s.num_ctx) {
     const used = (s.prompt_eval_count || 0) + (s.eval_count || 0);
     const pct = Math.round((used / s.num_ctx) * 100);

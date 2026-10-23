@@ -153,19 +153,24 @@ $manualUrls = @{
     llamacpp = 'https://github.com/ggml-org/llama.cpp/releases'
 }
 
-$models = @{
-    '12b' = 'hf.co/efficiencyx/Jun-LoRA-12B-GGUF:Q4_K_M'
-    'e4b' = 'hf.co/efficiencyx/Jun-LoRA-E4B-GGUF:Q4_K_M'
-    'e2b' = 'hf.co/efficiencyx/Jun-LoRA-E2B-GGUF:Q4_K_M'
+# menu picks MUST get the quant Recommend-Alias named
+function Get-QuantFor([string]$size, [int]$mb) {
+    switch ($size) {
+        '12B' { if ($mb -ge 23500) { return 'Q8_0' }; if ($mb -ge 15500) { return 'Q6_K' } }
+        'E4B' { if ($mb -ge 9500) { return 'Q8_0' } }
+        'E2B' { if ($mb -ge 7500) { return 'Q8_0' }; if ($mb -ge 5500) { return 'Q6_K' } }
+    }
+    return 'Q4_K_M'
 }
 
-function Resolve-Model([string]$a) {
-    switch -Regex ($a.ToLower()) {
-        '^(12b|jun|best)$'     { return $models['12b'] }
-        '^(e4b|balanced|fast)$' { return $models['e4b'] }
-        '^(e2b|fastest|cpu)$'  { return $models['e2b'] }
-        default                { return $a }
+function Resolve-Model([string]$a, [int]$mb = 0) {
+    $size = switch -Regex ($a.ToLower()) {
+        '^(12b|jun|best)$'      { '12B' }
+        '^(e4b|balanced|fast)$' { 'E4B' }
+        '^(e2b|fastest|cpu)$'   { 'E2B' }
     }
+    if (-not $size) { return $a }
+    return "hf.co/efficiencyx/Jun-LoRA-$size-GGUF:$(Get-QuantFor $size $mb)"
 }
 
 # match the drafter, the little model that guesses tokens
@@ -286,13 +291,9 @@ function Get-VramTotalMb {
 function Get-GpuCount { return @(Get-GpuMemoryMb).Count }
 
 function Recommend-Alias([int]$mb) {
-    if ($mb -ge 23500) { return 'hf.co/efficiencyx/Jun-LoRA-12B-GGUF:Q8_0' }
-    if ($mb -ge 15500) { return 'hf.co/efficiencyx/Jun-LoRA-12B-GGUF:Q6_K' }
-    if ($mb -ge 11500) { return $models['12b'] }
-    if ($mb -ge 9500) { return 'hf.co/efficiencyx/Jun-LoRA-E4B-GGUF:Q8_0' }
-    if ($mb -ge 7500) { return $models['e4b'] }
-    if ($mb -ge 5500) { return 'hf.co/efficiencyx/Jun-LoRA-E2B-GGUF:Q6_K' }
-    return $models['e2b']
+    if ($mb -ge 11500) { return Resolve-Model '12b' $mb }
+    if ($mb -ge 7500) { return Resolve-Model 'e4b' $mb }
+    return Resolve-Model 'e2b' $mb
 }
 
 function Set-EnvKey([string]$key, [string]$val) {
@@ -452,7 +453,7 @@ function Choose-InstallMode {
 function Ask-ModelRef {
     $gpus = Get-GpuCount
     $vram = if ($script:tensorParallel -eq 'on') { Get-VramTotalMb } else { Get-VramMb }
-    $rec  = if ($null -ne $vram) { Recommend-Alias $vram } else { $models['e2b'] }
+    $rec  = if ($null -ne $vram) { Recommend-Alias $vram } else { Resolve-Model 'e2b' }
 
     $alias = $env:JUN_MODEL
     if (-not $alias) {
@@ -482,7 +483,7 @@ function Ask-ModelRef {
             $alias = $rec
         }
     }
-    return Resolve-Model $alias
+    return Resolve-Model $alias $(if ($null -ne $vram) { $vram } else { 0 })
 }
 
 function Ask-TensorParallel {

@@ -489,11 +489,12 @@ function memory_wipe_user(int $userId): array {
             }
             if (!@rmdir($dir)) return ['error' => 'memory_delete_failed'];
         }
-        $legacy = [
+        $loose = [
             memory_file_path($userId),
             memory_dir() . '/user-' . $userId . '.journal.md',
+            dirname(consolidation_lock_path($userId)) . '/user-' . $userId . '.feed',
         ];
-        foreach ($legacy as $path) {
+        foreach ($loose as $path) {
             if (is_file($path) && !@unlink($path)) return ['error' => 'memory_delete_failed'];
             if (is_file($path . '.migrated') && !@unlink($path . '.migrated')) {
                 return ['error' => 'memory_delete_failed'];

@@ -89,6 +89,8 @@ services:
       LLAMACPP_TOOLS: "${LLAMACPP_TOOLS:-}"
       FLEE_BANS: "${FLEE_BANS:-on}"
       FREE_ROAM: "${FREE_ROAM:-off}"
+      CONSOLIDATION_THINK: "${CONSOLIDATION_THINK:-}"
+      CONSOLIDATION_STALL_SECONDS: "${CONSOLIDATION_STALL_SECONDS:-}"
       # KOKORO_URL is the old name, kept so existing .env files
       # still work
       TTS_URL: "${TTS_URL:-}"

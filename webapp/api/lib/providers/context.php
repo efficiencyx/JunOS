@@ -29,6 +29,8 @@ const THINK_MAX_TOKENS = 16384;
 // ceiling.
 const PLAIN_MAX_TOKENS = 512;
 
+const CHAT_TEMPERATURE = 0.4;
+
 // what's left on the card once the weights and a bit of working
 // room are gone. zero when we don't know the GPU size, see
 // OMEGA_GPU_VRAM_MB in start.sh. also zero when ollama lives on

@@ -17,18 +17,21 @@ function consolidation_lock_read(int $userId): ?array {
     if (is_int($data)) $data = ['expiry' => $data];
     if (!is_array($data) || !isset($data['expiry'])) return null;
     return [
-        'expiry'  => (int)$data['expiry'],
-        'started' => (int)($data['started'] ?? 0),
-        'phase'   => (string)($data['phase'] ?? ''),
+        'expiry'      => (int)$data['expiry'],
+        'started'     => (int)($data['started'] ?? 0),
+        'phase'       => (string)($data['phase'] ?? ''),
+        'progress'    => is_array($data['progress'] ?? null) ? $data['progress'] : null,
+        'quiet_until' => (int)($data['quiet_until'] ?? 0),
     ];
 }
 
-function consolidation_lock_write(int $userId, int $expiry, int $started, string $phase): void {
-    @file_put_contents(
-        consolidation_lock_path($userId),
-        json_encode(['expiry' => $expiry, 'started' => $started, 'phase' => $phase]),
-        LOCK_EX
-    );
+const CONSOLIDATION_LOCK_TTL = 600;
+
+// rolling expiry, a healthy pass on a CPU box runs way past ten minutes
+function consolidation_lock_update(int $userId, array $fields): void {
+    $lock = consolidation_lock_read($userId) ?? ['started' => time()];
+    $lock = array_merge($lock, $fields, ['expiry' => time() + CONSOLIDATION_LOCK_TTL]);
+    @file_put_contents(consolidation_lock_path($userId), json_encode($lock, JSON_UNESCAPED_UNICODE), LOCK_EX);
 }
 
 function consolidation_locked(int $userId): bool {
@@ -47,11 +50,13 @@ function consolidation_status(int $userId): array {
     if (!consolidation_locked($userId)) return ['locked' => false];
     $lock = consolidation_lock_read($userId);
     if ($lock === null) return ['locked' => false];
-    return [
+    $status = [
         'locked'  => true,
         'phase'   => $lock['phase'],
         'elapsed' => $lock['started'] > 0 ? max(0, time() - $lock['started']) : 0,
     ];
+    if ($lock['progress']) $status['progress'] = $lock['progress'];
+    return $status;
 }
 
 function consolidation_touch(int $userId, ?bool $enabled = null): void {

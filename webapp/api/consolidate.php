@@ -1,8 +1,9 @@
 <?php
 
 require_once __DIR__ . '/lib/bootstrap.php';
-require_once __DIR__ . '/lib/consolidation/engine.php';
-require_once __DIR__ . '/lib/consolidation/passes.php';
+require_once __DIR__ . '/lib/chat/sse.php';
+require_once __DIR__ . '/lib/consolidation/feed.php';
+require_once __DIR__ . '/lib/consolidation/cabinet.php';
 require_once __DIR__ . '/lib/consolidation/welcome.php';
 
 $user = require_user();
@@ -51,6 +52,45 @@ if ($method === 'POST' && $action === 'activity') {
     json_out(['ok' => true]);
 }
 
+// php -S (windows, colab) serves one request at a time. holding
+// the stream there freezes the app, so it answers and EventSource polls
+if ($method === 'GET' && $action === 'stream') {
+    rate_limit('consolidate_stream', 240, 60);
+    $cursor = (string)($_SERVER['HTTP_LAST_EVENT_ID'] ?? $_GET['from'] ?? '');
+    $until = time() + (PHP_SAPI === 'cli-server' ? 0 : 25);
+    sse_open();
+    echo "retry: 1000\n\n";
+    @flush();
+    do {
+        [$events, $cursor] = consolidation_feed_read($userId, $cursor);
+        foreach ($events as $event) {
+            echo 'id: ' . $event['id'] . "\ndata: " . json_encode($event, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES) . "\n\n";
+        }
+        if ($events) @flush();
+        if (time() >= $until || (!$events && !consolidation_locked($userId))) break;
+        usleep(300000);
+    } while (!connection_aborted());
+    exit;
+}
+
+if ($method === 'POST' && $action === 'interrupt') {
+    rate_limit('consolidate_interrupt', 30, 60);
+    db()->prepare('UPDATE memory_consolidation SET interrupt_at = ? WHERE user_id = ?')->execute([time(), $userId]);
+    json_out(['ok' => true]);
+}
+
+if ($method === 'POST' && $action === 'game') {
+    rate_limit('consolidate_game', 30, 600);
+    json_out(cabinet_settle($userId, read_json_body(64 * 1024)));
+}
+
+// admin only, and queued for the worker: a guided pass outlives any fastcgi timeout
 require_post();
+if (!is_admin($user)) fail(403, 'forbidden');
 rate_limit('consolidate', 6, 600);
-json_out(consolidation_run($userId));
+db()->prepare(
+    'INSERT INTO memory_consolidation (user_id, force_at) VALUES (?, ?)
+     ON CONFLICT(user_id) DO UPDATE SET force_at = excluded.force_at'
+)->execute([$userId, time()]);
+key_push($userId, true);
+json_out(['queued' => true]);

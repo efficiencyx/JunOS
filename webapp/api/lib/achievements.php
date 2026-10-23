@@ -34,6 +34,10 @@ const ACH_CATALOG = [
     ['id' => 'wrote_that_down', 'group' => 'habits',   'stat' => 'notes',          'name' => 'She Wrote That Down',            'desc' => 'Memory notes she saved',                'tiers' => [5, 25, 100, 300]],
     ['id' => 'google_gf',       'group' => 'habits',   'stat' => 'searches',       'name' => 'Google Girlfriend',              'desc' => 'Web searches she ran',                  'tiers' => [3, 15, 50, 200]],
     ['id' => 'lore_goblin',     'group' => 'habits',   'stat' => 'lore',           'name' => 'Lore Goblin',                    'desc' => 'Lore lookups she did',                  'tiers' => [5, 25, 100, 500]],
+    ['id' => 'filing_clerk',    'group' => 'habits',   'stat' => 'cab_filed',      'name' => 'Filing Clerk',                   'desc' => 'Cards filed while she tidied',          'tiers' => [25, 100, 500, 2500]],
+    ['id' => 'read_her_mind',   'group' => 'habits',   'stat' => 'cab_streak',     'name' => 'Read Her Mind',                  'desc' => 'Cards in a row filed where she would',  'tiers' => [5, 10, 20, 40]],
+    ['id' => 'shredder',        'group' => 'habits',   'stat' => 'cab_shredded',   'name' => 'Shredder',                       'desc' => 'Junk cards shredded',                   'tiers' => [10, 50, 200, 1000], 'hidden' => true],
+    ['id' => 'waited_up',       'group' => 'feelings', 'stat' => 'cab_waited',     'name' => 'Waited Up',                      'desc' => 'Times you stayed until she was done',   'tiers' => [1, 5, 20, 50]],
     ['id' => 'left_on_read',    'group' => 'feelings', 'stat' => 'silent',         'name' => 'Left on Read',                   'desc' => 'Times she stayed silent',               'tiers' => [1, 5, 20, 50], 'hidden' => true],
     ['id' => 'door_slammed',    'group' => 'feelings', 'stat' => 'fled',           'name' => 'Door Slammed',                   'desc' => 'Times she walked out',                  'tiers' => [1, 3, 10, 25], 'hidden' => true],
 ];

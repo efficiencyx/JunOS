@@ -1,5 +1,5 @@
-import { moodControlPhrases, moodControlVals, moodInputs, moodPhrases, moodRefreshBtn, moodVals } from './dom.js?v=11';
-import { renderGreeting } from './greetings.js?v=12';
+import { moodControlPhrases, moodControlVals, moodInputs, moodPhrases, moodRefreshBtn, moodVals } from './dom.js?v=75';
+import { renderGreeting } from './greetings.js?v=13';
 import * as Live2D from '../live2d/live2d.js?v=84';
 
 const MOOD_PHRASES = {

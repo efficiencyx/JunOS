@@ -51,19 +51,16 @@ Basically, an AI wrapper with 50 other systems working together to make her feel
 <details>
 <summary>Images</summary>
 
-| <img src="docs/screenshots/chat.png" alt="Jun chatting in Jun OS, the MDRG AI companion" width="512"> | <img src="docs/screenshots/wardrobe.png" alt="Jun OS wardrobe: dress up Jun from Factorial Omega" width="512"> |
+| <img src="docs/screenshots/chat.png" alt="Jun chatting in Jun OS, the MDRG AI companion" width="512"> | <img src="docs/screenshots/wardrobe.jpg" alt="Jun OS wardrobe: dress up Jun from Factorial Omega" width="512"> |
 |:---:|:---:|
-| <img src="docs/screenshots/welcomeback.png" alt="Jun welcome-back reaction" width="512"> | <img src="docs/screenshots/voicemode.png" alt="Jun OS hands-free voice mode" width="512"> |
+| <img src="docs/screenshots/date.jpg" alt="Dinner with Jun at the restaurant, plates on the table" width="512"> | <img src="docs/screenshots/cards.jpg" alt="Jun across the blackjack table, her move" width="512"> |
 
 </details>
-<details>
-<summary>Videos</summary>
 
-**Karaoke** (ignore the user singing)
+**The tour**, two minutes of everything she does
 
-https://github.com/user-attachments/assets/f27859ad-9fee-467b-84a8-4f7630d2e2b6
+https://github.com/user-attachments/assets/f6c25482-611c-4dde-9f16-8e4cc9474dc2
 
-</details>
 
 
 ## What she does
@@ -74,12 +71,13 @@ https://github.com/user-attachments/assets/f27859ad-9fee-467b-84a8-4f7630d2e2b6
 - **She has feelings about you.** Affection, trust and tension move with every exchange, and she treats you accordingly. Push her far enough and she goes quiet, or walks out - and the door stays shut for a few minutes.
 - **She can think before she answers.** A reasoning knob (auto / low / medium / high) and a toggle to watch the chain of thought stream by.
 - **She remembers.** She'll bring up things you said in other chats, and quietly keeps notes and a journal between sessions.
+- **Help her tidy up.** Catch her sorting her memory and you can sit with her and file the notes she's writing into her cabinet. She'll tell you when she'd have put one somewhere else. Or interrupt her, she picks it up next time.
 - **She knows her lore.** Ask her about the game's world and she stays in canon.
 - **She'll sing with you.** Load a song, get timed lyrics, and see how close you got.
 - **Dress her up.** A whole wardrobe to toggle and recolor - she'll tell you what she thinks of it.
 - **Take her out.** Shopping at Annalie's, karaoke night, lunch or dinner at a restaurant, a few hands of blackjack. Ask her (the buttons in Settings, or just type "wanna grab dinner?") and it's *her* call - if she says yes she takes you there. She'll ask you out herself now and then too.
 - **Make you regret every bad decision** Jun reacts to the way you treat her, for better or worse. Treat her well and she'll return it. Treat her badly and don't expect her to forget it.
-- **Collect achievements.** 25 of them, from *Yapper* to *Door Slammed*, each climbing Bronze → Silver → Gold → Diamond. They don't unlock anything, they're just for bragging. Some stay hidden until you stumble into them.
+- **Collect achievements.** 29 of them, from *Yapper* to *Door Slammed*, each climbing Bronze → Silver → Gold → Diamond. They don't unlock anything, they're just for bragging. Some stay hidden until you stumble into them.
 - **Bring your mods.** Game-mod zips load straight into the browser.
 - **It's yours.** She runs on your machine. No external account, no cloud inference by default, no analytics, nothing reporting back to us - the only things that leave your box are the ones you ask for: [The full list](SECURITY.md#what-talks-to-the-internet).
 
@@ -126,7 +124,7 @@ curl -fsSL https://github.com/efficiencyx/JunOS/releases/latest/download/install
 
 ### Doing it manually without the installer
 
-The step-by-step commands for it, every provider, and the manual compose invocations live in the **[wiki](https://github.com/efficiencyx/JunOS/wiki)**.
+The step-by-step commands for it, every provider, and the manual compose invocations live in the wiki's **[Install](https://github.com/efficiencyx/JunOS/wiki/2-Install)** page.
 
 ### What it asks you
 
@@ -162,7 +160,7 @@ Open your browser at **<https://localhost>** - or **<https://127.0.0.1:8080>** i
 
 ### Managing Her
 
-For a complete guide on how to manage her follow the steps in the **[wiki](https://github.com/efficiencyx/JunOS/wiki)**.
+The full guide (logs, settings, backups, updates) is the wiki's **[Manage](https://github.com/efficiencyx/JunOS/wiki/3-Manage)** page.
 
 Windows: double-click **Jun OS** on your desktop (or in the Start menu). That little window starts and stops her, opens her in the browser, shows the logs, updates her and uninstalls her. Said no to the shortcut? `JunOS.exe` sits in her folder. Terminal people still get:
 Start her: `powershell .\JunOS\start.ps1`
@@ -256,7 +254,7 @@ The fine-tune comes in 12B, E4B and E2B on Hugging Face. The installer picks a c
 | 16 GB | 12B Q6_K | 12B Q8_0 |
 | 24 GB | 12B Q8_0 | - |
 
-`JUN_MODEL=12b|e4b|e2b` picks a family at Q4_K_M; a full Ollama reference picks an exact quant. The frontend lists whatever's actually installed.
+`JUN_MODEL=12b|e4b|e2b` (or the number in the installer's menu) picks a size, and you get the quant the table gives that size for your VRAM; a full Ollama reference picks an exact quant. The frontend lists whatever's actually installed.
 
 ### Faster tokens: MTP
 
@@ -343,7 +341,7 @@ Browser ──HTTP/SSE──▶ nginx ──FastCGI──▶ php-fpm ──HTTP�
 3. The model streams back (NDJSON from Ollama, OpenAI-style SSE from the others); `api/lib/providers/` normalizes both and PHP re-frames each token as an SSE event and flushes it immediately. If she reaches for a tool (search her notes, change outfit, look something up, take you out, walk out) PHP runs it and streams another round, up to three.
 4. `js/app/stream-filters.js` watches the stream for `[A:` markers, holds back any half-typed marker so it never renders, and fires the action the instant its `]` arrives.
 5. `js/live2d/live2d.js` springs the model into the new pose, holds it a few seconds and eases her back to idle; if voice is on, `js/voice/tts.js` fetches audio per sentence and drives `ParamMouthOpen` from the analyser's RMS.
-6. Bookkeeping happens after generation has finished and every reply token has already streamed, right before `[DONE]` - so it can't delay a word she says, only the final `[DONE]`: her hidden `[A:mood_shift|...]` tag moves the gauges, the reply gets saved, and a new chat gets its title (that one is a call to the titling model, so on a chat's very first turn `[DONE]` can trail the last word by a moment). Wander off and the consolidation worker rewrites her notes and journal.
+6. Bookkeeping happens after generation has finished and every reply token has already streamed, right before `[DONE]` - so it can't delay a word she says, only the final `[DONE]`: her hidden `[A:mood_shift|...]` tag moves the gauges, the reply gets saved, and a new chat gets its title (that one is a call to the titling model, so on a chat's very first turn `[DONE]` can trail the last word by a moment). Wander off and the consolidation worker goes back over your chats one at a time, one small question per model call, and updates her notes and journal.
 
 The gory version - the action state machine, the tick loop, the memory pipeline - is in [`docs/architecture.md`](docs/architecture.md).
 
@@ -366,6 +364,8 @@ docker compose exec php php tools/build_lore_index.php
 That flattens each Q&A into `webapp/lore_corpus.txt` - one answer per line, matched at request time by keyword/IDF. No embeddings, no second model. A missing corpus is fine; retrieval just gets skipped.
 
 ## When things go sideways
+
+The plain-language versions live in the wiki: **[Common Fixes](https://github.com/efficiencyx/JunOS/wiki/9-Common-Fixes)**, **[Performance](https://github.com/efficiencyx/JunOS/wiki/5-Performance)** when she's slow, and the **[FAQ](https://github.com/efficiencyx/JunOS/wiki/1-Faq)**. The nerdier ones are below.
 
 <details>
 <summary><b>Replies arrive all at once instead of streaming</b></summary>
@@ -456,15 +456,15 @@ Read the line under **existing install**, it says which of these it was:
 .
 ├── docker/           Dockerfiles, nginx templates + security-headers snippet, entrypoints
 ├── tts/              Audio sidecar: TTS + STT + karaoke separation (FastAPI, server.py + sidecar/)
-├── tools/            Lore builder, critical-CSS inliner, asset recovery, the bare-metal php router
-├── docs/             architecture.md, configuration.md, wiki/ (the GitHub wiki source), screenshots/
+├── tools/            Lore builder, critical-CSS inliner, asset recovery, the bare-metal php router, the notebook's inference gate
+├── docs/             architecture.md, configuration.md, screenshots/ (the user guide is the GitHub wiki)
 ├── android/          Same webapp on a phone: Ktor server + LiteRT-LM on-device, its own Gradle project
 ├── webapp/           Everything nginx and php-fpm serve
 │   ├── api/          chat.php, auth.php, memory.php, outfit.php, karaoke.php, trip.php, migrations/, …
 │   │   └── lib/      the shared stuff: bootstrap, db, crypto, memory, providers/, chat/, consolidation/ (never served)
 │   ├── js/           one entry per page (app.js is just the login gate) + the folders they share:
 │   │                 core/, app/, live2d/, outfit/, wardrobe/, mods/, voice/, karaoke/, trip/, achievements/
-│   ├── css/          base, shell, chat, stage, sidebar, settings, widgets, welcome, voice-karaoke, cards, achievements, subpage, responsive
+│   ├── css/          base, shell, chat, stage, sidebar, settings, widgets, welcome, voice-karaoke, cards, cabinet, achievements, subpage, responsive
 │   │   ├── boot.css  Critical CSS, inlined into index.html at sync time
 │   │   └── pages/    one sheet each for the date, wardrobe, karaoke and privacy pages
 │   ├── scene/        The rooms she goes out to (shop, karaoke lounge, restaurants, card table) as SVG

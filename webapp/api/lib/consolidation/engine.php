@@ -4,11 +4,13 @@
 // SQLite hands out max(rowid)+1 and happily reuses ids a delete
 // freed. drop the newest conversation and upto_id is suddenly
 // above every row that's left, so `m.id > upto_id` starves
-// consolidation for Ever. so: wind back any watermark that ran
-// past its user's messages.
+// consolidation for Ever. everything that survived sits under the
+// old watermark, so it goes back to the highest surviving id.
 function consolidation_repair_watermarks(PDO $db): void {
     $db->exec(
-        'UPDATE memory_consolidation SET upto_id = 0
+        'UPDATE memory_consolidation SET upto_id = (SELECT COALESCE(MAX(m.id), 0) FROM messages m
+                                                    JOIN conversations c ON c.id = m.conversation_id
+                                                    WHERE c.user_id = memory_consolidation.user_id)
          WHERE upto_id > (SELECT COALESCE(MAX(m.id), 0) FROM messages m
                           JOIN conversations c ON c.id = m.conversation_id
                           WHERE c.user_id = memory_consolidation.user_id)'
@@ -26,155 +28,16 @@ function consolidation_record_result(int $userId, string $status, int $noteCount
     )->execute([$userId, time(), $status, $noteCount]);
 }
 
-function consolidation_tool(string $name, string $description, array $properties = [], array $required = []): array {
-    $parameters = ['type' => 'object', 'properties' => $properties ?: (object)[]];
-    if ($required) $parameters['required'] = $required;
-    return [
-        'type' => 'function',
-        'function' => [
-            'name' => $name,
-            'description' => $description,
-            'parameters' => $parameters,
-        ],
-    ];
-}
-
-function consolidation_json_ops(string $content): array {
-    $json = trim($content);
-    if (preg_match('/```(?:json)?\s*(.*?)\s*```/is', $json, $match)) $json = trim($match[1]);
-    $length = strlen($json);
-    for ($start = 0; $start < $length; $start++) {
-        if ($json[$start] !== '[' || !preg_match('/\G\[\s*\{/A', $json, $match, 0, $start)) continue;
-        $depth = 0;
-        $inString = false;
-        $escaped = false;
-        for ($end = $start; $end < $length; $end++) {
-            $char = $json[$end];
-            if ($inString) {
-                if ($escaped) $escaped = false;
-                elseif ($char === '\\') $escaped = true;
-                elseif ($char === '"') $inString = false;
-                continue;
-            }
-            if ($char === '"') {
-                $inString = true;
-                continue;
-            }
-            if ($char === '[') $depth++;
-            elseif ($char === ']' && --$depth === 0) {
-                $ops = json_decode(substr($json, $start, $end - $start + 1), true);
-                if (!is_array($ops) || !array_is_list($ops)) break;
-                return array_values(array_filter($ops, function ($op): bool {
-                    return is_array($op)
-                        && trim((string)($op['tool'] ?? '')) !== ''
-                        && is_array($op['args'] ?? []);
-                }));
-            }
-        }
-    }
-    return [];
-}
-
-function consolidation_tool_loop(
-    int $userId,
-    string $system,
-    string $input,
-    array $tools,
-    callable $exec,
-    int $maxRounds = 10
-): array {
-    $provider = ai_provider();
-    $nativeTools = provider_tools_enabled();
-    if (!$nativeTools) {
-        $system .= "\n\nTool calling is unavailable. Answer with a JSON array of operations shaped "
-            . '{"tool":"tool_name","args":{"name":"value"}}. Use an empty array when no operation is needed.';
-    }
-    $messages = [
-        ['role' => 'system', 'content' => $system],
-        ['role' => 'user', 'content' => $input],
-    ];
-    $counts = [];
-    $finished = false;
-
-    for ($round = 0; $round < $maxRounds; $round++) {
-        $reply = provider_complete_tools(
-            $provider,
-            default_chat_model(),
-            $messages,
-            $nativeTools ? $tools : [],
-            4000,
-            false
-        );
-        if (isset($reply['error'])) throw new RuntimeException('consolidation_provider_' . $reply['error']);
-
-        $content = (string)($reply['content'] ?? '');
-        $calls = is_array($reply['tool_calls'] ?? null) ? $reply['tool_calls'] : [];
-        if (!$calls) {
-            foreach (consolidation_json_ops($content) as $index => $op) {
-                $arguments = $op['args'];
-                $messageArguments = $arguments ?: (object)[];
-                $calls[] = [
-                    'id' => 'consolidation-' . $round . '-' . $index,
-                    'type' => 'function',
-                    'function' => [
-                        'name' => (string)$op['tool'],
-                        'arguments' => provider_uses_openai_protocol($provider)
-                            ? json_encode($messageArguments, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES)
-                            : $messageArguments,
-                    ],
-                ];
-            }
-        }
-        if (!$calls) break;
-
-        $calls = array_slice($calls, 0, 6);
-        foreach ($calls as $index => &$call) {
-            if (!isset($call['id']) || trim((string)$call['id']) === '') {
-                $call['id'] = 'consolidation-' . $round . '-' . $index;
-            }
-            if (!isset($call['type'])) $call['type'] = 'function';
-            if (!provider_uses_openai_protocol($provider)
-                && isset($call['function']['arguments'])
-                && $call['function']['arguments'] === []) {
-                $call['function']['arguments'] = (object)[];
-            }
-        }
-        unset($call);
-        $messages[] = ['role' => 'assistant', 'content' => $content, 'tool_calls' => $calls];
-
-        $roundHadError = false;
-        foreach ($calls as $call) {
-            $fn = is_array($call['function'] ?? null) ? $call['function'] : [];
-            $name = trim((string)($fn['name'] ?? ''));
-            $args = tool_call_args($call);
-            $counts[$name] = ($counts[$name] ?? 0) + 1;
-            try {
-                $result = $exec($name, $args);
-                if (!is_array($result)) $result = ['result' => $result];
-            } catch (Throwable $e) {
-                $result = ['error' => 'tool_failed'];
-                log_event(['msg' => 'memory_consolidation_tool_error', 'user_id' => $userId, 'tool' => $name, 'err' => $e->getMessage()]);
-            }
-            if (isset($result['error'])) $roundHadError = true;
-            $messages[] = provider_tool_message(
-                $provider,
-                $name,
-                (string)$call['id'],
-                json_encode($result, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES)
-            );
-            if ($name === 'finish_up') {
-                if (!$roundHadError) {
-                    $finished = true;
-                    break;
-                }
-            }
-        }
-        if ($finished) break;
-    }
-
-    return [
-        'counts' => $counts,
-        'total' => array_sum($counts),
-        'finished' => $finished,
-    ];
+function consolidation_pending_count(PDO $db, int $userId): int {
+    $stmt = $db->prepare(
+        'SELECT COUNT(*) FROM messages m
+         JOIN conversations c ON c.id = m.conversation_id
+         LEFT JOIN memory_consolidation mc ON mc.user_id = c.user_id
+         LEFT JOIN consolidation_chats cc ON cc.user_id = c.user_id AND cc.conversation_id = c.id
+         WHERE c.user_id = ? AND m.id > MAX(COALESCE(mc.upto_id, 0), COALESCE(cc.upto_id, 0))'
+    );
+    $stmt->execute([$userId]);
+    $count = (int)$stmt->fetchColumn();
+    $stmt->closeCursor();
+    return $count;
 }

@@ -309,6 +309,7 @@
 
 .consolidation-banner {
   display: flex;
+  flex-wrap: wrap;
   align-items: flex-start;
   gap: 10px;
   padding: 10px 14px;
@@ -331,9 +332,11 @@
 .consolidation-banner[data-kind="done"] .consolidation-mark { background: var(--ok); }
 .consolidation-banner[data-kind="warn"] { border-color: var(--warn); }
 .consolidation-banner[data-kind="warn"] .consolidation-mark { background: var(--warn); }
-.consolidation-text { min-width: 0; }
+.consolidation-text { flex: 1 1 180px; min-width: 0; }
 .consolidation-title { color: var(--fg); font-weight: 600; }
 .consolidation-sub { color: var(--muted); margin-top: 2px; }
+.consolidation-actions { display: flex; gap: var(--space-2); margin-left: auto; align-self: center; flex-shrink: 0; }
+.consolidation-actions[hidden] { display: none; }
 
 .composer {
   display: flex;

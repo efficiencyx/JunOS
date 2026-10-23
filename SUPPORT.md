@@ -4,7 +4,7 @@ Jun OS is a volunteer fan project without guaranteed response times, but good di
 
 ## Start here
 
-1. Read [When things go sideways](README.md#when-things-go-sideways).
+1. Read [When things go sideways](README.md#when-things-go-sideways) and the wiki's [Common Fixes](https://github.com/efficiencyx/JunOS/wiki/9-Common-Fixes).
 2. Check the full [configuration reference](docs/configuration.md).
 3. Search open and closed GitHub issues.
 4. If the problem remains, open a **Setup or support request**. Use a **Bug report** when you have a repeatable defect, or a **Feature request** for a new capability.

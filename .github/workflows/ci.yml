@@ -21,13 +21,16 @@ jobs:
 
       - uses: actions/setup-node@v4
         with:
-          node-version: '20'
+          node-version: '24'
+          # the runner image caches an older 24.x and setup-node
+          # happily uses it. this makes it fetch the patched one
+          check-latest: true
 
       - name: JS syntax
         # node --check parses a .js file as CommonJS and rejects
-        # import/export. node 22.7+ spots module syntax by itself,
-        # 20 doesn't. so each file gets copied to .mjs and the
-        # extension picks the ES module parser.
+        # import/export. node 22.7+ is supposed to spot module
+        # syntax by itself, the .mjs copy doesn't depend on that
+        # guess, the extension just picks the ES module parser.
         run: |
           fail=0
           for f in $(git ls-files 'webapp/js/**/*.js' 'webapp/*.js' ':!webapp/vendor'); do

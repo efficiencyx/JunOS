@@ -1,6 +1,7 @@
 <?php
 // Backend for the dev HUD. how much VRAM and RAM the loaded model
-// takes, from Ollama /api/ps, plus host memory. the HUD asks
+// takes, from Ollama /api/ps (llama.cpp only says what's
+// loaded), plus host memory. the HUD asks
 // every few seconds while it is open so keep this cheap and Never
 // fatal, if something upstream hiccups we give back the half we
 // got and not an error page.
@@ -14,9 +15,15 @@ rate_limit('stats', 60, 60);
 
 $out = ['models' => [], 'vram_bytes' => 0, 'ram_model_bytes' => 0, 'host' => null];
 
-// /api/ps is an Ollama thing. with any other chat provider there
-// is nobody to ask, and no reason to pay the connect timeout on
-// every HUD poll, so we just report host memory.
+if (ai_provider() === 'llamacpp') {
+    $title = llamacpp_title_model();
+    foreach (llamacpp_models() as $id => $state) {
+        if ($state !== 'loaded' || $id === $title) continue;
+        [$name, $quant] = array_pad(explode(':', $id, 2), 2, '');
+        $out['models'][] = ['name' => $name, 'size' => 0, 'vram' => 0, 'quant' => $quant, 'params' => '', 'context' => 0];
+    }
+}
+
 $loaded = ai_provider() === 'ollama' ? (ollama_api_json('/api/ps', null, 5)['models'] ?? null) : null;
 if (is_array($loaded)) {
     foreach ($loaded as $m) {

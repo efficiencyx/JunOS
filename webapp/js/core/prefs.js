@@ -19,6 +19,7 @@ export const TRACKED = [
   'model',
   'reasoning_level',
   'think',
+  'cabinet.rules_seen',
 ];
 
 function debounce(fn, ms) {

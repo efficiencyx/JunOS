@@ -1,4 +1,4 @@
-import { mobileConversationTitle, mobileReplyStatus, sidebarBackground, stageEl } from './dom.js?v=11';
+import { mobileConversationTitle, mobileReplyStatus, sidebarBackground, stageEl } from './dom.js?v=75';
 import { phoneMode, visualRect } from '../core/util.js?v=1';
 import * as Names from '../core/names.js?v=1';
 import * as TTS from '../voice/tts.js?v=84';

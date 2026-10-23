@@ -1,5 +1,5 @@
-import { messagesEl, messagesEmpty } from './dom.js?v=11';
-import { hideFaceBubble } from './face-bubble.js?v=83';
+import { messagesEl, messagesEmpty } from './dom.js?v=75';
+import { hideFaceBubble } from './face-bubble.js?v=84';
 import { escapeHtml } from '../core/util.js?v=1';
 
 const MARKDOWN_TAGS = [

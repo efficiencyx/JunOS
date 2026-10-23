@@ -33,13 +33,13 @@ interface InferenceEngine : Closeable {
     val lastStats: StateFlow<JsonObject?>
 
     suspend fun ensureLoaded()
-    fun generate(messages: List<ChatMessage>, maxTokens: Int = 768, temperature: Float = 0.8f): Flow<String>
+    fun generate(messages: List<ChatMessage>, maxTokens: Int = 768, temperature: Float = 0.4f): Flow<String>
     fun turn(
         messages: List<ChatMessage>,
         tools: List<String>,
         think: Boolean,
         maxTokens: Int = 768,
-        temperature: Float = 0.8f,
+        temperature: Float = 0.4f,
     ): Flow<TurnEvent>
     fun cancel()
 }

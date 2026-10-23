@@ -88,6 +88,7 @@ $upstreamPayload = provider_chat_payload($PROVIDER, $model, $messages, $reasonin
 
 if ($toolsOffered) $upstreamPayload['tools'] = tool_catalog($approvedWebSearchQuery);
 
+$prepMs = (int)round((microtime(true) - $_SERVER['REQUEST_TIME_FLOAT']) * 1000);
 $sawError = false;
 $mtpFellBack = false;
 $assistantBuffer = '';
@@ -288,6 +289,7 @@ if ($state['silenced']) {
 if ($stats !== null) {
     $stats['num_ctx'] = provider_context_size($PROVIDER, $upstreamPayload);
     $stats['model'] = $model;
+    $stats['prep_ms'] = $prepMs;
     sse_send(['stats' => $stats]);
 }
 

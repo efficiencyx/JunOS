@@ -139,9 +139,7 @@ fetch() {
     curl --proto '=https' --tlsv1.2 -fsSL --retry 3 --retry-delay 2 -o "$2" "$1"
 }
 
-MODEL_12B="hf.co/efficiencyx/Jun-LoRA-12B-GGUF:Q4_K_M"
-MODEL_E4B="hf.co/efficiencyx/Jun-LoRA-E4B-GGUF:Q4_K_M"
-MODEL_E2B="hf.co/efficiencyx/Jun-LoRA-E2B-GGUF:Q4_K_M"
+MODEL_REPO="hf.co/efficiencyx/Jun-LoRA"
 
 # the drafter, the small model that guesses her next tokens,
 # has to match the same Gemma 4 size and QAT branch (QAT is
@@ -182,13 +180,25 @@ mtp_budget_mb() {
     esac
 }
 
-resolve_model() {  # alias|full-ref -> full-ref
-    case "$(printf '%s' "$1" | tr '[:upper:]' '[:lower:]')" in
-        12b|jun|best|"") echo "$MODEL_12B" ;;
-        e4b|balanced|fast) echo "$MODEL_E4B" ;;
-        e2b|fastest|cpu) echo "$MODEL_E2B" ;;
-        *)               echo "$1" ;;
+# menu picks MUST get the quant recommend_model named
+quant_for() {  # size vram-MB -> quant
+    local mb="${2:-0}"
+    case "$1" in
+        12B) if [ "$mb" -ge 23500 ]; then echo Q8_0; elif [ "$mb" -ge 15500 ]; then echo Q6_K; else echo Q4_K_M; fi ;;
+        E4B) if [ "$mb" -ge 9500 ]; then echo Q8_0; else echo Q4_K_M; fi ;;
+        E2B) if [ "$mb" -ge 7500 ]; then echo Q8_0; elif [ "$mb" -ge 5500 ]; then echo Q6_K; else echo Q4_K_M; fi ;;
     esac
+}
+
+resolve_model() {  # alias|full-ref [vram-MB] -> full-ref
+    local size
+    case "$(printf '%s' "$1" | tr '[:upper:]' '[:lower:]')" in
+        12b|jun|best|"") size=12B ;;
+        e4b|balanced|fast) size=E4B ;;
+        e2b|fastest|cpu) size=E2B ;;
+        *) echo "$1"; return ;;
+    esac
+    echo "$MODEL_REPO-$size-GGUF:$(quant_for "$size" "${2:-}")"
 }
 
 # rocm-smi is ROCm userland, not the amdgpu kernel driver, and a
@@ -254,15 +264,10 @@ detect_gpu_count() {
 }
 
 recommend_model() {
-    local mb="$1"
-    [ -z "$mb" ] && { echo "$MODEL_E2B"; return; }
-    if   [ "$mb" -ge 23500 ]; then echo "hf.co/efficiencyx/Jun-LoRA-12B-GGUF:Q8_0"
-    elif [ "$mb" -ge 15500 ]; then echo "hf.co/efficiencyx/Jun-LoRA-12B-GGUF:Q6_K"
-    elif [ "$mb" -ge 11500 ]; then echo "$MODEL_12B"
-    elif [ "$mb" -ge 9500 ]; then echo "hf.co/efficiencyx/Jun-LoRA-E4B-GGUF:Q8_0"
-    elif [ "$mb" -ge 7500 ]; then echo "$MODEL_E4B"
-    elif [ "$mb" -ge 5500 ]; then echo "hf.co/efficiencyx/Jun-LoRA-E2B-GGUF:Q6_K"
-    else                               echo "$MODEL_E2B"
+    local mb="${1:-0}"
+    if   [ "$mb" -ge 11500 ]; then resolve_model 12b "$mb"
+    elif [ "$mb" -ge 7500 ]; then resolve_model e4b "$mb"
+    else                          resolve_model e2b "$mb"
     fi
 }
 
@@ -340,7 +345,7 @@ ask_model_ref() {
         esac
     fi
 
-    MODEL_REF="$(resolve_model "$alias")"
+    MODEL_REF="$(resolve_model "$alias" "$vram")"
 }
 
 # start.sh asks GitHub about releases on every boot when this is

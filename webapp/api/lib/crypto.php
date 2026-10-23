@@ -108,13 +108,14 @@ function key_push_port(): int {
     return (int)env_str('OMEGA_KEY_PORT', '9099');
 }
 
-function key_push(int $userId): void {
+// $wake makes the worker poll right now instead of in up to 15 s
+function key_push(int $userId, bool $wake = false): void {
     if (PHP_SAPI === 'cli') return;
     $key = crypt_key();
     if ($key === null) return;
     $sock = @stream_socket_client('tcp://127.0.0.1:' . key_push_port(), $errno, $errstr, 0.2);
     if ($sock === false) return;
-    fwrite($sock, json_encode(['user_id' => $userId, 'dek' => base64_encode($key)]) . "\n");
+    fwrite($sock, json_encode(['user_id' => $userId, 'dek' => base64_encode($key), 'wake' => $wake]) . "\n");
     fclose($sock);
 }
 

@@ -100,6 +100,12 @@ function provider_parse_openai_chunk(
                 'load_duration' => 0,
             ];
         }
+        if (isset($obj['timings']['prompt_ms']) && $state['stats'] !== null) {
+            $t = $obj['timings'];
+            $state['stats']['eval_duration'] = (int)(($t['predicted_ms'] ?? 0) * 1e6);
+            $state['stats']['prompt_eval_duration'] = (int)($t['prompt_ms'] * 1e6);
+            $state['stats']['prompt_new'] = (int)($t['prompt_n'] ?? 0);
+        }
         $choice = $obj['choices'][0] ?? null;
         if (!is_array($choice)) continue;
         if (!empty($choice['finish_reason'])) {
@@ -168,6 +174,10 @@ function provider_merge_stats(?array $total, array $round): array {
     $round['eval_count'] += $total['eval_count'];
     $round['eval_duration'] += $total['eval_duration'];
     $round['total_duration'] += $total['total_duration'];
+    // TTFT is the first round's prefill, a tool round comes after
+    foreach (['prompt_eval_duration', 'prompt_new'] as $k) {
+        if (isset($total[$k])) $round[$k] = $total[$k];
+    }
     return $round;
 }
 
@@ -177,7 +187,7 @@ function stream_turn_deadline(): float {
     return $deadline;
 }
 
-function provider_stream_round(string $provider, array $payload, callable $emit, int $round = 0): array {
+function provider_stream_round(string $provider, array $payload, callable $emit, int $round = 0, ?float $deadline = null): array {
     // ollama throws the trace away on think:false. llama.cpp and
     // vllm hand back whatever reasoning they parsed out anyway, so the
     // browser would get thinking on turns that asked for none
@@ -198,7 +208,7 @@ function provider_stream_round(string $provider, array $payload, callable $emit,
     curl_setopt($ch, CURLOPT_HTTPHEADER, chat_request_headers($provider));
     curl_setopt($ch, CURLOPT_POSTFIELDS, json_encode($payload, JSON_UNESCAPED_UNICODE));
     curl_setopt($ch, CURLOPT_RETURNTRANSFER, false);
-    curl_setopt($ch, CURLOPT_TIMEOUT_MS, max(1000, (int)((stream_turn_deadline() - $started) * 1000)));
+    curl_setopt($ch, CURLOPT_TIMEOUT_MS, max(1000, (int)((($deadline ?? stream_turn_deadline()) - $started) * 1000)));
     curl_setopt($ch, CURLOPT_LOW_SPEED_LIMIT, 1);
     curl_setopt($ch, CURLOPT_LOW_SPEED_TIME, max(10, (int)env_str('OMEGA_STREAM_IDLE_S', '300')));
     curl_setopt($ch, CURLOPT_CONNECTTIMEOUT, 10);
