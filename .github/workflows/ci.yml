@@ -99,7 +99,7 @@ jobs:
               compile(src, f'colab.ipynb cell {i}', 'exec')
           PY
 
-      - uses: astral-sh/ruff-action@v4
+      - uses: astral-sh/ruff-action@v4.1.0
         with:
           # error-level rules only. this repo has no formatting policy and is
           # not about to grow one from CI.
