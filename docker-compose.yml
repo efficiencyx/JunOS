@@ -156,7 +156,7 @@ services:
     networks: [omega]
 
   llamacpp:
-    image: ghcr.io/ggml-org/llama.cpp:server@sha256:190813e82f33a82f506e66826f367004a3159f8b8139b11d07566437aecdac93
+    image: ghcr.io/ggml-org/llama.cpp:server@sha256:8c74db29f1a2bef3f0a331b52c4d6214601dfceed4bee0b94cc48b3b23ff257d
     container_name: omega-llamacpp
     profiles: [llamacpp]
     restart: unless-stopped

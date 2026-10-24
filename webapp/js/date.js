@@ -2,8 +2,8 @@
 // from the model: every turn is one ephemeral turn (nothing
 // stored, gauges still move) carrying an OOC stage direction, and
 // the reply goes through say() in core/speech-card.js. the trip
-// endpoint writes the memory note on the way home, the turns
-// themselves leave nothing behind.
+// endpoint writes the memory notes on the way home, recapping
+// `table`. the turns themselves leave nothing behind.
 //
 // she orders for herself. Anon taps his own dish on the card, hers
 // comes out of her reply as an ORDER: tag (SUGGEST: is her
@@ -95,6 +95,8 @@ async function main() {
   const kitchen = { start: 0, due: 0, lulls: 0, timer: 0 };
   let lastLineAt = 0;
   let history = [];
+  const table = [];
+  let leaving = false;
   let conversationId = 0;
   const her = () => Names.getBot();
 
@@ -183,10 +185,10 @@ async function main() {
     setComposer();
     const raw = await turn(content);
     readTags(raw);
-    let line = raw.replace(STRIP_RE, '').replace(/\[\s*A(?:CTIONS?)?\s*:[^\]]*\]/gi, '')
+    const spoken = raw.replace(STRIP_RE, '').replace(/\[\s*A(?:CTIONS?)?\s*:[^\]]*\]/gi, '')
       .replace(/\s+/g, ' ').replace(/^[\s,.;:]+/, '').trim();
-    line = Names.apply(line);
-    line = line || fallback;
+    if (spoken) table.push({ role: 'assistant', text: spoken });
+    const line = Names.apply(spoken) || fallback;
     status.textContent = '';
     lastLine.textContent = line;
     lastLineAt = Date.now();
@@ -196,7 +198,7 @@ async function main() {
   }
 
   function setComposer() {
-    const locked = busy || !ready;
+    const locked = busy || !ready || !!leaving;
     // NEVER disable this while she's answering. disabling the focused
     // input drops focus, and on a phone that shuts the keyboard and
     // reopens it every single turn. the submit handler guards on busy
@@ -204,7 +206,7 @@ async function main() {
     input.disabled = !ready;
     sendBtn.disabled = locked;
     orderBtn.disabled = locked || ordered;
-    billBtn.disabled = locked;
+    billBtn.disabled = locked && leaving !== 'bill';
     skipBtn.hidden = !canSkip || !kitchen.timer || served;
   }
 
@@ -321,15 +323,44 @@ async function main() {
     say(await ask(note('served'), FALLBACK.served));
   }
 
+  function showBill(recap) {
+    const player = Names.getPlayer();
+    const lines = (items) => items.map(t => {
+      const p = document.createElement('p');
+      p.className = 'kept-line';
+      p.textContent = Names.apply(t).replace(/\bAnon\b/g, player);
+      return p;
+    });
+    const heading = (text) => Object.assign(document.createElement('h3'), { className: 'menu-course', textContent: text });
+    const title = document.getElementById('menuTitle');
+    title.lastChild.previousSibling.textContent = 'The bill';
+    list.replaceChildren(
+      ...(recap.moments.length ? [heading(`${her()} kept`), ...lines(recap.moments)] : []),
+      ...(recap.plans.length ? [heading('Still owed'), ...lines(recap.plans)] : []),
+    );
+    document.getElementById('menuHint').hidden = true;
+    document.body.classList.remove('ordered');
+  }
+
   async function goHome() {
-    if (busy) return;
-    billBtn.disabled = true;
+    if (leaving === 'bill') { location.href = 'index.html?from=date'; return; }
+    if (busy || leaving) return;
+    leaving = true;
     billBtn.textContent = 'Heading home…';
-    await say(await ask(note('leave'), FALLBACK.leave));
-    try {
-      await apiJson('trip.php?action=home', { meal, dishes: picks });
-    } catch (e) {}
-    location.href = 'index.html?from=date';
+    setComposer();
+    const line = await ask(note('leave'), FALLBACK.leave);
+    const home = apiJson('trip.php?action=home', { meal, venue: venue.name, dishes: picks, table })
+      .then(r => r.ok ? r.json() : null).catch(() => null);
+    await say(line);
+    const recap = (await home)?.recap;
+    if (!recap || !(recap.moments.length || recap.plans.length)) {
+      location.href = 'index.html?from=date';
+      return;
+    }
+    showBill(recap);
+    leaving = 'bill';
+    billBtn.textContent = 'Walk home';
+    setComposer();
   }
 
   const me = await Auth.me().catch(() => null);
@@ -372,9 +403,10 @@ async function main() {
   document.getElementById('composer').addEventListener('submit', async (e) => {
     e.preventDefault();
     const text = input.value.trim();
-    if (!text || busy || !ready) return;
+    if (!text || busy || !ready || leaving) return;
     input.value = '';
     const spoken = Names.canonicalize(text);
+    table.push({ role: 'user', text: spoken });
     say(await ask(`${spoken}\n\n${note('talk')}`, FALLBACK.talk));
     input.focus();
   });

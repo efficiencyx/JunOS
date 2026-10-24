@@ -119,7 +119,8 @@
   body.sidebar-open .conv-sidebar { transform: translateX(0); }
   .app-main.sidebar-collapsed .conv-sidebar .sidebar-toggle { display: inline-flex; }
   .app-main.sidebar-collapsed .conv-sidebar .sidebar-brand-name { display: inline; }
-  .app-main.sidebar-collapsed .conv-sidebar .conv-list { display: block; }
+  .app-main.sidebar-collapsed .conv-sidebar .conv-list:not([hidden]) { display: block; }
+  .app-main.sidebar-collapsed .conv-sidebar .chat-search:not([hidden]) { display: block; }
   .app-main.sidebar-collapsed .conv-sidebar .user-info { display: flex; }
   .app-main.sidebar-collapsed .conv-sidebar .sidebar-brand {
     position: static;

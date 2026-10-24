@@ -3,9 +3,11 @@ package com.efficiencyx.junos.inference
 import android.app.NotificationChannel
 import android.app.NotificationManager
 import android.app.Service
+import android.content.Context
 import android.content.Intent
 import android.os.IBinder
 import androidx.core.app.NotificationCompat
+import androidx.core.content.ContextCompat
 import com.efficiencyx.junos.R
 
 class GenerationService : Service() {
@@ -19,6 +21,10 @@ class GenerationService : Service() {
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         enterForeground()
+        if (intent?.action == ACTION_STOP) {
+            stopForeground(STOP_FOREGROUND_REMOVE)
+            stopSelf()
+        }
         return START_NOT_STICKY
     }
 
@@ -37,5 +43,12 @@ class GenerationService : Service() {
     companion object {
         private const val CHANNEL = "generation"
         private const val NOTIFICATION_ID = 2001
+        private const val ACTION_STOP = "com.efficiencyx.junos.STOP_GENERATION"
+
+        // NOT stopService(). a turn that fails fast would stop it before
+        // startForeground() ran, and android kills the whole app for that
+        fun stop(context: Context) {
+            ContextCompat.startForegroundService(context, Intent(context, GenerationService::class.java).setAction(ACTION_STOP))
+        }
     }
 }

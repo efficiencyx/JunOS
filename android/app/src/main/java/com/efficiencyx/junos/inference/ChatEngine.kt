@@ -11,6 +11,7 @@ import com.efficiencyx.junos.data.RelationshipEntity
 import com.efficiencyx.junos.data.WardrobeStateEntity
 import com.efficiencyx.junos.lore.LoreIndex
 import com.efficiencyx.junos.memory.MemoryStore
+import com.efficiencyx.junos.memory.NoteSource
 import com.efficiencyx.junos.wardrobe.Wardrobe
 import com.efficiencyx.junos.wardrobe.WardrobeState
 import kotlinx.coroutines.CoroutineScope
@@ -48,6 +49,8 @@ data class ChatRequest(
     val ephemeral: Boolean = false,
     @SerialName("client_time") val clientTime: String? = null,
     val audio: String? = null,
+    val voice: Boolean = false,
+    @SerialName("hear_all") val hearAll: Boolean = false,
     @SerialName("mod_items") val modItems: List<String> = emptyList(),
 )
 
@@ -88,8 +91,10 @@ class ChatEngine(
         val conversation = dao.conversation(request.conversationId) ?: error("forbidden")
         dao.ensureDefaults(now())
         val lastUser = request.messages.lastOrNull { it.role == "user" }?.content.orEmpty()
+        var noteSource = NoteSource("chat", request.conversationId)
         if (!request.idle && !request.ephemeral) {
-            dao.insertMessage(MessageEntity(conversationId = request.conversationId, role = "user", content = lastUser, createdAt = now()))
+            val userRowId = dao.insertMessage(MessageEntity(conversationId = request.conversationId, role = "user", content = lastUser, createdAt = now()))
+            noteSource = noteSource.copy(msg = userRowId)
             val consolidation = dao.consolidation() ?: ConsolidationEntity()
             dao.putConsolidation(consolidation.copy(lastActivity = now()))
         }
@@ -186,7 +191,7 @@ class ChatEngine(
                 for (call in ran) {
                     emit(toolStatus(call.name, "running"))
                     val result = if (call.name == "change_outfit") changeOutfit(call.args, modItems, emit)
-                        else executeTool(call, request.conversationId)
+                        else executeTool(call, request.conversationId, noteSource)
                     emit(toolStatus(call.name, "done", result))
                     if (call.name == "stay_silent" && !request.idle) silenced = true
                     if (call.name == "flee") fled = buildJsonObject {
@@ -212,7 +217,7 @@ class ChatEngine(
                 show(thoughts.finish(), plain)
             }
         } finally {
-            context.stopService(Intent(context, GenerationService::class.java))
+            GenerationService.stop(context)
         }
 
         var assistant = visible.toString().trim()
@@ -223,7 +228,7 @@ class ChatEngine(
             if (assistant.isBlank()) assistant = "..."
             emit(buildJsonObject { put("fled", fled!!) })
         }
-        assistant = salvageMemoryTags(assistant, emit)
+        assistant = salvageMemoryTags(assistant, noteSource, emit)
         assistant = applyRelationshipTag(assistant, relationship)
         assistant = EXIT_TAG.replace(assistant, "").trim()
         if ((silenced || fled != null) && assistant.isBlank()) assistant = "..."
@@ -279,6 +284,8 @@ class ChatEngine(
         summary: String,
     ): String {
         val blocks = mutableListOf<String>()
+        // first block, same as chat.php. it only works up top
+        if (request.voice && !request.hearAll) blocks += SIDE_TALK_CHECK
         blocks += "## Current date and time\nIt is currently ${request.clientTime?.take(80) ?: java.time.ZonedDateTime.now()}."
         memory.recentContext(1200).takeIf { it.isNotBlank() }?.let(blocks::add)
         if (summary.isNotBlank()) blocks += "## Story so far (earlier in THIS conversation)\n$summary"
@@ -294,7 +301,7 @@ class ChatEngine(
         return "# Live context for THIS reply (from the system, not spoken by Anon)\n\n" + blocks.joinToString("\n\n")
     }
 
-    private suspend fun executeTool(call: ParsedToolCall, conversationId: Long): String = when (call.name) {
+    private suspend fun executeTool(call: ParsedToolCall, conversationId: Long, noteSource: NoteSource): String = when (call.name) {
         "search_lore" -> {
             val query = call.args["query"]?.jsonPrimitive?.content.orEmpty()
             json.encodeToString(lore.search(query, call.args["limit"]?.jsonPrimitive?.intOrNull ?: 5).map { it.text })
@@ -303,6 +310,7 @@ class ChatEngine(
             val note = memory.add(
                 call.args["category"]?.jsonPrimitive?.content ?: "events",
                 call.args["memory"]?.jsonPrimitive?.content.orEmpty(),
+                noteSource,
             )
             json.encodeToString(mapOf("saved" to note.id))
         }
@@ -346,14 +354,14 @@ class ChatEngine(
         })
     }
 
-    private suspend fun salvageMemoryTags(text: String, emit: suspend (JsonElement) -> Unit): String {
+    private suspend fun salvageMemoryTags(text: String, noteSource: NoteSource, emit: suspend (JsonElement) -> Unit): String {
         var clean = text
         for (match in MEMORY_TAG.findAll(text).toList()) {
             val args = match.groupValues[1]
             val category = Regex("category\\s*=\\s*([^,|]+)", RegexOption.IGNORE_CASE).find(args)?.groupValues?.get(1) ?: "events"
             val value = Regex("memory\\s*=\\s*(.+)$", setOf(RegexOption.IGNORE_CASE, RegexOption.DOT_MATCHES_ALL))
                 .find(args)?.groupValues?.get(1)?.trim() ?: continue
-            val note = memory.add(category.trim(), value)
+            val note = memory.add(category.trim(), value, noteSource)
             emit(toolStatus("memory_write", "done", json.encodeToString(mapOf("saved" to note.id))))
             clean = clean.replace(match.value, "")
         }
@@ -438,6 +446,13 @@ class ChatEngine(
                 "percentage|average|total)\\b",
         )
         private const val PROMPT_TOKEN_BUDGET = 6000
+        private const val SIDE_TALK_CHECK = "## Who he is talking to\n" +
+            "He said this out loud and he is not alone in the room. Before you answer, check that the line fits " +
+            "as something said TO YOU, following what you two were just saying. A line with no question or remark " +
+            "for you, about objects, food, a game on TV, chores, or another person, is him talking to someone else " +
+            "in the room. Talking about you in the third person (she, her, the girl) is also not for you." +
+            " Unless it is clearly for you, call stay_silent with overheard=true. Staying quiet costs nothing, " +
+            "answering a conversation you are not part of is embarrassing."
         private const val JOURNAL_HEADER = "# My memory of us\n\n" +
             "These are your own notes on everything you and Anon have been through, written by you " +
             "while he wasn't around. What happened recently you still remember clearly; the further " +

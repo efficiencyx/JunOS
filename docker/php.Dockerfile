@@ -1,4 +1,4 @@
-FROM php:8.2.35-fpm-alpine
+FROM php:8.5.12-fpm-alpine
 
 ARG APCU_VERSION=5.1.28
 ARG APCU_SHA256=0e60ba9d0fa4021c57a70c071f3d8f71de236275d084e560d5959fec4edd8c32
@@ -11,13 +11,13 @@ ARG APCU_SHA256=0e60ba9d0fa4021c57a70c071f3d8f71de236275d084e560d5959fec4edd8c32
 # every update runs `up --build`, so a dead pecl = nobody can
 # update. pinned + sha256 checked like everything else.
 RUN apk add --no-cache curl fcgi sqlite-libs \
- && apk add --no-cache --virtual .build-deps autoconf build-base sqlite-dev \
+ && apk add --no-cache --virtual .build-deps autoconf build-base \
  && curl -fsSL -o /tmp/apcu.tgz "https://github.com/krakjoe/apcu/archive/refs/tags/v${APCU_VERSION}.tar.gz" \
  && echo "${APCU_SHA256}  /tmp/apcu.tgz" | sha256sum -c - \
  && docker-php-source extract \
  && mkdir -p /usr/src/php/ext/apcu \
  && tar xzf /tmp/apcu.tgz -C /usr/src/php/ext/apcu --strip-components=1 \
- && docker-php-ext-install apcu opcache pdo_sqlite \
+ && docker-php-ext-install apcu \
  && docker-php-source delete \
  && apk del .build-deps \
  && rm -f /tmp/apcu.tgz

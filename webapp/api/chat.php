@@ -77,6 +77,7 @@ if (is_admin($user)) {
 }
 
 $userRowId = chat_save_user_message($convId, $req, $lastUserMsg);
+memory_request_source(['kind' => 'chat', 'conv' => $convId, 'msg' => $userRowId]);
 if ($userRowId) ach_on_user_message((int)$user['id'], $req, $lastUserMsg);
 
 ollama_evict_if_partially_offloaded($model);

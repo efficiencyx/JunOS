@@ -25,7 +25,7 @@ function summarize_conversation_chunk(string $oldSummary, array $chunk): ?string
         [['role' => 'system', 'content' => $sys], ['role' => 'user', 'content' => $usr]], 512);
 }
 
-// every action but list/create is about one conversation, ?id=
+// every action but list/search/create is about one conversation, ?id=
 function conversation_id(): int {
     $id = (int)($_GET['id'] ?? 0);
     if (!$id) fail(400, 'invalid_request');
@@ -42,15 +42,60 @@ switch ($action) {
 
     case 'list':
         require_method('GET');
-        $stmt = $db->prepare(
-            'SELECT id, title, created_at, updated_at FROM conversations
-             WHERE user_id=? ORDER BY updated_at DESC LIMIT 100'
-        );
-        $stmt->execute([$userId]);
+        $before = (int)($_GET['before'] ?? 0);
+        $sql = 'SELECT id, title, created_at, updated_at FROM conversations WHERE user_id=?';
+        $args = [$userId];
+        if ($before > 0) {
+            $sql .= ' AND (updated_at < ? OR (updated_at = ? AND id < ?))';
+            array_push($args, $before, $before, (int)($_GET['before_id'] ?? 0));
+        }
+        $stmt = $db->prepare($sql . ' ORDER BY updated_at DESC, id DESC LIMIT 100');
+        $stmt->execute($args);
         $rows = $stmt->fetchAll();
         foreach ($rows as &$row) $row['title'] = dec($row['title']);
         unset($row);
         json_out($rows);
+
+    case 'search':
+        require_method('GET');
+        $query = trim(preg_replace('/\s+/u', ' ', mb_substr((string)($_GET['q'] ?? ''), 0, 120)));
+        if (mb_strlen($query) < 2) json_out([]);
+        preg_match_all('/[\p{L}\p{N}]{2,}/u', $query, $m);
+        $terms = array_values(array_unique(array_map('mb_strtolower', $m[0])));
+        $convs = $db->prepare('SELECT id, title, updated_at FROM conversations WHERE user_id=?');
+        $convs->execute([$userId]);
+        $hits = [];
+        $titles = [];
+        foreach ($convs->fetchAll() as $c) {
+            $title = (string)dec($c['title'] ?? null);
+            $titles[(int)$c['id']] = [$title, (int)$c['updated_at']];
+            if ($title !== '' && recall_match($title, $query, $terms) !== null) $hits[(int)$c['id']] = '';
+        }
+        // ciphertext, so no LIKE. same walk as search_recent_chats
+        $st = $db->prepare(
+            "SELECT m.conversation_id, m.content FROM messages m JOIN conversations c ON c.id = m.conversation_id
+              WHERE c.user_id = ? AND m.role IN ('user', 'assistant') ORDER BY m.id DESC"
+        );
+        $st->execute([$userId]);
+        $found = 0;
+        while ($found < 50 && ($r = $st->fetch())) {
+            $cid = (int)$r['conversation_id'];
+            if (($hits[$cid] ?? '') !== '') continue;
+            $text = spoken_text((string)dec($r['content']));
+            if ($text === '' || $text === '<audio>') continue;
+            $at = recall_match($text, $query, $terms);
+            if ($at === null) continue;
+            $hits[$cid] = recall_excerpt($text, $at, 140);
+            $found++;
+        }
+        $st->closeCursor();
+        $out = [];
+        foreach ($hits as $cid => $snippet) {
+            [$title, $updated] = $titles[$cid];
+            $out[] = ['id' => $cid, 'title' => $title !== '' ? $title : null, 'updated_at' => $updated, 'snippet' => $snippet];
+        }
+        usort($out, fn($a, $b) => $b['updated_at'] <=> $a['updated_at']);
+        json_out(array_slice($out, 0, 50));
 
     case 'create':
         require_method('POST');
@@ -67,7 +112,7 @@ switch ($action) {
         $id = conversation_id();
         require_owned($id, $userId);
         $stmt = $db->prepare(
-            'SELECT role, content, created_at FROM messages WHERE conversation_id=? ORDER BY id'
+            'SELECT id, role, content, created_at FROM messages WHERE conversation_id=? ORDER BY id'
         );
         $stmt->execute([$id]);
         $rows = $stmt->fetchAll();

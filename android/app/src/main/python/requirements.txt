@@ -15,7 +15,7 @@
 Pillow==11.0.0
 lz4==4.3.2
 attrs==26.1.0
-fsspec==2026.7.0
+fsspec==2026.9.0
 
 # pip runs with --no-deps (UnityPy's compiled dependencies and
 # brotli have no usable Android wheels and are stubbed in this

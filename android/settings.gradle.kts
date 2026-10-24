@@ -23,7 +23,10 @@ dependencyResolutionManagement {
             url = uri("https://files.pythonhosted.org/packages/source")
             patternLayout { artifact("[organisation]/[module]/[module]-[revision].[ext]") }
             metadataSources { artifact() }
-            content { includeModule("u", "unitypy") }
+            content {
+                includeModule("u", "unitypy")
+                includeModule("t", "tpk_ar")
+            }
         }
     }
 }

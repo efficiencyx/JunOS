@@ -199,6 +199,8 @@ export function setData(nextData) {
       category: category,
       text: note.text || '',
       created: Number(note.created) || 0,
+      source: note.source || null,
+      revisions: Array.isArray(note.revisions) ? note.revisions : [],
       links: Array.isArray(note.links) ? note.links : [],
       label: note.text || 'Memory ' + (index + 1),
       r: 3.5,
@@ -586,6 +588,59 @@ function onKeyDown(event) {
   resetView();
 }
 
+var openChat = null;
+export function onOpenChat(callback) {
+  openChat = callback;
+}
+
+var SOURCE_LABELS = {
+  chat: 'From a chat',
+  date: 'From a date',
+  karaoke: 'From karaoke',
+  pass: 'From her memory pass',
+  manual: 'Added in Settings',
+};
+
+function sourceLine(ref, label) {
+  var line = document.createElement('p');
+  line.className = 'memory-source';
+  line.textContent = label;
+  if (!ref.conv) return line;
+  if (!ref.chat) {
+    line.textContent += ' (chat deleted)';
+    return line;
+  }
+  line.textContent += ' · ';
+  var open = document.createElement('button');
+  open.type = 'button';
+  open.className = 'link';
+  open.textContent = ref.chat.title || 'New conversation';
+  open.addEventListener('click', function () {
+    if (openChat) openChat(ref.conv, ref.msg || 0);
+  });
+  line.appendChild(open);
+  return line;
+}
+
+function appendOrigin(node) {
+  if (node.source && SOURCE_LABELS[node.source.kind]) readerBody.appendChild(sourceLine(node.source, SOURCE_LABELS[node.source.kind]));
+  if (!node.revisions.length) return;
+  var details = document.createElement('details');
+  details.className = 'memory-revisions';
+  var summary = document.createElement('summary');
+  summary.textContent = node.revisions.length === 1 ? 'Changed once' : 'Changed ' + node.revisions.length + ' times';
+  details.appendChild(summary);
+  node.revisions.slice().reverse().forEach(function (rev) {
+    var item = document.createElement('div');
+    var was = document.createElement('p');
+    was.textContent = rev.text;
+    item.appendChild(was);
+    item.appendChild(sourceLine(rev, 'Until ' + formatDate(rev.at) + (rev.kind === 'pass' ? ', changed by her memory pass' : '')));
+    details.appendChild(item);
+  });
+  readerBody.appendChild(details);
+}
+
 function formatDate(timestamp) {
   return timestamp ? new Date(timestamp * 1000).toLocaleDateString() : 'Date unknown';
 }
@@ -615,6 +670,7 @@ function openReader(node) {
     var text = document.createElement('p');
     text.textContent = node.text;
     readerBody.appendChild(text);
+    appendOrigin(node);
     return;
   }
   if (node.type === 'journal-leaf') {

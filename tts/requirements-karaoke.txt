@@ -13,8 +13,8 @@
 # cpu, cu128 or rocm and they don't carry the same versions.
 demucs==4.1.0
 faster-whisper==1.2.1
-torch>=2.5,<2.14
-fastapi==0.141.1
-uvicorn[standard]==0.52.1
+torch>=2.5,<2.15
+fastapi==0.162.0
+uvicorn[standard]==0.54.0
 soundfile==0.14.0
 numpy==2.2.6

@@ -679,27 +679,27 @@ configure() {
     elif [ -n "${JUN_PROVIDER:-}" ]; then
         provider="$(printf '%s' "$JUN_PROVIDER" | tr '[:upper:]' '[:lower:]')"
     elif [ "${JUN_YES:-}" = "1" ] || [ ! -r /dev/tty ]; then
-        provider=ollama
+        provider=llamacpp
     else
         {
             printf '\n     %sselect an AI provider%s\n' "$B" "$R"
-            printf '       %s1%s  Ollama      %s-%s local, fully managed %s(default)%s\n' "$ACCENT" "$R" "$DIM" "$R" "$DIM" "$R"
+            printf '       %s1%s  llama.cpp   %s-%s local llama-server, fully managed %s(default)%s\n' "$ACCENT" "$R" "$DIM" "$R" "$DIM" "$R"
             printf '       %s2%s  OpenRouter  %s-%s cloud API - needs an API key; chats leave this machine\n' "$ACCENT" "$R" "$DIM" "$R"
-            printf '       %s3%s  llama.cpp   %s-%s local llama-server\n' "$ACCENT" "$R" "$DIM" "$R"
-            printf '     %s$%s choice %s[enter = Ollama]%s %s→%s ' \
+            printf '       %s3%s  Ollama      %s-%s local, fully managed\n' "$ACCENT" "$R" "$DIM" "$R"
+            printf '     %s$%s choice %s[enter = llama.cpp]%s %s→%s ' \
                 "$OK" "$R" "$DIM" "$R" "$ACCENT" "$R"
         } > /dev/tty
         read -r ans < /dev/tty || ans=""
         case "$ans" in
-            2) provider=openrouter ;; 3) provider=llamacpp ;;
-            ""|1) provider=ollama ;;
-            *) printf '     %s✗%s unrecognized choice, using Ollama\n' "$DANGER" "$R" > /dev/tty; provider=ollama ;;
+            2) provider=openrouter ;; 3) provider=ollama ;;
+            ""|1) provider=llamacpp ;;
+            *) printf '     %s✗%s unrecognized choice, using llama.cpp\n' "$DANGER" "$R" > /dev/tty; provider=llamacpp ;;
         esac
     fi
     case "$provider" in
         ollama|openrouter|llamacpp|cloud) ;;
-        *) printf '     %s✗%s unknown provider "%s", using Ollama\n' "$DANGER" "$R" "$provider" > /dev/tty 2>/dev/null || true
-           provider=ollama ;;
+        *) printf '     %s✗%s unknown provider "%s", using llama.cpp\n' "$DANGER" "$R" "$provider" > /dev/tty 2>/dev/null || true
+           provider=llamacpp ;;
     esac
 
     TENSOR_PARALLEL=off
@@ -1797,6 +1797,19 @@ if docker_run docker info >/dev/null 2>&1; then
             ok "she's awake"
         else
             warn_ "she'll load on your first message instead (a minute or two)"
+        fi
+    elif docker_run docker ps --format '{{.Names}}' | grep -qx omega-llamacpp; then
+        note "model download (first run can take a while, ./start.sh logs llamacpp to watch)"
+        waited=0
+        until docker_run docker exec omega-llamacpp curl -fsS http://127.0.0.1:8080/v1/models 2>/dev/null \
+                | grep -q '"value":"loaded"'; do
+            [ "$waited" -lt 1800 ] || break
+            sleep 5; waited=$((waited + 5))
+        done
+        if [ "$waited" -lt 1800 ]; then
+            ok "she's awake"
+        else
+            warn_ "still loading after 30 minutes - she'll answer once ./start.sh logs llamacpp says the model is loaded"
         fi
     fi
     # has to run here, not in configure(). every row it measures is

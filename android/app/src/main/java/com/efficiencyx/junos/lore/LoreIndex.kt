@@ -37,11 +37,8 @@ class LoreIndex(private val context: Context) {
     }
 
     private fun build(): Index {
-        // a checkout without tools/lore_dataset.jsonl (the public
-        // tree, so every CI release apk) still builds, it just packs
-        // no data/lore_dataset.jsonl. no corpus = no lore, same
-        // as php skipping a missing lore_corpus.txt. NOT a crash
-        // on every single chat turn.
+        // no data/lore_dataset.jsonl = no lore, same as php skipping
+        // a missing lore_corpus.txt. NOT a crash on every chat turn.
         val stream = try {
             context.assets.open("data/lore_dataset.jsonl")
         } catch (_: FileNotFoundException) {

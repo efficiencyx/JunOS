@@ -1,8 +1,17 @@
 import { api, apiJson } from '../core/api.js?v=1';
 
-export async function list() {
-  const r = await api('conversations.php?action=list');
+export const PAGE = 100;
+
+export async function list(after = null) {
+  const cursor = after ? `&before=${after.updated_at}&before_id=${after.id}` : '';
+  const r = await api(`conversations.php?action=list${cursor}`);
   if (!r.ok) throw new Error(`history list ${r.status}`);
+  return r.json();
+}
+
+export async function search(q) {
+  const r = await api(`conversations.php?action=search&q=${encodeURIComponent(q)}`);
+  if (!r.ok) throw new Error(`history search ${r.status}`);
   return r.json();
 }
 

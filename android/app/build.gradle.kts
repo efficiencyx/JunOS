@@ -4,7 +4,6 @@ import groovy.json.JsonSlurper
 
 plugins {
     id("com.android.application")
-    id("org.jetbrains.kotlin.android")
     id("org.jetbrains.kotlin.plugin.compose")
     id("org.jetbrains.kotlin.plugin.serialization")
     id("com.google.devtools.ksp")
@@ -13,7 +12,7 @@ plugins {
 
 android {
     namespace = "com.efficiencyx.junos"
-    compileSdk = 35
+    compileSdk = 37
 
     defaultConfig {
         applicationId = "com.efficiencyx.junos"
@@ -60,7 +59,7 @@ android {
     }
 
     sourceSets.named("main") {
-        assets.srcDir(layout.buildDirectory.dir("generated/junWeb"))
+        assets.directories += layout.buildDirectory.dir("generated/junWeb").get().asFile.path
     }
 }
 
@@ -90,15 +89,20 @@ chaquopy {
     productFlavors { }
 }
 
-val unityPyVersion = "1.25.0"
-val unityPySdist by configurations.creating
+val unityPyVersion = "1.25.4"
+val tpkArVersion = "0.2.4"
+val unityPySdist = configurations.create("unityPySdist")
+val tpkArSdist = configurations.create("tpkArSdist")
 
-val verifyUnityPySdist by tasks.registering {
+val verifyUnityPySdist = tasks.register("verifyUnityPySdist") {
     doLast {
-        val digest = MessageDigest.getInstance("SHA-256").digest(unityPySdist.singleFile.readBytes())
+        fun sha256(file: File) = MessageDigest.getInstance("SHA-256").digest(file.readBytes())
             .joinToString("") { "%02x".format(it) }
-        check(digest == "4267195aba76fff95975a9687e2d04b8f16e5909a92ac8d4020241284d9082fb") {
+        check(sha256(unityPySdist.singleFile) == "91d6169d73db8eb5f11fd6531b4e5e980f53dae00d5e3cbab827bbf4765de6d3") {
             "UnityPy sdist checksum mismatch"
+        }
+        check(sha256(tpkArSdist.singleFile) == "d64897e5a0bcddd58e8a7d4dd922f372da984a0f98bc3b460ec869aab906ee78") {
+            "tpk_ar sdist checksum mismatch"
         }
     }
 }
@@ -108,12 +112,18 @@ val verifyUnityPySdist by tasks.registering {
 // package tree out of the sdist and leave its C++ sibling behind.
 // keep this version in step with the desktop installers. before
 // 1.10, UnityPy reads this game's Unity 6 Texture2D headers Wrong.
-val unpackUnityPy by tasks.registering(Copy::class) {
+val unpackUnityPy = tasks.register<Copy>("unpackUnityPy") {
     dependsOn(verifyUnityPySdist)
     from(provider { tarTree(resources.gzip(unityPySdist.singleFile)) }) {
         include("unitypy-$unityPyVersion/UnityPy/**")
         exclude("**/*.pyi")
         eachFile { path = path.substringAfter("unitypy-$unityPyVersion/") }
+    }
+    // UnityPy 1.25.4 imports tpk_ar at load. pure python, sdist only,
+    // and chaquopy won't install a PyPI sdist, so it comes in the same way
+    from(provider { tarTree(resources.gzip(tpkArSdist.singleFile)) }) {
+        include("tpk_ar-$tpkArVersion/tpk_ar/**")
+        eachFile { path = path.substringAfter("tpk_ar-$tpkArVersion/") }
     }
     includeEmptyDirs = false
     into(layout.buildDirectory.dir("generated/unityPyPython"))
@@ -124,7 +134,7 @@ tasks.matching { it.name.matches(Regex("merge(.*)PythonSources")) }.configureEac
     dependsOn(unpackUnityPy)
 }
 
-val generateJunWebAssets by tasks.registering(Copy::class) {
+val generateJunWebAssets = tasks.register<Copy>("generateJunWebAssets") {
     from(rootProject.projectDir.parentFile.resolve("webapp")) {
         exclude("api/**", "assets/**", "**/*.php", "lore_corpus.txt", "lore_index.bin", "lore_meta.json")
     }
@@ -136,7 +146,7 @@ val generateJunWebAssets by tasks.registering(Copy::class) {
 
 tasks.named("preBuild").configure { dependsOn(generateJunWebAssets) }
 
-val generateRecoverySource by tasks.registering(Copy::class) {
+val generateRecoverySource = tasks.register<Copy>("generateRecoverySource") {
     from(rootProject.projectDir.parentFile.resolve("tools/recover_assets.py"))
     into(layout.buildDirectory.dir("generated/recoveryPython"))
 }
@@ -146,15 +156,15 @@ tasks.matching { it.name.matches(Regex("merge(.*)PythonSources")) }.configureEac
     dependsOn(generateRecoverySource)
 }
 
-val sherpaAar by configurations.creating
+val sherpaAar = configurations.create("sherpaAar")
 configurations.named("implementation") { extendsFrom(sherpaAar) }
 
-val verifySherpaAar by tasks.registering {
+val verifySherpaAar = tasks.register("verifySherpaAar") {
     doLast {
         val file = sherpaAar.singleFile
         val digest = MessageDigest.getInstance("SHA-256").digest(file.readBytes())
             .joinToString("") { "%02x".format(it) }
-        check(digest == "03f9c4df965f21c71269365a7951a7f23b5696fddd093fa318c80d65550ab780") {
+        check(digest == "633c24321e06b1fe79feafa03ea16cbc0f8a286641e2da3559bac91bdb13bd96") {
             "sherpa-onnx AAR checksum mismatch"
         }
     }
@@ -162,7 +172,7 @@ val verifySherpaAar by tasks.registering {
 
 tasks.named("preBuild").configure { dependsOn(verifySherpaAar) }
 
-val verifyPinnedManifests by tasks.registering {
+val verifyPinnedManifests = tasks.register("verifyPinnedManifests") {
     doLast {
         val file = file("src/main/assets/manifests/litert_model.json")
         val manifest = JsonSlurper().parse(file) as Map<*, *>
@@ -199,39 +209,40 @@ tasks.register("verifyReleaseContents") {
 }
 
 dependencies {
-    sherpaAar("k2-fsa:sherpa-onnx:1.13.4@aar")
+    sherpaAar("k2-fsa:sherpa-onnx:1.13.8@aar")
     unityPySdist("u:unitypy:$unityPyVersion@tar.gz")
-    val composeBom = platform("androidx.compose:compose-bom:2025.03.01")
+    tpkArSdist("t:tpk_ar:$tpkArVersion@tar.gz")
+    val composeBom = platform("androidx.compose:compose-bom:2026.09.00")
     implementation(composeBom)
     androidTestImplementation(composeBom)
 
-    implementation("androidx.activity:activity-compose:1.10.1")
+    implementation("androidx.activity:activity-compose:1.13.0")
     implementation("androidx.compose.material3:material3")
     implementation("androidx.compose.ui:ui")
     implementation("androidx.compose.ui:ui-tooling-preview")
     debugImplementation("androidx.compose.ui:ui-tooling")
-    implementation("androidx.lifecycle:lifecycle-runtime-compose:2.8.7")
-    implementation("androidx.lifecycle:lifecycle-viewmodel-compose:2.8.7")
+    implementation("androidx.lifecycle:lifecycle-runtime-compose:2.11.0")
+    implementation("androidx.lifecycle:lifecycle-viewmodel-compose:2.11.0")
 
-    implementation("androidx.room:room-runtime:2.7.0")
-    implementation("androidx.room:room-ktx:2.7.0")
-    ksp("androidx.room:room-compiler:2.7.0")
-    implementation("androidx.work:work-runtime-ktx:2.10.0")
+    implementation("androidx.room:room-runtime:2.8.5")
+    implementation("androidx.room:room-ktx:2.8.5")
+    ksp("androidx.room:room-compiler:2.8.5")
+    implementation("androidx.work:work-runtime-ktx:2.12.0")
 
-    implementation("io.ktor:ktor-server-cio:3.1.2")
-    implementation("io.ktor:ktor-server-core:3.1.2")
-    implementation("io.ktor:ktor-server-content-negotiation:3.1.2")
-    implementation("io.ktor:ktor-serialization-kotlinx-json:3.1.2")
-    implementation("io.ktor:ktor-server-status-pages:3.1.2")
-    implementation("org.jetbrains.kotlinx:kotlinx-serialization-json:1.8.1")
-    implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.10.1")
+    implementation("io.ktor:ktor-server-cio:3.6.0")
+    implementation("io.ktor:ktor-server-core:3.6.0")
+    implementation("io.ktor:ktor-server-content-negotiation:3.6.0")
+    implementation("io.ktor:ktor-serialization-kotlinx-json:3.6.0")
+    implementation("io.ktor:ktor-server-status-pages:3.6.0")
+    implementation("org.jetbrains.kotlinx:kotlinx-serialization-json:1.12.0")
+    implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.11.0")
     implementation("com.google.ai.edge.litertlm:litertlm-android:0.18.1")
-    implementation("com.squareup.okhttp3:okhttp:4.12.0")
-    implementation("org.apache.commons:commons-compress:1.27.1")
+    implementation("com.squareup.okhttp3:okhttp:5.5.1")
+    implementation("org.apache.commons:commons-compress:1.28.0")
 
     testImplementation("junit:junit:4.13.2")
-    testImplementation("org.jetbrains.kotlinx:kotlinx-coroutines-test:1.10.1")
-    androidTestImplementation("androidx.test.ext:junit:1.2.1")
-    androidTestImplementation("androidx.test.espresso:espresso-core:3.6.1")
+    testImplementation("org.jetbrains.kotlinx:kotlinx-coroutines-test:1.11.0")
+    androidTestImplementation("androidx.test.ext:junit:1.3.0")
+    androidTestImplementation("androidx.test.espresso:espresso-core:3.7.0")
     androidTestImplementation("androidx.compose.ui:ui-test-junit4")
 }

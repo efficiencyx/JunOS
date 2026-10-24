@@ -1,6 +1,6 @@
 $ErrorActionPreference = "Stop"
-$version = "8.11.1"
-$expected = "f397b287023acdba1e9f6fc5ea72d22dd63669d59ed4a289a29b1a76eee151c6"
+$version = "9.8.2"
+$expected = "21bd5da2de49b642904077f38c0efdc7778e92b3ed0889392dca61b97e389607"
 $cacheRoot = Join-Path ([Environment]::GetFolderPath("LocalApplicationData")) "JunOS\gradle"
 $archive = Join-Path $cacheRoot "gradle-$version-bin.zip"
 $install = Join-Path $cacheRoot "gradle-$version"

@@ -75,7 +75,18 @@ Any server that does not meet ALL of the above is PUBLIC.
 Please respect the wishes of the original creator.
 
 ================================================================================
-3. Vendored third-party libraries
+3. Game lore dataset
+================================================================================
+
+tools/lore_dataset.jsonl and the webapp/lore_corpus.txt built from it are
+question and answer pairs about the story, setting and characters of the game,
+written from the game's text. They are included with the original creator's
+permission. They are not Game Assets under section 1, and they are not covered
+by the Apache License 2.0: the story, setting and characters they describe
+remain the property of the original creator.
+
+================================================================================
+4. Vendored third-party libraries
 ================================================================================
 
 webapp/vendor/ contains unmodified copies of libraries that were previously
@@ -86,8 +97,8 @@ remains under its own license, NOT the Apache License 2.0 of this repository:
   -------------------------  -------------------------  ----------------------
   pixi.min.js                pixi.js 6.5.10             MIT
   cubism4.min.js             pixi-live2d-display 0.4.0  MIT
-  marked.min.js              marked 12.0.2              MIT
-  purify.min.js              DOMPurify 3.0.11           Apache-2.0 / MPL-2.0
+  marked.umd.js              marked 18.1.1              MIT
+  purify.min.js              DOMPurify 3.4.17           Apache-2.0 / MPL-2.0
   live2dcubismcore.min.js    Live2D Cubism Core         Live2D Proprietary
                                                         Software License
 
@@ -96,3 +107,17 @@ License Agreement, which permits bundling it with an application. It is NOT
 covered by the Apache License 2.0 and may not be relicensed. By using this software
 you must also comply with that agreement:
 https://www.live2d.com/eula/live2d-proprietary-software-license-agreement_en.html
+
+================================================================================
+5. Python packages bundled in the Android app
+================================================================================
+
+The Android build unpacks these packages from their PyPI source archives, pinned
+by SHA-256 in android/app/build.gradle.kts, and ships them unmodified inside the
+APK. Each remains under its own license, NOT the Apache License 2.0 of this
+repository:
+
+  Package                    Version                    License
+  -------------------------  -------------------------  ----------------------
+  UnityPy                    1.25.4                     MIT
+  tpk_ar                     0.2.4                      MIT

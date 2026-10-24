@@ -1,4 +1,4 @@
-FROM nginx:1.30.4-alpine
+FROM nginx:1.30.6-alpine
 
 # curl for the healthcheck. openssl makes the local CA and
 # her cert

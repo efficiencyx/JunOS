@@ -137,6 +137,39 @@ if ($action === 'transcribe') {
     sidecar_relay($res);
 }
 
+if ($action === 'take') {
+    require_post();
+    $body = read_json_body(64 * 1024);
+    $key = crypt_key();
+    $hash = (string)($body['song'] ?? '');
+    if ($key === null || !preg_match('/^[0-9a-f]{64}$/', $hash)) fail(400, 'invalid_request');
+    $song = hash_hmac('sha256', $hash, $key);
+    $total = max(0, (int)($body['total'] ?? 0));
+    $matched = max(0, min($total, (int)($body['matched'] ?? 0)));
+    if (!$total) fail(400, 'invalid_request');
+    $score = (int)round($matched / $total * 100);
+    $offset = isset($body['offset_ms']) ? max(-5000, min(5000, (int)$body['offset_ms'])) : null;
+    $lines = [];
+    foreach (array_slice(is_array($body['lines'] ?? null) ? $body['lines'] : [], 0, 400) as $line) {
+        if (!is_array($line)) continue;
+        $lines[] = ['i' => (int)($line['i'] ?? 0), 'matched' => (int)($line['matched'] ?? 0), 'total' => (int)($line['total'] ?? 0),
+            'offset_ms' => isset($line['offset_ms']) ? max(-5000, min(5000, (int)$line['offset_ms'])) : null];
+    }
+    $mode = in_array($body['mode'] ?? '', ['solo', 'duo', 'split'], true) ? $body['mode'] : 'solo';
+
+    $db = db();
+    $st = $db->prepare('SELECT score, at FROM karaoke_takes WHERE user_id = ? AND song = ? ORDER BY id');
+    $st->execute([(int)$user['id'], $song]);
+    $before = $st->fetchAll();
+    $best = null;
+    foreach ($before as $row) if ($best === null || (int)$row['score'] > $best['score']) $best = ['score' => (int)$row['score'], 'at' => (int)$row['at']];
+    $last = $before ? ['score' => (int)end($before)['score'], 'at' => (int)end($before)['at']] : null;
+
+    $db->prepare('INSERT INTO karaoke_takes (user_id, song, mode, score, matched, total, offset_ms, lines, at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)')
+       ->execute([(int)$user['id'], $song, $mode, $score, $matched, $total, $offset, enc(json_encode($lines)), time()]);
+    json_out(['score' => $score, 'takes' => count($before), 'best' => $best, 'last' => $last]);
+}
+
 if ($action === 'lyrics') {
     $title = trim((string)($_GET['title'] ?? ''));
     $artist = trim((string)($_GET['artist'] ?? ''));

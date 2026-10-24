@@ -1,10 +1,10 @@
 import { abortFn, currentConversationId } from './session.js?v=1';
-import { sendMessage } from './chat.js?v=21';
-import { cancelIdleNudge } from './consolidation.js?v=93';
+import { sendMessage } from './chat.js?v=25';
+import { cancelIdleNudge } from './consolidation.js?v=97';
 import { closeSettingsBtn, devNoIdleChk, drawerBackdrop, modelSelect, openSettingsBtn, reasoningSelect, sendBtn, siteVolumeInput, thinkChk, ttsChk, ttsSpeedInput, voiceChk, voiceSilenceInput } from './dom.js?v=75';
 import { logAction } from './logging.js?v=75';
 import { loadMood, setMoodEditingEnabled } from './mood.js?v=84';
-import { loadConversation, setSidebarOpen } from './sidebar.js?v=93';
+import { loadConversation, setSidebarOpen } from './sidebar.js?v=97';
 import * as Names from '../core/names.js?v=1';
 import * as Prefs from '../core/prefs.js?v=6';
 import * as ui from '../core/ui.js?v=1';
@@ -136,7 +136,14 @@ const memoryCount = document.getElementById('memoryCount');
 // the graph only loads once somebody actually opens this panel
 let MemoryGraph = null;
 async function loadMemories() {
-  MemoryGraph = MemoryGraph || await import('./memory-graph.js?v=1');
+  if (!MemoryGraph) {
+    MemoryGraph = await import('./memory-graph.js?v=3');
+    MemoryGraph.onOpenChat((conv, messageId) => {
+      ui.toggleDrawer(false);
+      setSidebarOpen(false);
+      loadConversation(conv, messageId ? { messageId } : null);
+    });
+  }
   MemoryGraph.setActive(true);
   MemoryGraph.setStatus('Loading…');
   try {

@@ -252,6 +252,30 @@
   line-height: 1.5;
 }
 .memory-reader-body p { margin: 0; white-space: pre-wrap; }
+.memory-reader-body .memory-source {
+  margin-top: var(--space-3);
+  color: var(--muted);
+  font-size: 12px;
+}
+.memory-source .link {
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  background: none;
+  color: var(--accent-2);
+  font: inherit;
+  text-align: left;
+  text-decoration: underline;
+}
+.memory-source .link:active { transform: none; }
+.memory-revisions {
+  margin-top: var(--space-3);
+  color: var(--muted);
+  font-size: 12px;
+}
+.memory-revisions summary { cursor: pointer; }
+.memory-reader-body .memory-revisions p { margin-top: var(--space-2); color: var(--fg-2); }
+.memory-reader-body .memory-revisions .memory-source { margin-top: 2px; color: var(--muted); }
 .memory-reader-body ul {
   display: grid;
   gap: var(--space-2);

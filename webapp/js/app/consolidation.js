@@ -1,8 +1,8 @@
 import { abortFn, currentConversationId } from './session.js?v=1';
-import { runChat } from './chat.js?v=21';
+import { runChat } from './chat.js?v=25';
 import { chatInput, consolidationActions, consolidationBanner, consolidationSub, consolidationTitle, devNoIdleChk, fleeEtaEl, fleeOverlay, fleeReasonEl, interruptPassBtn, sendBtn, sitWithHerBtn, voiceChk } from './dom.js?v=75';
-import * as Feed from './consolidation-feed.js?v=2';
-import * as Cabinet from './cabinet.js?v=2';
+import * as Feed from './consolidation-feed.js?v=3';
+import * as Cabinet from './cabinet.js?v=4';
 import { showFaceBubble } from './face-bubble.js?v=84';
 import { logAction } from './logging.js?v=75';
 import { escapeHtml, formatElapsed } from '../core/util.js?v=1';
@@ -297,7 +297,7 @@ export function setConsolidating(locked, status) {
   consolidationProgress = null;
   consolidationStartedAt = 0;
   if (consolidationActions) consolidationActions.hidden = true;
-  Feed.stop();
+  Feed.drain(status && status.last && status.last.status);
   if (wasLocked) showConsolidationOutcome(status && status.last);
   else if (!consolidationOutcomeTimer) hideConsolidationBanner();
 }

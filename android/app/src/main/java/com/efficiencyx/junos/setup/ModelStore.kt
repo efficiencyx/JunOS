@@ -141,9 +141,9 @@ class ModelStore(private val context: Context) {
             check(response.isSuccessful || response.code == 206) { "Download failed: HTTP ${response.code}" }
             val append = existing > 0 && response.code == 206
             val start = if (append) existing else 0L
-            val total = response.body?.contentLength()?.takeIf { it >= 0 }?.plus(start) ?: expectedSize
+            val total = response.body.contentLength().takeIf { it >= 0 }?.plus(start) ?: expectedSize
             FileOutputStream(partial, append).use { output ->
-                val input = response.body?.byteStream() ?: error("Download returned no body")
+                val input = response.body.byteStream()
                 val buffer = ByteArray(256 * 1024)
                 var written = start
                 while (true) {

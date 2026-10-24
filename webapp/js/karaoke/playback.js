@@ -1,7 +1,7 @@
 import * as Live2D from '../live2d/live2d.js?v=84';
-import { $, active, hooks } from './karaoke.js?v=18';
-import { mode, setStatus, track } from './setup.js?v=11';
-import { startRecording, stopRecording } from './recorder.js?v=11';
+import { $, active, hooks } from './karaoke.js?v=21';
+import { mode, setStatus, track } from './setup.js?v=14';
+import { startRecording, stopRecording } from './recorder.js?v=14';
 import { clamp } from '../core/util.js?v=1';
 
 // queue both stems (the split vocal and backing tracks) 0.1
@@ -185,19 +185,7 @@ export function start(nextSoloPhase = 'you') {
     renderLyrics();
   }
 
-  instrSource = audioCtx.createBufferSource();
-  instrSource.buffer = track.instrBuf;
-  instrSource.connect(masterGain);
-
-  guideGain = audioCtx.createGain();
-  guideSource = audioCtx.createBufferSource();
-  guideSource.buffer = track.guideBuf;
-  guideSource.connect(guideGain);
-  guideGain.connect(masterGain);
-  // tap after the gain, lipsync follows only the vocal you actually
-  // hear
-  guideGain.connect(analyser);
-
+  makeSources();
   startTime = audioCtx.currentTime + START_LEAD;
   scheduleGuideAutomation();
   instrSource.start(startTime);
@@ -218,6 +206,45 @@ export function start(nextSoloPhase = 'you') {
   setStatus(mode === 'solo'
     ? soloPhase === 'you' ? 'Your solo… Jun goes next' : "Jun's solo…"
     : 'Singing… tap Stop when done');
+}
+
+function makeSources() {
+  instrSource = audioCtx.createBufferSource();
+  instrSource.buffer = track.instrBuf;
+  instrSource.connect(masterGain);
+
+  guideGain = audioCtx.createGain();
+  guideSource = audioCtx.createBufferSource();
+  guideSource.buffer = track.guideBuf;
+  guideSource.connect(guideGain);
+  guideGain.connect(masterGain);
+  // tap after the gain, lipsync follows only the vocal you actually
+  // hear
+  guideGain.connect(analyser);
+}
+
+// one line again with the original vocal up, nothing recorded
+export function practice(sectionIndex) {
+  const sec = track && track.sections[sectionIndex];
+  if (!sec) return;
+  stopPlayback();
+  lastOwnerKey = '';
+  makeSources();
+  guideGain.gain.value = junVolume;
+  const from = Math.max(0, sec.start - 1.5);
+  const length = Math.min(track.duration, sec.end + 0.5) - from;
+  const at = audioCtx.currentTime + START_LEAD;
+  startTime = at - from;
+  instrSource.start(at, from, length);
+  guideSource.start(at, from, length);
+  instrSource.onended = () => {
+    if (!active) return;
+    stopPlayback();
+    setStatus('');
+  };
+  if (hooks.onPlaybackChange) hooks.onPlaybackChange(true);
+  if (!rafId) rafId = requestAnimationFrame(loop);
+  setStatus('Practice, this one is not scored');
 }
 
 export function stopPlayback() {

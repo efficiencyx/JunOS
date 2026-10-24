@@ -20,7 +20,13 @@ data class MemoryNote(
     val links: List<String>,
     val created: Long,
     val updated: Long,
+    val source: NoteSource? = null,
+    val revisions: List<NoteSource> = emptyList(),
 )
+
+// lib/memory.php's meta source. no memory pass here, so revisions stay empty
+@Serializable
+data class NoteSource(val kind: String, val conv: Long? = null, val msg: Long? = null)
 
 @Serializable
 data class JournalEntry(val date: String, val text: String)
@@ -39,7 +45,7 @@ data class MemoryCategory(val slug: String, val count: Int, val updated: Long)
 data class JournalPayload(val entries: List<JournalEntry>)
 
 @Serializable
-private data class MetaEntry(val created: Long, val updated: Long)
+private data class MetaEntry(val created: Long, val updated: Long, val source: NoteSource? = null)
 
 class MemoryStore(context: Context) {
     private val root = File(context.filesDir, "memory/user-1").also { it.mkdirs() }
@@ -51,7 +57,7 @@ class MemoryStore(context: Context) {
         mutex.withLock { snapshotUnlocked() }
     }
 
-    suspend fun add(category: String, memory: String): MemoryNote = withContext(Dispatchers.IO) {
+    suspend fun add(category: String, memory: String, source: NoteSource? = null): MemoryNote = withContext(Dispatchers.IO) {
         mutex.withLock {
             val text = normalize(memory)
             require(text.isNotBlank() && text.length <= 500) { "invalid_memory" }
@@ -61,10 +67,10 @@ class MemoryStore(context: Context) {
             val ids = current.mapTo(mutableSetOf()) { it.id }
             val id = generateId(ids)
             val now = System.currentTimeMillis() / 1000
-            val note = MemoryNote(id, slug, text, links(text), now, now)
+            val note = MemoryNote(id, slug, text, links(text), now, now, source)
             writeCategory(slug, current.filter { it.category == slug } + note)
             val meta = loadMeta().toMutableMap()
-            meta[id] = MetaEntry(now, now)
+            meta[id] = MetaEntry(now, now, source)
             writeMeta(meta)
             note
         }
@@ -129,7 +135,7 @@ class MemoryStore(context: Context) {
             val match = NOTE_LINE.matchEntire(line.trim()) ?: return@mapNotNull null
             val id = match.groupValues[2]
             val stamp = meta[id] ?: MetaEntry(0, 0)
-            MemoryNote(id, slug, match.groupValues[1].trim(), links(match.groupValues[1]), stamp.created, stamp.updated)
+            MemoryNote(id, slug, match.groupValues[1].trim(), links(match.groupValues[1]), stamp.created, stamp.updated, stamp.source)
         }
     }
 

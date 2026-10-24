@@ -40,18 +40,6 @@ cleanup() {
 }
 trap cleanup EXIT INT TERM
 
-# lore_corpus.txt is gitignored, a fresh checkout has none and
-# lore_retrieve() quietly returns nothing. build it so the world
-# facts block actually shows up in the prompt below. the public
-# tree ships no lore_dataset.jsonl at all, there the lore check
-# is skipped instead of failing the whole run.
-HAVE_LORE=0
-if [ -f tools/lore_dataset.jsonl ]; then
-	php tools/build_lore_index.php >/dev/null
-	HAVE_LORE=1
-fi
-export HAVE_LORE
-
 FAKE_OLLAMA_LOG="$work/ollama-requests.jsonl" python3 .github/scripts/fake-ollama.py "$OLLAMA_PORT" &
 fake=$!
 
@@ -178,11 +166,9 @@ assert msgs[-1]['role'] == 'tool', 'the reply round did not carry the tool resul
 user = [m for m in msgs if m['role'] == 'user'][-1]['content']
 marker = '\n\n# Live context for THIS reply'
 assert user.startswith(question + marker), 'his words must come first, then the live context'
-if os.environ['HAVE_LORE'] == '1':
-    assert '## World facts (canon)' in user, 'lore never made it into the live context'
+assert '## World facts (canon)' in user, 'lore never made it into the live context'
 assert user.rstrip('>').rsplit('<think:', 1)[-1] in ('low', 'med', 'high') and user.endswith('>'), 'the <think:LEVEL> budget token is not the last thing in the user turn'
-lore = 'lore attached' if os.environ['HAVE_LORE'] == '1' else 'lore skipped (no dataset)'
-print(f'  ok   system prefix is byte-identical, question before live context, {lore}, budget token last')
+print('  ok   system prefix is byte-identical, question before live context, lore attached, budget token last')
 PY
 
 curl -sS -b "$cookies" "$BASE/api/conversations.php?action=messages&id=$convo" >"$work/body"

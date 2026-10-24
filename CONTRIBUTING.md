@@ -46,6 +46,7 @@ Some choices that look incidental are required for correctness:
 - Keep `webapp/js` as plain, dependency-free ES modules. If a module cache-buster changes, update every import of that module.
 - Make voice and karaoke features degrade gracefully when their sidecars are unavailable.
 - Do not add embeddings to lore or memory retrieval; the repository intentionally uses keyword/IDF scoring, and word matching over decrypted chat history.
+- After editing `tools/lore_dataset.jsonl`, run `php tools/build_lore_index.php` and commit the rebuilt `webapp/lore_corpus.txt` with it. Retrieval only reads the corpus, and CI fails when the two don't match.
 - Do not upload client-side mod assets to the server. Only item metadata may leave the browser.
 - Preserve the optional Compose profiles and account for Docker, bare-metal Windows, and Colab when a shared path changes.
 

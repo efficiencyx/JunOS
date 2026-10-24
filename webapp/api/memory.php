@@ -10,6 +10,15 @@ try {
     if ($method === 'GET') {
         $categories = [];
         $notes = [];
+        $titles = [];
+        $st = db()->prepare('SELECT id, title FROM conversations WHERE user_id=?');
+        $st->execute([$userId]);
+        foreach ($st->fetchAll() as $row) $titles[(int)$row['id']] = (string)dec($row['title'] ?? null);
+        $withTitle = function (?array $ref) use ($titles): ?array {
+            if (!$ref || !isset($ref['conv'])) return $ref;
+            $ref['chat'] = isset($titles[$ref['conv']]) ? ['title' => $titles[$ref['conv']] ?: null] : null;
+            return $ref;
+        };
         foreach (memory_notes_load($userId) as $slug => $data) {
             $updated = 0;
             foreach ($data['notes'] as $note) {
@@ -20,6 +29,8 @@ try {
                     'text' => $note['text'],
                     'links' => $note['links'],
                     'created' => $note['created'],
+                    'source' => $withTitle($note['source']),
+                    'revisions' => array_map($withTitle, $note['revisions']),
                 ];
             }
             $categories[] = [
@@ -37,7 +48,8 @@ try {
 
     if ($method === 'POST') {
         $body = read_json_body(8 * 1024);
-        $res = memory_note_add($userId, (string)($body['category'] ?? 'general'), (string)($body['memory'] ?? ''));
+        $kind = ($body['source'] ?? '') === 'karaoke' ? 'karaoke' : 'manual';
+        $res = memory_note_add($userId, (string)($body['category'] ?? 'general'), (string)($body['memory'] ?? ''), ['kind' => $kind]);
         if (isset($res['error'])) fail(400, $res['error']);
         json_out($res);
     }

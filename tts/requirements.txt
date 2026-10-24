@@ -7,7 +7,7 @@
 # interpreter in that window on purpose, the docker image is
 # 3.11.
 kokoro==0.9.4
-pocket-tts==2.1.0
+pocket-tts==4.0.1
 # STT. Runs on CTranslate2 (not torch) and decodes audio via
 # PyAV, whose wheel bundles ffmpeg - so no ffmpeg package is
 # needed in the image.
@@ -21,9 +21,9 @@ faster-whisper==1.2.1
 # cu124 and rocm indexes carry different version numbers than
 # PyPI does, so no single pinned number exists on all three. the
 # cap at least stops a new major landing on someone mid-install.
-torch>=2.5,<2.14
-fastapi==0.141.1
-uvicorn[standard]==0.52.1
+torch>=2.5,<2.15
+fastapi==0.162.0
+uvicorn[standard]==0.54.0
 soundfile==0.14.0
 # 2.2.x is the last numpy line with 3.10 wheels, and install.ps1
 # still accepts a 3.10 interpreter. newer numpy would build from

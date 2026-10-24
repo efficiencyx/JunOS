@@ -35,6 +35,7 @@ import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.booleanOrNull
 import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.doubleOrNull
+import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.longOrNull
 import kotlinx.serialization.json.put
 
@@ -52,7 +53,7 @@ class LiteRtEngine(
     override val state: StateFlow<EngineState> = _state.asStateFlow()
     override val lastStats: StateFlow<JsonObject?> = _lastStats.asStateFlow()
 
-    override suspend fun ensureLoaded() = loadMutex.withLock {
+    override suspend fun ensureLoaded(): Unit = loadMutex.withLock {
         if (engine != null) return
         check(models.litertReady()) { "Jun LiteRT model is not installed" }
         _state.value = EngineState.Loading(0f)
@@ -186,9 +187,14 @@ class LiteRtEngine(
 }
 
 private class DeclaredTool(private val schema: String) : OpenApiTool {
-    override fun getToolDescriptionJsonString(): String = schema
+    override fun getToolDescriptionJsonString(): String = toolDescription(schema)
     override fun execute(paramsJsonString: String): String = "{}"
 }
+
+// ToolManager adds the {"type":"function"} wrapper ITSELF. wrap it twice
+// and createConversation dies with Failed to parse field "name"
+internal fun toolDescription(schema: String): String =
+    Json.parseToJsonElement(schema).jsonObject["function"]?.toString() ?: schema
 
 // v8 trained on the real round trip, the model turn carrying the
 // call and a tool turn carrying the result, not v7's "(Tool

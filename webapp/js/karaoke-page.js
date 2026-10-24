@@ -1,7 +1,7 @@
 import * as Auth from './core/auth.js?v=1';
 import { api } from './core/api.js?v=1';
 import * as Prefs from './core/prefs.js?v=6';
-import * as Karaoke from './karaoke/karaoke.js?v=18';
+import * as Karaoke from './karaoke/karaoke.js?v=21';
 import * as Live2D from './live2d/live2d.js?v=84';
 import * as Outfit from './outfit/outfit.js?v=84';
 import * as Scene from './trip/scene.js?v=1';

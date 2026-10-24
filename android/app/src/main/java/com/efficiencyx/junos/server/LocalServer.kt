@@ -13,6 +13,7 @@ import com.efficiencyx.junos.data.WardrobeStateEntity
 import com.efficiencyx.junos.inference.ChatEngine
 import com.efficiencyx.junos.inference.ChatRequest
 import com.efficiencyx.junos.memory.MemoryStore
+import com.efficiencyx.junos.memory.NoteSource
 import com.efficiencyx.junos.setup.AssetRecovery
 import com.efficiencyx.junos.voice.TtsRequest
 import com.efficiencyx.junos.voice.VoiceEngine
@@ -51,11 +52,13 @@ import kotlinx.serialization.json.encodeToJsonElement
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonElement
+import kotlinx.serialization.json.JsonNull
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.buildJsonArray
 import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.intOrNull
+import kotlinx.serialization.json.jsonArray
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
 import kotlinx.serialization.json.longOrNull
@@ -218,14 +221,22 @@ class LocalServer(
 
             get("/api/memory.php") {
                 if (!call.authorized()) return@get
-                call.respondText(json.encodeToString(memory.snapshot()), ContentType.Application.Json)
+                val titles = database.dao().conversations(Int.MAX_VALUE).associate { it.id to it.title }
+                val snapshot = json.encodeToJsonElement(memory.snapshot()).jsonObject
+                val notes = snapshot["notes"]!!.jsonArray.map { note ->
+                    val source = (note.jsonObject["source"] as? JsonObject) ?: return@map note
+                    val conv = source["conv"]?.jsonPrimitive?.longOrNull ?: return@map note
+                    val chat = if (conv in titles) buildJsonObject { titles[conv]?.let { put("title", it) } } else JsonNull
+                    JsonObject(note.jsonObject + ("source" to JsonObject(source + ("chat" to chat))))
+                }
+                call.json(JsonObject(snapshot + ("notes" to JsonArray(notes))))
             }
             post("/api/memory.php") {
                 if (!call.authorized()) return@post
                 val body = call.jsonBody(8 * 1024) ?: return@post
                 val text = body["memory"]?.jsonPrimitive?.content.orEmpty()
                 val category = body["category"]?.jsonPrimitive?.content ?: "events"
-                val note = runCatching { memory.add(category, text) }
+                val note = runCatching { memory.add(category, text, NoteSource("manual")) }
                     .getOrElse { return@post call.error(HttpStatusCode.BadRequest, "invalid_memory") }
                 call.respondText(json.encodeToString(note), ContentType.Application.Json)
             }
@@ -316,8 +327,20 @@ class LocalServer(
         when (action) {
             "list" -> {
                 if (!call.requireMethod(HttpMethod.Get)) return
-                call.json(buildJsonArray { dao.conversations().forEach { value -> add(buildJsonObject {
+                val before = call.request.queryParameters["before"]?.toLongOrNull() ?: 0
+                val page = if (before > 0) dao.conversationsBefore(before, call.request.queryParameters["before_id"]?.toLongOrNull() ?: 0)
+                else dao.conversations()
+                call.json(buildJsonArray { page.forEach { value -> add(buildJsonObject {
                     put("id", value.id); value.title?.let { put("title", it) }; put("created_at", value.createdAt); put("updated_at", value.updatedAt)
+                }) } })
+            }
+            "search" -> {
+                if (!call.requireMethod(HttpMethod.Get)) return
+                val query = call.request.queryParameters["q"].orEmpty().take(120).trim().replace(Regex("\\s+"), " ")
+                val terms = Regex("[\\p{L}\\p{N}]{2,}").findAll(query.lowercase()).map { it.value }.distinct().toList()
+                if (query.length < 2 || terms.isEmpty()) return call.json(JsonArray(emptyList()))
+                call.json(buildJsonArray { searchConversations(query, terms).forEach { (conversation, snippet) -> add(buildJsonObject {
+                    put("id", conversation.id); conversation.title?.let { put("title", it) }; put("updated_at", conversation.updatedAt); put("snippet", snippet)
                 }) } })
             }
             "create" -> {
@@ -328,7 +351,7 @@ class LocalServer(
                 if (!call.requireMethod(HttpMethod.Get)) return
                 if (id == null || dao.conversation(id) == null) return call.error(HttpStatusCode.NotFound, "not_found")
                 call.json(buildJsonArray { dao.messages(id).forEach { add(buildJsonObject {
-                    put("role", it.role); put("content", it.content); put("created_at", it.createdAt)
+                    put("id", it.id); put("role", it.role); put("content", it.content); put("created_at", it.createdAt)
                 }) } })
             }
             "rename" -> {
@@ -361,6 +384,30 @@ class LocalServer(
             }
             else -> call.error(HttpStatusCode.BadRequest, "invalid_action")
         }
+    }
+
+    // conversations.php search, same matching. the LIKE only narrows it down
+    private suspend fun searchConversations(query: String, terms: List<String>): List<Pair<ConversationEntity, String>> {
+        val dao = database.dao()
+        val patterns = (listOf(query) + terms).map { Regex("(?<![\\p{L}\\p{N}])" + Regex.escape(it), RegexOption.IGNORE_CASE) }
+        fun matchAt(text: String): Int? {
+            patterns[0].find(text)?.let { return it.range.first }
+            return patterns.drop(1).map { it.find(text)?.range?.first ?: return null }.min()
+        }
+        val conversations = dao.conversations(Int.MAX_VALUE)
+        val hits = conversations.filter { it.title != null && matchAt(it.title) != null }.associate { it.id to "" }.toMutableMap()
+        var found = 0
+        for (message in dao.searchMessages(terms.maxBy { it.length }, 5_000)) {
+            if (found >= 50) break
+            if (message.role != "user" && message.role != "assistant" || hits[message.conversationId]?.isNotEmpty() == true) continue
+            val text = message.content.replace(Regex("\\[\\s*A(?:CTIONS?)?\\s*:[^\\]]*]", RegexOption.IGNORE_CASE), "").replace(Regex("\\s+"), " ").trim()
+            val at = matchAt(text) ?: continue
+            val start = (at - 46).coerceIn(0, maxOf(0, text.length - 138))
+            hits[message.conversationId] = (if (start > 0) "\u2026" else "") + text.substring(start, minOf(text.length, start + 138)) +
+                (if (start + 138 < text.length) "\u2026" else "")
+            found++
+        }
+        return conversations.filter { it.id in hits }.take(50).map { it to hits.getValue(it.id) }
     }
 
     private suspend fun io.ktor.server.routing.RoutingContext.relationship() {

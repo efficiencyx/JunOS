@@ -1,8 +1,8 @@
 import { currentConversationId, messages, setCurrentConversationId } from './session.js?v=1';
 import { appendMsg, renderMarkdown, updateEmptyState } from './messages.js?v=11';
-import { discardActiveResponse } from './chat.js?v=21';
+import { discardActiveResponse } from './chat.js?v=25';
 import { setConversationTitle } from './face-bubble.js?v=84';
-import { IDLE_AFTER_JOIN_MS, cancelAutoReset, reportActivity, resetIdleNudge, scheduleIdleNudge } from './consolidation.js?v=93';
+import { IDLE_AFTER_JOIN_MS, cancelAutoReset, reportActivity, resetIdleNudge, scheduleIdleNudge } from './consolidation.js?v=97';
 import { conversationSidebar, messagesEl, mobileConversationTitle, mobileMenuBtn, narrowSidebarQuery, reloadPromptBtn, resetLive2DBtn, sidebarBackdrop, sidebarBackground } from './dom.js?v=75';
 import { announceMobileReply, faceBubble, hideFaceBubble, latestAssistantReply, scheduleFaceBubbleHide, setLatestAssistantReply, showFaceBubble } from './face-bubble.js?v=84';
 import { logAction } from './logging.js?v=75';
@@ -10,54 +10,163 @@ import { makeStreamBuffer } from './stream-filters.js?v=85';
 import { escapeHtml, phoneMode } from '../core/util.js?v=1';
 import * as Names from '../core/names.js?v=1';
 import * as ui from '../core/ui.js?v=1';
-import * as History from './history.js?v=1';
+import * as History from './history.js?v=2';
 import * as TTS from '../voice/tts.js?v=84';
 import * as Live2D from '../live2d/live2d.js?v=84';
 
 const conversationTitles = new Map();
 let sidebarRefreshGeneration = 0;
 let conversationLoadGeneration = 0;
+let shownConversations = 0;
 export async function refreshSidebar() {
   const ul = document.getElementById('conversationList');
   if (!ul) return;
   const refreshGeneration = ++sidebarRefreshGeneration;
-  let convs;
-  try { convs = await History.list(); } catch (e) { return; }
+  const convs = [];
+  try {
+    let page;
+    do {
+      page = await History.list(convs[convs.length - 1]);
+      convs.push(...page);
+    } while (page.length >= History.PAGE && convs.length < shownConversations);
+  } catch (e) { return; }
   if (refreshGeneration !== sidebarRefreshGeneration) return;
   ul.innerHTML = '';
   conversationTitles.clear();
-  for (const c of convs) {
-    const li = document.createElement('li');
-    li.className = 'conv-item' + (c.id === currentConversationId ? ' active' : '');
-    li.dataset.id = String(c.id);
-    const title = c.title || 'New conversation';
-    conversationTitles.set(c.id, title);
-    li.innerHTML = `<button class="conv-open" type="button"><span class="conv-title">${escapeHtml(title)}</span></button>`
-      + `<button class="conv-rename" type="button" title="Rename conversation" aria-label="Rename conversation">`
-      + `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M17 3a2.83 2.83 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z"/><path d="M15 5l4 4"/></svg>`
-      + `</button>`
-      + `<button class="conv-delete" type="button" title="Delete conversation" aria-label="Delete conversation">`
-      + `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/><path d="M10 11v6"/><path d="M14 11v6"/><path d="M9 6V4a2 2 0 0 1 2-2h2a2 2 0 0 1 2 2v2"/></svg>`
-      + `</button>`;
-    const openBtn = li.querySelector('.conv-open');
-    if (c.id === currentConversationId) openBtn.setAttribute('aria-current', 'page');
-    openBtn.addEventListener('click', () => {
-      setSidebarOpen(false);
-      loadConversation(c.id);
-    });
-    const renameBtn = li.querySelector('.conv-rename');
-    renameBtn.addEventListener('click', (e) => {
-      e.stopPropagation();
-      startRename(li, c.id);
-    });
-    const delBtn = li.querySelector('.conv-delete');
-    delBtn.addEventListener('click', (e) => {
-      e.stopPropagation();
-      deleteConversation(c.id, title);
-    });
-    ul.appendChild(li);
-  }
+  for (const c of convs) ul.appendChild(conversationItem(c));
+  shownConversations = convs.length;
+  if (convs.length % History.PAGE === 0 && convs.length) ul.appendChild(loadOlderItem(ul, convs[convs.length - 1]));
   if (currentConversationId != null) setConversationTitle(conversationTitles.get(currentConversationId));
+}
+
+function loadOlderItem(ul, last) {
+  const li = document.createElement('li');
+  li.className = 'conv-more';
+  li.innerHTML = '<button class="sidebar-item" type="button"><span>Load older</span></button>';
+  const btn = li.querySelector('button');
+  btn.addEventListener('click', async () => {
+    btn.disabled = true;
+    const refreshGeneration = sidebarRefreshGeneration;
+    let page;
+    try { page = await History.list(last); } catch (e) {
+      ui.toast('Failed to load older chats: ' + e.message, 'error');
+      btn.disabled = false;
+      return;
+    }
+    if (refreshGeneration !== sidebarRefreshGeneration) return;
+    li.remove();
+    for (const c of page) ul.appendChild(conversationItem(c));
+    shownConversations += page.length;
+    if (page.length >= History.PAGE) ul.appendChild(loadOlderItem(ul, page[page.length - 1]));
+  });
+  return li;
+}
+
+function conversationItem(c) {
+  const li = document.createElement('li');
+  li.className = 'conv-item' + (c.id === currentConversationId ? ' active' : '');
+  li.dataset.id = String(c.id);
+  const title = c.title || 'New conversation';
+  conversationTitles.set(c.id, title);
+  li.innerHTML = `<button class="conv-open" type="button"><span class="conv-title">${escapeHtml(title)}</span></button>`
+    + `<button class="conv-rename" type="button" title="Rename conversation" aria-label="Rename conversation">`
+    + `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M17 3a2.83 2.83 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z"/><path d="M15 5l4 4"/></svg>`
+    + `</button>`
+    + `<button class="conv-delete" type="button" title="Delete conversation" aria-label="Delete conversation">`
+    + `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/><path d="M10 11v6"/><path d="M14 11v6"/><path d="M9 6V4a2 2 0 0 1 2-2h2a2 2 0 0 1 2 2v2"/></svg>`
+    + `</button>`;
+  const openBtn = li.querySelector('.conv-open');
+  if (c.id === currentConversationId) openBtn.setAttribute('aria-current', 'page');
+  openBtn.addEventListener('click', () => {
+    setSidebarOpen(false);
+    loadConversation(c.id);
+  });
+  li.querySelector('.conv-rename').addEventListener('click', (e) => {
+    e.stopPropagation();
+    startRename(li, c.id);
+  });
+  li.querySelector('.conv-delete').addEventListener('click', (e) => {
+    e.stopPropagation();
+    deleteConversation(c.id, title);
+  });
+  return li;
+}
+
+const searchBtn = document.getElementById('searchChatsBtn');
+const searchInput = document.getElementById('chatSearch');
+const searchResults = document.getElementById('chatSearchResults');
+let searchTimer = 0;
+let searchGeneration = 0;
+
+function searchTerms(q) {
+  return [...new Set((q.toLowerCase().match(/[\p{L}\p{N}]{2,}/gu) || []))];
+}
+
+function markTerms(text, terms) {
+  if (!terms.length) return escapeHtml(text);
+  const re = new RegExp(`(${terms.join('|')})`, 'giu');
+  return text.split(re).map((part, i) => i % 2 ? `<mark>${escapeHtml(part)}</mark>` : escapeHtml(part)).join('');
+}
+
+function setSearching(on) {
+  searchInput.hidden = !on;
+  searchResults.hidden = !on;
+  document.getElementById('conversationList').hidden = on;
+  document.getElementById('recentLabel').hidden = on;
+  if (!on) {
+    searchInput.value = '';
+    searchResults.innerHTML = '';
+    searchGeneration++;
+  }
+}
+
+async function runSearch() {
+  const q = searchInput.value.trim();
+  const generation = ++searchGeneration;
+  if (q.length < 2) { searchResults.innerHTML = ''; return; }
+  let hits;
+  try { hits = await History.search(q); } catch (e) { return; }
+  if (generation !== searchGeneration) return;
+  const terms = searchTerms(q);
+  searchResults.innerHTML = '';
+  if (!hits.length) {
+    searchResults.innerHTML = '<li class="conv-empty">Nothing matches.</li>';
+    return;
+  }
+  for (const hit of hits) {
+    const li = document.createElement('li');
+    li.className = 'conv-item hit' + (hit.id === currentConversationId ? ' active' : '');
+    const title = hit.title || 'New conversation';
+    conversationTitles.set(hit.id, title);
+    li.innerHTML = `<button class="conv-open" type="button"><span class="conv-title">${markTerms(title, terms)}</span>`
+      + (hit.snippet ? `<span class="conv-snippet">${markTerms(Names.apply(hit.snippet), terms)}</span>` : '')
+      + `</button>`;
+    li.querySelector('.conv-open').addEventListener('click', () => {
+      conversationTitles.set(hit.id, title);
+      setSidebarOpen(false);
+      loadConversation(hit.id, { terms });
+    });
+    searchResults.appendChild(li);
+  }
+}
+
+if (searchBtn && searchInput && searchResults) {
+  searchBtn.addEventListener('click', () => {
+    if (!narrowSidebarQuery.matches && document.querySelector('.app-main.sidebar-collapsed')) document.getElementById('expandSidebarBtn')?.click();
+    if (searchInput.hidden) setSearching(true);
+    searchInput.focus();
+  });
+  searchInput.addEventListener('input', () => {
+    clearTimeout(searchTimer);
+    searchTimer = setTimeout(runSearch, 250);
+  });
+  searchInput.addEventListener('keydown', (e) => {
+    if (e.key !== 'Escape') return;
+    e.preventDefault();
+    e.stopPropagation();
+    setSearching(false);
+    searchBtn.focus();
+  });
 }
 
 function startRename(li, id) {
@@ -157,7 +266,7 @@ function markSidebarActive(id) {
   });
 }
 
-export async function loadConversation(id) {
+export async function loadConversation(id, find = null) {
   discardActiveResponse();
   const loadGeneration = ++conversationLoadGeneration;
   setCurrentConversationId(id);
@@ -181,10 +290,11 @@ export async function loadConversation(id) {
     let latest = '';
     for (const row of rows) {
       if (row.role === 'user') {
-        appendMsg('user', Names.apply(row.content));
+        appendMsg('user', Names.apply(row.content)).dataset.id = row.id;
         messages.push({ role: 'user', content: row.content });
       } else if (row.role === 'assistant') {
         const el = appendMsg('assistant', '');
+        el.dataset.id = row.id;
         let visible = '';
         const sb = makeStreamBuffer(clean => { visible += clean; });
         sb.push(row.content);
@@ -197,10 +307,22 @@ export async function loadConversation(id) {
     }
     setLatestAssistantReply(latest);
     setConversationTitle(conversationTitles.get(id));
+    if (find) scrollToMatch(find);
   } catch (e) {
     if (loadGeneration !== conversationLoadGeneration || currentConversationId !== id) return;
     ui.toast('Failed to load conversation: ' + e.message, 'error');
   }
+}
+
+function scrollToMatch({ terms, messageId }) {
+  const hit = [...messagesEl.children].reverse().find(el => {
+    if (messageId) return el.dataset.id === String(messageId);
+    const text = el.textContent.toLowerCase();
+    return terms.every(t => text.includes(t));
+  });
+  if (!hit) return;
+  hit.scrollIntoView({ block: 'center' });
+  if (messageId) hit.classList.add('found');
 }
 
 let sidebarOpener = null;

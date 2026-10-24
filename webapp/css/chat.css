@@ -88,6 +88,7 @@
   border: none;
   border-radius: 20px;
 }
+.msg.found { box-shadow: 0 0 0 1px var(--accent-2); }
 .msg.assistant {
   background: transparent;
   color: var(--fg);

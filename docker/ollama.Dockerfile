@@ -11,7 +11,7 @@
 # loading the DRAFT layer, which kills jun-mtp, which is the
 # model php actually runs. every chat 500s and the container
 # still reports healthy.
-ARG OLLAMA_BASE=ollama/ollama:0.32.6
+ARG OLLAMA_BASE=ollama/ollama:0.40.10
 FROM ${OLLAMA_BASE}
 
 # curl, for the readiness probe in the entrypoint.

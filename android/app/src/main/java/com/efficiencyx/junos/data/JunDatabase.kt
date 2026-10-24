@@ -92,8 +92,14 @@ data class ConsolidationEntity(
 
 @Dao
 abstract class JunDao {
-    @Query("SELECT * FROM conversations ORDER BY updatedAt DESC LIMIT :limit")
+    @Query("SELECT * FROM conversations ORDER BY updatedAt DESC, id DESC LIMIT :limit")
     abstract suspend fun conversations(limit: Int = 100): List<ConversationEntity>
+
+    @Query(
+        "SELECT * FROM conversations WHERE updatedAt < :before OR (updatedAt = :before AND id < :beforeId) " +
+            "ORDER BY updatedAt DESC, id DESC LIMIT :limit",
+    )
+    abstract suspend fun conversationsBefore(before: Long, beforeId: Long, limit: Int = 100): List<ConversationEntity>
 
     @Query("SELECT * FROM conversations WHERE id = :id")
     abstract suspend fun conversation(id: Long): ConversationEntity?

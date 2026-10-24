@@ -132,16 +132,18 @@ The installers fetch code from other people and run it. What is checked:
 | Docker (Linux, only if missing) | `get.docker.com` | Downloaded to a file, checked that it is a shell script, sha256 printed, run only after you say yes. `JUN_DOCKER_SCRIPT_SHA256=<digest>` turns that into a hard check. It is never piped into a root shell. |
 | Portable PHP (Windows) | `windows.php.net` | sha256 from `releases.json`, checked before unpacking. Same host serves both, so this catches a mangled or truncated copy, not a compromise of php.net itself. Every install and update compares the PHP already in `runtime\php` with the newest build in `releases.json` and replaces it when it's older, so a PHP security fix reaches an existing install on its next update. |
 | CA bundle (Windows) | `curl.se` | sha256 from `cacert.pem.sha256`. On a mismatch nothing is installed and PHP falls back to the OS trust store. |
-| git, Python, llama.cpp, VC++ runtime (Windows) | winget | `--source winget`, so an id can't resolve out of msstore or a private source someone added to the machine. llama.cpp is pinned to `b10448`, the winget build closest to the one the Docker images run. Package signatures are winget's job. |
+| git, Python, llama.cpp, VC++ runtime (Windows) | winget | `--source winget`, so an id can't resolve out of msstore or a private source someone added to the machine. llama.cpp is pinned to `b11804`, the same build the Docker images run. Package signatures are winget's job. |
 | Which release is current | `api.github.com` (anonymous, read-only), then `github.com/<repo>/releases/latest` | TLS. One or two requests to the releases endpoint per run to turn the channel into a tag, skipped for `experimental` and when `JUN_REF` is set. When the API doesn't answer, the website's `/releases/latest` redirect names the newest full release instead. Drafts are invisible to both. If neither answers, a fresh install stops rather than fall back to `main`. |
 | Ollama (Windows) | `ollama.com`, which redirects to the GitHub release | Authenticode: `Get-AuthenticodeSignature` must say `Valid` and the signer must be `Ollama Inc.` before `OllamaSetup.exe` runs. Nothing pins a version, you get the latest. |
+| Caddy (Windows) | GitHub release | Version and sha512 pinned in `install.ps1`; the zip is refused when the digest differs. |
+| Android build | `services.gradle.org`, GitHub release, PyPI, Maven Central / Google Maven | The Gradle distribution (`android/gradlew`, `android/gradle-bootstrap.ps1`), the sherpa-onnx AAR and the UnityPy / tpk_ar source archives are pinned by sha256 and refused on a mismatch. Maven libraries are pinned by exact version only. |
 | winget itself, if absent | PSGallery | Not automatic. It asks first, or takes `JUN_BOOTSTRAP_WINGET=1`. |
 | Python packages | PyPI, `download.pytorch.org` | Exact versions in `tts/requirements*.txt` and `tools/requirements-recovery.txt`. Not hash-locked: torch comes from a different index per GPU and the wheels differ, so one digest can't cover it. Transitive deps float. |
-| Base images | Docker Hub, ghcr.io | Exact version tags (`php:8.2.35-fpm-alpine`, `nginx:1.30.4-alpine`, `python:3.11.13-slim`, `certbot/certbot:v5.7.0`, `ollama/ollama:0.32.6` - the floor for the MTP drafter's `gemma4-assistant` architecture, and the AMD/Colab pins move with it). The llama.cpp server images are pinned by sha256 digest in the compose files. The php image builds APCu from its GitHub tag (`krakjoe/apcu`, version and sha256 pinned in `docker/php.Dockerfile`), not from pecl.php.net. A tag is still mutable upstream; the digest is not. |
+| Base images | Docker Hub, ghcr.io | Exact version tags (`php:8.5.12-fpm-alpine`, `nginx:1.30.6-alpine`, `python:3.11.17-slim`, `certbot/certbot:v5.8.0`, `ollama/ollama:0.40.10` - 0.32 is the floor for the MTP drafter's `gemma4-assistant` architecture, and the AMD/Colab pins move with it). The llama.cpp server images are pinned by sha256 digest in the compose files. The php image builds APCu from its GitHub tag (`krakjoe/apcu`, version and sha256 pinned in `docker/php.Dockerfile`), not from pecl.php.net. A tag is still mutable upstream; the digest is not. |
 | Models | Hugging Face, via Ollama or llama.cpp | Tags only. Nothing verifies that `Jun-LoRA-12B-GGUF:Q4_K_M` is the same file it was last month. |
 | MTP drafters | Hugging Face, third-party uploads (`Janvitos/...`, `amaranus/...` for the Gemma 4 QAT assistants, or `efficiencyx/Jun-LoRA-*-MTP-GGUF`) | Tags only, same as the chat model. Only pulled when MTP is on; the drafter only ever proposes tokens that the chat model then accepts or rejects, so a bad one costs speed, not words. |
 | Title model (Ollama and llama.cpp) | Hugging Face, `efficiencyx/Titlewen-GGUF` | Tags only. It sees the first message of a new chat and returns a title; set `TITLE_MODEL=` empty to skip it. |
-| vLLM (Colab/Kaggle notebook, TPU only) | PyPI | `vllm-tpu==0.30.0`, installed into its own venv. Not hash-locked, transitive deps (jax, torch) float. |
+| vLLM (Colab/Kaggle notebook, TPU only) | PyPI | `vllm-tpu==0.32.0`, installed into its own venv. Not hash-locked, transitive deps (jax, torch) float. |
 | cloudflared (notebook, inference-only mode) | GitHub release | Version and sha256 pinned in `colab.ipynb`; the download is refused when the digest differs. |
 
 The one-liner install (`curl ... | bash`) runs whatever `main`'s `install.sh`
@@ -288,8 +290,9 @@ page shows placeholder art when they are not.
 ## Encryption and recovery
 
 The PHP application encrypts message content, conversation titles and summaries,
-saved preferences, welcome messages, walk-out reasons and memory files with a random 32-byte key
-per account. Stored values use `v1:` followed by base64-encoded nonce and sodium
+saved preferences, welcome messages, walk-out reasons, memory files and the per-line
+breakdown of karaoke takes with a random 32-byte key per account. Take scores stay
+plaintext, and the song they belong to is an HMAC under that key, never the file hash. Stored values use `v1:` followed by base64-encoded nonce and sodium
 secretbox ciphertext. This is application-level encryption of selected content,
 not whole-database or end-to-end encryption, and does not describe the separate
 Android client's local storage.

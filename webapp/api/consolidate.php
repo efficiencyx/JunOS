@@ -76,6 +76,8 @@ if ($method === 'GET' && $action === 'stream') {
 if ($method === 'POST' && $action === 'interrupt') {
     rate_limit('consolidate_interrupt', 30, 60);
     db()->prepare('UPDATE memory_consolidation SET interrupt_at = ? WHERE user_id = ?')->execute([time(), $userId]);
+    // he's back. without this last_activity still reads idle and the worker restarts her a second later
+    consolidation_touch($userId);
     json_out(['ok' => true]);
 }
 

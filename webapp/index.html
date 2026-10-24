@@ -621,13 +621,13 @@ html[data-pre-auth] #app { visibility: hidden; }
    (the page's allowlist for what may run) forbids the usual
    media="print" onload= trick. and blocking on the full sheet
    costs a round trip the auth screen doesn't even need. -->
-<link rel="preload" as="style" href="styles.css?v=64">
+<link rel="preload" as="style" href="styles.css?v=68">
 <link rel="preload" as="style" href="css/trip-loader.css?v=1">
-<noscript><link rel="stylesheet" href="styles.css?v=64"></noscript>
+<noscript><link rel="stylesheet" href="styles.css?v=68"></noscript>
 
 <script type="module" src="js/core/pwa.js?v=1"></script>
-<script src="js/boot-gate.js?v=18"></script>
-<script type="module" src="js/app.js?v=102"></script>
+<script src="js/boot-gate.js?v=22"></script>
+<script type="module" src="js/app.js?v=108"></script>
 </head>
 <body>
 
@@ -1251,8 +1251,10 @@ html[data-pre-auth] #app { visibility: hidden; }
       </div>
 
       <div class="sidebar-section sidebar-scroll">
-        <div class="sidebar-label">Recent</div>
+        <input id="chatSearch" class="chat-search" type="search" placeholder="Search chats" aria-label="Search chats" autocomplete="off" hidden>
+        <div class="sidebar-label" id="recentLabel">Recent</div>
         <ul id="conversationList" class="conv-list" role="list"></ul>
+        <ul id="chatSearchResults" class="conv-list" role="list" aria-live="polite" hidden></ul>
       </div>
 
       <div class="sidebar-footer">

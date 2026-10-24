@@ -2,7 +2,7 @@ services:
   ollama:
     build:
       args:
-        OLLAMA_BASE: ollama/ollama:0.32.6-rocm
+        OLLAMA_BASE: ollama/ollama:0.40.10-rocm
     devices:
       - /dev/kfd
       - /dev/dri
@@ -16,7 +16,7 @@ services:
       - OLLAMA_SCHED_SPREAD
 
   llamacpp:
-    image: ghcr.io/ggml-org/llama.cpp:server-vulkan@sha256:9e44de245d8a3619a60cd42fbb553528e0ef3b0ea2420e44155950d7105a3eb3
+    image: ghcr.io/ggml-org/llama.cpp:server-vulkan@sha256:a644fb651975d9dea49140302577a3b945993fd5efd3400bf89c7d525d03c103
     devices:
       - /dev/kfd
       - /dev/dri

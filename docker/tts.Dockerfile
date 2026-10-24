@@ -4,9 +4,9 @@
 # GPU copy would sit on ~2GB of VRAM that the LLM wants for its
 # own layers. the one audio job that really does want a GPU lives
 # in docker/karaoke.Dockerfile.
-FROM python:3.11.13-slim
+FROM python:3.11.17-slim
 
-COPY --from=ghcr.io/astral-sh/uv:0.11.29 /uv /uvx /bin/
+COPY --from=ghcr.io/astral-sh/uv:0.13.5 /uv /uvx /bin/
 
 RUN apt-get update \
  && apt-get install -y --no-install-recommends \

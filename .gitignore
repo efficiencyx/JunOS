@@ -55,15 +55,8 @@ webapp/api/review.js
 # raw Live2D source assets. kept locally, not in the repo
 live2d_raw/
 
-# lore dataset and the corpus build_lore_index.php builds from
-# it. the jsonl is tracked here but publish.sh keeps it out of
-# the public tree. this line is what stops it getting re-added
-# over there.
-tools/lore_dataset.jsonl
-# (.bin/.json came from the embedding index, deleted in 2026-07.
-# still ignored so stale copies in older checkouts never get
-# committed)
-webapp/lore_corpus.txt
+# leftovers of the embedding index deleted in 2026-07, so stale
+# copies in older checkouts never get committed
 webapp/lore_index.bin
 webapp/lore_meta.json
 

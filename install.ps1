@@ -141,11 +141,10 @@ function Invoke-Git {
 # straight from ollama.com. see there for why.
 $wingetIds = @{ git = 'Git.Git'; python = 'Python.Python.3.11'; llamacpp = 'ggml.llamacpp' }
 # llama.cpp moves fast and start.ps1 runs it in router mode with
-# --fit, so it's pinned to the build docker runs (10438, winget
-# has no 10438, 10448 is the next one up). older than that and
-# llama-server starts, then dies on --models-preset.
-$wingetVersions = @{ llamacpp = 'b10448' }
-$LlamacppMinBuild = 10448
+# --fit, so it's pinned to the build docker runs (11804). older
+# than 10448 and llama-server starts, then dies on --models-preset.
+$wingetVersions = @{ llamacpp = 'b11804' }
+$LlamacppMinBuild = 11804
 $manualUrls = @{
     git      = 'https://git-scm.com/download/win'
     ollama   = 'https://ollama.com/download/windows'
@@ -722,23 +721,23 @@ function Configure-Jun {
         if ($interactive) {
             Write-Host ''
             Write-Host "     ${B}select an AI provider${R}"
-            Write-Host "       ${ACCENT}[1]${R}  Ollama      ${DIM}- local, fully managed${R} ${DIM}(default)${R}"
+            Write-Host "       ${ACCENT}[1]${R}  llama.cpp   ${DIM}- local llama-server, fully managed${R} ${DIM}(default)${R}"
             Write-Host "       ${ACCENT}[2]${R}  OpenRouter  ${DIM}- cloud API - needs an API key; chats leave this machine${R}"
-            Write-Host "       ${ACCENT}[3]${R}  llama.cpp   ${DIM}- local llama-server${R}"
-            $ans = Read-Styled "     ${OK}▸${R} choice ${DIM}[Enter = Ollama]${R} ${ACCENT}›${R} "
+            Write-Host "       ${ACCENT}[3]${R}  Ollama      ${DIM}- local, fully managed${R}"
+            $ans = Read-Styled "     ${OK}▸${R} choice ${DIM}[Enter = llama.cpp]${R} ${ACCENT}›${R} "
             $provider = switch -Regex ($ans) {
-                '^(2|openrouter)$'               { 'openrouter' }
-                '^(3|llama|llamacpp|llama\.cpp)$' { 'llamacpp' }
-                '^(1|ollama)?$'                  { 'ollama' }
-                default { Warn_ "unrecognized choice '$ans', using Ollama"; 'ollama' }
+                '^(2|openrouter)$'                 { 'openrouter' }
+                '^(3|ollama)$'                     { 'ollama' }
+                '^(1|llama|llamacpp|llama\.cpp)?$' { 'llamacpp' }
+                default { Warn_ "unrecognized choice '$ans', using llama.cpp"; 'llamacpp' }
             }
         } else {
-            $provider = 'ollama'
+            $provider = 'llamacpp'
         }
     }
     if ($provider -notin 'ollama', 'openrouter', 'llamacpp', 'cloud') {
-        Warn_ "unknown provider '$provider', using Ollama"
-        $provider = 'ollama'
+        Warn_ "unknown provider '$provider', using llama.cpp"
+        $provider = 'llamacpp'
     }
 
     Step 'configure'
@@ -1228,8 +1227,8 @@ function Install-Php {
 # github release as the zip, so reading it at install time would
 # only catch a broken download. a pinned hash catches a swapped
 # release too. bump both together.
-$CaddyVersion = '2.11.4'
-$CaddySha512  = 'cd5ccfd86a4b40732cf715890d0dca5bf3f63adefec5a7914de85adf240c60ce7e5d2791631b88ef9758e46b23bb1730e020b9c5d696889740b284ffd4788e35'
+$CaddyVersion = '2.11.7'
+$CaddySha512  = 'c308154504e53755958ffc62d8a2657ab17eefd6dd25c45dbb2c3d93d29519971f77ca652f7d0f2bcb7f980b9ba3822478865e29969d0272d7613550a43152b1'
 
 function Install-Caddy {
     $caddyDir = Join-Path (Get-Location) 'runtime\caddy'

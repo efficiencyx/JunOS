@@ -519,9 +519,9 @@ public sealed class InstallerProcessOutput
 
                                 <TextBlock Text="AI provider" FontWeight="SemiBold" />
                                 <ComboBox x:Name="ProviderCombo" Margin="0,7,0,0">
-                                    <ComboBoxItem Content="Ollama — local and fully managed" Tag="ollama" IsSelected="True" />
+                                    <ComboBoxItem Content="llama.cpp — local and fully managed" Tag="llamacpp" IsSelected="True" />
                                     <ComboBoxItem Content="OpenRouter — cloud API" Tag="openrouter" />
-                                    <ComboBoxItem Content="llama.cpp — local llama-server" Tag="llamacpp" />
+                                    <ComboBoxItem Content="Ollama — local and fully managed" Tag="ollama" />
                                 </ComboBox>
 
                                 <StackPanel x:Name="OpenRouterPanel" Visibility="Collapsed" Margin="0,14,0,0">
@@ -796,7 +796,7 @@ if ($script:PinnedRef) {
     $ChannelPanel.Visibility = 'Collapsed'
     $window.Title = "Jun OS Setup $($script:PinnedRef)"
 }
-$ExpressSummaryText.Text = "$versionLine`nOllama with $recommendedLabel`nVoice conversation and karaoke enabled`nMulti-token prediction on, draft depth measured after install`nJun OS shortcut on the desktop and in the Start menu`nLive2D asset recovery offered separately"
+$ExpressSummaryText.Text = "$versionLine`nllama.cpp with $recommendedLabel`nVoice conversation and karaoke enabled`nMulti-token prediction on, draft depth measured after install`nJun OS shortcut on the desktop and in the Start menu`nLive2D asset recovery offered separately"
 
 if ($script:gpuVendor -eq 'cpu') {
     $HardwareText.Text = 'No NVIDIA or AMD GPU was detected. The CPU-friendly Jun E2B model is recommended; local inference will still work.'
@@ -804,9 +804,9 @@ if ($script:gpuVendor -eq 'cpu') {
     $amdName = $script:gpuNames -join ', '
     if ($script:gpuMemory.Count -gt 0) {
         $largestMb = [int](($script:gpuMemory | Measure-Object -Maximum).Maximum)
-        $HardwareText.Text = "Detected $amdName with $largestMb MB VRAM. Ollama can accelerate it through ROCm or Vulkan; a matching model has been selected."
+        $HardwareText.Text = "Detected $amdName with $largestMb MB VRAM. llama.cpp accelerates it through Vulkan; a matching model has been selected."
     } else {
-        $HardwareText.Text = "Detected $amdName, but Windows did not report its VRAM reliably. The CPU-friendly Jun E2B model is selected; Ollama can still use ROCm or Vulkan acceleration."
+        $HardwareText.Text = "Detected $amdName, but Windows did not report its VRAM reliably. The CPU-friendly Jun E2B model is selected; llama.cpp can still use Vulkan acceleration."
     }
 } else {
     $largestMb = [int](($script:gpuMemory | Measure-Object -Maximum).Maximum)
@@ -952,7 +952,7 @@ function Validate-Assets {
 function Get-SetupValues {
     $express = $ExpressRadio.IsChecked -eq $true
     $cloud = $CloudRadio.IsChecked -eq $true
-    $provider = if ($cloud) { 'cloud' } elseif ($express) { 'ollama' } else { Get-SelectedTag $ProviderCombo }
+    $provider = if ($cloud) { 'cloud' } elseif ($express) { 'llamacpp' } else { Get-SelectedTag $ProviderCombo }
     $model = if ($express) { $script:recommendedModel } else { Get-SelectedTag $ModelCombo }
     return @{
         Express = $express

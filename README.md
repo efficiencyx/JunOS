@@ -5,7 +5,7 @@
 <h1>Jun OS - AI Companion for MDRG (Factorial Omega)</h1>
 
 [![License: Apache 2.0](https://img.shields.io/badge/License-Apache_2.0-blue.svg)](LICENSE)
-![PHP](https://img.shields.io/badge/PHP-8.2-777BB4?logo=php&logoColor=white)
+![PHP](https://img.shields.io/badge/PHP-8.5-777BB4?logo=php&logoColor=white)
 ![Python](https://img.shields.io/badge/Python-3.10%2B-3776AB?logo=python&logoColor=white)
 ![Docker](https://img.shields.io/badge/Docker-compose-2496ED?logo=docker&logoColor=white)
 ![Live2D](https://img.shields.io/badge/Live2D-Cubism%204-ff7096)
@@ -172,7 +172,7 @@ Stop her: `./JunOS/start.sh stop`
 
 ### Why the first start is slow
 
-The very first boot downloads her brain - whatever model is listed in `OLLAMA_MODELS_TO_PULL`, by default `hf.co/efficiencyx/Jun-LoRA-E2B-GGUF:Q4_K_M`, which is the one that runs fine without a fancy graphics card. It's a big file. On Ollama it also grabs the tiny model that names your chats (`TITLE_MODEL`, ~1.2 GB, lives on the CPU) and, if you said yes to MTP, the drafter. Watch it all crawl in with `./start.sh logs ollama`.
+The very first boot downloads her brain - whatever model is listed in `LLAMACPP_MODEL_HF` (`OLLAMA_MODELS_TO_PULL` if you picked Ollama), by default `efficiencyx/Jun-LoRA-E2B-GGUF:Q4_K_M`, which is the one that runs fine without a fancy graphics card. It's a big file. The tiny model that names your chats (`TITLE_MODEL`, ~1.2 GB, lives on the CPU) comes too, on llama.cpp the first time a chat needs a name, and so does the MTP drafter if you said yes to it. Watch it all crawl in with `./start.sh logs llamacpp` (or `logs ollama`).
 
 She's ready once everything reports **healthy**. After that first download it's usually 30-90 seconds.
 
@@ -232,7 +232,7 @@ BIND_ADDR=0.0.0.0
 
 The launcher works out this machine's address on the network by itself and prints it - `reachable as: https://192.168.X.X` on Linux, `on your phone: https://192.168.X.X:8080` on Windows - and that's the URL you type into the phone. On Windows it also adds a firewall rule for the port on **private** networks only (it needs an admin PowerShell to do it, otherwise it prints the one-liner for you to run). One request at a time on Windows, so the phone and the desktop take turns.
 
-Want her *on* the phone instead, no computer at all? Every [release](https://github.com/efficiencyx/JunOS/releases) carries **`JunOS-<version>.apk`**, the Android app, still a work in progress. arm64 phones on Android 10 or newer, and the first start downloads the ~2.9 GB v8 model. Updating from an older model downloads it again; your chats, memory and settings stay on the phone.
+Want her *on* the phone instead, no computer at all? Every [release](https://github.com/efficiencyx/JunOS/releases) carries **`JunOS-<version>.apk`**, the Android app, still a work in progress. arm64 phones on Android 10 or newer, and the first start downloads the ~2.9 GB v8 model. Updating from an older model downloads it again; your chats, memory and settings stay on the phone. The phone app doesn't have everything yet: no memory tidying (her notes are only added, never merged or rewritten, and there's no **Changed** history), no karaoke, no outings, no achievements and no welcome-back scene.
 
 The phone still gets the certificate warning, trusting the CA only covers the computer you did it on. Your password and every word she says cross the wifi encrypted, but a cert the phone doesn't trust can't prove it's really talking to your box, so keep it to networks you trust and **never** port-forward it to the internet - that's what the certbot setup above is for. DHCP moves addresses around, so if she stops answering after a few days, restart the launcher and read the new one (the new address gets a fresh cert from the same CA, so a computer that trusts it doesn't notice, and the phone clicks through once more).
 
@@ -264,8 +264,8 @@ Gemma 4 ships a tiny *drafter* that guesses the next few tokens; Jun checks the 
 
 | Provider | What it is | Non-interactive install |
 |---|---|---|
-| **Ollama** *(default)* | Local inference, models pulled and pre-warmed for you | `JUN_YES=1 ./install.sh` |
-| **llama.cpp** | A local [`llama-server`](https://github.com/ggml-org/llama.cpp) - managed for you, or point at one you already run. Same Jun as Ollama: same prompt byte for byte, her voice input, chat titles, the model picker, context sized to your card | `JUN_PROVIDER=llamacpp ./install.sh` |
+| **llama.cpp** *(default)* | A local [`llama-server`](https://github.com/ggml-org/llama.cpp) - managed for you, or point at one you already run. First tokens come ~4x sooner than on Ollama (0.15 s vs 0.58 s on a 3060) and MTP drafting runs ~10% faster | `JUN_YES=1 ./install.sh` |
+| **Ollama** | Local inference, models pulled and pre-warmed for you. Same Jun as llama.cpp: same prompt byte for byte, her voice input, chat titles, the model picker, context sized to your card | `JUN_PROVIDER=ollama ./install.sh` |
 | **OpenRouter** | Any cloud model; needs a key, and **your chats leave the machine** | `JUN_PROVIDER=openrouter OPENROUTER_API_KEY=sk-... ./install.sh` |
 | **vLLM** | A model served somewhere else, usually a TPU in the [Colab notebook](#no-gpu-or-you-just-want-to-test-the-waters-no-problem) in inference-only mode. Nothing runs here; **your chats travel to that machine** | paste the `AI_PROVIDER=vllm` + `VLLM_*` lines Step 3 prints into `.env` |
 
@@ -294,7 +294,7 @@ Everything is environment variables in `.env` - the full reference is [`docs/con
 |---|---|---|
 | `DOMAIN` / `EMAIL` / `TLS_MODE` | Hostname, Let's Encrypt contact, Let's Encrypt on/off (`off` still serves HTTPS, on a cert from the install's own local CA) | `localhost` · `admin@localhost` · `off` |
 | `BIND_ADDR` | Where nginx (Caddy on Windows) listens. `0.0.0.0` for the phone on your wifi | `127.0.0.1` |
-| `AI_PROVIDER` | `ollama` \| `llamacpp` \| `openrouter` \| `vllm` | `ollama` |
+| `AI_PROVIDER` | `llamacpp` \| `ollama` \| `openrouter` \| `vllm` | `llamacpp` (an old `.env` with no line keeps `ollama`) |
 | `OLLAMA_URL` + `OLLAMA_API_KEY` / `VLLM_*` | Her brain on another machine, like the Colab notebook in inference-only mode, which prints all of them | this machine |
 | `OLLAMA_MODELS_TO_PULL` | Downloaded on first boot and re-checked on every start, so a new upload under the same tag arrives with your next restart; the **first** one is pre-warmed | `hf.co/efficiencyx/Jun-LoRA-E2B-GGUF:Q4_K_M` |
 | `LLAMACPP_MODEL_HF` / `LLAMACPP_MODEL_FILE` | Model for the managed llama-server: pull from HF, or serve one off disk | `efficiencyx/Jun-LoRA-E2B-GGUF:Q4_K_M` |
@@ -332,7 +332,7 @@ Browser ──HTTP/SSE──▶ nginx ──FastCGI──▶ php-fpm ──HTTP�
                         └── serves /var/www/omega/ (static assets, JS, Live2D model)
 ```
 
-**The stack:** PHP 8.2 for the SSE proxy and retrieval · Python FastAPI + Kokoro-82M / pocket-tts / faster-whisper / demucs for the ears, voice and karaoke · plain HTML/CSS/ES modules up front with PIXI.js + pixi-live2d-display + Cubism 4, all vendored · SQLite · nginx + php-fpm. No bundler, no `node_modules`, no build step.
+**The stack:** PHP 8.5 for the SSE proxy and retrieval · Python FastAPI + Kokoro-82M / pocket-tts / faster-whisper / demucs for the ears, voice and karaoke · plain HTML/CSS/ES modules up front with PIXI.js + pixi-live2d-display + Cubism 4, all vendored · SQLite · nginx + php-fpm. No bundler, no `node_modules`, no build step.
 
 **What happens when you hit send:**
 
@@ -355,13 +355,14 @@ The house rules, the invariants you can break without noticing, and what CI chec
 
 Editing anything under `webapp/`? Run **`./sync-webapp.sh`** - it pushes the files into the running containers and restarts php-fpm (opcache won't notice otherwise). `-s` for static-only.
 
-Lore datamine from LLMs lives in `tools/lore_dataset.jsonl` (kept local, not in the repo); rebuild the index after editing it:
+Her world knowledge is `tools/lore_dataset.jsonl`: about 2900 Q&A rows about the game's story and characters, mined from its text and shipped here with the dev's OK. Edit it, then rebuild the corpus and commit both (CI fails if they don't match):
 
 ```sh
-docker compose exec php php tools/build_lore_index.php
+php tools/build_lore_index.php   # any PHP 8, no extensions
+./sync-webapp.sh                 # the php restart drops the cached index
 ```
 
-That flattens each Q&A into `webapp/lore_corpus.txt` - one answer per line, matched at request time by keyword/IDF. No embeddings, no second model. A missing corpus is fine; retrieval just gets skipped.
+That flattens each Q&A into `webapp/lore_corpus.txt` - one answer per line, matched at request time by keyword/IDF. No embeddings, no second model. Delete the corpus and she just stops quoting canon, nothing breaks.
 
 ## When things go sideways
 
@@ -376,7 +377,7 @@ Something's buffering the SSE. The `/api/chat.php` location needs `proxy_bufferi
 <details>
 <summary><b>She's not broken, just slow</b></summary>
 
-Check GPU residency first: `docker exec omega-ollama ollama ps`. Anything short of 100% GPU means something is elbowing her out of VRAM - usually `TTS_DEVICE=cuda` (~2 GB for a speedup you won't hear) or a too-generous `num_ctx`; pin it with `OMEGA_NUM_CTX`. The `UNTIL` column should read `Forever`; a five-minute expiry means the keep-alive pin didn't take and the next quiet stretch costs you a full reload plus re-prefill. If the very first reply after a start crawls, see whether the pre-warm made it: `docker logs omega-php | grep prewarm` (`runtime\logs\prewarm.log` on Windows). A `failed:` line there with something else holding the card means she loaded on your first message instead.
+Check GPU residency first. On llama.cpp every `./start.sh` prints the device she landed on; on Ollama it's `docker exec omega-ollama ollama ps`. Anything short of 100% GPU means something is elbowing her out of VRAM - usually `TTS_DEVICE=cuda` (~2 GB for a speedup you won't hear) or a too-generous `num_ctx`; pin it with `OMEGA_NUM_CTX`. The `UNTIL` column should read `Forever`; a five-minute expiry means the keep-alive pin didn't take and the next quiet stretch costs you a full reload plus re-prefill. If the very first reply after a start crawls, see whether the pre-warm made it: `docker logs omega-php | grep prewarm` (`runtime\logs\prewarm.log` on Windows). A `failed:` line there with something else holding the card means she loaded on your first message instead.
 </details>
 
 <details>
@@ -430,7 +431,7 @@ Everything ships from her own origin, so a clean install produces none - if you 
 <details>
 <summary><b>Running compose by hand and nothing starts</b></summary>
 
-The model-server and voice containers are profile-gated. `./start.sh` derives `COMPOSE_PROFILES` from your `.env`; a bare `docker compose up -d` needs `COMPOSE_PROFILES=ollama,voice` (or `llamacpp,voice`, plus `karaoke` if you want it) set in `.env` or the shell.
+The model-server and voice containers are profile-gated. `./start.sh` derives `COMPOSE_PROFILES` from your `.env`; a bare `docker compose up -d` needs `COMPOSE_PROFILES=llamacpp,voice` (or `ollama,voice`, plus `karaoke` if you want it) set in `.env` or the shell.
 </details>
 
 <details>

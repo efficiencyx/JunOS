@@ -5,9 +5,9 @@
 # one audio job worth real VRAM, a 4 minute track takes minutes
 # on a CPU and seconds on a GPU. it gets its own container so the
 # voice sidecar can stay CPU only next to the LLM.
-FROM python:3.11.13-slim
+FROM python:3.11.17-slim
 
-COPY --from=ghcr.io/astral-sh/uv:0.11.29 /uv /uvx /bin/
+COPY --from=ghcr.io/astral-sh/uv:0.13.5 /uv /uvx /bin/
 
 RUN apt-get update \
  && apt-get install -y --no-install-recommends \

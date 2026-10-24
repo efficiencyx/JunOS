@@ -59,18 +59,23 @@ function memory_note_render(array $note): string {
     if ($created <= 0) return $text;
 
     return preg_replace_callback(MEMORY_RELATIVE_TIME_RE, function (array $m) use ($created): string {
-        $phrase = strtolower($m[0]);
-        $day = null;
-        if (isset(MEMORY_RELATIVE_TIME_OFFSETS[$phrase])) {
-            $day = strtotime(MEMORY_RELATIVE_TIME_OFFSETS[$phrase] . ' days', $created);
-        } elseif (preg_match('/^next (monday|tuesday|wednesday|thursday|friday|saturday|sunday)$/', $phrase, $d)) {
-            $day = strtotime('next ' . $d[1], $created);
-        } elseif (preg_match('/^(?:in (\d{1,2})|(\d{1,2})) (day|week|month)s? ?(?:from now)?$/', $phrase, $d)) {
-            $day = strtotime('+' . ($d[1] !== '' ? $d[1] : $d[2]) . ' ' . $d[3] . 's', $created);
-        }
+        $day = memory_relative_day($m[0], $created);
         if (!$day) return $m[0];
         return $m[0] . ' (= ' . date('l j F Y', $day) . ', ' . memory_days_phrase($day) . ')';
     }, $text) ?? $text;
+}
+
+function memory_relative_day(string $phrase, int $created): ?int {
+    $phrase = strtolower($phrase);
+    $day = false;
+    if (isset(MEMORY_RELATIVE_TIME_OFFSETS[$phrase])) {
+        $day = strtotime(MEMORY_RELATIVE_TIME_OFFSETS[$phrase] . ' days', $created);
+    } elseif (preg_match('/^next (monday|tuesday|wednesday|thursday|friday|saturday|sunday)$/', $phrase, $d)) {
+        $day = strtotime('next ' . $d[1], $created);
+    } elseif (preg_match('/^(?:in (\d{1,2})|(\d{1,2})) (day|week|month)s? ?(?:from now)?$/', $phrase, $d)) {
+        $day = strtotime('+' . ($d[1] !== '' ? $d[1] : $d[2]) . ' ' . $d[3] . 's', $created);
+    }
+    return $day ?: null;
 }
 
 function memory_normalize_entry(string $memory, string $category): array {
@@ -165,6 +170,30 @@ function memory_meta_write(int $userId, array $meta): array {
     $json = json_encode($encoded, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES | JSON_PRETTY_PRINT);
     if ($json === false) return ['error' => 'memory_encode_failed'];
     return memory_atomic_write(memory_user_dir($userId) . '/meta.json', $json . "\n", '.meta-');
+}
+
+const MEMORY_SOURCE_KINDS = ['chat', 'date', 'karaoke', 'pass', 'manual'];
+const MEMORY_REVISIONS_KEPT = 5;
+
+// chat.php sets this once per turn, so memory_write and the
+// [A:memory_write] salvage both get the message without passing it
+function memory_request_source(?array $set = null): ?array {
+    static $source = null;
+    if ($set !== null) $source = $set;
+    return $source;
+}
+
+function memory_clean_source(?array $source): ?array {
+    if (!$source || !in_array($source['kind'] ?? '', MEMORY_SOURCE_KINDS, true)) return null;
+    $out = ['kind' => $source['kind']];
+    foreach (['conv', 'msg'] as $key) if ((int)($source[$key] ?? 0) > 0) $out[$key] = (int)$source[$key];
+    return $out;
+}
+
+// edit and move reset the pass's marks on purpose, so the note gets
+// looked at again. where it came from and what it used to say stay
+function memory_meta_keep(array $meta, string $id): array {
+    return array_intersect_key($meta['notes'][$id] ?? [], ['source' => 1, 'revisions' => 1]);
 }
 
 function memory_mint_id(array $used): string {
@@ -323,6 +352,8 @@ function memory_notes_load_unlocked(int $userId): array {
                 'links' => memory_note_links($text),
                 'created' => (int)($times['created'] ?? $mtime),
                 'updated' => (int)($times['updated'] ?? $mtime),
+                'source' => is_array($times['source'] ?? null) ? $times['source'] : null,
+                'revisions' => is_array($times['revisions'] ?? null) ? $times['revisions'] : [],
             ];
         }
         if ($rewrite) memory_notes_write_file($userId, $slug, $notes);
@@ -340,7 +371,7 @@ function memory_notes_load(int $userId): array {
     return $result;
 }
 
-function memory_note_add_unlocked(int $userId, string $category, string $text): array {
+function memory_note_add_unlocked(int $userId, string $category, string $text, ?array $source = null): array {
     $entry = memory_normalize_entry($text, $category);
     if (isset($entry['error'])) return $entry;
     $categories = memory_notes_load_unlocked($userId);
@@ -356,6 +387,8 @@ function memory_note_add_unlocked(int $userId, string $category, string $text): 
     if (empty($result['ok'])) return $result;
     $meta = memory_meta_load($userId);
     $meta['notes'][$id] = ['created' => $now, 'updated' => $now];
+    $source = memory_clean_source($source ?? memory_request_source());
+    if ($source) $meta['notes'][$id]['source'] = $source;
     $result = memory_meta_write($userId, $meta);
     if (empty($result['ok'])) return $result;
     return ['ok' => true, 'entry' => [
@@ -366,7 +399,7 @@ function memory_note_add_unlocked(int $userId, string $category, string $text): 
     ]];
 }
 
-function memory_note_edit_unlocked(int $userId, string $id, string $text): array {
+function memory_note_edit_unlocked(int $userId, string $id, string $text, ?array $by = null): array {
     $categories = memory_notes_load_unlocked($userId);
     foreach ($categories as $category => $data) {
         foreach ($data['notes'] as $index => $note) {
@@ -377,10 +410,15 @@ function memory_note_edit_unlocked(int $userId, string $id, string $text): array
             $result = memory_notes_write_file($userId, $category, $data['notes']);
             if (empty($result['ok'])) return $result;
             $meta = memory_meta_load($userId);
+            $kept = memory_meta_keep($meta, $id);
+            if ($entry['memory'] !== $note['text']) {
+                $kept['revisions'] = array_slice([...($kept['revisions'] ?? []),
+                    ['text' => $note['text'], 'at' => time()] + (memory_clean_source($by) ?? [])], -MEMORY_REVISIONS_KEPT);
+            }
             $meta['notes'][$id] = [
                 'created' => (int)($meta['notes'][$id]['created'] ?? $note['created']),
                 'updated' => time(),
-            ];
+            ] + $kept;
             $result = memory_meta_write($userId, $meta);
             return empty($result['ok']) ? $result : ['ok' => true];
         }
@@ -436,7 +474,7 @@ function memory_note_move_unlocked(int $userId, string $id, string $category): a
             $meta['notes'][$id] = [
                 'created' => (int)($meta['notes'][$id]['created'] ?? $note['created']),
                 'updated' => time(),
-            ];
+            ] + memory_meta_keep($meta, $id);
             $result = memory_meta_write($userId, $meta);
             return empty($result['ok']) ? $result : ['ok' => true];
         }
@@ -444,17 +482,17 @@ function memory_note_move_unlocked(int $userId, string $id, string $category): a
     return ['error' => 'memory_not_found'];
 }
 
-function memory_note_add(int $userId, string $category, string $text): array {
+function memory_note_add(int $userId, string $category, string $text, ?array $source = null): array {
     return memory_with_user_lock(
         $userId,
-        fn() => memory_note_add_unlocked($userId, $category, $text)
+        fn() => memory_note_add_unlocked($userId, $category, $text, $source)
     );
 }
 
-function memory_note_edit(int $userId, string $id, string $text): array {
+function memory_note_edit(int $userId, string $id, string $text, ?array $by = null): array {
     return memory_with_user_lock(
         $userId,
-        fn() => memory_note_edit_unlocked($userId, $id, $text)
+        fn() => memory_note_edit_unlocked($userId, $id, $text, $by)
     );
 }
 

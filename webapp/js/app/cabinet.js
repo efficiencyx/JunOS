@@ -1,6 +1,6 @@
 // never writes a note, the server only scores it (consolidate.php?action=game)
 
-import * as Feed from './consolidation-feed.js?v=2';
+import * as Feed from './consolidation-feed.js?v=3';
 import * as Live2D from '../live2d/live2d.js?v=84';
 import * as VoiceMode from '../voice/voicemode.js?v=83';
 import * as Achievements from '../achievements/achievements.js?v=8';
@@ -180,7 +180,7 @@ async function finish(status) {
   hand = [];
   picked = null;
   render();
-  if (status !== 'ok') { teardown(); return; }
+  if (status !== 'ok') { settle(false); teardown(); return; }
   const score = await settle(true);
   if (score && score.total > 0) say(`Done. You put ${score.agreed} of ${score.total} where I would have.`);
   setTimeout(teardown, CLOSE_AFTER_DONE_MS);

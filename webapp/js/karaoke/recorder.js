@@ -1,7 +1,7 @@
 import * as ui from '../core/ui.js?v=1';
-import { $, active } from './karaoke.js?v=18';
-import { instrSource, soloPhase } from './playback.js?v=11';
-import { mode, setStatus, track } from './setup.js?v=11';
+import { $, active } from './karaoke.js?v=21';
+import { instrSource, practice, soloPhase } from './playback.js?v=14';
+import { mode, setStatus, track } from './setup.js?v=14';
 import { normWord } from './lyrics.js?v=1';
 import { api, apiJson } from '../core/api.js?v=1';
 import { escapeHtml } from '../core/util.js?v=1';
@@ -9,6 +9,10 @@ import { escapeHtml } from '../core/util.js?v=1';
 // a sung word can miss its timestamp by 1.25 seconds and
 // still count. generous on purpose.
 const TOLERANCE = 1.25;
+const WEAK_LINE = 0.6;
+// mean offsets under this read as on the beat, whisper's own
+// word timestamps wobble about that much
+const ON_BEAT = 0.12;
 let recorder = null, micStream = null;
 
 export async function startRecording() {
@@ -58,8 +62,10 @@ async function onRecordingStopped(chunks, sections, stream, activeRecorder) {
     if (!r.ok) throw new Error(`transcribe http ${r.status}`);
     const data = await r.json();
     const result = scoreTake(sections, data.words || []);
-    renderScore(result);
-    rememberTake(result);
+    renderScore(result, null);
+    const history = await saveTake(result);
+    if (history) renderScore(result, history);
+    rememberTake(result, history);
   } catch (e) {
     console.error(e);
     ui.toast('⚠ Scoring failed: ' + e.message, 'error');
@@ -70,12 +76,28 @@ async function onRecordingStopped(chunks, sections, stream, activeRecorder) {
   }
 }
 
+async function saveTake(r) {
+  if (!r.scored || !track) return null;
+  try {
+    const res = await apiJson('karaoke.php?action=take', {
+      song: track.hash, mode, matched: r.matched, total: r.total, offset_ms: msOrNull(r.offset),
+      lines: r.breakdown.map(b => ({ i: b.index, matched: b.matched, total: b.total, offset_ms: msOrNull(b.offset) })),
+    });
+    return res.ok ? await res.json() : null;
+  } catch (e) {
+    return null;
+  }
+}
+
+const msOrNull = (seconds) => seconds === null ? null : Math.round(seconds * 1000);
+const mean = (xs) => xs.length ? xs.reduce((a, b) => a + b, 0) / xs.length : null;
+
 // nothing on the chat side knows this page exists, so a scored
 // take gets written into her durable notes like any other event
 // and rides the live context from the next reply on. the date
 // goes in spelled out, never "today", she can't do relative time
 // at all.
-function rememberTake(r) {
+function rememberTake(r, history) {
   if (!r.scored || !track) return;
   const m = track.meta || {};
   const day = new Date().toLocaleDateString('en-GB', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' });
@@ -85,20 +107,23 @@ function rememberTake(r) {
     duo: 'a duet, both of us singing the whole song',
     split: 'lines split between us',
   }[mode];
-  const memory = `Karaoke with Anon on ${day}: ${song} (${how}). He scored ${r.score}/100, ${r.matched} of ${r.total} of his words landed in time.`;
-  apiJson('memory.php', { memory, category: 'events' }).catch(() => {});
+  let memory = `Karaoke with Anon on ${day}: ${song} (${how}). He scored ${r.score}/100, ${r.matched} of ${r.total} of his words landed in time.`;
+  if (history?.best && r.score > history.best.score) memory += ` His best on this song so far, up from ${history.best.score}.`;
+  apiJson('memory.php', { memory, category: 'events', source: 'karaoke' }).catch(() => {});
 }
 
 function scoreTake(sections, user) {
   const userN = user.map(w => ({ t: (w.start + w.end) / 2, w: normWord(w.word), used: false })).filter(u => u.w);
   let matched = 0, total = 0;
   const breakdown = [];
+  const offsets = [];
   sections.forEach((sec, idx) => {
     if (sec.owner === 'jun') return;
     const refN = sec.words
       .map((w, wi) => ({ i: wi, t: (w.start + w.end) / 2, w: normWord(w.word) }))
       .filter(r => r.w);
     const hits = new Set();
+    const lineOffsets = [];
     let m = 0;
     for (const r of refN) {
       let best = -1, bestDt = Infinity;
@@ -109,14 +134,21 @@ function scoreTake(sections, user) {
         const dt = Math.abs(u.t - r.t);
         if (dt <= TOLERANCE && dt < bestDt) { best = i; bestDt = dt; }
       }
-      if (best >= 0) { userN[best].used = true; m++; hits.add(r.i); }
+      if (best >= 0) {
+        userN[best].used = true;
+        m++;
+        hits.add(r.i);
+        lineOffsets.push(userN[best].t - r.t);
+      }
     }
     matched += m; total += refN.length;
-    if (sec.owner === 'you') breakdown.push({
+    offsets.push(...lineOffsets);
+    breakdown.push({
       index: idx,
       owner: sec.owner,
       matched: m,
       total: refN.length,
+      offset: lineOffsets.length >= 2 ? mean(lineOffsets) : null,
       // words that normalise to nothing are punctuation-only and were
       // never scorable, so they render plain instead of as something
       // you missed
@@ -127,7 +159,8 @@ function scoreTake(sections, user) {
       })),
     });
   });
-  return { matched, total, score: total ? Math.round(matched / total * 100) : 0, breakdown, scored: total > 0 };
+  return { matched, total, score: total ? Math.round(matched / total * 100) : 0, breakdown, scored: total > 0,
+    offset: offsets.length >= 5 ? mean(offsets) : null };
 }
 
 const SCORE_GRADES = [
@@ -144,7 +177,23 @@ function gradeFor(score) {
   return found ? found[1] : SCORE_GRADES[SCORE_GRADES.length - 1][1];
 }
 
-function renderScore(r) {
+function compareLine(r, history) {
+  if (!history || !history.best) return '';
+  const best = history.best.score;
+  if (r.score > best) return `New best on this song, up from ${best}`;
+  if (r.score === best) return `Ties your best on this song`;
+  return `Your best on this song is ${best}` + (history.last && history.last.score !== best ? `, last time ${history.last.score}` : '');
+}
+
+function timingLine(offset) {
+  if (offset === null) return '';
+  if (Math.abs(offset) < ON_BEAT) return 'On the beat';
+  return `Mostly ${offset < 0 ? 'early' : 'late'}, by ${Math.abs(offset).toFixed(1)}s`;
+}
+
+const lineTiming = (offset) => offset === null || Math.abs(offset) < 0.25 ? '' : offset < 0 ? 'early' : 'late';
+
+function renderScore(r, history) {
   const box = $('karaokeScore');
   if (!box) return;
   box.hidden = false;
@@ -158,11 +207,21 @@ function renderScore(r) {
       const cls = !w.scorable ? 'skip' : (w.hit ? 'hit' : 'miss');
       return `<span class="${cls}">${escapeHtml(w.word)}</span>`;
     }).join(' ');
+    const timing = lineTiming(b.offset);
+    const weak = b.total && b.matched / b.total < WEAK_LINE;
     return `<li><span class="karaoke-score-words">${words}</span>
-      <span class="karaoke-score-count">${b.matched}/${b.total}</span></li>`;
+      <span class="karaoke-score-count">${timing ? `<span class="karaoke-score-timing">${timing}</span>` : ''}${b.matched}/${b.total}</span>`
+      + `<span class="karaoke-practice">${weak ? `<button class="karaoke-linkish" type="button" data-section="${b.index}">Practice</button>` : ''}</span>`
+      + `</li>`;
   }).join('');
+  const compare = compareLine(r, history);
+  const timing = timingLine(r.offset);
   box.innerHTML = `<div class="karaoke-score-num">${r.score}</div>
     <div class="karaoke-score-grade">${escapeHtml(gradeFor(r.score))}</div>
     <div class="karaoke-score-sub">${r.matched} of ${r.total} words landed in time</div>` +
+    (compare || timing ? `<div class="karaoke-score-sub">${[compare, timing].filter(Boolean).join(' · ')}</div>` : '') +
     (rows ? `<ul class="karaoke-score-list">${rows}</ul>` : '');
+  box.querySelectorAll('.karaoke-practice button').forEach(btn => {
+    btn.addEventListener('click', () => practice(Number(btn.dataset.section)));
+  });
 }

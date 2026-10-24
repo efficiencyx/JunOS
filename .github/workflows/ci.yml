@@ -17,9 +17,9 @@ jobs:
     name: static checks
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v7
         with:
           node-version: '24'
           # the runner image caches an older 24.x and setup-node
@@ -72,9 +72,9 @@ jobs:
     name: python
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
-      - uses: actions/setup-python@v5
+      - uses: actions/setup-python@v7
         with:
           python-version: '3.11'
 
@@ -99,7 +99,7 @@ jobs:
               compile(src, f'colab.ipynb cell {i}', 'exec')
           PY
 
-      - uses: astral-sh/ruff-action@v3
+      - uses: astral-sh/ruff-action@v4
         with:
           # error-level rules only. this repo has no formatting policy and is
           # not about to grow one from CI.
@@ -111,12 +111,12 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        # 8.2 is what docker/php.Dockerfile ships. 8.5 is what a fresh
-        # bare metal install pulls down (and what an update moves an
-        # old one to), and it is where the deprecations land first.
+        # 8.5 is what docker/php.Dockerfile and a bare metal install
+        # run, deprecations land there first. 8.2 is the oldest php
+        # we still keep working.
         php: ['8.2', '8.5']
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       - uses: shivammathur/setup-php@v2
         with:
@@ -151,7 +151,7 @@ jobs:
     name: docker stack
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       - name: Compose config
         run: |
@@ -199,7 +199,7 @@ jobs:
       run:
         shell: pwsh
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       - name: PowerShell parse
         run: |
@@ -233,7 +233,7 @@ jobs:
           ./tools/build-installer-exe.ps1 -Manager -Version "1.0.${{ github.run_number }}.0"
           ./tools/build-installer-exe.ps1 -Version "1.0.${{ github.run_number }}.0" -EmbedManager dist\JunOS.exe
 
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: JunSetup
           path: |
@@ -244,14 +244,14 @@ jobs:
     name: android
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
-      - uses: actions/setup-java@v4
+      - uses: actions/setup-java@v6
         with:
           distribution: temurin
           java-version: '17'
 
-      - uses: actions/setup-python@v5
+      - uses: actions/setup-python@v7
         id: python312
         with:
           python-version: '3.12'
@@ -263,13 +263,13 @@ jobs:
         # android/gradlew downloads gradle itself and checks it against a
         # SHA pinned in the script, so the version in the key is the
         # whole identity.
-        uses: actions/cache@v4
+        uses: actions/cache@v6
         with:
           path: ~/.gradle/junos-bootstrap
-          key: gradle-bootstrap-8.13
+          key: gradle-bootstrap-9.8.2
 
       - name: Cache gradle deps
-        uses: actions/cache@v4
+        uses: actions/cache@v6
         with:
           path: |
             ~/.gradle/caches

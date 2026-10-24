@@ -58,6 +58,7 @@ body.ordered .menu-card { transform: translate(-50%, 70px); opacity: 0; pointer-
 .dish[aria-pressed="true"] .dish-title { box-shadow: 0 0 0 1.4px var(--wine); }
 .dish-note { display: block; font: 400 11px/1.4 system-ui, sans-serif; letter-spacing: .05em; color: var(--wine); }
 .dish-note:empty { display: none; }
+.page .kept-line { margin: 6px 0 0; font: italic 400 clamp(14px, 1.35vw, 17px)/1.4 var(--serif); color: var(--ink); text-align: center; }
 /* the only line that explains the mechanic, so it does not live in
    the scroller and it does not get display:none on a phone */
 .menu-hint { flex: none; margin: 0; padding: 7px 22px 9px; border-top: 1px solid #d5c6a8; background: #efe3cb; font: italic 12px var(--serif); color: var(--muted-ink); text-align: center; }

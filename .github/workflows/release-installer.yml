@@ -36,7 +36,7 @@ jobs:
     name: JunSetup.exe
     runs-on: windows-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       - name: Build
         # powershell (5.1), not pwsh: ps2exe emits a .NET Framework WPF binary
@@ -66,7 +66,7 @@ jobs:
           ./tools/build-installer-exe.ps1 -Manager -Version ($parts[0..3] -join '.') -OutputPath dist\JunOS.exe
           ./tools/build-installer-exe.ps1 -Version ($parts[0..3] -join '.') -OutputPath $out -EmbedManager dist\JunOS.exe @pin
 
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: JunSetup
           path: |
@@ -82,17 +82,17 @@ jobs:
     # unsigned instead (the Keystore step below warns about it)
     environment: ${{ github.ref_type == 'tag' && 'release' || '' }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           # the versionCode is the commit count, a shallow clone says 1
           fetch-depth: 0
 
-      - uses: actions/setup-java@v4
+      - uses: actions/setup-java@v6
         with:
           distribution: temurin
           java-version: '17'
 
-      - uses: actions/setup-python@v5
+      - uses: actions/setup-python@v7
         id: python312
         with:
           python-version: '3.12'
@@ -100,12 +100,12 @@ jobs:
       - name: Point Chaquopy at python 3.12
         run: echo "JUN_PYTHON_312=${{ steps.python312.outputs.python-path }}" >> "$GITHUB_ENV"
 
-      - uses: actions/cache@v4
+      - uses: actions/cache@v6
         with:
           path: ~/.gradle/junos-bootstrap
-          key: gradle-bootstrap-8.13
+          key: gradle-bootstrap-9.8.2
 
-      - uses: actions/cache@v4
+      - uses: actions/cache@v6
         with:
           path: |
             ~/.gradle/caches
@@ -163,7 +163,7 @@ jobs:
             cp app/build/outputs/apk/release/app-release-unsigned.apk "$out/JunOS-${REF//\//-}-unsigned.apk"
           fi
 
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: JunOS-android
           path: dist/JunOS-*.apk
@@ -174,14 +174,14 @@ jobs:
     if: startsWith(github.ref, 'refs/tags/')
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
-      - uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@v8
         with:
           name: JunSetup
           path: dist
 
-      - uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@v8
         with:
           name: JunOS-android
           path: dist

@@ -411,11 +411,13 @@ body.karaoke-mode .karaoke-overlay {
   align-items: baseline;
   gap: 16px;
 }
-.karaoke-score-words { color: var(--fg); }
+.karaoke-score-words { flex: 1; color: var(--fg); }
 .karaoke-score-words .hit { color: var(--ok); }
 .karaoke-score-words .miss { color: var(--dim); text-decoration: line-through; }
 .karaoke-score-words .skip { color: var(--dim); }
 .karaoke-score-count { flex: none; color: var(--muted); font-variant-numeric: tabular-nums; }
+.karaoke-score-timing { margin-right: 8px; }
+.karaoke-practice { flex: none; min-width: 4.5em; text-align: right; }
 
 @media (prefers-reduced-motion: reduce) {
   .karaoke-line { transition: none; }

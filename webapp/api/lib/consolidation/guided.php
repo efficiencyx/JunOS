@@ -41,7 +41,7 @@ const CG_STR = ['type' => 'string'];
 function cg_annotate_dates(string $text, int $created): array {
     $past = false;
     $out = preg_replace_callback(
-        '/(?<!since )\b(?:(\d{1,2})(?:st|nd|rd|th)? (' . CONSOLIDATION_MONTHS . ')|(' . CONSOLIDATION_MONTHS . ') (\d{1,2})(?:st|nd|rd|th)?)(?:,? (\d{4}))?\b/i',
+        '/(?<!since |said )\b(?:(\d{1,2})(?:st|nd|rd|th)? (' . CONSOLIDATION_MONTHS . ')|(' . CONSOLIDATION_MONTHS . ') (\d{1,2})(?:st|nd|rd|th)?)(?:,? (\d{4}))?\b/i',
         function ($m) use ($created, &$past) {
             $day = $m[1] !== '' ? $m[1] : $m[4];
             $month = $m[2] !== '' ? $m[2] : $m[3];
@@ -54,6 +54,20 @@ function cg_annotate_dates(string $text, int $created): array {
         $text
     ) ?? $text;
     return [$out, $past];
+}
+
+// "next Saturday" counts from the note's own created day. merged into
+// an older note it'd point at the wrong week, so pin it first
+function cg_pin_dates(array $note): string {
+    $created = (int)$note['created'];
+    if ($created <= 0) return $note['text'];
+    $fuzzy = false;
+    $text = preg_replace_callback(MEMORY_RELATIVE_TIME_RE, function ($m) use ($created, &$fuzzy) {
+        $day = memory_relative_day($m[0], $created);
+        if ($day === null) $fuzzy = true;
+        return $day === null ? $m[0] : 'on ' . date('j F Y', $day);
+    }, $note['text']) ?? $note['text'];
+    return $fuzzy ? preg_replace('/[.!?]?$/', ' (said ' . date('j F Y', $created) . ')$0', $text, 1) : $text;
 }
 
 function cg_show(array $note): string {
@@ -95,6 +109,17 @@ function cg_keeps_all(string $merged, array $sources): bool {
     return true;
 }
 
+// an english note from an italian chat says Rome where he said Roma
+function cg_in_chat(array &$ctx, string $lines, string $text): bool {
+    $chat = strtolower($lines);
+    $missing = array_filter(cg_keepers($text), fn($k) => !str_contains($chat, $k));
+    if (!$missing) return true;
+    [$answer] = consolidation_vote($ctx, 'checking the names',
+        "One of our chats:\n$lines\n\nIs each of these in the chat, maybe in another language or written another way (Roma for Rome, New York for NYC, tre for 3)?\n" . implode(', ', $missing),
+        ['yes', 'no'], 'no');
+    return $answer === 'yes';
+}
+
 function cg_voice_bad(string $text): bool {
     return (bool)preg_match('/\b(the user|assistant|Jun\b|we talked|we chatted|the conversation)|^I\b/i', $text);
 }
@@ -118,10 +143,17 @@ function cg_note(int $userId, string $id): ?array {
     return null;
 }
 
-function cg_mark(int $userId, string $id, string $field): void {
-    memory_with_user_lock($userId, function () use ($userId, $id, $field): array {
+function cg_mark(int $userId, array $note, string $field): void {
+    memory_with_user_lock($userId, function () use ($userId, $note, $field): array {
+        $id = $note['id'];
         $meta = memory_meta_load($userId);
-        if (!isset($meta['notes'][$id])) return ['ok' => true];
+        // no meta entry = never marked = back to the model every pass
+        if (!isset($meta['notes'][$id])) {
+            $live = array_merge(...array_values(array_map(fn($c) => array_column($c['notes'], 'id'), memory_notes_load_unlocked($userId))));
+            if (!in_array($id, $live, true)) return ['ok' => true];
+            $meta = memory_meta_load($userId);
+            $meta['notes'][$id] = ['created' => (int)$note['created'], 'updated' => (int)$note['updated']];
+        }
         $meta['notes'][$id][$field] = time();
         return memory_meta_write($userId, $meta);
     });
@@ -137,9 +169,13 @@ function cg_note_event(array &$ctx, string $action, array $fields): void {
     consolidation_feed_emit($ctx['user'], ['type' => 'note', 'action' => $action] + $fields);
 }
 
-function cg_can_delete(array &$ctx): bool {
-    if ($ctx['deleted'] + 1 > max(1, $ctx['start_notes']) * CONSOLIDATION_DELETE_SHARE) return false;
-    $ctx['deleted']++;
+function cg_delete_room(array $ctx): int {
+    return (int)floor(max(1, $ctx['start_notes']) * CONSOLIDATION_DELETE_SHARE) - $ctx['deleted'];
+}
+
+function cg_can_delete(array &$ctx, int $n = 1): bool {
+    if (cg_delete_room($ctx) < $n) return false;
+    $ctx['deleted'] += $n;
     return true;
 }
 
@@ -177,15 +213,16 @@ function cg_commit(int $userId, int $conversationId, string $column, int $uptoId
 
 function cg_chunks(array $rows, int $budget): array {
     $chunks = [];
-    $current = ['lines' => [], 'upto' => 0, 'size' => 0];
+    $current = ['lines' => [], 'ids' => [], 'upto' => 0, 'size' => 0];
     foreach ($rows as $row) {
         $line = $row['line'];
         if ($current['lines'] && $current['size'] + strlen($line) > $budget) {
             $chunks[] = $current;
-            $current = ['lines' => [], 'upto' => 0, 'size' => 0];
+            $current = ['lines' => [], 'ids' => [], 'upto' => 0, 'size' => 0];
         }
         if ($line !== '') {
             $current['lines'][] = mb_strcut($line, 0, $budget);
+            $current['ids'][] = $row['id'];
             $current['size'] += strlen($line) + 1;
         }
         $current['upto'] = $row['id'];
@@ -196,6 +233,18 @@ function cg_chunks(array $rows, int $budget): array {
 
 function cg_category_help(): string {
     return implode("\n", array_map(fn($k, $v) => "- $k: $v", array_keys(CONSOLIDATION_CATEGORIES), CONSOLIDATION_CATEGORIES));
+}
+
+// his line in the chunk sharing the most words with the note
+function cg_source(array $ctx, string $text): array {
+    $words = cg_words($text);
+    [$best, $bestHits] = [0, 0];
+    foreach ($ctx['chunk']['lines'] as $i => $line) {
+        if (!str_starts_with($line, 'Anon: ')) continue;
+        $hits = count(array_intersect($words, cg_words($line)));
+        if ($hits > $bestHits) [$best, $bestHits] = [$ctx['chunk']['ids'][$i], $hits];
+    }
+    return ['kind' => 'pass', 'conv' => $ctx['chunk']['conv'], 'msg' => $best];
 }
 
 function cg_harvest(array &$ctx, string $lines): void {
@@ -211,8 +260,9 @@ function cg_harvest(array &$ctx, string $lines): void {
 
     foreach ((array)($got['facts'] ?? []) as $fact) {
         $text = trim(str_replace('*', '', (string)$fact));
-        if ($text === '' || cg_shape_bad($text) || !cg_keeps_all($lines, [$text])) {
-            if ($text !== '') cg_note_event($ctx, 'dropped', ['text' => $text, 'why' => 'shape']);
+        if ($text === '') continue;
+        if (cg_shape_bad($text) || !cg_in_chat($ctx, $lines, $text)) {
+            cg_note_event($ctx, 'dropped', ['text' => $text, 'why' => cg_shape_bad($text) ? 'shape' : 'names']);
             continue;
         }
         $check = consolidation_call($ctx, 'checking it against the chat',
@@ -225,7 +275,7 @@ function cg_harvest(array &$ctx, string $lines): void {
         $grounded = (string)($check['grounded'] ?? 'no');
         $fixed = trim((string)($check['fixed'] ?? ''));
         // her fix only counts if every name and number in it is in the chat
-        if ($grounded === 'partly' && $fixed !== '' && !cg_shape_bad($fixed) && cg_keeps_all($lines, [$fixed])) {
+        if ($grounded === 'partly' && $fixed !== '' && !cg_shape_bad($fixed) && cg_in_chat($ctx, $lines, $fixed)) {
             $text = $fixed;
             $grounded = 'yes';
         }
@@ -263,12 +313,13 @@ function cg_harvest(array &$ctx, string $lines): void {
                     . "Once what he told me today has happened, is my note wrong? \"yes\" only if they can't both stay true then. Adding a detail is \"no\".",
                     ['yes', 'no'], 'no');
                 if ($wrong === 'yes') {
+                    $news = cg_pin_dates(['text' => $text, 'created' => time()]);
                     $merged = consolidation_call($ctx, 'updating a note',
-                        "One of my notes isn't right anymore:\n{$old['text']}\n\nWhat he told me today:\n$text\n\n"
+                        "One of my notes isn't right anymore:\n" . cg_pin_dates($old) . "\n\nWhat he told me today:\n$news\n\n"
                         . "Rewrite my note so it's true today. Keep every part of it that is still true, change only what today's news changed, and if he gave a date for the change say what changes when. One or two sentences about him, dates written out in full.",
                         cg_obj(['text' => CG_STR]), 160);
                     $new = trim((string)($merged['text'] ?? ''));
-                    if ($new !== '' && !cg_voice_bad($new) && cg_keeps_all($new, [$text]) && !empty(memory_note_edit($userId, $old['id'], $new)['ok'])) {
+                    if ($new !== '' && !cg_voice_bad($new) && cg_keeps_all($new, [$news]) && !empty(memory_note_edit($userId, $old['id'], $new, cg_source($ctx, $text))['ok'])) {
                         cg_note_event($ctx, 'updated', ['id' => $old['id'], 'category' => $old['category'], 'text' => $new, 'was' => $old['text']]);
                         $ctx['changed']++;
                         continue;
@@ -276,7 +327,7 @@ function cg_harvest(array &$ctx, string $lines): void {
                 }
             }
         }
-        $saved = memory_note_add($userId, $category, $text);
+        $saved = memory_note_add($userId, $category, $text, cg_source($ctx, $text));
         if (!empty($saved['ok'])) {
             cg_note_event($ctx, 'saved', ['id' => $saved['entry']['id'], 'category' => $saved['entry']['category'], 'text' => $saved['entry']['memory']]);
             $ctx['changed']++;
@@ -320,7 +371,7 @@ function cg_tidy(array &$ctx): int {
                     $ctx['changed']++;
                     continue;
                 }
-            } elseif (!empty(memory_note_edit($userId, $note['id'], $text)['ok'])) {
+            } elseif (!empty(memory_note_edit($userId, $note['id'], $text, ['kind' => 'pass'])['ok'])) {
                 cg_note_event($ctx, 'updated', ['id' => $note['id'], 'category' => $note['category'], 'text' => $text, 'was' => $note['text']]);
                 $ctx['changed']++;
                 $note = cg_note($userId, $note['id']) ?? $note;
@@ -339,11 +390,13 @@ function cg_tidy(array &$ctx): int {
                 $ctx['changed']++;
                 continue;
             }
-            cg_mark($userId, $note['id'], 'expiry_ok');
+            cg_mark($userId, $note, 'expiry_ok');
         }
 
         $others = array_filter(cg_all_notes($userId), fn($n) => $n['id'] !== $note['id']);
         $near = cg_similar($note['text'], $others, 4);
+        // out of deletes, it stays unchecked for the next pass
+        if ($near && cg_delete_room($ctx) < 1) continue;
         if ($near) {
             $pick = consolidation_call($ctx, 'looking for doubles',
                 "My notes:\n" . implode("\n", array_map('cg_show', $near)) . "\n\nThe note I'm checking:\n" . cg_show($note) . "\n\n"
@@ -352,18 +405,18 @@ function cg_tidy(array &$ctx): int {
             $other = cg_note($userId, strtolower(trim((string)($pick['id'] ?? 'none'))));
             if ($other && $other['id'] !== $note['id']) {
                 $merged = consolidation_call($ctx, 'merging two notes',
-                    "Two of my notes are about the same thing:\n- {$note['text']}\n- {$other['text']}\n\nWrite them as one note. Keep every detail from both, start with \"Anon\", one or two sentences.",
+                    "Two of my notes are about the same thing:\n- " . cg_pin_dates($note) . "\n- " . cg_pin_dates($other) . "\n\nWrite them as one note. Keep every detail from both, start with \"Anon\", one or two sentences.",
                     cg_obj(['text' => CG_STR]), 120);
                 $text = trim((string)($merged['text'] ?? ''));
-                if ($text !== '' && !cg_voice_bad($text) && cg_keeps_all($text, [$note['text'], $other['text']])
-                    && !empty(memory_note_edit($userId, $note['id'], $text)['ok'])) {
+                if ($text !== '' && !cg_voice_bad($text) && cg_keeps_all($text, [cg_pin_dates($note), cg_pin_dates($other)])
+                    && cg_can_delete($ctx) && !empty(memory_note_edit($userId, $note['id'], $text, ['kind' => 'pass'])['ok'])) {
                     memory_note_delete($userId, $other['id']);
                     cg_note_event($ctx, 'merged', ['id' => $note['id'], 'category' => $note['category'], 'text' => $text, 'was' => $note['text'], 'gone' => $other['text']]);
                     $ctx['changed']++;
                 }
             }
         }
-        cg_mark($userId, $note['id'], 'checked');
+        cg_mark($userId, $note, 'checked');
     }
     return count($queue);
 }
@@ -373,14 +426,29 @@ function cg_names(string $text): array {
     return array_values(array_filter(array_diff(cg_keepers($text), $skip), fn($w) => !ctype_digit($w)));
 }
 
+// "Next" or "When" only ever open a sentence. a name shows up
+// mid-sentence in at least one note
+function cg_known_names(array $notes): array {
+    $known = [];
+    foreach ($notes as $note) {
+        preg_match_all("/(?<!^)(?<![.!?]\s)\b[A-Z][\w']*/u", $note['text'], $m);
+        foreach (cg_names(implode(' ', $m[0])) as $name) $known[$name] = true;
+    }
+    return $known;
+}
+
 // the model never calls two facts about Miso "the same thing", so
 // PHP groups them by the name they share, inside one category
 function cg_compact(array &$ctx, int $tidied): void {
     $userId = $ctx['user'];
     $meta = memory_meta_load($userId)['notes'] ?? [];
+    $all = cg_all_notes($userId);
+    $known = cg_known_names($all);
     $byName = [];
-    foreach (cg_all_notes($userId) as $note) {
-        foreach (cg_names($note['text']) as $name) $byName[$note['category'] . '|' . $name][$note['id']] = $note;
+    foreach ($all as $note) {
+        foreach (cg_names($note['text']) as $name) {
+            if (isset($known[$name])) $byName[$note['category'] . '|' . $name][$note['id']] = $note;
+        }
     }
     uasort($byName, fn($a, $b) => count($b) <=> count($a));
     $used = [];
@@ -397,9 +465,11 @@ function cg_compact(array &$ctx, int $tidied): void {
     }
 
     foreach ($groups as $i => [$name, $notes]) {
-        $texts = array_column($notes, 'text');
-        if (preg_match('/\b(' . preg_quote($name, '/') . ')/i', $texts[0], $m)) $name = $m[1];
         cg_progress($ctx, 2, $tidied + $i + 1, $tidied + count($groups));
+        // no room under the 40% cap: left unmarked, next pass gets it
+        if (cg_delete_room($ctx) < count($notes) - 1) continue;
+        $texts = array_map('cg_pin_dates', $notes);
+        if (preg_match('/\b(' . preg_quote($name, '/') . ')/i', $texts[0], $m)) $name = $m[1];
         $got = consolidation_call($ctx, "putting together what I know about $name",
             "My notes about $name:\n- " . implode("\n- ", $texts) . "\n\n"
             . "Write them as one note. Keep every detail from all of them. One to three sentences. \"he\" and \"his\" only ever mean Anon, anyone else gets their name. Don't link facts that weren't linked.",
@@ -408,13 +478,14 @@ function cg_compact(array &$ctx, int $tidied): void {
         $wanted = array_unique(array_merge(...array_map('cg_words', $texts)));
         $kept = count(array_intersect($wanted, cg_words($text))) / max(1, count($wanted));
         $first = array_shift($notes);
-        if ($text !== '' && !cg_voice_bad($text) && mb_strlen($text) <= 500 && $kept >= 0.7 && cg_keeps_all($text, $texts)
-            && !empty(memory_note_edit($userId, $first['id'], $text)['ok'])) {
+        $merged = $text !== '' && !cg_voice_bad($text) && mb_strlen($text) <= 500 && $kept >= 0.7 && cg_keeps_all($text, $texts)
+            && cg_can_delete($ctx, count($notes)) && !empty(memory_note_edit($userId, $first['id'], $text, ['kind' => 'pass'])['ok']);
+        if ($merged) {
             foreach ($notes as $n) memory_note_delete($userId, $n['id']);
-            cg_note_event($ctx, 'merged', ['id' => $first['id'], 'category' => $first['category'], 'text' => $text, 'was' => implode(' / ', $texts)]);
+            cg_note_event($ctx, 'merged', ['id' => $first['id'], 'category' => $first['category'], 'text' => $text, 'was' => implode(' / ', array_column(array_merge([$first], $notes), 'text'))]);
             $ctx['changed']++;
         }
-        foreach (array_merge([$first], $notes) as $n) cg_mark($userId, $n['id'], 'compacted');
+        foreach ($merged ? [$first] : array_merge([$first], $notes) as $n) cg_mark($userId, $n, 'compacted');
     }
 }
 
@@ -518,6 +589,7 @@ function consolidation_guided(int $userId, int $started): array {
         foreach ($chat['chunks'] as $chunk) {
             cg_progress($ctx, 1, ++$done, $total, $chat['title']);
             if ($chunk['lines']) {
+                $ctx['chunk'] = ['conv' => $chat['id'], 'lines' => $chunk['lines'], 'ids' => $chunk['ids']];
                 cg_harvest($ctx, implode("\n", $chunk['lines']));
                 foreach ($chunk['lines'] as $line) $welcomeLines[] = '[' . $chat['title'] . '] ' . $line;
             }

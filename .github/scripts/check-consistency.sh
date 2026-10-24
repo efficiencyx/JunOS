@@ -80,6 +80,17 @@ else
 fi
 rm -rf "$tmp"
 
+echo "lore corpus"
+# lore.php reads the corpus, never the jsonl. skip the rebuild and
+# every docker image, windows install and release gets old lore
+if ! command -v php >/dev/null 2>&1; then
+	pass 'no php here, corpus freshness not checked'
+elif php tools/build_lore_index.php >/dev/null && git diff --quiet -- webapp/lore_corpus.txt; then
+	pass 'webapp/lore_corpus.txt matches tools/lore_dataset.jsonl'
+else
+	fail 'webapp/lore_corpus.txt is stale, commit what php tools/build_lore_index.php just wrote'
+fi
+
 echo "nothing that must not be in the repo"
 # the extractor is personal-use only per the agreement with the
 # game dev (see NOTICE). ripped assets must never
