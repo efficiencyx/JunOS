@@ -63,7 +63,7 @@ $deadline = time() + PREWARM_PULL_WAIT_S;
 $said = false;
 while (!prewarm_model_pulled($model)) {
     if (time() >= $deadline) {
-        $fallback = ollama_mtp_fallback_model($model);
+        $fallback = chat_fallback_model($model);
         if ($fallback !== '' && prewarm_model_pulled($fallback)) {
             prewarm_say("$model never showed up, warming $fallback instead");
             $model = $fallback;
@@ -85,7 +85,7 @@ $err = prewarm_load($model, $ctx);
 // the drafter's CUDA buffer is the first thing to fail on a
 // crowded card, and chat.php falls back to the base model when
 // that happens. so warm what chat is going to end up on.
-$fallback = $err !== '' ? ollama_mtp_fallback_model($model) : '';
+$fallback = $err !== '' ? chat_fallback_model($model) : '';
 if ($fallback !== '') {
     prewarm_say("$model failed ($err), trying $fallback");
     $model = $fallback;

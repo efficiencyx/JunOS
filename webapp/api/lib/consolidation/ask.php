@@ -102,7 +102,7 @@ function consolidation_call(array &$ctx, string $label, string $task, ?array $sc
         $flush();
 
         if ($state['http_status'] >= 400 && $attempt === 0) {
-            $fallback = ollama_mtp_fallback_model($model);
+            $fallback = chat_fallback_model($model);
             if ($fallback !== '') {
                 log_event(['msg' => 'mtp_fallback', 'from' => $model, 'to' => $fallback, 'err' => 'http_' . $state['http_status']]);
                 $model = $fallback;

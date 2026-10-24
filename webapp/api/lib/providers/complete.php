@@ -29,7 +29,7 @@ function provider_post_chat(string $provider, array $payload, ?string &$error = 
             $error = 'invalid_response';
             return null;
         }
-        $fallback = $status >= 400 ? ollama_mtp_fallback_model((string)($payload['model'] ?? '')) : '';
+        $fallback = $status >= 400 ? chat_fallback_model((string)($payload['model'] ?? '')) : '';
         if ($fallback === '') return null;
         log_event(['msg' => 'mtp_fallback', 'from' => $payload['model'], 'to' => $fallback, 'err' => $error]);
         $payload['model'] = $fallback;

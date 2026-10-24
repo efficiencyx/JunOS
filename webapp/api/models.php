@@ -65,6 +65,7 @@ if ($provider === 'openrouter') {
         $models = [];
         foreach ($data['data'] as $m) {
             if (!isset($m['id']) || !is_string($m['id']) || $m['id'] === $titleModel) continue;
+            if ($provider === 'llamacpp' && llamacpp_is_drafter($m['id'])) continue;
             $models[] = $m['id'];
         }
     }

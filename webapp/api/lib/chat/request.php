@@ -51,7 +51,7 @@ function chat_parse_request(string $provider): array {
         if (!preg_match('/^[a-z0-9._:\\/\-]{1,64}$/i', $body['model'])) sse_fail('invalid_request');
         $model = $body['model'];
     }
-    $model = ollama_resolve_chat_model($model);
+    $model = resolve_chat_model($model);
 
     // she hears through the mmproj (the multimodal projector) that
     // sits next to the GGUF. ollama and llama.cpp both say whether

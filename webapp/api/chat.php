@@ -91,7 +91,7 @@ if ($toolsOffered) $upstreamPayload['tools'] = tool_catalog($approvedWebSearchQu
 
 $prepMs = (int)round((microtime(true) - $_SERVER['REQUEST_TIME_FLOAT']) * 1000);
 $sawError = false;
-$mtpFellBack = false;
+$modelFellBack = false;
 $assistantBuffer = '';
 $usedTools = false;
 $stats = null;
@@ -133,9 +133,9 @@ for ($round = 0; $round < 3; $round++) {
             log_event(['msg' => 'upstream_http_error', 'provider' => $PROVIDER,
                        'model' => $upstreamPayload['model'], 'status' => $result['http_status'],
                        'body' => mb_substr($result['error_body'], 0, 500)]);
-            $fallback = $mtpFellBack ? '' : ollama_mtp_fallback_model((string)$upstreamPayload['model']);
+            $fallback = $modelFellBack ? '' : chat_fallback_model((string)$upstreamPayload['model']);
             if ($fallback !== '') {
-                $mtpFellBack = true;
+                $modelFellBack = true;
                 $model = $fallback;
                 $upstreamPayload['model'] = $fallback;
                 $retryRound = true;
@@ -152,6 +152,15 @@ for ($round = 0; $round < 3; $round++) {
                 // NEVER log request headers. the API key is in there.
                 log_event(['msg' => 'upstream_http_error', 'provider' => $PROVIDER,
                            'status' => $result['http_status'], 'body' => mb_substr($result['error_body'], 0, 500)]);
+                $fallback = $modelFellBack || !str_contains($result['error_body'], 'failed to load')
+                    ? '' : chat_fallback_model((string)$upstreamPayload['model']);
+                if ($fallback !== '') {
+                    $modelFellBack = true;
+                    $model = $fallback;
+                    $upstreamPayload['model'] = $fallback;
+                    $retryRound = true;
+                    continue;
+                }
                 if ($round === 0 && !$retriedWithoutTools && isset($upstreamPayload['tools'])) {
                     // one more go, for llama.cpp templates that refuse tools
                     unset($upstreamPayload['tools']);

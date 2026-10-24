@@ -78,8 +78,10 @@ function display_chat_model(): string {
 // so the name coming back from the browser is the plain one. swap
 // it right before we talk to ollama, otherwise she answers from
 // the twin with no drafter attached and you lose the speedup
-// without anything telling you.
-function ollama_resolve_chat_model(string $model): string {
+// without anything telling you. a drafter picked back when
+// models.php still listed it goes back to her.
+function resolve_chat_model(string $model): string {
+    if (ai_provider() === 'llamacpp') return llamacpp_is_drafter($model) ? default_chat_model() : $model;
     if (ai_provider() !== 'ollama') return $model;
     $mtp = ollama_mtp_model();
     if ($mtp === '') return $model;
@@ -90,8 +92,13 @@ function ollama_resolve_chat_model(string $model): string {
 // and leave Ollama returning 500 on every retry. the base
 // fine-tune has the same weights without drafting, so fallback
 // costs speed only. return empty unless this is the twin and a
-// base exists.
-function ollama_mtp_fallback_model(string $model): string {
+// base exists. on llama.cpp anything that isn't her falls back
+// to her, the router 500s on every model it can't load.
+function chat_fallback_model(string $model): string {
+    if (ai_provider() === 'llamacpp') {
+        $default = default_chat_model();
+        return $model === $default ? '' : $default;
+    }
     if (ai_provider() !== 'ollama') return '';
     $mtp = ollama_mtp_model();
     if ($mtp === '' || $model !== $mtp) return '';

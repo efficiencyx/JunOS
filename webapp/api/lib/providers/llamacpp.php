@@ -29,6 +29,14 @@ function llamacpp_title_model(): string {
     return str_contains($model, '/') ? $model : '';
 }
 
+// the router lists every GGUF in its HF cache, the MTP drafter too.
+// it can't chat, it dies on "Gemma4Assistant requires ctx_other"
+function llamacpp_is_drafter(string $id): bool {
+    $mtp = env_str('LLAMACPP_MTP');
+    return stripos($id, '-mtp') !== false
+        || ($mtp !== '' && explode(':', $id)[0] === explode(':', $mtp)[0]);
+}
+
 // id => loaded / loading / unloaded. a llama-server of your own that
 // isn't a router has no status field, its one model counts as loaded
 function llamacpp_models(): array {
