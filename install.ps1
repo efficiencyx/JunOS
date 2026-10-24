@@ -173,6 +173,39 @@ function Resolve-Model([string]$a, [int]$mb = 0) {
     return "hf.co/efficiencyx/Jun-LoRA-$size-GGUF:$(Get-QuantFor $size $mb)"
 }
 
+$ggufGb = @{
+    '12B:Q4_K_M' = '7.4'; '12B:Q6_K' = '9.8'; '12B:Q8_0' = '12.7'
+    'E4B:Q4_K_M' = '5.3'; 'E4B:Q6_K' = '6.2'; 'E4B:Q8_0' = '8.0'
+    'E2B:Q4_K_M' = '3.4'; 'E2B:Q6_K' = '3.8'; 'E2B:Q8_0' = '4.9'
+}
+
+# Enter keeps the quant $modelRef already has
+function Ask-Quant([string]$modelRef) {
+    $cut = $modelRef.LastIndexOf(':')
+    $base = $modelRef.Substring(0, $cut)
+    $rec = $modelRef.Substring($cut + 1)
+    $size = $base -replace '^.*Jun-LoRA-', '' -replace '-GGUF$', ''
+    $quants = @('Q4_K_M', 'Q6_K', 'Q8_0')
+    $notes = @{ 'Q4_K_M' = ', lightest'; 'Q6_K' = ''; 'Q8_0' = ', closest to the full model' }
+    Write-Host ''
+    Write-Host "     ${B}select a quant for Jun ${size}${R}"
+    for ($i = 0; $i -lt $quants.Count; $i++) {
+        $q = $quants[$i]
+        $note = $notes[$q]
+        if ($q -eq $rec) { $note += ' (recommended)' }
+        Write-Host ("       ${ACCENT}[$($i + 1)]${R}  {0,-7} ${DIM}- $($ggufGb["${size}:$q"]) GB${note}${R}" -f $q)
+    }
+    $ans = (Read-Styled "     ${OK}▸${R} choice ${DIM}[Enter = recommended ${rec}]${R} ${ACCENT}›${R} ").ToUpper()
+    $pick = switch -Regex ($ans) {
+        '^(1|Q4_K_M)$' { 'Q4_K_M' }
+        '^(2|Q6_K)$'   { 'Q6_K' }
+        '^(3|Q8_0)$'   { 'Q8_0' }
+        '^$'           { $rec }
+        default        { Warn_ "unrecognized choice, using $rec"; $rec }
+    }
+    return "${base}:$pick"
+}
+
 # match the drafter, the little model that guesses tokens
 # ahead, to the same Gemma 4 size and QAT branch (QAT is
 # quantization-aware training, the -qat- repos). a mismatch
@@ -208,7 +241,9 @@ function Get-MtpBudgetMb([string]$modelRef) {
         'Jun-LoRA-12B.*Q6_K' { return 10800 }
         'Jun-LoRA-12B'       { return 8100 }
         'E4B.*Q8_0'          { return 9000 }
+        'E4B.*Q6_K'          { return 6500 }
         'E4B'                { return 5000 }
+        'E2B.*Q8_0'          { return 5600 }
         'E2B.*Q6_K'          { return 4500 }
         'E2B'                { return 3400 }
         default              { return 0 }
@@ -479,6 +514,7 @@ function Ask-ModelRef {
                 { $_ -match '^(12b|e4b|e2b)$' } { $alias = $ans }
                 default { Warn_ 'unrecognized choice, using recommended model'; $alias = $rec }
             }
+            return Ask-Quant (Resolve-Model $alias $(if ($null -ne $vram) { $vram } else { 0 }))
         } else {
             $alias = $rec
         }

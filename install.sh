@@ -173,7 +173,9 @@ mtp_budget_mb() {
         *Jun-LoRA-12B*Q6_K) echo 10800 ;;
         *Jun-LoRA-12B*)     echo 8100 ;;
         *E4B*Q8_0)          echo 9000 ;;
+        *E4B*Q6_K)          echo 6500 ;;
         *E4B*)              echo 5000 ;;
+        *E2B*Q8_0)          echo 5600 ;;
         *E2B*Q6_K)          echo 4500 ;;
         *E2B*)              echo 3400 ;;
         *)                  echo 0 ;;
@@ -188,6 +190,37 @@ quant_for() {  # size vram-MB -> quant
         E4B) if [ "$mb" -ge 9500 ]; then echo Q8_0; else echo Q4_K_M; fi ;;
         E2B) if [ "$mb" -ge 7500 ]; then echo Q8_0; elif [ "$mb" -ge 5500 ]; then echo Q6_K; else echo Q4_K_M; fi ;;
     esac
+}
+
+gguf_gb() {
+    case "$1:$2" in
+        12B:Q4_K_M) echo 7.4 ;; 12B:Q6_K) echo 9.8 ;; 12B:Q8_0) echo 12.7 ;;
+        E4B:Q4_K_M) echo 5.3 ;; E4B:Q6_K) echo 6.2 ;; E4B:Q8_0) echo 8.0 ;;
+        E2B:Q4_K_M) echo 3.4 ;; E2B:Q6_K) echo 3.8 ;; E2B:Q8_0) echo 4.9 ;;
+    esac
+}
+
+ask_quant() {  # full-ref -> full-ref, enter keeps its quant
+    local base="${1%:*}" rec="${1##*:}" size q i=1 note ans
+    size="${base##*Jun-LoRA-}"; size="${size%-GGUF}"
+    {
+        printf '\n     %sselect a quant for Jun %s%s\n' "$B" "$size" "$R"
+        for q in Q4_K_M Q6_K Q8_0; do
+            case "$q" in Q4_K_M) note=", lightest" ;; Q8_0) note=", closest to the full model" ;; *) note="" ;; esac
+            [ "$q" = "$rec" ] && note="$note (recommended)"
+            printf '       %s%s%s  %-7s %s- %s GB%s%s\n' "$ACCENT" "$i" "$R" "$q" "$DIM" "$(gguf_gb "$size" "$q")" "$note" "$R"
+            i=$((i + 1))
+        done
+        printf '     %s$%s choice %s[enter = recommended %s]%s %s→%s ' \
+            "$OK" "$R" "$DIM" "$rec" "$R" "$ACCENT" "$R"
+    } > /dev/tty
+    read -r ans < /dev/tty || ans=""
+    case "$(printf '%s' "$ans" | tr '[:lower:]' '[:upper:]')" in
+        1|Q4_K_M) q=Q4_K_M ;; 2|Q6_K) q=Q6_K ;; 3|Q8_0) q=Q8_0 ;;
+        "") q="$rec" ;;
+        *) printf '     %s✗%s unrecognized choice, using %s\n' "$DANGER" "$R" "$rec" > /dev/tty; q="$rec" ;;
+    esac
+    echo "$base:$q"
 }
 
 resolve_model() {  # alias|full-ref [vram-MB] -> full-ref
@@ -343,6 +376,8 @@ ask_model_ref() {
             "") alias="$rec" ;;
             *) printf '     %s✗%s unrecognized choice, using recommended model\n' "$DANGER" "$R" > /dev/tty; alias="$rec" ;;
         esac
+        MODEL_REF="$(ask_quant "$(resolve_model "$alias" "$vram")")"
+        return
     fi
 
     MODEL_REF="$(resolve_model "$alias" "$vram")"

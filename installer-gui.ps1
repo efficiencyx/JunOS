@@ -671,7 +671,9 @@ $modelChoices = @(
     @{ Label = 'Jun 12B — Q6_K, high quality'; Ref = 'hf.co/efficiencyx/Jun-LoRA-12B-GGUF:Q6_K' },
     @{ Label = 'Jun 12B — Q4_K_M'; Ref = 'hf.co/efficiencyx/Jun-LoRA-12B-GGUF:Q4_K_M' },
     @{ Label = 'Jun E4B — Q8_0, balanced'; Ref = 'hf.co/efficiencyx/Jun-LoRA-E4B-GGUF:Q8_0' },
+    @{ Label = 'Jun E4B — Q6_K, balanced'; Ref = 'hf.co/efficiencyx/Jun-LoRA-E4B-GGUF:Q6_K' },
     @{ Label = 'Jun E4B — Q4_K_M, balanced'; Ref = 'hf.co/efficiencyx/Jun-LoRA-E4B-GGUF:Q4_K_M' },
+    @{ Label = 'Jun E2B — Q8_0, lightweight'; Ref = 'hf.co/efficiencyx/Jun-LoRA-E2B-GGUF:Q8_0' },
     @{ Label = 'Jun E2B — Q6_K, lightweight'; Ref = 'hf.co/efficiencyx/Jun-LoRA-E2B-GGUF:Q6_K' },
     @{ Label = 'Jun E2B — Q4_K_M, CPU-friendly'; Ref = 'hf.co/efficiencyx/Jun-LoRA-E2B-GGUF:Q4_K_M' }
 )

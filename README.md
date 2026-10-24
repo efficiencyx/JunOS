@@ -131,7 +131,7 @@ The step-by-step commands for it, every provider, and the manual compose invocat
 One question: **Express**, **Custom** or **Cloud**.
 
 - **Express** - press Enter and forget about it. It figures out your hardware on its own and rebuilds her Live2D model from your game copy. The only things it might still ask are *where* the game is, if it can't find it by itself, whether you want the [update checker](#which-jun-you-get), and on Linux whether to add you to the docker group when it just installed Docker (that one's root without a password, so it's your call, not ours. We'd say no).
-- **Custom** - walks you through which [release channel](#which-jun-you-get), which provider, which model, which voice, and whether to turn on [MTP](#faster-tokens-mtp).
+- **Custom** - walks you through which [release channel](#which-jun-you-get), which provider, which model and quant, which voice, and whether to turn on [MTP](#faster-tokens-mtp).
 - **Cloud** - everything except her brain, which lives on the [Colab notebook](#no-gpu-or-you-just-want-to-test-the-waters-no-problem) in inference-only mode. It asks for the lines the notebook prints (or you add them later), and whether you want voice and karaoke. Your chats go to the notebook for this one.
 
 Installing on a machine you can't sit in front of? `JUN_YES=1` (on Windows, `$env:JUN_YES='1'`) skips the question entirely. On Linux nobody's there to say yes to the docker group either, so Docker stays behind `sudo` unless you also pass `JUN_DOCKER_GROUP=1`.
@@ -254,7 +254,7 @@ The fine-tune comes in 12B, E4B and E2B on Hugging Face. The installer picks a c
 | 16 GB | 12B Q6_K | 12B Q8_0 |
 | 24 GB | 12B Q8_0 | - |
 
-`JUN_MODEL=12b|e4b|e2b` (or the number in the installer's menu) picks a size, and you get the quant the table gives that size for your VRAM; a full Ollama reference picks an exact quant. The frontend lists whatever's actually installed.
+`JUN_MODEL=12b|e4b|e2b` picks a size, and you get the quant the table gives that size for your VRAM; a full Ollama reference picks an exact quant. Custom asks for the size, then the quant, with the table's pick as the Enter default. The Colab notebook has the same `Quant` field next to `Model`. The frontend lists whatever's actually installed.
 
 ### Faster tokens: MTP
 
