@@ -321,12 +321,15 @@ Rate-limit zones defined in `docker/nginx/templates/omega.conf.template`:
 ```nginx
 limit_req_zone  $binary_remote_addr zone=api:10m rate=10r/s;
 limit_req_zone  $binary_remote_addr zone=api_other:10m rate=10r/s;
-limit_conn_zone $binary_remote_addr zone=conns:10m;
+limit_conn_zone $binary_remote_addr zone=chat_conns:10m;
+limit_conn_zone $binary_remote_addr zone=tts_conns:10m;
+limit_conn_zone $binary_remote_addr zone=stt_conns:10m;
+limit_conn_zone $binary_remote_addr zone=karaoke_conns:10m;
 limit_conn_status 429;
 limit_req_status  429;
 ```
 
-Each API location layers its own burst and open-connection cap on top: `/api/chat.php` gets `limit_req zone=api burst=20 nodelay;` and `limit_conn conns 2;` (two live streams per IP), `/api/tts.php` `burst=10` / `conns 4`, `/api/stt.php` `burst=5` / `conns 1`, `/api/karaoke.php` `burst=5` / `conns 2` (the karaoke page fetches both stems in parallel). Those four use `nodelay`: requests over the burst return 429 immediately, no queuing. Every other `/api/*.php` sits in its own `api_other` bucket with `burst=20 delay=10`: the first 10 requests over the rate are served at once (a page load fires about 8 in parallel), the next 10 queue at 10r/s, and anything past that is a 429. It gets its own bucket because a page's burst of small calls would otherwise spend the `burst=5` that `stt.php` and `karaoke.php` get hit with right after. `limit_req_status 429` matters: nginx's default for `limit_req` is 503. `client_max_body_size` is 16k everywhere except the locations that take a body (chat, STT, karaoke), which override it.
+Each API location layers its own burst and open-connection cap on top: `/api/chat.php` gets `limit_req zone=api burst=20 nodelay;` and `limit_conn chat_conns 2;` (two live streams per IP), `/api/tts.php` `burst=10` / `tts_conns 4`, `/api/stt.php` `burst=5` / `stt_conns 1`, `/api/karaoke.php` `burst=5` / `karaoke_conns 2` (the karaoke page fetches both stems in parallel). Each location has its own connection zone: over HTTP/2 every in-flight request counts as a connection, and when the four shared one zone, the TTS fetches for a reply she was still speaking took chat.php's two slots and the next voice turn got a 429. Those four use `nodelay`: requests over the burst return 429 immediately, no queuing. Every other `/api/*.php` sits in its own `api_other` bucket with `burst=20 delay=10`: the first 10 requests over the rate are served at once (a page load fires about 8 in parallel), the next 10 queue at 10r/s, and anything past that is a 429. It gets its own bucket because a page's burst of small calls would otherwise spend the `burst=5` that `stt.php` and `karaoke.php` get hit with right after. `limit_req_status 429` matters: nginx's default for `limit_req` is 503. `client_max_body_size` is 16k everywhere except the locations that take a body (chat, STT, karaoke), which override it.
 
 Security headers live in `docker/nginx/snippets/security-headers.conf` and are `include`d by the server block:
 
@@ -372,7 +375,7 @@ Endpoint-specific caps:
 - `stats.php` - the whole endpoint (model list, VRAM, host readings).
 - `relationship.php` `PUT` - the absolute-value override. `GET` stays open to the session owner; see [Relationship state](#relationship-state).
 - `memory.php` `DELETE` - both the single-note and `{"all":true}` forms.
-- `chat.php`'s debug SSE frame - it carries the fully assembled system prompt and live context, so it is only emitted to an admin session. The dev HUD is its only consumer.
+- `chat.php`'s debug SSE frame - it carries the fully assembled system prompt, live context and final user turn, so it is only emitted to an admin session. The same gate adds the raw `call` (what the model emitted) and `message` (what went back to it) to `tool_status` frames. Settings > Developer shows all of it, next to her chain of thought and the raw reply tokens.
 - `consolidate.php?action=welcome` preview parameters (`preview`, `away`, `tier`); the plain welcome read, `hour` included, stays open to everyone.
 - `api/review.php`, the local dataset triage UI (dev boxes only, not in the public repo; `sync-webapp.sh` leaves it out unless `SYNC_REVIEW=1`).
 

@@ -95,7 +95,9 @@ $Services = 'caddy', 'php', 'memory', 'prewarm', 'tts', 'ollama', 'llamacpp'
 # set already, so you can still override one for a single run.
 if (Test-Path .env) {
     foreach ($line in Get-Content .env) {
-        if ($line -match '^\s*([A-Za-z_][A-Za-z0-9_]*)\s*=\s*(.*)$') {
+        # -cmatch ON PURPOSE. turkish 5.1's -match lowercases I to
+        # dotless i (U+0131), [A-Za-z] misses it, AI_PROVIDER gone
+        if ($line -cmatch '^\s*([A-Za-z_][A-Za-z0-9_]*)\s*=\s*(.*)$') {
             $k = $Matches[1]; $v = $Matches[2].Trim()
             # the docker hostnames in .env.example mean nothing on bare
             # metal, so skip them and use our own localhost defaults.

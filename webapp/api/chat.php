@@ -69,11 +69,16 @@ if ($req['ephemeral']) {
 // names are low/med/high there, not medium.
 $messages[count($messages) - 1]['content'] .= "\n\n<think:" . ($reasoning === 'medium' ? 'med' : $reasoning) . '>';
 
-// this frame carries the WHOLE assembled system prompt, so it
-// stays behind the admin role. the dev HUD is the only thing that
-// reads it.
-if (is_admin($user)) {
-    sse_send(['debug' => ['system_prompt' => $systemContent, 'live_context' => $liveContext, 'reasoning' => $reasoning, 'think' => $think, 'route' => $route]]);
+// this frame carries the WHOLE assembled prompt, so it stays
+// behind the admin role. same for the raw tool frames below
+$isAdmin = is_admin($user);
+if ($isAdmin) {
+    $userTurn = $messages[count($messages) - 1];
+    sse_send(['debug' => [
+        'system_prompt' => $systemContent, 'live_context' => $liveContext,
+        'user_turn' => $userTurn['content'], 'audio_attached' => !empty($userTurn['images']),
+        'reasoning' => $reasoning, 'think' => $think, 'route' => $route,
+    ]]);
 }
 
 $userRowId = chat_save_user_message($convId, $req, $lastUserMsg);
@@ -222,23 +227,23 @@ for ($round = 0; $round < 3; $round++) {
     foreach (array_slice($toolCalls, 0, 4) as $call) {
         $name = (string)($call['function']['name'] ?? '');
         $args = tool_call_args($call);
-        sse_send(['tool_status' => ['name' => $name, 'state' => 'running', 'args' => $args]]);
+        $running = ['name' => $name, 'state' => 'running', 'args' => $args];
+        if ($isAdmin) $running['call'] = $call;
+        sse_send(['tool_status' => $running]);
         $t0 = microtime(true);
         $toolResult = chat_run_tool($name, $args, [
             'provider' => $PROVIDER, 'model' => $model, 'user' => $user, 'conv_id' => $convId, 'req' => $req,
         ], $state);
-        sse_send(['tool_status' => [
+        $toolMessage = provider_tool_message($PROVIDER, $name, (string)($call['id'] ?? ''), $toolResult);
+        $done = [
             'name' => $name, 'state' => 'done',
             'duration_ms' => (int)round((microtime(true) - $t0) * 1000),
             'result' => mb_substr($toolResult, 0, 2000),
-        ]]);
+        ];
+        if ($isAdmin) $done['message'] = $toolMessage;
+        sse_send(['tool_status' => $done]);
         if ($state['silenced'] || $state['fled'] !== null) break;
-        $messages[] = provider_tool_message(
-            $PROVIDER,
-            $name,
-            (string)($call['id'] ?? ''),
-            $toolResult
-        );
+        $messages[] = $toolMessage;
     }
     if ($state['silenced'] || $state['fled'] !== null) break;
     $usedTools = true;

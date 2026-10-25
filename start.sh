@@ -2,13 +2,27 @@
 set -euo pipefail
 cd "$(dirname "$0")"
 
+# dockerd only offers driver: nvidia when one of these hooks is on
+# its PATH at startup. no hook = "could not select device driver"
+docker_sees_nvidia() {
+  command -v nvidia-container-runtime-hook >/dev/null 2>&1 \
+    || command -v nvidia-cdi-hook >/dev/null 2>&1 \
+    || docker info 2>/dev/null | grep -q '^ *Runtimes:.*nvidia'
+}
+
 detect_gpu() {
   case "${GPU:-auto}" in
     nvidia|amd|cpu) echo "$GPU"; return ;;
   esac
   if { command -v nvidia-smi >/dev/null 2>&1 && nvidia-smi -L >/dev/null 2>&1; } \
      || [ -e /proc/driver/nvidia/version ]; then
-    echo nvidia
+    if docker_sees_nvidia; then
+      echo nvidia
+    else
+      echo "warning: NVIDIA card found but Docker can't use it, the NVIDIA Container Toolkit is missing." >&2
+      echo "         she runs on the CPU for now. re-run install.sh and it offers to add it" >&2
+      echo cpu
+    fi
   elif [ -e /dev/kfd ] && compgen -G "/dev/dri/renderD*" >/dev/null; then
     echo amd
   else

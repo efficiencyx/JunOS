@@ -208,8 +208,8 @@
   .settings-drawer {
     top: calc(var(--visual-viewport-top, 0px) + var(--visual-viewport-height, 100dvh) / 2);
     left: calc(var(--visual-viewport-left, 0px) + var(--visual-viewport-width, 100vw) / 2);
-    width: min(780px, calc(var(--visual-viewport-width, 100vw) - 16px));
-    height: min(580px, calc(var(--visual-viewport-height, 100dvh) - 16px));
+    width: calc(var(--visual-viewport-width, 100vw) - 16px);
+    height: min(1000px, calc(var(--visual-viewport-height, 100dvh) - 16px));
     max-width: none;
   }
   .settings-nav { width: 60px; }

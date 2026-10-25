@@ -277,7 +277,7 @@ llama.cpp can also serve a GGUF straight off your disk (`LLAMACPP_MODELS_DIR` + 
 
 | Backend | How `start.sh` spots it | What it does |
 |---|---|---|
-| **NVIDIA** | `nvidia-smi` works, or `/proc/driver/nvidia` exists | Adds `docker-compose.nvidia.yml`. Needs [nvidia-container-toolkit](https://docs.nvidia.com/datacenter/cloud-native/container-toolkit/latest/install-guide.html). |
+| **NVIDIA** | `nvidia-smi` works, or `/proc/driver/nvidia` exists | Adds `docker-compose.nvidia.yml`. Needs [nvidia-container-toolkit](https://docs.nvidia.com/datacenter/cloud-native/container-toolkit/latest/install-guide.html), which `install.sh` offers to install when Docker can't see the card. Until it's there `start.sh` says so and boots her on the CPU. |
 | **AMD** | `/dev/kfd` + `/dev/dri/renderD*` present | Adds `docker-compose.amd.yml` (ROCm image, device passthrough, host `video`/`render` groups). Needs `amdgpu`. |
 | **CPU** | nothing else matched | Base compose only - runs anywhere. |
 | **Intel** | Not implemented | Do you have an Intel GPU? Contact me! |

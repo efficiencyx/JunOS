@@ -126,7 +126,13 @@ class ChatEngine(
         trimToBudget(messages)
         val baseMessages = messages.toList()
 
-        emit(buildJsonObject { put("debug", buildJsonObject { put("live_context", liveContext); put("reasoning", reasoning); put("think", think) }) })
+        emit(buildJsonObject {
+            put("debug", buildJsonObject {
+                put("system_prompt", baseMessages.first().content); put("live_context", liveContext)
+                put("user_turn", baseMessages.last().content); put("audio_attached", false)
+                put("reasoning", reasoning); put("think", think)
+            })
+        })
         val statusJob = if (engine.state.value !is EngineState.Ready) {
             emit(statusEvent("loading", 0f))
             CoroutineScope(currentCoroutineContext()).launch {
@@ -166,6 +172,10 @@ class ChatEngine(
                 visible.append(text)
                 emit(buildJsonObject { put("token", text) })
             }
+            suspend fun streamThoughts(thoughts: ThinkStreamFilter) {
+                val thought = thoughts.drainThought()
+                if (thought.isNotEmpty()) emit(buildJsonObject { put("thinking", thought) })
+            }
             for (round in 0 until 3) {
                 val thoughts = ThinkStreamFilter()
                 val lead = StringBuilder()
@@ -175,11 +185,13 @@ class ChatEngine(
                         is TurnEvent.Text -> {
                             tokenCount++
                             show(thoughts.push(event.text), lead)
+                            streamThoughts(thoughts)
                         }
                         is TurnEvent.Call -> calls += event.call
                     }
                 }
                 show(thoughts.finish(), lead)
+                streamThoughts(thoughts)
                 engine.lastStats.value?.let { stats ->
                     nativeEvalCount += stats["eval_count"]?.jsonPrimitive?.intOrNull ?: 0
                     nativeEvalMs += stats["eval_ms"]?.jsonPrimitive?.longOrNull ?: 0
@@ -189,10 +201,14 @@ class ChatEngine(
                 val ran = calls.take(4)
                 messages += ChatMessage("assistant", lead.toString(), toolCalls = ran)
                 for (call in ran) {
-                    emit(toolStatus(call.name, "running"))
+                    emit(toolStatus(call.name, "running", raw = buildJsonObject {
+                        put("call", buildJsonObject { put("name", call.name); put("arguments", call.args) })
+                    }))
                     val result = if (call.name == "change_outfit") changeOutfit(call.args, modItems, emit)
                         else executeTool(call, request.conversationId, noteSource)
-                    emit(toolStatus(call.name, "done", result))
+                    emit(toolStatus(call.name, "done", result, raw = buildJsonObject {
+                        put("message", buildJsonObject { put("role", "tool"); put("name", call.name); put("content", result) })
+                    }))
                     if (call.name == "stay_silent" && !request.idle) silenced = true
                     if (call.name == "flee") fled = buildJsonObject {
                         put("until", 0); put("minutes", 0); put("reason", call.args["reason"]?.jsonPrimitive?.content.orEmpty())
@@ -212,9 +228,11 @@ class ChatEngine(
                     if (event is TurnEvent.Text) {
                         tokenCount++
                         show(thoughts.push(event.text), plain)
+                        streamThoughts(thoughts)
                     }
                 }
                 show(thoughts.finish(), plain)
+                streamThoughts(thoughts)
             }
         } finally {
             GenerationService.stop(context)
@@ -347,10 +365,11 @@ class ChatEngine(
         put("status", buildJsonObject { put("phase", phase); put("progress", progress) })
     }
 
-    private fun toolStatus(name: String, state: String, result: String? = null) = buildJsonObject {
+    private fun toolStatus(name: String, state: String, result: String? = null, raw: JsonObject? = null) = buildJsonObject {
         put("tool_status", buildJsonObject {
             put("name", name); put("state", state)
             if (result != null) put("result", result.take(2000))
+            raw?.forEach { (key, value) -> put(key, value) }
         })
     }
 
@@ -480,17 +499,18 @@ class ChatEngine(
 }
 
 // some builds wrap reasoning in <think>...</think>. the tags
-// split across tokens, so hold any partial tag and drop the whole
-// block.
+// split across tokens, so hold any partial tag and keep the whole
+// block out of the reply (drainThought() hands it over seperately)
 internal class ThinkStreamFilter {
     private val held = StringBuilder()
+    private val thought = StringBuilder()
     private var inside = false
 
     fun push(chunk: String): String {
         val out = StringBuilder()
         for (char in chunk) {
             if (held.isEmpty() && char != '<') {
-                if (!inside) out.append(char)
+                (if (inside) thought else out).append(char)
                 continue
             }
             held.append(char)
@@ -502,10 +522,9 @@ internal class ThinkStreamFilter {
                 }
             } else {
                 val restart = char == '<'
-                if (!inside) {
-                    out.append(held, 0, held.length - 1)
-                    if (!restart) out.append(char)
-                }
+                val into = if (inside) thought else out
+                into.append(held, 0, held.length - 1)
+                if (!restart) into.append(char)
                 held.clear()
                 if (restart) held.append(char)
             }
@@ -515,9 +534,12 @@ internal class ThinkStreamFilter {
 
     fun finish(): String {
         val tail = if (inside) "" else held.toString()
+        if (inside) thought.append(held)
         held.clear()
         return tail
     }
+
+    fun drainThought(): String = thought.toString().also { thought.clear() }
 
     private companion object {
         const val OPEN = "<think>"

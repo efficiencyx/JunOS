@@ -13,6 +13,9 @@ CHANNEL=""
 TARGET=""
 DOCKER_SCRIPT_URL="https://get.docker.com"
 DOCKER_SCRIPT=""
+NVIDIA_REPO="https://nvidia.github.io/libnvidia-container"
+NVIDIA_GUIDE_URL="https://docs.nvidia.com/datacenter/cloud-native/container-toolkit/latest/install-guide.html"
+NVIDIA_CONFIG=/etc/nvidia-container-runtime/config.toml
 OS="$(uname -s)"
 NEED_SG=0
 NEED_SUDO=0
@@ -1190,8 +1193,12 @@ record_change() {
 # ip_unprivileged_port_start. the rootless netns (its own network
 # namespace) copies the value when it's created, hence the daemon
 # restart.
+docker_is_rootless() {
+    docker_run docker info -f '{{.SecurityOptions}}' 2>/dev/null | grep -q rootless
+}
+
 allow_privileged_ports() {
-    docker_run docker info -f '{{.SecurityOptions}}' 2>/dev/null | grep -q rootless || return 0
+    docker_is_rootless || return 0
     local start
     start="$(sysctl -n net.ipv4.ip_unprivileged_port_start 2>/dev/null || echo 1024)"
     [ "$start" -le 80 ] && return 0
@@ -1218,6 +1225,137 @@ wait_for_docker() {
     done
     printf ' %stimeout%s\n' "$WARN" "$R"
     return 1
+}
+
+# same hook check as start.sh. rootless also needs no-cgroups,
+# its daemon isn't allowed to set up device cgroups
+nvidia_toolkit_ready() {
+    command -v nvidia-container-runtime-hook >/dev/null 2>&1 \
+        || command -v nvidia-cdi-hook >/dev/null 2>&1 \
+        || return 1
+    [ "$1" = 1 ] || return 0
+    grep -Eq '^[[:space:]]*no-cgroups[[:space:]]*=[[:space:]]*true' "$NVIDIA_CONFIG" 2>/dev/null
+}
+
+fetch_nvidia_rpm_repo() {
+    local tmp rc=0; tmp="$(mktemp)"
+    fetch "$NVIDIA_REPO/stable/rpm/nvidia-container-toolkit.repo" "$tmp" \
+        && $SUDO install -m 644 "$tmp" /etc/yum.repos.d/nvidia-container-toolkit.repo || rc=$?
+    rm -f "$tmp"
+    return "$rc"
+}
+
+install_nvidia_toolkit() {
+    case "$PM" in
+        apt-get)
+            local key="/usr/share/keyrings/nvidia-container-toolkit-keyring.asc" tmp rc=0
+            tmp="$(mktemp)"
+            fetch "$NVIDIA_REPO/gpgkey" "$tmp" && $SUDO install -m 644 "$tmp" "$key" || rc=$?
+            rm -f "$tmp"
+            [ "$rc" -eq 0 ] || return "$rc"
+            # shellcheck disable=SC2016 # $(ARCH) is apt's, not ours
+            printf 'deb [signed-by=%s] %s/stable/deb/$(ARCH) /\n' "$key" "$NVIDIA_REPO" \
+                | $SUDO tee /etc/apt/sources.list.d/nvidia-container-toolkit.list >/dev/null \
+                && $SUDO apt-get update \
+                && $SUDO apt-get install -y nvidia-container-toolkit
+            ;;
+        dnf|yum)
+            fetch_nvidia_rpm_repo && $SUDO "$PM" install -y nvidia-container-toolkit ;;
+        zypper)
+            { $SUDO zypper --non-interactive lr nvidia-container-toolkit >/dev/null 2>&1 \
+                || $SUDO zypper --non-interactive ar "$NVIDIA_REPO/stable/rpm/nvidia-container-toolkit.repo"; } \
+                && $SUDO zypper --non-interactive --gpg-auto-import-keys install nvidia-container-toolkit
+            ;;
+        pacman) $SUDO pacman -Sy --noconfirm nvidia-container-toolkit ;;
+        rpm-ostree)
+            fetch_nvidia_rpm_repo && $SUDO rpm-ostree install nvidia-container-toolkit ;;
+    esac
+}
+
+configure_nvidia_docker() {
+    if [ "$1" = 1 ]; then
+        nvidia-ctk runtime configure --runtime=docker --config="${XDG_CONFIG_HOME:-$HOME/.config}/docker/daemon.json" \
+            && $SUDO nvidia-ctk config --set nvidia-container-cli.no-cgroups --in-place \
+            && systemctl --user restart docker
+    else
+        $SUDO nvidia-ctk runtime configure --runtime=docker || return
+        if command -v systemctl >/dev/null 2>&1; then
+            $SUDO systemctl restart docker
+        else
+            $SUDO service docker restart
+        fi
+    fi
+}
+
+# start.sh only falls back to the CPU without it, this is the fix.
+# rootless ALWAYS asks, no-cgroups goes for every Docker on the box
+setup_nvidia_toolkit() {
+    [ "$OS" = Linux ] && [ "$CLOUD" != 1 ] || return 0
+    case "$(printf '%s' "${GPU:-auto}" | tr '[:upper:]' '[:lower:]')" in
+        auto|nvidia) ;;
+        *) return 0 ;;
+    esac
+    { command -v nvidia-smi >/dev/null 2>&1 && nvidia-smi -L >/dev/null 2>&1; } || return 0
+    local rootless=0 a=""
+    docker_is_rootless && rootless=1
+    nvidia_toolkit_ready "$rootless" && return 0
+
+    step "NVIDIA Container Toolkit"
+    note "Docker can't use your NVIDIA card without it, she'd run on the CPU"
+    [ "$rootless" = 1 ] && note "rootless Docker also needs no-cgroups in $NVIDIA_CONFIG, that's for every Docker on this machine"
+    case "$(printf '%s' "${JUN_NVIDIA_TOOLKIT:-}" | tr '[:upper:]' '[:lower:]')" in
+        1|on|yes|true) a=y ;;
+        0|off|no|false) a=n ;;
+        *)
+            if [ "$rootless" = 0 ] && [ "${JUN_YES:-}" = "1" ]; then
+                a=y
+            elif [ ! -r /dev/tty ] || { [ "${JUN_YES:-}" = "1" ] && [ "$EXPRESS" != 1 ]; }; then
+                a=n
+            elif [ "$rootless" = 1 ]; then
+                printf '     %s$%s install it and set no-cgroups? %s[y/N]%s %s→%s ' \
+                    "$OK" "$R" "$DIM" "$R" "$ACCENT" "$R" > /dev/tty
+                read -r a < /dev/tty || a=""
+            else
+                printf '     %s$%s install it from NVIDIA'"'"'s repo? %s[Y/n]%s %s→%s ' \
+                    "$OK" "$R" "$DIM" "$R" "$ACCENT" "$R" > /dev/tty
+                read -r a < /dev/tty || a=""
+                case "$a" in n|N|no|NO) ;; *) a=y ;; esac
+            fi
+            ;;
+    esac
+    case "$a" in
+        y|Y|yes|YES) ;;
+        *) note "skipped - re-run this installer anytime to add it"; return 0 ;;
+    esac
+    if [ -z "$SUDO" ] && [ "$(id -u)" -ne 0 ]; then
+        warn_ "that needs root, and sudo isn't available. by hand: $NVIDIA_GUIDE_URL"
+        return 0
+    fi
+    [ -n "$SUDO" ] && { note "sudo authentication"; $SUDO -v || return 0; }
+
+    PM="$(pkg_manager)"
+    if ! command -v nvidia-container-runtime-hook >/dev/null 2>&1 \
+        && ! command -v nvidia-cdi-hook >/dev/null 2>&1; then
+        case "$PM" in
+            apt-get|dnf|yum|zypper|pacman|rpm-ostree) ;;
+            *) warn_ "no package manager I can install it with. by hand: $NVIDIA_GUIDE_URL"; return 0 ;;
+        esac
+        if ! ( run "install nvidia-container-toolkit" install_nvidia_toolkit ); then
+            note "she runs on the CPU until it's in. NVIDIA's guide: $NVIDIA_GUIDE_URL"
+            return 0
+        fi
+        record_change nvidia_toolkit "$PM"
+        if [ "$PM" = rpm-ostree ]; then
+            ok "layered for the next boot - reboot, then re-run this installer to finish it"
+            return 0
+        fi
+    fi
+    if ! ( run "point Docker at it" configure_nvidia_docker "$rootless" ); then
+        note "she runs on the CPU until that works. NVIDIA's guide: $NVIDIA_GUIDE_URL"
+        return 0
+    fi
+    [ "$rootless" = 0 ] || record_change nvidia_no_cgroups 1
+    wait_for_docker || true
 }
 
 confirm_deps() {
@@ -1781,6 +1919,7 @@ fi
 [ "$DOCKER_JUST_INSTALLED" = 1 ] && wait_for_docker || true
 
 if docker_run docker info >/dev/null 2>&1; then
+    setup_nvidia_toolkit
     step "boot stack"
     allow_privileged_ports
     run_live "build & start containers" docker_run ./start.sh

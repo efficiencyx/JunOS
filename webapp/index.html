@@ -621,13 +621,13 @@ html[data-pre-auth] #app { visibility: hidden; }
    (the page's allowlist for what may run) forbids the usual
    media="print" onload= trick. and blocking on the full sheet
    costs a round trip the auth screen doesn't even need. -->
-<link rel="preload" as="style" href="styles.css?v=68">
+<link rel="preload" as="style" href="styles.css?v=69">
 <link rel="preload" as="style" href="css/trip-loader.css?v=1">
-<noscript><link rel="stylesheet" href="styles.css?v=68"></noscript>
+<noscript><link rel="stylesheet" href="styles.css?v=69"></noscript>
 
 <script type="module" src="js/core/pwa.js?v=1"></script>
-<script src="js/boot-gate.js?v=22"></script>
-<script type="module" src="js/app.js?v=108"></script>
+<script src="js/boot-gate.js?v=23"></script>
+<script type="module" src="js/app.js?v=110"></script>
 </head>
 <body>
 
@@ -1130,24 +1130,43 @@ html[data-pre-auth] #app { visibility: hidden; }
         </div>
         <div class="set-block">
           <div class="set-block-head">
-            <div class="set-row-title">Tool calls</div>
-            <span class="count" id="toolLogCount">0</span>
-            <button class="ghost" id="clearToolLogBtn">clear</button>
+            <div class="set-row-title">User turn</div>
+            <button class="ghost" data-copy="debugUserTurn">copy</button>
           </div>
-          <div class="set-row-desc">Every tool the model calls this session: arguments, duration and a preview of the result.</div>
-          <div id="toolLog" class="action-log small">No tool calls yet.</div>
+          <div class="set-row-desc">The last user message exactly as the model got it: his words, the live context, then the think budget token.</div>
+          <pre id="debugUserTurn" class="action-log small debug-raw">Send a message to capture it.</pre>
         </div>
         <div class="set-block">
           <div class="set-block-head">
-            <div class="set-row-title">Raw stream</div>
-            <button class="ghost" id="clearRawBtn">clear</button>
+            <div class="set-row-title">System prompt</div>
+            <button class="ghost" data-copy="debugSystemPrompt">copy</button>
           </div>
-          <div id="rawStream" class="action-log small"></div>
+          <pre id="debugSystemPrompt" class="action-log small debug-raw">Send a message to capture it.</pre>
         </div>
         <div class="set-block">
-          <div class="set-row-title">System prompt</div>
-          <div class="set-row-desc">The full prompt sent on the last message, including injected date/time and retrieved context.</div>
-          <div id="debugSystemPrompt" class="action-log small">Send a message to capture the system prompt.</div>
+          <div class="set-block-head">
+            <div class="set-row-title">Chain of thought</div>
+            <button class="ghost" data-copy="debugThinking">copy</button>
+          </div>
+          <pre id="debugThinking" class="action-log small debug-raw">No thinking on the last turn.</pre>
+        </div>
+        <div class="set-block">
+          <div class="set-block-head">
+            <div class="set-row-title">Reply</div>
+            <button class="ghost" data-copy="debugReply">copy</button>
+          </div>
+          <div class="set-row-desc">Every token as streamed, action and bookkeeping tags included.</div>
+          <pre id="debugReply" class="action-log small debug-raw"></pre>
+        </div>
+        <div class="set-block">
+          <div class="set-block-head">
+            <div class="set-row-title">Tool calls</div>
+            <span class="count" id="toolLogCount">0</span>
+            <button class="ghost" id="toolLogModeBtn">raw</button>
+            <button class="ghost" id="clearToolLogBtn">clear</button>
+          </div>
+          <div id="toolLog" class="action-log small">No tool calls yet.</div>
+          <pre id="toolLogRaw" class="action-log small debug-raw" hidden>No tool calls yet.</pre>
         </div>
         <div class="set-block">
           <div class="set-row-title">Missing parameters</div>

@@ -86,8 +86,8 @@ how to report something you find.
 
 ## Install-time supply chain
 
-The Linux installer changes two things outside its own folder, and records
-both in `.install-changes` so `uninstall.sh` can offer to undo them:
+The Linux installer changes these things outside its own folder, and records
+them in `.install-changes` so `uninstall.sh` can offer to undo them:
 
 * **The `docker` group.** Membership is root without a password for every
   process you run. Express and Custom both ask, defaulting to no. An
@@ -97,6 +97,20 @@ both in `.install-changes` so `uninstall.sh` can offer to undo them:
   written to `/etc/sysctl.d/99-jun-unprivileged-ports.conf`. Rootless Docker
   can't publish `:80` without it. It applies system-wide, so any program can
   then bind ports 80 and up. The uninstaller restores the previous value.
+* **The NVIDIA Container Toolkit**, only with an NVIDIA card that Docker
+  can't use yet. On apt, dnf/yum, zypper and rpm-ostree it comes from
+  NVIDIA's own repository (`nvidia.github.io/libnvidia-container`), which
+  the installer adds along with NVIDIA's signing key. pacman takes it from
+  the distro. Then `nvidia-ctk runtime configure` registers it in Docker's
+  `daemon.json` and Docker restarts. Rootful Docker: Express and unattended
+  runs say yes, Custom asks `[Y/n]`, `JUN_NVIDIA_TOOLKIT=0` skips it. The
+  uninstaller leaves the package and the repository in place, like Docker
+  itself, and prints what to remove.
+* **`no-cgroups = true` in `/etc/nvidia-container-runtime/config.toml`**,
+  only with rootless Docker, which can't hand a GPU to a container without
+  it. It applies to every Docker on the machine, so the installer always
+  asks first (`[y/N]`, Express included); an unattended run needs
+  `JUN_NVIDIA_TOOLKIT=1`. The uninstaller sets it back to `false`.
 
 Both installers can also add one thing to your trust stores, and ask first
 (default yes, `JUN_TRUST_CA=0` skips it):
@@ -129,6 +143,7 @@ The installers fetch code from other people and run it. What is checked:
 | --- | --- | --- |
 | The installer you start | a published release on `github.com/<repo>/releases` (`JunSetup-<tag>.exe`, or `install.sh` / `install.ps1` from `releases/latest/download/`) | TLS. Always a published release's own assets, never `main`. The release's `SHA256SUMS` lists every file, but it sits in the same release, so it catches a broken download, not a compromised account. |
 | The repo itself | `github.com` over https | TLS, and `JUN_REPO` pointing anywhere but upstream needs `JUN_ALLOW_FORK=1` or an interactive yes. By default you get the tag of the newest full release (`JUN_CHANNEL=stable`); `latest` follows pre-releases too, `experimental` follows `main`, which moves, and is only used when you pick it. While Jun is in beta, release tags are not locked on GitHub and can still be moved. `JUN_REF` picks an exact branch or tag. A versioned `JunSetup-<tag>.exe` also carries the tag's commit hash (`JUN_PIN_SHA`) and refuses to install code whose commit doesn't match, checked before checkout. |
+| NVIDIA Container Toolkit (Linux, only with an NVIDIA card Docker can't use) | `nvidia.github.io/libnvidia-container`, or the distro's repos on Arch | TLS for the key and the repo file. After that the package manager checks NVIDIA's signature: apt on the repo's `Release` file, dnf/zypper on the repo metadata (`repo_gpgcheck`, the rpms themselves aren't signed). When it asks: [Install-time supply chain](#install-time-supply-chain). |
 | Docker (Linux, only if missing) | `get.docker.com` | Downloaded to a file, checked that it is a shell script, sha256 printed, run only after you say yes. `JUN_DOCKER_SCRIPT_SHA256=<digest>` turns that into a hard check. It is never piped into a root shell. |
 | Portable PHP (Windows) | `windows.php.net` | sha256 from `releases.json`, checked before unpacking. Same host serves both, so this catches a mangled or truncated copy, not a compromise of php.net itself. Every install and update compares the PHP already in `runtime\php` with the newest build in `releases.json` and replaces it when it's older, so a PHP security fix reaches an existing install on its next update. |
 | CA bundle (Windows) | `curl.se` | sha256 from `cacert.pem.sha256`. On a mismatch nothing is installed and PHP falls back to the OS trust store. |
@@ -163,7 +178,8 @@ release's `SHA256SUMS`. Without a match it skips it and the shortcut runs
 ## What talks to the internet
 
 **During install:** github.com and api.github.com (which release is current), your distro's package mirrors or Homebrew,
-`get.docker.com` (Linux, only when Docker is missing), Docker Hub and ghcr.io
+`get.docker.com` (Linux, only when Docker is missing), `nvidia.github.io` (Linux,
+only when an NVIDIA card needs the container toolkit), Docker Hub and ghcr.io
 for base images, `windows.php.net`, `curl.se` and `ollama.com` (Windows), winget
 and PSGallery (Windows), PyPI and `download.pytorch.org` when voice or karaoke is on.
 

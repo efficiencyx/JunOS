@@ -270,6 +270,9 @@ function Measure-Llamacpp([string]$url) {
 function Restart-Llamacpp([string]$url) {
     $prev = $env:MTP_AUTOTUNE_RUNNING
     $env:MTP_AUTOTUNE_RUNNING = '1'
+    # start.ps1 only loads .env keys that are unset and runs in OUR
+    # process, so without this every row reuses the first N_MAX
+    Remove-Item env:LLAMACPP_MTP, env:LLAMACPP_MTP_N_MAX -ErrorAction SilentlyContinue
     try {
         & "$PSScriptRoot\start.ps1" stop | Out-Null
         & "$PSScriptRoot\start.ps1" -NoBrowser | Out-Null

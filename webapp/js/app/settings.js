@@ -1,10 +1,10 @@
 import { abortFn, currentConversationId } from './session.js?v=1';
-import { sendMessage } from './chat.js?v=25';
-import { cancelIdleNudge } from './consolidation.js?v=97';
-import { closeSettingsBtn, devNoIdleChk, drawerBackdrop, modelSelect, openSettingsBtn, reasoningSelect, sendBtn, siteVolumeInput, thinkChk, ttsChk, ttsSpeedInput, voiceChk, voiceSilenceInput } from './dom.js?v=75';
-import { logAction } from './logging.js?v=75';
-import { loadMood, setMoodEditingEnabled } from './mood.js?v=84';
-import { loadConversation, setSidebarOpen } from './sidebar.js?v=97';
+import { sendMessage } from './chat.js?v=27';
+import { cancelIdleNudge } from './consolidation.js?v=99';
+import { closeSettingsBtn, devNoIdleChk, drawerBackdrop, modelSelect, openSettingsBtn, reasoningSelect, sendBtn, siteVolumeInput, thinkChk, ttsChk, ttsSpeedInput, voiceChk, voiceSilenceInput } from './dom.js?v=77';
+import { logAction } from './logging.js?v=78';
+import { loadMood, setMoodEditingEnabled } from './mood.js?v=85';
+import { loadConversation, setSidebarOpen } from './sidebar.js?v=99';
 import * as Names from '../core/names.js?v=1';
 import * as Prefs from '../core/prefs.js?v=6';
 import * as ui from '../core/ui.js?v=1';

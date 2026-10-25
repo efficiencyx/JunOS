@@ -9,16 +9,18 @@
 #      volume is saved to ~/jun-backup-<date>.tar.gz first.
 #   3. undo the system changes install.sh recorded in
 #      .install-changes: removing you from the docker group if the
-#      installer added you, and restoring
+#      installer added you, restoring
 #      net.ipv4.ip_unprivileged_port_start if it lowered it for
-#      rootless Docker
+#      rootless Docker, and turning NVIDIA's no-cgroups back off
+#      if it set it for rootless Docker
 #   4. take Jun's local certificate authority back out of the
 #      system and browser trust stores, if `./start.sh trust` put
 #      it there (runtime/jun-ca.pem)
 #   5. delete this folder
 #
-# Docker itself, git and Python are left alone, since they're
-# general-purpose tools you may use elsewhere. Remove them with your
+# Docker itself, git, Python and the NVIDIA Container Toolkit are
+# left alone, since they're general-purpose tools you may use
+# elsewhere. Remove them with your
 # package manager if you want. Installs from before .install-changes
 # existed have nothing recorded; undo those by hand:
 #   sudo gpasswd -d "$USER" docker
@@ -105,6 +107,16 @@ if [ -n "$port_start" ] && confirm "Restore net.ipv4.ip_unprivileged_port_start 
     fi
 fi
 
+if [ -n "$(recorded nvidia_no_cgroups)" ] && confirm "Turn NVIDIA's no-cgroups back off (the installer set it for rootless Docker)?"; then
+    if $SUDO nvidia-ctk config --set nvidia-container-cli.no-cgroups=false --in-place; then
+        echo "no-cgroups is off again in /etc/nvidia-container-runtime/config.toml."
+    else
+        echo "Could not change it. Run: sudo nvidia-ctk config --set nvidia-container-cli.no-cgroups=false --in-place" >&2
+    fi
+fi
+
+toolkit_pm="$(recorded nvidia_toolkit)"
+
 if [ -s runtime/jun-ca.pem ] && confirm "Remove Jun's local certificate authority from this machine's trust stores?"; then
     tools/trust-ca.sh remove runtime/jun-ca.pem || echo 'Some stores still have it. Look for "Jun OS local CA" in the browser certificate settings.' >&2
 fi
@@ -114,3 +126,11 @@ cd "${HOME:-/}"
 rm -rf "$root"
 echo "Removed $root. Jun is uninstalled."
 echo 'Left in place: Docker, git and any Python installed for asset recovery - remove with your package manager if unwanted.'
+if [ -n "$toolkit_pm" ]; then
+    echo "Also left: the NVIDIA Container Toolkit the installer added ($toolkit_pm package nvidia-container-toolkit)."
+    case "$toolkit_pm" in
+        apt-get) echo "  NVIDIA's repo for it: /etc/apt/sources.list.d/nvidia-container-toolkit.list and /usr/share/keyrings/nvidia-container-toolkit-keyring.asc" ;;
+        dnf|yum|rpm-ostree) echo "  NVIDIA's repo for it: /etc/yum.repos.d/nvidia-container-toolkit.repo" ;;
+        zypper) echo "  NVIDIA's repo for it: zypper repo nvidia-container-toolkit" ;;
+    esac
+fi
