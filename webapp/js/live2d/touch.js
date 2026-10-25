@@ -1,4 +1,4 @@
-import * as Actions from './actions.js?v=84';
+import * as Actions from './actions.js?v=86';
 import * as Live2D from './live2d.js?v=84';
 
 let sendEvent = null;

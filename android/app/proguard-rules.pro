@@ -1,5 +1,8 @@
 -keep class com.chaquo.python.** { *; }
 -keepclasseswithmembernames class * { native <methods>; }
+# their JNI reads config getters/fields and calls onMessage BY NAME. renamed = release apk dies on the first prompt
+-keep class com.google.ai.edge.litertlm.** { *; }
+-keep class com.k2fsa.sherpa.onnx.** { *; }
 -dontwarn io.ktor.**
 # commons-compress references codecs we never pull in (only its ZIP reader is used)
 -dontwarn org.apache.commons.compress.**

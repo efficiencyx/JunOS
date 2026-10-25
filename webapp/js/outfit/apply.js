@@ -1,11 +1,11 @@
 import * as Live2D from '../live2d/live2d.js?v=84';
-import * as Mods from '../mods/mods.js?v=85';
+import * as Mods from '../mods/mods.js?v=87';
 import { ALWAYS_HIDDEN, COLOR_GROUPS, ITEMS, VARIANTS, VARIANT_OWNER } from './catalog.js?v=1';
-import { applyGlassesTexture, applyStockingTexture, cancelStockingTexture, stockingColorMode } from './composite.js?v=14';
+import { applyGlassesTexture, applyStockingTexture, cancelStockingTexture, stockingColorMode } from './composite.js?v=16';
 import { colors, state, variantState } from './current.js?v=1';
 import { hexToRgb01, normalizeHex } from './colors.js?v=1';
-import { queueWardrobe, saveColors, textureAvailable } from './sync.js?v=14';
-import { snapshot } from './chat-tools.js?v=14';
+import { queueWardrobe, saveColors, textureAvailable } from './sync.js?v=16';
+import { snapshot } from './chat-tools.js?v=16';
 import { hooks } from './hooks.js?v=1';
 
 export const itemPatterns = (it) => it.colorPatterns || it.visibilityPatterns || [];
@@ -90,8 +90,7 @@ export function applyVariants(onlyKey) {
   const onlyKeys = onlyKey
     ? new Set(Array.isArray(onlyKey) ? onlyKey : [onlyKey])
     : null;
-  Live2D.setDrawableOrderBelow(
-    VARIANTS.flatMap(v => v.options[variantState[v.key] || 0].order || []));
+  applyDrawOrder();
   for (const v of VARIANTS) {
     if (onlyKeys && !onlyKeys.has(v.key)) continue;
     const opt = v.options[variantState[v.key] || 0];
@@ -108,6 +107,17 @@ export function applyVariants(onlyKey) {
     }
     applyVariantVisibility(v);
   }
+}
+
+// mod limbs are mech art too. on standard legs the calf's notched
+// top lands over the thigh unless they get the experimental order.
+export function applyDrawOrder() {
+  Live2D.setDrawableOrderBelow(VARIANTS.flatMap(v => {
+    const own = v.options[variantState[v.key] || 0].order;
+    if (own) return own;
+    const mech = v.options.find(o => o.order);
+    return mech ? mech.order.filter(pair => pair.some(Mods.owns)) : [];
+  }));
 }
 
 function applyVariantVisibility(v) {

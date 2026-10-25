@@ -2,7 +2,7 @@ import * as Live2D from '../live2d/live2d.js?v=84';
 import * as Prefs from '../core/prefs.js?v=6';
 import { idbStore } from '../core/idb.js?v=1';
 import { hexToRgb01 } from '../outfit/colors.js?v=1';
-import { hiddenItemDrawables, refreshVisibility, setModdedDrawables } from '../outfit/apply.js?v=14';
+import { applyDrawOrder, hiddenItemDrawables, refreshVisibility, setModdedDrawables } from '../outfit/apply.js?v=16';
 import { unzip } from './zip.js?v=1';
 import { itemDrawables, parseMod } from './parse.js?v=12';
 import { MOD_SLOT, bakeDrawable, fileUrl } from './layers.js?v=12';
@@ -103,6 +103,8 @@ function bakeKey(id, entries, colorsFor, tint, replaceVanilla) {
     + '|' + (tint || '') + (replaceVanilla ? '|R' : '');
 }
 
+const LIMB_SLOT = /^(Arm|Leg)[LR]$/;
+
 let applyRunning = null;
 let applyQueued = null;
 
@@ -161,7 +163,10 @@ async function applyPass() {
     const tint = entries.some(e => e.bypassColorScaler) ? hostTintFor(id) : null;
     // ColorIndex points into the owning item's ColorSlots list
     const colorsFor = (e) => ((modState(e.mod.guid).colors || {})[e.itemIndex] || [])[e.colorIndex] || null;
-    const replaceVanilla = hiddenByOutfit.has(id);
+    // a limb slot item IS the limb. layered over the dark mech art,
+    // its soft edges go grey
+    const replaceVanilla = hiddenByOutfit.has(id)
+      || entries.some(e => LIMB_SLOT.test(e.mod.items[e.itemIndex].equip || ''));
     const key = bakeKey(id, entries, colorsFor, tint, replaceVanilla);
     let baked = bakeCache.get(key);
     if (!baked) {
@@ -193,6 +198,7 @@ async function applyPass() {
   }
   bakeCache = fresh;
   appliedIds = new Set(byDrawable.keys());
+  applyDrawOrder();
   const hold = new Set();
   for (const id of byDrawable.keys()) {
     if (MOD_SLOT.test(id) || (hiddenByOutfit.has(id) && !controllerDrawables.has(id))) hold.add(id);

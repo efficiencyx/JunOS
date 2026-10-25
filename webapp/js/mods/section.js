@@ -1,6 +1,6 @@
-import { makeItemColorButton } from '../wardrobe/color-picker.js?v=15';
+import { makeItemColorButton } from '../wardrobe/color-picker.js?v=17';
 import { itemThumbUrl } from './layers.js?v=12';
-import { ensureLoaded, followsHerColors, importZip, isEquipped, modState, mods, removeMod, setColor, setEquipped, setFollowsHerColors } from './engine.js?v=14';
+import { ensureLoaded, followsHerColors, importZip, isEquipped, modState, mods, removeMod, setColor, setEquipped, setFollowsHerColors } from './engine.js?v=16';
 
 let uiBody = null;
 

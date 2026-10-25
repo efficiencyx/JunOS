@@ -1,12 +1,12 @@
 import { currentConversationId, messages, setCurrentConversationId } from './session.js?v=1';
 import { appendMsg, renderMarkdown, updateEmptyState } from './messages.js?v=12';
-import { discardActiveResponse } from './chat.js?v=27';
+import { discardActiveResponse } from './chat.js?v=29';
 import { setConversationTitle } from './face-bubble.js?v=85';
-import { IDLE_AFTER_JOIN_MS, cancelAutoReset, reportActivity, resetIdleNudge, scheduleIdleNudge } from './consolidation.js?v=99';
+import { IDLE_AFTER_JOIN_MS, cancelAutoReset, reportActivity, resetIdleNudge, scheduleIdleNudge } from './consolidation.js?v=101';
 import { conversationSidebar, messagesEl, mobileConversationTitle, mobileMenuBtn, narrowSidebarQuery, reloadPromptBtn, resetLive2DBtn, sidebarBackdrop, sidebarBackground } from './dom.js?v=77';
 import { announceMobileReply, faceBubble, hideFaceBubble, latestAssistantReply, scheduleFaceBubbleHide, setLatestAssistantReply, showFaceBubble } from './face-bubble.js?v=85';
 import { logAction } from './logging.js?v=78';
-import { makeStreamBuffer } from './stream-filters.js?v=87';
+import { makeStreamBuffer } from './stream-filters.js?v=89';
 import { escapeHtml, phoneMode } from '../core/util.js?v=1';
 import * as Names from '../core/names.js?v=1';
 import * as ui from '../core/ui.js?v=1';
