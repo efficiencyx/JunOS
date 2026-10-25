@@ -14,13 +14,13 @@ class GenerationService : Service() {
     override fun onCreate() {
         super.onCreate()
         getSystemService(NotificationManager::class.java).createNotificationChannel(
-            NotificationChannel(CHANNEL, "Local generation", NotificationManager.IMPORTANCE_LOW),
+            NotificationChannel(CHANNEL, "Generation", NotificationManager.IMPORTANCE_LOW),
         )
         enterForeground()
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
-        enterForeground()
+        enterForeground(intent?.getStringExtra(EXTRA_WHERE))
         if (intent?.action == ACTION_STOP) {
             stopForeground(STOP_FOREGROUND_REMOVE)
             stopSelf()
@@ -28,11 +28,11 @@ class GenerationService : Service() {
         return START_NOT_STICKY
     }
 
-    private fun enterForeground() {
+    private fun enterForeground(where: String? = null) {
         val notification = NotificationCompat.Builder(this, CHANNEL)
             .setSmallIcon(R.drawable.ic_launcher_foreground)
             .setContentTitle("Jun is thinking")
-            .setContentText("Generating locally on this phone")
+            .setContentText(if (where == null || where == "this phone") "Generating locally on this phone" else "Generating on $where")
             .setOngoing(true)
             .build()
         startForeground(NOTIFICATION_ID, notification)
@@ -44,6 +44,10 @@ class GenerationService : Service() {
         private const val CHANNEL = "generation"
         private const val NOTIFICATION_ID = 2001
         private const val ACTION_STOP = "com.efficiencyx.junos.STOP_GENERATION"
+        private const val EXTRA_WHERE = "where"
+
+        fun intent(context: Context, where: String): Intent =
+            Intent(context, GenerationService::class.java).putExtra(EXTRA_WHERE, where)
 
         // NOT stopService(). a turn that fails fast would stop it before
         // startForeground() ran, and android kills the whole app for that

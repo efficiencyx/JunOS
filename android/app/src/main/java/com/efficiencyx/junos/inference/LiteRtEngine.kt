@@ -42,8 +42,9 @@ import kotlinx.serialization.json.put
 class LiteRtEngine(
     private val models: ModelStore,
     private val backend: Backend = Backend.GPU(),
-    private val contextTokens: Int = 8192,
+    override val contextTokens: Int = 8192,
 ) : InferenceEngine {
+    override val label = "this phone"
     private val loadMutex = Mutex()
     private val _state = MutableStateFlow<EngineState>(EngineState.Idle)
     private val _lastStats = MutableStateFlow<JsonObject?>(null)
@@ -90,6 +91,7 @@ class LiteRtEngine(
         think: Boolean,
         maxTokens: Int,
         temperature: Float,
+        reasoning: String,
     ): Flow<TurnEvent> = stream(messages, tools, ThinkingConfig(think), maxTokens, temperature)
 
     private fun stream(

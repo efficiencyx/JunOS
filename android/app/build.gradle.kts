@@ -238,6 +238,7 @@ dependencies {
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.11.0")
     implementation("com.google.ai.edge.litertlm:litertlm-android:0.18.1")
     implementation("com.squareup.okhttp3:okhttp:5.5.1")
+    implementation("com.journeyapps:zxing-android-embedded:4.3.0")
     implementation("org.apache.commons:commons-compress:1.28.0")
 
     testImplementation("junit:junit:4.13.2")

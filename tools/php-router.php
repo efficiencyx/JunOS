@@ -35,6 +35,7 @@ function router_serve_static(string $path, string $method): never {
         'mp4' => 'video/mp4',
         'ogg' => 'audio/ogg',
         'otf' => 'font/otf',
+        'pem' => 'application/x-pem-file',
         'png' => 'image/png',
         'svg' => 'image/svg+xml',
         'ttf' => 'font/ttf',
@@ -155,6 +156,14 @@ $route = strtolower($path);
 if ($route === '/system_prompt.txt' || str_starts_with($route, '/api/migrations/')
     || $route === '/api/consolidation-worker.php' || $route === '/api/prewarm.php') {
     router_fail(404, 'not found');
+}
+
+// the local CA, public anyway. the android app checks it against
+// the fingerprint in its pairing QR. start.ps1 says where caddy's is
+if ($route === '/jun-ca.pem') {
+    $ca = (string)getenv('JUN_CA_FILE');
+    if ($ca === '' || !is_file($ca)) router_fail(404, 'not found');
+    router_serve_static($ca, strtoupper($_SERVER['REQUEST_METHOD'] ?? 'GET'));
 }
 
 $isApi = preg_match('#^/api/[^/]+\.php$#', $route) === 1;

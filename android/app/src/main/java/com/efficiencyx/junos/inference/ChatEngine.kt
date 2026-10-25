@@ -1,7 +1,6 @@
 package com.efficiencyx.junos.inference
 
 import android.content.Context
-import android.content.Intent
 import android.util.Log
 import androidx.core.content.ContextCompat
 import com.efficiencyx.junos.data.ConsolidationEntity
@@ -28,6 +27,7 @@ import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonElement
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.buildJsonObject
+import kotlinx.serialization.json.contentOrNull
 import kotlinx.serialization.json.intOrNull
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
@@ -69,8 +69,9 @@ class ChatEngine(
     private val database: JunDatabase,
     private val memory: MemoryStore,
     private val lore: LoreIndex,
-    private val engine: InferenceEngine,
+    private val engines: () -> InferenceEngine,
 ) {
+    private val engine get() = engines()
     private val dao get() = database.dao()
     private val json = Json { ignoreUnknownKeys = true }
     private val systemPrompt by lazy {
@@ -82,6 +83,7 @@ class ChatEngine(
     }
 
     suspend fun stream(incoming: ChatRequest, emit: suspend (JsonElement) -> Unit) {
+        val engine = engine
         incoming.validate()
         val request = incoming.copy(messages = incoming.messages.takeLast(160))
         val modItems = request.modItems.take(60)
@@ -123,7 +125,7 @@ class ChatEngine(
         // turn with "\n\n<think:LEVEL>" and the names are low/med/high
         val last = messages.lastIndex
         messages[last] = messages[last].copy(content = messages[last].content + "\n\n<think:$reasoning>")
-        trimToBudget(messages)
+        trimToBudget(messages, engine.contextTokens)
         val baseMessages = messages.toList()
 
         emit(buildJsonObject {
@@ -156,7 +158,7 @@ class ChatEngine(
             statusJob?.cancelAndJoin()
         }
         emit(statusEvent("generating", 1f))
-        ContextCompat.startForegroundService(context, Intent(context, GenerationService::class.java))
+        ContextCompat.startForegroundService(context, GenerationService.intent(context, engine.label))
         val started = System.nanoTime()
         var visible = StringBuilder()
         var silenced = false
@@ -180,13 +182,14 @@ class ChatEngine(
                 val thoughts = ThinkStreamFilter()
                 val lead = StringBuilder()
                 val calls = mutableListOf<ParsedToolCall>()
-                engine.turn(messages, TOOL_SCHEMAS, think, replyTokens(think)).collect { event ->
+                engine.turn(messages, TOOL_SCHEMAS, think, replyTokens(think), reasoning = reasoning).collect { event ->
                     when (event) {
                         is TurnEvent.Text -> {
                             tokenCount++
                             show(thoughts.push(event.text), lead)
                             streamThoughts(thoughts)
                         }
+                        is TurnEvent.Thought -> emit(buildJsonObject { put("thinking", event.text) })
                         is TurnEvent.Call -> calls += event.call
                     }
                 }
@@ -224,11 +227,13 @@ class ChatEngine(
                 // there's nothing left to reach for but words.
                 val thoughts = ThinkStreamFilter()
                 val plain = StringBuilder()
-                engine.turn(baseMessages, emptyList(), think, replyTokens(think)).collect { event ->
+                engine.turn(baseMessages, emptyList(), think, replyTokens(think), reasoning = reasoning).collect { event ->
                     if (event is TurnEvent.Text) {
                         tokenCount++
                         show(thoughts.push(event.text), plain)
                         streamThoughts(thoughts)
+                    } else if (event is TurnEvent.Thought) {
+                        emit(buildJsonObject { put("thinking", event.text) })
                     }
                 }
                 show(thoughts.finish(), plain)
@@ -257,8 +262,8 @@ class ChatEngine(
                 put("eval_duration", if (nativeEvalMs > 0) nativeEvalMs * 1_000_000 else duration)
                 put("prompt_eval_count", nativePromptEvalCount)
                 put("total_duration", duration)
-                put("num_ctx", 8192)
-                put("model", "jun-e2b-v8-litert")
+                put("num_ctx", engine.contextTokens)
+                put("model", engine.lastStats.value?.get("model")?.jsonPrimitive?.contentOrNull ?: "jun-e2b-v8-litert")
             })
         })
         if (assistant.isBlank()) error("empty_reply")
@@ -402,15 +407,16 @@ class ChatEngine(
         return MOOD_TAG.replace(text, "").trim()
     }
 
-    // 8192 total context (the bundle's kv cache), 2048 kept for her
-    // reply because a <think:high> trace comes BEFORE the reply and
-    // eats from the same budget. the tool declarations ride in the
-    // system turn so they count too. past the cache the runtime just
-    // lops the front off, so we drop whole old turns instead. system
-    // message + the turn she must answer always stay.
-    private fun trimToBudget(messages: MutableList<ChatMessage>) {
+    // the engine's context minus 2048 for her reply, a <think:high>
+    // trace comes BEFORE the reply and eats from the same budget.
+    // the tool declarations ride in the system turn so they count
+    // too. past the cache the runtime just lops the front off, so we
+    // drop whole old turns instead. system message + the turn she
+    // must answer always stay.
+    private fun trimToBudget(messages: MutableList<ChatMessage>, contextTokens: Int) {
+        val budget = (contextTokens - REPLY_RESERVE).coerceAtLeast(2048)
         fun estimate() = (messages.sumOf { it.content.length } + TOOL_SCHEMA_CHARS) / 4
-        while (estimate() > PROMPT_TOKEN_BUDGET && messages.size > 2) messages.removeAt(1)
+        while (estimate() > budget && messages.size > 2) messages.removeAt(1)
     }
 
     // chat.php's level picker, same rules. the webapp sends "auto" by
@@ -464,7 +470,7 @@ class ChatEngine(
             "\\b(how many|how much|how long|how old|days? (?:since|ago|until)|hours? (?:since|ago)|what time|" +
                 "percentage|average|total)\\b",
         )
-        private const val PROMPT_TOKEN_BUDGET = 6000
+        private const val REPLY_RESERVE = 2192
         private const val SIDE_TALK_CHECK = "## Who he is talking to\n" +
             "He said this out loud and he is not alone in the room. Before you answer, check that the line fits " +
             "as something said TO YOU, following what you two were just saying. A line with no question or remark " +

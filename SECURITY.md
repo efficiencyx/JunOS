@@ -51,6 +51,14 @@ how to report something you find.
   filesystems, the webapp tree is root-owned so PHP can only read it, only
   nginx publishes a port, and everything else talks over the internal `omega`
   network.
+* *Someone else on the wifi using her model.* `LAN_INFERENCE` is off by
+  default. On, `api/model.php` answers nothing without the 256-bit
+  `JUN_LAN_TOKEN` (constant-time compare, per-IP rate limit), stores nothing,
+  and only generates: no account, chat, memory or file is reachable through
+  it. The phone pins the desktop's local CA by the SHA-256 in the pairing QR,
+  so somebody in the middle on the network can't pose as the PC and collect
+  the token. The token sits in that QR, though: a photo of the code is a key,
+  and a new `JUN_LAN_TOKEN` is how you take it back.
 * *Something else on that network talking to the sidecars.* Every voice/karaoke
   request except `/health` needs a `Host` from `SIDECAR_ALLOWED_HOSTS`, no
   `Origin`/`Sec-Fetch-Site` header at all (browsers never talk to it, PHP
@@ -221,6 +229,14 @@ downloads or changes anything.
   finds the URL can't use the GPU or touch the model store. Cloudflare
   terminates TLS on a quick tunnel, so it can read that traffic in transit.
 
+**The Android app** sends nothing anywhere in Local mode beyond the one-time
+model, voice and asset downloads. In LAN mode it talks to the paired PC on your
+network and nothing else. In Cloud mode it sends every prompt to the notebook's
+`*.trycloudflare.com` URL, with the same contents and the same gate as the PC
+case above, and the picker says so next to the option. Chats, memory and the
+database stay on the phone in every mode. A pairing only ever comes from a code
+you confirm in the app, deep links from a web page included.
+
 **Never:** there is no analytics, no crash reporting, no usage ping, no
 automatic update, and nothing reports back to this project. The update checker
 above is opt-in and only reads GitHub's public release list. An older build had a
@@ -366,6 +382,10 @@ If you put her on the internet:
   proxy.
 * `OMEGA_ALLOWED_ORIGINS` (comma separated) is for a proxy that rewrites `Host`
   and would otherwise trip the cross-origin check.
+* `LAN_INFERENCE=on` is for your own network. With `BIND_ADDR=0.0.0.0` on a
+  box reachable from the internet, the token is all that stands between a
+  stranger and your GPU. Keep the pairing QR to yourself and rotate
+  `JUN_LAN_TOKEN` when a phone is lost.
 * Claim the first account before exposing the install. After that, keep the
   generated `OMEGA_REGISTRATION_KEY` enabled and share it only with people you
   want to let register. Put public installs behind something that decides who

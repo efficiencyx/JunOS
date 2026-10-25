@@ -102,6 +102,13 @@ server {
         return 200 "ok";
     }
 
+    # The local CA certificate, public by nature. The Android app
+    # checks it against the fingerprint in its pairing QR code.
+    location = /jun-ca.pem {
+        default_type application/x-pem-file;
+        alias /etc/nginx/selfsigned/ca.pem;
+    }
+
     # Buffering and compression must stay off for SSE (server-sent
     # events, the token-by-token reply stream). gzip collects the
     # response into its own buffer, which stalls the token stream.
@@ -125,6 +132,27 @@ server {
 
         include fastcgi_params;
         fastcgi_param SCRIPT_FILENAME /var/www/omega/api/chat.php;
+        fastcgi_pass  $php_upstream;
+    }
+
+    # Android app LAN mode. model.php checks LAN_INFERENCE and the
+    # token itself. It streams like chat.php, so buffering stays off.
+    location = /api/model.php {
+        limit_req zone=api burst=20 nodelay;
+        limit_conn chat_conns 2;
+        client_max_body_size 4m;
+
+        gzip                off;
+        proxy_buffering     off;
+        fastcgi_buffering   off;
+        fastcgi_read_timeout 600s;
+        fastcgi_keep_conn   on;
+
+        add_header X-Accel-Buffering no always;
+        include /etc/nginx/snippets/security-headers.conf;
+
+        include fastcgi_params;
+        fastcgi_param SCRIPT_FILENAME /var/www/omega/api/model.php;
         fastcgi_pass  $php_upstream;
     }
 

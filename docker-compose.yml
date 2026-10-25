@@ -93,6 +93,8 @@ services:
       LLAMACPP_TOOLS: "${LLAMACPP_TOOLS:-}"
       FLEE_BANS: "${FLEE_BANS:-on}"
       FREE_ROAM: "${FREE_ROAM:-off}"
+      LAN_INFERENCE: "${LAN_INFERENCE:-off}"
+      JUN_LAN_TOKEN: "${JUN_LAN_TOKEN:-}"
       CONSOLIDATION_THINK: "${CONSOLIDATION_THINK:-}"
       CONSOLIDATION_STALL_SECONDS: "${CONSOLIDATION_STALL_SECONDS:-}"
       # KOKORO_URL is the old name, kept so existing .env files

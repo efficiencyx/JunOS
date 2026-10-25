@@ -130,6 +130,28 @@ server {
         fastcgi_pass  $php_upstream;
     }
 
+    # Android app LAN mode. model.php checks LAN_INFERENCE and the
+    # token itself. It streams like chat.php, so buffering stays off.
+    location = /api/model.php {
+        limit_req zone=api burst=20 nodelay;
+        limit_conn chat_conns 2;
+        client_max_body_size 4m;
+
+        gzip                off;
+        proxy_buffering     off;
+        fastcgi_buffering   off;
+        fastcgi_read_timeout 600s;
+        fastcgi_keep_conn   on;
+
+        add_header X-Accel-Buffering no always;
+        add_header Strict-Transport-Security "max-age=31536000; includeSubDomains" always;
+        include /etc/nginx/snippets/security-headers.conf;
+
+        include fastcgi_params;
+        fastcgi_param SCRIPT_FILENAME /var/www/omega/api/model.php;
+        fastcgi_pass  $php_upstream;
+    }
+
     location = /api/tts.php {
         limit_req zone=api burst=10 nodelay;
         # js/voice/tts.js keeps 3 synthesis requests in flight per

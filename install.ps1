@@ -1429,6 +1429,12 @@ function Install-Tts([string]$Karaoke = 'off') {
             return
         }
         Ok 'TTS voice engine ready'
+    } else {
+        # an update re-runs this on the old venv, so the pins have to land here too
+        & $py -m pip install --disable-pip-version-check --quiet -r (Join-Path (Get-Location) 'tts\requirements.txt')
+        if ($LASTEXITCODE -ne 0) {
+            Warn_ 'could not refresh the TTS packages - keeping the ones already there. Re-run install.ps1 to retry.'
+        }
     }
 
     if ($Karaoke -ne 'on') { return }

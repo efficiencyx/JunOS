@@ -301,7 +301,7 @@ case "${1:-up}" in
     echo "./start.sh to restart her with them"
     exit 0
     ;;
-  stop|down|status|ps|logs|trust) ;;
+  stop|down|status|ps|logs|trust|phone) ;;
   *) check_cloud_link; update_check ;;
 esac
 
@@ -844,6 +844,67 @@ trust_ca() {
   return "$rc"
 }
 
+urlenc() {
+  local s="$1"
+  s="${s//%/%25}"; s="${s//&/%26}"; s="${s//=/%3D}"; s="${s//+/%2B}"; s="${s//#/%23}"
+  s="${s//\?/%3F}"; s="${s//:/%3A}"; s="${s//\//%2F}"; s="${s// /%20}"
+  printf '%s' "$s"
+}
+
+# ./start.sh phone: the QR the android app scans for LAN mode. asks
+# before turning LAN_INFERENCE on, BIND_ADDR=0.0.0.0 opens her up
+phone_pair() {
+  local need=() token on_now hosts h ca="" link ans
+  token="$(env_get JUN_LAN_TOKEN)"
+  is_on "$(env_get LAN_INFERENCE)" || need+=("LAN_INFERENCE=on")
+  [ "${#token}" -ge 32 ] || need+=("a new JUN_LAN_TOKEN")
+  case "$(env_get BIND_ADDR)" in ''|127.*|localhost|::1) need+=("BIND_ADDR=0.0.0.0") ;; esac
+  if [ "${#need[@]}" -gt 0 ]; then
+    echo "the phone needs: ${need[*]}"
+    echo "BIND_ADDR=0.0.0.0 lets every device on this network reach her login page, and her model with the token"
+    { true >/dev/tty; } 2>/dev/null || { echo "set those in .env and run ./start.sh phone again" >&2; return 1; }
+    printf 'write them to .env and restart her? [Y/n] ' >/dev/tty
+    read -r ans </dev/tty || ans=n
+    case "$ans" in ''|y|Y|yes) ;; *) return 1 ;; esac
+    env_set LAN_INFERENCE on
+    if [ "${#token}" -lt 32 ]; then
+      token="$(openssl rand -hex 32 2>/dev/null || head -c32 /dev/urandom | od -An -tx1 | tr -d ' \n')"
+      env_set JUN_LAN_TOKEN "$token"
+    fi
+    case "$(env_get BIND_ADDR)" in ''|127.*|localhost|::1) env_set BIND_ADDR 0.0.0.0 ;; esac
+  fi
+
+  # what php runs with, not what .env says. an edit nobody restarted
+  # for would hand the phone a token php has never heard of
+  on_now="$(docker exec omega-php printenv JUN_LAN_TOKEN 2>/dev/null || true)"
+  if [ "$on_now" != "$token" ] || ! is_on "$(docker exec omega-php printenv LAN_INFERENCE 2>/dev/null)"; then
+    echo "restarting her with LAN mode on..."
+    env -u OMEGA_EXTRA_HOSTS BIND_ADDR="$(env_get BIND_ADDR)" ./start.sh || return 1
+  fi
+
+  # a real certificate (any TLS_MODE but off) only names DOMAIN,
+  # and the phone trusts it like any website. no CA to pin
+  case "$(printf '%s' "${TLS_MODE:-off}" | tr '[:upper:]' '[:lower:]')" in
+    off|'')
+      hosts="$(lan_hosts | tr '\n' ' ') $(env_get OMEGA_EXTRA_HOSTS | tr ',' ' ')"
+      ca="$(docker exec omega-nginx cat /etc/nginx/selfsigned/ca.pem 2>/dev/null |
+        docker exec -i omega-php php -r 'echo openssl_x509_fingerprint(stream_get_contents(STDIN), "sha256");' 2>/dev/null || true)"
+      [ -n "$ca" ] || { echo "couldn't read her local CA from nginx. is she up? ./start.sh status" >&2; return 1; } ;;
+    *) hosts="$(env_get DOMAIN)" ;;
+  esac
+  link="junos://pair?mode=lan&name=$(urlenc "$(hostname 2>/dev/null || echo PC)")&token=$token"
+  [ -z "$ca" ] || link="$link&ca=$ca"
+  for h in $hosts; do link="$link&url=$(urlenc "https://$h/api/model.php")"; done
+  case "$link" in *"&url="*) ;; *) echo "no private address on this machine for the phone to reach" >&2; return 1 ;; esac
+
+  echo
+  docker exec -i omega-php php -- "$link" ansi < tools/qr.php || return 1
+  echo
+  echo "scan it in the Jun OS app (LAN, then Scan), or with the phone's camera."
+  echo "same wifi as this PC. if the phone stops reaching her later (new address, new CA), scan a fresh one."
+  echo "the code holds the token: anyone who scans it gets her model. a new JUN_LAN_TOKEN in .env cuts everyone off."
+}
+
 # a bare first word is a lifecycle subcommand. anything else (a
 # flag like --build, or service names) goes straight through to
 # `up -d`.
@@ -854,6 +915,7 @@ case "${1:-up}" in
   status|ps)  shift; set -x; exec docker compose "${files[@]}" ps "$@" ;;
   logs)       shift; set -x; exec docker compose "${files[@]}" logs -f "$@" ;;
   trust)      mkdir -p runtime; trust_ca ;;
+  phone)      phone_pair ;;
   *)          if staged_up "$@"; then
                 set -x
                 docker compose "${files[@]}" up -d --build --scale karaoke=0

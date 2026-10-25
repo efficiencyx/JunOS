@@ -31,5 +31,5 @@ require_once __DIR__ . '/providers/stream.php';
 // there's no request to check there.
 if (PHP_SAPI !== 'cli') {
     require_allowed_host();
-    require_same_origin();
+    if (!defined('OMEGA_TOKEN_AUTH')) require_same_origin();
 }

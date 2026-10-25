@@ -1,9 +1,11 @@
 ﻿[CmdletBinding()]
 param(
-    [ValidateSet('start', 'stop', 'status', 'trust', 'link')]
+    [ValidateSet('start', 'stop', 'status', 'trust', 'link', 'phone')]
     [string]$Action = 'start',
     [switch]$NoBrowser,
-    [switch]$IgnoreSecurity
+    [switch]$IgnoreSecurity,
+    # phone only: JunOS.exe already asked about turning LAN mode on
+    [switch]$Yes
 )
 
 $ErrorActionPreference = 'Stop'
@@ -411,6 +413,54 @@ function Get-TrackedProcess([object]$pids, [string]$name) {
     return $null
 }
 
+# what pids.json lost track of still holds JUN_PORT and the files
+# under runtime\, so the uninstaller can't delete caddy.exe
+function Stop-Strays([int[]]$keep = @()) {
+    $here = $PSScriptRoot.TrimEnd('\') + '\'
+    Get-CimInstance Win32_Process -ErrorAction SilentlyContinue `
+        -Filter "Name='caddy.exe' OR Name='php.exe' OR Name='python.exe' OR Name='pythonw.exe' OR Name='llama-server.exe'" |
+        Where-Object {
+            $_.ProcessId -ne $PID -and $_.ProcessId -notin $keep -and $_.ParentProcessId -notin $keep -and (
+                ($_.ExecutablePath -and $_.ExecutablePath.StartsWith($here, [StringComparison]::OrdinalIgnoreCase)) -or
+                ($_.CommandLine -and $_.CommandLine.IndexOf($here, [StringComparison]::OrdinalIgnoreCase) -ge 0))
+        } | ForEach-Object {
+            try {
+                Stop-Process -Id $_.ProcessId -Force -ErrorAction Stop
+                Ok "stopped untracked $($_.Name) (pid $($_.ProcessId))"
+            } catch {
+                Warn_ "could not stop $($_.Name) (pid $($_.ProcessId)): $($_.Exception.Message)"
+            }
+        }
+}
+
+# caddy gives the same WSAEACCES for a port another app holds and
+# one windows reserved, so say which before it starts
+function Get-PortBlocker([string]$port, [string]$addr) {
+    if ($addr -eq 'localhost') { $addr = '127.0.0.1' }
+    if (Get-Command Get-NetTCPConnection -ErrorAction SilentlyContinue) {
+        for ($try = 0; $try -lt 6; $try++) {
+            $owners = @(Get-NetTCPConnection -LocalPort ([int]$port) -State Listen -ErrorAction SilentlyContinue |
+                Where-Object { $_.LocalAddress -in '0.0.0.0', '::', $addr -or $addr -in '0.0.0.0', '::' } |
+                ForEach-Object { Get-Process -Id $_.OwningProcess -ErrorAction SilentlyContinue } |
+                Sort-Object Id -Unique)
+            if (-not $owners) { break }
+            Start-Sleep -Milliseconds 500
+        }
+        if ($owners) {
+            return ($owners | ForEach-Object {
+                $path = if ($_.Path) { " ($($_.Path))" } else { ' (no path, a windows service or something run as admin)' }
+                "$($_.ProcessName) pid $($_.Id)$path"
+            }) -join ', '
+        }
+    }
+    foreach ($line in (netsh interface ipv4 show excludedportrange protocol=tcp)) {
+        if ($line -match '^\s*(\d+)\s+(\d+)' -and [int]$port -ge [int]$Matches[1] -and [int]$port -le [int]$Matches[2]) {
+            return "windows itself, it reserved ports $($Matches[1])-$($Matches[2]) (Hyper-V, WSL or Docker Desktop do that)"
+        }
+    }
+    return $null
+}
+
 function Test-Http([string]$url, [int]$timeoutSec = 2) {
     try {
         Invoke-WebRequest -Uri $url -UseBasicParsing -TimeoutSec $timeoutSec | Out-Null
@@ -518,11 +568,15 @@ if ($Action -eq 'stop') {
     $pids = Read-Pids
     foreach ($name in $Services) {
         $p = Get-TrackedProcess $pids $name
-        if ($p) {
+        if (-not $p) { continue }
+        try {
+            Stop-Process -Id $p.Id -Force -ErrorAction Stop
             Ok "stopped $name (pid $($p.Id))"
-            Stop-Process -Id $p.Id -Force -ErrorAction SilentlyContinue
+        } catch {
+            Warn_ "could not stop $name (pid $($p.Id)): $($_.Exception.Message)"
         }
     }
+    Stop-Strays
     Remove-Item $PidFile -ErrorAction SilentlyContinue
     Write-Host ''
     Ok 'all services stopped'
@@ -583,6 +637,100 @@ if ($Action -eq 'trust') {
         exit 1
     }
     if (Update-CaTrust $true) { exit 0 } else { exit 1 }
+}
+
+function Get-PhpExe {
+    $exe = Join-Path $Runtime 'php\php.exe'
+    if (Test-Path $exe) { return $exe }
+    $cmd = Get-Command php -ErrorAction SilentlyContinue
+    if (-not $cmd) { throw 'PHP not found. Run install.ps1 first (it puts a portable PHP under runtime\php).' }
+    return $cmd.Source
+}
+
+# .\start.ps1 phone: the QR the android app scans for LAN mode. asks
+# before turning LAN_INFERENCE on, BIND_ADDR=0.0.0.0 opens her up
+if ($Action -eq 'phone') {
+    $phpExe = Get-PhpExe
+    $token = "$env:JUN_LAN_TOKEN"
+    $loopback = $BindAddr -in @('127.0.0.1', 'localhost', '::1')
+    $need = @()
+    if ("$env:LAN_INFERENCE" -notmatch '^(on|1|true|yes)$') { $need += 'LAN_INFERENCE=on' }
+    if ($token.Length -lt 32) { $need += 'a new JUN_LAN_TOKEN' }
+    if ($loopback) { $need += 'BIND_ADDR=0.0.0.0' }
+    if ($need.Count) {
+        Note "the phone needs: $($need -join ', ')"
+        Note 'BIND_ADDR=0.0.0.0 lets every device on this network reach her login page, and her model with the token'
+        if (-not $Yes) {
+            if (-not [Environment]::UserInteractive -or [Console]::IsInputRedirected) {
+                Fail_ 'set those in .env and run .\start.ps1 phone again'
+                exit 1
+            }
+            $ans = Read-Host '    write them to .env and restart her? [Y/n]'
+            if ($ans -and $ans -notmatch '^(y|yes)$') { exit 1 }
+        }
+        if ($token.Length -lt 32) {
+            $bytes = [byte[]]::new(32)
+            [Security.Cryptography.RandomNumberGenerator]::Create().GetBytes($bytes)
+            $token = ($bytes | ForEach-Object { $_.ToString('x2') }) -join ''
+        }
+        $set = [ordered]@{ LAN_INFERENCE = 'on'; JUN_LAN_TOKEN = $token }
+        if ($loopback) { $set.BIND_ADDR = '0.0.0.0'; $BindAddr = '0.0.0.0' }
+        if (-not (Test-Path .env)) { New-Item -ItemType File .env | Out-Null }
+        foreach ($k in $set.Keys) {
+            $kept = @(Get-Content .env | Where-Object { $_ -notmatch "^$k=" })
+            Set-Content -Path .env -Value ($kept + "$k=$($set[$k])")
+            Set-Item "env:$k" $set[$k]
+        }
+    }
+
+    # php itself, not .env. an edit nobody restarted for would hand
+    # the phone a token php has never heard of
+    $live = $false
+    try {
+        Invoke-WebRequest -UseBasicParsing -Uri "$PhpUrl/api/model.php" -TimeoutSec 5 `
+            -Headers @{ Authorization = "Bearer $token" } | Out-Null
+        $live = $true
+    } catch {}
+    if (-not $live) {
+        Step 'restarting her with LAN mode on'
+        $self = (Get-Process -Id $PID).Path
+        & $self -NoProfile -ExecutionPolicy Bypass -File $PSCommandPath stop | Out-Host
+        & $self -NoProfile -ExecutionPolicy Bypass -File $PSCommandPath start -NoBrowser | Out-Host
+        if ($LASTEXITCODE -ne 0) { Fail_ 'she did not come back up, see above'; exit 1 }
+    }
+    Confirm-FirewallRule $Port
+
+    $caFile = Join-Path $CertDir 'ca.pem'
+    $ca = if (Test-Path $caFile) {
+        & $phpExe -r 'echo openssl_x509_fingerprint(file_get_contents($argv[1]), ''sha256'');' -- $caFile
+    }
+    if (-not $ca) { Fail_ "couldn't read her local CA at $caFile"; exit 1 }
+    $hosts = @(Get-PrivateIPv4) + @($env:OMEGA_EXTRA_HOSTS -split '[,\s]+' | Where-Object { $_ })
+    if (-not $hosts) { Fail_ 'no private address on this machine for the phone to reach'; exit 1 }
+    $enc = { param($s) [Uri]::EscapeDataString($s) }
+    $link = "junos://pair?mode=lan&name=$(& $enc $env:COMPUTERNAME)&token=$token&ca=$ca"
+    foreach ($h in $hosts) { $link += "&url=$(& $enc "https://${h}:$Port/api/model.php")" }
+
+    # drawn here from 0s and 1s, not as ANSI. the old console
+    # without VT would print the escape codes as garbage
+    $rows = @(& $phpExe (Join-Path $PSScriptRoot 'tools\qr.php') $link rows)
+    $blank = '0' * $rows[0].Length
+    $rows = @($blank) * 4 + $rows + @($blank) * 5
+    Write-Host ''
+    for ($y = 0; $y + 1 -lt $rows.Count; $y += 2) {
+        $line = '    '
+        for ($x = 0; $x -lt $rows[$y].Length; $x++) {
+            $top = $rows[$y][$x] -eq '1'; $bottom = $rows[$y + 1][$x] -eq '1'
+            $line += if ($top -and $bottom) { [char]0x2588 } elseif ($top) { [char]0x2580 } elseif ($bottom) { [char]0x2584 } else { ' ' }
+        }
+        Write-Host '  ' -NoNewline
+        Write-Host ($line + '    ') -ForegroundColor Black -BackgroundColor White
+    }
+    Write-Host ''
+    Note 'scan it in the Jun OS app (LAN, then Scan), or with the phone camera. same wifi as this PC.'
+    Write-Host "    $link"
+    Note 'the code holds the token: anyone who scans it gets her model. a new JUN_LAN_TOKEN in .env cuts everyone off.'
+    exit 0
 }
 
 if ($Action -eq 'status') {
@@ -796,12 +944,7 @@ if (-not $voiceOff -and (Test-Path $ttsPython)) {
     Warn_ 'voice is on but the TTS venv is missing - re-run install.ps1 to set it up. Continuing text-only.'
 }
 
-$phpExe = Join-Path $Runtime 'php\php.exe'
-if (-not (Test-Path $phpExe)) {
-    $cmd = Get-Command php -ErrorAction SilentlyContinue
-    if (-not $cmd) { throw 'PHP not found. Run install.ps1 first (it puts a portable PHP under runtime\php).' }
-    $phpExe = $cmd.Source
-}
+$phpExe = Get-PhpExe
 $caddyExe = Join-Path $Runtime 'caddy\caddy.exe'
 if (-not (Test-Path $caddyExe)) {
     $cmd = Get-Command caddy -ErrorAction SilentlyContinue
@@ -812,6 +955,13 @@ if (-not (Test-Path $caddyExe)) {
 foreach ($name in 'caddy', 'php') {
     $old = Get-TrackedProcess $oldPids $name
     if ($old) { Stop-Process -Id $old.Id -Force -ErrorAction SilentlyContinue }
+}
+Stop-Strays @($newPids.Values)
+foreach ($taken in @(@{ Port = $Port; Addr = $BindAddr; Knob = 'JUN_PORT' }, @{ Port = $PhpPort; Addr = '127.0.0.1'; Knob = 'JUN_PHP_PORT' })) {
+    $blocker = Get-PortBlocker $taken.Port $taken.Addr
+    if ($blocker) {
+        throw "port $($taken.Port) is taken by $blocker. close that, or set $($taken.Knob) to a free port in .env"
+    }
 }
 
 # sanity-check php.exe before launching it hidden. a missing VC++
@@ -853,6 +1003,7 @@ $env:SIDECAR_SECRET         = $SidecarSecret
 # karaoke gets its own (GPU-capable) container.
 $env:KARAOKE_URL            = 'http://127.0.0.1:8001'
 $env:OMEGA_STATE_DIR        = $StateDir
+$env:JUN_CA_FILE            = Join-Path $CertDir 'ca.pem'
 # php-router.php refuses any Host that isn't in here with a 421,
 # so a phone opening https://192.168.1.42:8080 needs that exact
 # address listed. filled in from this machine's own private

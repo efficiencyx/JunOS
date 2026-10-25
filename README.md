@@ -170,6 +170,8 @@ Linux:
 Start her: `./JunOS/start.sh`
 Stop her: `./JunOS/start.sh stop`
 
+Pair the phone app with this PC: `./JunOS/start.sh phone`, or the **Phone** button in that Windows window (`powershell .\JunOS\start.ps1 phone` in a terminal).
+
 ### Why the first start is slow
 
 The very first boot downloads her brain - whatever model is listed in `LLAMACPP_MODEL_HF` (`OLLAMA_MODELS_TO_PULL` if you picked Ollama), by default `efficiencyx/Jun-LoRA-E2B-GGUF:Q4_K_M`, which is the one that runs fine without a fancy graphics card. It's a big file. The tiny model that names your chats (`TITLE_MODEL`, ~1.2 GB, lives on the CPU) comes too, on llama.cpp the first time a chat needs a name, and so does the MTP drafter if you said yes to it. Watch it all crawl in with `./start.sh logs llamacpp` (or `logs ollama`).
@@ -200,7 +202,7 @@ Knobs in the cells: **Mode** (everything in the notebook, or inference only), **
 
 > **It's a disposable demo.** Colab wipes the session when it ends: accounts, chat history and weights don't survive. Run her locally for anything persistent.
 
-**She already lives on your PC but your card can't hold the model you want?** Pick **Inference only** in Step 1. Jun stays home, chats and memories included, and the notebook only lends her its GPU or TPU. Step 3 prints a few lines (`OLLAMA_URL` + `OLLAMA_API_KEY` on a GPU, `AI_PROVIDER=vllm` + `VLLM_*` on a TPU). Hand them over with `./start.sh link` on Linux or the **Notebook link** button in the manager on Windows (or pick **Cloud** when installing), start her, and she thinks on Google's hardware. Every notebook run makes a new URL and key; when the old ones stop answering, starting her asks for the new lines by itself. **Kaggle** works the same way, inference only. Your messages do leave the machine for this: they go through a Cloudflare tunnel to the notebook, locked with a key that changes every run.
+**She already lives on your PC but your card can't hold the model you want?** Pick **Inference only** in Step 1. Jun stays home, chats and memories included, and the notebook only lends her its GPU or TPU. Step 3 prints a few lines (`OLLAMA_URL` + `OLLAMA_API_KEY` on a GPU, `AI_PROVIDER=vllm` + `VLLM_*` on a TPU). Hand them over with `./start.sh link` on Linux or the **Notebook link** button in the manager on Windows (or pick **Cloud** when installing), start her, and she thinks on Google's hardware. Every notebook run makes a new URL and key; when the old ones stop answering, starting her asks for the new lines by itself. **Kaggle** works the same way, inference only. Your messages do leave the machine for this: they go through a Cloudflare tunnel to the notebook, locked with a key that changes every run. The phone app can borrow the same brain: Step 3 also shows a QR code for its **Cloud** mode.
 
 **On a TPU** she runs on [vLLM](https://github.com/vllm-project/tpu-inference) instead of Ollama, from a safetensors build. `TPU_Model` on `auto` takes the full-precision [`efficiencyx/Jun-LoRA-12B-Safetensor`](https://huggingface.co/efficiencyx/Jun-LoRA-12B-Safetensor) on a **v6e-1** (32 GB) or bigger, and the [INT8 build](https://huggingface.co/efficiencyx/Jun-LoRA-12B-Safetensor-INT8) on a 16 GB **v5e-1**, where she gets 6144 tokens of context. Step 2 says so before downloading anything if a model you picked won't fit. Kaggle's v5e-8 has room for much bigger models. The first start compiles her for the TPU, give it 10-20 minutes.
 
@@ -232,9 +234,11 @@ BIND_ADDR=0.0.0.0
 
 The launcher works out this machine's address on the network by itself and prints it - `reachable as: https://192.168.X.X` on Linux, `on your phone: https://192.168.X.X:8080` on Windows - and that's the URL you type into the phone. On Windows it also adds a firewall rule for the port on **private** networks only (it needs an admin PowerShell to do it, otherwise it prints the one-liner for you to run). One request at a time on Windows, so the phone and the desktop take turns.
 
-Want her *on* the phone instead, no computer at all? Every [release](https://github.com/efficiencyx/JunOS/releases) carries **`JunOS-<version>.apk`**, the Android app, still a work in progress. arm64 phones on Android 10 or newer, and the first start downloads the ~2.9 GB v8 model. Updating from an older model downloads it again; your chats, memory and settings stay on the phone. The phone app doesn't have everything yet: no memory tidying (her notes are only added, never merged or rewritten, and there's no **Changed** history), no karaoke, no outings, no achievements and no welcome-back scene.
+Want her *on* the phone instead, no computer at all? Every [release](https://github.com/efficiencyx/JunOS/releases) carries **`JunOS-<version>.apk`**, the Android app, still a work in progress. arm64 phones on Android 10 or newer, and Local mode downloads the ~2.9 GB v8 model the first time you pick it. Updating from an older model downloads it again; your chats, memory and settings stay on the phone. The phone app doesn't have everything yet: no memory tidying (her notes are only added, never merged or rewritten, and there's no **Changed** history), no karaoke, no outings, no achievements and no welcome-back scene.
 
-The phone still gets the certificate warning, trusting the CA only covers the computer you did it on. Your password and every word she says cross the wifi encrypted, but a cert the phone doesn't trust can't prove it's really talking to your box, so keep it to networks you trust and **never** port-forward it to the internet - that's what the certbot setup above is for. DHCP moves addresses around, so if she stops answering after a few days, restart the launcher and read the new one (the new address gets a fresh cert from the same CA, so a computer that trusts it doesn't notice, and the phone clicks through once more).
+Every time the app starts it asks where she thinks this time: **Local** (on the phone, offline), **LAN** (your PC on the same wifi, so the 12B instead of the phone's E2B) or **Cloud** (the Colab or Kaggle notebook in inference only mode). Pairing is one QR code: `./start.sh phone` on Linux, the **Phone** button in the Jun OS window on Windows, or Step 3 of the notebook. Scan it in the app, or with the phone's camera. Chats and memories stay on the phone in all three, the PC or the notebook only does the thinking. In Cloud mode what she reads goes through Google and Cloudflare, same as the PC case. `./start.sh phone` asks before it flips anything: it needs `BIND_ADDR=0.0.0.0`, `LAN_INFERENCE=on` and a token, and that token lives in the QR, so don't post a photo of it.
+
+The phone's browser still gets the certificate warning, trusting the CA only covers the computer you did it on (the app doesn't, the QR tells it which CA is yours). Your password and every word she says cross the wifi encrypted, but a cert the phone doesn't trust can't prove it's really talking to your box, so keep it to networks you trust and **never** port-forward it to the internet - that's what the certbot setup above is for. DHCP moves addresses around, so if she stops answering after a few days, restart the launcher and read the new one (the new address gets a fresh cert from the same CA, so a computer that trusts it doesn't notice, and the phone clicks through once more).
 
 The `prod` profile adds the certbot sidecar. On a fresh box nginx comes up first on a throwaway local cert (so for the first minute or so your browser will complain - that's expected), certbot then runs `certbot certonly --webroot` and nginx swaps the real cert in by itself, no restart. If issuance fails (usually DNS not pointing at the box yet, or port 80 blocked) certbot keeps retrying after 1, 4 and 16 minutes, then hourly - `./start.sh logs certbot` tells you why. After that it's `certbot renew` every 12 hours, and nginx picks up renewed certs on its own too. Certs live in the `letsencrypt` volume, nginx serves 443 with HSTS. Mind Let's Encrypt's 5-duplicate-issuances-per-week limit while testing.
 
@@ -304,6 +308,7 @@ Everything is environment variables in `.env` - the full reference is [`docs/con
 | `VOICE` | `off` skips the voice sidecar: the `tts` container under Docker (`voice` profile), the sidecar process on bare-metal Windows. Chat degrades to text-only | `on` |
 | `FLEE_BANS` | When she walks out of a scene, `on` locks that account out of chat for 5 min, doubling per repeat up to 30. `off` lets her leave without the lockout | `on` |
 | `FREE_ROAM` | Going out is her call: the shop, karaoke and date pages bounce home unless she agreed in chat. `on` drops that gate and gives everyone the "Force her" buttons and the restaurant's "Skip the wait" (admins have them regardless) | `off` |
+| `LAN_INFERENCE` | Lends her brain to the phone app on your wifi. `./start.sh phone` turns it on for you, with a fresh `JUN_LAN_TOKEN`; change the token to unpair every phone | `off` |
 | `TTS_DEVICE` | Voice synthesis device. Keep it on CPU: both engines are real-time there, and a GPU copy parks ~2 GB your LLM wants more | `cpu` |
 | `KARAOKE` / `SEP_DEVICE` | Karaoke sidecar on/off, and where stem separation runs. *This* is the audio job that wants a GPU - minutes on CPU, seconds on a card, VRAM handed back after | `on` · `auto` |
 | `STT_MODEL` / `STT_LANG` | Whisper size and language; blank lang = per-utterance auto-detect | `base` · *(auto)* |
@@ -387,6 +392,12 @@ The notebook's tunnel URL and key are new every time Step 3 runs, and the sessio
 </details>
 
 <details>
+<summary><b>The phone app can't reach your PC</b></summary>
+
+Same wifi first, and Jun OS has to be running on the PC. Then read what the start screen says. *LAN mode is off*: run `./start.sh phone` there (the **Phone** button on Windows). *Doesn't know this phone anymore* or *has a new certificate*: the token or her local CA changed, scan a fresh code. Just *can't reach*: the PC's address moved (DHCP) or, on Windows, the firewall rule for her port is missing, run `./start.sh phone` again and it prints the rule if it couldn't add it. Cloud is the same story as above: every Step 3 run is a new code.
+</details>
+
+<details>
 <summary><b>Jun shows "Placeholder" / "404 Assets not extracted"</b></summary>
 
 That's the placeholder - the server couldn't find her rig. It wants all four of `webapp/assets/interaction_model.moc3` and `texture_00.png`..`texture_02.png`; one missing and you get the stand-in. Run the extraction (see [her body isn't in this repo](#her-body-isnt-in-this-repo)), then reload.
@@ -457,9 +468,9 @@ Read the line under **existing install**, it says which of these it was:
 .
 ├── docker/           Dockerfiles, nginx templates + security-headers snippet, entrypoints
 ├── tts/              Audio sidecar: TTS + STT + karaoke separation (FastAPI, server.py + sidecar/)
-├── tools/            Lore builder, critical-CSS inliner, asset recovery, the bare-metal php router, the notebook's inference gate
+├── tools/            Lore builder, critical-CSS inliner, asset recovery, the bare-metal php router, the notebook's inference gate, the pairing QR encoder
 ├── docs/             architecture.md, configuration.md, screenshots/ (the user guide is the GitHub wiki)
-├── android/          Same webapp on a phone: Ktor server + LiteRT-LM on-device, its own Gradle project
+├── android/          Same webapp on a phone: Ktor server + LiteRT-LM on-device (or a paired PC/notebook), its own Gradle project
 ├── webapp/           Everything nginx and php-fpm serve
 │   ├── api/          chat.php, auth.php, memory.php, outfit.php, karaoke.php, trip.php, migrations/, …
 │   │   └── lib/      the shared stuff: bootstrap, db, crypto, memory, providers/, chat/, consolidation/ (never served)

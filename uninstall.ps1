@@ -26,6 +26,16 @@ param([switch]$Yes)
 $ErrorActionPreference = 'Stop'
 $root = $PSScriptRoot
 
+# JunOS.exe opens this in its own window, which closes the moment
+# the script ends. Keep the error on screen.
+trap {
+    Write-Host ''
+    Write-Host "Uninstall stopped: $($_.Exception.Message)" -ForegroundColor Red
+    Write-Host "Whatever is left is still in $root. Close anything running from it (Task Manager: caddy, php, python, llama-server) and run uninstall.ps1 again, or delete the folder."
+    if (-not $Yes) { Read-Host 'Press Enter to close' | Out-Null }
+    exit 1
+}
+
 function Confirm-Step([string]$question) {
     if ($Yes) { return $true }
     return (Read-Host "$question [y/N]") -match '^(y|yes)$'
@@ -120,6 +130,11 @@ Get-Process JunOS -ErrorAction SilentlyContinue |
 
 # From outside the folder, since this script lives inside it.
 Set-Location $env:USERPROFILE
-Remove-Item -LiteralPath $root -Recurse -Force
+# Windows releases a stopped process's files a moment after it exits.
+for ($try = 1; ; $try++) {
+    try { Remove-Item -LiteralPath $root -Recurse -Force -ErrorAction Stop; break }
+    catch { if ($try -ge 5) { throw } }
+    Start-Sleep -Seconds 2
+}
 Write-Host "Removed $root. Jun is uninstalled."
 Write-Host 'Left in place: git and any Python installed for voice or asset recovery - remove via Settings > Apps if unwanted.'

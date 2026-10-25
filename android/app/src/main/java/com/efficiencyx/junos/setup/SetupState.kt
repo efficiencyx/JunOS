@@ -1,5 +1,8 @@
 package com.efficiencyx.junos.setup
 
+import com.efficiencyx.junos.pairing.Pairing
+import com.efficiencyx.junos.pairing.SessionMode
+
 data class DeviceStatus(
     val supportedAbi: Boolean,
     val totalRamBytes: Long,
@@ -9,7 +12,10 @@ data class DeviceStatus(
         get() = totalRamBytes >= MIN_REPORTED_RAM
 
     val supported: Boolean
-        get() = supportedAbi && freeStorageBytes >= MIN_FREE_STORAGE
+        get() = supportedAbi
+
+    val roomForModel: Boolean
+        get() = freeStorageBytes >= MIN_FREE_STORAGE
 
     companion object {
         const val MIN_REPORTED_RAM = 7L * 1024 * 1024 * 1024
@@ -17,7 +23,7 @@ data class DeviceStatus(
     }
 }
 
-enum class SetupPhase { CHECKING, CONSENT, MODEL, ASSETS, VOICE, READY, STARTING, ERROR }
+enum class SetupPhase { CHECKING, CONSENT, ASSETS, VOICE, PICK, STARTING, ERROR }
 
 data class TransferProgress(
     val bytes: Long = 0,
@@ -41,4 +47,16 @@ data class SetupState(
     val error: String? = null,
     val ready: Boolean = false,
     val serverUrl: String? = null,
-)
+    val mode: SessionMode = SessionMode.LOCAL,
+    val lan: Pairing? = null,
+    val cloud: Pairing? = null,
+    // a scanned or pasted code, waiting for a yes
+    val offer: Pairing? = null,
+    val pickError: String? = null,
+) {
+    fun pairing(mode: SessionMode): Pairing? = when (mode) {
+        SessionMode.LAN -> lan
+        SessionMode.CLOUD -> cloud
+        SessionMode.LOCAL -> null
+    }
+}

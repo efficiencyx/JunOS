@@ -138,6 +138,7 @@ public sealed class JunProcessOutput
             <Button x:Name="FolderButton" Content="Open folder" />
             <Button x:Name="LogsButton" Content="Logs" />
             <Button x:Name="LinkButton" Content="Notebook link" />
+            <Button x:Name="PhoneButton" Content="Phone" />
             <Button x:Name="UpdateButton" Content="Update" />
             <Button x:Name="UninstallButton" Content="Uninstall" />
         </WrapPanel>
@@ -151,7 +152,7 @@ public sealed class JunProcessOutput
 
 $window = [Windows.Markup.XamlReader]::Load([Xml.XmlNodeReader]::new($xaml))
 foreach ($name in 'FolderText', 'StateText', 'DetailText', 'StartButton', 'StopButton', 'OpenButton',
-        'FolderButton', 'LogsButton', 'LinkButton', 'UpdateButton', 'UninstallButton', 'OutputBox') {
+        'FolderButton', 'LogsButton', 'LinkButton', 'PhoneButton', 'UpdateButton', 'UninstallButton', 'OutputBox') {
     Set-Variable -Name $name -Value $window.FindName($name) -Scope Script
 }
 $FolderText.Text = $script:Root
@@ -205,7 +206,8 @@ function Set-State([string]$text, [string]$color) {
 
 function Update-Status {
     $services = @(Get-RunningServices)
-    $webUp = Test-Port ([int](Get-EnvValue 'JUN_PORT' '8080'))
+    # another app on JUN_PORT answers too, so it has to be our caddy
+    $webUp = 'caddy' -in $services -and (Test-Port ([int](Get-EnvValue 'JUN_PORT' '8080')))
     if ($script:busy) {
         Set-State 'Working...' '#FFC870'
     } elseif ($webUp) {
@@ -224,6 +226,7 @@ function Update-Status {
     $StopButton.IsEnabled = -not $script:busy -and ($services.Count -gt 0 -or $webUp)
     $OpenButton.IsEnabled = $webUp
     $UpdateButton.IsEnabled = -not $script:busy
+    $PhoneButton.IsEnabled = -not $script:busy
     $UninstallButton.IsEnabled = -not $script:busy
 }
 
@@ -247,7 +250,9 @@ function Invoke-StartScript([string]$action) {
     $info.RedirectStandardError = $true
     $info.StandardOutputEncoding = [Text.Encoding]::UTF8
     $info.StandardErrorEncoding = [Text.Encoding]::UTF8
-    if ($action -eq 'start') { $info.EnvironmentVariables['JUN_LINK_CHECKED'] = '1' }
+    if ($action -eq 'start' -or $action -like 'phone*') { $info.EnvironmentVariables['JUN_LINK_CHECKED'] = '1' }
+    $script:action = $action
+    $script:pairLink = $null
 
     $OutputBox.Clear()
     $script:process = [Diagnostics.Process]::new()
@@ -282,7 +287,11 @@ $script:ticks = 0
 $timer.Add_Tick({
     if ($script:output) {
         $line = [string]::Empty
-        while ($script:output.Lines.TryDequeue([ref]$line)) { Add-OutputLine $line; $line = [string]::Empty }
+        while ($script:output.Lines.TryDequeue([ref]$line)) {
+            if ($line -match '(junos://pair\?\S+)') { $script:pairLink = $Matches[1] }
+            Add-OutputLine $line
+            $line = [string]::Empty
+        }
     }
     # HasExited, never a bare WaitForExit(). start.ps1's services
     # inherit its output pipe and keep it open forever, so waiting
@@ -298,6 +307,8 @@ $timer.Add_Tick({
             }
         } elseif ($code -ne 0) {
             Add-OutputLine "start.ps1 exited with code $code. The Logs button has the details."
+        } elseif ($script:action -like 'phone*' -and $script:pairLink) {
+            Show-PhoneDialog $script:pairLink
         }
     }
     $script:ticks++
@@ -396,9 +407,56 @@ function Confirm-CloudLink {
     return Show-CloudDialog $reason 'Save and start' 'Start anyway'
 }
 
+function Show-PhoneDialog([string]$link) {
+    $php = Join-Path $script:Root 'runtime\php\php.exe'
+    if (-not (Test-Path -LiteralPath $php)) { $php = (Get-Command php -ErrorAction SilentlyContinue).Source }
+    $rows = @(& $php (Join-Path $script:Root 'tools\qr.php') $link rows | Where-Object { $_ })
+    if (-not $rows) { Add-OutputLine "Couldn't draw the QR code. The link above works too, paste it into the app."; return }
+    $quiet = 4
+    $n = $rows[0].Length + 2 * $quiet
+    $pixels = [byte[]]::new($n * $n)
+    for ($i = 0; $i -lt $pixels.Length; $i++) { $pixels[$i] = 255 }
+    for ($y = 0; $y -lt $rows.Count; $y++) {
+        for ($x = 0; $x -lt $rows[$y].Length; $x++) {
+            if ($rows[$y][$x] -eq '1') { $pixels[($y + $quiet) * $n + $x + $quiet] = 0 }
+        }
+    }
+    [xml]$dialogXaml = @'
+<Window xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="Jun OS" Width="420" SizeToContent="Height" WindowStartupLocation="CenterOwner" ResizeMode="NoResize"
+        Background="#111318" Foreground="#F3F4F6" FontFamily="Segoe UI" FontSize="14">
+    <StackPanel Margin="24,20,24,16">
+        <Image x:Name="QrImage" Width="320" Height="320" RenderOptions.BitmapScalingMode="NearestNeighbor" />
+        <TextBlock TextWrapping="Wrap" Margin="0,16,0,0"
+                   Text="Scan it in the Jun OS app (LAN, then Scan) or with the phone camera. Same wifi as this PC." />
+        <TextBlock TextWrapping="Wrap" Foreground="#AEB5C2" FontSize="12" Margin="0,8,0,0"
+                   Text="The code holds the token: anyone who scans it can use her model. A new JUN_LAN_TOKEN in .env cuts everyone off." />
+        <TextBox x:Name="LinkBox" IsReadOnly="True" TextWrapping="Wrap" FontFamily="Consolas" FontSize="11"
+                 Background="#0C0E12" Foreground="#C1C6D0" BorderBrush="#343945" Padding="6" Margin="0,12,0,16" />
+        <Button x:Name="CloseButton" Content="Done" HorizontalAlignment="Right" Padding="14,8" />
+    </StackPanel>
+</Window>
+'@
+    $dialog = [Windows.Markup.XamlReader]::Load([Xml.XmlNodeReader]::new($dialogXaml))
+    $dialog.Owner = $window
+    $dialog.FindName('QrImage').Source = [Windows.Media.Imaging.BitmapSource]::Create(
+        $n, $n, 96, 96, [Windows.Media.PixelFormats]::Gray8, $null, $pixels, $n)
+    $dialog.FindName('LinkBox').Text = $link
+    $dialog.FindName('CloseButton').Add_Click({ $dialog.Close() })
+    [void]$dialog.ShowDialog()
+}
+
 $StartButton.Add_Click({ if (Confirm-CloudLink) { Invoke-StartScript 'start' } })
 $LinkButton.Add_Click({
     [void](Show-CloudDialog 'Lend her brain to the Colab or Kaggle notebook in inference only mode. Stop then Start afterwards to use it.' 'Save' 'Cancel')
+})
+$PhoneButton.Add_Click({
+    $off = (Get-EnvValue 'LAN_INFERENCE' 'off') -notmatch '^(on|1|true|yes)$' -or
+        (Get-EnvValue 'JUN_LAN_TOKEN' '').Length -lt 32 -or
+        (Get-EnvValue 'BIND_ADDR' '127.0.0.1') -in @('127.0.0.1', 'localhost', '::1')
+    if ($off -and -not (Confirm-Action "Pairing a phone turns on LAN mode. Jun OS then listens on your network (BIND_ADDR=0.0.0.0): other devices on this wifi can reach her login page, and her model with the token in the code.`n`nWrite that to .env and restart her?")) { return }
+    Invoke-StartScript 'phone -Yes'
 })
 $StopButton.Add_Click({ Invoke-StartScript 'stop' })
 $OpenButton.Add_Click({ Start-Process (Get-SiteUrl) })

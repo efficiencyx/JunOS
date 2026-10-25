@@ -16,6 +16,7 @@ data class ParsedToolCall(val name: String, val args: JsonObject)
 
 sealed interface TurnEvent {
     data class Text(val text: String) : TurnEvent
+    data class Thought(val text: String) : TurnEvent
     data class Call(val call: ParsedToolCall) : TurnEvent
 }
 
@@ -31,6 +32,9 @@ sealed interface EngineState {
 interface InferenceEngine : Closeable {
     val state: StateFlow<EngineState>
     val lastStats: StateFlow<JsonObject?>
+    // where she runs, for the notification: "this phone", the PC's name
+    val label: String
+    val contextTokens: Int
 
     suspend fun ensureLoaded()
     fun generate(messages: List<ChatMessage>, maxTokens: Int = 768, temperature: Float = 0.4f): Flow<String>
@@ -40,6 +44,7 @@ interface InferenceEngine : Closeable {
         think: Boolean,
         maxTokens: Int = 768,
         temperature: Float = 0.4f,
+        reasoning: String = "low",
     ): Flow<TurnEvent>
     fun cancel()
 }

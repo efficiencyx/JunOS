@@ -9,19 +9,24 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.selection.selectable
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Button
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
+import androidx.compose.material3.RadioButton
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
+import com.efficiencyx.junos.pairing.SessionMode
 
 @Composable
 fun SetupScreen(
@@ -31,7 +36,11 @@ fun SetupScreen(
     onPauseModel: () -> Unit,
     onSelectZip: () -> Unit,
     onDownloadVoice: () -> Unit,
-    onContinue: () -> Unit,
+    onSkipVoice: () -> Unit,
+    onSelectMode: (SessionMode) -> Unit,
+    onScan: () -> Unit,
+    onPaste: () -> Unit,
+    onStart: () -> Unit,
     onRetry: () -> Unit,
 ) {
     Column(
@@ -55,18 +64,6 @@ fun SetupScreen(
                 )
                 Spacer(Modifier.height(20.dp))
                 Button(onClick = onConsent, modifier = Modifier.fillMaxWidth()) { Text("I am 18 or older") }
-            }
-            SetupPhase.MODEL -> {
-                if (state.modelProgress.total > 0) {
-                    LinearProgressIndicator(progress = { state.modelProgress.fraction }, modifier = Modifier.fillMaxWidth())
-                    Text(formatProgress(state.modelProgress), style = MaterialTheme.typography.bodySmall)
-                    Spacer(Modifier.height(12.dp))
-                }
-                if (state.modelProgress.running) {
-                    OutlinedButton(onClick = onPauseModel, modifier = Modifier.fillMaxWidth()) { Text("Pause download") }
-                } else {
-                    Button(onClick = onDownloadModel, modifier = Modifier.fillMaxWidth()) { Text("Download Jun model") }
-                }
             }
             SetupPhase.ASSETS -> {
                 Text(
@@ -92,9 +89,56 @@ fun SetupScreen(
                     Button(onClick = onDownloadVoice, modifier = Modifier.fillMaxWidth()) { Text("Download offline voice") }
                 }
                 Spacer(Modifier.height(8.dp))
-                OutlinedButton(onClick = onContinue, modifier = Modifier.fillMaxWidth()) { Text("Continue without voice") }
+                OutlinedButton(onClick = onSkipVoice, modifier = Modifier.fillMaxWidth()) { Text("Continue without voice") }
             }
-            SetupPhase.READY -> Button(onClick = onContinue, modifier = Modifier.fillMaxWidth()) { Text("Open Jun OS") }
+            SetupPhase.PICK -> {
+                ModeOption(
+                    state, SessionMode.LOCAL, "Local",
+                    if (state.modelReady) "On this phone, offline." else "On this phone, offline. Needs the model download first.",
+                    onSelectMode,
+                )
+                ModeOption(
+                    state, SessionMode.LAN, "LAN",
+                    state.lan?.let { "${it.name}, on this wifi." }
+                        ?: "Your PC on this wifi. To pair, run ./start.sh phone there, or press Phone in the Jun OS app on Windows.",
+                    onSelectMode,
+                )
+                ModeOption(
+                    state, SessionMode.CLOUD, "Cloud",
+                    (state.cloud?.let { "${it.name}." } ?: "Colab or Kaggle in inference only mode, Step 3 shows the code.") +
+                        " Chats pass through Google and Cloudflare.",
+                    onSelectMode,
+                )
+                state.pickError?.let {
+                    Spacer(Modifier.height(8.dp))
+                    Text(it, color = MaterialTheme.colorScheme.error, textAlign = TextAlign.Center)
+                }
+                Spacer(Modifier.height(20.dp))
+                val paired = state.pairing(state.mode)
+                when {
+                    state.mode == SessionMode.LOCAL && !state.modelReady -> {
+                        if (state.modelProgress.total > 0) {
+                            LinearProgressIndicator(progress = { state.modelProgress.fraction }, modifier = Modifier.fillMaxWidth())
+                            Text(formatProgress(state.modelProgress), style = MaterialTheme.typography.bodySmall)
+                            Spacer(Modifier.height(12.dp))
+                        }
+                        if (state.modelProgress.running) {
+                            OutlinedButton(onClick = onPauseModel, modifier = Modifier.fillMaxWidth()) { Text("Pause download") }
+                        } else {
+                            Button(onClick = onDownloadModel, modifier = Modifier.fillMaxWidth()) { Text("Download Jun model") }
+                        }
+                    }
+                    state.mode != SessionMode.LOCAL && paired == null ->
+                        Button(onClick = onScan, modifier = Modifier.fillMaxWidth()) { Text("Scan pairing code") }
+                    else -> Button(onClick = onStart, modifier = Modifier.fillMaxWidth()) { Text("Start") }
+                }
+                if (state.mode != SessionMode.LOCAL) {
+                    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.Center) {
+                        if (paired != null) TextButton(onClick = onScan) { Text("Scan a new code") }
+                        TextButton(onClick = onPaste) { Text("Paste link") }
+                    }
+                }
+            }
             SetupPhase.ERROR -> {
                 Text(state.error ?: "Setup failed", color = MaterialTheme.colorScheme.error, textAlign = TextAlign.Center)
                 Spacer(Modifier.height(20.dp))
@@ -119,6 +163,29 @@ fun SetupScreen(
                 Text("Free storage", style = MaterialTheme.typography.bodySmall)
                 Text(formatBytes(device.freeStorageBytes), style = MaterialTheme.typography.bodySmall)
             }
+        }
+    }
+}
+
+@Composable
+private fun ModeOption(
+    state: SetupState,
+    mode: SessionMode,
+    title: String,
+    detail: String,
+    onSelect: (SessionMode) -> Unit,
+) {
+    val selected = state.mode == mode
+    Row(
+        Modifier.fillMaxWidth()
+            .selectable(selected = selected, onClick = { onSelect(mode) }, role = Role.RadioButton)
+            .padding(vertical = 10.dp),
+        verticalAlignment = Alignment.Top,
+    ) {
+        RadioButton(selected = selected, onClick = null)
+        Column(Modifier.padding(start = 12.dp)) {
+            Text(title, style = MaterialTheme.typography.titleMedium)
+            Text(detail, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
         }
     }
 }

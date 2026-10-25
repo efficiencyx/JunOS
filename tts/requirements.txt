@@ -7,6 +7,9 @@
 # interpreter in that window on purpose, the docker image is
 # 3.11.
 kokoro==0.9.4
+# spacy (kokoro -> misaki) pulls this in unpinned. 3.0.14 kills
+# en_core_web_sm with OverflowError in _flush_specials, so no voice
+preshed==3.0.13
 pocket-tts==4.0.1
 # STT. Runs on CTranslate2 (not torch) and decodes audio via
 # PyAV, whose wheel bundles ffmpeg - so no ffmpeg package is
