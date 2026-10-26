@@ -1,14 +1,14 @@
-import { armIdleAfterReply, cancelActiveIdleNudge, cancelAutoReset, cancelIdleNudge, composerPlaceholder, consolidating, fleeActive, reportActivity, resetIdleNudge, scheduleAutoReset, setCancelActiveIdleNudge, setConsolidating, showConsolidatingBubble, startFleeLock, syncConsolidationStatus } from './consolidation.js?v=102';
+import { armIdleAfterReply, cancelActiveIdleNudge, cancelAutoReset, cancelIdleNudge, composerPlaceholder, consolidating, fleeActive, reportActivity, resetIdleNudge, scheduleAutoReset, setCancelActiveIdleNudge, setConsolidating, showConsolidatingBubble, startFleeLock, syncConsolidationStatus } from './consolidation.js?v=104';
 import { chatInput, messagesEl, modelSelect, reasoningSelect, sendBtn, sendButtonIdleMarkup, sendButtonStopMarkup, thinkChk } from './dom.js?v=77';
 import { announceMobileReply, hideFaceBubble, scheduleFaceBubbleHide, setLatestAssistantReply, showFaceBubble } from './face-bubble.js?v=85';
 import { appendDebugReply, appendDebugThinking, beginDebugTurn, logToolStatus, setDebugPrompt } from './logging.js?v=78';
 import { loadMood } from './mood.js?v=85';
-import { refreshSidebar } from './sidebar.js?v=102';
+import { refreshSidebar } from './sidebar.js?v=104';
 import { makeNameFilter, makeStreamBuffer } from './stream-filters.js?v=90';
 import { localTimeString, phoneMode } from '../core/util.js?v=1';
 import * as Names from '../core/names.js?v=1';
 import * as ui from '../core/ui.js?v=1';
-import * as ChatAPI from '../core/chat-api.js?v=3';
+import * as ChatAPI from '../core/chat-api.js?v=4';
 import * as Mods from '../mods/mods.js?v=88';
 import * as Outfit from '../outfit/outfit.js?v=87';
 import * as Cards from './cards.js?v=26';
@@ -266,7 +266,7 @@ export function runChat({ idle, ephemeral, audio, voice, invite = '', onOverhear
   };
   const bubbleStream = { ephemeral: !!ephemeral, render: renderBubble, text: () => shown };
   activeBubbleStream = bubbleStream;
-  const names = makeNameFilter(sub => {
+  const showText = (sub) => {
     shown += sub;
     if (!VoiceMode.isActive()) {
       body.innerHTML = renderMarkdown(shown);
@@ -275,16 +275,18 @@ export function runChat({ idle, ephemeral, audio, voice, invite = '', onOverhear
     }
     renderBubble();
     TTS.feed(sub);
-  });
+  };
+  let names = makeNameFilter(showText);
   setRenderVoiceDraft(() => {
     body.innerHTML = renderMarkdown(shown);
     if (abortFn) body.appendChild(typing);
     messagesEl.scrollTop = messagesEl.scrollHeight;
   });
-  const stream = makeStreamBuffer(clean => {
+  const keepText = (clean) => {
     visible += clean;
     names.push(clean);
-  });
+  };
+  let stream = makeStreamBuffer(keepText);
 
   sendBtn.disabled = false;
   sendBtn.innerHTML = sendButtonStopMarkup;
@@ -390,6 +392,21 @@ export function runChat({ idle, ephemeral, audio, voice, invite = '', onOverhear
         if (!isCurrent()) return;
         startFleeLock((info.until || 0) * 1000, info.reason);
       },
+      onRestart: (r) => {
+        if (!isCurrent()) return;
+        TTS.stop();
+        hideFaceBubble();
+        visible = '';
+        shown = '';
+        stream = makeStreamBuffer(keepText);
+        names = makeNameFilter(showText);
+        thinkEl?.remove();
+        thinkEl = thinkBody = null;
+        thinking = '';
+        thinkSettled = false;
+        body.replaceChildren(typing);
+        ui.setStatus(`stuck, starting over ${r.retry}/${r.of}`, 'streaming');
+      },
       onThinking: (t) => {
         if (!isCurrent()) return;
         if (DevHud) DevHud.tickToken();
@@ -442,6 +459,11 @@ export function runChat({ idle, ephemeral, audio, voice, invite = '', onOverhear
         names.flush();
         TTS.flush();
         typing.remove();
+        if (err.message === 'looping') {
+          TTS.stop();
+          hideFaceBubble();
+          visible = shown = '';
+        }
         if (!visible.trim()) draft.remove();
         if (err.message === 'user_fled') {
           const info = err.data || {};
@@ -454,6 +476,8 @@ export function runChat({ idle, ephemeral, audio, voice, invite = '', onOverhear
           setConsolidating(true);
           showConsolidatingBubble();
           setTimeout(syncConsolidationStatus, 3000);
+        } else if (err.message === 'looping') {
+          ui.toast(`⚠ ${Names.getBot()} broke. She got stuck repeating herself, four times in a row.`, 'error');
         } else {
           ui.toast('⚠ ' + err.message, 'error');
         }

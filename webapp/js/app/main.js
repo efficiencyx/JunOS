@@ -1,18 +1,18 @@
-import { IDLE_AFTER_REPLY_MS, TYPING_POLL_MS, consolidating, reportActivity, resetIdleNudge, runPassNow, scheduleIdleNudge, showConsolidatingBubble, syncConsolidationStatus } from './consolidation.js?v=102';
+import { IDLE_AFTER_REPLY_MS, TYPING_POLL_MS, consolidating, reportActivity, resetIdleNudge, runPassNow, scheduleIdleNudge, showConsolidatingBubble, syncConsolidationStatus } from './consolidation.js?v=104';
 import { chatInput, devNoIdleChk, missingParamsEl, modelSelect, narrowSidebarQuery, reasoningSelect, sendBtn, siteVolumeInput, stageEl, thinkChk } from './dom.js?v=77';
 import { faceBubble, hideFaceBubble, latestAssistantReply, restartFaceBubbleHide, scheduleFaceBubblePosition, setLatestAssistantReply } from './face-bubble.js?v=85';
 import { logAction, logMissing, setStageStatus } from './logging.js?v=78';
 import { loadMood } from './mood.js?v=85';
-import { applyProviderCapabilities, applyRoleGates, setSiteVolume, syncThinkToggle, updateSiteVolumeLabel, wireNameSettings } from './settings.js?v=103';
-import { loadConversation, refreshSidebar, setSidebarOpen } from './sidebar.js?v=102';
+import { applyRoleGates, setSiteVolume, syncThinkToggle, updateSiteVolumeLabel, wireNameSettings } from './settings.js?v=106';
+import { loadConversation, refreshSidebar, setSidebarOpen } from './sidebar.js?v=104';
 import { escapeHtml, mealNow } from '../core/util.js?v=1';
-import { wireTts } from './wire-tts.js?v=103';
-import { wireVoice } from './wire-voice.js?v=103';
+import { wireTts } from './wire-tts.js?v=106';
+import { wireVoice } from './wire-voice.js?v=106';
 import { WELCOME_TIERS, fetchWelcome, playWelcome, previewWelcome } from './welcome.js?v=91';
 import * as Names from '../core/names.js?v=1';
 import * as Prefs from '../core/prefs.js?v=6';
 import * as ui from '../core/ui.js?v=1';
-import * as ChatAPI from '../core/chat-api.js?v=3';
+import * as ChatAPI from '../core/chat-api.js?v=4';
 import * as MobileViewport from '../core/viewport.js?v=1';
 import * as Actions from '../live2d/actions.js?v=87';
 import * as Live2D from '../live2d/live2d.js?v=84';
@@ -25,7 +25,7 @@ import * as History from './history.js?v=2';
 import { startSkybox } from '../trip/skybox.js?v=2';
 import * as TripLoader from '../trip/trip-loader.js?v=1';
 import { DevHud, abortFn, currentConversationId, setDevHud } from './session.js?v=1';
-import { rerenderBubbleStream, sendMessage, sendTouchEvent } from './chat.js?v=30';
+import { rerenderBubbleStream, sendMessage, sendTouchEvent } from './chat.js?v=32';
 import * as Achievements from '../achievements/achievements.js?v=8';
 
 // the one app global left, on purpose. it's a console handle,
@@ -124,7 +124,7 @@ export async function boot(me) {
     .then(r => r.ok ? r.json() : null).catch(() => null);
 
   // devhud.js owns Ctrl+Shift+D, so only admins get that module
-  if (currentUser?.role === 'admin') setDevHud(await import('./devhud.js?v=84'));
+  if (currentUser?.role === 'admin') setDevHud(await import('./devhud.js?v=86'));
   startSkybox();
   // marked is a global and app.js's loadScripts only brings it in
   // side by side with this module. at module scope it's not there
@@ -299,7 +299,6 @@ export async function boot(me) {
   }
 
   const m = await waitForProvider();
-  applyProviderCapabilities(m.provider);
   // hide the shared hf.co/efficiencyx/ prefix in labels only.
   // requests still need the full model name.
   const shortName = (n) => n.replace(/^hf\.co\/[^/]+\//, '');

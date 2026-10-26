@@ -11,7 +11,7 @@
 
 import * as Auth from './core/auth.js?v=1';
 import { api, apiJson } from './core/api.js?v=1';
-import * as ChatAPI from './core/chat-api.js?v=3';
+import * as ChatAPI from './core/chat-api.js?v=4';
 import * as Names from './core/names.js?v=1';
 import * as Prefs from './core/prefs.js?v=6';
 import { say } from './core/speech-card.js?v=12';
@@ -167,11 +167,12 @@ async function main() {
           client_time: localTimeString(), outfit_context: Outfit.describe() },
         {
           onToken: (t) => { text += t; },
+          onRestart: () => { text = ''; },
           onDone: () => {
             if (text.trim()) history.push({ role: 'assistant', content: text });
             resolve(text);
           },
-          onError: () => resolve(text),
+          onError: (err) => resolve(err.message === 'looping' ? '' : text),
         }
       );
     });

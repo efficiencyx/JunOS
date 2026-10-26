@@ -65,10 +65,11 @@ function consolidation_run_locked(int $userId, ?int $idleBefore, bool $forced, b
         return ['ok' => true];
     } catch (Throwable $e) {
         $stopped = $e->getMessage() === 'consolidation_interrupted';
+        $status = $stopped ? 'stopped' : ($e->getMessage() === 'consolidation_looping' ? 'looping' : 'error');
         log_event(['msg' => $stopped ? 'memory_consolidation_stopped' : 'memory_consolidation_error', 'user_id' => $userId, 'err' => $e->getMessage()]);
         try {
-            consolidation_record_result($userId, $stopped ? 'stopped' : 'error', count(memory_list($userId)));
-            consolidation_feed_emit($userId, ['type' => 'done', 'status' => $stopped ? 'stopped' : 'error']);
+            consolidation_record_result($userId, $status, count(memory_list($userId)));
+            consolidation_feed_emit($userId, ['type' => 'done', 'status' => $status]);
         } catch (Throwable $ignored) {}
         return $stopped ? ['stopped' => true] : ['ok' => false];
     } finally {

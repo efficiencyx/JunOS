@@ -101,6 +101,8 @@ if (Test-Path .env) {
         # dotless i (U+0131), [A-Za-z] misses it, AI_PROVIDER gone
         if ($line -cmatch '^\s*([A-Za-z_][A-Za-z0-9_]*)\s*=\s*(.*)$') {
             $k = $Matches[1]; $v = $Matches[2].Trim()
+            # compose drops the quotes, so do we. else KEY="x" is 3 chars
+            if ($v -match '^(["''])(.*)\1$') { $v = $Matches[2] }
             # the docker hostnames in .env.example mean nothing on bare
             # metal, so skip them and use our own localhost defaults.
             if ($v -match '://(ollama|tts|kokoro|karaoke|nginx|php|llamacpp)\b') { continue }
@@ -693,10 +695,15 @@ if ($Action -eq 'phone') {
     } catch {}
     if (-not $live) {
         Step 'restarting her with LAN mode on'
-        $self = (Get-Process -Id $PID).Path
-        & $self -NoProfile -ExecutionPolicy Bypass -File $PSCommandPath stop | Out-Host
-        & $self -NoProfile -ExecutionPolicy Bypass -File $PSCommandPath start -NoBrowser | Out-Host
-        if ($LASTEXITCODE -ne 0) { Fail_ 'she did not come back up, see above'; exit 1 }
+        # NOT | Out-Host. her services inherit that pipe and keep it
+        # open, Out-Host waits for EOF forever. -NoNewWindow passes ours
+        foreach ($step in 'stop', 'start -NoBrowser') {
+            $p = Start-Process (Get-Process -Id $PID).Path -NoNewWindow -PassThru `
+                -ArgumentList "-NoProfile -ExecutionPolicy Bypass -File `"$PSCommandPath`" $step"
+            $null = $p.Handle
+            $p.WaitForExit()
+        }
+        if ($p.ExitCode -ne 0) { Fail_ 'she did not come back up, see above'; exit 1 }
     }
     Confirm-FirewallRule $Port
 
@@ -728,6 +735,7 @@ if ($Action -eq 'phone') {
     }
     Write-Host ''
     Note 'scan it in the Jun OS app (LAN, then Scan), or with the phone camera. same wifi as this PC.'
+    Note 'no camera? get this link onto the phone and tap Paste link in the app:'
     Write-Host "    $link"
     Note 'the code holds the token: anyone who scans it gets her model. a new JUN_LAN_TOKEN in .env cuts everyone off.'
     exit 0

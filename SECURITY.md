@@ -139,6 +139,16 @@ Both installers can also add one thing to your trust stores, and ask first
   `runtime\caddy\tls\trusted` on Windows. By hand, look for
   "Jun OS local CA" in the browser's or the OS certificate manager.
 
+Pairing the phone (`./start.sh phone`) can make one more change, and asks
+first:
+
+* **https in firewalld.** Fedora and Bazzite block 443 from the network by
+  default, so the phone can't connect. It adds the `https` service to the
+  firewalld zone of each interface with a private address, runtime and
+  permanent, through `sudo`, and records the zones as `firewalld_https` in
+  `.install-changes`. The uninstaller removes the service from those zones.
+  ufw isn't touched: Docker's published ports bypass it.
+
 Installs from before `.install-changes` existed have nothing recorded, so
 `uninstall.sh` reverts nothing for them. Undo the changes by hand with
 `sudo gpasswd -d "$USER" docker`, then

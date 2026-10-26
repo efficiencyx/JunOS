@@ -121,3 +121,17 @@ repository:
   -------------------------  -------------------------  ----------------------
   UnityPy                    1.25.4                     MIT
   tpk_ar                     0.2.4                      MIT
+
+================================================================================
+6. LiteRT-LM in the Android app
+================================================================================
+
+Release APKs built with tools/release-apk-local.sh do not use the LiteRT-LM
+AAR from Maven. They carry a build of LiteRT-LM (Apache License 2.0,
+https://github.com/google-ai-edge/LiteRT-LM) from upstream commit
+c30ab949d5605022d2ccf714794e99d5f5effe4c, unmodified, built for arm64-v8a
+with the Bazel command recorded in that script, next to the prebuilt
+libraries the same commit ships under prebuilt/android_arm64/ (Apache License
+2.0; libwebgpu_dawn.so is Dawn, BSD 3-Clause). That commit is the first with
+Session.clone(), which the on-device prefix cache needs. Once a Maven release
+includes it, the APK goes back to the Maven AAR.

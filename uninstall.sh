@@ -115,6 +115,19 @@ if [ -n "$(recorded nvidia_no_cgroups)" ] && confirm "Turn NVIDIA's no-cgroups b
     fi
 fi
 
+fw_zones="$(recorded firewalld_https)"
+if [ -n "$fw_zones" ] && command -v firewall-cmd >/dev/null 2>&1 \
+    && confirm "Close https in firewalld zone $fw_zones (./start.sh phone opened it)?"; then
+    for z in $fw_zones; do
+        $SUDO firewall-cmd --quiet --zone="$z" --remove-service=https 2>/dev/null || true
+        if $SUDO firewall-cmd --quiet --permanent --zone="$z" --remove-service=https; then
+            echo "Closed https in firewalld zone $z."
+        else
+            echo "Could not close it. Run: sudo firewall-cmd --permanent --zone=$z --remove-service=https && sudo firewall-cmd --reload" >&2
+        fi
+    done
+fi
+
 toolkit_pm="$(recorded nvidia_toolkit)"
 
 if [ -s runtime/jun-ca.pem ] && confirm "Remove Jun's local certificate authority from this machine's trust stores?"; then

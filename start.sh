@@ -851,6 +851,54 @@ urlenc() {
   printf '%s' "$s"
 }
 
+# no ufw on purpose, docker's published ports skip it. firewalld
+# doesn't (fedora, bazzite), and the phone just says can't reach
+open_lan_firewall() {
+  local h ifc z zones="" sudo="" ans done_zones
+  command -v firewall-cmd >/dev/null 2>&1 && systemctl is-active --quiet firewalld 2>/dev/null || return 0
+  for h in $(lan_hosts); do
+    ifc="$(ip -4 -o addr show to "$h" 2>/dev/null | awk '{print $2; exit}')"
+    z="$(firewall-cmd --get-zone-of-interface="$ifc" 2>/dev/null || firewall-cmd --get-default-zone 2>/dev/null)"
+    if [ -z "$z" ]; then
+      echo "couldn't read firewalld's zone for $ifc. if the phone can't reach her: sudo firewall-cmd --add-service=https && sudo firewall-cmd --permanent --add-service=https"
+      continue
+    fi
+    firewall-cmd --zone="$z" --query-service=https >/dev/null 2>&1 && continue
+    firewall-cmd --zone="$z" --query-port=443/tcp >/dev/null 2>&1 && continue
+    case " $zones " in *" $z "*) ;; *) zones="${zones:+$zones }$z" ;; esac
+  done
+  [ -n "$zones" ] || return 0
+
+  [ "$(id -u)" -eq 0 ] || sudo=sudo
+  echo "firewalld blocks https (443) in zone $zones, the phone won't get through"
+  ans=n
+  if { true >/dev/tty; } 2>/dev/null && { [ -z "$sudo" ] || command -v sudo >/dev/null 2>&1; }; then
+    printf 'open it there (needs sudo)? [Y/n] ' >/dev/tty
+    read -r ans </dev/tty || ans=n
+  fi
+  case "$ans" in
+    ''|y|Y|yes)
+      for z in $zones; do
+        if $sudo firewall-cmd --quiet --zone="$z" --add-service=https &&
+           $sudo firewall-cmd --quiet --permanent --zone="$z" --add-service=https; then
+          done_zones="$(sed -n 's/^firewalld_https=//p' .install-changes 2>/dev/null | head -n1)"
+          case " $done_zones " in *" $z "*) ;; *)
+            { grep -v '^firewalld_https=' .install-changes 2>/dev/null || true
+              printf 'firewalld_https=%s\n' "${done_zones:+$done_zones }$z"; } > .install-changes.tmp
+            mv .install-changes.tmp .install-changes ;;
+          esac
+          echo "opened https in firewalld zone $z"
+        else
+          echo "couldn't change zone $z. run: sudo firewall-cmd --zone=$z --add-service=https && sudo firewall-cmd --permanent --zone=$z --add-service=https" >&2
+        fi
+      done ;;
+    *)
+      for z in $zones; do
+        echo "to let her through: sudo firewall-cmd --zone=$z --add-service=https && sudo firewall-cmd --permanent --zone=$z --add-service=https"
+      done ;;
+  esac
+}
+
 # ./start.sh phone: the QR the android app scans for LAN mode. asks
 # before turning LAN_INFERENCE on, BIND_ADDR=0.0.0.0 opens her up
 phone_pair() {
@@ -881,6 +929,7 @@ phone_pair() {
     echo "restarting her with LAN mode on..."
     env -u OMEGA_EXTRA_HOSTS BIND_ADDR="$(env_get BIND_ADDR)" ./start.sh || return 1
   fi
+  open_lan_firewall
 
   # a real certificate (any TLS_MODE but off) only names DOMAIN,
   # and the phone trusts it like any website. no CA to pin
@@ -901,6 +950,8 @@ phone_pair() {
   docker exec -i omega-php php -- "$link" ansi < tools/qr.php || return 1
   echo
   echo "scan it in the Jun OS app (LAN, then Scan), or with the phone's camera."
+  echo "no camera? get this link onto the phone and tap Paste link in the app:"
+  echo "  $link"
   echo "same wifi as this PC. if the phone stops reaching her later (new address, new CA), scan a fresh one."
   echo "the code holds the token: anyone who scans it gets her model. a new JUN_LAN_TOKEN in .env cuts everyone off."
 }

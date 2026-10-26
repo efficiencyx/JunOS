@@ -72,6 +72,7 @@ function consolidation_call(array &$ctx, string $label, string $task, ?array $sc
     $messages = [['role' => 'system', 'content' => $ctx['voice']], ['role' => 'user', 'content' => $task . $marker]];
     if ($think) $maxTokens = max($maxTokens, 1500);
 
+    $loops = 0;
     for ($attempt = 0; $attempt < 2; $attempt++) {
         $ctx['calls']++;
         $promptTokens = (int)ceil((strlen($ctx['voice']) + strlen($task)) / 4);
@@ -96,10 +97,20 @@ function consolidation_call(array &$ctx, string $label, string $task, ?array $sc
             if (isset($out['token'])) $pending['out'] .= $out['token'];
             if (microtime(true) - $flushedAt >= CONSOLIDATION_FEED_FLUSH_S) $flush();
         };
+        [$emit, $stuck] = stream_loop_guard($emit);
 
         $payload = consolidation_payload($provider, $model, $messages, $schema, $maxTokens, $think, $effort, $temperature);
-        $state = provider_stream_round($provider, $payload, $emit, 0, microtime(true) + CONSOLIDATION_CALL_TIMEOUT);
+        $state = provider_stream_round($provider, $payload, $emit, 0, microtime(true) + CONSOLIDATION_CALL_TIMEOUT, $stuck);
         $flush();
+
+        if ($state['aborted'] === 'looping') {
+            log_event(['msg' => 'consolidation_looping', 'user_id' => $ctx['user'], 'label' => $label, 'retry' => $loops + 1]);
+            if (++$loops > STREAM_LOOP_RETRIES) throw new RuntimeException('consolidation_looping');
+            consolidation_feed_emit($ctx['user'], ['type' => 'loop', 'label' => $label, 'retry' => $loops, 'of' => STREAM_LOOP_RETRIES]);
+            $temperature = min(1.0, $temperature + 0.2);
+            $attempt--;
+            continue;
+        }
 
         if ($state['http_status'] >= 400 && $attempt === 0) {
             $fallback = chat_fallback_model($model);

@@ -6,7 +6,7 @@ export async function listModels() {
   return r.json();
 }
 
-export function chat({ messages, model, reasoning, think, outfit_context, mod_items, conversation_id, idle, ephemeral, client_time, audio, voice, hear_all, invite, tts }, { onToken, onThinking, onDone, onError, onDebug, onStats, onToolStatus, onOutfit, onGo, onSilence, onFled }) {
+export function chat({ messages, model, reasoning, think, outfit_context, mod_items, conversation_id, idle, ephemeral, client_time, audio, voice, hear_all, invite, tts }, { onToken, onThinking, onDone, onError, onDebug, onStats, onToolStatus, onOutfit, onGo, onSilence, onFled, onRestart }) {
   const ctrl = new AbortController();
 
   (async () => {
@@ -47,6 +47,7 @@ export function chat({ messages, model, reasoning, think, outfit_context, mod_it
                 onError && onError(err);
                 continue;
               }
+              if (obj.restart) { onRestart && onRestart(obj.restart); continue; }
               if (obj.silence) { onSilence && onSilence(obj.silence); continue; }
               if (obj.fled) { onFled && onFled(obj.fled); continue; }
               if (obj.debug) { onDebug && onDebug(obj.debug); continue; }

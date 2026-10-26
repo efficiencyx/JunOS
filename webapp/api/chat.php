@@ -113,6 +113,7 @@ $state = [
     'went' => '',
 ];
 
+$loops = 0;
 for ($round = 0; $round < 3; $round++) {
     $roundContent = '';
     $toolCalls = [];
@@ -121,7 +122,22 @@ for ($round = 0; $round < 3; $round++) {
 
     do {
         $retryRound = false;
-        $result = provider_stream_round($PROVIDER, $upstreamPayload, 'sse_send', $round);
+        [$emit, $stuck] = stream_loop_guard('sse_send');
+        $result = provider_stream_round($PROVIDER, $upstreamPayload, $emit, $round, null, $stuck);
+        if ($result['aborted'] === 'looping') {
+            log_event(['msg' => 'chat_looping', 'model' => $model, 'round' => $round, 'retry' => $loops + 1]);
+            if (++$loops <= STREAM_LOOP_RETRIES) {
+                // the browser wipes the whole reply, so earlier tool rounds go out again
+                sse_send(['restart' => ['retry' => $loops, 'of' => STREAM_LOOP_RETRIES]]);
+                if ($assistantBuffer !== '') sse_send(['token' => $assistantBuffer]);
+                $upstreamPayload = stream_warmer($upstreamPayload);
+                $retryRound = true;
+                continue;
+            }
+            sse_send(['error' => 'looping']);
+            $sawError = true;
+            break;
+        }
         $roundContent = $result['content'];
         $toolCalls = $result['tool_calls'];
         if ($result['stats'] !== null) $stats = provider_merge_stats($stats, $result['stats']);
@@ -260,7 +276,9 @@ if ($usedTools && !$sawError && !$state['silenced'] && $state['fled'] === null &
     log_event(['msg' => 'tool_round_silent_retry', 'model' => $model]);
     unset($upstreamPayload['tools']);
     $upstreamPayload['messages'] = $messages;
-    $result = provider_stream_round($PROVIDER, $upstreamPayload, 'sse_send', 3);
+    [$emit, $stuck] = stream_loop_guard('sse_send');
+    $result = provider_stream_round($PROVIDER, $upstreamPayload, $emit, 3, null, $stuck);
+    if ($result['aborted'] === 'looping') sse_send(['error' => 'looping']);
     $assistantBuffer .= $result['content'];
     if ($result['done_reason'] !== '') $doneReason = $result['done_reason'];
     if ($result['stream_error']) $sawError = true;

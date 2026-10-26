@@ -196,7 +196,7 @@ Run the whole stack on Colab - nothing installed, nothing on your machine, just 
 1. Open [`colab.ipynb`](colab.ipynb) with the badge.
 2. **Runtime → Change runtime type → TPU → Save** (a v6e-1 or a v5e-1), or **T4 GPU** if you can't get a TPU (see below).
 3. **Runtime → Run all**, wait for the ✅s (first run downloads a few GB, ~3–6 min).
-4. Click the public link printed at **Step 3**.
+4. Click the public link printed at **Step 3**. That cell never finishes on purpose: it keeps printing her logs, because Colab ends a session once no cell is running. Stop it and she keeps going, but the idle clock starts.
 
 Knobs in the cells: **Mode** (everything in the notebook, or inference only), **Model** (`auto` takes the 12B since Colab can hold it), **TPU_Model** (`auto`, the full 12B, the INT8 12B or any repo you type) / **Context** for a TPU, and **Voice** (adds ~2 min on first run). The link comes from Colab's own proxy - if it 404s briefly, wait 30 s and reload.
 
@@ -236,7 +236,7 @@ The launcher works out this machine's address on the network by itself and print
 
 Want her *on* the phone instead, no computer at all? Every [release](https://github.com/efficiencyx/JunOS/releases) carries **`JunOS-<version>.apk`**, the Android app, still a work in progress. arm64 phones on Android 10 or newer, and Local mode downloads the ~2.9 GB v8 model the first time you pick it. Updating from an older model downloads it again; your chats, memory and settings stay on the phone. The phone app doesn't have everything yet: no memory tidying (her notes are only added, never merged or rewritten, and there's no **Changed** history), no karaoke, no achievements and no welcome-back scene. The shop, eating out and blackjack do work there.
 
-Every time the app starts it asks where she thinks this time: **Local** (on the phone, offline), **LAN** (your PC on the same wifi, so the 12B instead of the phone's E2B) or **Cloud** (the Colab or Kaggle notebook in inference only mode). Pairing is one QR code: `./start.sh phone` on Linux, the **Phone** button in the Jun OS window on Windows, or Step 3 of the notebook. Scan it in the app, or with the phone's camera. Chats and memories stay on the phone in all three, the PC or the notebook only does the thinking. In Cloud mode what she reads goes through Google and Cloudflare, same as the PC case. `./start.sh phone` asks before it flips anything: it needs `BIND_ADDR=0.0.0.0`, `LAN_INFERENCE=on` and a token, and that token lives in the QR, so don't post a photo of it.
+Every time the app starts it asks where she thinks this time: **Local** (on the phone, offline), **LAN** (your PC on the same wifi, so the 12B instead of the phone's E2B) or **Cloud** (the Colab or Kaggle notebook in inference only mode). Pairing is one QR code: `./start.sh phone` on Linux, the **Phone** button in the Jun OS window on Windows, or Step 3 of the notebook. Scan it in the app, or with the phone's camera. The link is printed under the code too: camera broken, get it onto the phone however you like and tap **Paste link** in the app. Chats and memories stay on the phone in all three, the PC or the notebook only does the thinking. In Cloud mode what she reads goes through Google and Cloudflare, same as the PC case. `./start.sh phone` asks before it flips anything: it needs `BIND_ADDR=0.0.0.0`, `LAN_INFERENCE=on` and a token, and that token lives in the QR, so don't post a photo of it. On Fedora and Bazzite it also asks (sudo) to open https in firewalld's zone for your wifi, which blocks 443 by default.
 
 The phone's browser still gets the certificate warning, trusting the CA only covers the computer you did it on (the app doesn't, the QR tells it which CA is yours). Your password and every word she says cross the wifi encrypted, but a cert the phone doesn't trust can't prove it's really talking to your box, so keep it to networks you trust and **never** port-forward it to the internet - that's what the certbot setup above is for. DHCP moves addresses around, so if she stops answering after a few days, restart the launcher and read the new one (the new address gets a fresh cert from the same CA, so a computer that trusts it doesn't notice, and the phone clicks through once more).
 
@@ -388,13 +388,13 @@ Check GPU residency first. On llama.cpp every `./start.sh` prints the device she
 <details>
 <summary><b>Her brain is on Colab and she stopped answering</b></summary>
 
-The notebook's tunnel URL and key are new every time Step 3 runs, and the session itself ends when Colab decides you're idle (Kaggle after its time limit). Re-run Step 3, paste the fresh lines over the old ones in `.env`, restart her. A `401` in `docker logs omega-php` (`runtime\logs` on Windows) means the key is stale, a timeout means the session is gone.
+The notebook's tunnel URL and key are new every time Step 3 runs, and the session itself ends when Colab decides you're idle (Kaggle after its time limit). Leave Step 3 running, that's what keeps it busy. Re-run Step 3, paste the fresh lines over the old ones in `.env`, restart her. A `401` in `docker logs omega-php` (`runtime\logs` on Windows) means the key is stale, a timeout means the session is gone.
 </details>
 
 <details>
 <summary><b>The phone app can't reach your PC</b></summary>
 
-Same wifi first, and Jun OS has to be running on the PC. Then read what the start screen says. *LAN mode is off*: run `./start.sh phone` there (the **Phone** button on Windows). *Doesn't know this phone anymore* or *has a new certificate*: the token or her local CA changed, scan a fresh code. Just *can't reach*: the PC's address moved (DHCP) or, on Windows, the firewall rule for her port is missing, run `./start.sh phone` again and it prints the rule if it couldn't add it. Cloud is the same story as above: every Step 3 run is a new code.
+Same wifi first, and Jun OS has to be running on the PC. Then read what the start screen says. *LAN mode is off*: run `./start.sh phone` there (the **Phone** button on Windows). *Doesn't know this phone anymore* or *has a new certificate*: the token or her local CA changed, scan a fresh code. Just *can't reach*: the PC's address moved (DHCP), a VPN on the phone is eating local traffic, or the firewall drops her port (the Windows rule, or firewalld on Fedora/Bazzite, which blocks 443 out of the box). Run `./start.sh phone` again: it offers to open https in firewalld and prints the command if it couldn't. Cloud is the same story as above: every Step 3 run is a new code.
 </details>
 
 <details>

@@ -1,25 +1,32 @@
 package com.efficiencyx.junos.inference
 
+import android.util.Log
 import com.efficiencyx.junos.setup.ModelStore
 import com.google.ai.edge.litertlm.Backend
 import com.google.ai.edge.litertlm.Content
 import com.google.ai.edge.litertlm.Contents
-import com.google.ai.edge.litertlm.Conversation
 import com.google.ai.edge.litertlm.ConversationConfig
 import com.google.ai.edge.litertlm.Engine
 import com.google.ai.edge.litertlm.EngineConfig
+import com.google.ai.edge.litertlm.InputData
 import com.google.ai.edge.litertlm.Message
 import com.google.ai.edge.litertlm.MessageCallback
 import com.google.ai.edge.litertlm.OpenApiTool
+import com.google.ai.edge.litertlm.ResponseCallback
 import com.google.ai.edge.litertlm.SamplerConfig
 import com.google.ai.edge.litertlm.ThinkingConfig
 import com.google.ai.edge.litertlm.ToolCall
 import com.google.ai.edge.litertlm.tool
+import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.cancel
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.channels.ProducerScope
 import kotlinx.coroutines.channels.awaitClose
 import kotlinx.coroutines.flow.callbackFlow
 import kotlinx.coroutines.flow.flowOn
@@ -38,6 +45,9 @@ import kotlinx.serialization.json.doubleOrNull
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.longOrNull
 import kotlinx.serialization.json.put
+import java.util.concurrent.atomic.AtomicBoolean
+
+private const val TAG = "LiteRtEngine"
 
 class LiteRtEngine(
     private val models: ModelStore,
@@ -49,7 +59,9 @@ class LiteRtEngine(
     private val _state = MutableStateFlow<EngineState>(EngineState.Idle)
     private val _lastStats = MutableStateFlow<JsonObject?>(null)
     @Volatile private var engine: Engine? = null
-    @Volatile private var active: Conversation? = null
+    @Volatile private var stopActive: (() -> Unit)? = null
+    private var prefixCache: PrefixCache? = null
+    private val background = CoroutineScope(SupervisorJob() + Dispatchers.Default)
 
     override val state: StateFlow<EngineState> = _state.asStateFlow()
     override val lastStats: StateFlow<JsonObject?> = _lastStats.asStateFlow()
@@ -103,13 +115,32 @@ class LiteRtEngine(
     ): Flow<TurnEvent> = callbackFlow {
         ensureLoaded()
         val engine = engine ?: error("LiteRT engine is not loaded")
+        val system = messages.firstOrNull { it.role == "system" }?.content
+        val rest = messages.drop(if (system != null) 1 else 0)
+        _state.value = EngineState.Prefill(messages.sumOf { it.content.length } / 4)
 
+        val cached = if (thinking != null && tools.isNotEmpty() && PrefixCache.supported) {
+            runCatching { prefixCache(engine).open(system, rest, tools, thinking.enableThinking, temperature) }
+                .onFailure { Log.w(TAG, "prefix cache off for this turn", it) }
+                .getOrNull()
+        } else null
+        if (cached != null) sessionTurn(cached, maxTokens)
+        else conversationTurn(engine, system, rest, tools, thinking, maxTokens, temperature)
+    }.flowOn(Dispatchers.Default)
+
+    private suspend fun ProducerScope<TurnEvent>.conversationTurn(
+        engine: Engine,
+        system: String?,
+        rest: List<ChatMessage>,
+        tools: List<String>,
+        thinking: ThinkingConfig?,
+        maxTokens: Int,
+        temperature: Float,
+    ) {
         // ChatEngine rebuilds the transcript every turn and puts the
         // live context in the last message. a long-lived Conversation
         // would carry the history TWICE, so every turn gets a fresh
         // one. the prompt template still comes from .litertlm.
-        val system = messages.firstOrNull { it.role == "system" }?.content
-        val rest = messages.drop(if (system != null) 1 else 0)
         val last = rest.lastOrNull() ?: error("no message to send")
 
         // automatic calling OFF. ChatEngine runs the tool itself, it
@@ -127,8 +158,7 @@ class LiteRtEngine(
                 thinkingConfig = thinking,
             )
         )
-        active = conversation
-        _state.value = EngineState.Prefill(messages.sumOf { it.content.length } / 4)
+        stopActive = { conversation.close() }
 
         val started = System.nanoTime()
         var emitted = 0
@@ -163,32 +193,96 @@ class LiteRtEngine(
         )
 
         awaitClose {
-            active = null
+            stopActive = null
             runCatching { conversation.close() }
-            val elapsedMs = (System.nanoTime() - started) / 1_000_000
-            _lastStats.value = buildJsonObject {
-                put("eval_count", emitted)
-                put("eval_ms", elapsedMs)
-                put("prompt_eval_count", 0)
-            }
-            _state.value = EngineState.Ready("litert-lm", backend.name)
+            finishStats(started, emitted)
         }
-    }.flowOn(Dispatchers.Default)
+    }
+
+    private suspend fun ProducerScope<TurnEvent>.sessionTurn(turn: PrefixCache.Turn, maxTokens: Int) {
+        val session = turn.session
+        val parser = RawTurnParser()
+        val started = System.nanoTime()
+        var emitted = 0
+        val stopping = AtomicBoolean(false)
+        fun stop() {
+            if (stopping.compareAndSet(false, true)) runCatching { session.cancelProcess() }
+        }
+        stopActive = ::stop
+
+        val pieces = prefillPieces(turn.prompt)
+        pieces.dropLast(1).forEach { session.runPrefill(listOf(InputData.Text(it))) }
+        // a raw Session has no maxOutputToken, the cap is ours
+        session.generateContentStream(
+            listOf(InputData.Text(pieces.last())),
+            object : ResponseCallback {
+                override fun onNext(response: String) {
+                    emitted++
+                    parser.push(response).forEach { trySend(it) }
+                    if (parser.stopped || emitted >= maxTokens) stop()
+                }
+
+                override fun onDone() {
+                    parser.finish().forEach { trySend(it) }
+                    close()
+                }
+
+                override fun onError(throwable: Throwable) {
+                    if (!stopping.get()) return run { close(throwable) }
+                    parser.finish().forEach { trySend(it) }
+                    close()
+                }
+            },
+        )
+
+        awaitClose {
+            stopActive = null
+            runCatching { session.close() }
+            finishStats(started, emitted)
+        }
+    }
+
+    override fun warm(messages: List<ChatMessage>, tools: List<String>, think: Boolean, temperature: Float) {
+        val engine = engine ?: return
+        if (!PrefixCache.supported) return
+        val system = messages.firstOrNull { it.role == "system" }?.content
+        val rest = messages.drop(if (system != null) 1 else 0)
+        background.launch {
+            runCatching { prefixCache(engine).warm(system, rest, tools, think, temperature) }
+                .onFailure { Log.w(TAG, "warm failed", it) }
+        }
+    }
+
+    @Synchronized
+    private fun prefixCache(engine: Engine): PrefixCache =
+        prefixCache ?: PrefixCache(engine).also { prefixCache = it }
+
+    private fun finishStats(started: Long, emitted: Int) {
+        _lastStats.value = buildJsonObject {
+            put("eval_count", emitted)
+            put("eval_ms", (System.nanoTime() - started) / 1_000_000)
+            put("prompt_eval_count", 0)
+        }
+        _state.value = EngineState.Ready("litert-lm", backend.name)
+    }
 
     override fun cancel() {
-        active?.let { runCatching { it.close() } }
-        active = null
+        stopActive?.let { runCatching { it() } }
+        stopActive = null
     }
 
     override fun close() {
         cancel()
+        background.cancel()
+        prefixCache?.close()
+        prefixCache = null
         engine?.let { runCatching { it.close() } }
         engine = null
         _state.value = EngineState.Idle
     }
 }
 
-private class DeclaredTool(private val schema: String) : OpenApiTool {
+internal class DeclaredTool(private val schema: String) : OpenApiTool {
     override fun getToolDescriptionJsonString(): String = toolDescription(schema)
     override fun execute(paramsJsonString: String): String = "{}"
 }
@@ -201,7 +295,7 @@ internal fun toolDescription(schema: String): String =
 // v8 trained on the real round trip, the model turn carrying the
 // call and a tool turn carrying the result, not v7's "(Tool
 // result, ...)" user line
-private fun ChatMessage.toLiteRtMessage(): Message = when {
+internal fun ChatMessage.toLiteRtMessage(): Message = when {
     role == "assistant" && toolCalls.isNotEmpty() -> Message.model(
         if (content.isBlank()) Contents.of(emptyList()) else Contents.of(content),
         toolCalls.map { ToolCall(it.name, it.args.toPlain()) },

@@ -1,10 +1,10 @@
 import * as Live2D from '../live2d/live2d.js?v=84';
-import { closeColorPicker, colorPickerEl, makeColorButton, phonePopupMode, pickerEmbedded, schedulePopupPosition, showColorPicker, visualViewportRect, watchPopupViewport } from './color-picker.js?v=18';
+import { closeColorPicker, colorPickerEl, makeColorButton, phonePopupMode, pickerEmbedded, schedulePopupPosition, showColorPicker, visualViewportRect, watchPopupViewport } from './color-picker.js?v=20';
 import { colorGroup } from '../outfit/catalog.js?v=2';
 import { colors, state, variantState } from '../outfit/current.js?v=2';
 import { setItem, setVariant } from '../outfit/apply.js?v=17';
 import { variantThumb } from './tile-bake.js?v=17';
-import { wdGhost } from './panel.js?v=18';
+import { wdGhost } from './panel.js?v=20';
 
 export function wdMoveGhost(x, y) {
   wdGhost.style.left = (x + 10) + 'px';
@@ -170,7 +170,9 @@ function isNestedTileControl(tile, target) {
   return !!(control && tile.contains(control));
 }
 
-function bindTileDrag(tile, thumbSrc, onEquip, popupCfg) {
+const tileThumb = (tile) => (tile.querySelector('img') || {}).src || '';
+
+export function bindTileDrag(tile, onEquip, onTap) {
   tile.addEventListener('pointerdown', (e) => {
     if (e.pointerType === 'touch' || e.button !== 0 || isNestedTileControl(tile, e.target)) return;
     e.preventDefault();
@@ -181,7 +183,7 @@ function bindTileDrag(tile, thumbSrc, onEquip, popupCfg) {
       if (ev.pointerId !== e.pointerId) return;
       if (!dragging && Math.hypot(ev.clientX - sx, ev.clientY - sy) > 6) {
         dragging = true;
-        wdShowGhost(thumbSrc, ev.clientX, ev.clientY);
+        wdShowGhost(tileThumb(tile), ev.clientX, ev.clientY);
       }
       if (dragging) wdMoveGhost(ev.clientX, ev.clientY);
     };
@@ -192,7 +194,7 @@ function bindTileDrag(tile, thumbSrc, onEquip, popupCfg) {
       tile.removeEventListener('pointercancel', cancel);
       wdShowGhost(null);
       if (cancelled) return;
-      if (!dragging) openTilePopup(tile, popupCfg);
+      if (!dragging) onTap();
       else if (Live2D.isOverModel(ev.clientX, ev.clientY)) onEquip();
     };
     const up = (ev) => finish(ev, false);
@@ -245,7 +247,7 @@ function bindTileDrag(tile, thumbSrc, onEquip, popupCfg) {
     clearTouchSession();
     if (dragging) {
       if (Live2D.isOverModel(touch.clientX, touch.clientY)) onEquip();
-    } else openTilePopup(tile, popupCfg);
+    } else onTap();
   };
   const cancelTouch = () => clearTouchSession();
   tile.addEventListener('touchstart', (e) => {
@@ -264,7 +266,7 @@ function bindTileDrag(tile, thumbSrc, onEquip, popupCfg) {
       if (!touchSession) return;
       touchSession.dragging = true;
       tile.classList.add('wd-dragging');
-      wdShowGhost(thumbSrc, touchSession.x, touchSession.y);
+      wdShowGhost(tileThumb(tile), touchSession.x, touchSession.y);
     }, 400);
     window.addEventListener('touchstart', cancelMultitouch, { capture: true, passive: true });
     window.addEventListener('touchmove', moveTouch, { capture: true, passive: false });
@@ -296,7 +298,7 @@ export function makeTile(label, thumbSrc, onEquip, colorKeys, popupCfg) {
   fillTile(tile, thumbSrc, label);
   if (colorKeys && colorKeys.length) tile.appendChild(makeSwatch(colorKeys, label));
   tile.appendChild(makeOptOrb(popupCfg));
-  bindTileDrag(tile, thumbSrc, onEquip, popupCfg);
+  bindTileDrag(tile, onEquip, () => openTilePopup(tile, popupCfg));
   tile.addEventListener('keydown', (e) => {
     if (e.key !== 'Enter' && e.key !== ' ') return;
     e.preventDefault();

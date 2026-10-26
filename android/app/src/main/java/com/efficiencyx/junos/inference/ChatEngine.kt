@@ -86,7 +86,7 @@ class ChatEngine(
     suspend fun stream(incoming: ChatRequest, emit: suspend (JsonElement) -> Unit) {
         val engine = engine
         incoming.validate()
-        val request = incoming.copy(messages = incoming.messages.takeLast(160))
+        val request = incoming.copy(messages = incoming.messages.drop(blockCut(incoming.messages.size - 160, 40)))
         val modItems = request.modItems.take(60)
             .map { it.replace(CONTROL_CHARS, " ").trim() }
             .filter { it.isNotEmpty() }
@@ -303,6 +303,9 @@ class ChatEngine(
                 dao.renameConversation(request.conversationId, title, now())
             }
         }
+        if (!request.idle && !request.ephemeral && request.messages.lastOrNull()?.role == "user") {
+            engine.warm(baseMessages.dropLast(1) + ChatMessage("user", lastUser), TOOL_SCHEMAS, think)
+        }
     }
 
     fun cancel() = engine.cancel()
@@ -449,11 +452,13 @@ class ChatEngine(
     // the tool declarations ride in the system turn so they count
     // too. past the cache the runtime just lops the front off, so we
     // drop whole old turns instead. system message + the turn she
-    // must answer always stay.
+    // must answer always stay. 16 at a time, a cut that moves every turn resets every KV cache every turn
     private fun trimToBudget(messages: MutableList<ChatMessage>, contextTokens: Int) {
         val budget = (contextTokens - REPLY_RESERVE).coerceAtLeast(2048)
         fun estimate() = (messages.sumOf { it.content.length } + TOOL_SCHEMA_CHARS) / 4
-        while (estimate() > budget && messages.size > 2) messages.removeAt(1)
+        while (estimate() > budget && messages.size > 2) {
+            messages.subList(1, minOf(1 + TRIM_STEP, messages.size - 1)).clear()
+        }
     }
 
     // chat.php's level picker, same rules. the webapp sends "auto" by
@@ -508,6 +513,7 @@ class ChatEngine(
                 "percentage|average|total)\\b",
         )
         private const val REPLY_RESERVE = 2192
+        private const val TRIM_STEP = 16
         private const val LIVE_CONTEXT_HEADER = "# Live context for THIS reply (from the system, not spoken by Anon)\n\n"
         private val INVITE_PLANS = mapOf(
             "shop" to "go to Annalie's shop together",
@@ -556,6 +562,8 @@ class ChatEngine(
 // some builds wrap reasoning in <think>...</think>. the tags
 // split across tokens, so hold any partial tag and keep the whole
 // block out of the reply (drainThought() hands it over seperately)
+internal fun blockCut(over: Int, block: Int): Int = if (over <= 0) 0 else (over + block - 1) / block * block
+
 internal class ThinkStreamFilter {
     private val held = StringBuilder()
     private val thought = StringBuilder()

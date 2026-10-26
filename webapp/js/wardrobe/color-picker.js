@@ -1,8 +1,9 @@
+import * as Live2D from '../live2d/live2d.js?v=84';
 import * as MobileViewport from '../core/viewport.js?v=1';
 import { colorGroup } from '../outfit/catalog.js?v=2';
 import { colors } from '../outfit/current.js?v=2';
 import { hexToHsv, hsvToHex, normalizeHex } from '../outfit/colors.js?v=1';
-import { optPopEl, positionOptionsPopup } from './tiles.js?v=18';
+import { optPopEl, positionOptionsPopup } from './tiles.js?v=20';
 import { setColor } from '../outfit/apply.js?v=17';
 
 function paintColorButton(button) {
@@ -64,6 +65,12 @@ export function closeColorPicker(focusAnchor, force) {
   if (focusAnchor && colorPickerAnchor) colorPickerAnchor.focus();
   colorPickerAnchor = null;
   pickerState = null;
+  holdMouthForPicker();
+}
+
+function holdMouthForPicker() {
+  const key = pickerState && pickerState.keys && pickerState.keys[pickerState.index];
+  Live2D.setMouthOverride(key === 'mouth_interior' ? 1 : null);
 }
 
 function positionColorPicker() {
@@ -131,6 +138,7 @@ function selectPickerChannel(index) {
   if (!pickerState || !pickerState.labels[index]) return;
   pickerState.index = index;
   pickerState.hsv = hexToHsv(pickerColor(index) || '#ffffff');
+  holdMouthForPicker();
   updatePickerUI();
 }
 
@@ -267,6 +275,7 @@ export function showColorPicker(anchor, label, state, embedContainer) {
   colorPickerEl.style.width = '';
   colorPickerEl.style.maxHeight = '';
   pickerState = { ...state, index: 0, hsv: hexToHsv('#ffffff') };
+  holdMouthForPicker();
   if (!pickerState.labels.length) return;
   colorPickerEl.querySelector('.ocp-title').textContent = label;
   const channels = colorPickerEl.querySelector('.ocp-channels');

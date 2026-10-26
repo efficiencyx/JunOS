@@ -163,6 +163,7 @@ function Get-EnvValue([string]$key, [string]$fallback) {
         $line = Get-Content -LiteralPath $envPath | Where-Object { $_ -match "^$key=" } | Select-Object -Last 1
         if ($line) {
             $value = $line.Substring($line.IndexOf('=') + 1).Trim()
+            if ($value -match '^(["''])(.*)\1$') { $value = $Matches[2] }
             if ($value) { return $value }
         }
     }
@@ -429,12 +430,15 @@ function Show-PhoneDialog([string]$link) {
     <StackPanel Margin="24,20,24,16">
         <Image x:Name="QrImage" Width="320" Height="320" RenderOptions.BitmapScalingMode="NearestNeighbor" />
         <TextBlock TextWrapping="Wrap" Margin="0,16,0,0"
-                   Text="Scan it in the Jun OS app (LAN, then Scan) or with the phone camera. Same wifi as this PC." />
+                   Text="Scan it in the Jun OS app (LAN, then Scan) or with the phone camera. Same wifi as this PC. No camera? Get the link below onto the phone and tap Paste link in the app." />
         <TextBlock TextWrapping="Wrap" Foreground="#AEB5C2" FontSize="12" Margin="0,8,0,0"
                    Text="The code holds the token: anyone who scans it can use her model. A new JUN_LAN_TOKEN in .env cuts everyone off." />
         <TextBox x:Name="LinkBox" IsReadOnly="True" TextWrapping="Wrap" FontFamily="Consolas" FontSize="11"
                  Background="#0C0E12" Foreground="#C1C6D0" BorderBrush="#343945" Padding="6" Margin="0,12,0,16" />
-        <Button x:Name="CloseButton" Content="Done" HorizontalAlignment="Right" Padding="14,8" />
+        <StackPanel Orientation="Horizontal" HorizontalAlignment="Right">
+            <Button x:Name="CopyButton" Content="Copy link" Padding="14,8" Margin="0,0,8,0" />
+            <Button x:Name="CloseButton" Content="Done" Padding="14,8" />
+        </StackPanel>
     </StackPanel>
 </Window>
 '@
@@ -443,6 +447,8 @@ function Show-PhoneDialog([string]$link) {
     $dialog.FindName('QrImage').Source = [Windows.Media.Imaging.BitmapSource]::Create(
         $n, $n, 96, 96, [Windows.Media.PixelFormats]::Gray8, $null, $pixels, $n)
     $dialog.FindName('LinkBox').Text = $link
+    $copy = $dialog.FindName('CopyButton')
+    $copy.Add_Click({ [Windows.Clipboard]::SetText($link); $copy.Content = 'Copied' })
     $dialog.FindName('CloseButton').Add_Click({ $dialog.Close() })
     [void]$dialog.ShowDialog()
 }

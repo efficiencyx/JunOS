@@ -1,8 +1,18 @@
-import { makeItemColorButton } from '../wardrobe/color-picker.js?v=18';
+import { makeItemColorButton } from '../wardrobe/color-picker.js?v=20';
+import { bindTileDrag } from '../wardrobe/tiles.js?v=20';
+import { modItemKey } from '../wardrobe/worn.js?v=18';
 import { itemThumbUrl } from './layers.js?v=12';
 import { ensureLoaded, followsHerColors, importZip, isEquipped, modState, mods, removeMod, setColor, setEquipped, setFollowsHerColors } from './engine.js?v=17';
 
 let uiBody = null;
+
+export function syncModTiles() {
+  if (!uiBody) return;
+  for (const mod of mods) mod.items.forEach((_, i) => {
+    const tile = uiBody.querySelector(`.wd-tile[data-mod-item="${modItemKey(mod.guid, i)}"]`);
+    if (tile) tile.classList.toggle('on', isEquipped(mod, i));
+  });
+}
 
 export function buildWardrobeSection(body) {
   uiBody = body;
@@ -60,6 +70,7 @@ function renderMods() {
     mod.items.forEach((item, i) => {
       const tile = document.createElement('div');
       tile.className = 'wd-tile';
+      tile.dataset.modItem = modItemKey(mod.guid, i);
       tile.classList.toggle('on', isEquipped(mod, i));
       const placeholder = document.createElement('div');
       placeholder.className = 'wd-noimg';
@@ -87,10 +98,11 @@ function renderMods() {
           },
         ));
       }
-      tile.addEventListener('click', async () => {
-        await setEquipped(mod.guid, i, !isEquipped(mod, i));
-        grid.querySelectorAll('.wd-tile').forEach((t, j) => t.classList.toggle('on', isEquipped(mod, j)));
-      });
+      const equip = async (on) => {
+        await setEquipped(mod.guid, i, on);
+        syncModTiles();
+      };
+      bindTileDrag(tile, () => equip(true), () => equip(!isEquipped(mod, i)));
       grid.appendChild(tile);
     });
     list.append(head, grid);

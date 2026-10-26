@@ -60,6 +60,7 @@ android {
 
     sourceSets.named("main") {
         assets.directories += layout.buildDirectory.dir("generated/junWeb").get().asFile.path
+        providers.gradleProperty("litertlmLocal").orNull?.let { jniLibs.directories += "$it/jni" }
     }
 }
 
@@ -236,7 +237,14 @@ dependencies {
     implementation("io.ktor:ktor-server-status-pages:3.6.0")
     implementation("org.jetbrains.kotlinx:kotlinx-serialization-json:1.12.0")
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.11.0")
-    implementation("com.google.ai.edge.litertlm:litertlm-android:0.18.1")
+    val litertlmLocal = providers.gradleProperty("litertlmLocal").orNull
+    if (litertlmLocal != null) {
+        implementation(files("$litertlmLocal/classes.jar"))
+        implementation("com.google.code.gson:gson:2.14.0")
+        implementation("org.jetbrains.kotlin:kotlin-reflect:2.4.0")
+    } else {
+        implementation("com.google.ai.edge.litertlm:litertlm-android:0.18.1")
+    }
     implementation("com.squareup.okhttp3:okhttp:5.5.1")
     implementation("com.journeyapps:zxing-android-embedded:4.3.0")
     implementation("org.apache.commons:commons-compress:1.28.0")

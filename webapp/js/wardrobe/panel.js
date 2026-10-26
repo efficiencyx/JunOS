@@ -1,19 +1,21 @@
 import * as Live2D from '../live2d/live2d.js?v=84';
 import { BODY_VARIANTS, CLOTHING_VARIANTS, COLOR_GROUPS, ITEMS, ITEM_COLOR_GROUPS, ITEM_VARIANTS, VARIANTS } from '../outfit/catalog.js?v=2';
-import { fillTile, makeOptOrb, makeSwatch, makeTile, openTilePopup, syncOptionsPopup, wdMoveGhost, wdShowGhost } from './tiles.js?v=18';
+import { fillTile, makeOptOrb, makeSwatch, makeTile, openTilePopup, syncOptionsPopup, wdMoveGhost, wdShowGhost } from './tiles.js?v=20';
 import { state, variantState } from '../outfit/current.js?v=2';
 import { itemThumb, variantThumb } from './tile-bake.js?v=17';
-import { looksOpen, toggleLooks } from './looks.js?v=18';
+import { looksOpen, toggleLooks } from './looks.js?v=20';
 import { reset, setItem } from '../outfit/apply.js?v=17';
-import { wornDrawableMap, wornHitAt, wornLabel, wornRemove, wornWear } from './worn.js?v=17';
-import { buildWardrobeSection } from '../mods/section.js?v=18';
+import { wornDrawableMap, wornHitAt, wornLabel, wornRemove, wornWear } from './worn.js?v=18';
+import { buildWardrobeSection, syncModTiles } from '../mods/section.js?v=20';
 import { activate, playOutro } from './reactions.js?v=82';
-import { refreshColorButtons } from './color-picker.js?v=18';
+import { refreshColorButtons } from './color-picker.js?v=20';
 import { hooks } from '../outfit/hooks.js?v=1';
 
 export let clearWornHover = null;
 
 export let wdOverlay = null, wdTooltip = null, wdGhost = null;
+
+let syncWornOnly = () => {};
 
 function buildWardrobe() {
   const coarsePointer = matchMedia('(pointer: coarse)');
@@ -39,20 +41,61 @@ function buildWardrobe() {
   const body = wdOverlay.querySelector('.wd-body');
   const rail = wdOverlay.querySelector('.wd-rail');
 
-  const navTargets = [];
-  const addNav = (name, el) => {
+  const navButton = (name, onClick) => {
     const b = document.createElement('button');
     b.type = 'button';
     b.className = 'wd-nav';
-    b.title = name;
     b.textContent = name;
-    b.addEventListener('click', () => body.scrollTo({ top: el.offsetTop - 6, behavior: 'smooth' }));
+    b.addEventListener('click', onClick);
     rail.appendChild(b);
+    return b;
+  };
+
+  // tiles taken off stay in the set (unticked) until you leave the
+  // tab, otherwise the tile you just tapped vanishes under the popup
+  let wornOnly = null;
+  const wornScopes = [];
+  const wornEmpty = document.createElement('p');
+  wornEmpty.className = 'wd-worn-empty';
+  wornEmpty.textContent = 'Nothing on right now.';
+  const setWornOnly = (on) => {
+    wornOnly = on ? new Set() : null;
+    syncWornOnly();
+    syncNav();
+    body.scrollTop = 0;
+  };
+  const wornNav = navButton('Wearing', () => setWornOnly(!wornOnly));
+  syncWornOnly = () => {
+    wdOverlay.classList.toggle('wd-worn-only', !!wornOnly);
+    let any = false;
+    for (const grid of body.querySelectorAll('.wd-grid')) {
+      if (!wornScopes.some(scope => scope.contains(grid))) continue;
+      let shown = 0;
+      for (const tile of grid.querySelectorAll('.wd-tile')) {
+        if (wornOnly && tile.classList.contains('on')) wornOnly.add(tile);
+        tile.hidden = !!wornOnly && !wornOnly.has(tile);
+        if (!tile.hidden) shown++;
+      }
+      grid.hidden = !!wornOnly && !shown;
+      const modHead = grid.previousElementSibling;
+      if (modHead && !modHead.classList.contains('wd-section')) modHead.style.display = grid.hidden ? 'none' : 'flex';
+      any = any || shown > 0;
+    }
+    wornEmpty.hidden = !wornOnly || any;
+  };
+
+  const navTargets = [];
+  const addNav = (name, el) => {
+    const b = navButton(name, () => {
+      if (wornOnly) setWornOnly(false);
+      body.scrollTo({ top: el.offsetTop - 6, behavior: 'smooth' });
+    });
     navTargets.push([el, b]);
   };
   const syncNav = () => {
-    let active = navTargets.length ? navTargets[0][1] : null;
-    for (const [el, b] of navTargets) if (el.offsetTop <= body.scrollTop + 90) active = b;
+    wornNav.classList.toggle('on', !!wornOnly);
+    let active = navTargets.length && !wornOnly ? navTargets[0][1] : null;
+    if (!wornOnly) for (const [el, b] of navTargets) if (el.offsetTop <= body.scrollTop + 90) active = b;
     for (const [, b] of navTargets) b.classList.toggle('on', b === active);
   };
   body.addEventListener('scroll', syncNav, { passive: true });
@@ -100,6 +143,7 @@ function buildWardrobe() {
   for (const [sec, name] of [[undefined, 'Clothing'], ['body', 'Body'], ['hair', 'Hair']]) {
     const { title, grid } = section(name);
     addNav(name, title);
+    if (sec === undefined) wornScopes.push(grid);
     for (const it of ITEMS.filter(x => x.section === sec)) {
       const colorKeys = ITEM_COLOR_GROUPS[it.key] || [];
       const popupCfg = {
@@ -134,6 +178,11 @@ function buildWardrobe() {
   const modTitle = anchor.nextElementSibling;
   anchor.remove();
   if (modTitle) addNav('Mods', modTitle);
+  const modList = body.querySelector('[data-mod-list]');
+  if (modList) wornScopes.push(modList);
+  for (const scope of wornScopes) scope.classList.add('wd-worn-scope');
+  wornEmpty.hidden = true;
+  body.append(wornEmpty);
   syncNav();
 
   wdTooltip = document.createElement('div');
@@ -159,7 +208,7 @@ function buildWardrobe() {
     removeDrag = { key, x, y, removed: false };
     wdTooltip.style.display = 'none';
     setHoveredItem(key, wornDrawableMap());
-    const tile = wdOverlay.querySelector(`.wd-tile[data-item="${key}"] img, .wd-tile[data-variant-tile="${key}"] img`);
+    const tile = wdOverlay.querySelector(`.wd-tile[data-item="${key}"] img, .wd-tile[data-variant-tile="${key}"] img, .wd-tile[data-mod-item="${key}"] img`);
     wdShowGhost(tile ? tile.src : '', x, y);
   };
   let hoveredKey = null, hoveredIds = [];
@@ -335,8 +384,10 @@ function syncWardrobe() {
       }
     }
   }
+  syncModTiles();
   syncOptionsPopup();
   refreshColorButtons();
+  syncWornOnly();
 }
 
 export function openWardrobe() {

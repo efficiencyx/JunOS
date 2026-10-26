@@ -1,7 +1,7 @@
 import { api } from '../core/api.js?v=1';
 import { clamp } from '../core/util.js?v=1';
 import * as Feed from './consolidation-feed.js?v=3';
-import { runPassNow } from './consolidation.js?v=102';
+import { runPassNow } from './consolidation.js?v=104';
 
 const STORAGE_KEY = 'omega.devhud.v1';
 const GEOM_KEY = 'omega.devhud.geom.v1';
@@ -177,6 +177,9 @@ function onFeed(ev) {
       break;
     case 'stall':
       termLine(ev.client ? '  !! nothing for 30 s, reconnecting' : `  !! stalled, restart ${ev.restart}`, 'warn');
+      break;
+    case 'loop':
+      termLine(`  !! repeating herself, asking again ${ev.retry}/${ev.of}`, 'warn');
       break;
     case 'done':
       termLine(`${clock(ev.at)} done · ${ev.status}${ev.notes != null ? ' · ' + ev.notes + ' notes' : ''}`, 'head');

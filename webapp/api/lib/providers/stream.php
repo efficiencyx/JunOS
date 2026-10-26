@@ -165,6 +165,48 @@ const STREAM_PENDING_MAX = 1024 * 1024;
 
 const STREAM_CONTENT_MAX = 4 * 1024 * 1024;
 
+const STREAM_LOOP_RETRIES = 3;
+const STREAM_LOOP_MIN_CHARS = 200;
+const STREAM_LOOP_MAX_PERIOD = 400;
+const STREAM_LOOP_TAIL = 1200;
+
+// stuck = the tail is one chunk said 3+ times back to back, 200+ chars of it
+function stream_looping(string $text): bool {
+    $len = strlen($text);
+    for ($period = 1; $period <= STREAM_LOOP_MAX_PERIOD && $period * 3 <= $len; $period++) {
+        $reps = max(3, (int)ceil(STREAM_LOOP_MIN_CHARS / $period));
+        if ($period * $reps > $len) continue;
+        $block = substr($text, -$period);
+        if (substr($text, -2 * $period, $period) !== $block) continue;
+        if (str_repeat($block, $reps) === substr($text, -$period * $reps)) return true;
+    }
+    return false;
+}
+
+// same prompt at the same temperature walks right back into the same loop
+function stream_warmer(array $payload): array {
+    if (isset($payload['options']['temperature'])) $payload['options']['temperature'] = min(1.0, $payload['options']['temperature'] + 0.2);
+    elseif (isset($payload['temperature'])) $payload['temperature'] = min(1.0, $payload['temperature'] + 0.2);
+    return $payload;
+}
+
+// [emit, stop] for provider_stream_round. the caller decides what a
+// loop looks like to the user, so the abort's error frame stays here
+function stream_loop_guard(callable $emit): array {
+    $tail = ['thinking' => '', 'token' => ''];
+    $track = function (array $out) use (&$tail, $emit) {
+        if (($out['error'] ?? '') === 'looping') return;
+        foreach ($tail as $key => $text) {
+            if (isset($out[$key])) $tail[$key] = substr($text . $out[$key], -STREAM_LOOP_TAIL);
+        }
+        $emit($out);
+    };
+    $stuck = function () use (&$tail): string {
+        return stream_looping($tail['thinking']) || stream_looping($tail['token']) ? 'looping' : '';
+    };
+    return [$track, $stuck];
+}
+
 // a turn's stats across tool rounds. generation is spread over
 // every round so those counters add up. the prompt ones do NOT.
 // each round resends the whole transcript, last round's output
@@ -187,7 +229,8 @@ function stream_turn_deadline(): float {
     return $deadline;
 }
 
-function provider_stream_round(string $provider, array $payload, callable $emit, int $round = 0, ?float $deadline = null): array {
+// $stop runs after every chunk, a non-empty string hangs up with that as the reason
+function provider_stream_round(string $provider, array $payload, callable $emit, int $round = 0, ?float $deadline = null, ?callable $stop = null): array {
     // ollama throws the trace away on think:false. llama.cpp and
     // vllm hand back whatever reasoning they parsed out anyway, so the
     // browser would get thinking on turns that asked for none
@@ -228,7 +271,7 @@ function provider_stream_round(string $provider, array $payload, callable $emit,
     };
 
     if (!$openai) {
-        curl_setopt($ch, CURLOPT_WRITEFUNCTION, function ($ch, $chunk) use (&$buf, &$state, $emit, $abort, $overflowed) {
+        curl_setopt($ch, CURLOPT_WRITEFUNCTION, function ($ch, $chunk) use (&$buf, &$state, $emit, $abort, $overflowed, $stop) {
             if (connection_aborted()) return $abort('client_gone');
             if ($state['http_status'] === 0) {
                 $state['http_status'] = (int)curl_getinfo($ch, CURLINFO_RESPONSE_CODE);
@@ -244,10 +287,11 @@ function provider_stream_round(string $provider, array $payload, callable $emit,
             }
             provider_parse_ollama_chunk($chunk, $buf, $state, $emit);
             if ($overflowed()) return $abort('upstream_overflow');
+            if ($stop && ($why = $stop()) !== '') return $abort($why);
             return strlen($chunk);
         });
     } else {
-        curl_setopt($ch, CURLOPT_WRITEFUNCTION, function ($ch, $chunk) use (&$buf, &$toolAcc, &$state, $emit, $abort, $overflowed) {
+        curl_setopt($ch, CURLOPT_WRITEFUNCTION, function ($ch, $chunk) use (&$buf, &$toolAcc, &$state, $emit, $abort, $overflowed, $stop) {
             if (connection_aborted()) return $abort('client_gone');
             if ($state['http_status'] === 0) {
                 $state['http_status'] = (int)curl_getinfo($ch, CURLINFO_RESPONSE_CODE);
@@ -260,6 +304,7 @@ function provider_stream_round(string $provider, array $payload, callable $emit,
 
             provider_parse_openai_chunk($chunk, $buf, $toolAcc, $state, $emit);
             if ($overflowed()) return $abort('upstream_overflow');
+            if ($stop && ($why = $stop()) !== '') return $abort($why);
             return strlen($chunk);
         });
     }

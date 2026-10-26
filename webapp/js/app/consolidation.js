@@ -1,5 +1,5 @@
 import { abortFn, currentConversationId } from './session.js?v=1';
-import { runChat } from './chat.js?v=30';
+import { runChat } from './chat.js?v=32';
 import { chatInput, consolidationActions, consolidationBanner, consolidationSub, consolidationTitle, devNoIdleChk, fleeEtaEl, fleeOverlay, fleeReasonEl, interruptPassBtn, sendBtn, sitWithHerBtn, voiceChk } from './dom.js?v=77';
 import * as Feed from './consolidation-feed.js?v=3';
 import * as Cabinet from './cabinet.js?v=5';
@@ -245,6 +245,9 @@ function showConsolidationOutcome(last) {
     setConsolidationBanner('done', botName() + ' is caught up', last.notes
       ? `She's keeping ${last.notes} note${last.notes === 1 ? '' : 's'} about you. Settings › Memory has the list.`
       : 'Nothing new this time that was worth writing down.');
+  } else if (last.status === 'looping') {
+    setConsolidationBanner('warn', botName() + ' broke',
+      'She got stuck saying the same thing over and over, four times in a row. She will try again in about ten minutes.');
   } else if (last.status === 'rejected') {
     setConsolidationBanner('warn', botName() + " couldn't finish tidying",
       'What the model gave back did not look right, so she left her notes exactly as they were.');

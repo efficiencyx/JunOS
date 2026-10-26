@@ -47,4 +47,6 @@ interface InferenceEngine : Closeable {
         reasoning: String = "low",
     ): Flow<TurnEvent>
     fun cancel()
+    // messages = what the next turn will start with, his message without live context
+    fun warm(messages: List<ChatMessage>, tools: List<String>, think: Boolean, temperature: Float = 0.4f) {}
 }
