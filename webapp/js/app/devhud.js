@@ -1,7 +1,7 @@
 import { api } from '../core/api.js?v=1';
 import { clamp } from '../core/util.js?v=1';
 import * as Feed from './consolidation-feed.js?v=3';
-import { runPassNow } from './consolidation.js?v=101';
+import { runPassNow } from './consolidation.js?v=102';
 
 const STORAGE_KEY = 'omega.devhud.v1';
 const GEOM_KEY = 'omega.devhud.geom.v1';

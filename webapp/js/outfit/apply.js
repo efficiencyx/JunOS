@@ -1,11 +1,11 @@
 import * as Live2D from '../live2d/live2d.js?v=84';
-import * as Mods from '../mods/mods.js?v=87';
-import { ALWAYS_HIDDEN, COLOR_GROUPS, ITEMS, VARIANTS, VARIANT_OWNER } from './catalog.js?v=1';
-import { applyGlassesTexture, applyStockingTexture, cancelStockingTexture, stockingColorMode } from './composite.js?v=16';
-import { colors, state, variantState } from './current.js?v=1';
+import * as Mods from '../mods/mods.js?v=88';
+import { ALWAYS_HIDDEN, COLOR_GROUPS, ITEMS, VARIANTS, VARIANT_OWNER } from './catalog.js?v=2';
+import { applyGlassesTexture, applyStockingTexture, cancelStockingTexture, stockingColorMode } from './composite.js?v=17';
+import { colors, state, variantState } from './current.js?v=2';
 import { hexToRgb01, normalizeHex } from './colors.js?v=1';
-import { queueWardrobe, saveColors, textureAvailable } from './sync.js?v=16';
-import { snapshot } from './chat-tools.js?v=16';
+import { queueWardrobe, saveColors, textureAvailable } from './sync.js?v=17';
+import { snapshot } from './chat-tools.js?v=17';
 import { hooks } from './hooks.js?v=1';
 
 export const itemPatterns = (it) => it.colorPatterns || it.visibilityPatterns || [];
@@ -75,6 +75,7 @@ export function applyItems(onlyItems) {
     }
   }
   if (Object.keys(textureMap).length) Live2D.setDrawableTextures(textureMap);
+  applyFootCover();
 }
 
 export function applyAll() {
@@ -106,6 +107,21 @@ export function applyVariants(onlyKey) {
       Live2D.setDrawableTextures(map);
     }
     applyVariantVisibility(v);
+  }
+  applyFootCover();
+}
+
+// stocking's soft edge is ~1px inside the mech foot and the grey shows
+// thru (a band at the date page zoom). covered foot = not drawn
+const SOCK_DRAWABLES = ['StockingL', 'StockingR'];
+const FEET = ['AttachLegLFeet', 'AttachLegRFeet'];
+export function applyFootCover() {
+  const sock = VARIANTS.find(v => v.key === 'sock_style');
+  const covered = state.stockings && !sock.options[variantState.sock_style || 0].bareFeet
+    && !SOCK_DRAWABLES.some(Mods.owns);
+  for (const id of FEET) {
+    if (Mods.holds(id)) continue;
+    Live2D.setDrawableOpacity(id, covered ? 0 : null);
   }
 }
 

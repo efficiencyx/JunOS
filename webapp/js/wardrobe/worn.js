@@ -1,7 +1,7 @@
 import * as Live2D from '../live2d/live2d.js?v=84';
-import { ITEMS, VARIANTS } from '../outfit/catalog.js?v=1';
-import { itemDrawableIds, setItem, setVariant } from '../outfit/apply.js?v=16';
-import { state, variantState } from '../outfit/current.js?v=1';
+import { ITEMS, VARIANTS } from '../outfit/catalog.js?v=2';
+import { itemDrawableIds, setItem, setVariant } from '../outfit/apply.js?v=17';
+import { state, variantState } from '../outfit/current.js?v=2';
 
 export function wornDrawableMap() {
   const map = new Map();

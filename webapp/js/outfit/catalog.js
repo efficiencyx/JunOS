@@ -328,7 +328,7 @@ export const VARIANTS = [
       { name: 'Long', textures: { StockingL: 'assets/variants/longSockL.png', StockingR: 'assets/variants/longSockR.png' } },
       { name: 'Lingerie', colorMode: 'duotone', textures: { StockingL: 'assets/variants/lingerieSockL.png', StockingR: 'assets/variants/lingerieSockR.png' } },
       { name: 'Striped stockings', colorMode: 'overlay', textures: { StockingL: { url: 'assets/variants/stripedStockingL.png', overlay: true }, StockingR: { url: 'assets/variants/stripedStockingR.png', overlay: true } } },
-      { name: 'Stirrups', colorMode: 'duotone', textures: { StockingL: 'assets/variants/stirrupL.png', StockingR: 'assets/variants/stirrupR.png' } },
+      { name: 'Stirrups', colorMode: 'duotone', bareFeet: true, textures: { StockingL: 'assets/variants/stirrupL.png', StockingR: 'assets/variants/stirrupR.png' } },
     ],
   },
   {

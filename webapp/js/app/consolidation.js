@@ -1,5 +1,5 @@
 import { abortFn, currentConversationId } from './session.js?v=1';
-import { runChat } from './chat.js?v=29';
+import { runChat } from './chat.js?v=30';
 import { chatInput, consolidationActions, consolidationBanner, consolidationSub, consolidationTitle, devNoIdleChk, fleeEtaEl, fleeOverlay, fleeReasonEl, interruptPassBtn, sendBtn, sitWithHerBtn, voiceChk } from './dom.js?v=77';
 import * as Feed from './consolidation-feed.js?v=3';
 import * as Cabinet from './cabinet.js?v=5';

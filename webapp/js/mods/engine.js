@@ -2,7 +2,7 @@ import * as Live2D from '../live2d/live2d.js?v=84';
 import * as Prefs from '../core/prefs.js?v=6';
 import { idbStore } from '../core/idb.js?v=1';
 import { hexToRgb01 } from '../outfit/colors.js?v=1';
-import { applyDrawOrder, hiddenItemDrawables, refreshVisibility, setModdedDrawables } from '../outfit/apply.js?v=16';
+import { applyDrawOrder, applyFootCover, hiddenItemDrawables, refreshVisibility, setModdedDrawables } from '../outfit/apply.js?v=17';
 import { unzip } from './zip.js?v=1';
 import { itemDrawables, parseMod } from './parse.js?v=12';
 import { MOD_SLOT, bakeDrawable, fileUrl } from './layers.js?v=12';
@@ -199,6 +199,7 @@ async function applyPass() {
   bakeCache = fresh;
   appliedIds = new Set(byDrawable.keys());
   applyDrawOrder();
+  applyFootCover();
   const hold = new Set();
   for (const id of byDrawable.keys()) {
     if (MOD_SLOT.test(id) || (hiddenByOutfit.has(id) && !controllerDrawables.has(id))) hold.add(id);
