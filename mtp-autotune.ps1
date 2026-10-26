@@ -144,22 +144,32 @@ function Get-MtpRepo([string]$ref) {
     return "$repo-MTP$tag"
 }
 
+# PS 5.1 sends a string -Body as Latin-1. the prompt's middle dots
+# and arrows turn into broken UTF-8 and llama-server rejects every request
+$LastFail = ''
+function Invoke-Chat([string]$uri, $payload) {
+    $bytes = [Text.Encoding]::UTF8.GetBytes(($payload | ConvertTo-Json -Depth 5))
+    try {
+        return Invoke-RestMethod -Method Post -Uri $uri -ContentType 'application/json; charset=utf-8' `
+            -Body $bytes -TimeoutSec 300
+    } catch {
+        $script:LastFail = if ($_.ErrorDetails.Message) { $_.ErrorDetails.Message } else { $_.Exception.Message }
+        return $null
+    }
+}
+
 # tok/s pooled over both prompts. Ollama reports eval_count and
 # eval_duration per request, so this counts generation only and
 # leaves prompt processing out of it.
 function Measure-Ollama([string]$model, [string]$url) {
     $tok = 0; $ns = 0.0
     foreach ($p in $Prompts) {
-        $body = @{
+        $r = Invoke-Chat "$url/api/chat" @{
             model = $model; stream = $false
             messages = Get-Messages $p
             options = @{ temperature = 0; num_predict = $Tokens }
-        } | ConvertTo-Json -Depth 5
-        try {
-            $r = Invoke-RestMethod -Method Post -Uri "$url/api/chat" -ContentType 'application/json' `
-                -Body $body -TimeoutSec 300
-        } catch { continue }
-        if (-not $r.eval_count -or -not $r.eval_duration) { continue }
+        }
+        if (-not $r -or -not $r.eval_count -or -not $r.eval_duration) { continue }
         $tok += [int]$r.eval_count
         $ns  += [double]$r.eval_duration
     }
@@ -208,7 +218,10 @@ function Tune-Ollama {
     # infinitely slow. Carrying on from here would read the silence
     # as "drafting never helps" and switch the feature off on the
     # strength of nothing.
-    if ($base -le 0) { Die "could not measure a baseline - is $chat pulled and ollama running?" }
+    if ($base -le 0) {
+        if ($LastFail) { Say $LastFail }
+        Die "could not measure a baseline - is $chat pulled and ollama running?"
+    }
 
     $bestN = 0; $best = $base
     $mf = Join-Path $env:TEMP 'Modelfile.tune'
@@ -245,17 +258,13 @@ function Measure-Llamacpp([string]$url) {
     $hf = Get-EnvKey 'LLAMACPP_MODEL_HF'
     $model = if ($hf) { ($hf -split ',')[0].Trim() } else { 'efficiencyx/Jun-LoRA-E2B-GGUF:Q4_K_M' }
     foreach ($p in $Prompts) {
-        $body = @{
+        $r = Invoke-Chat "$url/v1/chat/completions" @{
             model = $model
             stream = $false
             messages = Get-Messages $p
             temperature = 0; max_tokens = $Tokens
-        } | ConvertTo-Json -Depth 5
-        try {
-            $r = Invoke-RestMethod -Method Post -Uri "$url/v1/chat/completions" -ContentType 'application/json' `
-                -Body $body -TimeoutSec 300
-        } catch { continue }
-        if (-not $r.usage.completion_tokens -or -not $r.timings.predicted_ms) { continue }
+        }
+        if (-not $r -or -not $r.usage.completion_tokens -or -not $r.timings.predicted_ms) { continue }
         $tok += [int]$r.usage.completion_tokens
         $ms  += [double]$r.timings.predicted_ms
     }
@@ -321,7 +330,11 @@ function Tune-Llamacpp {
     if (-not (Restart-Llamacpp $url)) { Set-EnvKey 'LLAMACPP_MTP' $drafter; Die 'could not get a baseline' }
     $base = Measure-Llamacpp $url
     Write-Host "       ${DIM}no drafter${R}   $base tok/s"
-    if ($base -le 0) { Set-EnvKey 'LLAMACPP_MTP' $drafter; Die 'could not measure a baseline - is llama-server healthy?' }
+    if ($base -le 0) {
+        Set-EnvKey 'LLAMACPP_MTP' $drafter
+        if ($LastFail) { Say $LastFail }
+        Die 'could not measure a baseline - is llama-server healthy?'
+    }
 
     Set-EnvKey 'LLAMACPP_MTP' $drafter
     $bestN = 0; $best = $base

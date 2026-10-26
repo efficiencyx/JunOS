@@ -33,7 +33,7 @@ die() { echo "release-apk-local: $*" >&2; exit 1; }
 [ -f "$litert/classes.jar" ] && [ -f "$litert/jni/arm64-v8a/liblitertlm_jni.so" ] || die "no LiteRT-LM build in $litert"
 git -C "$public" rev-parse -q --verify "refs/tags/$tag" >/dev/null || die "$tag is not a tag in $public"
 [ "$(gh release view "$tag" -R "$repo" --json isDraft --jq .isDraft)" = true ] || die "$tag is not a draft release, refusing to touch it"
-gh release view "$tag" -R "$repo" --json assets --jq '.assets[].name' | grep -qx "$apk" || die "the draft has no $apk yet, wait for release-installer.yml"
+grep -qx "$apk" <<< "$(gh release view "$tag" -R "$repo" --json assets --jq '.assets[].name')" || die "the draft has no $apk yet, wait for release-installer.yml"
 
 work="$(mktemp -d)"
 cleanup() {
@@ -58,7 +58,7 @@ export JUN_ANDROID_VERSION_NAME="${tag#v}"
 (cd "$work/src/android" && sh ./gradlew :app:verifyReleaseContents -PlitertlmLocal="$litert" --no-daemon -q)
 built="$work/src/android/app/build/outputs/apk/release/app-release.apk"
 [ -f "$built" ] || die "gradle built no signed apk"
-unzip -l "$built" | grep -q 'lib/arm64-v8a/libwebgpu_dawn.so' || die "the apk doesn't carry the local LiteRT-LM build"
+grep -q 'lib/arm64-v8a/libwebgpu_dawn.so' <<< "$(unzip -l "$built")" || die "the apk doesn't carry the local LiteRT-LM build"
 
 apksigner="$(printf '%s\n' "$ANDROID_HOME"/build-tools/* | sort -V | tail -1)/apksigner"
 gh release download "$tag" -R "$repo" -p "$apk" -p SHA256SUMS -D "$work/draft"
