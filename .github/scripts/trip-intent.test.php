@@ -28,5 +28,8 @@ $eq('reply cant wait', trip_reply_accepts("Can't wait!"), true);
 $eq('reply no', trip_reply_accepts('Hmm, not today. Maybe later?'), false);
 $eq('reply yes but', trip_reply_accepts("I'd love to, but I can't right now."), false);
 $eq('reply unrelated', trip_reply_accepts('What song would you pick?'), false);
+$eq("reply i'll go", trip_reply_accepts("Fine.\nI'll go."), true);
+$eq("reply i'm going", trip_reply_accepts("[A:smile] I'm going."), true);
+$eq("i'm going to is not a yes", trip_reply_accepts("I'm going to stay right here."), false);
 
 exit($fails ? 1 : 0);

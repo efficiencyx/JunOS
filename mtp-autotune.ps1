@@ -276,6 +276,12 @@ function Restart-Llamacpp([string]$url) {
     try {
         & "$PSScriptRoot\start.ps1" stop | Out-Null
         & "$PSScriptRoot\start.ps1" -NoBrowser | Out-Null
+    } catch {
+        # the next row's start overwrites this log, so show it now
+        Warn_ $_.Exception.Message
+        $err = Join-Path $PSScriptRoot 'runtime\logs\llamacpp.err.log'
+        if (Test-Path $err) { Get-Content $err -Tail 8 | ForEach-Object { Say $_ } }
+        return $false
     } finally {
         if ($prev) { $env:MTP_AUTOTUNE_RUNNING = $prev }
         else { Remove-Item env:MTP_AUTOTUNE_RUNNING -ErrorAction SilentlyContinue }

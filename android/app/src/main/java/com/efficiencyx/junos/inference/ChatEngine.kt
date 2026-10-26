@@ -52,6 +52,7 @@ data class ChatRequest(
     val voice: Boolean = false,
     @SerialName("hear_all") val hearAll: Boolean = false,
     @SerialName("mod_items") val modItems: List<String> = emptyList(),
+    val invite: String = "",
 )
 
 internal fun ChatRequest.validate() {
@@ -93,6 +94,12 @@ class ChatEngine(
         val conversation = dao.conversation(request.conversationId) ?: error("forbidden")
         dao.ensureDefaults(now())
         val lastUser = request.messages.lastOrNull { it.role == "user" }?.content.orEmpty()
+        val invite = when {
+            request.idle -> ""
+            request.invite in Trips.TOOLS.values -> request.invite
+            request.ephemeral -> ""
+            else -> Trips.guessInvite(lastUser, request.messages.lastOrNull { it.role == "assistant" }?.content.orEmpty())
+        }
         var noteSource = NoteSource("chat", request.conversationId)
         if (!request.idle && !request.ephemeral) {
             val userRowId = dao.insertMessage(MessageEntity(conversationId = request.conversationId, role = "user", content = lastUser, createdAt = now()))
@@ -102,7 +109,7 @@ class ChatEngine(
         }
 
         val relationship = dao.relationship() ?: RelationshipEntity(updatedAt = now())
-        val liveContext = buildLiveContext(request, lastUser, relationship, conversation.summary.orEmpty())
+        val liveContext = buildLiveContext(request, lastUser, relationship, conversation.summary.orEmpty(), invite)
         val journal = memory.journalText()
         val system = if (journal.isBlank()) systemPrompt else "$systemPrompt\n\n$JOURNAL_HEADER$journal"
         val messages = mutableListOf(ChatMessage("system", system))
@@ -167,6 +174,19 @@ class ChatEngine(
         var nativeEvalCount = 0
         var nativeEvalMs = 0L
         var nativePromptEvalCount = 0
+        var went = ""
+        suspend fun goOut(where: String): String {
+            if (request.idle) return json.encodeToString(mapOf("error" to "not_available_on_idle"))
+            if (where == "karaoke") return buildJsonObject { put("started", false); put("note", KARAOKE_CLOSED) }.toString()
+            if (where != "cards") Trips.current = Trip(where, now(), request.conversationId)
+            emit(buildJsonObject { put("go", where) })
+            went = where
+            return buildJsonObject {
+                put("going", where)
+                put("note", if (where == "cards") "Say one short line. The table opens the moment you finish talking."
+                    else "Say one short line about heading out together. The trip starts the moment you finish talking.")
+            }.toString()
+        }
         try {
             suspend fun show(text: String, into: StringBuilder) {
                 if (text.isEmpty()) return
@@ -207,8 +227,12 @@ class ChatEngine(
                     emit(toolStatus(call.name, "running", raw = buildJsonObject {
                         put("call", buildJsonObject { put("name", call.name); put("arguments", call.args) })
                     }))
-                    val result = if (call.name == "change_outfit") changeOutfit(call.args, modItems, emit)
-                        else executeTool(call, request.conversationId, noteSource)
+                    val trip = Trips.TOOLS[call.name]
+                    val result = when {
+                        call.name == "change_outfit" -> changeOutfit(call.args, modItems, emit)
+                        trip != null -> goOut(trip)
+                        else -> executeTool(call, request.conversationId, noteSource)
+                    }
                     emit(toolStatus(call.name, "done", result, raw = buildJsonObject {
                         put("message", buildJsonObject { put("role", "tool"); put("name", call.name); put("content", result) })
                     }))
@@ -241,6 +265,10 @@ class ChatEngine(
             }
         } finally {
             GenerationService.stop(context)
+        }
+        // she said yes in words and called nothing. go anyway, same as chat.php
+        if (invite.isNotEmpty() && went.isEmpty() && !silenced && fled == null && Trips.replyAccepts(visible.toString())) {
+            goOut(invite)
         }
 
         var assistant = visible.toString().trim()
@@ -305,7 +333,17 @@ class ChatEngine(
         lastUser: String,
         relationship: RelationshipEntity,
         summary: String,
+        invite: String,
     ): String {
+        val feelings = "## YOUR FEELINGS TOWARD ANON RIGHT NOW - highest priority for this reply\n" +
+            "- Affection: ${relationship.affection}/100\n- Trust: ${relationship.trust}/100\n- Tension: ${relationship.tension}/100"
+        // invite turn: one OOC line naming the tool + feelings, nothing
+        // else. lore about the shop just pulls her off the question
+        if (invite.isNotEmpty()) {
+            val tool = Trips.TOOLS.entries.first { it.value == invite }.key
+            return LIVE_CONTEXT_HEADER + "(OOC stage direction, not spoken by Anon: Anon wants to ${INVITE_PLANS.getValue(invite)}. " +
+                "If you wish to go along with it, invoke the tool $tool.)\n\n" + feelings
+        }
         val blocks = mutableListOf<String>()
         // first block, same as chat.php. it only works up top
         if (request.voice && !request.hearAll) blocks += SIDE_TALK_CHECK
@@ -315,13 +353,12 @@ class ChatEngine(
         val facts = lore.search(lastUser, 5)
         if (facts.isNotEmpty()) blocks += "## World facts (canon)\n" + facts.joinToString("\n") { "- ${it.text}" }
         request.outfitContext?.trim()?.takeIf { it.isNotBlank() }?.let { blocks += "## Current Wardrobe State\n$it" }
-        blocks += "## YOUR FEELINGS TOWARD ANON RIGHT NOW - highest priority for this reply\n" +
-            "- Affection: ${relationship.affection}/100\n- Trust: ${relationship.trust}/100\n- Tension: ${relationship.tension}/100"
+        blocks += feelings
         blocks += "## Save check\n" +
             "If Anon's latest message contains something durable (a preference, personal fact, plan, " +
             "boundary, health/safety matter, or something emotionally significant), call memory_write " +
             "before replying. Otherwise ignore this."
-        return "# Live context for THIS reply (from the system, not spoken by Anon)\n\n" + blocks.joinToString("\n\n")
+        return LIVE_CONTEXT_HEADER + blocks.joinToString("\n\n")
     }
 
     private suspend fun executeTool(call: ParsedToolCall, conversationId: Long, noteSource: NoteSource): String = when (call.name) {
@@ -471,6 +508,15 @@ class ChatEngine(
                 "percentage|average|total)\\b",
         )
         private const val REPLY_RESERVE = 2192
+        private const val LIVE_CONTEXT_HEADER = "# Live context for THIS reply (from the system, not spoken by Anon)\n\n"
+        private val INVITE_PLANS = mapOf(
+            "shop" to "go to Annalie's shop together",
+            "karaoke" to "go to karaoke together",
+            "date" to "go out to eat together",
+            "cards" to "play a game of blackjack",
+        )
+        private const val KARAOKE_CLOSED = "The karaoke room is closed right now (there is no karaoke on the phone). " +
+            "Tell Anon plainly, do not pretend to sing."
         private const val SIDE_TALK_CHECK = "## Who he is talking to\n" +
             "He said this out loud and he is not alone in the room. Before you answer, check that the line fits " +
             "as something said TO YOU, following what you two were just saying. A line with no question or remark " +
@@ -489,8 +535,7 @@ class ChatEngine(
             "If asked to be quiet Break the silence with ONLY an action. such as a wave or a smile. No chat or text!)"
 
         // chat.php's declarations, word for word, for the tools the
-        // phone can actually carry out. no web_search (offline) and no
-        // outings, there are no trip pages on android to send her to
+        // phone can actually carry out. no web_search (offline)
         internal val TOOL_SCHEMAS = listOf(
             """{"type":"function","function":{"name":"search_recent_chats","description":"Search your saved chat history with Anon for a specific past topic he references or that you don't recall.","parameters":{"type":"object","properties":{"query":{"type":"string","description":"What to search for."},"limit":{"type":"integer","description":"Max messages, 1-8."}},"required":["query"]}}}""",
             """{"type":"function","function":{"name":"list_recent_chats","description":"Recap your most recent conversations with Anon when he wants to catch up, with no specific topic.","parameters":{"type":"object","properties":{"limit":{"type":"integer","description":"How many to recap, 1-10."}}}}}""",
@@ -499,6 +544,10 @@ class ChatEngine(
             """{"type":"function","function":{"name":"change_outfit","description":"Put clothes on or take them off. Calling this is the ONLY thing that actually changes what you are wearing - describing a change in your reply does not move a single thread. It answers with what you have on afterwards, so call it BEFORE you say anything about your clothes.","parameters":{"type":"object","properties":{"put_on":{"type":"array","items":{"type":"string"},"description":"Items to put on. Use the names listed in your current wardrobe state."},"take_off":{"type":"array","items":{"type":"string"},"description":"Items to take off. \"nude\" takes off all of your clothes at once."},"look":{"type":"string","description":"Name of a saved look to put on whole, from the saved looks in your wardrobe state. Overrides put_on and take_off."}}}}}""",
             """{"type":"function","function":{"name":"stay_silent","description":"Say nothing at all this turn - ignoring him, too hurt/angry, the scene calls for silence, or he wasn't talking to you at all (someone else in the room, a phone call, the TV). Sends no message.","parameters":{"type":"object","properties":{"reason":{"type":"string","description":"Why (private)."},"overheard":{"type":"boolean","description":"true when what he said was aimed at someone else, not you."}}}}}""",
             """{"type":"function","function":{"name":"flee","description":"Walk out and leave Anon alone. Call it when you want to go.","parameters":{"type":"object","properties":{"reason":{"type":"string","description":"Why you are leaving."},"destination":{"type":"string","description":"Where you're going, if anywhere."}}}}}""",
+            """{"type":"function","function":{"name":"enter_shop","description":"Go to Annalie's clothes shop together with Anon to browse and try things on. Call it once the two of you agree to go, then say your line - you both leave for the shop when you finish talking.","parameters":{"type":"object","properties":{"reason":{"type":"string","description":"Why you two are going (private)."}}}}}""",
+            """{"type":"function","function":{"name":"enter_karaoke","description":"Start a karaoke date with Anon: you two pick a song and sing it together. Call it once the two of you agree to sing, then say your line - the karaoke starts when you finish talking. It tells you if the karaoke room is closed.","parameters":{"type":"object","properties":{"reason":{"type":"string","description":"Why you two are going (private)."}}}}}""",
+            """{"type":"function","function":{"name":"play_cards","description":"Play a game of blackjack with Anon at the table, you deal. Call it once you two agree to play, then say your line - the table opens when you finish talking.","parameters":{"type":"object","properties":{"reason":{"type":"string","description":"Why you want to play (private)."}}}}}""",
+            """{"type":"function","function":{"name":"go_out_to_eat","description":"Go out for lunch or dinner with Anon at a restaurant, whether he is taking you out to eat or you asked him. Call it once the two of you agree to go, then say your line - you both leave when you finish talking.","parameters":{"type":"object","properties":{"reason":{"type":"string","description":"Why you two are going (private)."}}}}}""",
         )
         private val TOOL_SCHEMA_CHARS = TOOL_SCHEMAS.sumOf { it.length }
     }

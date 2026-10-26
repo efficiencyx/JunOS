@@ -12,6 +12,8 @@ import com.efficiencyx.junos.data.WardrobePresetEntity
 import com.efficiencyx.junos.data.WardrobeStateEntity
 import com.efficiencyx.junos.inference.ChatEngine
 import com.efficiencyx.junos.inference.ChatRequest
+import com.efficiencyx.junos.inference.Trip
+import com.efficiencyx.junos.inference.Trips
 import com.efficiencyx.junos.memory.MemoryStore
 import com.efficiencyx.junos.memory.NoteSource
 import com.efficiencyx.junos.setup.AssetRecovery
@@ -57,6 +59,7 @@ import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.buildJsonArray
 import kotlinx.serialization.json.buildJsonObject
+import kotlinx.serialization.json.contentOrNull
 import kotlinx.serialization.json.intOrNull
 import kotlinx.serialization.json.jsonArray
 import kotlinx.serialization.json.jsonObject
@@ -264,6 +267,40 @@ class LocalServer(
                     put("models", JsonArray(emptyList())); put("vram_bytes", 0); put("ram_model_bytes", 0)
                     put("host", buildJsonObject { put("total", info.totalMem); put("avail", info.availMem); put("used", info.totalMem - info.availMem) })
                 })
+            }
+
+            // the only user here is admin, so Force her is always on
+            get("/api/trip.php") {
+                if (!call.authorized()) return@get
+                val trip = Trips.current
+                call.json(buildJsonObject {
+                    put("where", trip?.where.orEmpty()); put("since", trip?.since ?: 0); put("conversation_id", trip?.conversationId ?: 0)
+                    put("gated", true); put("can_force", true)
+                })
+            }
+            post("/api/trip.php") {
+                if (!call.authorized()) return@post
+                val hasBody = (call.request.headers[HttpHeaders.ContentLength]?.toLongOrNull() ?: 0) > 0
+                val body = if (hasBody) call.jsonBody(48 * 1024) ?: return@post else JsonObject(emptyMap())
+                when (call.request.queryParameters["action"]) {
+                    "go" -> {
+                        val where = (body["where"] as? JsonPrimitive)?.contentOrNull
+                        if (where !in setOf("shop", "karaoke", "date")) return@post call.error(HttpStatusCode.BadRequest, "invalid_request")
+                        Trips.current = Trip(where!!, now(), (body["conversation_id"] as? JsonPrimitive)?.longOrNull ?: 0)
+                        call.ok()
+                    }
+                    "home" -> {
+                        val trip = Trips.current
+                        Trips.current = null
+                        // no date_recap(), a second generation while she says bye is too slow here
+                        if (trip?.where == "date") {
+                            runCatching { memory.add("events", dateNote(body), NoteSource("date", trip.conversationId.takeIf { it > 0 })) }
+                                .onFailure { Log.w(TAG, "date note failed", it) }
+                        }
+                        call.ok()
+                    }
+                    else -> call.error(HttpStatusCode.BadRequest, "invalid_request")
+                }
             }
 
             get("/api/karaoke.php") {
@@ -535,6 +572,21 @@ class LocalServer(
 
     private suspend fun io.ktor.server.application.ApplicationCall.error(status: HttpStatusCode, code: String) {
         json(buildJsonObject { put("error", code) }, status)
+    }
+
+    private fun dateNote(body: JsonObject): String {
+        fun field(obj: JsonObject?, key: String, max: Int) = (obj?.get(key) as? JsonPrimitive)?.contentOrNull?.take(max)?.trim().orEmpty()
+        val meal = field(body, "meal", 10).takeIf { it == "lunch" || it == "dinner" } ?: "a meal"
+        val venue = field(body, "venue", 60)
+        val dishes = body["dishes"] as? JsonObject
+        val me = field(dishes, "me", 80)
+        val her = field(dishes, "her", 80)
+        return buildString {
+            append("Went out for ").append(meal)
+            if (venue.isNotEmpty()) append(" at ").append(venue)
+            append(" with Anon.")
+            if (me.isNotEmpty() && her.isNotEmpty()) append(" He had ").append(me).append(", I picked ").append(her).append(" for myself.")
+        }
     }
 
     private fun safePath(path: String) = path.isNotBlank() && path.length <= 512 && '\\' !in path &&

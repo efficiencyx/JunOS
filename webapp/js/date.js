@@ -365,8 +365,8 @@ async function main() {
 
   const me = await Auth.me().catch(() => null);
   if (!me) { location.replace('index.html'); return; }
-  // she has to have agreed in chat. a dead endpoint (android has
-  // none) counts as open, this is a story rule not a security one
+  // she has to have agreed in chat. a dead endpoint counts as
+  // open, this is a story rule not a security one
   const trip = await api('trip.php')
     .then(r => r.ok ? r.json() : null).catch(() => null);
   if (trip && trip.gated && trip.where !== 'date') { location.replace('index.html'); return; }
@@ -375,8 +375,8 @@ async function main() {
   // whole walk just to get redirected at the end of it
   TripLoader.mount();
   TripLoader.setStage('Finding your table');
-  // no trip row (gate off, or the android build that has no endpoint)
-  // means no seed, so fall back to the day. at least it moves.
+  // no trip row (gate off) means no seed, so fall back to the
+  // day. at least it moves.
   const seed = (trip && Number(trip.since)) || Math.floor(Date.now() / 864e5);
   venue = VENUES[Math.abs(seed) % VENUES.length];
   document.body.dataset.venue = venue.scene.replace(/^diner-|\.svg$/g, '');

@@ -56,7 +56,7 @@ function trip_reply_accepts(string $reply): bool {
     $a = TRIP_APOS;
     $reply = mb_strtolower(preg_replace('/\[[^\]]*\]/', ' ', $reply));
     return !trip_has_no($reply)
-        && (bool)preg_match("/\b(?:yes|yeah|yay|sure|okay|ok|alright|of course|let{$a}s go|let{$a}s do it|lead the way|grab my (?:coat|bag|jacket)|i{$a}d love (?:to|that)|i{$a}m in|count me in|deal|gladly|absolutely|definitely|can{$a}t wait|you{$a}re on)\b/u", $reply);
+        && (bool)preg_match("/\b(?:yes|yeah|yay|sure|okay|ok|alright|of course|let{$a}s go|let{$a}s do it|lead the way|grab my (?:coat|bag|jacket)|i{$a}d love (?:to|that)|i{$a}m in|count me in|deal|gladly|absolutely|definitely|can{$a}t wait|you{$a}re on|i{$a}ll (?:go|come)|i{$a}m (?:going|coming)(?! to\b))\b/u", $reply);
 }
 
 function tool_catalog(?string $approvedWebSearchQuery): array {

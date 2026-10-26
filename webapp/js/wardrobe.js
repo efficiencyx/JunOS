@@ -64,8 +64,8 @@ async function main() {
     if (layoutChanged) syncOrientation();
   });
 
-  // she has to have agreed in chat. a dead endpoint (android has
-  // none) counts as open, this is a story rule not a security one
+  // she has to have agreed in chat. a dead endpoint counts as
+  // open, this is a story rule not a security one
   const trip = await api('trip.php')
     .then(r => r.ok ? r.json() : null).catch(() => null);
   if (trip && trip.gated && trip.where !== 'shop') {

@@ -968,7 +968,8 @@ function Assert-OnPath([string]$command) {
 # missing counts as too old too, see $LlamacppMinBuild
 function Test-LlamaServerBuild {
     if (-not (Get-Command llama-server -ErrorAction SilentlyContinue)) { return $false }
-    $out = (& llama-server --version 2>&1 | Out-String)
+    # cmd /c, llama-server prints its version on stderr and 5.1 throws on that
+    $out = (cmd /c "llama-server --version 2>&1" | Out-String)
     return ($out -match 'build (\d+)') -and ([int]$matches[1] -ge $LlamacppMinBuild)
 }
 
@@ -1107,8 +1108,10 @@ function Install-Php {
         try { $have = "$(& $phpExe -r 'echo PHP_VERSION;' 2>$null)".Trim() } catch {}
         $haveVersion = $null
         if (-not [version]::TryParse(($have -replace '[^0-9.].*$', ''), [ref]$haveVersion)) { $haveVersion = [version]'0.0' }
-        if ($haveVersion -ge [version]$newest.Value.version) { return }
-        Step "PHP $have is out of date, replacing it with $($newest.Value.version)"
+        # rebuilds come as 8.5.12-1, PHP_VERSION still says 8.5.12
+        $newestVersion = $newest.Value.version -replace '-.*$', ''
+        if ($haveVersion -ge [version]$newestVersion) { return }
+        Step "PHP $have is out of date, replacing it with $newestVersion"
         # php.exe holds its own dlls open while she runs, and the swap
         # below deletes that folder. so stop her first, the installer
         # starts her again at the end anyway.
@@ -1175,7 +1178,10 @@ function Install-Php {
         try {
             $caTmp = Join-Path $tmpDir 'cacert.pem'
             Invoke-WebRequest -Uri 'https://curl.se/ca/cacert.pem' -OutFile $caTmp -UseBasicParsing
-            $caWant = ((Invoke-WebRequest -Uri 'https://curl.se/ca/cacert.pem.sha256' -UseBasicParsing).Content -split '\s+')[0]
+            # to a file, pwsh 7 hands .Content back as bytes for application/x-pem-file
+            $caSha = Join-Path $tmpDir 'cacert.pem.sha256'
+            Invoke-WebRequest -Uri 'https://curl.se/ca/cacert.pem.sha256' -OutFile $caSha -UseBasicParsing
+            $caWant = ((Get-Content -Raw -LiteralPath $caSha) -split '\s+')[0]
             if (-not (Test-Sha256 $caTmp $caWant)) { throw 'cacert.pem does not match its published sha256' }
             [IO.File]::Copy($caTmp, $cacert, $true)
         } catch {
