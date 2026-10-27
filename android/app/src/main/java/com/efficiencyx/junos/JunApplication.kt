@@ -1,6 +1,7 @@
 package com.efficiencyx.junos
 
 import android.app.Application
+import com.efficiencyx.junos.colab.ColabSession
 import com.efficiencyx.junos.data.JunDatabase
 import com.efficiencyx.junos.inference.ChatEngine
 import com.efficiencyx.junos.inference.InferenceEngine
@@ -19,6 +20,7 @@ class JunApplication : Application() {
     val memoryStore by lazy { MemoryStore(this) }
     val loreIndex by lazy { LoreIndex(this) }
     val pairingStore by lazy { PairingStore(this) }
+    val colab by lazy { ColabSession(this) }
     val localEngine by lazy { LiteRtEngine(modelStore) }
     @Volatile private var sessionEngine: InferenceEngine? = null
     val inferenceEngine: InferenceEngine get() = sessionEngine ?: localEngine

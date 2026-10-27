@@ -6,6 +6,7 @@
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_DATA_SYNC" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_SPECIAL_USE" />
     <uses-permission android:name="android.permission.WAKE_LOCK" />
 
     <application
@@ -40,5 +41,14 @@
             android:name=".inference.GenerationService"
             android:exported="false"
             android:foregroundServiceType="dataSync" />
+        <!-- specialUse, not dataSync: android 15 caps dataSync at 6 h a day and a free colab session runs up to 12 -->
+        <service
+            android:name=".colab.ColabKeepAliveService"
+            android:exported="false"
+            android:foregroundServiceType="specialUse">
+            <property
+                android:name="android.app.PROPERTY_SPECIAL_USE_FGS_SUBTYPE"
+                android:value="Keeps the user's own Colab notebook page connected while it serves the model" />
+        </service>
     </application>
 </manifest>

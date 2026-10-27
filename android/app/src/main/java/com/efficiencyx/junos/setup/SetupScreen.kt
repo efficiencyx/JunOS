@@ -40,6 +40,9 @@ fun SetupScreen(
     onSelectMode: (SessionMode) -> Unit,
     onScan: () -> Unit,
     onPaste: () -> Unit,
+    colabRunning: Boolean,
+    onColab: () -> Unit,
+    onColabInBrowser: () -> Unit,
     onStart: () -> Unit,
     onRetry: () -> Unit,
 ) {
@@ -105,7 +108,7 @@ fun SetupScreen(
                 )
                 ModeOption(
                     state, SessionMode.CLOUD, "Cloud",
-                    (state.cloud?.let { "${it.name}." } ?: "Colab or Kaggle in inference only mode, Step 3 shows the code.") +
+                    (state.cloud?.let { "${it.name}." } ?: "A free Colab GPU, started from here. Kaggle works too, scan its Step 3 code.") +
                         " Chats pass through Google and Cloudflare.",
                     onSelectMode,
                 )
@@ -128,14 +131,38 @@ fun SetupScreen(
                             Button(onClick = onDownloadModel, modifier = Modifier.fillMaxWidth()) { Text("Download Jun model") }
                         }
                     }
+                    state.mode == SessionMode.CLOUD && (paired == null || colabRunning) ->
+                        Button(onClick = onColab, modifier = Modifier.fillMaxWidth()) {
+                            Text(if (colabRunning) "Back to Colab" else "Start Colab session")
+                        }
                     state.mode != SessionMode.LOCAL && paired == null ->
                         Button(onClick = onScan, modifier = Modifier.fillMaxWidth()) { Text("Scan pairing code") }
                     else -> Button(onClick = onStart, modifier = Modifier.fillMaxWidth()) { Text("Start") }
                 }
+                if (state.mode == SessionMode.CLOUD && paired != null && !colabRunning) {
+                    Spacer(Modifier.height(8.dp))
+                    OutlinedButton(onClick = onColab, modifier = Modifier.fillMaxWidth()) { Text("Start a new Colab session") }
+                }
+                if (state.mode == SessionMode.CLOUD && paired == null && !colabRunning) {
+                    Text(
+                        "Sign in with Google, tap Runtime > Run all, and she connects by herself when Step 3 is done.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        textAlign = TextAlign.Center,
+                        modifier = Modifier.padding(top = 8.dp),
+                    )
+                }
                 if (state.mode != SessionMode.LOCAL) {
                     Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.Center) {
-                        if (paired != null) TextButton(onClick = onScan) { Text("Scan a new code") }
+                        if (paired != null || state.mode == SessionMode.CLOUD) TextButton(onClick = onScan) {
+                            Text(if (paired != null) "Scan a new code" else "Scan code")
+                        }
                         TextButton(onClick = onPaste) { Text("Paste link") }
+                    }
+                }
+                if (state.mode == SessionMode.CLOUD && !colabRunning) {
+                    TextButton(onClick = onColabInBrowser, modifier = Modifier.fillMaxWidth()) {
+                        Text("Google won't sign me in here")
                     }
                 }
             }

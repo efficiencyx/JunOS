@@ -1,24 +1,38 @@
 package com.efficiencyx.junos
 
 import android.Manifest
+import android.app.Activity
 import android.content.ClipboardManager
 import android.content.Intent
 import android.content.pm.PackageManager
 import android.net.Uri
 import android.os.Build
 import android.os.Bundle
+import android.view.View
+import android.view.ViewGroup
+import android.webkit.MimeTypeMap
 import android.webkit.PermissionRequest
+import android.webkit.ValueCallback
 import android.webkit.WebChromeClient
 import android.webkit.WebResourceRequest
 import android.webkit.WebSettings
 import android.webkit.WebView
 import android.webkit.WebViewClient
 import androidx.activity.ComponentActivity
+import androidx.activity.compose.BackHandler
+import androidx.activity.compose.LocalActivity
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.compose.setContent
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.activity.viewModels
+import androidx.compose.foundation.background
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.safeDrawingPadding
+import androidx.compose.foundation.layout.size
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
@@ -31,12 +45,17 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.core.content.ContextCompat
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.efficiencyx.junos.colab.ColabKeepAliveService
+import com.efficiencyx.junos.colab.ColabSession
+import com.efficiencyx.junos.colab.ColabState
 import com.efficiencyx.junos.pairing.SessionMode
 import com.efficiencyx.junos.setup.SetupScreen
 import com.journeyapps.barcodescanner.ScanContract
@@ -52,12 +71,22 @@ class MainActivity : ComponentActivity() {
                 JunRoot(viewModel)
             }
         }
-        if (savedInstanceState == null) intent?.dataString?.let(viewModel::offerPairing)
+        if (savedInstanceState == null) intent?.let(::handle)
     }
 
     override fun onNewIntent(intent: Intent) {
         super.onNewIntent(intent)
-        intent.dataString?.let(viewModel::offerPairing)
+        handle(intent)
+    }
+
+    override fun onDestroy() {
+        (application as JunApplication).colab.release(this)
+        super.onDestroy()
+    }
+
+    private fun handle(intent: Intent) {
+        if (intent.action == ColabKeepAliveService.ACTION_SHOW) (application as JunApplication).colab.show()
+        else intent.dataString?.let(viewModel::offerPairing)
     }
 }
 
@@ -71,6 +100,9 @@ private fun JunRoot(viewModel: MainViewModel) {
         result.contents?.let(viewModel::offerPairing)
     }
     val context = LocalContext.current
+    val activity = LocalActivity.current
+    val colab = (context.applicationContext as JunApplication).colab
+    val colabState by colab.state.collectAsStateWithLifecycle()
     val notificationPermission = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) {}
     LaunchedEffect(Unit) {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
@@ -101,10 +133,14 @@ private fun JunRoot(viewModel: MainViewModel) {
                     val clip = context.getSystemService(ClipboardManager::class.java).primaryClip
                     viewModel.offerPairing(clip?.takeIf { it.itemCount > 0 }?.getItemAt(0)?.coerceToText(context)?.toString().orEmpty())
                 },
+                colabRunning = colabState.running,
+                onColab = { if (colabState.running) colab.show() else activity?.let(colab::start) },
+                onColabInBrowser = { colab.openInBrowser(context) },
                 onStart = viewModel::startApp,
                 onRetry = viewModel::refresh,
             )
         }
+        if (colabState.running && activity != null) ColabLayer(colab, colabState, activity)
         state.offer?.let { offer ->
             AlertDialog(
                 onDismissRequest = viewModel::dismissOffer,
@@ -126,6 +162,35 @@ private fun JunRoot(viewModel: MainViewModel) {
     }
 }
 
+// hidden, not removed: a detached or paused page is a dead session to colab.
+// no alpha(0f) either, the webview stops drawing and never comes back on show
+@Composable
+private fun ColabLayer(session: ColabSession, state: ColabState, activity: Activity) {
+    BackHandler(enabled = state.visible) { session.hide() }
+    Column(
+        if (state.visible) Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background).safeDrawingPadding()
+        else Modifier.size(1.dp),
+    ) {
+        if (state.visible) {
+            Row(Modifier.fillMaxWidth().padding(start = 16.dp), verticalAlignment = Alignment.CenterVertically) {
+                Text(
+                    state.attention
+                        ?: if (state.paired) "She's connected. Hide this, Colab keeps running."
+                        else "Runtime > Run all. She connects by herself at Step 3.",
+                    style = MaterialTheme.typography.bodySmall,
+                    modifier = Modifier.weight(1f),
+                )
+                TextButton(onClick = session::hide) { Text("Hide") }
+                TextButton(onClick = session::stop) { Text("Stop") }
+            }
+        }
+        AndroidView(
+            modifier = Modifier.fillMaxWidth().weight(1f),
+            factory = { session.view(activity) ?: View(it) },
+        )
+    }
+}
+
 @Composable
 private fun JunWebView(url: String) {
     var pendingAudioRequest by remember { mutableStateOf<PermissionRequest?>(null) }
@@ -135,11 +200,18 @@ private fun JunWebView(url: String) {
         }
         pendingAudioRequest = null
     }
+    var pendingFiles by remember { mutableStateOf<ValueCallback<Array<Uri>>?>(null) }
+    val filePicker = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
+        pendingFiles?.onReceiveValue(uri?.let { arrayOf(it) })
+        pendingFiles = null
+    }
 
     AndroidView(
         modifier = Modifier.fillMaxSize(),
         factory = { context ->
             WebView(context).apply {
+                // fillMaxSize isn't enough. WRAP_CONTENT (the default) makes every vh/dvh 0 and the shop sheet vanishes
+                layoutParams = ViewGroup.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT)
                 settings.javaScriptEnabled = true
                 settings.domStorageEnabled = true
                 settings.databaseEnabled = true
@@ -160,6 +232,13 @@ private fun JunWebView(url: String) {
                     }
                 }
                 webChromeClient = object : WebChromeClient() {
+                    override fun onShowFileChooser(view: WebView, callback: ValueCallback<Array<Uri>>, params: FileChooserParams): Boolean {
+                        pendingFiles?.onReceiveValue(null)
+                        pendingFiles = callback
+                        filePicker.launch(pickerMimeTypes(params.acceptTypes))
+                        return true
+                    }
+
                     override fun onPermissionRequest(request: PermissionRequest) {
                         val audioOnly = request.resources.contentEquals(arrayOf(PermissionRequest.RESOURCE_AUDIO_CAPTURE))
                         if (!audioOnly) return request.deny()
@@ -175,4 +254,13 @@ private fun JunWebView(url: String) {
             }
         },
     )
+}
+
+// file managers hand out zips as octet-stream half the time
+private fun pickerMimeTypes(accept: Array<String>): Array<String> {
+    val types = accept.flatMap { it.split(',') }.map { it.trim().lowercase() }.filter { it.isNotEmpty() }.map { type ->
+        if (type.startsWith('.')) MimeTypeMap.getSingleton().getMimeTypeFromExtension(type.drop(1)) ?: return arrayOf("*/*") else type
+    }
+    if (types.isEmpty()) return arrayOf("*/*")
+    return (types + if ("application/zip" in types) listOf("application/x-zip-compressed", "application/octet-stream") else emptyList()).distinct().toTypedArray()
 }

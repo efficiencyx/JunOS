@@ -245,7 +245,15 @@ network and nothing else. In Cloud mode it sends every prompt to the notebook's
 `*.trycloudflare.com` URL, with the same contents and the same gate as the PC
 case above, and the picker says so next to the option. Chats, memory and the
 database stay on the phone in every mode. A pairing only ever comes from a code
-you confirm in the app, deep links from a web page included.
+you confirm in the app, deep links from a web page included. The one exception
+is **Start Colab session**: the app opens Colab in its own WebView, and Step 3
+hands the link over through a `window.junos` bridge that only exists in frames
+from `colab.research.google.com` and `*.googleusercontent.com`, inside that one
+WebView. Only a `mode=cloud` link is accepted, and it pairs without a dialog
+because you started the session. Your Google sign-in happens in that WebView,
+which hides its WebView markers (user agent, `X-Requested-With`) because
+Google's login page refuses WebViews. The app never reads the page beyond the
+bridge messages, and the cookies stay in the app's own WebView storage.
 
 **Never:** there is no analytics, no crash reporting, no usage ping, no
 automatic update, and nothing reports back to this project. The update checker

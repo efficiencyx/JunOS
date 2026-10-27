@@ -211,6 +211,29 @@ class SetupCoordinator(
         mutableState.value = mutableState.value.copy(ready = true, serverUrl = url)
     }
 
+    // the colab page already saved it, no dialog: the user started that session from here
+    suspend fun autoPair(pairing: Pairing, server: LocalServer) {
+        mode = SessionMode.CLOUD
+        val current = mutableState.value
+        if (!current.ready) {
+            if (current.phase != SetupPhase.PICK) return
+            refresh()
+            startApp(server)
+            return
+        }
+        if (pairings.lastMode != SessionMode.CLOUD) return
+        val engine = RemoteEngine(pairing, pairings)
+        try {
+            engine.ensureLoaded()
+        } catch (error: Throwable) {
+            Log.w(TAG, "new colab link unreachable", error)
+            engine.close()
+            return
+        }
+        app.useEngine(engine)
+        mutableState.value = mutableState.value.copy(cloud = pairing)
+    }
+
     fun close() { scope.cancel() }
 
     companion object {

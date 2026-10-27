@@ -15,7 +15,12 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     private val coordinator = SetupCoordinator(app, app.modelStore, app.assetRecovery)
     val state: StateFlow<SetupState> = coordinator.state
 
-    init { refresh() }
+    init {
+        refresh()
+        viewModelScope.launch {
+            app.colab.pairings.collect { coordinator.autoPair(it, app.localServer) }
+        }
+    }
 
     fun refresh() = coordinator.refresh()
     fun acceptConsent() = coordinator.acceptConsent()

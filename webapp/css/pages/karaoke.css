@@ -94,7 +94,7 @@ html body:has(#karaokeOverlay[data-view="stage"]) #stage { right: 0; }
   .music-room { right: 0; bottom: var(--karaoke-sheet); }
   :root { --room-h: calc(100% - var(--karaoke-sheet)); }
   html #stage, html.phone-ui #stage { right: 0; }
-  .room-session { bottom: 10px; font-size: 11px; letter-spacing: .1em; }
+  .room-session { bottom: calc(var(--karaoke-sheet) + 10px); width: 100%; font-size: 11px; letter-spacing: .1em; }
   .karaoke-page-status { top: auto; bottom: 20%; left: 18px; right: 18px; width: auto; }
   html #karaokeOverlay { inset: auto 8px max(12px, env(safe-area-inset-bottom)) 8px; width: auto; height: calc(var(--karaoke-sheet) - 12px); }
   .karaoke-menu-body, .karaoke-assign-body { padding: 16px; gap: 14px; }
