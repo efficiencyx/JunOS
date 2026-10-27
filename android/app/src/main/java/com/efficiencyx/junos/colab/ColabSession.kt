@@ -66,6 +66,7 @@ class ColabSession(private val app: JunApplication) {
     }
 
     fun hide() {
+        webView?.clearFocus()
         mutableState.value = mutableState.value.copy(visible = false)
     }
 

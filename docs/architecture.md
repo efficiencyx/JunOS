@@ -11,14 +11,14 @@ This document is the long-form reference for the system. For a quick orientation
                           │  Docker network: omega                          │
                           │                                                 │
   ┌──────────┐  HTTP/SSE  │  ┌─────────┐  FastCGI  ┌──────────┐             │
-  │          │ ────────── │─▶│  nginx  │ ─────────▶│ php-fpm  │             │
+  │          │ ───────────│▶│  nginx  │ ────────▶│ php-fpm  │             │
   │ Browser  │            │  │ :80/443 │           │   :9000  │             │
-  │          │◀────────── │──│         │           └────┬─────┘             │
-  └──────────┘            │  │  static │                 │  HTTP            │
-                          │  │  files  │                 ├──────────────── ▶│ ollama :11434  (profile=ollama)
-                          │  └─────────┘                 ├──────────────── ▶│ llamacpp :8080 (profile=llamacpp)
-                          │                              ├──────────────── ▶│ tts :8001      (profile=voice)
-                          │                              └──────────────── ▶│ karaoke :8001  (profile=karaoke)
+  │          │◀──────────│──│         │           └────┬─────┘             │
+  └──────────┘            │  │  static │                │  HTTP             │
+                          │  │  files  │                ├─────────────────▶│ ollama :11434  (profile=ollama)
+                          │  └─────────┘                ├─────────────────▶│ llamacpp :8080 (profile=llamacpp)
+                          │                             ├─────────────────▶│ tts :8001      (profile=voice)
+                          │                             └─────────────────▶│ karaoke :8001  (profile=karaoke)
                           └─────────────────────────────────────────────────┘
 
   Volumes: ollama_data, llamacpp_cache, tts_cache, karaoke_cache, omega_state, letsencrypt, certbot_webroot, selfsigned
@@ -735,7 +735,7 @@ Thinking comes back as `TurnEvent.Thought` and goes to the page as the same `thi
 **Colab from the phone.** Cloud's **Start Colab session** (`colab/ColabSession.kt`) opens `colab.ipynb` in a WebView owned by `JunApplication`, not by the activity, built on a `MutableContextWrapper` whose base flips between the activity and the application context, so the page outlives activity restarts. The phone-in-a-browser setup this replaces died the moment the browser got backgrounded and frozen: Colab treats a gone frontend as idle and ends the runtime.
 - **Sign-in.** Google's login refuses anything it can tell is a WebView, so the page drops `; wv` and `Version/4.0` from the user agent and sends no `X-Requested-With` (`setRequestedWithHeaderOriginAllowList` with an empty set, androidx.webkit). Third-party cookies are on, popups load in place, and only `google.com`, `googleusercontent.com`, `gstatic.com`, `youtube.com` and Google's country domains load in the page (sign-in ends with a hop through `accounts.youtube.com`, and sending that out handed the login to the YouTube app), everything else goes to the system browser. If Google catches on anyway, **Google won't sign me in here** opens the same URL in the real browser and the old scan/paste flow takes over.
 - **Bridge.** `WebViewCompat.addWebMessageListener` puts `window.junos` into frames from `colab.research.google.com` and `*.googleusercontent.com`, the second being where Colab renders cell output. Step 1 checks for it with `eval_js` and turns on inference-only (`PHONE`) without touching `Mode`. Step 3 posts the `junos://pair` link through it. The app only takes a link that passes `Pairing.parse` with `mode=cloud`, saves it with no dialog (the user started this session), hides the page and runs the normal Cloud start. A re-run of Step 3 while she's up swaps in a fresh `RemoteEngine`. A document-start script on the Colab frame reads the page text every 15 s for "are you still there" and "runtime disconnected" and posts those too. That's best effort, Colab's dialogs have no stable ids.
-- **Keepalive.** `colab/ColabKeepAliveService.kt` is a `specialUse` foreground service, since Android 15 caps `dataSync` at 6 h a day and free Colab runs up to 12. It holds a partial wake lock capped at 12 h, and its notification has Show and Stop. Hidden means a 1 dp view that stays attached and drawn, never `onPause`/`pauseTimers` and never `alpha(0f)` (the WebView stops drawing under it and stays frozen on its last frame once shown again), with `RENDERER_PRIORITY_IMPORTANT` kept while invisible. The still-there and disconnect messages raise a high-importance notification that opens the page. Nothing clicks anything for the user.
+- **Keepalive.** `colab/ColabKeepAliveService.kt` is a `specialUse` foreground service, since Android 15 caps `dataSync` at 6 h a day and free Colab runs up to 12. It holds a partial wake lock capped at 12 h, and its notification has Show and Stop. Hidden means full size under her page (a lower `zIndex`, her layer is opaque and eats taps), attached and drawn, never `onPause`/`pauseTimers`, never `alpha(0f)` (the WebView stops drawing and stays frozen on its last frame once shown again) and never resized (1 dp to full screen froze the whole window), with `RENDERER_PRIORITY_IMPORTANT` kept while invisible. Hide drops the WebView's focus so the keyboard doesn't stay on Colab. The still-there and disconnect messages raise a high-importance notification that opens the page. Nothing clicks anything for the user.
 
 A failed probe keeps the picker up with a reason: `lan_unreachable`, `cloud_unreachable` (a notebook run that ended, its URL and key die with it), `unauthorized` (a changed token), `lan_mode_off` (404 from `model.php`), `ca_changed` and `certificate_mismatch`. A connection that drops mid-reply ends that turn with `connection_lost`. Windows serves `php -S` single-worker, so a phone in LAN mode and the desktop page take turns there as they already do for the browser.
 
