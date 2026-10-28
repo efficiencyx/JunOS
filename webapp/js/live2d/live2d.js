@@ -3,16 +3,16 @@
 // builds a second copy of the module graph, and the two copies
 // don't share state.
 
-import { playSequence, releaseAll, resetIdle, renderIfDirty, setFidgetsEnabled, setMood, setMouthOverride, startIdle, stopIdle, tick } from './anim.js?v=80';
+import { playSequence, releaseAll, resetIdle, renderIfDirty, setFidgetsEnabled, setMood, setMouthOverride, startIdle, stopIdle, tick } from './anim.js?v=82';
 import { bakeThumb } from './bake.js?v=2';
-import { cameraStates, captureCameraState, currentCameraMode, fitModel, loadPos, measureStage, rendererResolution, setCameraPreset as setRigCameraPreset, watchStageSize, writeCameraStates } from './camera.js?v=76';
-import { drawableAt, faceAnchor, findDrawables, hitTest, isOverModel } from './geometry.js?v=78';
-import { installStageInput } from './input.js?v=7';
-import { mountPlaceholder, setPlaceholderPreset } from './placeholder.js?v=5';
+import { cameraStates, captureCameraState, currentCameraMode, fitModel, loadPos, measureStage, rendererResolution, setCameraPreset as setRigCameraPreset, watchStageSize, writeCameraStates } from './camera.js?v=78';
+import { drawableAt, faceAnchor, findDrawables, hitTest, isOverModel } from './geometry.js?v=80';
+import { installStageInput } from './input.js?v=9';
+import { mountPlaceholder } from './placeholder.js?v=7';
 import { cancelPending, debugParam, hold, knows, scheduleSequence, setNow, setOnMissingParam, setTarget, startLoop, stopAllLoops, stopLoop } from './params.js?v=4';
 import { installColorShaderPatch, patchRenderer } from './renderer.js?v=2';
 import { S, app, currentValues, model, paramDefault, paramIndex, paramMax, paramMin, publicTint, raw, setApp, setModel, setParamRanges, setRaw } from './state.js?v=75';
-import { drawableThumb, getDrawableTint, installVariantCompositor, listDrawables, opacityByPattern, screenByPattern, setDrawableOpacity, setDrawableOrderBelow, setDrawableScreen, setDrawableTexture, setDrawableTextures, setDrawableTint, texturesSettled, tintByPattern } from './textures.js?v=78';
+import { drawableThumb, getDrawableTint, installVariantCompositor, listDrawables, opacityByPattern, screenByPattern, setDrawableOpacity, setDrawableOrderBelow, setDrawableScreen, setDrawableTexture, setDrawableTextures, setDrawableTint, texturesSettled, tintByPattern } from './textures.js?v=80';
 
 export {
   bakeThumb, cancelPending, debugParam, drawableAt, drawableThumb, faceAnchor, findDrawables, fitModel,
@@ -37,8 +37,7 @@ function getRaw(m) {
 export function hasModel() { return !!model; }
 
 export function setCameraPreset(preset) {
-  if (model) setRigCameraPreset(preset);
-  else setPlaceholderPreset(preset);
+  setRigCameraPreset(preset);
 }
 
 // anything but a clear "no" means try the real rig, so a probe
@@ -78,7 +77,9 @@ export async function init({ stageEl, onStatus, ignoreSavedPos }) {
     // empty maps, not null. every setTarget/startLoop then just
     // says no and the rest of the page never has to know
     setParamRanges(new Map(), new Map(), new Map(), new Map());
+    loadPos();
     mountPlaceholder(stageEl);
+    installStageInput();
     onStatus('Live2D assets not installed, placeholder art');
     return { paramIds: [], placeholder: true };
   }

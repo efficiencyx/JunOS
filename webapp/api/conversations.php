@@ -162,11 +162,13 @@ switch ($action) {
         require_method('POST');
         $id = conversation_id();
         require_owned($id, $userId);
-        $db->prepare(
-            "DELETE FROM messages WHERE id = (
-               SELECT id FROM messages WHERE conversation_id=? AND role='assistant'
-               ORDER BY id DESC LIMIT 1)"
-        )->execute([$id]);
+        $st = $db->prepare("SELECT id FROM messages WHERE conversation_id=? AND role='assistant' ORDER BY id DESC LIMIT 1");
+        $st->execute([$id]);
+        $msgId = (int)$st->fetchColumn();
+        if ($msgId) {
+            $db->prepare('UPDATE reply_ratings SET message_id=NULL WHERE message_id=?')->execute([$msgId]);
+            $db->prepare('DELETE FROM messages WHERE id=?')->execute([$msgId]);
+        }
         json_out(['ok' => true]);
 
     case 'compact':

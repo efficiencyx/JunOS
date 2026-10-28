@@ -1,31 +1,33 @@
-import { IDLE_AFTER_REPLY_MS, TYPING_POLL_MS, consolidating, reportActivity, resetIdleNudge, runPassNow, scheduleIdleNudge, showConsolidatingBubble, syncConsolidationStatus } from './consolidation.js?v=104';
+import { IDLE_AFTER_REPLY_MS, TYPING_POLL_MS, consolidating, reportActivity, resetIdleNudge, runPassNow, scheduleIdleNudge, showConsolidatingBubble, syncConsolidationStatus } from './consolidation.js?v=111';
 import { chatInput, devNoIdleChk, missingParamsEl, modelSelect, narrowSidebarQuery, reasoningSelect, sendBtn, siteVolumeInput, stageEl, thinkChk } from './dom.js?v=77';
-import { faceBubble, hideFaceBubble, latestAssistantReply, restartFaceBubbleHide, scheduleFaceBubblePosition, setLatestAssistantReply } from './face-bubble.js?v=85';
+import { faceBubble, hideFaceBubble, latestAssistantReply, restartFaceBubbleHide, scheduleFaceBubblePosition, setLatestAssistantReply } from './face-bubble.js?v=87';
 import { logAction, logMissing, setStageStatus } from './logging.js?v=78';
-import { loadMood } from './mood.js?v=85';
-import { applyRoleGates, setSiteVolume, syncThinkToggle, updateSiteVolumeLabel, wireNameSettings } from './settings.js?v=106';
-import { loadConversation, refreshSidebar, setSidebarOpen } from './sidebar.js?v=104';
+import { loadMood } from './mood.js?v=87';
+import { applyRoleGates, setSiteVolume, syncThinkToggle, updateSiteVolumeLabel, wireNameSettings } from './settings.js?v=114';
+import { loadConversation, refreshSidebar, setSidebarOpen } from './sidebar.js?v=111';
 import { escapeHtml, mealNow } from '../core/util.js?v=1';
-import { wireTts } from './wire-tts.js?v=106';
-import { wireVoice } from './wire-voice.js?v=106';
-import { WELCOME_TIERS, fetchWelcome, playWelcome, previewWelcome } from './welcome.js?v=91';
+import { wireTts } from './wire-tts.js?v=113';
+import { wireVoice } from './wire-voice.js?v=114';
+import { WELCOME_TIERS, fetchWelcome, playWelcome, previewWelcome } from './welcome.js?v=93';
 import * as Names from '../core/names.js?v=1';
+import * as AwayNotify from './away-notify.js?v=4';
 import * as Prefs from '../core/prefs.js?v=6';
 import * as ui from '../core/ui.js?v=1';
-import * as ChatAPI from '../core/chat-api.js?v=4';
+import * as ChatAPI from '../core/chat-api.js?v=5';
 import * as MobileViewport from '../core/viewport.js?v=1';
-import * as Actions from '../live2d/actions.js?v=87';
-import * as Live2D from '../live2d/live2d.js?v=84';
-import * as ModelTouch from '../live2d/touch.js?v=87';
-import * as Outfit from '../outfit/outfit.js?v=87';
-import { playIntro } from '../wardrobe/reactions.js?v=82';
-import * as BootFX from './boot-fx.js?v=1';
-import * as Cards from './cards.js?v=26';
+import * as Actions from '../live2d/actions.js?v=89';
+import * as Live2D from '../live2d/live2d.js?v=86';
+import * as ModelTouch from '../live2d/touch.js?v=89';
+import * as Outfit from '../outfit/outfit.js?v=89';
+import { playIntro } from '../wardrobe/reactions.js?v=84';
+import * as BootFX from './boot-fx.js?v=2';
+import * as Cards from './cards.js?v=28';
 import * as History from './history.js?v=2';
 import { startSkybox } from '../trip/skybox.js?v=2';
 import * as TripLoader from '../trip/trip-loader.js?v=1';
 import { DevHud, abortFn, currentConversationId, setDevHud } from './session.js?v=1';
-import { rerenderBubbleStream, sendMessage, sendTouchEvent } from './chat.js?v=32';
+import { rerenderBubbleStream, sendMessage, sendTouchEvent } from './chat.js?v=39';
+import { setComposerText } from './composer.js?v=3';
 import * as Achievements from '../achievements/achievements.js?v=8';
 
 // the one app global left, on purpose. it's a console handle,
@@ -98,7 +100,7 @@ if (appMain && localStorage.getItem('sidebar.collapsed') === '1') {
 
 document.querySelectorAll('.chip[data-prompt]').forEach(chip => {
   chip.addEventListener('click', () => {
-    chatInput.value = chip.dataset.prompt;
+    setComposerText(chip.dataset.prompt);
     chatInput.focus();
   });
 });
@@ -112,6 +114,22 @@ function showBoot() {
     bo.setAttribute('aria-hidden', 'false');
   }
   BootFX.start();
+  runBootChecks();
+}
+
+// the model row is waitForProvider's, it keeps retrying. auth.php
+// already answered from the db, so that row is OK by definition
+async function runBootChecks() {
+  BootFX.setCheck('db', true);
+  let h = null;
+  try {
+    const r = await fetch('api/health.php', { credentials: 'same-origin' });
+    if (r.ok) h = await r.json();
+  } catch (e) {}
+  if (h?.provider) BootFX.setCheck('provider', null, 'link neural-core · ' + h.provider);
+  BootFX.setCheck('rig', !!h?.rig);
+  BootFX.setCheck('voice', !!h?.voice);
+  BootFX.setCheck('lore', !!h?.lore);
 }
 
 export async function boot(me) {
@@ -124,7 +142,7 @@ export async function boot(me) {
     .then(r => r.ok ? r.json() : null).catch(() => null);
 
   // devhud.js owns Ctrl+Shift+D, so only admins get that module
-  if (currentUser?.role === 'admin') setDevHud(await import('./devhud.js?v=86'));
+  if (currentUser?.role === 'admin') setDevHud(await import('./devhud.js?v=92'));
   startSkybox();
   // marked is a global and app.js's loadScripts only brings it in
   // side by side with this module. at module scope it's not there
@@ -166,6 +184,7 @@ export async function boot(me) {
   Names.load();
   Names.decorate();
   wireNameSettings();
+  AwayNotify.init();
 
   const storedVolume = parseFloat(localStorage.getItem('audio.volume') || '1');
   const siteVolume = setSiteVolume(storedVolume);
@@ -273,6 +292,15 @@ export async function boot(me) {
     BootFX.finish(hide);
   };
 
+  // 502 upstream_unavailable = php is fine, the model server isn't
+  const providerHint = (e, attempt) => {
+    const down = /http 502/.test(e.message);
+    if (attempt < 8) return (down ? 'model server not answering' : e.message) + ' - retrying…';
+    return down
+      ? 'the model server is down or still loading. check `./start.sh logs` (JunOS.exe > Logs on Windows) - retrying…'
+      : e.message + ' - is php running? retrying…';
+  };
+
   async function waitForProvider() {
     let attempt = 0;
     const bot = Names.getBot();
@@ -286,13 +314,18 @@ export async function boot(me) {
       attempt++;
       try {
         const m = await ChatAPI.listModels();
-        if (m && m.models && m.models.length) return m;
+        if (m && m.models && m.models.length) {
+          BootFX.setCheck('provider', true, 'link neural-core · ' + m.provider);
+          return m;
+        }
+        BootFX.setCheck('provider', false);
         setBoot('Pulling models', m && m.provider && m.provider !== 'ollama'
           ? 'No models reported by the provider yet - still booting?'
           : 'No models installed yet - `ollama pull <model>`', 'err');
       } catch (e) {
+        BootFX.setCheck('provider', false);
         const phase = phases[Math.min(attempt - 1, phases.length - 1)];
-        setBoot(phase, bot + ' is still sleeping - retrying…', 'err');
+        setBoot(phase, providerHint(e, attempt), 'err');
       }
       await new Promise(r => setTimeout(r, Math.min(1000 + attempt * 250, 3000)));
     }
@@ -326,11 +359,13 @@ export async function boot(me) {
   if (picked) modelSelect.value = picked;
   dismissBoot();
 
-  // the phone build's LocalServer.kt has no achievements.php, every
-  // call there is a 404. no button, no counting
+  // the phone build's LocalServer.kt has no achievements.php or
+  // ratings.php, every call there is a 404. no buttons, no counting
   const achievementsBtn = document.getElementById('achievementsBtn');
   if (m.provider === 'litertlm-android') {
+    document.documentElement.classList.add('android-app');
     if (achievementsBtn) achievementsBtn.style.display = 'none';
+    AwayNotify.initNative(ui.toast);
   } else {
     achievementsBtn?.addEventListener('click', () => setSidebarOpen(false));
     Achievements.wire(achievementsBtn);

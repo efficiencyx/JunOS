@@ -1,24 +1,26 @@
-import { armIdleAfterReply, cancelActiveIdleNudge, cancelAutoReset, cancelIdleNudge, composerPlaceholder, consolidating, fleeActive, reportActivity, resetIdleNudge, scheduleAutoReset, setCancelActiveIdleNudge, setConsolidating, showConsolidatingBubble, startFleeLock, syncConsolidationStatus } from './consolidation.js?v=104';
+import { armIdleAfterReply, cancelActiveIdleNudge, cancelAutoReset, cancelIdleNudge, composerPlaceholder, consolidating, fleeActive, reportActivity, resetIdleNudge, scheduleAutoReset, setCancelActiveIdleNudge, setConsolidating, showConsolidatingBubble, startFleeLock, syncConsolidationStatus } from './consolidation.js?v=111';
 import { chatInput, messagesEl, modelSelect, reasoningSelect, sendBtn, sendButtonIdleMarkup, sendButtonStopMarkup, thinkChk } from './dom.js?v=77';
-import { announceMobileReply, hideFaceBubble, scheduleFaceBubbleHide, setLatestAssistantReply, showFaceBubble } from './face-bubble.js?v=85';
+import { announceMobileReply, hideFaceBubble, scheduleFaceBubbleHide, setLatestAssistantReply, showFaceBubble } from './face-bubble.js?v=87';
 import { appendDebugReply, appendDebugThinking, beginDebugTurn, logToolStatus, setDebugPrompt } from './logging.js?v=78';
-import { loadMood } from './mood.js?v=85';
-import { refreshSidebar } from './sidebar.js?v=104';
-import { makeNameFilter, makeStreamBuffer } from './stream-filters.js?v=90';
+import { loadMood } from './mood.js?v=87';
+import { refreshSidebar } from './sidebar.js?v=111';
+import { makeNameFilter, makeStreamBuffer } from './stream-filters.js?v=92';
 import { localTimeString, phoneMode } from '../core/util.js?v=1';
 import * as Names from '../core/names.js?v=1';
 import * as ui from '../core/ui.js?v=1';
-import * as ChatAPI from '../core/chat-api.js?v=4';
-import * as Mods from '../mods/mods.js?v=88';
-import * as Outfit from '../outfit/outfit.js?v=87';
-import * as Cards from './cards.js?v=26';
+import { apiJson } from '../core/api.js?v=1';
+import * as ChatAPI from '../core/chat-api.js?v=5';
+import * as Mods from '../mods/mods.js?v=90';
+import * as Outfit from '../outfit/outfit.js?v=89';
+import * as Cards from './cards.js?v=28';
 import * as Achievements from '../achievements/achievements.js?v=8';
 import * as History from './history.js?v=2';
-import * as TTS from '../voice/tts.js?v=84';
-import * as Voice from '../voice/voice.js?v=84';
-import * as VoiceMode from '../voice/voicemode.js?v=83';
+import * as TTS from '../voice/tts.js?v=86';
+import * as Voice from '../voice/voice.js?v=86';
+import * as VoiceMode from '../voice/voicemode.js?v=85';
 import { DevHud, abortFn, currentConversationId, messages, setAbortFn, setRenderVoiceDraft, setStopActiveStream, stopActiveStream } from './session.js?v=1';
-import { appendMsg, renderMarkdown, updateEmptyState } from './messages.js?v=12';
+import { appendMsg, followLatest, renderMarkdown, updateEmptyState } from './messages.js?v=16';
+import { setComposerText } from './composer.js?v=3';
 
 const THUMBS_UP_ICON = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M14 9V5a3 3 0 0 0-3-3l-4 9v11h11.28a2 2 0 0 0 2-1.7l1.38-9a2 2 0 0 0-2-2.3zM7 22H4a2 2 0 0 1-2-2v-7a2 2 0 0 1 2-2h3"/></svg>';
 const THUMBS_DOWN_ICON = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M10 15v4a3 3 0 0 0 3 3l4-9V2H5.72a2 2 0 0 0-2 1.7l-1.38 9a2 2 0 0 0 2 2.3zm7-13h2.67A2.31 2.31 0 0 1 22 4v7a2.31 2.31 0 0 1-2.33 2H17"/></svg>';
@@ -32,63 +34,77 @@ function setSpokenText(bubble, text) {
   bubble.append(text);
 }
 
-function addRatingControls(message) {
-  document.querySelectorAll('.msg-rate button').forEach(button => { button.disabled = true; });
-  const rate = document.createElement('div');
-  rate.className = 'msg-rate';
-  const up = document.createElement('button');
-  const down = document.createElement('button');
-  up.type = down.type = 'button';
-  up.innerHTML = THUMBS_UP_ICON;
-  down.innerHTML = THUMBS_DOWN_ICON;
-  up.setAttribute('aria-label', 'Rate this reply positively');
-  down.setAttribute('aria-label', 'Rate this reply negatively');
-  rate.append(up, down);
-  message.appendChild(rate);
-  requestAnimationFrame(() => rate.classList.add('shown'));
+const REGENERATE_ICON = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="1 4 1 10 7 10"/><path d="M3.51 15a9 9 0 1 0 2.13-9.36L1 10"/></svg>';
 
-  let rateTimer;
-  const fadeOutRate = () => {
-    clearTimeout(rateTimer);
-    if (!message.isConnected || !rate.isConnected || rate.classList.contains('hiding')) return;
-    rate.classList.add('hiding');
-    let removed = false;
-    const removeRate = event => {
-      if (event && event.target !== rate) return;
-      if (removed) return;
-      removed = true;
-      rate.remove();
-      rate.removeEventListener('transitionend', removeRate);
-    };
-    rate.addEventListener('transitionend', removeRate);
-    setTimeout(removeRate, 250);
-  };
-  rateTimer = setTimeout(fadeOutRate, 5000);
+function actionButton(icon, label, cls) {
+  const b = document.createElement('button');
+  b.type = 'button';
+  b.className = cls;
+  b.innerHTML = icon;
+  b.title = label;
+  b.setAttribute('aria-label', label);
+  return b;
+}
 
-  up.addEventListener('click', () => {
-    if (abortFn) return;
-    up.classList.add('selected');
-    up.disabled = down.disabled = true;
-    clearTimeout(rateTimer);
-    fadeOutRate();
-  });
-  down.addEventListener('click', async () => {
-    if (abortFn) return;
-    up.disabled = down.disabled = true;
-    clearTimeout(rateTimer);
-    message.remove();
-    if (messages[messages.length - 1]?.role === 'assistant') messages.pop();
-    if (currentConversationId != null) {
-      try {
-        await fetch(`api/conversations.php?action=delete_last_assistant&id=${encodeURIComponent(currentConversationId)}`, {
-          method: 'POST',
-          credentials: 'same-origin',
-        });
-      } catch {}
+// only her latest reply gets these, regenerate and the rating
+// both act on the newest assistant row server side
+// a reply loaded from history doesn't know its model, the export
+// says null then rather than whatever the picker shows now
+export function addReplyActions(message, model = null) {
+  document.querySelectorAll('.msg-actions').forEach(el => el.remove());
+  const row = document.createElement('div');
+  row.className = 'msg-actions';
+  const regen = actionButton(REGENERATE_ICON, 'Regenerate', 'msg-regen');
+  const up = actionButton(THUMBS_UP_ICON, 'Good reply', 'msg-rate-btn');
+  const down = actionButton(THUMBS_DOWN_ICON, 'Bad reply', 'msg-rate-btn');
+  row.append(regen, up, down);
+  message.appendChild(row);
+
+  const rate = async (value, btn) => {
+    if (abortFn || currentConversationId == null) return;
+    const next = btn.classList.contains('selected') ? 0 : value;
+    up.classList.toggle('selected', next === 1);
+    down.classList.toggle('selected', next === -1);
+    try {
+      const r = await apiJson('ratings.php?action=rate', { conversation_id: currentConversationId, rating: next, model });
+      if (!r.ok) throw new Error('http ' + r.status);
+    } catch (e) {
+      up.classList.remove('selected');
+      down.classList.remove('selected');
+      ui.toast('⚠ Rating not saved.', 'error');
     }
-    updateEmptyState();
-    runChat({ idle: false });
-  });
+  };
+  if (model == null && currentConversationId != null && !document.documentElement.classList.contains('android-app')) {
+    const id = currentConversationId;
+    fetch(`api/ratings.php?action=get&conversation_id=${encodeURIComponent(id)}`, { credentials: 'same-origin' })
+      .then(r => (r.ok ? r.json() : null))
+      .then(d => {
+        if (!d || id !== currentConversationId || !row.isConnected) return;
+        up.classList.toggle('selected', d.rating === 1);
+        down.classList.toggle('selected', d.rating === -1);
+      })
+      .catch(() => {});
+  }
+  up.addEventListener('click', () => rate(1, up));
+  down.addEventListener('click', () => rate(-1, down));
+  regen.addEventListener('click', () => regenerate(message));
+}
+
+async function regenerate(message) {
+  if (abortFn || fleeActive() || consolidating) return;
+  if (messages[messages.length - 1]?.role !== 'assistant') return;
+  message.remove();
+  messages.pop();
+  if (currentConversationId != null) {
+    try {
+      await fetch(`api/conversations.php?action=delete_last_assistant&id=${encodeURIComponent(currentConversationId)}`, {
+        method: 'POST',
+        credentials: 'same-origin',
+      });
+    } catch {}
+  }
+  updateEmptyState();
+  runChat({ idle: false, regenerate: true });
 }
 
 // the button handler passes the click event here, so anything
@@ -112,7 +128,7 @@ export function sendMessage(opts) {
   }
   resetIdleNudge();
   reportActivity();
-  chatInput.value = '';
+  setComposerText('');
   const bubble = appendMsg('user', text);
   const entry = { role: 'user', content: Names.canonicalize(text) };
   messages.push(entry);
@@ -203,12 +219,13 @@ function leaveFor(where) {
   tick();
 }
 
-export function runChat({ idle, ephemeral, audio, voice, invite = '', onOverheard, onAudioUnsupported, onReply }) {
+export function runChat({ idle, ephemeral, audio, voice, invite = '', regenerate = false, onOverheard, onAudioUnsupported, onReply }) {
   if (abortFn) return;
   cancelIdleNudge();
   cancelAutoReset();
   const generation = ++chatGeneration;
   const isCurrent = () => generation === chatGeneration;
+  document.querySelectorAll('.msg-actions').forEach(el => el.remove());
 
   const draft = appendMsg('assistant', '');
   if (ephemeral) {
@@ -237,7 +254,7 @@ export function runChat({ idle, ephemeral, audio, voice, invite = '', onOverhear
     }
     thinking += t;
     thinkBody.textContent = thinking;
-    messagesEl.scrollTop = messagesEl.scrollHeight;
+    followLatest();
   }
   let thinkSettled = false;
   function settleThinking() {
@@ -271,7 +288,7 @@ export function runChat({ idle, ephemeral, audio, voice, invite = '', onOverhear
     if (!VoiceMode.isActive()) {
       body.innerHTML = renderMarkdown(shown);
       body.appendChild(typing);
-      messagesEl.scrollTop = messagesEl.scrollHeight;
+      followLatest();
     }
     renderBubble();
     TTS.feed(sub);
@@ -280,7 +297,7 @@ export function runChat({ idle, ephemeral, audio, voice, invite = '', onOverhear
   setRenderVoiceDraft(() => {
     body.innerHTML = renderMarkdown(shown);
     if (abortFn) body.appendChild(typing);
-    messagesEl.scrollTop = messagesEl.scrollHeight;
+    followLatest();
   });
   const keepText = (clean) => {
     visible += clean;
@@ -338,14 +355,15 @@ export function runChat({ idle, ephemeral, audio, voice, invite = '', onOverhear
     TTS.warmLang(predicted);
   }
 
+  const model = modelSelect.value;
   setAbortFn(ChatAPI.chat(
-    { messages: [...messages], model: modelSelect.value,
+    { messages: [...messages], model,
       reasoning: reasoningSelect.value, think: thinkChk.checked,
       outfit_context: Outfit.describe(),
       mod_items: Mods.itemNames(),
       conversation_id: currentConversationId,
       idle: !!idle, ephemeral: !!ephemeral, client_time: localTimeString(),
-      audio, voice: !!voice, invite, tts: TTS.isEnabled(),
+      audio, voice: !!voice, invite, regenerate, tts: TTS.isEnabled(),
       hear_all: !!Voice.hearAll() },
     {
       onDebug: (dbg) => {
@@ -436,7 +454,7 @@ export function runChat({ idle, ephemeral, audio, voice, invite = '', onOverhear
           if (!overheard) messages.push({ role: 'assistant', content: '...' });
         } else if (visible.trim()) {
           messages.push({ role: 'assistant', content: visible });
-          if (!ephemeral) addRatingControls(draft);
+          if (!ephemeral) addReplyActions(draft, model);
         } else draft.remove();
         finalize();
         ui.setStatus('idle', 'idle');

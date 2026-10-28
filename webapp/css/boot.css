@@ -212,6 +212,16 @@ html, body {
   background: rgba(123,216,143,.12);
   transition: opacity .25s ease;
 }
+.boot-ok[data-state="pending"] {
+  color: var(--term-dim);
+  border-color: var(--border-2);
+  background: transparent;
+}
+.boot-ok[data-state="ko"] {
+  color: var(--danger);
+  border-color: rgba(255,138,138,.36);
+  background: rgba(255,138,138,.12);
+}
 .boot-term.typing .boot-ok          { opacity: 0; }
 .boot-term.typing .boot-log li.done .boot-ok { opacity: 1; }
 

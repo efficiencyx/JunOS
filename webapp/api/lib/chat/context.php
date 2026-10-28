@@ -237,10 +237,12 @@ function chat_live_context(array $req, array $user, string $lastUserMsg, string 
             . "before replying. Otherwise ignore this.";
     }
     if ($approvedWebSearchQuery !== null) {
-        $contextParts[] = "## Approved public web search\n"
-            . "Anon explicitly approved one outbound search for exactly this JSON string: "
+        $contextParts[] = "## Approved web lookup\n"
+            . "Anon asked you to look this up: "
             . json_encode($approvedWebSearchQuery, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES) . "\n"
-            . "Call web_search with that exact query. Do not add private context, memory, or other terms.";
+            . (web_is_url($approvedWebSearchQuery) ? "It is a link: your first web_search call reads that page. " : "Your first web_search call searches exactly that. ")
+            . "If it isn't enough, you may call web_search up to two more times with related queries of your own. "
+            . "Never put his name, places, numbers or anything from your memories of him in a query.";
     }
 
 

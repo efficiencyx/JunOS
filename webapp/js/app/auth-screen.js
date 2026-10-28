@@ -106,6 +106,16 @@ function showRecoveryCode(code) {
   authRecoveryCode.hidden = false;
 }
 document.getElementById('authRecoveryDone')?.addEventListener('click', () => location.reload());
+document.getElementById('authRecoveryCopy')?.addEventListener('click', async (e) => {
+  const code = document.getElementById('authRecoveryCodeValue');
+  try {
+    await navigator.clipboard.writeText(code.textContent);
+    e.target.textContent = 'copied';
+  } catch {
+    // no clipboard API over plain http on the LAN, select it so ctrl+c works
+    getSelection().selectAllChildren(code);
+  }
+});
 
 document.getElementById('authShowRecover')?.addEventListener('click', () => {
   authFormLogin.hidden = true;
@@ -183,6 +193,7 @@ if (authFormSignup) {
 if (signOutBtn) {
   signOutBtn.addEventListener('click', async () => {
     Prefs.clearLocal();
+    try { for (const k of Object.keys(localStorage)) if (k.startsWith('draft.')) localStorage.removeItem(k); } catch (e) {}
     await Auth.logout();
     location.reload();
   });

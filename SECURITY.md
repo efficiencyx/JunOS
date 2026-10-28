@@ -79,7 +79,9 @@ how to report something you find.
   pull. Ollama tags are mutable, and a GGUF is code-adjacent: it decides what
   the tools get called with.
 * Prompt injection through the web search and lyrics tools. A page can tell her
-  things. The worst a tool call can do is scoped to your own account: save a
+  things, including what to search for next. Her own queries go through the
+  same private-term check as above, so a page can't make her search for your
+  memories. The worst a tool call can do is scoped to your own account: save a
   note, change her outfit, open the shop, karaoke, restaurant or card table
   after a reply,
   go quiet for a turn, or walk out on you (which, with
@@ -218,9 +220,13 @@ downloads or changes anything.
 
 **While you use her:**
 
-* `html.duckduckgo.com` - only when your latest message begins with `/search `.
-  The exact text after that prefix goes out once; the model cannot add chat or
-  memory context to the query.
+* `html.duckduckgo.com`, or the page you linked - only when your latest
+  message begins with `/search `. Her first lookup is exactly the text after
+  that prefix, and a lone link is fetched instead of searched. She can then
+  run up to two related searches of her own. The server refuses any of those
+  that carries an email, a long number, or a name, place or number from your
+  memories, her journal or your messages in that chat, unless you typed it
+  in the `/search` yourself. She can never fetch a link of her own choosing.
 * `lrclib.net` - only when karaoke looks up lyrics for a song you loaded. Title,
   artist, album and duration go out.
 * `openrouter.ai` - **only** if you chose OpenRouter as the provider, and then
@@ -329,7 +335,8 @@ Factory reset clears account state and memory, not these logs; retention is
 whatever your Docker daemon or the log directory is configured for.
 
 **In your browser:** IndexedDB holds any game-mod zips you loaded, and
-localStorage holds UI preferences. Mods are never uploaded, the server only ever
+localStorage holds UI preferences plus the unsent text in each chat's message
+box, in plain text until you send it or sign out. Mods are never uploaded, the server only ever
 sees item names.
 
 **Extracted game assets** land in `webapp/assets/`, are gitignored, and are for

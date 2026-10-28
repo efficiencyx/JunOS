@@ -1,14 +1,15 @@
 import { abortFn, currentConversationId } from './session.js?v=1';
-import { sendMessage } from './chat.js?v=32';
-import { cancelIdleNudge } from './consolidation.js?v=104';
+import { sendMessage } from './chat.js?v=39';
+import { cancelIdleNudge } from './consolidation.js?v=111';
 import { closeSettingsBtn, devNoIdleChk, drawerBackdrop, modelSelect, openSettingsBtn, reasoningSelect, sendBtn, siteVolumeInput, thinkChk, ttsChk, ttsSpeedInput, voiceChk, voiceSilenceInput } from './dom.js?v=77';
 import { logAction } from './logging.js?v=78';
-import { loadMood, setMoodEditingEnabled } from './mood.js?v=85';
-import { loadConversation, setSidebarOpen } from './sidebar.js?v=104';
+import { loadMood, setMoodEditingEnabled } from './mood.js?v=87';
+import { loadConversation, setSidebarOpen } from './sidebar.js?v=111';
+import { loadTimeline } from './timeline.js?v=3';
 import * as Names from '../core/names.js?v=1';
 import * as Prefs from '../core/prefs.js?v=6';
 import * as ui from '../core/ui.js?v=1';
-import * as TTS from '../voice/tts.js?v=84';
+import * as TTS from '../voice/tts.js?v=86';
 
 export function syncThinkToggle() {
   thinkChk.disabled = reasoningSelect.value === 'auto';
@@ -81,7 +82,7 @@ settingsNavItems.forEach((item, idx) => {
     if (settingsPanelTitle && label) settingsPanelTitle.textContent = label.textContent;
     if (key === 'developer') loadMood();
     if (MemoryGraph) MemoryGraph.setActive(key === 'memory');
-    if (key === 'memory') { loadMemories(); loadMood(); }
+    if (key === 'memory') { loadMemories(); loadMood(); loadTimeline(); }
   });
   item.tabIndex = item.classList.contains('active') ? 0 : -1;
   item.addEventListener('keydown', (e) => {
@@ -128,7 +129,9 @@ const memoryCount = document.getElementById('memoryCount');
 let MemoryGraph = null;
 async function loadMemories() {
   if (!MemoryGraph) {
-    MemoryGraph = await import('./memory-graph.js?v=3');
+    MemoryGraph = await import('./memory-graph.js?v=5');
+    const { renderNoteActions } = await import('./memory-actions.js?v=3');
+    MemoryGraph.onNoteActions((node, body) => renderNoteActions(node, body, { isAdmin, reload: loadMemories }));
     MemoryGraph.onOpenChat((conv, messageId) => {
       ui.toggleDrawer(false);
       setSidebarOpen(false);
@@ -202,6 +205,7 @@ let isAdmin = false;
 
 export function applyRoleGates(user) {
   isAdmin = user?.role === 'admin';
+  document.documentElement.classList.toggle('is-admin', isAdmin);
   setMoodEditingEnabled(isAdmin);
   // Hidden, never taken out of the page. logging.js grabs the
   // buttons inside the developer panel at import time and would
@@ -211,7 +215,7 @@ export function applyRoleGates(user) {
   // Everyone else wipes memories through Factory Reset, the DELETE
   // is admin only.
   if (memoryClearBtn) memoryClearBtn.hidden = !isAdmin;
-  for (const id of ['devBadge', 'statusPill', 'resetLive2DBtn']) {
+  for (const id of ['devBadge', 'statusPill', 'resetLive2DBtn', 'ratingsExportRow']) {
     const el = document.getElementById(id);
     if (el) el.hidden = !isAdmin;
   }
@@ -271,6 +275,44 @@ if (promoteBtn) promoteBtn.addEventListener('click', async () => {
   promoteBtn.disabled = false;
 });
 
+const ratingsExportBtn = document.getElementById('ratingsExportBtn');
+if (ratingsExportBtn) ratingsExportBtn.addEventListener('click', () => {
+  location.href = 'api/ratings.php?action=export';
+});
+
+const passwordRow = document.getElementById('passwordRow');
+const passwordDesc = document.getElementById('passwordDesc');
+if (passwordRow) passwordRow.addEventListener('submit', async (e) => {
+  e.preventDefault();
+  const current = document.getElementById('currentPasswordInput');
+  const next = document.getElementById('newPasswordInput');
+  const btn = document.getElementById('changePasswordBtn');
+  const msgs = {
+    invalid_credentials: 'Current password is wrong.',
+    password_too_short: 'New password needs at least 8 characters.',
+    rate_limit_exceeded: 'Too many tries, wait an hour.',
+  };
+  btn.disabled = true;
+  try {
+    const r = await fetch('api/auth.php?action=change_password', {
+      method: 'POST',
+      credentials: 'same-origin',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ current_password: current.value, password: next.value }),
+    });
+    const j = await r.json().catch(() => ({}));
+    if (r.ok) {
+      passwordRow.reset();
+      passwordDesc.textContent = 'Changed. Other devices are signed out.';
+    } else {
+      passwordDesc.textContent = msgs[j.error] || 'Could not change the password.';
+    }
+  } catch (err) {
+    passwordDesc.textContent = 'Network error.';
+  }
+  btn.disabled = false;
+});
+
 const factoryResetBtn = document.getElementById('factoryResetBtn');
 if (factoryResetBtn) factoryResetBtn.addEventListener('click', async () => {
   const ok = await ui.confirm({
@@ -290,5 +332,6 @@ if (factoryResetBtn) factoryResetBtn.addEventListener('click', async () => {
     return;
   }
   Prefs.clearLocal();
+  try { for (const k of Object.keys(localStorage)) if (k.startsWith('draft.')) localStorage.removeItem(k); } catch (e) {}
   location.reload();
 });

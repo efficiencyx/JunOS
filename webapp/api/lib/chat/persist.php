@@ -2,6 +2,10 @@
 
 function chat_save_user_message(int $convId, array $req, string $lastUserMsg): int {
     if ($req['idle'] || $req['ephemeral']) return 0;
+    if ($req['regenerate']) {
+        $last = chat_last_user_row($convId);
+        if ($last) return $last;
+    }
     // <audio> stays plaintext on purpose. conversations.php
     // set_audio_text finds the row by that literal and swaps the
     // transcript in, sealed. it can't match a ciphertext.
@@ -9,6 +13,15 @@ function chat_save_user_message(int $convId, array $req, string $lastUserMsg): i
     $db->prepare('INSERT INTO messages (conversation_id, role, content, created_at) VALUES (?, ?, ?, ?)')
        ->execute([$convId, 'user', $req['audio'] !== '' ? '<audio>' : enc($lastUserMsg), time()]);
     return (int)$db->lastInsertId();
+}
+
+// regenerate asks again for a turn that's already stored, so no
+// second copy of his message. only when his row is the newest one
+function chat_last_user_row(int $convId): int {
+    $st = db()->prepare('SELECT id, role FROM messages WHERE conversation_id=? ORDER BY id DESC LIMIT 1');
+    $st->execute([$convId]);
+    $row = $st->fetch();
+    return $row && $row['role'] === 'user' ? (int)$row['id'] : 0;
 }
 
 function chat_save_reply(int $convId, string $reply, array $req, string $lastUserMsg): void {

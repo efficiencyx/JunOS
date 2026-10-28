@@ -62,6 +62,16 @@ data class RelationshipEntity(
     val updatedAt: Long = 0,
 )
 
+@Entity(tableName = "relationship_history")
+data class RelationshipHistoryEntity(
+    @PrimaryKey(autoGenerate = true) val id: Long = 0,
+    val affection: Int,
+    val trust: Int,
+    val tension: Int,
+    val event: String? = null,
+    val at: Long,
+)
+
 @Entity(
     tableName = "wardrobe_presets",
     indices = [Index(value = ["name"], unique = true)],
@@ -147,7 +157,27 @@ abstract class JunDao {
     abstract suspend fun relationship(): RelationshipEntity?
 
     @Insert(onConflict = OnConflictStrategy.REPLACE)
-    abstract suspend fun putRelationship(value: RelationshipEntity)
+    protected abstract suspend fun replaceRelationship(value: RelationshipEntity)
+
+    @Insert
+    protected abstract suspend fun insertHistory(value: RelationshipHistoryEntity): Long
+
+    @Query("DELETE FROM relationship_history WHERE id <= (SELECT id FROM relationship_history ORDER BY id DESC LIMIT 1 OFFSET 2000)")
+    protected abstract suspend fun trimHistory()
+
+    @Query("SELECT * FROM relationship_history ORDER BY at, id")
+    abstract suspend fun relationshipHistory(): List<RelationshipHistoryEntity>
+
+    // same as relationship_set() in php: a timeline row only when a gauge actually moved
+    @Transaction
+    open suspend fun putRelationship(value: RelationshipEntity) {
+        val old = relationship()
+        replaceRelationship(value)
+        if (old == null || old.affection != value.affection || old.trust != value.trust || old.tension != value.tension) {
+            insertHistory(RelationshipHistoryEntity(affection = value.affection, trust = value.trust, tension = value.tension, at = value.updatedAt))
+            trimHistory()
+        }
+    }
 
     @Query("SELECT * FROM wardrobe_presets ORDER BY updatedAt DESC")
     abstract suspend fun wardrobePresets(): List<WardrobePresetEntity>
@@ -195,11 +225,12 @@ abstract class JunDao {
         MessageEntity::class,
         PreferenceEntity::class,
         RelationshipEntity::class,
+        RelationshipHistoryEntity::class,
         WardrobePresetEntity::class,
         WardrobeStateEntity::class,
         ConsolidationEntity::class,
     ],
-    version = 2,
+    version = 3,
     exportSchema = true,
 )
 abstract class JunDatabase : RoomDatabase() {
@@ -210,11 +241,17 @@ abstract class JunDatabase : RoomDatabase() {
             context.applicationContext,
             JunDatabase::class.java,
             "jun.db",
-        ).addMigrations(MIGRATION_1_2).build()
+        ).addMigrations(MIGRATION_1_2, MIGRATION_2_3).build()
 
         private val MIGRATION_1_2 = object : Migration(1, 2) {
             override fun migrate(db: SupportSQLiteDatabase) {
                 db.execSQL("CREATE TABLE IF NOT EXISTS `wardrobe_state` (`id` INTEGER NOT NULL, `data` TEXT NOT NULL, `updatedAt` INTEGER NOT NULL, PRIMARY KEY(`id`))")
+            }
+        }
+
+        private val MIGRATION_2_3 = object : Migration(2, 3) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL("CREATE TABLE IF NOT EXISTS `relationship_history` (`id` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, `affection` INTEGER NOT NULL, `trust` INTEGER NOT NULL, `tension` INTEGER NOT NULL, `event` TEXT, `at` INTEGER NOT NULL)")
             }
         }
     }

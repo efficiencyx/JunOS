@@ -76,6 +76,22 @@ class MemoryStore(context: Context) {
         }
     }
 
+    suspend fun edit(id: String, memory: String): Boolean = withContext(Dispatchers.IO) {
+        mutex.withLock {
+            require(id.matches(Regex("[a-z0-9]{5}")))
+            val text = normalize(memory)
+            require(text.isNotBlank() && text.length <= 800) { "invalid_memory" }
+            val snapshot = snapshotUnlocked()
+            val note = snapshot.notes.firstOrNull { it.id == id } ?: return@withLock false
+            writeCategory(note.category, snapshot.notes.filter { it.category == note.category }.map { if (it.id == id) it.copy(text = text) else it })
+            val meta = loadMeta().toMutableMap()
+            val now = System.currentTimeMillis() / 1000
+            meta[id] = (meta[id] ?: MetaEntry(note.created, now)).copy(updated = now)
+            writeMeta(meta)
+            true
+        }
+    }
+
     suspend fun delete(id: String): Boolean = withContext(Dispatchers.IO) {
         mutex.withLock {
             require(id.matches(Regex("[a-z0-9]{5}")))

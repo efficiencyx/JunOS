@@ -101,13 +101,14 @@ function chat_parse_request(string $provider): array {
 
     $idle = isset($body['idle']) && $body['idle'] === true;
     $ephemeral = !empty($body['ephemeral']);
+    $regenerate = !$idle && !$ephemeral && ($body['regenerate'] ?? false) === true;
     $invite = isset($body['invite']) && in_array($body['invite'], TRIP_TOOLS, true) ? (string)$body['invite'] : '';
 
     return [
         'body' => $body, 'dropped_oldest' => $droppedOldest, 'audio' => $audioB64, 'spoken' => $spoken,
         'model' => $model, 'reasoning' => $reasoning, 'outfit_context' => $outfitContext,
         'mod_items' => $modItems, 'client_time' => $clientTime, 'tz' => $tz, 'idle' => $idle,
-        'ephemeral' => $ephemeral, 'invite' => $invite,
+        'ephemeral' => $ephemeral, 'invite' => $invite, 'regenerate' => $regenerate,
     ];
 }
 

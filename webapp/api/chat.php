@@ -83,7 +83,7 @@ if ($isAdmin) {
 
 $userRowId = chat_save_user_message($convId, $req, $lastUserMsg);
 memory_request_source(['kind' => 'chat', 'conv' => $convId, 'msg' => $userRowId]);
-if ($userRowId) ach_on_user_message((int)$user['id'], $req, $lastUserMsg);
+if ($userRowId && !$req['regenerate']) ach_on_user_message((int)$user['id'], $req, $lastUserMsg);
 
 ollama_evict_if_partially_offloaded($model);
 if ($PROVIDER === 'llamacpp') llamacpp_unload_chat_models($model);
@@ -110,6 +110,7 @@ $state = [
     'fled' => null,
     'flee_decided' => false,
     'approved_search' => $approvedWebSearchQuery,
+    'lookups' => 0,
     'went' => '',
 ];
 
@@ -342,7 +343,7 @@ if (!$sawError && $assistantBuffer !== '') {
     // otherwise two people chatting for ten minutes leaves thirty
     // <audio>/... pairs eating context
     if ($state['overheard']) {
-        if ($userRowId) db()->prepare('DELETE FROM messages WHERE id=? AND conversation_id=?')->execute([$userRowId, $convId]);
+        if ($userRowId && !$req['regenerate']) db()->prepare('DELETE FROM messages WHERE id=? AND conversation_id=?')->execute([$userRowId, $convId]);
         log_event(['msg' => 'overheard', 'conversation_id' => $convId, 'audio' => $req['audio'] !== '']);
         sse_done();
         exit;

@@ -3,6 +3,7 @@ package com.efficiencyx.junos.server
 import android.app.ActivityManager
 import android.content.Context
 import android.util.Log
+import com.efficiencyx.junos.away.AwayNotify
 import com.efficiencyx.junos.data.ConsolidationEntity
 import com.efficiencyx.junos.data.ConversationEntity
 import com.efficiencyx.junos.data.JunDatabase
@@ -243,6 +244,16 @@ class LocalServer(
                     .getOrElse { return@post call.error(HttpStatusCode.BadRequest, "invalid_memory") }
                 call.respondText(json.encodeToString(note), ContentType.Application.Json)
             }
+            put("/api/memory.php") {
+                if (!call.authorized()) return@put
+                val body = call.jsonBody(8 * 1024) ?: return@put
+                val id = body["id"]?.jsonPrimitive?.content.orEmpty()
+                val text = body["memory"]?.jsonPrimitive?.content.orEmpty()
+                val edited = runCatching { memory.edit(id, text) }
+                    .getOrElse { return@put call.error(HttpStatusCode.BadRequest, "invalid_memory") }
+                if (!edited) return@put call.error(HttpStatusCode.NotFound, "memory_not_found")
+                call.ok()
+            }
             delete("/api/memory.php") {
                 if (!call.authorized()) return@delete
                 val body = call.jsonBody(8 * 1024) ?: return@delete
@@ -301,6 +312,18 @@ class LocalServer(
                     }
                     else -> call.error(HttpStatusCode.BadRequest, "invalid_request")
                 }
+            }
+
+            // setup won't finish without the recovered art and the lore ships in the apk
+            get("/api/health.php") {
+                if (!call.authorized()) return@get
+                call.json(buildJsonObject {
+                    put("provider", "litertlm-android")
+                    put("db", true)
+                    put("rig", true)
+                    put("lore", true)
+                    put("voice", voice.available)
+                })
             }
 
             get("/api/karaoke.php") {
@@ -449,6 +472,11 @@ class LocalServer(
 
     private suspend fun io.ktor.server.routing.RoutingContext.relationship() {
         val dao = database.dao(); dao.ensureDefaults(now())
+        if (call.request.httpMethod == HttpMethod.Get && call.request.queryParameters["action"] == "history") {
+            return call.json(buildJsonArray { dao.relationshipHistory().forEach { row -> add(buildJsonObject {
+                put("at", row.at); put("affection", row.affection); put("trust", row.trust); put("tension", row.tension); put("event", row.event)
+            }) } })
+        }
         if (call.request.httpMethod == HttpMethod.Put) {
             val body = call.jsonBody(1024) ?: return
             val values = listOf("affection", "trust", "tension").map { body[it]?.jsonPrimitive?.intOrNull }
@@ -496,6 +524,14 @@ class LocalServer(
                 })
             }
             "welcome" -> if (call.requireMethod(HttpMethod.Get)) call.json(buildJsonObject { put("messages", JsonArray(emptyList())); put("away", 0); put("tier", "none") })
+            "notify" -> {
+                if (call.request.httpMethod == HttpMethod.Post) {
+                    val body = call.jsonBody(1024) ?: return
+                    val on = body["enabled"]?.jsonPrimitive?.contentOrNull == "true"
+                    AwayNotify.configure(context, on && AwayNotify.permitted(context), body["player"]?.jsonPrimitive?.contentOrNull, body["bot"]?.jsonPrimitive?.contentOrNull)
+                }
+                call.json(buildJsonObject { put("enabled", AwayNotify.enabled(context)); put("permitted", AwayNotify.permitted(context)) })
+            }
             "activity" -> {
                 if (!call.requireMethod(HttpMethod.Post)) return
                 val current = dao.consolidation() ?: ConsolidationEntity()

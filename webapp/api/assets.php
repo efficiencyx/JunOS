@@ -12,10 +12,8 @@ $requestPath = (string)($_SERVER['OMEGA_ASSET_PATH'] ?? '');
 // ran tools/recover_assets.py gets the placeholder art instead of
 // four 404s and a red error toast.
 if ($requestPath === '' && isset($_GET['probe'])) {
-    $rig = ['interaction_model.moc3', 'texture_00.png', 'texture_01.png', 'texture_02.png'];
-    $dir = __DIR__ . '/../assets/';
     header('Cache-Control: no-store');
-    json_out(['model' => array_reduce($rig, fn($ok, $f) => $ok && is_file($dir . $f), true)]);
+    json_out(['model' => rig_assets_present()]);
 }
 if (!str_starts_with($requestPath, '/assets/')) fail(404, 'not_found');
 $relative = rawurldecode(substr($requestPath, strlen('/assets/')));

@@ -142,8 +142,8 @@
   padding: 7px 10px;
   font-size: 13px;
 }
-#devAccessRow .set-row-control, [data-panel="dates"] .set-row-control { gap: var(--space-2); }
-#devKeyInput { width: 150px; }
+#devAccessRow .set-row-control, #passwordRow .set-row-control, .voice-pick, [data-panel="dates"] .set-row-control { gap: var(--space-2); }
+#devKeyInput, #passwordRow input { width: 150px; }
 .set-row-control.range-control { gap: 10px; }
 .set-row-control.range-control input[type="range"] {
   width: 140px;
@@ -298,6 +298,12 @@
 .memory-revisions summary { cursor: pointer; }
 .memory-reader-body .memory-revisions p { margin-top: var(--space-2); color: var(--fg-2); }
 .memory-reader-body .memory-revisions .memory-source { margin-top: 2px; color: var(--muted); }
+.memory-actions { margin-top: var(--space-3); display: grid; gap: var(--space-2); }
+.memory-actions summary { cursor: pointer; color: var(--accent-2); font-size: 12px; }
+.memory-actions details[open] { display: grid; gap: var(--space-2); }
+.memory-actions textarea { width: 100%; resize: vertical; font: inherit; font-size: 13px; }
+.memory-actions-row { display: flex; gap: var(--space-2); }
+.memory-reader-body .memory-her-reply { padding-left: var(--space-2); border-left: 2px solid var(--accent-2); color: var(--fg); font-style: italic; }
 .memory-reader-body ul {
   display: grid;
   gap: var(--space-2);
@@ -321,10 +327,74 @@
   align-items: center;
   gap: var(--space-3);
 }
-.mood-row--affection { --gauge: #f6809f; }
-.mood-row--trust { --gauge: #6cb0f5; }
-.mood-row--tension { --gauge: #ff7a55; }
+.mood-row--affection, .rel-tl-row--affection, .rel-tl-key--affection { --gauge: #f6809f; }
+.mood-row--trust, .rel-tl-row--trust, .rel-tl-key--trust { --gauge: #6cb0f5; }
+.mood-row--tension, .rel-tl-row--tension, .rel-tl-key--tension { --gauge: #ff7a55; }
 .mood-label { color: var(--muted); font-weight: 600; }
+
+.rel-timeline { padding-top: 6px; }
+.rel-tl-plots { position: relative; display: grid; gap: 6px; }
+.rel-tl-row {
+  display: grid;
+  grid-template-columns: 76px minmax(0, 1fr);
+  align-items: center;
+  gap: var(--space-3);
+}
+.rel-tl-label { color: var(--muted); font-size: 12px; }
+.rel-tl-plot { width: 100%; height: 40px; display: block; background: var(--bg-3); border-radius: var(--radius-sm); }
+.rel-tl-mid { stroke: var(--border); stroke-width: 1; vector-effect: non-scaling-stroke; }
+.rel-tl-line { fill: none; stroke: var(--gauge); stroke-width: 2; stroke-linejoin: round; vector-effect: non-scaling-stroke; }
+.rel-tl-events {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: calc(76px + var(--space-3));
+  right: 0;
+  pointer-events: none;
+}
+.rel-tl-event {
+  position: absolute;
+  top: -2px;
+  bottom: -2px;
+  width: 0;
+  border-left: 1px dashed var(--muted);
+}
+.rel-tl-event::before {
+  content: "";
+  position: absolute;
+  top: -5px;
+  left: -5px;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--fg);
+  border: 1px solid var(--bg-2);
+}
+.rel-tl-event[data-kind="walkout"] { border-left-color: var(--danger); }
+.rel-tl-event[data-kind="walkout"]::before { background: var(--danger); border-radius: 1px; }
+.rel-tl-cursor { position: absolute; top: 0; bottom: 0; width: 0; border-left: 1px solid var(--muted); pointer-events: none; }
+.rel-tl-tip {
+  position: absolute;
+  top: 0;
+  z-index: 2;
+  padding: 6px 8px;
+  background: var(--bg-4);
+  border: 1px solid var(--border-2);
+  border-radius: var(--radius-sm);
+  font-size: 12px;
+  color: var(--fg);
+  pointer-events: none;
+  white-space: nowrap;
+}
+.rel-tl-tip-time, .rel-tl-tip-event { color: var(--muted); }
+.rel-tl-key { display: inline-block; width: 8px; height: 2px; margin-right: 6px; vertical-align: middle; background: var(--gauge); }
+.rel-tl-axis {
+  display: flex;
+  justify-content: space-between;
+  margin: 4px 0 0 calc(76px + var(--space-3));
+  color: var(--muted);
+  font-size: 11px;
+}
 .mood-track { position: relative; display: flex; align-items: center; min-width: 0; }
 .mood-clip {
   position: absolute;
@@ -411,3 +481,5 @@
   text-align: right;
   text-shadow: 0 0 8px var(--glow, transparent);
 }
+html.android-app .ratings-export { display: none; }
+html.android-app .account-password { display: none; }

@@ -1,5 +1,13 @@
 <?php
 
+function rig_assets_present(): bool {
+    $dir = __DIR__ . '/../../assets/';
+    foreach (['interaction_model.moc3', 'texture_00.png', 'texture_01.png', 'texture_02.png'] as $f) {
+        if (!is_file($dir . $f)) return false;
+    }
+    return true;
+}
+
 const WARDROBE_ITEM_DEFAULTS = [
     'shirt' => true, 'hoodie' => false, 'dress' => false, 'dress1' => false,
     'skirt' => true, 'pants' => false, 'bra' => true, 'panties' => true,

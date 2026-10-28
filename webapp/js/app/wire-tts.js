@@ -1,11 +1,12 @@
-import { IDLE_AFTER_REPLY_MS, scheduleIdleNudge } from './consolidation.js?v=104';
+import { IDLE_AFTER_REPLY_MS, scheduleIdleNudge } from './consolidation.js?v=111';
 import { ttsChk, ttsEngineSelect, ttsLangRow, ttsLangSelect, ttsSpeedInput, ttsVoiceSelect } from './dom.js?v=77';
-import { finishPendingFaceBubbleHide } from './face-bubble.js?v=85';
+import { finishPendingFaceBubbleHide } from './face-bubble.js?v=87';
 import { logAction } from './logging.js?v=78';
-import { syncVoiceDeps, updateTtsSpeedLabel } from './settings.js?v=106';
+import { syncVoiceDeps, updateTtsSpeedLabel } from './settings.js?v=114';
 import { escapeHtml } from '../core/util.js?v=1';
+import * as Names from '../core/names.js?v=1';
 import * as Prefs from '../core/prefs.js?v=6';
-import * as TTS from '../voice/tts.js?v=84';
+import * as TTS from '../voice/tts.js?v=86';
 
 export async function wireTts() {
   TTS.setLogger(logAction);
@@ -109,6 +110,24 @@ export async function wireTts() {
       TTS.setVoice(ttsVoiceSelect.value);
       localStorage.setItem('tts.voice', ttsVoiceSelect.value);
       Prefs.pushToServer();
+    });
+  }
+  const previewBtn = document.getElementById('ttsPreviewBtn');
+  if (previewBtn) {
+    let previewing = false;
+    const settle = () => { previewing = false; previewBtn.textContent = 'Play'; };
+    // stop() from anywhere else cancels without either hook, so the
+    // button can't trust previewing alone
+    ttsChk?.addEventListener('change', () => { if (!ttsChk.checked) settle(); });
+    previewBtn.addEventListener('click', () => {
+      if (previewing && TTS.isSpeaking()) { TTS.stop(); settle(); return; }
+      const ok = TTS.speak(`Hi ${Names.getPlayer()}, do you like this voice?`, {
+        onDone: settle,
+        onError: settle,
+      });
+      if (!ok) { logAction('warn', 'voice preview: TTS is off or has no voice'); return; }
+      previewing = true;
+      previewBtn.textContent = 'Stop';
     });
   }
   if (ttsLangSelect) {

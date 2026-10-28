@@ -1,5 +1,5 @@
-import { cameraPreset, fitModel, savePos } from './camera.js?v=76';
-import { isInteractiveTarget, isOverModel } from './geometry.js?v=78';
+import { cameraPreset, fitModel, savePos } from './camera.js?v=78';
+import { isInteractiveTarget, isOverModel } from './geometry.js?v=80';
 import { S } from './state.js?v=75';
 
 const ZOOM_MIN = 0.2, ZOOM_MAX = 5;

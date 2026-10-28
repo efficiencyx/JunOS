@@ -1,8 +1,8 @@
 import { mobileConversationTitle, mobileReplyStatus, sidebarBackground, stageEl } from './dom.js?v=77';
 import { phoneMode, visualRect } from '../core/util.js?v=1';
 import * as Names from '../core/names.js?v=1';
-import * as TTS from '../voice/tts.js?v=84';
-import * as Live2D from '../live2d/live2d.js?v=84';
+import * as TTS from '../voice/tts.js?v=86';
+import * as Live2D from '../live2d/live2d.js?v=86';
 
 let currentConversationTitle = 'New conversation';
 

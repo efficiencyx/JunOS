@@ -82,6 +82,7 @@ function relationship_get(int $userId): array {
 function relationship_set(int $userId, array $values): void {
     $clamp = fn($n) => max(0, min(100, (int)$n));
     try {
+        $before = relationship_get($userId);
         db()->prepare(
             'INSERT INTO relationship (user_id, affection, trust, tension, updated_at) VALUES (?, ?, ?, ?, ?)
              ON CONFLICT(user_id) DO UPDATE SET affection=excluded.affection, trust=excluded.trust, tension=excluded.tension, updated_at=excluded.updated_at'
@@ -92,9 +93,36 @@ function relationship_set(int $userId, array $values): void {
             $clamp($values['tension'] ?? RELATIONSHIP_DEFAULTS['tension']),
             time(),
         ]);
+        $after = relationship_get($userId);
+        if ($after !== $before) relationship_history_add($userId, $after);
     } catch (Throwable $e) {
         log_event(['msg' => 'relationship_set_error', 'err' => $e->getMessage()]);
     }
+}
+
+const RELATIONSHIP_HISTORY_KEEP = 2000;
+
+// $event is null for a plain gauge change, 'outing:<where>' or 'walkout'
+function relationship_history_add(int $userId, ?array $gauges = null, ?string $event = null): void {
+    try {
+        $g = $gauges ?? relationship_get($userId);
+        db()->prepare('INSERT INTO relationship_history (user_id, affection, trust, tension, event, at) VALUES (?, ?, ?, ?, ?, ?)')
+            ->execute([$userId, $g['affection'], $g['trust'], $g['tension'], $event, time()]);
+        db()->prepare('DELETE FROM relationship_history WHERE user_id=? AND id <=
+                       (SELECT id FROM relationship_history WHERE user_id=? ORDER BY id DESC LIMIT 1 OFFSET ' . RELATIONSHIP_HISTORY_KEEP . ')')
+            ->execute([$userId, $userId]);
+    } catch (Throwable $e) {
+        log_event(['msg' => 'relationship_history_add_error', 'err' => $e->getMessage()]);
+    }
+}
+
+function relationship_history(int $userId): array {
+    $st = db()->prepare('SELECT affection, trust, tension, event, at FROM relationship_history WHERE user_id=? ORDER BY at, id');
+    $st->execute([$userId]);
+    return array_map(fn($r) => [
+        'at' => (int)$r['at'], 'affection' => (int)$r['affection'], 'trust' => (int)$r['trust'],
+        'tension' => (int)$r['tension'], 'event' => $r['event'],
+    ], $st->fetchAll());
 }
 
 // stack this turn's deltas onto $cur and save. capped at +/-50 a

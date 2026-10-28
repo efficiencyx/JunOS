@@ -593,6 +593,11 @@ export function onOpenChat(callback) {
   openChat = callback;
 }
 
+var noteActions = null;
+export function onNoteActions(callback) {
+  noteActions = callback;
+}
+
 var SOURCE_LABELS = {
   chat: 'From a chat',
   date: 'From a date',
@@ -635,7 +640,7 @@ function appendOrigin(node) {
     var was = document.createElement('p');
     was.textContent = rev.text;
     item.appendChild(was);
-    item.appendChild(sourceLine(rev, 'Until ' + formatDate(rev.at) + (rev.kind === 'pass' ? ', changed by her memory pass' : '')));
+    item.appendChild(sourceLine(rev, 'Until ' + formatDate(rev.at) + (rev.kind === 'pass' ? ', changed by her memory pass' : rev.kind === 'request' ? ', changed when you asked her' : '')));
     details.appendChild(item);
   });
   readerBody.appendChild(details);
@@ -671,6 +676,7 @@ function openReader(node) {
     text.textContent = node.text;
     readerBody.appendChild(text);
     appendOrigin(node);
+    if (noteActions) noteActions(node, readerBody);
     return;
   }
   if (node.type === 'journal-leaf') {
@@ -680,6 +686,7 @@ function openReader(node) {
     var entry = document.createElement('p');
     entry.textContent = node.text;
     readerBody.appendChild(entry);
+    if (noteActions) noteActions(node, readerBody);
     return;
   }
   if (node.type === 'journal-hub') {

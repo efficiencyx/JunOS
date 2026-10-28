@@ -1,10 +1,11 @@
 <?php
 require_once __DIR__ . '/lib/bootstrap.php';
+require_once __DIR__ . '/lib/memory_request.php';
 
 $user = require_user();
 rate_limit('memory', 60, 60);
 $userId = (int)$user['id'];
-$method = require_method('GET', 'POST', 'DELETE');
+$method = require_method('GET', 'POST', 'PUT', 'DELETE');
 
 try {
     if ($method === 'GET') {
@@ -46,6 +47,11 @@ try {
         ]);
     }
 
+    if ($method === 'POST' && ($_GET['action'] ?? '') === 'request') {
+        rate_limit('memory_request', 10, 3600);
+        json_out(memory_request_handle($userId, read_json_body(4 * 1024)));
+    }
+
     if ($method === 'POST') {
         $body = read_json_body(8 * 1024);
         $kind = ($body['source'] ?? '') === 'karaoke' ? 'karaoke' : 'manual';
@@ -56,6 +62,24 @@ try {
 
     require_admin();
     $body = read_json_body(8 * 1024);
+    if (isset($body['journal'])) {
+        $date = (string)$body['journal'];
+        if (!preg_match('/^\d{4}-\d{2}-\d{2}$/', $date)) fail(400, 'invalid_request');
+        $res = $method === 'PUT'
+            ? memory_journal_upsert($userId, $date, (string)($body['memory'] ?? ''))
+            : memory_journal_delete($userId, $date);
+        $err = $res['error'] ?? '';
+        if ($err === 'journal_not_found') fail(404, $err);
+        if ($err !== '') fail(str_starts_with($err, 'journal_') ? 400 : 500, $err);
+        json_out(['ok' => true]);
+    }
+    if ($method === 'PUT') {
+        if (!preg_match('/^[a-z0-9]{5}$/', (string)($body['id'] ?? ''))) fail(400, 'invalid_request');
+        $res = memory_note_edit($userId, (string)$body['id'], (string)($body['memory'] ?? ''), ['kind' => 'manual']);
+        if (($res['error'] ?? '') === 'memory_not_found') fail(404, 'memory_not_found');
+        if (isset($res['error'])) fail(400, $res['error']);
+        json_out(['ok' => true]);
+    }
     if (!empty($body['all'])) {
         $res = memory_wipe_user($userId);
         if (isset($res['error'])) fail(500, $res['error']);

@@ -60,6 +60,7 @@ import androidx.compose.ui.viewinterop.AndroidView
 import androidx.compose.ui.zIndex
 import androidx.core.content.ContextCompat
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.efficiencyx.junos.away.AwayNotify
 import com.efficiencyx.junos.colab.ColabKeepAliveService
 import com.efficiencyx.junos.colab.ColabSession
 import com.efficiencyx.junos.colab.ColabState
@@ -79,6 +80,16 @@ class MainActivity : ComponentActivity() {
             }
         }
         if (savedInstanceState == null) intent?.let(::handle)
+    }
+
+    override fun onStart() {
+        super.onStart()
+        AwayNotify.back(this)
+    }
+
+    override fun onStop() {
+        AwayNotify.left(this)
+        super.onStop()
     }
 
     override fun onNewIntent(intent: Intent) {

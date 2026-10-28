@@ -1,18 +1,19 @@
-import { currentConversationId, messages, setCurrentConversationId } from './session.js?v=1';
-import { appendMsg, renderMarkdown, updateEmptyState } from './messages.js?v=12';
-import { discardActiveResponse } from './chat.js?v=32';
-import { setConversationTitle } from './face-bubble.js?v=85';
-import { IDLE_AFTER_JOIN_MS, cancelAutoReset, reportActivity, resetIdleNudge, scheduleIdleNudge } from './consolidation.js?v=104';
-import { conversationSidebar, messagesEl, mobileConversationTitle, mobileMenuBtn, narrowSidebarQuery, reloadPromptBtn, resetLive2DBtn, sidebarBackdrop, sidebarBackground } from './dom.js?v=77';
-import { announceMobileReply, faceBubble, hideFaceBubble, latestAssistantReply, scheduleFaceBubbleHide, setLatestAssistantReply, showFaceBubble } from './face-bubble.js?v=85';
+import { currentConversationId, messages, setCurrentConversationId, stopActiveStream } from './session.js?v=1';
+import { appendMsg, renderMarkdown, scrollToLatest, updateEmptyState } from './messages.js?v=16';
+import { dropDraft, useDraftFor } from './composer.js?v=3';
+import { addReplyActions, discardActiveResponse } from './chat.js?v=39';
+import { setConversationTitle } from './face-bubble.js?v=87';
+import { announceMobileReply, faceBubble, hideFaceBubble, latestAssistantReply, scheduleFaceBubbleHide, setLatestAssistantReply, showFaceBubble } from './face-bubble.js?v=87';
+import { IDLE_AFTER_JOIN_MS, cancelAutoReset, reportActivity, resetIdleNudge, scheduleIdleNudge } from './consolidation.js?v=111';
+import { chatInput, conversationSidebar, messagesEl, mobileConversationTitle, mobileMenuBtn, narrowSidebarQuery, reloadPromptBtn, resetLive2DBtn, sidebarBackdrop, sidebarBackground } from './dom.js?v=77';
 import { logAction } from './logging.js?v=78';
-import { makeStreamBuffer } from './stream-filters.js?v=90';
+import { makeStreamBuffer } from './stream-filters.js?v=92';
 import { escapeHtml, phoneMode } from '../core/util.js?v=1';
 import * as Names from '../core/names.js?v=1';
 import * as ui from '../core/ui.js?v=1';
 import * as History from './history.js?v=2';
-import * as TTS from '../voice/tts.js?v=84';
-import * as Live2D from '../live2d/live2d.js?v=84';
+import * as TTS from '../voice/tts.js?v=86';
+import * as Live2D from '../live2d/live2d.js?v=86';
 
 const conversationTitles = new Map();
 let sidebarRefreshGeneration = 0;
@@ -237,6 +238,7 @@ async function deleteConversation(id, title) {
   }
   try {
     await History.delete(id);
+    dropDraft(id);
     if (id === currentConversationId) {
       const convs = await History.list();
       if (convs.length > 0) {
@@ -270,6 +272,7 @@ export async function loadConversation(id, find = null) {
   discardActiveResponse();
   const loadGeneration = ++conversationLoadGeneration;
   setCurrentConversationId(id);
+  useDraftFor(id);
   cancelAutoReset();
   hideFaceBubble();
   setLatestAssistantReply('');
@@ -288,9 +291,11 @@ export async function loadConversation(id, find = null) {
     const rows = await History.load(id);
     if (loadGeneration !== conversationLoadGeneration || currentConversationId !== id) return;
     let latest = '';
+    let lastEl = null;
     for (const row of rows) {
       if (row.role === 'user') {
         appendMsg('user', Names.apply(row.content)).dataset.id = row.id;
+        lastEl = null;
         messages.push({ role: 'user', content: row.content });
       } else if (row.role === 'assistant') {
         const el = appendMsg('assistant', '');
@@ -302,12 +307,15 @@ export async function loadConversation(id, find = null) {
         const shown = Names.apply(visible);
         el.innerHTML = renderMarkdown(shown);
         latest = shown;
+        lastEl = shown.trim() ? el : null;
         messages.push({ role: 'assistant', content: visible });
       }
     }
     setLatestAssistantReply(latest);
+    if (lastEl) addReplyActions(lastEl);
     setConversationTitle(conversationTitles.get(id));
     if (find) scrollToMatch(find);
+    else scrollToLatest();
   } catch (e) {
     if (loadGeneration !== conversationLoadGeneration || currentConversationId !== id) return;
     ui.toast('Failed to load conversation: ' + e.message, 'error');
@@ -327,14 +335,34 @@ function scrollToMatch({ terms, messageId }) {
 
 let sidebarOpener = null;
 
+function openSearch() {
+  if (narrowSidebarQuery.matches) setSidebarOpen(true);
+  searchBtn?.click();
+}
+
 document.addEventListener('keydown', (e) => {
-  if (e.key !== 'Escape') return;
+  const mod = e.ctrlKey || e.metaKey;
+  if (mod && !e.shiftKey && !e.altKey && e.key.toLowerCase() === 'k') {
+    e.preventDefault();
+    openSearch();
+    return;
+  }
+  if (mod && e.shiftKey && !e.altKey && e.key.toLowerCase() === 'o') {
+    e.preventDefault();
+    newChatBtn?.click();
+    return;
+  }
+  if (e.key !== 'Escape' || e.defaultPrevented) return;
   if (document.body.classList.contains('sidebar-open')) {
     setSidebarOpen(false);
     return;
   }
   const d = document.getElementById('settingsDrawer');
-  if (d && d.classList.contains('open')) ui.toggleDrawer(false);
+  if (d && d.classList.contains('open')) {
+    ui.toggleDrawer(false);
+    return;
+  }
+  if (stopActiveStream && document.activeElement === chatInput) stopActiveStream();
 });
 
 export function setSidebarOpen(open) {

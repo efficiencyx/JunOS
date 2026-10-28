@@ -1,4 +1,4 @@
-import { placeholderAnchor } from './placeholder.js?v=5';
+import { placeholderAnchor } from './placeholder.js?v=7';
 import { S, app, forcedDrawableOpacity, model, publicTint, raw } from './state.js?v=75';
 
 const MOUTH_DRAWABLES = ['HitAreaOpenMouth', 'HitAreaCloseMouth', 'InnerMouth', 'SkinLipUpper'];
@@ -65,7 +65,12 @@ export function faceAnchor() {
 }
 
 export function isOverModel(clientX, clientY) {
-  if (!model || !app) return false;
+  if (!model || !app) {
+    const a = placeholderAnchor();
+    if (!a) return false;
+    const top = a.y - a.modelH * 0.09;
+    return Math.abs(clientX - a.x) <= a.modelW / 4 && clientY >= top && clientY <= top + a.modelH;
+  }
   const r = app.view.getBoundingClientRect();
   const x = clientX - r.left, y = clientY - r.top;
   const b = model.getBounds();

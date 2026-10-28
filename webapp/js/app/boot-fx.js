@@ -88,6 +88,21 @@ export function typeStatus(text) {
   doTypeStatus(text);
 }
 
+export function setCheck(key, ok, label) {
+  const li = document.querySelector(`.boot-log li[data-check="${key}"]`);
+  if (!li) return;
+  const badge = li.querySelector('.boot-ok');
+  if (ok != null) {
+    badge.dataset.state = ok ? 'ok' : 'ko';
+    badge.textContent = ok ? 'OK' : 'KO';
+  }
+  if (label) {
+    const cmd = li.querySelector('.boot-cmd');
+    cmd.setAttribute('data-text', label);
+    if (!li.classList.contains('live') || li.classList.contains('done')) cmd.textContent = label;
+  }
+}
+
 export function start() {
   const el = document.querySelector('#bootStatus .boot-status-label');
   if (el) typeStatus(el.textContent.trim());

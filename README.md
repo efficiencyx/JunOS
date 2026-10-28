@@ -374,6 +374,12 @@ That flattens each Q&A into `webapp/lore_corpus.txt` - one answer per line, matc
 The plain-language versions live in the wiki: **[Common Fixes](https://github.com/efficiencyx/JunOS/wiki/9-Common-Fixes)**, **[Performance](https://github.com/efficiencyx/JunOS/wiki/5-Performance)** when she's slow, and the **[FAQ](https://github.com/efficiencyx/JunOS/wiki/1-Faq)**. The nerdier ones are below.
 
 <details>
+<summary><b>The boot screen has a red KO</b></summary>
+
+Each line is a real check now. **neural-core** KO means the model server isn't answering (`./start.sh logs llamacpp` or `logs ollama`, Logs in JunOS.exe), and she keeps retrying until it does. **live2d-rig** KO is the placeholder art, the game assets were never extracted. **voice-synth** KO means the voice sidecar is off or down, chat works without it. **lore-corpus** KO means `webapp/lore_corpus.txt` is missing. Only neural-core keeps you on the boot screen.
+</details>
+
+<details>
 <summary><b>Replies arrive all at once instead of streaming</b></summary>
 
 Something's buffering the SSE. The `/api/chat.php` location needs `proxy_buffering off;`, `fastcgi_buffering off;` and `X-Accel-Buffering: no`. A load balancer in front of nginx can sneak buffering back in.

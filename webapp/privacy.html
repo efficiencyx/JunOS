@@ -7,8 +7,8 @@
 <meta name="robots" content="noindex">
 <title>Privacy notice · Jun OS</title>
 <link rel="icon" type="image/png" href="favicon.png?v=1">
-<link rel="stylesheet" href="css/boot.css?v=5">
-<link rel="stylesheet" href="styles.css?v=69">
+<link rel="stylesheet" href="css/boot.css?v=6">
+<link rel="stylesheet" href="styles.css?v=74">
 <link rel="stylesheet" href="css/pages/privacy.css?v=4">
 <link rel="stylesheet" href="css/head-home.css?v=1">
 </head>
@@ -85,7 +85,7 @@
         alone cannot unlock encrypted content. Older accounts are encrypted when they log in,
         and interrupted encryption is retried on the next password login.</p>
         <p>This does not encrypt all stored data: account details, timestamps, relationship and
-        wardrobe state, karaoke scores, logs, browser preferences and cached audio remain outside that protection.
+        wardrobe state, karaoke scores, logs, browser preferences, unsent message drafts and cached audio remain outside that protection.
         Running processes and the selected AI provider receive plaintext, and the browser stores
         a cookie containing the data key. Old backups may still contain unencrypted content.
         The separate Android client uses its own storage.</p>
@@ -109,8 +109,10 @@
         start also sends that address one request with its key to check that the link still
         works.</p>
         <p>Voice and karaoke run locally in sidecar containers. A message beginning with
-        <code>/search </code> sends the exact text after that prefix to DuckDuckGo once; Jun cannot
-        add conversation or memory text to it. Karaoke can send song title, artist, album and duration
+        <code>/search </code> sends the text after that prefix to DuckDuckGo, or fetches the page
+        when it's a link. Jun may then run up to two related searches of her own. The server refuses
+        any that contain your email, long numbers, or names, places and numbers from your memories,
+        her journal or your messages in that chat that you didn't type yourself. Karaoke can send song title, artist, album and duration
         to LRCLIB for a lyrics lookup.</p>
       </section>
 

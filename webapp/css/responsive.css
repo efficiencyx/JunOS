@@ -271,7 +271,8 @@ html.phone-ui .composer-area {
     max(var(--space-3), env(safe-area-inset-left, 0px));
   pointer-events: auto;
 }
-html.phone-ui .composer textarea { font-size: 16px; }
+html.phone-ui .composer textarea,
+html.phone-ui .composer-mirror { font-size: 16px; }
 html.phone-ui .face-bubble {
   pointer-events: auto;
   touch-action: pan-x pan-y;

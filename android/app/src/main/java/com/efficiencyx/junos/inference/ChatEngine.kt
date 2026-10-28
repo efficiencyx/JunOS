@@ -53,6 +53,7 @@ data class ChatRequest(
     @SerialName("hear_all") val hearAll: Boolean = false,
     @SerialName("mod_items") val modItems: List<String> = emptyList(),
     val invite: String = "",
+    val regenerate: Boolean = false,
 )
 
 internal fun ChatRequest.validate() {
@@ -102,7 +103,8 @@ class ChatEngine(
         }
         var noteSource = NoteSource("chat", request.conversationId)
         if (!request.idle && !request.ephemeral) {
-            val userRowId = dao.insertMessage(MessageEntity(conversationId = request.conversationId, role = "user", content = lastUser, createdAt = now()))
+            val stored = if (request.regenerate) dao.messages(request.conversationId).lastOrNull()?.takeIf { it.role == "user" } else null
+            val userRowId = stored?.id ?: dao.insertMessage(MessageEntity(conversationId = request.conversationId, role = "user", content = lastUser, createdAt = now()))
             noteSource = noteSource.copy(msg = userRowId)
             val consolidation = dao.consolidation() ?: ConsolidationEntity()
             dao.putConsolidation(consolidation.copy(lastActivity = now()))

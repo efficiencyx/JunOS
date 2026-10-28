@@ -104,8 +104,12 @@ export function usableStage(mode = S.cameraMode) {
   return candidate;
 }
 
+// the placeholder svg stands in for the rig, same offsets and zoom
+let standIn = null;
+export function setStandIn(s) { standIn = s; }
+
 export function fitModel() {
-  if (!model || !app) return;
+  if (!model || !app) { standIn?.fit(); return; }
   const usable = usableStage();
   const margin = 0.92;
   const sx = (usable.width * margin) / model.internalModel.width;
@@ -135,6 +139,7 @@ export function fitModel() {
 }
 
 export function captureCameraState(usable = lastUsableStage || usableStage()) {
+  if (!model && standIn) return standIn.capture(usableStage());
   if (!model || !usable || usable.width < 1 || usable.height < 1) return null;
   const centerX = model.x + model.internalModel.width * model.scale.x / 2;
   const centerY = model.y + model.internalModel.height * model.scale.y / 2;
@@ -356,7 +361,22 @@ function tweenCameraTo(target, ms, onDone) {
   app.ticker.add(cameraTween);
 }
 
+// the placeholder has no renderer, so resizeStage never runs for
+// it. same mode swap: the new layout's saved camera, or its default
+export function standInModeChanged(next) {
+  S.cameraMode = next;
+  if (cameraPreset === 'face') return;
+  const state = S.cameraPersistenceEnabled && sanitizeCameraState(cameraStates[next]);
+  if (state) applyCameraState(state);
+  else resetCameraForMode(next);
+}
+
 export function setCameraPreset(preset) {
+  if (!model && standIn && preset !== cameraPreset) {
+    cameraPreset = preset === 'face' ? 'face' : 'default';
+    standIn.fit();
+    return;
+  }
   if (!model || !app || preset === cameraPreset) return;
   if (preset === 'face') {
     savedCamera = currentCameraSnapshot();

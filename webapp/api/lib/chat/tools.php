@@ -123,11 +123,11 @@ function tool_catalog(?string $approvedWebSearchQuery): array {
             'type' => 'function',
             'function' => [
                 'name' => 'web_search',
-                'description' => 'Search the web for current or external real-world info you can\'t be sure of.',
+                'description' => 'Look something up on the web. The first call runs exactly what Anon typed (a search, or the page if he gave a link). Up to two more calls run your own related queries.',
                 'parameters' => [
                     'type' => 'object',
                     'properties' => [
-                        'query' => ['type' => 'string', 'description' => 'Search query.'],
+                        'query' => ['type' => 'string', 'description' => 'Search query. Never include anything private about Anon.'],
                     ],
                     'required' => ['query'],
                 ],
@@ -308,6 +308,7 @@ function chat_run_tool(string $name, array $args, array $ctx, array &$state): st
         // the grant is what lets the page open at all. cards is
         // played at home, nothing to grant
         if ($where !== 'cards') trip_set((int)$ctx['user']['id'], $where, $ctx['conv_id']);
+        relationship_history_add((int)$ctx['user']['id'], null, 'outing:' . $where);
         sse_send(['go' => $where]);
         $state['went'] = $where;
         return json_encode([
@@ -318,10 +319,32 @@ function chat_run_tool(string $name, array $args, array $ctx, array &$state): st
         ]);
     }
 
-    return run_tool_call($name, $args, $ctx['user'], $ctx['conv_id'], $state['approved_search']);
+    if ($name === 'web_search') {
+        $approved = $state['approved_search'];
+        if ($approved === null) return json_encode(['error' => 'user_confirmation_required']);
+        $userId = (int)$ctx['user']['id'];
+        $used = $state['lookups']++;
+        if ($used === 0) ach_add($userId, 'searches');
+        $res = web_lookup($approved, (string)($args['query'] ?? ''), $used, web_private_texts($ctx['user'], $ctx['req']));
+        return json_encode($res, JSON_UNESCAPED_UNICODE | JSON_INVALID_UTF8_SUBSTITUTE);
+    }
+
+    return run_tool_call($name, $args, $ctx['user'], $ctx['conv_id']);
 }
 
-function run_tool_call(string $name, array $args, array $user, int $convId, ?string &$approvedWebSearchQuery): string {
+function web_private_texts(array $user, array $req): array {
+    $userId = (int)$user['id'];
+    $texts = [(string)($user['email'] ?? ''), memory_journal_read($userId)];
+    foreach (memory_notes_load($userId) as $data) {
+        foreach ($data['notes'] as $note) $texts[] = (string)$note['text'];
+    }
+    foreach ($req['body']['messages'] ?? [] as $m) {
+        if (($m['role'] ?? '') === 'user' && is_string($m['content'] ?? null)) $texts[] = $m['content'];
+    }
+    return $texts;
+}
+
+function run_tool_call(string $name, array $args, array $user, int $convId): string {
     try {
         if ($name === 'search_recent_chats') {
             $query = trim((string)($args['query'] ?? ''));
@@ -414,15 +437,6 @@ function run_tool_call(string $name, array $args, array $user, int $convId, ?str
             $res = memory_note_add((int)$user['id'], $category, $memory);
             if (!empty($res['ok'])) ach_add((int)$user['id'], 'notes');
             return json_encode($res, JSON_UNESCAPED_UNICODE);
-        }
-        if ($name === 'web_search') {
-            if ($approvedWebSearchQuery === null) {
-                return json_encode(['error' => 'user_confirmation_required']);
-            }
-            $query = $approvedWebSearchQuery;
-            $approvedWebSearchQuery = null;
-            ach_add((int)$user['id'], 'searches');
-            return json_encode(web_search_public($query), JSON_UNESCAPED_UNICODE);
         }
         return json_encode(['error' => 'unknown_tool']);
     } catch (Throwable $e) {

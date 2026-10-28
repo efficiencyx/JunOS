@@ -172,7 +172,7 @@ function memory_meta_write(int $userId, array $meta): array {
     return memory_atomic_write(memory_user_dir($userId) . '/meta.json', $json . "\n", '.meta-');
 }
 
-const MEMORY_SOURCE_KINDS = ['chat', 'date', 'karaoke', 'pass', 'manual'];
+const MEMORY_SOURCE_KINDS = ['chat', 'date', 'karaoke', 'pass', 'manual', 'request'];
 const MEMORY_REVISIONS_KEPT = 5;
 
 // chat.php sets this once per turn, so memory_write and the

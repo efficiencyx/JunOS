@@ -218,32 +218,31 @@
   color: var(--muted);
 }
 .msg.assistant a { color: var(--accent); }
-.msg-rate {
+.msg-actions {
   display: flex;
   gap: 4px;
   margin-top: 8px;
-  opacity: 0;
-  transition: opacity .2s ease;
+  opacity: .6;
+  transition: opacity .15s ease;
 }
-.msg-rate.shown { opacity: 1; }
-.msg-rate.hiding { opacity: 0; }
-.msg-rate button {
+.msg:hover .msg-actions,
+.msg-actions:focus-within { opacity: 1; }
+.msg-actions button {
   appearance: none;
   border: 1px solid var(--border-2);
   background: var(--bg-elev);
   border-radius: var(--radius-sm);
   color: var(--muted);
   cursor: pointer;
-  font-size: 12px;
   line-height: 1;
-  opacity: .52;
   padding: 4px 6px;
-  transition: opacity .15s ease, border-color .15s ease;
+  transition: color .15s ease, border-color .15s ease;
 }
-.msg-rate button:hover:not(:disabled) { opacity: 1; border-color: var(--accent); }
-.msg-rate button.selected { opacity: 1; border-color: var(--accent); }
-.msg-rate button:disabled { cursor: default; }
-.msg-rate button svg { display: block; }
+.msg-actions button:hover { color: var(--fg); border-color: var(--accent); }
+.msg-actions button.selected { color: var(--fg); border-color: var(--accent); }
+.msg-actions button svg { display: block; }
+.msg-rate-btn { display: none; }
+html.is-admin:not(.android-app) .msg-rate-btn { display: inline-block; }
 .msg-spoken-icon { vertical-align: -2px; margin-right: 6px; }
 .msg-think {
   margin: 0 0 8px;
@@ -306,7 +305,30 @@
   max-width: 760px;
   width: 100%;
   margin: 0 auto;
+  position: relative;
 }
+
+.jump-latest {
+  position: absolute;
+  top: -44px;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 34px;
+  height: 34px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  border-radius: 50%;
+  border: 1px solid var(--border-2);
+  background: var(--bg-3);
+  color: var(--fg);
+  cursor: pointer;
+  z-index: 2;
+}
+.jump-latest:hover { background: var(--bg-hover); }
+.jump-latest[hidden],
+html.phone-ui .jump-latest { display: none; }
 
 .consolidation-banner {
   display: flex;
@@ -363,9 +385,30 @@
   padding: 9px 6px;
   min-height: 24px;
   max-height: 200px;
+  field-sizing: content;
   outline: none;
 }
 .composer textarea::placeholder { color: var(--muted); }
+
+.composer-field { flex: 1; position: relative; display: flex; min-width: 0; }
+.composer-field textarea { position: relative; }
+.composer-mirror {
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+  padding: 9px 6px;
+  font: inherit;
+  font-size: 14px;
+  line-height: 1.5;
+  white-space: pre-wrap;
+  overflow-wrap: break-word;
+  color: var(--fg);
+  pointer-events: none;
+}
+.composer-field:not(.has-command) .composer-mirror { display: none; }
+.composer-field.has-command textarea { color: transparent; caret-color: var(--fg); }
+.cmd { color: var(--accent-2); }
+html.android-app .cmd { color: inherit; }
 
 .composer-icon,
 .composer-send {

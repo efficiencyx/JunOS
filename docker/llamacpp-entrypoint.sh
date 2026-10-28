@@ -18,7 +18,8 @@ ini=/tmp/models.ini
 # leave it unset under a 16k ceiling and fit shrinks the context
 # first, down to fit-ctx, which is what ollama does. the override
 # only lands on gemma4 GGUFs, on anything else it does nothing and
-# you want OMEGA_NUM_CTX. fit-target is php's VRAM_RESERVE_MB.
+# you want OMEGA_NUM_CTX. fit-target is 1024, NOT php's 2048
+# VRAM_RESERVE_MB: at 2048 the 12B on a 12 GB card went partly CPU.
 chat_section() {  # name, where-the-weights-are line, mtp yes/no
     printf '[%s]\n%s\n' "$1" "$2"
     if [ -n "${OMEGA_NUM_CTX:-}" ]; then
@@ -26,7 +27,7 @@ chat_section() {  # name, where-the-weights-are line, mtp yes/no
     else
         printf 'override-kv = gemma4.context_length=int:16384\nfit-ctx = 6144\n'
     fi
-    printf 'fit-target = 2048\n'
+    printf 'fit-target = 1024\n'
     # the drafter matches ONE gemma 4 size, so only the default
     # model gets it
     if [ "$3" = yes ] && [ -n "${LLAMACPP_MTP:-}" ]; then

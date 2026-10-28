@@ -168,6 +168,46 @@ case 'recover':
     start_session((int)$user['id'], $dek);
     json_out(['user' => user_public($user)]);
 
+// signed in and knows the old password. same rewrap as recover,
+// nothing on disk gets re-encrypted. other sessions are logged out
+case 'change_password':
+    require_post();
+    require_content_type('application/json');
+    rate_limit('auth_change_password', 5, 3600);
+
+    $sessionUser = require_user();
+    $body = json_decode(read_body(4 * 1024), true);
+    if (!is_array($body)) fail(400, 'invalid_request');
+    $current = (string)($body['current_password'] ?? '');
+    $password = (string)($body['password'] ?? '');
+    if (strlen($password) < 8) fail(400, 'password_too_short');
+
+    $db = db();
+    $st = $db->prepare('SELECT * FROM users WHERE id = ? LIMIT 1');
+    $st->execute([$sessionUser['id']]);
+    $user = $st->fetch();
+    if (!$user || !password_verify($current, $user['password_hash'])) {
+        log_event(['msg' => 'change_password_failed', 'user_id' => $sessionUser['id']]);
+        fail(401, 'invalid_credentials');
+    }
+
+    if ($user['wrapped_dek'] === null) {
+        $db->prepare('UPDATE users SET password_hash = ? WHERE id = ?')
+           ->execute([password_hash($password, PASSWORD_DEFAULT), $user['id']]);
+    } else {
+        $dek = crypt_open((string)$user['wrapped_dek'], crypt_kdf($current, base64_decode((string)$user['kdf_salt'])));
+        if ($dek === null) fail(500, 'data_key_unavailable');
+        $salt = random_bytes(SODIUM_CRYPTO_PWHASH_SALTBYTES);
+        $db->prepare('UPDATE users SET password_hash = ?, kdf_salt = ?, wrapped_dek = ? WHERE id = ?')
+           ->execute([password_hash($password, PASSWORD_DEFAULT), base64_encode($salt),
+                      crypt_seal($dek, crypt_kdf($password, $salt)), $user['id']]);
+    }
+    $token = (string)($_COOKIE['omega_session'] ?? '');
+    $db->prepare('DELETE FROM sessions WHERE user_id = ? AND token != ?')
+       ->execute([$user['id'], session_token_hash($token)]);
+    log_event(['msg' => 'password_changed', 'user_id' => $user['id']]);
+    json_out(['ok' => true]);
+
 case 'promote':
     require_post();
     require_content_type('application/json');
@@ -202,7 +242,8 @@ case 'factory_reset':
            ->execute([$userId]);
         foreach (['conversations', 'preferences', 'relationship', 'memory_consolidation',
                   'user_bans', 'wardrobe_presets', 'wardrobe_state', 'welcome_queue', 'trips',
-                  'achievement_stats', 'achievement_seen', 'karaoke_takes'] as $table) {
+                  'achievement_stats', 'achievement_seen', 'karaoke_takes', 'reply_ratings',
+                  'mood_log', 'relationship_history'] as $table) {
             $db->prepare('DELETE FROM ' . $table . ' WHERE user_id = ?')->execute([$userId]);
         }
         $token = (string)($_COOKIE['omega_session'] ?? '');

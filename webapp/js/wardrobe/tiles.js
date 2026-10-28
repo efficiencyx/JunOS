@@ -1,10 +1,10 @@
-import * as Live2D from '../live2d/live2d.js?v=84';
-import { closeColorPicker, colorPickerEl, makeColorButton, phonePopupMode, pickerEmbedded, schedulePopupPosition, showColorPicker, visualViewportRect, watchPopupViewport } from './color-picker.js?v=20';
+import * as Live2D from '../live2d/live2d.js?v=86';
+import { closeColorPicker, colorPickerEl, makeColorButton, phonePopupMode, pickerEmbedded, schedulePopupPosition, showColorPicker, visualViewportRect, watchPopupViewport } from './color-picker.js?v=22';
 import { colorGroup } from '../outfit/catalog.js?v=2';
 import { colors, state, variantState } from '../outfit/current.js?v=2';
-import { setItem, setVariant } from '../outfit/apply.js?v=17';
-import { variantThumb } from './tile-bake.js?v=17';
-import { wdGhost } from './panel.js?v=20';
+import { setItem, setVariant } from '../outfit/apply.js?v=19';
+import { variantThumb } from './tile-bake.js?v=19';
+import { wdGhost } from './panel.js?v=22';
 
 export function wdMoveGhost(x, y) {
   wdGhost.style.left = (x + 10) + 'px';
