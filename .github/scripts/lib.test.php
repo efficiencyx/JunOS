@@ -120,7 +120,7 @@ $refused = function (array $body, bool $watching) {
 };
 $eq('frames: one jpeg ok', chat_parse_frames(['frames' => [$jpeg]], true), [$jpeg]);
 $eq('frames: none without watch', $refused(['frames' => [$jpeg]], false), true);
-$eq('frames: five is too many', $refused(['frames' => array_fill(0, 5, $jpeg)], true), true);
+$eq('frames: over WATCH_MAX_FRAMES refused', $refused(['frames' => array_fill(0, WATCH_MAX_FRAMES + 1, $jpeg)], true), true);
 $eq('frames: png refused', $refused(['frames' => [base64_encode("\x89PNG\r\n\x1a\n")]], true), true);
 $eq('frames: over 768 px refused', $refused(['frames' => [$fakeJpeg(1024, 576)]], true), true);
 $eq('watch: absent', chat_parse_watch([]), null);
