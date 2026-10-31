@@ -14,6 +14,8 @@ let plan = null;
 let lastHere = Date.now();
 let shownFor = 0;
 const shown = new Set();
+// planned texts have a fixed time, his clicks don't reset them
+const shownPlanned = new Set();
 
 export function supported() {
   return 'Notification' in window && window.isSecureContext;
@@ -40,6 +42,7 @@ async function refresh() {
     for (const t of Array.isArray(d.tiers) ? d.tiers : []) {
       (t.texts || []).forEach((text, i) => items.push({ key: t.tier + ':' + i, offset: (t.after + i * (t.gap || 0)) * 1000, text }));
     }
+    for (const p of Array.isArray(d.planned) ? d.planned : []) items.push({ key: 'planned:' + p.id, at: p.at * 1000, text: p.text });
     plan = { idleSince: (d.idle_since || 0) * 1000, items };
   } catch (e) {
     // stack is down, the plan from the last good fetch still runs
@@ -63,9 +66,10 @@ function tick() {
   if (start !== shownFor) { shown.clear(); shownFor = start; }
   const now = Date.now();
   for (const it of plan.items) {
-    const due = start + it.offset;
-    if (due > now || shown.has(it.key)) continue;
-    shown.add(it.key);
+    const due = it.at ?? start + it.offset;
+    const seen = it.at ? shownPlanned : shown;
+    if (due > now || seen.has(it.key)) continue;
+    seen.add(it.key);
     if (now - due < STALE_MS) show(it.text, it.key);
   }
 }

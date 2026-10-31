@@ -546,12 +546,15 @@ function driveHair(ps, dtMs) {
 // instead of kinking. eyeballs fastest (saccades), body slowest.
 const SMOOTH_S = [
   [/^ParamEyeball/, 0.07],
-  [/^Param(Eye|Brow|Mouth|Iris|Blush|Heart|Pupil)/, 0.1],
+  [/^ParamHeart$/, 0.075],
+  [/^Param(Eye|Brow|Mouth|Iris|Blush|Pupil)/, 0.1],
   [/^ParamHead[XYZ]$/, 0.16],
   [/^ParamBody[XYZ]$/, 0.24],
   [/^Param(Arm|Leg)/, 0.2],
 ];
 const DEFAULT_SMOOTH_S = 0.12;
+// on/off art, any target in between is a half transparent heart
+const SWITCH_PARAMS = new Set(['ParamHeart']);
 const smoothCache = new Map();
 
 function smoothTime(id) {
@@ -707,7 +710,8 @@ export function tick() {
   if (holds.size) releaseExpired(now);
 
   let settling = false;
-  for (const [id, target] of targetParams) {
+  for (let [id, target] of targetParams) {
+    if (SWITCH_PARAMS.has(id)) target = target >= 0.5 ? 1 : 0;
     const cur = currentValues.get(id);
     if (cur === undefined) { currentValues.set(id, target); continue; }
     const v0 = velocities.get(id) || 0;

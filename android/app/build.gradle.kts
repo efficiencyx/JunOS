@@ -142,6 +142,9 @@ val generateJunWebAssets = tasks.register<Copy>("generateJunWebAssets") {
     from(rootProject.projectDir.parentFile.resolve("tools/lore_dataset.jsonl")) {
         into("data")
     }
+    from(rootProject.projectDir.parentFile.resolve("webapp/api/lib/achievements.json")) {
+        into("data")
+    }
     into(layout.buildDirectory.dir("generated/junWeb"))
 }
 

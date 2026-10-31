@@ -21,6 +21,9 @@ $eq('yes to no question', trip_guess_invite('yes', 'I had dinner already.'), '')
 $eq('mention is not an invite', trip_guess_invite('I went to karaoke yesterday', ''), '');
 $eq('negated invite', trip_guess_invite("I don't want to go shopping", ''), '');
 $eq('later is not now', trip_guess_invite("let's go shopping later", ''), '');
+$eq('typed watch invite', trip_guess_invite('wanna watch a movie together?', ''), 'watch');
+$eq('movie night', trip_guess_invite("let's do a movie night", ''), 'watch');
+$eq('watch your mouth is no invite', trip_guess_invite("let's watch your mouth", ''), '');
 $eq('two trips named', trip_guess_invite("let's do dinner then karaoke", ''), '');
 
 $eq('reply yes', trip_reply_accepts("[A:happy] Yes! Let's go, I'll grab my coat."), true);

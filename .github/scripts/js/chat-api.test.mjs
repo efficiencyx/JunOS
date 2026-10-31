@@ -30,3 +30,11 @@ test('a plain turn posts an empty invite, which chat.php drops', async () => {
   const sent = await send({ messages: [], invite: '' });
   assert.equal(sent.body.invite, '');
 });
+
+test('a watch turn carries its frames and the watch block', async () => {
+  const watch = { turn: 'tick', source: 'file', title: 'x', at: 40, length: 600, paused: false };
+  const sent = await send({ messages: [], ephemeral: true, frames: ['/9j/'], audio: 'UklGRg==', watch });
+  assert.deepEqual(sent.body.frames, ['/9j/']);
+  assert.equal(sent.body.audio, 'UklGRg==');
+  assert.deepEqual(sent.body.watch, watch);
+});

@@ -11,6 +11,7 @@ import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
 import java.io.File
 import java.security.SecureRandom
+import java.time.LocalDate
 
 @Serializable
 data class MemoryNote(
@@ -22,7 +23,10 @@ data class MemoryNote(
     val updated: Long,
     val source: NoteSource? = null,
     val revisions: List<NoteSource> = emptyList(),
-)
+    val dated: Long = 0,
+) {
+    val anchor: Long get() = if (dated > 0) dated else created
+}
 
 // lib/memory.php's meta source. no memory pass here, so revisions stay empty
 @Serializable
@@ -45,7 +49,7 @@ data class MemoryCategory(val slug: String, val count: Int, val updated: Long)
 data class JournalPayload(val entries: List<JournalEntry>)
 
 @Serializable
-private data class MetaEntry(val created: Long, val updated: Long, val source: NoteSource? = null)
+private data class MetaEntry(val created: Long, val updated: Long, val source: NoteSource? = null, val dated: Long = 0)
 
 class MemoryStore(context: Context) {
     private val root = File(context.filesDir, "memory/user-1").also { it.mkdirs() }
@@ -86,7 +90,8 @@ class MemoryStore(context: Context) {
             writeCategory(note.category, snapshot.notes.filter { it.category == note.category }.map { if (it.id == id) it.copy(text = text) else it })
             val meta = loadMeta().toMutableMap()
             val now = System.currentTimeMillis() / 1000
-            meta[id] = (meta[id] ?: MetaEntry(note.created, now)).copy(updated = now)
+            val entry = meta[id] ?: MetaEntry(note.created, now)
+            meta[id] = entry.copy(updated = now, dated = MemoryDates.dated(note.text, text, entry.dated, now))
             writeMeta(meta)
             true
         }
@@ -118,7 +123,7 @@ class MemoryStore(context: Context) {
         val blocks = grouped.map { (category, notes) ->
             "### $category\n" +
                 notes.sortedByDescending { it.updated }.joinToString("\n") { note ->
-                    val created = MemoryDates.day(note.created)
+                    val created = MemoryDates.day(note.anchor)
                     "- " + MemoryDates.stamp(note.text, created) +
                         MemoryDates.render(note.text, created).replace(WIKI_LINK, "$1")
                 }
@@ -133,6 +138,26 @@ class MemoryStore(context: Context) {
 
     suspend fun journalText(): String = withContext(Dispatchers.IO) {
         mutex.withLock { File(root, "journal.md").takeIf { it.isFile }?.readText()?.trim().orEmpty() }
+    }
+
+    // write_journal. php's memory_journal_append(), in this file's
+    // own "## date" layout. null when it went in, else the error
+    suspend fun appendJournal(entry: String, day: LocalDate = LocalDate.now()): String? = withContext(Dispatchers.IO) {
+        mutex.withLock {
+            val text = normalize(entry).take(JOURNAL_ENTRY_MAX)
+            if (text.isBlank()) return@withLock "journal_text_required"
+            val date = day.toString()
+            val entries = parseJournal().toMutableList()
+            val at = entries.indexOfFirst { it.date == date }
+            val merged = if (at >= 0) entries[at].text + " " + text else text
+            if (merged.length > JOURNAL_DAY_MAX) return@withLock "journal_day_full"
+            if (at >= 0) entries[at] = JournalEntry(date, merged) else entries += JournalEntry(date, merged)
+            atomicWrite(
+                File(root, "journal.md"),
+                entries.sortedByDescending { it.date }.joinToString("\n\n", postfix = "\n") { "## ${it.date}\n${it.text}" },
+            )
+            null
+        }
     }
 
     private fun snapshotUnlocked(): MemorySnapshot {
@@ -151,7 +176,7 @@ class MemoryStore(context: Context) {
             val match = NOTE_LINE.matchEntire(line.trim()) ?: return@mapNotNull null
             val id = match.groupValues[2]
             val stamp = meta[id] ?: MetaEntry(0, 0)
-            MemoryNote(id, slug, match.groupValues[1].trim(), links(match.groupValues[1]), stamp.created, stamp.updated, stamp.source)
+            MemoryNote(id, slug, match.groupValues[1].trim(), links(match.groupValues[1]), stamp.created, stamp.updated, stamp.source, dated = stamp.dated)
         }
     }
 
@@ -228,6 +253,8 @@ class MemoryStore(context: Context) {
 
     companion object {
         private const val ALPHABET = "abcdefghijklmnopqrstuvwxyz0123456789"
+        private const val JOURNAL_ENTRY_MAX = 400
+        private const val JOURNAL_DAY_MAX = 1600
         private val CATEGORIES = setOf("preferences", "work", "health", "family", "plans", "boundaries", "events")
         private val NOTE_LINE = Regex("^-\\s+(.+?)\\s+\\^([a-z0-9]{5})$")
         private val WIKI_LINK = Regex("\\[\\[([^]\\n]+)]]")

@@ -1,9 +1,9 @@
-import * as Live2D from '../live2d/live2d.js?v=86';
+import * as Live2D from '../live2d/live2d.js?v=89';
 import { apiGet } from './api.js?v=1';
 import { gaugeTier } from './mood-tier.js?v=2';
 import * as Names from './names.js?v=1';
 import * as MobileViewport from './viewport.js?v=1';
-import * as TTS from '../voice/tts.js?v=86';
+import * as TTS from '../voice/tts.js?v=89';
 
 export let affection = 0;
 export let trust = 0;
@@ -115,7 +115,7 @@ function applyExpression(kind) {
     Live2D.setTarget('ParamBlush', 0.5);
     Live2D.setTarget('ParamMouthForm', 1);
     Live2D.setTarget('ParamEyesHappy', 1);
-    Live2D.setTarget('ParamHeart', 0.55);
+    Live2D.setTarget('ParamHeart', 1);
   } else {
     Live2D.setTarget('ParamBlush', kind === 'hair' ? 0.35 : 0.2);
     Live2D.setTarget('ParamMouthForm', 0.8);

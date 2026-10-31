@@ -33,9 +33,30 @@ const MEMORY_RELATIVE_TIME_OFFSETS = [
     'this evening' => 0, 'tomorrow' => 1, 'yesterday' => -1, 'last night' => -1,
 ];
 
+// the day the note's "tomorrow" was said. an edit that brings in new
+// relative wording moves it, see memory_note_dated()
+function memory_note_anchor(array $note): int {
+    return (int)($note['dated'] ?? 0) ?: (int)($note['created'] ?? 0);
+}
+
+function memory_relative_phrases(string $text): array {
+    preg_match_all(MEMORY_RELATIVE_TIME_RE, strtolower($text), $m);
+    $phrases = array_unique($m[0]);
+    sort($phrases);
+    return $phrases;
+}
+
+// same phrases as before = same anchor, a typo fix must not turn
+// last week's "tomorrow" into tomorrow
+function memory_note_dated(string $oldText, string $newText, int $dated): int {
+    $phrases = memory_relative_phrases($newText);
+    if (!$phrases) return 0;
+    return $phrases === memory_relative_phrases($oldText) ? $dated : time();
+}
+
 function memory_note_stamp(array $note): string {
     if (!preg_match(MEMORY_RELATIVE_TIME_RE, (string)$note['text'])) return '';
-    $created = (int)($note['created'] ?? 0);
+    $created = memory_note_anchor($note);
     if ($created <= 0) return '';
     return '(noted ' . date('l j F Y', $created) . ', ' . memory_days_phrase($created) . ') ';
 }
@@ -55,7 +76,7 @@ function memory_days_phrase(int $when): string {
 // day right after the phrase, leaving her nothing to work out.
 function memory_note_render(array $note): string {
     $text = (string)$note['text'];
-    $created = (int)($note['created'] ?? 0);
+    $created = memory_note_anchor($note);
     if ($created <= 0) return $text;
 
     return preg_replace_callback(MEMORY_RELATIVE_TIME_RE, function (array $m) use ($created): string {
@@ -172,7 +193,7 @@ function memory_meta_write(int $userId, array $meta): array {
     return memory_atomic_write(memory_user_dir($userId) . '/meta.json', $json . "\n", '.meta-');
 }
 
-const MEMORY_SOURCE_KINDS = ['chat', 'date', 'karaoke', 'pass', 'manual', 'request'];
+const MEMORY_SOURCE_KINDS = ['chat', 'date', 'karaoke', 'watch', 'pass', 'manual', 'request'];
 const MEMORY_REVISIONS_KEPT = 5;
 
 // chat.php sets this once per turn, so memory_write and the
@@ -193,7 +214,7 @@ function memory_clean_source(?array $source): ?array {
 // edit and move reset the pass's marks on purpose, so the note gets
 // looked at again. where it came from and what it used to say stay
 function memory_meta_keep(array $meta, string $id): array {
-    return array_intersect_key($meta['notes'][$id] ?? [], ['source' => 1, 'revisions' => 1]);
+    return array_intersect_key($meta['notes'][$id] ?? [], ['source' => 1, 'revisions' => 1, 'dated' => 1]);
 }
 
 function memory_mint_id(array $used): string {
@@ -352,6 +373,7 @@ function memory_notes_load_unlocked(int $userId): array {
                 'links' => memory_note_links($text),
                 'created' => (int)($times['created'] ?? $mtime),
                 'updated' => (int)($times['updated'] ?? $mtime),
+                'dated' => (int)($times['dated'] ?? 0),
                 'source' => is_array($times['source'] ?? null) ? $times['source'] : null,
                 'revisions' => is_array($times['revisions'] ?? null) ? $times['revisions'] : [],
             ];
@@ -411,6 +433,8 @@ function memory_note_edit_unlocked(int $userId, string $id, string $text, ?array
             if (empty($result['ok'])) return $result;
             $meta = memory_meta_load($userId);
             $kept = memory_meta_keep($meta, $id);
+            $kept['dated'] = memory_note_dated($note['text'], $entry['memory'], (int)($kept['dated'] ?? 0));
+            if (!$kept['dated']) unset($kept['dated']);
             if ($entry['memory'] !== $note['text']) {
                 $kept['revisions'] = array_slice([...($kept['revisions'] ?? []),
                     ['text' => $note['text'], 'at' => time()] + (memory_clean_source($by) ?? [])], -MEMORY_REVISIONS_KEPT);

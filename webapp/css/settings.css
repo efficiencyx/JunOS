@@ -481,5 +481,4 @@
   text-align: right;
   text-shadow: 0 0 8px var(--glow, transparent);
 }
-html.android-app .ratings-export { display: none; }
 html.android-app .account-password { display: none; }

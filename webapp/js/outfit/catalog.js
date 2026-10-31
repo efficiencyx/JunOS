@@ -3,7 +3,7 @@ export const ITEMS = [
   { key: 'shirt', label: 'Shirt', param: 'ParamShirtEnabled', defaultOn: true, excludes: ['dress','dress1'],
     colorPatterns: ['shirt'], colorExcludes: ['logo'] },
   { key: 'hoodie', label: 'Hoodie', param: 'ParamHoodieEnabled', defaultOn: false, excludes: ['dress','dress1'],
-    colorPatterns: ['hoodie'], colorExcludes: ['logo'] },
+    colorPatterns: ['hoodie'], colorExcludes: ['logo', 'hoodiestring'] },
   { key: 'dress', label: 'Dress', param: 'ParamDress2Enabled', defaultOn: false, excludes: ['shirt','hoodie','skirt','pants','dress1'],
     colorPatterns: ['dress'] },
   // Dress1 has no rig parameter, so we flip it on and off by hand
@@ -115,6 +115,8 @@ export const COLOR_GROUPS = [
 
   { key: 'stockings_accent', label: 'Accent', includes: [], excludes: [] },
 
+  { key: 'hoodie_strings', label: 'Strings', includes: ['hoodiestring'], excludes: [] },
+
   ...ITEMS.filter(it => it.colorPatterns).map(it => ({
     key: it.key, label: it.label,
     includes: it.colorPatterns, excludes: it.colorExcludes || [],
@@ -123,6 +125,7 @@ export const COLOR_GROUPS = [
 
 export const ITEM_COLOR_GROUPS = {
   ...Object.fromEntries(ITEMS.filter(it => it.colorPatterns).map(it => [it.key, [it.key]])),
+  hoodie: ['hoodie', 'hoodie_strings'],
   stockings: ['stockings', 'stockings_accent'],
   cat_ears: ['ear', 'ear_mid'],
   pointy_ears: ['ear'],

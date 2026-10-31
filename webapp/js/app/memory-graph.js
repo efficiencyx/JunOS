@@ -602,6 +602,7 @@ var SOURCE_LABELS = {
   chat: 'From a chat',
   date: 'From a date',
   karaoke: 'From karaoke',
+  watch: 'From watching something',
   pass: 'From her memory pass',
   manual: 'Added in Settings',
 };

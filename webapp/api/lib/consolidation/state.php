@@ -123,3 +123,57 @@ function welcome_queue_read(int $userId, bool $drain = true): array {
         return [];
     }
 }
+
+const PLANNED_MAX_WAITING = 3;
+
+function planned_when(int $hours): string {
+    if ($hours === 1) return 'in an hour';
+    if ($hours < 24) return "in $hours hours";
+    $days = intdiv($hours, 24);
+    $rest = $hours % 24;
+    $when = 'in ' . ($days === 1 ? 'a day' : "$days days");
+    if ($rest) $when .= ' and ' . ($rest === 1 ? 'an hour' : "$rest hours");
+    return $when;
+}
+
+// one statement so two racing calls can't both be the third. the cap is
+// inlined ON PURPOSE, bound it goes in as TEXT and sqlite says any int < any text
+function planned_add(int $userId, string $text, int $afterHours): array {
+    $text = mb_substr(trim(preg_replace('/\s+/', ' ', $text)), 0, WELCOME_MAX_CHARS);
+    if ($text === '') return ['error' => 'message_required'];
+    $hours = max(1, min(72, $afterHours));
+    $now = time();
+    $st = db()->prepare(
+        'INSERT INTO planned_messages (user_id, text, due_at, created_at)
+         SELECT ?, ?, ?, ? WHERE (SELECT COUNT(*) FROM planned_messages WHERE user_id = ? AND delivered_at IS NULL) < ' . PLANNED_MAX_WAITING
+    );
+    $st->execute([$userId, enc($text), $now + $hours * 3600, $now, $userId]);
+    if ($st->rowCount() === 0) {
+        return [
+            'planned' => false,
+            'note' => 'You already have ' . PLANNED_MAX_WAITING . ' texts waiting to go out to Anon. This one was not planned.',
+        ];
+    }
+    return ['planned' => true, 'sends' => planned_when($hours)];
+}
+
+function planned_waiting(int $userId, ?int $dueBy = null): array {
+    $st = db()->prepare(
+        'SELECT id, text, due_at FROM planned_messages
+          WHERE user_id = ? AND delivered_at IS NULL AND due_at <= ? ORDER BY due_at, id'
+    );
+    $st->execute([$userId, $dueBy ?? PHP_INT_MAX]);
+    $out = [];
+    foreach ($st->fetchAll() as $row) {
+        $text = (string)dec((string)$row['text']);
+        if ($text !== '') $out[] = ['id' => (int)$row['id'], 'at' => (int)$row['due_at'], 'text' => $text];
+    }
+    return $out;
+}
+
+function planned_mark_delivered(int $userId, array $ids): void {
+    if (!$ids) return;
+    $marks = implode(',', array_fill(0, count($ids), '?'));
+    db()->prepare("UPDATE planned_messages SET delivered_at = ? WHERE user_id = ? AND id IN ($marks)")
+        ->execute([time(), $userId, ...array_map('intval', $ids)]);
+}

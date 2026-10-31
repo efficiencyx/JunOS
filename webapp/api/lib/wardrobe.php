@@ -34,7 +34,7 @@ const WARDROBE_COLOR_DEFAULTS = [
     'eyebrows' => null, 'eye_sclera' => null, 'eye_iris' => null,
     'eye_pupil' => null, 'eye_highlight' => null, 'lips' => null,
     'mouth_interior' => null, 'glasses_frame' => null, 'glasses_lens' => null,
-    'shirt' => null, 'hoodie' => null, 'dress' => null, 'dress1' => null,
+    'shirt' => null, 'hoodie' => null, 'hoodie_strings' => null, 'dress' => null, 'dress1' => null,
     'skirt' => null, 'pants' => null, 'bra' => null, 'panties' => null,
     'bikini_top' => null, 'bikini_bot' => null, 'shoe_l' => null,
     'shoe_r' => null, 'stockings' => null, 'stockings_accent' => null, 'headband' => null,

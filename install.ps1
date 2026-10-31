@@ -267,7 +267,7 @@ function Get-MtpBudgetMb([string]$modelRef) {
 # not a size, it gets dropped. under 1GB is an APU carveout, not a
 # card (same rule as amd_vram_mb_list in install.sh).
 #
-# keep this byte for byte the same as the copy in installer-gui.ps1.
+# keep this byte for byte the same as the copies in installer-gui.ps1 and start.ps1.
 function Get-AmdMemoryMb([object[]]$controllers) {
     $entries = @(Get-ItemProperty -Path 'HKLM:\SYSTEM\CurrentControlSet\Control\Video\*\000*' -ErrorAction SilentlyContinue)
     $capMb = 4095

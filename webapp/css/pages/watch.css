@@ -1,0 +1,37 @@
+@import url("../subpage.css?v=1");
+:root { --screen-w: min(60vw, 1100px); }
+* { box-sizing: border-box; }
+[hidden] { display: none !important; }
+html, body { height: 100%; height: 100dvh; }
+body { margin: 0; background: var(--bg); color: var(--fg); font: 14px/1.5 system-ui, sans-serif; overflow: hidden; }
+button { font: inherit; cursor: pointer; }
+button:focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; }
+button:disabled { cursor: default; opacity: .45; }
+.watch-layout { position: relative; height: 100%; }
+.room { position: absolute; inset: 0; overflow: hidden; background: #0d0b14; }
+.room svg { display: block; width: 100%; height: 100%; opacity: .55; }
+.screen { position: absolute; z-index: 3; left: 3vw; top: calc(70px + env(safe-area-inset-top)); width: var(--screen-w); aspect-ratio: 16 / 9; max-height: calc(100% - 200px); background: #000; box-shadow: 0 18px 50px #000a; }
+.screen video { display: block; width: 100%; height: 100%; object-fit: contain; background: #000; }
+body:not(.watching) .screen video { visibility: hidden; }
+.picker { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; gap: 10px; }
+.picker button, .composer button { min-height: 42px; padding: 0 16px; border: 1px solid var(--border-2); border-radius: 4px; background: var(--bg-3); color: var(--fg); white-space: nowrap; }
+.picker button:hover, .composer button:not(:disabled):hover { background: var(--bg-4); }
+#fileBtn { border-color: var(--accent); }
+/* she sits to the right of the screen, close enough to share it */
+#stage { position: absolute; z-index: 2; inset: 0 0 0 calc(var(--screen-w) - 8vw); }
+#stage canvas { display: block; }
+#stageStatus { position: absolute; z-index: 6; top: calc(max(30px, env(safe-area-inset-top)) + 26px); right: 20px; max-width: min(46%, 360px); font-size: 12px; background: var(--bg-2); border-radius: 4px; padding: 6px 10px; }
+#stageStatus:empty { display: none; }
+#stage .wardrobe-reaction { z-index: 4; }
+.composer { position: absolute; z-index: 8; left: 3vw; bottom: calc(12px + env(safe-area-inset-bottom)); width: var(--screen-w); margin: 0; display: flex; flex-direction: column; gap: 6px; }
+.last-line { margin: 0; min-height: 1.4em; font: italic 13px/1.4 var(--serif); color: var(--fg); text-shadow: 0 1px 4px #000b; overflow-wrap: anywhere; }
+.composer-row { display: flex; gap: 8px; }
+.composer input { flex: 1; min-width: 0; padding: 11px 14px; border: 1px solid var(--border-2); border-radius: 4px; background: var(--bg-2); color: var(--fg); font: inherit; }
+.composer input:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+@media (max-width: 760px) {
+  :root { --screen-w: calc(100vw - 20px); }
+  .screen { left: 10px; top: calc(62px + env(safe-area-inset-top)); max-height: 40%; }
+  #stage { inset: 32% 0 0; }
+  .composer { left: 10px; }
+  #stageStatus { top: auto; bottom: calc(100px + env(safe-area-inset-bottom)); right: 12px; max-width: 60%; }
+}

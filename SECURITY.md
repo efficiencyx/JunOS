@@ -227,6 +227,11 @@ downloads or changes anything.
   that carries an email, a long number, or a name, place or number from your
   memories, her journal or your messages in that chat, unless you typed it
   in the `/search` yourself. She can never fetch a link of her own choosing.
+* Nothing for **Watch something**. A shared YouTube tab is captured by your
+  browser like a screen share, the server never fetches the video. Frames and
+  a few seconds of its sound go to your own model server with each turn and
+  are never stored or logged. With `OLLAMA_URL`/`VLLM_URL` pointed at a
+  notebook (below) they ride along with the prompt like everything else.
 * `lrclib.net` - only when karaoke looks up lyrics for a song you loaded. Title,
   artist, album and duration go out.
 * `openrouter.ai` - **only** if you chose OpenRouter as the provider, and then
@@ -304,7 +309,7 @@ Discord: effx__
 
 * `omega.sqlite` - accounts, password hashes, session hashes, conversations and
   every message, rolling summaries, relationship scores, wardrobe state and
-  saved looks, the welcome queue, the walk-out lockouts (`user_bans`), and
+  saved looks, the welcome queue and the texts she planned (encrypted), the walk-out lockouts (`user_bans`), and
   the open outing grant (`trips`).
 * `memory/user-<id>/` - encrypted category notes, `journal.md` and `meta.json`.
   The filenames keep their Markdown/JSON extensions; their stored contents
@@ -336,7 +341,8 @@ whatever your Docker daemon or the log directory is configured for.
 
 **In your browser:** IndexedDB holds any game-mod zips you loaded, and
 localStorage holds UI preferences plus the unsent text in each chat's message
-box, in plain text until you send it or sign out. Mods are never uploaded, the server only ever
+box, in plain text until you send it or sign out. A video you open in Watch
+something plays from your disk in the page and is never uploaded. Mods are never uploaded, the server only ever
 sees item names.
 
 **Extracted game assets** land in `webapp/assets/`, are gitignored, and are for

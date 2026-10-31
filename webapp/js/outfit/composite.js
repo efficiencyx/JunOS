@@ -1,7 +1,7 @@
-import * as Live2D from '../live2d/live2d.js?v=86';
-import { GLASSES_STYLES, VARIANTS } from './catalog.js?v=2';
-import { availableAssets, textureAvailable } from './sync.js?v=19';
-import { colors, variantState } from './current.js?v=2';
+import * as Live2D from '../live2d/live2d.js?v=89';
+import { GLASSES_STYLES, VARIANTS } from './catalog.js?v=3';
+import { availableAssets, textureAvailable } from './sync.js?v=23';
+import { colors, variantState } from './current.js?v=3';
 import { hexToRgb01 } from './colors.js?v=1';
 
 const textureImgCache = {};

@@ -1,5 +1,5 @@
-import * as Actions from './actions.js?v=89';
-import * as Live2D from './live2d.js?v=86';
+import * as Actions from './actions.js?v=93';
+import * as Live2D from './live2d.js?v=89';
 
 let sendEvent = null;
 let isBusy = () => false;
@@ -16,6 +16,7 @@ const TOUCH_DRAG_THRESHOLD = 8;
 const NOTIFY_INTERVAL_MS = 2000;
 const NOTIFY_CHANCE = 0.2;
 const COOLDOWN_MS = 10000;
+const SHAKE_TRAVEL_PX = 12;
 
 const HIT_FACE = new Set(['HitAreaFaceStroke']);
 const HIT_HEAD = new Set(['HitAreaHeadpat']);
@@ -49,11 +50,12 @@ function isInteractiveTarget(t) {
   ));
 }
 
-function eventText(kind, side) {
+function eventText(kind, side, shakes) {
   if (kind === 'head') return "*pats Jun's head*";
   if (kind === 'face') return "*rubs Jun's cheek*";
   if (kind === 'boob') return `*fondles Jun's ${side} breast*`;
   if (kind === 'skirt') return "*lifts Jun's skirt*";
+  if (shakes >= 2) return `*shakes Jun's ${side} hand*`;
   return `*holds Jun's ${side} hand*`;
 }
 
@@ -69,6 +71,11 @@ function begin(kind, side, e) {
     lastTickAt: performance.now(),
     ox: 0,
     oy: 0,
+    startX: e.clientX,
+    startY: e.clientY,
+    shakeX: { peak: e.clientX, dir: 0 },
+    shakeY: { peak: e.clientY, dir: 0 },
+    shakes: 0,
   };
   if (kind === 'head') {
     Actions.applyAction({ name: 'receive_headpat', kwargs: {} });
@@ -101,7 +108,7 @@ function cancelPending() {
 function tryNotify(now) {
   if (!active || !sendEvent || isBusy() || now < cooldownUntil) return;
   cooldownUntil = now + COOLDOWN_MS;
-  sendEvent(eventText(active.kind, active.side));
+  sendEvent(eventText(active.kind, active.side, active.shakes));
 }
 
 function end() {
@@ -126,6 +133,7 @@ function end() {
   } else if (kind === 'skirt') {
     Live2D.setTarget('ParamSkirtUp', active.lift > 0.6 ? 1 : 0);
   } else {
+    Live2D.setTarget(side === 'left' ? 'ParamArmLRot' : 'ParamArmRRot', 0);
     Actions.applyAction({ name: 'handhold', kwargs: { side, enable: 'false' } });
   }
   active = null;
@@ -154,6 +162,16 @@ function tick() {
   if (active.heldMs >= NOTIFY_INTERVAL_MS) {
     active.heldMs -= NOTIFY_INTERVAL_MS;
     if (Math.random() < NOTIFY_CHANCE) tryNotify(now);
+  }
+}
+
+function trackShake(axis, pos) {
+  if ((pos - axis.peak) * axis.dir > 0) {
+    axis.peak = pos;
+  } else if (Math.abs(pos - axis.peak) > SHAKE_TRAVEL_PX) {
+    if (axis.dir && ++active.shakes === 2) tryNotify(performance.now());
+    axis.dir = Math.sign(pos - axis.peak);
+    axis.peak = pos;
   }
 }
 
@@ -189,6 +207,14 @@ function onPointerMove(e) {
   } else if (active.kind === 'skirt') {
     active.lift = Math.max(0, Math.min(1, active.lift + (active.lastY - e.clientY) * 0.01));
     Live2D.setTarget('ParamSkirtUp', active.lift);
+  } else if (active.kind === 'hand') {
+    trackShake(active.shakeX, e.clientX);
+    trackShake(active.shakeY, e.clientY);
+    const s = active.side === 'left' ? 'L' : 'R';
+    active.ox = Math.max(-1, Math.min(1, (active.startX - e.clientX) * 0.01));
+    active.oy = Math.max(-1, Math.min(1, (active.startY - e.clientY) * 0.02));
+    Live2D.setTarget('ParamArm' + s + 'Rot', active.ox);
+    Live2D.setTarget('ParamHandholding' + s + 'Y', active.oy);
   }
   active.lastY = e.clientY;
   active.lastX = e.clientX;

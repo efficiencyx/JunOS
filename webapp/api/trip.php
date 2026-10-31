@@ -3,7 +3,7 @@ require_once __DIR__ . '/lib/bootstrap.php';
 require_once __DIR__ . '/lib/consolidation/guided.php';
 
 // the table talk was ephemeral. this call is all that survives of it
-function date_recap(array $table, string $meal, string $venue): array {
+function outing_recap(array $table, string $scene, string $notMoment): array {
     $lines = [];
     $anonSpoke = false;
     foreach (array_slice($table, -40) as $row) {
@@ -16,13 +16,12 @@ function date_recap(array $table, string $meal, string $venue): array {
     }
     $none = ['moments' => [], 'plans' => []];
     if (!$anonSpoke) return $none;
-    $where = $venue !== '' ? " at {$venue}" : '';
     $sys = CONSOLIDATION_VOICE . <<<PROMPT
 
 
-Anon and I just had {$meal}{$where}. Below is what we said at the table. I write down what I want to keep from it, nothing else of it stays with me.
+{$scene} Below is what we said. I write down what I want to keep from it, nothing else of it stays with me.
 
-"moments": at most 2. Something that actually happened at this table that I'd want to bring up again: a joke that landed, something he told me about himself, a fight, something I found out. One sentence each, with the concrete detail (the name, the place, what he actually said). Not what we ordered, that's already written down.
+"moments": at most 2. Something that actually happened that I'd want to bring up again: a joke that landed, something he told me about himself, a fight, something I found out. One sentence each, with the concrete detail (the name, the place, what he actually said). {$notMoment}
 "plans": at most 2. Something one of us promised, or we agreed to do later, that hasn't happened yet. One sentence each, with the when if we said one.
 
 Small talk is nothing. Only what's in these lines, never a guess. An empty list is fine.
@@ -55,6 +54,8 @@ if (require_method('GET', 'POST') === 'GET') {
     $trip = trip_get($userId) ?? ['where' => '', 'since' => 0, 'conversation_id' => 0];
     $trip['gated'] = !free_roam_enabled();
     $trip['can_force'] = $canForce;
+    $trip['watch'] = true;
+    $trip['frame_every'] = watch_frame_every();
     json_out($trip);
 }
 
@@ -64,7 +65,7 @@ $body = ($_SERVER['CONTENT_LENGTH'] ?? 0) > 0 ? read_json_body(48 * 1024) : [];
 if ($action === 'go') {
     if (!$canForce) fail(403, 'forbidden');
     $where = (string)($body['where'] ?? '');
-    if (!in_array($where, ['shop', 'karaoke', 'date'], true)) fail(400, 'invalid_request');
+    if (!in_array($where, ['shop', 'karaoke', 'date', 'watch'], true)) fail(400, 'invalid_request');
     trip_set($userId, $where, (int)($body['conversation_id'] ?? 0));
     json_out(['ok' => true]);
 }
@@ -77,7 +78,9 @@ if ($action === 'home') {
     if ($trip && $trip['where'] === 'date') {
         $meal = in_array($body['meal'] ?? '', ['lunch', 'dinner'], true) ? $body['meal'] : 'a meal';
         $venue = trim(mb_substr((string)($body['venue'] ?? ''), 0, 60));
-        $recap = date_recap(is_array($body['table'] ?? null) ? $body['table'] : [], $meal, $venue);
+        $recap = outing_recap(is_array($body['table'] ?? null) ? $body['table'] : [],
+            'Anon and I just had ' . $meal . ($venue !== '' ? " at {$venue}" : '') . '.',
+            "Not what we ordered, that's already written down.");
         $note = 'Went out for ' . $meal . ($venue !== '' ? ' at ' . $venue : '') . ' with Anon.';
         $dishes = is_array($body['dishes'] ?? null) ? $body['dishes'] : [];
         $me = trim(mb_substr((string)($dishes['me'] ?? ''), 0, 80));
@@ -92,6 +95,24 @@ if ($action === 'home') {
             log_event(['msg' => 'trip_note_error', 'err' => $e->getMessage()]);
         }
         ach_add($userId, 'dates');
+    }
+    if ($trip && $trip['where'] === 'watch') {
+        $title = trim(mb_substr(preg_replace('/[\x00-\x1F\x7F]+/u', ' ', (string)($body['title'] ?? '')), 0, 120));
+        $minutes = max(0, min(600, (int)($body['minutes'] ?? 0)));
+        $what = $title !== '' ? $title : 'a video';
+        $recap = outing_recap(is_array($body['table'] ?? null) ? $body['table'] : [],
+            "Anon and I just watched {$what} together on the couch.",
+            "Not a summary of what we watched, that's already written down.");
+        $note = "Watched {$what} with Anon" . ($minutes > 0 ? " ({$minutes} min)." : '.');
+        if ($recap['moments']) $note .= ' ' . implode(' ', $recap['moments']);
+        try {
+            $source = ['kind' => 'watch', 'conv' => $trip['conversation_id']];
+            memory_note_add($userId, 'events', $note, $source);
+            foreach ($recap['plans'] as $plan) memory_note_add($userId, 'plans', $plan, $source);
+        } catch (Throwable $e) {
+            log_event(['msg' => 'trip_note_error', 'err' => $e->getMessage()]);
+        }
+        ach_add($userId, 'watched');
     }
     if ($trip && $trip['where'] === 'shop') ach_add($userId, 'shops');
     trip_clear($userId);

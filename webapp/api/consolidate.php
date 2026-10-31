@@ -46,9 +46,10 @@ if ($method === 'GET' && $action === 'welcome') {
     json_out(welcome_payload($userId, $preview, $hour));
 }
 
-// the texts she wrote for his absence, read WITHOUT draining, so the
-// welcome scene still gets them. away-notify.js keeps them and pops
-// each one when its milestone passes, server running or not
+// the texts she wrote for his absence and the ones she planned, read
+// WITHOUT draining, so the welcome scene still gets them.
+// away-notify.js keeps them and pops each one when it comes due,
+// server running or not
 if ($method === 'GET' && $action === 'pending') {
     rate_limit('consolidate_pending', 30, 60);
     $after = array_column(WELCOME_TIERS, 'after', 'tier');
@@ -57,7 +58,7 @@ if ($method === 'GET' && $action === 'pending') {
         if (!isset($after[$tier], WELCOME_MILESTONES[$tier])) continue;
         $tiers[] = ['tier' => $tier, 'after' => $after[$tier], 'gap' => WELCOME_MILESTONES[$tier]['gap'], 'texts' => $texts];
     }
-    json_out(['idle_since' => welcome_last_activity($userId), 'tiers' => $tiers]);
+    json_out(['idle_since' => welcome_last_activity($userId), 'tiers' => $tiers, 'planned' => planned_waiting($userId)]);
 }
 
 if ($method === 'POST' && $action === 'activity') {

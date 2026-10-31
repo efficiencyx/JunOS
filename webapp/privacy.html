@@ -8,7 +8,7 @@
 <title>Privacy notice · Jun OS</title>
 <link rel="icon" type="image/png" href="favicon.png?v=1">
 <link rel="stylesheet" href="css/boot.css?v=6">
-<link rel="stylesheet" href="styles.css?v=74">
+<link rel="stylesheet" href="styles.css?v=75">
 <link rel="stylesheet" href="css/pages/privacy.css?v=4">
 <link rel="stylesheet" href="css/head-home.css?v=1">
 </head>
@@ -102,12 +102,17 @@
         <p>If you point Jun at a model server on another machine, usually the
         <strong>Colab or Kaggle notebook</strong> in inference-only mode (the installers' Cloud
         option), every prompt goes to that machine with what Jun sends along with it: the recent
-        conversation, recalled memories, lore and, for voice turns, the recording. Your account, the
+        conversation, recalled memories, lore, for voice turns the recording and, while you watch
+        something together, the frames and sound of what is playing. Your account, the
         database and the memory files stay on your machine. The notebook runs on Google's servers
         under your own Google or Kaggle account, and their terms apply. Requests reach it through a
         Cloudflare quick tunnel, where Cloudflare terminates TLS and can read them in transit. Each
         start also sends that address one request with its key to check that the link still
         works.</p>
+        <p>Watching a video together never uploads the video. A file plays from your disk inside
+        the page, and a shared browser tab is captured by your browser. Every 20 seconds or so a few
+        still frames and the last seconds of its sound go to the AI provider with that turn and are
+        not stored.</p>
         <p>Voice and karaoke run locally in sidecar containers. A message beginning with
         <code>/search </code> sends the text after that prefix to DuckDuckGo, or fetches the page
         when it's a link. Jun may then run up to two related searches of her own. The server refuses
@@ -146,7 +151,7 @@
 
       <footer class="privacy-footer">
         <a href="index.html">Head home</a>
-        <span>Version 2026-09-20</span>
+        <span>Version 2026-10-29</span>
       </footer>
 
     </main>

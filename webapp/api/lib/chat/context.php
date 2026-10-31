@@ -139,6 +139,16 @@ function chat_live_context(array $req, array $user, string $lastUserMsg, string 
                            bool $toolsOffered, ?string $approvedWebSearchQuery): string {
     $invite = $req['invite'];
     $contextParts = [];
+    $watch = $req['watch'];
+
+    // a tick is 20 s of video, not him talking. notes, lore and the
+    // save check only pull her off the screen
+    if ($watch !== null && $watch['turn'] === 'tick') {
+        return "# Live context for THIS reply (from the system, not spoken by Anon)\n\n"
+            . chat_watch_block($req, $toolsOffered) . "\n\n"
+            . "## YOUR FEELINGS TOWARD ANON RIGHT NOW - highest priority for this reply\n" . relationship_directives($rel);
+    }
+    if ($watch !== null) $contextParts[] = chat_watch_block($req, $toolsOffered);
 
     // FIRST block, on purpose. measured on the 12B with a 30 line
     // side-talk set: this text at the bottom of the live context
@@ -168,12 +178,12 @@ function chat_live_context(array $req, array $user, string $lastUserMsg, string 
     $memoryBlock = memory_recent_context((int)$user['id'], $lastUserMsg);
     if ($memoryBlock !== '') $contextParts[] = $memoryBlock;
 
-    if ($convSummary !== '') {
+    if ($convSummary !== '' && $watch === null) {
         $contextParts[] = "## Story so far (earlier in THIS conversation)\n" . $convSummary;
     }
 
 
-    $loreBlock = $invite === '' ? lore_retrieve($lastUserMsg) : '';
+    $loreBlock = $invite === '' && $watch === null ? lore_retrieve($lastUserMsg) : '';
     if ($loreBlock !== '') $contextParts[] = $loreBlock;
 
 
@@ -201,6 +211,7 @@ function chat_live_context(array $req, array $user, string $lastUserMsg, string 
             'karaoke' => 'go to karaoke together',
             'date' => 'go out to eat together',
             'cards' => 'play a game of blackjack',
+            'watch' => 'watch something together',
         ][$invite];
         $contextParts = ["(OOC stage direction, not spoken by Anon: Anon wants to {$plan}. "
             . "If you wish to go along with it, invoke the tool {$tool}.)", $feelingsBlock];
@@ -215,9 +226,10 @@ function chat_live_context(array $req, array $user, string $lastUserMsg, string 
         && random_int(1, $req['idle'] ? INITIATIVE_ODDS_IDLE : INITIATIVE_ODDS_REPLY) === 1) {
         $contextParts[] = "## Take the initiative\n"
             . "Right now YOU want something from Anon. Pick ONE and actually ask for it in this reply, in your own words: "
-            . "going to Annalie's shop together, karaoke, a game of blackjack, going out for lunch or dinner, or something "
-            . "small that fits the moment (a headpat, hearing about his day, him changing your outfit, a compliment, a promise). "
-            . "Do not call enter_shop, enter_karaoke, play_cards or go_out_to_eat yet - only once he says yes.";
+            . "going to Annalie's shop together, karaoke, a game of blackjack, going out for lunch or dinner, watching "
+            . "something together, or something small that fits the moment (a headpat, hearing about his day, him changing "
+            . "your outfit, a compliment, a promise). "
+            . "Do not call enter_shop, enter_karaoke, play_cards, go_out_to_eat or watch_together yet - only once he says yes.";
     }
 
     // v8 barely saw flee in training so she almost never reaches for
@@ -248,4 +260,51 @@ function chat_live_context(array $req, array $user, string $lastUserMsg, string 
 
     return "# Live context for THIS reply (from the system, not spoken by Anon)\n\n"
         . implode("\n\n", $contextParts);
+}
+
+function chat_watch_clock(int $s): string {
+    return $s >= 3600 ? sprintf('%d:%02d:%02d', intdiv($s, 3600), intdiv($s % 3600, 60), $s % 60)
+        : sprintf('%d:%02d', intdiv($s, 60), $s % 60);
+}
+
+function chat_watch_block(array $req, bool $toolsOffered): string {
+    $w = $req['watch'];
+    $what = $w['title'] !== '' ? json_encode($w['title'], JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES) : 'a video';
+    $from = $w['source'] === 'file' ? 'a video from his computer' : 'something he is sharing from his browser';
+    $lines = ["## Watching", "You and Anon are on the couch watching {$what} together, {$from}."];
+    if ($w['turn'] === 'start') {
+        $lines[] = 'You just sat down and it is about to start. Say one short line.';
+        return implode("\n", $lines);
+    }
+    $when = $w['length'] > 0
+        ? 'It is at ' . chat_watch_clock($w['at']) . ' of ' . chat_watch_clock($w['length'])
+        : 'About ' . max(1, intdiv($w['at'], 60)) . ' minutes in';
+    $lines[] = $when . ($w['paused'] ? ', paused.' : '.');
+    if ($w['turn'] === 'end') {
+        $lines[] = 'He just stopped it and you two are getting up. Say one short line about it.';
+        return implode("\n", $lines);
+    }
+    if ($w['earlier'] !== '') $lines[] = 'Before that it played on while you two said nothing: ' . $w['earlier'] . '.';
+    $n = count($req['frames']);
+    $at = $w['frames_at'];
+    if ($n > 0 && $at && $w['source'] === 'file') {
+        $lines[] = 'The pictures are moments of it at ' . implode(', ', array_map('chat_watch_clock', $at)) . ', oldest first.';
+    } elseif ($n > 1 && $at) {
+        $gap = max(1, (int)round((end($at) - $at[0]) / ($n - 1)));
+        $lines[] = "The pictures are the last {$n} moments of it, {$gap} s apart, oldest first.";
+    } elseif ($n > 0) {
+        $lines[] = "The pictures are the last {$n} moments of it, oldest first.";
+    }
+    if ($req['audio'] !== '') $lines[] = 'The recording is how those moments sounded.';
+    elseif ($w['heard'] !== '') $lines[] = 'What was said in it (transcribed, may be wrong): '
+        . json_encode($w['heard'], JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
+    if ($w['turn'] === 'talk') {
+        $lines[] = 'He said this while it plays. Answer him, the screen is there if it matters.';
+    } else {
+        $lines[] = 'If nothing is happening in it (the same still picture, a blank screen, an intermission card, credits, '
+            . 'silence), ' . ($toolsOffered ? 'call stay_silent' : 'answer with only "..."') . ' and say nothing. '
+            . 'If something happens, react with one short line the way you would on the couch next to him: '
+            . 'a reaction, a joke, a guess at what comes next. Never describe the pictures back to him.';
+    }
+    return implode("\n", $lines);
 }

@@ -1,6 +1,7 @@
 package com.efficiencyx.junos
 
 import android.app.Application
+import com.efficiencyx.junos.achievements.Achievements
 import com.efficiencyx.junos.colab.ColabSession
 import com.efficiencyx.junos.data.JunDatabase
 import com.efficiencyx.junos.inference.ChatEngine
@@ -25,12 +26,13 @@ class JunApplication : Application() {
     @Volatile private var sessionEngine: InferenceEngine? = null
     val inferenceEngine: InferenceEngine get() = sessionEngine ?: localEngine
     val voiceEngine by lazy { VoiceEngine(this, modelStore) }
+    val achievements by lazy { Achievements(this, database) }
     val chatEngine by lazy {
-        ChatEngine(this, database, memoryStore, loreIndex) { inferenceEngine }
+        ChatEngine(this, database, memoryStore, loreIndex, achievements) { inferenceEngine }
     }
     val assetRecovery by lazy { AssetRecovery(this) }
     val localServer by lazy {
-        LocalServer(this, database, memoryStore, chatEngine, voiceEngine, assetRecovery)
+        LocalServer(this, database, memoryStore, chatEngine, voiceEngine, assetRecovery, achievements)
     }
 
     // one per launch. closing the old one is what frees LiteRT's weights

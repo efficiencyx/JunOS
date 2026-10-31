@@ -62,6 +62,10 @@ function llamacpp_model_supports_audio(string $model): bool {
     return !empty(llamacpp_props($model)['modalities']['audio']);
 }
 
+function llamacpp_model_supports_vision(string $model): bool {
+    return !empty(llamacpp_props($model)['modalities']['vision']);
+}
+
 function llamacpp_num_ctx(string $model): int {
     return (int)(llamacpp_props($model)['default_generation_settings']['n_ctx'] ?? 0);
 }

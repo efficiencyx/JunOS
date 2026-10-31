@@ -10,41 +10,16 @@
 // hidden ones come out as ??? until the first tier lands.
 const ACH_TIERS = ['bronze', 'silver', 'gold', 'diamond'];
 
-const ACH_CATALOG = [
-    ['id' => 'yapper',          'group' => 'chat',     'stat' => 'messages',       'name' => 'Yapper',                         'desc' => 'Messages sent',                         'tiers' => [25, 100, 500, 2500]],
-    ['id' => 'touch_grass',     'group' => 'chat',     'stat' => 'days',           'name' => 'Touch Grass? Never Heard of It', 'desc' => 'Different days you chatted',            'tiers' => [3, 14, 60, 365]],
-    ['id' => 'streak',          'group' => 'chat',     'stat' => 'streak',         'name' => 'Streak Freak',                   'desc' => 'Days in a row chatting',                'tiers' => [3, 7, 30, 100]],
-    ['id' => 'novelist',        'group' => 'chat',     'stat' => 'longest',        'name' => 'Novelist',                       'desc' => 'Longest single message, in characters', 'tiers' => [500, 1500, 3000, 6000]],
-    ['id' => 'fresh_start',     'group' => 'chat',     'stat' => 'chats',          'name' => 'Fresh Start Addict',             'desc' => 'New conversations started',             'tiers' => [5, 25, 100, 300]],
-    ['id' => 'night_owl',       'group' => 'chat',     'stat' => 'night',          'name' => 'Night Owl Disorder',             'desc' => 'Messages sent between 2 and 5 am',      'tiers' => [5, 25, 100, 500], 'hidden' => true],
-    ['id' => 'k',               'group' => 'chat',     'stat' => 'short',          'name' => '"k."',                           'desc' => 'Messages of 3 characters or less',      'tiers' => [10, 50, 200, 1000], 'hidden' => true],
-    ['id' => 'golden_throat',   'group' => 'chat',     'stat' => 'voice',          'name' => 'Golden Throat',                  'desc' => 'Voice mode turns',                      'tiers' => [10, 50, 250, 1000]],
-    ['id' => 'earbleed',        'group' => 'chat',     'stat' => 'tts',            'name' => 'Earbleed',                       'desc' => 'Replies she read aloud',                'tiers' => [25, 100, 500, 2500]],
-    ['id' => 'date_haver',      'group' => 'outings',  'stat' => 'dates',          'name' => 'Professional Date-Haver',        'desc' => 'Dates eating out',                      'tiers' => [1, 5, 20, 50]],
-    ['id' => 'card_shark',      'group' => 'outings',  'stat' => 'bj_won',         'name' => 'Card Shark',                     'desc' => 'Blackjack hands won',                   'tiers' => [5, 25, 100, 500]],
-    ['id' => 'the_house',       'group' => 'outings',  'stat' => 'bj_lost',        'name' => 'The House (Her) Always Wins',    'desc' => 'Blackjack hands lost',                  'tiers' => [5, 25, 100, 500], 'hidden' => true],
-    ['id' => 'off_key',         'group' => 'outings',  'stat' => 'songs',          'name' => 'Off-Key Legend',                 'desc' => 'Karaoke songs',                         'tiers' => [1, 5, 25, 100]],
-    ['id' => 'retail',          'group' => 'outings',  'stat' => 'shops',          'name' => 'Retail Therapy',                 'desc' => 'Shop trips',                            'tiers' => [1, 5, 20, 50]],
-    ['id' => 'barbie',          'group' => 'outings',  'stat' => 'outfits',        'name' => 'Barbie Mode',                    'desc' => 'Outfit changes',                        'tiers' => [5, 25, 100, 500]],
-    ['id' => 'smitten',         'group' => 'feelings', 'stat' => 'affection_peak', 'name' => 'Smitten Kitten',                 'desc' => 'Highest affection reached',             'tiers' => [70, 80, 90, 100]],
-    ['id' => 'vault',           'group' => 'feelings', 'stat' => 'trust_peak',     'name' => 'Vault Access Granted',           'desc' => 'Highest trust reached',                 'tiers' => [70, 80, 90, 100]],
-    ['id' => 'eggshells',       'group' => 'feelings', 'stat' => 'tension_peak',   'name' => 'Walking on Eggshells',           'desc' => 'Highest tension reached',               'tiers' => [50, 70, 85, 100]],
-    ['id' => 'zen',             'group' => 'feelings', 'stat' => 'tension_low',    'name' => 'Zen Couple',                     'desc' => 'Lowest tension reached',                'tiers' => [15, 10, 5, 0], 'low' => true],
-    ['id' => 'mood_swing',      'group' => 'feelings', 'stat' => 'gauge_moved',    'name' => 'Mood Swing Enjoyer',             'desc' => 'Total mood gauge points moved',         'tiers' => [50, 250, 1000, 5000], 'hidden' => true],
-    ['id' => 'wrote_that_down', 'group' => 'habits',   'stat' => 'notes',          'name' => 'She Wrote That Down',            'desc' => 'Memory notes she saved',                'tiers' => [5, 25, 100, 300]],
-    ['id' => 'google_gf',       'group' => 'habits',   'stat' => 'searches',       'name' => 'Google Girlfriend',              'desc' => 'Web searches she ran',                  'tiers' => [3, 15, 50, 200]],
-    ['id' => 'lore_goblin',     'group' => 'habits',   'stat' => 'lore',           'name' => 'Lore Goblin',                    'desc' => 'Lore lookups she did',                  'tiers' => [5, 25, 100, 500]],
-    ['id' => 'filing_clerk',    'group' => 'habits',   'stat' => 'cab_filed',      'name' => 'Filing Clerk',                   'desc' => 'Cards filed while she tidied',          'tiers' => [25, 100, 500, 2500]],
-    ['id' => 'read_her_mind',   'group' => 'habits',   'stat' => 'cab_streak',     'name' => 'Read Her Mind',                  'desc' => 'Cards in a row filed where she would',  'tiers' => [5, 10, 20, 40]],
-    ['id' => 'shredder',        'group' => 'habits',   'stat' => 'cab_shredded',   'name' => 'Shredder',                       'desc' => 'Junk cards shredded',                   'tiers' => [10, 50, 200, 1000], 'hidden' => true],
-    ['id' => 'waited_up',       'group' => 'feelings', 'stat' => 'cab_waited',     'name' => 'Waited Up',                      'desc' => 'Times you stayed until she was done',   'tiers' => [1, 5, 20, 50]],
-    ['id' => 'left_on_read',    'group' => 'feelings', 'stat' => 'silent',         'name' => 'Left on Read',                   'desc' => 'Times she stayed silent',               'tiers' => [1, 5, 20, 50], 'hidden' => true],
-    ['id' => 'door_slammed',    'group' => 'feelings', 'stat' => 'fled',           'name' => 'Door Slammed',                   'desc' => 'Times she walked out',                  'tiers' => [1, 3, 10, 25], 'hidden' => true],
-];
+// one catalog for both sides. the phone app bundles this file
+// (android/app/build.gradle.kts) and reads the same rows
+function ach_catalog(): array {
+    static $catalog = null;
+    return $catalog ??= json_decode((string)file_get_contents(__DIR__ . '/achievements.json'), true) ?: [];
+}
 
 // the only stats the browser may bump itself. the blackjack table
 // runs entirely client side so there's nobody else to ask
-const ACH_CLIENT_STATS = ['bj_won', 'bj_lost'];
+const ACH_CLIENT_STATS = ['bj_won', 'bj_lost', 'bj_natural', 'bj_bust'];
 
 function ach_upsert(int $userId, string $stat, int $value, string $merge): void {
     try {
@@ -170,7 +145,7 @@ function ach_list(int $userId, bool $reveal = false): array {
 
     $list = [];
     $fresh = [];
-    foreach (ACH_CATALOG as $a) {
+    foreach (ach_catalog() as $a) {
         $value = $stats[$a['stat']] ?? null;
         $tier = ach_tier($a, $value);
         $secret = !empty($a['hidden']) && $tier === 0;
@@ -198,7 +173,7 @@ function ach_list(int $userId, bool $reveal = false): array {
 // point of testing it
 function ach_set(int $userId, string $id, ?int $value): bool {
     $a = null;
-    foreach (ACH_CATALOG as $c) if ($c['id'] === $id) $a = $c;
+    foreach (ach_catalog() as $c) if ($c['id'] === $id) $a = $c;
     if ($a === null) return false;
     $db = db();
     if ($value === null) {
@@ -212,7 +187,7 @@ function ach_set(int $userId, string $id, ?int $value): bool {
 }
 
 function ach_mark_seen(int $userId, array $items): void {
-    $known = array_column(ACH_CATALOG, 'id');
+    $known = array_column(ach_catalog(), 'id');
     $st = db()->prepare(
         'INSERT INTO achievement_seen (user_id, ach, tier) VALUES (?, ?, ?)
          ON CONFLICT(user_id, ach) DO UPDATE SET tier=MAX(tier, excluded.tier)'

@@ -1,5 +1,5 @@
-import { Presets, applyPreset, decodeOutfitCode, encodeOutfitCode, endPreview, schedulePreview } from '../outfit/presets.js?v=19';
-import { clearWornHover, wdOverlay } from './panel.js?v=22';
+import { Presets, applyPreset, decodeOutfitCode, encodeOutfitCode, endPreview, schedulePreview } from '../outfit/presets.js?v=23';
+import { clearWornHover, wdOverlay } from './panel.js?v=26';
 
 export const looksOpen = () => document.body.classList.contains('looks-open');
 

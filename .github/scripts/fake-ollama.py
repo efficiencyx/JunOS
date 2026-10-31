@@ -19,6 +19,8 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
 MODEL = 'fake-jun'
 LOG = os.environ.get('FAKE_OLLAMA_LOG', '')
+# FAKE_OLLAMA_CAPS=vision,audio makes her see and hear
+CAPS = ['completion', 'tools'] + [c for c in os.environ.get('FAKE_OLLAMA_CAPS', '').split(',') if c]
 
 # the memory_write and mood_shift tags sit at the end like she
 # writes them. the chunks split tags in half ON PURPOSE, php has
@@ -61,7 +63,7 @@ class Handler(BaseHTTPRequestHandler):
     def do_POST(self):
         body = self._body()
         if self.path == '/api/show':
-            return self._json({'capabilities': ['completion', 'tools']})
+            return self._json({'capabilities': CAPS})
         if self.path == '/api/generate':
             return self._json({'model': MODEL, 'done': True})
         if self.path != '/api/chat':

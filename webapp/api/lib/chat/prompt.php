@@ -73,15 +73,19 @@ function chat_build_messages(array $req, string $systemContent, string $liveCont
     // the wardrobe and the gauges instead of him.
     $lastIdx = count($messages) - 1;
     if ($lastIdx >= 0 && $messages[$lastIdx]['role'] === 'user') {
-        if ($req['audio'] !== '') {
-            // Ollama ONLY reads media out of `images`, whatever's in it. send
-            // the wav under `audio` or `audios` and it drops the field
-            // silently, then she answers a turn with nothing in it. no error.
-            // nothing.
+        // payload.php turns `media` into whatever the provider reads
+        if ($req['watch'] !== null) {
+            $messages[$lastIdx]['content'] .= "\n\n" . $liveContext;
+            $messages[$lastIdx]['media'] = [
+                'images' => $req['frames'],
+                'labels' => $req['watch']['source'] === 'file' ? array_map('chat_watch_clock', $req['watch']['frames_at']) : [],
+                'audio' => $req['audio'] !== '' ? [$req['audio']] : [],
+            ];
+        } elseif ($req['audio'] !== '') {
             $messages[$lastIdx]['content'] =
                 "## How Anon is talking\nHe is saying this out loud, the recording is attached. He is not typing."
                 . "\n\n" . $liveContext;
-            $messages[$lastIdx]['images'] = [$req['audio']];
+            $messages[$lastIdx]['media'] = ['audio' => [$req['audio']]];
         } else {
             $messages[$lastIdx]['content'] .= "\n\n" . $liveContext;
         }

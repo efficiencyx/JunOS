@@ -59,7 +59,7 @@ function cg_annotate_dates(string $text, int $created): array {
 // "next Saturday" counts from the note's own created day. merged into
 // an older note it'd point at the wrong week, so pin it first
 function cg_pin_dates(array $note): string {
-    $created = (int)$note['created'];
+    $created = memory_note_anchor($note);
     if ($created <= 0) return $note['text'];
     $fuzzy = false;
     $text = preg_replace_callback(MEMORY_RELATIVE_TIME_RE, function ($m) use ($created, &$fuzzy) {
@@ -71,7 +71,7 @@ function cg_pin_dates(array $note): string {
 }
 
 function cg_show(array $note): string {
-    [$text] = cg_annotate_dates(memory_note_render($note), (int)$note['created']);
+    [$text] = cg_annotate_dates(memory_note_render($note), memory_note_anchor($note));
     return $note['id'] . ': ' . memory_note_stamp($note) . $text;
 }
 
@@ -342,7 +342,7 @@ function cg_tidy(array &$ctx): int {
     $queue = [];
     foreach (cg_all_notes($userId) as $note) {
         $m = $meta[$note['id']] ?? [];
-        [, $past] = cg_annotate_dates(memory_note_render($note), (int)$note['created']);
+        [, $past] = cg_annotate_dates(memory_note_render($note), memory_note_anchor($note));
         $past = $past || str_contains(memory_note_render($note), 'already past');
         $fresh = (int)($m['updated'] ?? 0);
         $reasons = [
@@ -379,7 +379,7 @@ function cg_tidy(array &$ctx): int {
         }
 
         if ($item['why']['past']) {
-            [$annotated] = cg_annotate_dates(memory_note_render($note), (int)$note['created']);
+            [$annotated] = cg_annotate_dates(memory_note_render($note), memory_note_anchor($note));
             [$answer] = consolidation_vote($ctx, 'is it over',
                 "Today is {$ctx['today']}.\n\nOne of my notes:\n" . memory_note_stamp($note) . $annotated . "\n\n"
                 . "The day this note points at is already past. Now that it's gone, does the note still tell me something true about Anon today? "
@@ -572,7 +572,7 @@ function consolidation_guided(int $userId, int $started): array {
         'changed' => 0,
         'start_notes' => count(memory_list($userId)),
     ];
-    $budget = (int)floor(default_num_ctx() * 4 * 0.45);
+    $budget = (int)floor(chat_window_tokens() * 4 * 0.45);
     $welcomeLines = [];
 
     $chats = cg_pending($userId, 'upto_id');
@@ -600,7 +600,7 @@ function consolidation_guided(int $userId, int $started): array {
     cg_compact($ctx, cg_tidy($ctx));
 
     $journalChats = cg_pending($userId, 'journal_upto');
-    cg_journal($ctx, $journalChats, (int)floor(default_num_ctx() * 4 * 0.5));
+    cg_journal($ctx, $journalChats, (int)floor(chat_window_tokens() * 4 * 0.5));
     foreach ($journalChats as $chat) {
         $last = end($chat['rows']);
         if ($last) cg_commit($userId, $chat['id'], 'journal_upto', $last['id']);

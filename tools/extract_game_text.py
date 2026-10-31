@@ -80,7 +80,7 @@ def containers(data_dir):
         p = os.path.join(data_dir, n)
         if os.path.exists(p):
             yield p
-    bundles = os.path.join(data_dir, "StreamingAssets", "aa", "StandaloneWindows64")
+    bundles = os.path.join(data_dir, "StreamingAssets", "aa", "Standalone*")
     for p in sorted(glob.glob(os.path.join(bundles, "*.bundle"))):
         yield p
 

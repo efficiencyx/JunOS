@@ -1,15 +1,15 @@
 import { abortFn, currentConversationId } from './session.js?v=1';
-import { sendMessage } from './chat.js?v=39';
-import { cancelIdleNudge } from './consolidation.js?v=111';
+import { sendMessage } from './chat.js?v=45';
+import { cancelIdleNudge } from './consolidation.js?v=117';
 import { closeSettingsBtn, devNoIdleChk, drawerBackdrop, modelSelect, openSettingsBtn, reasoningSelect, sendBtn, siteVolumeInput, thinkChk, ttsChk, ttsSpeedInput, voiceChk, voiceSilenceInput } from './dom.js?v=77';
 import { logAction } from './logging.js?v=78';
-import { loadMood, setMoodEditingEnabled } from './mood.js?v=87';
-import { loadConversation, setSidebarOpen } from './sidebar.js?v=111';
+import { loadMood, setMoodEditingEnabled } from './mood.js?v=90';
+import { loadConversation, setSidebarOpen } from './sidebar.js?v=117';
 import { loadTimeline } from './timeline.js?v=3';
 import * as Names from '../core/names.js?v=1';
 import * as Prefs from '../core/prefs.js?v=6';
 import * as ui from '../core/ui.js?v=1';
-import * as TTS from '../voice/tts.js?v=86';
+import * as TTS from '../voice/tts.js?v=89';
 
 export function syncThinkToggle() {
   thinkChk.disabled = reasoningSelect.value === 'auto';
@@ -129,7 +129,7 @@ const memoryCount = document.getElementById('memoryCount');
 let MemoryGraph = null;
 async function loadMemories() {
   if (!MemoryGraph) {
-    MemoryGraph = await import('./memory-graph.js?v=5');
+    MemoryGraph = await import('./memory-graph.js?v=6');
     const { renderNoteActions } = await import('./memory-actions.js?v=3');
     MemoryGraph.onNoteActions((node, body) => renderNoteActions(node, body, { isAdmin, reload: loadMemories }));
     MemoryGraph.onOpenChat((conv, messageId) => {

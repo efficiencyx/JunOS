@@ -34,6 +34,17 @@ object MemoryDates {
         }
     }
 
+    // memory_note_dated() in lib/memory.php. same phrases = same
+    // anchor, a typo fix must not move last week's "tomorrow"
+    fun dated(oldText: String, newText: String, dated: Long, now: Long): Long {
+        val phrases = phrases(newText)
+        if (phrases.isEmpty()) return 0
+        return if (phrases == phrases(oldText)) dated else now
+    }
+
+    private fun phrases(text: String): Set<String> =
+        RELATIVE.findAll(text.lowercase(Locale.ROOT)).mapTo(sortedSetOf()) { it.value }
+
     // "next week" and "in a few days" have no single day to name.
     // they stay fuzzy and keep only the anchor stamp.
     private fun resolve(phrase: String, created: LocalDate): LocalDate? {

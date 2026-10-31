@@ -243,7 +243,7 @@ case 'factory_reset':
         foreach (['conversations', 'preferences', 'relationship', 'memory_consolidation',
                   'user_bans', 'wardrobe_presets', 'wardrobe_state', 'welcome_queue', 'trips',
                   'achievement_stats', 'achievement_seen', 'karaoke_takes', 'reply_ratings',
-                  'mood_log', 'relationship_history'] as $table) {
+                  'mood_log', 'relationship_history', 'planned_messages'] as $table) {
             $db->prepare('DELETE FROM ' . $table . ' WHERE user_id = ?')->execute([$userId]);
         }
         $token = (string)($_COOKIE['omega_session'] ?? '');

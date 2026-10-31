@@ -3,9 +3,13 @@ package com.efficiencyx.junos.inference
 import android.content.Context
 import android.util.Log
 import androidx.core.content.ContextCompat
+import com.efficiencyx.junos.achievements.Achievements
+import com.efficiencyx.junos.away.AwayNotify
+import com.efficiencyx.junos.away.AwayTexts
 import com.efficiencyx.junos.data.ConsolidationEntity
 import com.efficiencyx.junos.data.JunDatabase
 import com.efficiencyx.junos.data.MessageEntity
+import com.efficiencyx.junos.data.PlannedMessageEntity
 import com.efficiencyx.junos.data.RelationshipEntity
 import com.efficiencyx.junos.data.WardrobeStateEntity
 import com.efficiencyx.junos.lore.LoreIndex
@@ -26,6 +30,7 @@ import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonElement
 import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.booleanOrNull
 import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.contentOrNull
 import kotlinx.serialization.json.intOrNull
@@ -54,6 +59,7 @@ data class ChatRequest(
     @SerialName("mod_items") val modItems: List<String> = emptyList(),
     val invite: String = "",
     val regenerate: Boolean = false,
+    val tts: Boolean = false,
 )
 
 internal fun ChatRequest.validate() {
@@ -71,6 +77,7 @@ class ChatEngine(
     private val database: JunDatabase,
     private val memory: MemoryStore,
     private val lore: LoreIndex,
+    private val achievements: Achievements,
     private val engines: () -> InferenceEngine,
 ) {
     private val engine get() = engines()
@@ -106,6 +113,7 @@ class ChatEngine(
             val stored = if (request.regenerate) dao.messages(request.conversationId).lastOrNull()?.takeIf { it.role == "user" } else null
             val userRowId = stored?.id ?: dao.insertMessage(MessageEntity(conversationId = request.conversationId, role = "user", content = lastUser, createdAt = now()))
             noteSource = noteSource.copy(msg = userRowId)
+            if (!request.regenerate) achievements.onUserMessage(lastUser, request.voice)
             val consolidation = dao.consolidation() ?: ConsolidationEntity()
             dao.putConsolidation(consolidation.copy(lastActivity = now()))
         }
@@ -171,16 +179,20 @@ class ChatEngine(
         val started = System.nanoTime()
         var visible = StringBuilder()
         var silenced = false
+        var overheard = false
         var fled: JsonObject? = null
         var tokenCount = 0
         var nativeEvalCount = 0
         var nativeEvalMs = 0L
         var nativePromptEvalCount = 0
         var went = ""
+        var journaled = false
+        val tools = toolSchemas()
         suspend fun goOut(where: String): String {
             if (request.idle) return json.encodeToString(mapOf("error" to "not_available_on_idle"))
             if (where == "karaoke") return buildJsonObject { put("started", false); put("note", KARAOKE_CLOSED) }.toString()
             if (where != "cards") Trips.current = Trip(where, now(), request.conversationId)
+            else achievements.add("cards")
             emit(buildJsonObject { put("go", where) })
             went = where
             return buildJsonObject {
@@ -204,7 +216,7 @@ class ChatEngine(
                 val thoughts = ThinkStreamFilter()
                 val lead = StringBuilder()
                 val calls = mutableListOf<ParsedToolCall>()
-                engine.turn(messages, TOOL_SCHEMAS, think, replyTokens(think), reasoning = reasoning).collect { event ->
+                engine.turn(messages, tools, think, replyTokens(think), reasoning = reasoning).collect { event ->
                     when (event) {
                         is TurnEvent.Text -> {
                             tokenCount++
@@ -232,13 +244,18 @@ class ChatEngine(
                     val trip = Trips.TOOLS[call.name]
                     val result = when {
                         call.name == "change_outfit" -> changeOutfit(call.args, modItems, emit)
+                        call.name == "write_journal" && journaled -> JOURNALED_ALREADY
+                        call.name == "write_journal" -> writeJournal(call.args).also { journaled = it == JOURNAL_WRITTEN }
                         trip != null -> goOut(trip)
                         else -> executeTool(call, request.conversationId, noteSource)
                     }
                     emit(toolStatus(call.name, "done", result, raw = buildJsonObject {
                         put("message", buildJsonObject { put("role", "tool"); put("name", call.name); put("content", result) })
                     }))
-                    if (call.name == "stay_silent" && !request.idle) silenced = true
+                    if (call.name == "stay_silent" && !request.idle) {
+                        silenced = true
+                        overheard = call.args["overheard"]?.jsonPrimitive?.booleanOrNull == true
+                    }
                     if (call.name == "flee") fled = buildJsonObject {
                         put("until", 0); put("minutes", 0); put("reason", call.args["reason"]?.jsonPrimitive?.content.orEmpty())
                     }
@@ -277,9 +294,11 @@ class ChatEngine(
         if (silenced) {
             assistant = "..."
             emit(buildJsonObject { put("silence", buildJsonObject { put("reason", "Jun chose silence") }) })
+            if (!overheard) achievements.add("silent")
         } else if (fled != null) {
             if (assistant.isBlank()) assistant = "..."
             emit(buildJsonObject { put("fled", fled!!) })
+            achievements.add("fled")
         }
         assistant = salvageMemoryTags(assistant, noteSource, emit)
         assistant = applyRelationshipTag(assistant, relationship)
@@ -297,6 +316,7 @@ class ChatEngine(
             })
         })
         if (assistant.isBlank()) error("empty_reply")
+        if (request.tts && !silenced) achievements.add("tts")
         if (!request.ephemeral) {
             dao.insertMessage(MessageEntity(conversationId = request.conversationId, role = "assistant", content = assistant, createdAt = now()))
             dao.updateConversation(conversation.copy(updatedAt = now()))
@@ -306,7 +326,7 @@ class ChatEngine(
             }
         }
         if (!request.idle && !request.ephemeral && request.messages.lastOrNull()?.role == "user") {
-            engine.warm(baseMessages.dropLast(1) + ChatMessage("user", lastUser), TOOL_SCHEMAS, think)
+            engine.warm(baseMessages.dropLast(1) + ChatMessage("user", lastUser), tools, think)
         }
     }
 
@@ -369,6 +389,7 @@ class ChatEngine(
     private suspend fun executeTool(call: ParsedToolCall, conversationId: Long, noteSource: NoteSource): String = when (call.name) {
         "search_lore" -> {
             val query = call.args["query"]?.jsonPrimitive?.content.orEmpty()
+            achievements.add("lore")
             json.encodeToString(lore.search(query, call.args["limit"]?.jsonPrimitive?.intOrNull ?: 5).map { it.text })
         }
         "memory_write" -> {
@@ -377,6 +398,7 @@ class ChatEngine(
                 call.args["memory"]?.jsonPrimitive?.content.orEmpty(),
                 noteSource,
             )
+            achievements.add("notes")
             json.encodeToString(mapOf("saved" to note.id))
         }
         "search_recent_chats" -> {
@@ -389,11 +411,51 @@ class ChatEngine(
         "list_recent_chats" -> json.encodeToString(dao.conversations(10).filter { it.id != conversationId }.map {
             mapOf("id" to it.id.toString(), "title" to (it.title ?: "Untitled"))
         })
+        "plan_message" -> planMessage(call.args)
         "web_search" -> json.encodeToString(mapOf("error" to "network_search_unavailable_offline"))
         "stay_silent" -> json.encodeToString(mapOf("silent" to true))
         "flee" -> json.encodeToString(mapOf("fled" to true))
         else -> json.encodeToString(mapOf("error" to "unknown_tool"))
     }
+
+    private suspend fun planMessage(args: JsonObject): String {
+        val text = args["message"]?.jsonPrimitive?.contentOrNull.orEmpty().replace(Regex("\\s+"), " ").trim().take(AwayTexts.MAX_CHARS)
+        if (text.isEmpty()) return json.encodeToString(mapOf("error" to "message_required"))
+        val primitive = args["after_hours"]?.jsonPrimitive
+        val hours = (primitive?.intOrNull ?: primitive?.contentOrNull?.toIntOrNull() ?: 1).coerceIn(1, 72)
+        val dueAt = now() + hours * 3600L
+        val id = dao.planMessage(PlannedMessageEntity(text = text, dueAt = dueAt, createdAt = now()), PLANNED_MAX_WAITING)
+            ?: return buildJsonObject {
+                put("planned", false)
+                put("note", "You already have $PLANNED_MAX_WAITING texts waiting to go out to Anon. This one was not planned.")
+            }.toString()
+        AwayNotify.plan(context, id, dueAt, text)
+        return buildJsonObject { put("planned", true); put("sends", plannedWhen(hours)) }.toString()
+    }
+
+    private suspend fun writeJournal(args: JsonObject): String =
+        when (val error = memory.appendJournal(args["entry"]?.jsonPrimitive?.contentOrNull.orEmpty())) {
+            null -> JOURNAL_WRITTEN
+            "journal_day_full" -> buildJsonObject { put("written", false); put("note", "Today's page in your journal is full.") }.toString()
+            else -> json.encodeToString(mapOf("error" to error))
+        }
+
+    // planned_when() in lib/consolidation/state.php
+    private fun plannedWhen(hours: Int): String {
+        if (hours == 1) return "in an hour"
+        if (hours < 24) return "in $hours hours"
+        val days = hours / 24
+        val rest = hours % 24
+        var whenText = "in " + if (days == 1) "a day" else "$days days"
+        if (rest > 0) whenText += " and " + if (rest == 1) "an hour" else "$rest hours"
+        return whenText
+    }
+
+    // no notifications = no way for a planned text to reach him here,
+    // so she doesn't get offered the tool at all
+    private fun toolSchemas(): List<String> =
+        if (AwayNotify.enabled(context) && AwayNotify.permitted(context)) TOOL_SCHEMAS
+        else TOOL_SCHEMAS.filterNot { it.contains(PLAN_MESSAGE_NAME) }
 
     // the browser owns what's on screen, so it gets the change as its
     // own frame instead of parsing it back out of the tool result
@@ -404,6 +466,10 @@ class ChatEngine(
             .toMap()
         val outcome = Wardrobe.toolChange(Wardrobe.toolState(stored), args, modItems, presets)
         outcome.state?.let { dao.putWardrobeState(WardrobeStateEntity(data = json.encodeToString(it), updatedAt = now())) }
+        // a saved look counts only if the stored state moved, same as chat_run_tool()
+        val look = outcome.apply?.containsKey("look") == true
+        val changed = outcome.reply["changed"]?.jsonPrimitive?.booleanOrNull == true
+        if (if (look) achievements.wornChanged(Wardrobe.toolState(stored), outcome.state) else changed) achievements.add("outfits")
         outcome.apply?.let { emit(buildJsonObject { put("outfit", it) }) }
         return outcome.reply.toString()
     }
@@ -428,6 +494,7 @@ class ChatEngine(
             val value = Regex("memory\\s*=\\s*(.+)$", setOf(RegexOption.IGNORE_CASE, RegexOption.DOT_MATCHES_ALL))
                 .find(args)?.groupValues?.get(1)?.trim() ?: continue
             val note = memory.add(category.trim(), value, noteSource)
+            achievements.add("notes")
             emit(toolStatus("memory_write", "done", json.encodeToString(mapOf("saved" to note.id))))
             clean = clean.replace(match.value, "")
         }
@@ -438,14 +505,14 @@ class ChatEngine(
         val match = MOOD_TAG.find(text) ?: return text.trim()
         fun delta(key: String) = Regex("$key\\s*=\\s*([+-]?\\d+)", RegexOption.IGNORE_CASE)
             .find(match.groupValues[1])?.groupValues?.get(1)?.toIntOrNull() ?: 0
-        dao.putRelationship(
-            current.copy(
-                affection = (current.affection + delta("affection")).coerceIn(0, 100),
-                trust = (current.trust + delta("trust")).coerceIn(0, 100),
-                tension = (current.tension + delta("tension")).coerceIn(0, 100),
-                updatedAt = now(),
-            ),
+        val next = current.copy(
+            affection = (current.affection + delta("affection")).coerceIn(0, 100),
+            trust = (current.trust + delta("trust")).coerceIn(0, 100),
+            tension = (current.tension + delta("tension")).coerceIn(0, 100),
+            updatedAt = now(),
         )
+        dao.putRelationship(next)
+        achievements.onRelationship(current, next)
         return MOOD_TAG.replace(text, "").trim()
     }
 
@@ -549,6 +616,8 @@ class ChatEngine(
             """{"type":"function","function":{"name":"list_recent_chats","description":"Recap your most recent conversations with Anon when he wants to catch up, with no specific topic.","parameters":{"type":"object","properties":{"limit":{"type":"integer","description":"How many to recap, 1-10."}}}}}""",
             """{"type":"function","function":{"name":"search_lore","description":"Look up canon world facts - people, places, jobs, events from your own world - when you are unsure of a detail.","parameters":{"type":"object","properties":{"query":{"type":"string","description":"Name or topic to look up."},"limit":{"type":"integer","description":"Max facts, 1-6."}},"required":["query"]}}}""",
             """{"type":"function","function":{"name":"memory_write","description":"Save a durable note about Anon (a preference, fact, plan, boundary, or something emotionally significant). Use often and proactively, not only when asked.","parameters":{"type":"object","properties":{"memory":{"type":"string","description":"One concise fact to remember."},"category":{"type":"string","description":"Category: preferences, work, health, family, plans, boundaries, or events."}},"required":["memory"]}}}""",
+            """{"type":"function","function":{"name":"plan_message","description":"Plan a text to send Anon later, like asking tomorrow how his exam went. It goes out after the hours you pick, even if he is away. At most 3 can wait at once.","parameters":{"type":"object","properties":{"message":{"type":"string","description":"The text, the way you would type it to him. Max 240 characters."},"after_hours":{"type":"integer","description":"Hours from now, 1-72."}},"required":["message","after_hours"]}}}""",
+            """{"type":"function","function":{"name":"write_journal","description":"Write in your own journal about something between you and Anon that you want to keep. It is added to today's entry.","parameters":{"type":"object","properties":{"entry":{"type":"string","description":"A few sentences in your own words. Max 400 characters."}},"required":["entry"]}}}""",
             """{"type":"function","function":{"name":"change_outfit","description":"Put clothes on or take them off. Calling this is the ONLY thing that actually changes what you are wearing - describing a change in your reply does not move a single thread. It answers with what you have on afterwards, so call it BEFORE you say anything about your clothes.","parameters":{"type":"object","properties":{"put_on":{"type":"array","items":{"type":"string"},"description":"Items to put on. Use the names listed in your current wardrobe state."},"take_off":{"type":"array","items":{"type":"string"},"description":"Items to take off. \"nude\" takes off all of your clothes at once."},"look":{"type":"string","description":"Name of a saved look to put on whole, from the saved looks in your wardrobe state. Overrides put_on and take_off."}}}}}""",
             """{"type":"function","function":{"name":"stay_silent","description":"Say nothing at all this turn - ignoring him, too hurt/angry, the scene calls for silence, or he wasn't talking to you at all (someone else in the room, a phone call, the TV). Sends no message.","parameters":{"type":"object","properties":{"reason":{"type":"string","description":"Why (private)."},"overheard":{"type":"boolean","description":"true when what he said was aimed at someone else, not you."}}}}}""",
             """{"type":"function","function":{"name":"flee","description":"Walk out and leave Anon alone. Call it when you want to go.","parameters":{"type":"object","properties":{"reason":{"type":"string","description":"Why you are leaving."},"destination":{"type":"string","description":"Where you're going, if anywhere."}}}}}""",
@@ -558,6 +627,10 @@ class ChatEngine(
             """{"type":"function","function":{"name":"go_out_to_eat","description":"Go out for lunch or dinner with Anon at a restaurant, whether he is taking you out to eat or you asked him. Call it once the two of you agree to go, then say your line - you both leave when you finish talking.","parameters":{"type":"object","properties":{"reason":{"type":"string","description":"Why you two are going (private)."}}}}}""",
         )
         private val TOOL_SCHEMA_CHARS = TOOL_SCHEMAS.sumOf { it.length }
+        private const val PLAN_MESSAGE_NAME = "\"name\":\"plan_message\""
+        private const val PLANNED_MAX_WAITING = 3
+        private const val JOURNAL_WRITTEN = "{\"written\":true}"
+        private const val JOURNALED_ALREADY = "{\"written\":false,\"note\":\"You already wrote in your journal this turn.\"}"
     }
 }
 

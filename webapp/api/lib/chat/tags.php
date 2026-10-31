@@ -26,14 +26,14 @@ function chat_parse_action_tags(string $buffer, array $ctx, array &$state): stri
     return trim(preg_replace('/\[\s*A(?:CTIONS?)?\s*:\s*(?:flee|stay_silent)\b[^\]]*\]/i', '', $buffer));
 }
 
-function chat_apply_bookkeeping_tags(string $buffer, int $userId, array $rel): string {
+function chat_apply_bookkeeping_tags(string $buffer, int $userId, array $rel, bool $apply = true): string {
     // relationship tags are state, not dialogue. never persist them.
     if (preg_match('/\[\s*A(?:CTIONS?)?\s*:\s*mood_shift\b([^\]]*)\]/i', $buffer, $mm)) {
         $deltas = [];
         foreach (['affection', 'trust', 'tension'] as $k) {
             if (preg_match('/' . $k . '\s*=\s*([+-]?\d+)/i', $mm[1], $p)) $deltas[$k] = (int)$p[1];
         }
-        if ($deltas) relationship_apply($userId, $rel, $deltas);
+        if ($deltas && $apply) relationship_apply($userId, $rel, $deltas);
         $buffer = trim(preg_replace('/\[\s*A(?:CTIONS?)?\s*:\s*mood_shift\b[^\]]*\]/i', '', $buffer));
     }
 

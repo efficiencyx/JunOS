@@ -242,7 +242,7 @@
 .msg-actions button.selected { color: var(--fg); border-color: var(--accent); }
 .msg-actions button svg { display: block; }
 .msg-rate-btn { display: none; }
-html.is-admin:not(.android-app) .msg-rate-btn { display: inline-block; }
+html.is-admin .msg-rate-btn { display: inline-block; }
 .msg-spoken-icon { vertical-align: -2px; margin-right: 6px; }
 .msg-think {
   margin: 0 0 8px;

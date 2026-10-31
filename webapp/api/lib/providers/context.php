@@ -32,17 +32,27 @@ const PLAIN_MAX_TOKENS = 512;
 const CHAT_TEMPERATURE = 0.4;
 
 // what's left on the card once the weights and a bit of working
-// room are gone. zero when we don't know the GPU size, see
-// OMEGA_GPU_VRAM_MB in start.sh. also zero when ollama lives on
-// another machine, OMEGA_GPU_VRAM_MB is THIS box's card. a remote
-// one gets OMEGA_NUM_CTX instead, colab.ipynb prints it
-function gpu_ctx_headroom_mb(): int {
-    if (model_server_is_remote()) return 0;
+// room are gone, can go negative. null when we don't know the GPU
+// size (OMEGA_GPU_VRAM_MB, from start.sh / start.ps1) or the
+// weights. also null when ollama lives on another machine,
+// OMEGA_GPU_VRAM_MB is THIS box's card. a remote one gets
+// OMEGA_NUM_CTX instead, colab.ipynb prints it
+function gpu_ctx_headroom_mb(): ?int {
+    if (model_server_is_remote()) return null;
     $vram = (int)env_str('OMEGA_GPU_VRAM_MB', '0');
-    if ($vram <= 0) return 0;
+    if ($vram <= 0) return null;
     $weights = ollama_model_weights_mb(default_chat_model());
-    if ($weights <= 0) return 0;
+    if ($weights <= 0) return null;
     return (int)($vram - VRAM_RESERVE_MB - $weights);
+}
+
+function ctx_tier_for_headroom(int $headroomMb): int {
+    $fits = (int)(max(0, $headroomMb) / KV_MIB_PER_TOKEN);
+    $ctx = CTX_TIERS[0];
+    foreach (CTX_TIERS as $tier) {
+        if ($fits >= $tier) $ctx = $tier;
+    }
+    return $ctx;
 }
 
 function default_num_ctx(): int {
@@ -51,20 +61,11 @@ function default_num_ctx(): int {
     $override = (int)env_str('OMEGA_NUM_CTX', '0');
     if ($override > 0) return $ctx = $override;
 
-    // VRAM is what ACTUALLY limits the KV cache, so use it when the
-    // card size made it here from start.sh. under 4 GiB of room the
-    // answer would be a context too small to hold a conversation
-    // anyway, so fall back to the RAM tiers and let Ollama spill
-    // instead of cutting the window to nothing.
+    // VRAM is what ACTUALLY limits the KV cache, so a known card
+    // always decides. a crowded one still gets the smallest tier,
+    // a few layers spilling to CPU beats a window too small to talk.
     $headroom = gpu_ctx_headroom_mb();
-    if ($headroom >= 4096) {
-        $fits = (int)($headroom / KV_MIB_PER_TOKEN);
-        $ctx = CTX_TIERS[0];
-        foreach (CTX_TIERS as $tier) {
-            if ($fits >= $tier) $ctx = $tier;
-        }
-        return $ctx;
-    }
+    if ($headroom !== null) return $ctx = ctx_tier_for_headroom($headroom);
 
     $gib = 0.0;
     $meminfo = @file_get_contents('/proc/meminfo');
@@ -72,11 +73,9 @@ function default_num_ctx(): int {
         $gib = (int)$m[1] / (1024 * 1024);
     }
     if ($gib <= 0) return $ctx = 16384;
-    // MemTotal always comes in a bit under the number on the box, so
-    // the tiers sit just above it. system RAM is only a stand in,
-    // VRAM is the real limit on the KV cache, so just set
-    // OMEGA_NUM_CTX yourself on a machine where the two don't line
-    // up.
+    // only reached with no card size (CPU, or a GPU nobody could
+    // probe). MemTotal comes in a bit under the number on the box,
+    // so the tiers sit just above it.
     if ($gib <= 17) return $ctx = 6144;
     if ($gib <= 25) return $ctx = 8192;
     if ($gib <= 33) return $ctx = 12288;
@@ -91,6 +90,11 @@ function provider_window_tokens(string $provider, string $model = ''): int {
     if ($provider === 'vllm') return vllm_window_tokens($model !== '' ? $model : default_chat_model());
     if ($provider === 'openrouter') return 0;
     return default_num_ctx();
+}
+
+// openrouter has no window we know of, budgets still need a number
+function chat_window_tokens(): int {
+    return provider_window_tokens(ai_provider()) ?: default_num_ctx();
 }
 
 // whatever --fit gave her, read back off the server. capped at 16k
@@ -109,12 +113,26 @@ function llamacpp_window_tokens(string $model): int {
 // system message and the newest turns. budget is 4 bytes/token
 // against Gemma's ~3.7, minus a reserve for the reply and the
 // tool results that land mid-turn.
+// llama.cpp prompt_tokens on the 12B mmproj: a 512 px frame ~123,
+// audio exactly 25 a second (source: trust me bro)
+const MEDIA_IMAGE_TOKENS = 130;
+const MEDIA_AUDIO_TOKENS_PER_S = 25;
+
+function message_media_tokens(array $m): int {
+    $tokens = count($m['media']['images'] ?? []) * MEDIA_IMAGE_TOKENS;
+    foreach ($m['media']['audio'] ?? [] as $wav) {
+        $seconds = max(0, strlen($wav) * 3 / 4 - 44) / 32000;
+        $tokens += (int)ceil($seconds * MEDIA_AUDIO_TOKENS_PER_S);
+    }
+    return $tokens;
+}
+
 function fit_messages_to_context(array $messages, int $numCtx, int $reserve = 1024): array {
     $budget = $numCtx - $reserve;
     if ($numCtx <= 0 || $budget <= 0 || count($messages) <= 5) return $messages;
     $cost = static function (array $m): int {
         // +8 for the role and the turn markers the template wraps it in
-        return (int)(strlen((string)($m['content'] ?? '')) / 4) + 8;
+        return (int)(strlen((string)($m['content'] ?? '')) / 4) + 8 + message_media_tokens($m);
     };
     $total = 0;
     foreach ($messages as $m) $total += $cost($m);

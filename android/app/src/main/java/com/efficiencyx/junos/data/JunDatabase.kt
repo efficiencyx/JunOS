@@ -100,6 +100,43 @@ data class ConsolidationEntity(
     val lastNoteCount: Int = 0,
 )
 
+@Entity(tableName = "achievement_stats")
+data class AchievementStatEntity(
+    @PrimaryKey val stat: String,
+    val value: Long,
+    val updatedAt: Long,
+)
+
+@Entity(tableName = "achievement_seen")
+data class AchievementSeenEntity(
+    @PrimaryKey val ach: String,
+    val tier: Int,
+)
+
+@Entity(
+    tableName = "reply_ratings",
+    indices = [Index(value = ["messageId"], unique = true)],
+)
+data class ReplyRatingEntity(
+    @PrimaryKey(autoGenerate = true) val id: Long = 0,
+    val conversationId: Long,
+    val messageId: Long,
+    val rating: Int,
+    val model: String? = null,
+    val context: String,
+    val reply: String,
+    val at: Long,
+)
+
+@Entity(tableName = "planned_messages")
+data class PlannedMessageEntity(
+    @PrimaryKey(autoGenerate = true) val id: Long = 0,
+    val text: String,
+    val dueAt: Long,
+    val createdAt: Long,
+    val deliveredAt: Long? = null,
+)
+
 @Dao
 abstract class JunDao {
     @Query("SELECT * FROM conversations ORDER BY updatedAt DESC, id DESC LIMIT :limit")
@@ -206,6 +243,56 @@ abstract class JunDao {
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     abstract suspend fun putConsolidation(value: ConsolidationEntity)
 
+    @Query("SELECT * FROM achievement_stats")
+    abstract suspend fun achievementStats(): List<AchievementStatEntity>
+
+    @Query("SELECT * FROM achievement_stats WHERE stat = :stat")
+    abstract suspend fun achievementStat(stat: String): AchievementStatEntity?
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    abstract suspend fun putAchievementStat(value: AchievementStatEntity)
+
+    @Query("DELETE FROM achievement_stats WHERE stat = :stat")
+    abstract suspend fun deleteAchievementStat(stat: String)
+
+    @Query("SELECT * FROM achievement_seen")
+    abstract suspend fun achievementSeen(): List<AchievementSeenEntity>
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    abstract suspend fun putAchievementSeen(value: AchievementSeenEntity)
+
+    @Query("SELECT * FROM messages WHERE conversationId = :conversationId AND role = 'assistant' ORDER BY id DESC LIMIT 1")
+    abstract suspend fun lastAssistant(conversationId: Long): MessageEntity?
+
+    @Query("SELECT * FROM messages WHERE conversationId = :conversationId AND id < :beforeId ORDER BY id DESC LIMIT :limit")
+    abstract suspend fun messagesBefore(conversationId: Long, beforeId: Long, limit: Int): List<MessageEntity>
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    abstract suspend fun putRating(value: ReplyRatingEntity)
+
+    @Query("DELETE FROM reply_ratings WHERE messageId = :messageId")
+    abstract suspend fun deleteRating(messageId: Long)
+
+    @Query("SELECT * FROM reply_ratings WHERE messageId = :messageId")
+    abstract suspend fun rating(messageId: Long): ReplyRatingEntity?
+
+    @Query("SELECT * FROM reply_ratings ORDER BY id")
+    abstract suspend fun ratings(): List<ReplyRatingEntity>
+
+    @Query("SELECT COUNT(*) FROM planned_messages WHERE deliveredAt IS NULL")
+    protected abstract suspend fun plannedWaiting(): Int
+
+    @Insert
+    protected abstract suspend fun insertPlanned(value: PlannedMessageEntity): Long
+
+    // null when max texts are already waiting, same cap as planned_add() in php
+    @Transaction
+    open suspend fun planMessage(value: PlannedMessageEntity, max: Int): Long? =
+        if (plannedWaiting() >= max) null else insertPlanned(value)
+
+    @Query("UPDATE planned_messages SET deliveredAt = :at WHERE id = :id AND deliveredAt IS NULL")
+    abstract suspend fun markPlannedDelivered(id: Long, at: Long): Int
+
     @Insert(onConflict = OnConflictStrategy.IGNORE)
     protected abstract suspend fun insertRelationship(value: RelationshipEntity): Long
 
@@ -229,8 +316,12 @@ abstract class JunDao {
         WardrobePresetEntity::class,
         WardrobeStateEntity::class,
         ConsolidationEntity::class,
+        AchievementStatEntity::class,
+        AchievementSeenEntity::class,
+        ReplyRatingEntity::class,
+        PlannedMessageEntity::class,
     ],
-    version = 3,
+    version = 5,
     exportSchema = true,
 )
 abstract class JunDatabase : RoomDatabase() {
@@ -241,7 +332,7 @@ abstract class JunDatabase : RoomDatabase() {
             context.applicationContext,
             JunDatabase::class.java,
             "jun.db",
-        ).addMigrations(MIGRATION_1_2, MIGRATION_2_3).build()
+        ).addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5).build()
 
         private val MIGRATION_1_2 = object : Migration(1, 2) {
             override fun migrate(db: SupportSQLiteDatabase) {
@@ -252,6 +343,21 @@ abstract class JunDatabase : RoomDatabase() {
         private val MIGRATION_2_3 = object : Migration(2, 3) {
             override fun migrate(db: SupportSQLiteDatabase) {
                 db.execSQL("CREATE TABLE IF NOT EXISTS `relationship_history` (`id` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, `affection` INTEGER NOT NULL, `trust` INTEGER NOT NULL, `tension` INTEGER NOT NULL, `event` TEXT, `at` INTEGER NOT NULL)")
+            }
+        }
+
+        private val MIGRATION_3_4 = object : Migration(3, 4) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL("CREATE TABLE IF NOT EXISTS `achievement_stats` (`stat` TEXT NOT NULL, `value` INTEGER NOT NULL, `updatedAt` INTEGER NOT NULL, PRIMARY KEY(`stat`))")
+                db.execSQL("CREATE TABLE IF NOT EXISTS `achievement_seen` (`ach` TEXT NOT NULL, `tier` INTEGER NOT NULL, PRIMARY KEY(`ach`))")
+                db.execSQL("CREATE TABLE IF NOT EXISTS `reply_ratings` (`id` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, `conversationId` INTEGER NOT NULL, `messageId` INTEGER NOT NULL, `rating` INTEGER NOT NULL, `model` TEXT, `context` TEXT NOT NULL, `reply` TEXT NOT NULL, `at` INTEGER NOT NULL)")
+                db.execSQL("CREATE UNIQUE INDEX IF NOT EXISTS `index_reply_ratings_messageId` ON `reply_ratings` (`messageId`)")
+            }
+        }
+
+        private val MIGRATION_4_5 = object : Migration(4, 5) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL("CREATE TABLE IF NOT EXISTS `planned_messages` (`id` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, `text` TEXT NOT NULL, `dueAt` INTEGER NOT NULL, `createdAt` INTEGER NOT NULL, `deliveredAt` INTEGER)")
             }
         }
     }

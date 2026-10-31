@@ -3,11 +3,13 @@ package com.efficiencyx.junos.server
 import android.app.ActivityManager
 import android.content.Context
 import android.util.Log
+import com.efficiencyx.junos.achievements.Achievements
 import com.efficiencyx.junos.away.AwayNotify
 import com.efficiencyx.junos.data.ConsolidationEntity
 import com.efficiencyx.junos.data.ConversationEntity
 import com.efficiencyx.junos.data.JunDatabase
 import com.efficiencyx.junos.data.PreferenceEntity
+import com.efficiencyx.junos.data.ReplyRatingEntity
 import com.efficiencyx.junos.data.RelationshipEntity
 import com.efficiencyx.junos.data.WardrobePresetEntity
 import com.efficiencyx.junos.data.WardrobeStateEntity
@@ -78,6 +80,7 @@ class LocalServer(
     private val chat: ChatEngine,
     private val voice: VoiceEngine,
     private val recovery: AssetRecovery,
+    private val achievements: Achievements,
 ) {
     private val json = Json { ignoreUnknownKeys = true; encodeDefaults = true }
     private val lifecycle = Mutex()
@@ -144,8 +147,45 @@ class LocalServer(
             }
             post("/api/auth.php") {
                 if (!call.authorized()) return@post
-                call.error(HttpStatusCode.NotFound, "local_profile_only")
+                if (call.request.queryParameters["action"] != "factory_reset") return@post call.error(HttpStatusCode.NotFound, "local_profile_only")
+                withContext(Dispatchers.IO) { database.clearAllTables() }
+                memory.clear()
+                Trips.current = null
+                call.ok()
             }
+
+            get("/api/achievements.php") {
+                if (!call.authorized()) return@get
+                call.json(achievements.list())
+            }
+            post("/api/achievements.php") {
+                if (!call.authorized()) return@post
+                val body = call.jsonBody(4096) ?: return@post
+                when (call.request.queryParameters["action"]) {
+                    "seen" -> {
+                        achievements.markSeen(body["items"] as? JsonArray ?: JsonArray(emptyList()))
+                        call.ok()
+                    }
+                    "bump" -> {
+                        val stat = (body["stat"] as? JsonPrimitive)?.contentOrNull
+                        if (stat !in Achievements.CLIENT_STATS) return@post call.error(HttpStatusCode.BadRequest, "invalid_request")
+                        achievements.add(stat!!)
+                        call.ok()
+                    }
+                    "set" -> {
+                        val raw = body["value"]
+                        val value = if (raw == null || raw is JsonNull) null
+                            else (raw as? JsonPrimitive)?.takeIf { !it.isString }?.longOrNull ?: return@post call.error(HttpStatusCode.BadRequest, "invalid_request")
+                        val id = (body["id"] as? JsonPrimitive)?.contentOrNull.orEmpty()
+                        if (!achievements.set(id, value)) return@post call.error(HttpStatusCode.BadRequest, "invalid_request")
+                        call.json(achievements.list())
+                    }
+                    else -> call.error(HttpStatusCode.BadRequest, "invalid_request")
+                }
+            }
+
+            get("/api/ratings.php") { if (call.authorized()) ratings() }
+            post("/api/ratings.php") { if (call.authorized()) ratings() }
 
             get("/api/models.php") {
                 if (!call.authorized()) return@get
@@ -219,7 +259,9 @@ class LocalServer(
                 if (!call.authorized()) return@put
                 val body = call.jsonBody(32 * 1024) ?: return@put
                 val state = Wardrobe.canonicalState(body) ?: return@put call.error(HttpStatusCode.BadRequest, "invalid_wardrobe")
+                val before = database.dao().wardrobeState()?.let { runCatching { json.decodeFromString<WardrobeState>(it.data) }.getOrNull() }
                 database.dao().putWardrobeState(WardrobeStateEntity(data = json.encodeToString(state), updatedAt = now()))
+                if (achievements.wornChanged(before, state)) achievements.add("outfits")
                 call.json(buildJsonObject { put("state", json.encodeToJsonElement(state)) })
             }
 
@@ -307,7 +349,9 @@ class LocalServer(
                         if (trip?.where == "date") {
                             runCatching { memory.add("events", dateNote(body), NoteSource("date", trip.conversationId.takeIf { it > 0 })) }
                                 .onFailure { Log.w(TAG, "date note failed", it) }
+                            achievements.add("dates")
                         }
+                        if (trip?.where == "shop") achievements.add("shops")
                         call.ok()
                     }
                     else -> call.error(HttpStatusCode.BadRequest, "invalid_request")
@@ -405,7 +449,10 @@ class LocalServer(
             }
             "create" -> {
                 if (!call.requireMethod(HttpMethod.Post)) return
-                val now = now(); call.json(buildJsonObject { put("id", dao.insertConversation(ConversationEntity(createdAt = now, updatedAt = now))) })
+                val now = now()
+                val id = dao.insertConversation(ConversationEntity(createdAt = now, updatedAt = now))
+                achievements.add("chats")
+                call.json(buildJsonObject { put("id", id) })
             }
             "messages" -> {
                 if (!call.requireMethod(HttpMethod.Get)) return
@@ -468,6 +515,53 @@ class LocalServer(
             found++
         }
         return conversations.filter { it.id in hits }.take(50).map { it to hits.getValue(it.id) }
+    }
+
+    // ratings.php, same rows. the phone's one account is the admin
+    private suspend fun io.ktor.server.routing.RoutingContext.ratings() {
+        val dao = database.dao()
+        when (call.request.queryParameters["action"]) {
+            "rate" -> {
+                if (!call.requireMethod(HttpMethod.Post)) return
+                val body = call.jsonBody(4096) ?: return
+                val convId = (body["conversation_id"] as? JsonPrimitive)?.longOrNull ?: 0
+                val rating = (body["rating"] as? JsonPrimitive)?.takeIf { !it.isString }?.intOrNull
+                if (convId <= 0 || rating !in setOf(-1, 0, 1)) return call.error(HttpStatusCode.BadRequest, "invalid_request")
+                if (dao.conversation(convId) == null) return call.error(HttpStatusCode.NotFound, "not_found")
+                val reply = dao.lastAssistant(convId) ?: return call.error(HttpStatusCode.NotFound, "not_found")
+                dao.deleteRating(reply.id)
+                if (rating != 0) {
+                    val context = dao.messagesBefore(convId, reply.id, RATING_CONTEXT_TURNS).reversed().map {
+                        buildJsonObject { put("role", it.role); put("content", it.content) }
+                    }
+                    val model = (body["model"] as? JsonPrimitive)?.contentOrNull?.trim()?.take(200)?.ifBlank { null }
+                    dao.putRating(ReplyRatingEntity(conversationId = convId, messageId = reply.id, rating = rating!!, model = model,
+                        context = JsonArray(context).toString(), reply = reply.content, at = now()))
+                }
+                call.ok()
+            }
+            "get" -> {
+                if (!call.requireMethod(HttpMethod.Get)) return
+                val convId = call.request.queryParameters["conversation_id"]?.toLongOrNull() ?: 0
+                if (convId <= 0 || dao.conversation(convId) == null) return call.error(HttpStatusCode.NotFound, "not_found")
+                val rating = dao.lastAssistant(convId)?.let { dao.rating(it.id)?.rating } ?: 0
+                call.json(buildJsonObject { put("rating", rating) })
+            }
+            "export" -> {
+                if (!call.requireMethod(HttpMethod.Get)) return
+                val lines = dao.ratings().joinToString("") { row ->
+                    buildJsonObject {
+                        put("conversation_id", row.conversationId); put("rating", row.rating)
+                        put("model", row.model?.let { JsonPrimitive(it) } ?: JsonNull); put("at", row.at)
+                        put("messages", runCatching { json.parseToJsonElement(row.context) }.getOrDefault(JsonArray(emptyList())))
+                        put("reply", row.reply)
+                    }.toString() + "\n"
+                }
+                call.response.header(HttpHeaders.ContentDisposition, "attachment; filename=\"jun-ratings-${java.time.LocalDate.now()}.jsonl\"")
+                call.respondText(lines, ContentType.parse("application/x-ndjson; charset=utf-8"))
+            }
+            else -> call.error(HttpStatusCode.BadRequest, "invalid_request")
+        }
     }
 
     private suspend fun io.ktor.server.routing.RoutingContext.relationship() {
@@ -653,6 +747,7 @@ class LocalServer(
         private const val SESSION_COOKIE = "omega_session"
         private const val MODEL_ID = "jun-e2b-q4_k_m"
         private const val CHAT_BODY_LIMIT = 1024 * 1024
+        private const val RATING_CONTEXT_TURNS = 40
         private const val CSP = "default-src 'self' data: blob:; script-src 'self' 'unsafe-eval'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; media-src 'self' data: blob:; connect-src 'self' data:; worker-src 'self' blob:; frame-ancestors 'none'; base-uri 'self'; form-action 'none'; object-src 'none'"
     }
 }

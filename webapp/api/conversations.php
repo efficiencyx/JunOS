@@ -188,7 +188,7 @@ switch ($action) {
         foreach ($tail as &$m) $m['content'] = dec($m['content']);
         unset($m);
 
-        $ctxTokens = default_num_ctx();
+        $ctxTokens = chat_window_tokens();
         $budgetChars = (int)($ctxTokens * 4 * 0.5);
         $targetChars = (int)($ctxTokens * 4 * 0.35);
         $keepTail = 6;

@@ -83,4 +83,13 @@ class MemoryDatesTest {
         assertEquals("see you tomorrow", MemoryDates.render("see you tomorrow", MemoryDates.day(0)))
         assertEquals("", MemoryDates.stamp("see you tomorrow", MemoryDates.day(0)))
     }
+
+    @Test
+    fun reanchorsOnlyWhenTheRelativeWordingChanges() {
+        assertEquals(500L, MemoryDates.dated("dentist at nine", "Dentist tomorrow at nine", 0, 500))
+        assertEquals(0L, MemoryDates.dated("dentist tomorrow", "dentist tomorrow, at nine", 0, 500))
+        assertEquals(300L, MemoryDates.dated("dentist tomorrow", "the dentist tomorrow", 300, 500))
+        assertEquals(500L, MemoryDates.dated("dentist tomorrow", "dentist next friday", 300, 500))
+        assertEquals(0L, MemoryDates.dated("dentist tomorrow", "dentist on 3 November", 300, 500))
+    }
 }

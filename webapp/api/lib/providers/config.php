@@ -149,6 +149,12 @@ function provider_model_hears(string $provider, string $model): bool {
     return false;
 }
 
+function provider_model_sees(string $provider, string $model): bool {
+    if ($provider === 'ollama') return ollama_model_supports_vision($model);
+    if ($provider === 'llamacpp') return llamacpp_model_supports_vision($model);
+    return false;
+}
+
 function provider_tools_enabled(): bool {
     if (ai_provider() === 'llamacpp') {
         // wants the server up with --jinja and a chat template that can

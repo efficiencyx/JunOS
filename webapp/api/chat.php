@@ -76,7 +76,8 @@ if ($isAdmin) {
     $userTurn = $messages[count($messages) - 1];
     sse_send(['debug' => [
         'system_prompt' => $systemContent, 'live_context' => $liveContext,
-        'user_turn' => $userTurn['content'], 'audio_attached' => !empty($userTurn['images']),
+        'user_turn' => $userTurn['content'], 'audio_attached' => !empty($userTurn['media']['audio']),
+        'frames_attached' => count($userTurn['media']['images'] ?? []),
         'reasoning' => $reasoning, 'think' => $think, 'route' => $route,
     ]]);
 }
@@ -92,7 +93,7 @@ $messages = fit_messages_to_context($messages, provider_window_tokens($PROVIDER,
 
 $upstreamPayload = provider_chat_payload($PROVIDER, $model, $messages, $reasoning, $think);
 
-if ($toolsOffered) $upstreamPayload['tools'] = tool_catalog($approvedWebSearchQuery);
+if ($toolsOffered) $upstreamPayload['tools'] = tool_catalog($approvedWebSearchQuery, $req['watch'] !== null);
 
 $prepMs = (int)round((microtime(true) - $_SERVER['REQUEST_TIME_FLOAT']) * 1000);
 $sawError = false;
@@ -109,6 +110,7 @@ $state = [
     'overheard' => false,
     'fled' => null,
     'flee_decided' => false,
+    'journaled' => false,
     'approved_search' => $approvedWebSearchQuery,
     'lookups' => 0,
     'went' => '',
@@ -264,7 +266,7 @@ for ($round = 0; $round < 3; $round++) {
     }
     if ($state['silenced'] || $state['fled'] !== null) break;
     $usedTools = true;
-    $upstreamPayload['messages'] = $messages;
+    $upstreamPayload['messages'] = provider_messages($PROVIDER, $messages);
 }
 
 // she sometimes calls a tool and then just. stops. no answer at
@@ -276,7 +278,7 @@ for ($round = 0; $round < 3; $round++) {
 if ($usedTools && !$sawError && !$state['silenced'] && $state['fled'] === null && trim($assistantBuffer) === '') {
     log_event(['msg' => 'tool_round_silent_retry', 'model' => $model]);
     unset($upstreamPayload['tools']);
-    $upstreamPayload['messages'] = $messages;
+    $upstreamPayload['messages'] = provider_messages($PROVIDER, $messages);
     [$emit, $stuck] = stream_loop_guard('sse_send');
     $result = provider_stream_round($PROVIDER, $upstreamPayload, $emit, 3, null, $stuck);
     if ($result['aborted'] === 'looping') sse_send(['error' => 'looping']);
@@ -309,7 +311,7 @@ if ($state['silenced']) {
     // reject a dangling user turn on the next request.
     $assistantBuffer = '...';
     sse_send(['silence' => ['reason' => $state['silence_reason'], 'overheard' => $state['overheard']]]);
-    if (!$state['overheard']) ach_add((int)$user['id'], 'silent');
+    if (!$state['overheard'] && $req['watch'] === null) ach_add((int)$user['id'], 'silent');
 } elseif ($state['fled'] !== null) {
     if (trim($assistantBuffer) === '') $assistantBuffer = '...';
     sse_send(['fled' => [
@@ -333,7 +335,9 @@ if (!$sawError && $assistantBuffer === '') {
 }
 
 if (!$sawError && $assistantBuffer !== '') {
-    $assistantBuffer = chat_apply_bookkeeping_tags($assistantBuffer, (int)$user['id'], $rel);
+    // a film is a few hundred ticks, each one a shot at her gauges
+    $assistantBuffer = chat_apply_bookkeeping_tags($assistantBuffer, (int)$user['id'], $rel,
+        ($req['watch']['turn'] ?? '') !== 'tick');
     if (!empty($req['body']['tts']) && !$state['silenced'] && !$state['overheard']) ach_add((int)$user['id'], 'tts');
 
     if ($req['ephemeral']) { sse_done(); exit; }

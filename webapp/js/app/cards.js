@@ -8,9 +8,9 @@
 // up on the face preset so her lines land in the face bubble.
 
 import * as Names from '../core/names.js?v=1';
-import * as Live2D from '../live2d/live2d.js?v=86';
+import * as Live2D from '../live2d/live2d.js?v=89';
 import * as Scene from '../trip/scene.js?v=1';
-import * as VoiceMode from '../voice/voicemode.js?v=85';
+import * as VoiceMode from '../voice/voicemode.js?v=89';
 import * as Achievements from '../achievements/achievements.js?v=8';
 
 const SUITS = ['♠', '♥', '♦', '♣'];
@@ -86,6 +86,7 @@ function deal() {
   phase = 'player';
   render();
   const yv = value(you), hv = value(her);
+  if (yv === 21) Achievements.bump('bj_natural');
   if (yv === 21 && hv === 21) settle('push', 'both of you were dealt blackjack, push');
   else if (yv === 21) settle('you', 'Anon was dealt blackjack');
   else if (hv === 21) settle('her', `${bot()} was dealt blackjack`);
@@ -94,8 +95,10 @@ function deal() {
 function hit() {
   if (phase !== 'player') return;
   you.push(draw());
-  if (value(you) > 21) settle('her', `Anon hit and busted at ${value(you)} (${show(you)})`);
-  else herTurn();
+  if (value(you) > 21) {
+    Achievements.bump('bj_bust');
+    settle('her', `Anon hit and busted at ${value(you)} (${show(you)})`);
+  } else herTurn();
 }
 
 function stand() {

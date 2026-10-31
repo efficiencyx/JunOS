@@ -1,7 +1,7 @@
 import * as ui from '../core/ui.js?v=1';
-import * as Live2D from '../live2d/live2d.js?v=86';
-import * as TTS from './tts.js?v=86';
-import * as Voice from './voice.js?v=86';
+import * as Live2D from '../live2d/live2d.js?v=89';
+import * as TTS from './tts.js?v=89';
+import * as Voice from './voice.js?v=90';
 
 let active = false;
 let muted = false;

@@ -1,5 +1,8 @@
 <?php
 
+const JOURNAL_ENTRY_MAX = 400;
+const JOURNAL_DAY_MAX = 1600;
+
 function memory_journal_path(int $userId): string {
     memory_migrate_legacy($userId);
     $dir = memory_user_dir($userId);
@@ -68,7 +71,7 @@ function memory_journal_upsert_unlocked(int $userId, string $date, string $text)
     if ($when === false || $when->format('Y-m-d') !== $date) return ['error' => 'journal_date_invalid'];
     $text = trim(preg_replace('/\s+/', ' ', $text));
     if ($text === '') return ['error' => 'journal_text_required'];
-    if (mb_strlen($text) > 1600) $text = mb_substr($text, 0, 1597) . '…';
+    if (mb_strlen($text) > JOURNAL_DAY_MAX) $text = mb_substr($text, 0, JOURNAL_DAY_MAX - 3) . '…';
     $entries = journal_parse(memory_journal_read($userId));
     $next = [];
     $found = false;
@@ -103,4 +106,19 @@ function memory_journal_delete(int $userId, string $date): array {
         $userId,
         fn() => memory_journal_delete_unlocked($userId, $date)
     );
+}
+
+// write_journal mid chat. same server date the idle pass files
+// today under, so its next run reads this and folds it in
+function memory_journal_append(int $userId, string $text): array {
+    $text = mb_substr(trim(preg_replace('/\s+/', ' ', $text)), 0, JOURNAL_ENTRY_MAX);
+    if ($text === '') return ['error' => 'journal_text_required'];
+    $date = date('Y-m-d');
+    return memory_with_user_lock($userId, function () use ($userId, $date, $text) {
+        foreach (journal_parse(memory_journal_read($userId)) as $entry) {
+            if ($entry['date'] === $date) $text = $entry['text'] . ' ' . $text;
+        }
+        if (mb_strlen($text) > JOURNAL_DAY_MAX) return ['error' => 'journal_day_full'];
+        return memory_journal_upsert_unlocked($userId, $date, $text);
+    });
 }

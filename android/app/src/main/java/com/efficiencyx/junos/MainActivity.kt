@@ -10,10 +10,13 @@ import android.os.Build
 import android.os.Bundle
 import android.view.View
 import android.view.ViewGroup
+import android.widget.Toast
+import android.webkit.CookieManager
 import android.webkit.MimeTypeMap
 import android.webkit.PermissionRequest
 import android.webkit.ValueCallback
 import android.webkit.WebChromeClient
+import android.webkit.URLUtil
 import android.webkit.WebResourceRequest
 import android.webkit.WebSettings
 import android.webkit.WebView
@@ -49,6 +52,7 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -68,6 +72,11 @@ import com.efficiencyx.junos.pairing.SessionMode
 import com.efficiencyx.junos.setup.SetupScreen
 import com.journeyapps.barcodescanner.ScanContract
 import com.journeyapps.barcodescanner.ScanOptions
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
+import java.net.HttpURLConnection
+import java.net.URL
 
 class MainActivity : ComponentActivity() {
     private val viewModel: MainViewModel by viewModels()
@@ -212,6 +221,18 @@ private fun ColabLayer(session: ColabSession, state: ColabState, activity: Activ
     }
 }
 
+private fun saveDownload(context: android.content.Context, source: String, target: Uri) {
+    val connection = URL(source).openConnection() as HttpURLConnection
+    try {
+        CookieManager.getInstance().getCookie(source)?.let { connection.setRequestProperty("Cookie", it) }
+        check(connection.responseCode == 200) { "http ${connection.responseCode}" }
+        val out = context.contentResolver.openOutputStream(target) ?: error("no output stream")
+        out.use { sink -> connection.inputStream.use { it.copyTo(sink) } }
+    } finally {
+        connection.disconnect()
+    }
+}
+
 @Composable
 private fun JunWebView(url: String) {
     var pendingAudioRequest by remember { mutableStateOf<PermissionRequest?>(null) }
@@ -220,6 +241,18 @@ private fun JunWebView(url: String) {
             if (granted) request.grant(arrayOf(PermissionRequest.RESOURCE_AUDIO_CAPTURE)) else request.deny()
         }
         pendingAudioRequest = null
+    }
+    var pendingDownload by remember { mutableStateOf<String?>(null) }
+    val scope = rememberCoroutineScope()
+    val hostContext = LocalContext.current
+    val saveAs = rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument("application/octet-stream")) { target ->
+        val source = pendingDownload
+        pendingDownload = null
+        if (target == null || source == null) return@rememberLauncherForActivityResult
+        scope.launch {
+            val saved = withContext(Dispatchers.IO) { runCatching { saveDownload(hostContext, source, target) }.isSuccess }
+            if (!saved) Toast.makeText(hostContext, "Couldn't save the file.", Toast.LENGTH_SHORT).show()
+        }
     }
     var pendingFiles by remember { mutableStateOf<ValueCallback<Array<Uri>>?>(null) }
     val filePicker = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
@@ -251,6 +284,14 @@ private fun JunWebView(url: String) {
                         if (!local) context.startActivity(Intent(Intent.ACTION_VIEW, target))
                         return !local
                     }
+                }
+                // ratings export and friends. the webview has no download
+                // manager of its own, so ask where to put it and copy it there
+                setDownloadListener { target, _, disposition, mime, _ ->
+                    val source = Uri.parse(target)
+                    if (source.scheme != "http" || source.host != "127.0.0.1" || source.port != Uri.parse(url).port) return@setDownloadListener
+                    pendingDownload = target
+                    saveAs.launch(URLUtil.guessFileName(target, disposition, mime))
                 }
                 webChromeClient = object : WebChromeClient() {
                     override fun onShowFileChooser(view: WebView, callback: ValueCallback<Array<Uri>>, params: FileChooserParams): Boolean {

@@ -1,12 +1,18 @@
 <?php
 
-const TRIP_TOOLS = ['enter_shop' => 'shop', 'enter_karaoke' => 'karaoke', 'go_out_to_eat' => 'date', 'play_cards' => 'cards'];
+const TRIP_TOOLS = ['enter_shop' => 'shop', 'enter_karaoke' => 'karaoke', 'go_out_to_eat' => 'date', 'play_cards' => 'cards',
+    'watch_together' => 'watch'];
+
+// same two every tick so the KV cache holds, and neither can walk
+// her out of the film
+const WATCH_TOOLS = ['stay_silent', 'memory_write'];
 
 const TRIP_WORDS = [
     'shop' => "annalie|shop|shopping|boutique|clothes store|buy (?:you )?(?:some )?clothes",
     'karaoke' => 'karaoke|sing together|sing with me|sing a song|go singing',
     'date' => 'dinner|lunch|restaurant|eat out|go out to eat|grab (?:a bite|food|something to eat)',
     'cards' => 'blackjack|cards|card game',
+    'watch' => 'watch (?:a |some |an? )?(?:movies?|films?|videos?|shows?|episodes?|anime|youtube|something)|movie night|netflix',
 ];
 
 const TRIP_APOS = "['\x{2019}]?";
@@ -59,7 +65,7 @@ function trip_reply_accepts(string $reply): bool {
         && (bool)preg_match("/\b(?:yes|yeah|yay|sure|okay|ok|alright|of course|let{$a}s go|let{$a}s do it|lead the way|grab my (?:coat|bag|jacket)|i{$a}d love (?:to|that)|i{$a}m in|count me in|deal|gladly|absolutely|definitely|can{$a}t wait|you{$a}re on|i{$a}ll (?:go|come)|i{$a}m (?:going|coming)(?! to\b))\b/u", $reply);
 }
 
-function tool_catalog(?string $approvedWebSearchQuery): array {
+function tool_catalog(?string $approvedWebSearchQuery, bool $watching = false): array {
     $tools = [
         [
             'type' => 'function',
@@ -116,6 +122,35 @@ function tool_catalog(?string $approvedWebSearchQuery): array {
                         'category' => ['type' => 'string', 'description' => 'Category: preferences, work, health, family, plans, boundaries, or events.'],
                     ],
                     'required' => ['memory'],
+                ],
+            ],
+        ],
+        [
+            'type' => 'function',
+            'function' => [
+                'name' => 'plan_message',
+                'description' => 'Plan a text to send Anon later, like asking tomorrow how his exam went. It goes out after the hours you pick, even if he is away. At most 3 can wait at once.',
+                'parameters' => [
+                    'type' => 'object',
+                    'properties' => [
+                        'message' => ['type' => 'string', 'description' => 'The text, the way you would type it to him. Max 240 characters.'],
+                        'after_hours' => ['type' => 'integer', 'description' => 'Hours from now, 1-72.'],
+                    ],
+                    'required' => ['message', 'after_hours'],
+                ],
+            ],
+        ],
+        [
+            'type' => 'function',
+            'function' => [
+                'name' => 'write_journal',
+                'description' => 'Write in your own journal about something between you and Anon that you want to keep. It is added to today\'s entry.',
+                'parameters' => [
+                    'type' => 'object',
+                    'properties' => [
+                        'entry' => ['type' => 'string', 'description' => 'A few sentences in your own words. Max 400 characters.'],
+                    ],
+                    'required' => ['entry'],
                 ],
             ],
         ],
@@ -229,6 +264,19 @@ function tool_catalog(?string $approvedWebSearchQuery): array {
         [
             'type' => 'function',
             'function' => [
+                'name' => 'watch_together',
+                'description' => 'Sit down with Anon and watch a video together, a file from his computer or something he shares from his browser. Call it once the two of you agree to watch something, then say your line - you sit down together when you finish talking.',
+                'parameters' => [
+                    'type' => 'object',
+                    'properties' => [
+                        'reason' => ['type' => 'string', 'description' => 'Why you want to watch something (private).'],
+                    ],
+                ],
+            ],
+        ],
+        [
+            'type' => 'function',
+            'function' => [
                 'name' => 'go_out_to_eat',
                 'description' => 'Go out for lunch or dinner with Anon at a restaurant, whether he is taking you out to eat or you asked him. Call it once the two of you agree to go, then say your line - you both leave when you finish talking.',
                 'parameters' => [
@@ -240,6 +288,9 @@ function tool_catalog(?string $approvedWebSearchQuery): array {
             ],
         ],
     ];
+    if ($watching) {
+        return array_values(array_filter($tools, fn($tool) => in_array($tool['function']['name'] ?? '', WATCH_TOOLS, true)));
+    }
     if ($approvedWebSearchQuery === null) {
         $tools = array_values(array_filter(
             $tools,
@@ -251,10 +302,14 @@ function tool_catalog(?string $approvedWebSearchQuery): array {
 
 // the tools that change how the rest of the turn goes. $state is
 // the turn's: silenced, silence_reason, overheard, flee_decided,
-// fled, and approved_search, which the one web_search it allows
-// uses up. everything else falls through to run_tool_call().
+// fled, journaled (one write_journal a turn), and approved_search,
+// which the one web_search it allows uses up. everything else
+// falls through to run_tool_call().
 function chat_run_tool(string $name, array $args, array $ctx, array &$state): string {
     $idle = $ctx['req']['idle'];
+    if ($ctx['req']['watch'] !== null && !in_array($name, WATCH_TOOLS, true)) {
+        return json_encode(['error' => 'not_available_while_watching']);
+    }
 
     if ($name === 'stay_silent') {
         // an idle turn is unprompted anyway, so staying quiet does nothing
@@ -308,6 +363,7 @@ function chat_run_tool(string $name, array $args, array $ctx, array &$state): st
         // the grant is what lets the page open at all. cards is
         // played at home, nothing to grant
         if ($where !== 'cards') trip_set((int)$ctx['user']['id'], $where, $ctx['conv_id']);
+        else ach_add((int)$ctx['user']['id'], 'cards');
         relationship_history_add((int)$ctx['user']['id'], null, 'outing:' . $where);
         sse_send(['go' => $where]);
         $state['went'] = $where;
@@ -315,8 +371,20 @@ function chat_run_tool(string $name, array $args, array $ctx, array &$state): st
             'going' => $where,
             'note' => $where === 'cards'
                 ? 'Say one short line. The table opens the moment you finish talking.'
-                : 'Say one short line about heading out together. The trip starts the moment you finish talking.',
+                : ($where === 'watch'
+                    ? 'Say one short line about sitting down together. The video starts the moment you finish talking.'
+                    : 'Say one short line about heading out together. The trip starts the moment you finish talking.'),
         ]);
+    }
+
+    if ($name === 'write_journal') {
+        if (!empty($state['journaled'])) return json_encode(['written' => false, 'note' => 'You already wrote in your journal this turn.']);
+        $res = memory_journal_append((int)$ctx['user']['id'], (string)($args['entry'] ?? ''));
+        if (isset($res['error'])) return json_encode($res['error'] === 'journal_day_full'
+            ? ['written' => false, 'note' => 'Today\'s page in your journal is full.']
+            : ['error' => $res['error']]);
+        $state['journaled'] = true;
+        return json_encode(['written' => true]);
     }
 
     if ($name === 'web_search') {
@@ -436,6 +504,10 @@ function run_tool_call(string $name, array $args, array $user, int $convId): str
             $category = (string)($args['category'] ?? 'general');
             $res = memory_note_add((int)$user['id'], $category, $memory);
             if (!empty($res['ok'])) ach_add((int)$user['id'], 'notes');
+            return json_encode($res, JSON_UNESCAPED_UNICODE);
+        }
+        if ($name === 'plan_message') {
+            $res = planned_add((int)$user['id'], (string)($args['message'] ?? ''), (int)($args['after_hours'] ?? 0));
             return json_encode($res, JSON_UNESCAPED_UNICODE);
         }
         return json_encode(['error' => 'unknown_tool']);

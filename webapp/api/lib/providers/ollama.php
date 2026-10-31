@@ -48,7 +48,7 @@ function ollama_evict_if_partially_offloaded(string $model): void {
     // actually fit on the card. when they don't, a partial offload is
     // the best it can do and evicting just reloads it badly once per
     // message.
-    if (gpu_ctx_headroom_mb() <= 0) return;
+    if ((gpu_ctx_headroom_mb() ?? 0) <= 0) return;
 
     $loaded = null;
     foreach ((ollama_api_json('/api/ps')['models'] ?? []) as $entry) {
@@ -80,9 +80,19 @@ function ollama_evict_if_partially_offloaded(string $model): void {
 // fails closed. no answer from Ollama, a timeout, an old build
 // with no capabilities list, all of it means no audio and the
 // turn goes through whisper instead.
-function ollama_model_supports_audio(string $model): bool {
+function ollama_model_capabilities(string $model): array {
     static $cache = [];
-    if (isset($cache[$model])) return $cache[$model];
-    $caps = ollama_api_json('/api/show', ['model' => $model])['capabilities'] ?? null;
-    return $cache[$model] = is_array($caps) && in_array('audio', $caps, true);
+    if (!isset($cache[$model])) {
+        $caps = ollama_api_json('/api/show', ['model' => $model])['capabilities'] ?? null;
+        $cache[$model] = is_array($caps) ? $caps : [];
+    }
+    return $cache[$model];
+}
+
+function ollama_model_supports_audio(string $model): bool {
+    return in_array('audio', ollama_model_capabilities($model), true);
+}
+
+function ollama_model_supports_vision(string $model): bool {
+    return in_array('vision', ollama_model_capabilities($model), true);
 }

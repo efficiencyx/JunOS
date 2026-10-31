@@ -30,6 +30,7 @@ import kotlin.random.Random
 object AwayNotify {
     private const val PREFS = "away_notify"
     private const val TAG = "away"
+    private const val PLANNED_TAG = "planned"
     private const val CHANNEL = "away"
     // a quick app switch shouldn't load the model
     private const val WRITE_AFTER_MIN = 15L
@@ -61,6 +62,18 @@ object AwayNotify {
             .addTag(TAG)
             .build()
         WorkManager.getInstance(context).enqueueUniqueWork("away-writer", ExistingWorkPolicy.REPLACE, writer)
+    }
+
+    // plan_message on the phone. its own tag, coming back to the app
+    // must not cancel a text she meant to send tomorrow
+    fun plan(context: Context, id: Long, dueAt: Long, text: String) {
+        WorkManager.getInstance(context).enqueue(
+            OneTimeWorkRequestBuilder<NotifyWorker>()
+                .setInitialDelay((dueAt - now()).coerceAtLeast(0), TimeUnit.SECONDS)
+                .setInputData(workDataOf("planned" to id, "key" to "planned-$id", "text" to text))
+                .addTag(PLANNED_TAG)
+                .build(),
+        )
     }
 
     fun back(context: Context) {
@@ -138,7 +151,13 @@ object AwayNotify {
     class NotifyWorker(context: Context, params: WorkerParameters) : CoroutineWorker(context, params) {
         override suspend fun doWork(): Result {
             val context = applicationContext
-            if (!stillAway(context, inputData.getLong("leftAt", -1)) || !permitted(context)) return Result.success()
+            val planned = inputData.getLong("planned", 0)
+            if (planned > 0) {
+                // the row is gone after a factory reset, nothing to send then
+                val dao = (context as JunApplication).database.dao()
+                if (dao.markPlannedDelivered(planned, now()) == 0 || !enabled(context)) return Result.success()
+            } else if (!stillAway(context, inputData.getLong("leftAt", -1))) return Result.success()
+            if (!permitted(context)) return Result.success()
             val key = inputData.getString("key") ?: return Result.success()
             val prefs = prefs(context)
             val player = prefs.getString("player", null) ?: "Anon"

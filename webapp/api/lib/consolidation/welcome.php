@@ -359,7 +359,9 @@ function welcome_payload(int $userId, ?array $preview = null, ?int $hour = null)
     // under WELCOME_MIN_AWAY the greeting stops being a moment and
     // turns into nagging on every single page refresh. under it
     // nothing matches at all, so a normal refresh shows nothing.
-    if ($preview === null && $absence === null) return ['show' => false];
+    // a planned text that came due still shows, minus the greeting
+    $planned = $preview === null ? planned_waiting($userId, $now) : [];
+    if ($preview === null && $absence === null && !$planned) return ['show' => false];
 
     // only drained when at least one milestone shows. a 'none' tier
     // return (1 min to 2 h) uses none of it, and spending the batch
@@ -374,6 +376,11 @@ function welcome_payload(int $userId, ?array $preview = null, ?int $hour = null)
         if (!isset(WELCOME_MILESTONES[$tier['tier']]) || $tier['after'] > ($absence['after'] ?? -1)) continue;
         $milestones[] = welcome_milestone($tier['tier'], $leftAt + $tier['after'], $queued[$tier['tier']] ?? [], $now);
     }
+    foreach ($planned as $text) {
+        $at = min($text['at'], $now);
+        $milestones[] = ['tier' => 'planned', 'at' => $at, 'items' => [['kind' => 'text', 'at' => $at, 'text' => $text['text']]]];
+    }
+    usort($milestones, fn($a, $b) => $a['at'] <=> $b['at']);
 
     // the hour only colors the WARM greetings. "How was work?" in
     // front of the hollow reaction sounds like she forgot the last
@@ -381,7 +388,7 @@ function welcome_payload(int $userId, ?array $preview = null, ?int $hour = null)
     $greetings = !empty($absence['cold'])
         ? WELCOME_GREETINGS_COLD
         : (welcome_hour_greetings($hour) ?? WELCOME_GREETINGS_WARM);
-    $live = [$greetings[array_rand($greetings)]];
+    $live = $absence === null && $preview === null ? [] : [$greetings[array_rand($greetings)]];
     if ($absence !== null) {
         $live[] = str_replace('{d}', welcome_duration($away), $absence['lines'][array_rand($absence['lines'])]);
     }
@@ -397,6 +404,8 @@ function welcome_payload(int $userId, ?array $preview = null, ?int $hour = null)
         'mood_changed' => false,
     ];
     if ($preview !== null) return $payload + ['preview' => true];
+
+    planned_mark_delivered($userId, array_column($planned, 'id'));
 
     // applied HERE, on the fetch, not when he reads anything. closing
     // the phone without looking does not get him out of it.
@@ -414,6 +423,7 @@ function welcome_payload(int $userId, ?array $preview = null, ?int $hour = null)
         'away' => $away,
         'tier' => $payload['tier'],
         'milestones' => count($milestones),
+        'planned' => count($planned),
         'generated' => count(array_intersect_key($queued, array_flip(array_column($milestones, 'tier')))),
     ]);
     return $payload;

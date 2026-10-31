@@ -138,6 +138,9 @@ jobs:
       - name: Trip intent
         run: php .github/scripts/trip-intent.test.php
 
+      - name: Lib units
+        run: php .github/scripts/lib.test.php
+
       - name: Migrations
         run: php .github/scripts/migrations.test.php
 

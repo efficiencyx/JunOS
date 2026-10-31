@@ -1,5 +1,13 @@
 <?php
 
+// a 20 s window at WATCH_FRAME_EVERY=1
+const WATCH_MAX_FRAMES = 20;
+const WATCH_FRAME_MAX_BYTES = 200 * 1024;
+const WATCH_FRAME_MAX_PX = 768;
+// 25 s of 16 kHz mono plus the header. her audio encoder tops out
+// at 30 s a clip
+const WATCH_AUDIO_MAX_BYTES = 25 * 32000 + 44;
+
 function chat_parse_request(string $provider): array {
     // big enough for a base64 wav plus the history. nginx caps
     // /api/chat.php at 4m and THAT's the limit that actually bites,
@@ -34,10 +42,17 @@ function chat_parse_request(string $provider): array {
         $audioB64 = $body['audio'];
         unset($wav);
     }
+    $watch = chat_parse_watch($body);
+    $frames = chat_parse_frames($body, $watch !== null);
+    if ($watch !== null && count($watch['frames_at']) !== count($frames)) $watch['frames_at'] = [];
+    if ($watch !== null && $audioB64 !== '' && strlen(base64_decode($audioB64)) > WATCH_AUDIO_MAX_BYTES) {
+        sse_fail('invalid_request');
+    }
     // a whisper turn arrives as plain text and looks typed. the flag
     // is what earns it the "who is he talking to" block below, an
-    // audio turn gets it for free
-    $spoken = $audioB64 !== '' || !empty($body['voice']);
+    // audio turn gets it for free. on the couch the audio is the
+    // video's, not his
+    $spoken = $watch === null && ($audioB64 !== '' || !empty($body['voice']));
     // the "hear everything" switch. she still hears it as spoken, but
     // no side-talk block and overheard is ignored. there for anyone
     // alone at the desk, and for the languages her audio encoder
@@ -58,6 +73,7 @@ function chat_parse_request(string $provider): array {
     // the loaded one does audio, OpenRouter + the Android build
     // can't take it at all. client hears this and falls back to
     // stt.php
+    if ($frames && !provider_model_sees($provider, $model)) sse_fail('vision_unsupported');
     if ($audioB64 !== '' && !provider_model_hears($provider, $model)) {
         sse_fail('audio_unsupported');
     }
@@ -90,17 +106,14 @@ function chat_parse_request(string $provider): array {
         }
     }
 
-    $clientTime = '';
-    if (isset($body['client_time']) && is_string($body['client_time'])) {
-        $clientTime = trim(mb_substr(preg_replace('/[\x00-\x1F\x7F]+/u', ' ', $body['client_time']), 0, 80));
-    }
+    $clientTime = chat_clean_text($body['client_time'] ?? '', 80);
 
     // minutes east of UTC, so the achievement day and the 2-5 am
     // window are Anon's and not the container's
     $tz = isset($body['tz']) && is_int($body['tz']) ? $body['tz'] : 0;
 
     $idle = isset($body['idle']) && $body['idle'] === true;
-    $ephemeral = !empty($body['ephemeral']);
+    $ephemeral = !empty($body['ephemeral']) || $watch !== null;
     $regenerate = !$idle && !$ephemeral && ($body['regenerate'] ?? false) === true;
     $invite = isset($body['invite']) && in_array($body['invite'], TRIP_TOOLS, true) ? (string)$body['invite'] : '';
 
@@ -109,7 +122,60 @@ function chat_parse_request(string $provider): array {
         'model' => $model, 'reasoning' => $reasoning, 'outfit_context' => $outfitContext,
         'mod_items' => $modItems, 'client_time' => $clientTime, 'tz' => $tz, 'idle' => $idle,
         'ephemeral' => $ephemeral, 'invite' => $invite, 'regenerate' => $regenerate,
+        'watch' => $watch, 'frames' => $frames,
     ];
+}
+
+function chat_clean_text(mixed $value, int $max): string {
+    if (!is_string($value)) return '';
+    return trim(mb_substr(preg_replace('/[\x00-\x1F\x7F]+/u', ' ', $value), 0, $max));
+}
+
+function chat_parse_watch(array $body): ?array {
+    if (!isset($body['watch'])) return null;
+    $w = $body['watch'];
+    if (!is_array($w)
+        || !in_array($w['turn'] ?? '', ['start', 'tick', 'talk', 'end'], true)
+        || !in_array($w['source'] ?? '', ['file', 'tab', 'screen'], true)) {
+        sse_fail('invalid_request');
+    }
+    return [
+        'turn' => $w['turn'],
+        'source' => $w['source'],
+        'title' => chat_clean_text($w['title'] ?? '', 120),
+        'at' => max(0, min(86400, (int)($w['at'] ?? 0))),
+        'length' => max(0, min(86400, (int)($w['length'] ?? 0))),
+        'paused' => !empty($w['paused']),
+        'heard' => chat_clean_text($w['heard'] ?? '', 2000),
+        'earlier' => chat_clean_text($w['earlier'] ?? '', 2400),
+        'frames_at' => chat_parse_frame_times($w['frames_at'] ?? null),
+    ];
+}
+
+function chat_parse_frame_times(mixed $times): array {
+    if (!is_array($times) || count($times) > WATCH_MAX_FRAMES) return [];
+    foreach ($times as $t) if (!is_int($t) || $t < 0 || $t > 86400) return [];
+    return array_values($times);
+}
+
+// only ever base64 jpeg. the data: url goes together in
+// payload.php, nothing the client sends becomes a url
+function chat_parse_frames(array $body, bool $watching): array {
+    if (!isset($body['frames'])) return [];
+    if (!$watching || !is_array($body['frames']) || count($body['frames']) > WATCH_MAX_FRAMES) sse_fail('invalid_request');
+    $frames = [];
+    foreach ($body['frames'] as $b64) {
+        $jpeg = is_string($b64) ? base64_decode($b64, true) : false;
+        if ($jpeg === false || strlen($jpeg) > WATCH_FRAME_MAX_BYTES || !str_starts_with($jpeg, "\xFF\xD8\xFF")) {
+            sse_fail('invalid_request');
+        }
+        $size = @getimagesizefromstring($jpeg);
+        if (!$size || ($size[2] ?? 0) !== IMAGETYPE_JPEG || max($size[0], $size[1]) > WATCH_FRAME_MAX_PX) {
+            sse_fail('invalid_request');
+        }
+        $frames[] = $b64;
+    }
+    return $frames;
 }
 
 function chat_require_conversation(array $user, array $body): int {
@@ -131,7 +197,7 @@ function chat_last_user_message(array $req): string {
     // message gets nothing. keyword lore lookup dies with it, which
     // is fine, she's got search_lore and can just ask for what she
     // needs.
-    if ($req['audio'] !== '') $lastUserMsg = '';
+    if ($req['audio'] !== '' && $req['watch'] === null) $lastUserMsg = '';
     return $lastUserMsg;
 }
 

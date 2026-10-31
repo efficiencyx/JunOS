@@ -631,13 +631,13 @@ html[data-pre-auth] #app { visibility: hidden; }
    (the page's allowlist for what may run) forbids the usual
    media="print" onload= trick. and blocking on the full sheet
    costs a round trip the auth screen doesn't even need. -->
-<link rel="preload" as="style" href="styles.css?v=74">
+<link rel="preload" as="style" href="styles.css?v=75">
 <link rel="preload" as="style" href="css/trip-loader.css?v=1">
-<noscript><link rel="stylesheet" href="styles.css?v=74"></noscript>
+<noscript><link rel="stylesheet" href="styles.css?v=75"></noscript>
 
 <script type="module" src="js/core/pwa.js?v=2"></script>
-<script src="js/boot-gate.js?v=28"></script>
-<script type="module" src="js/app.js?v=126"></script>
+<script src="js/boot-gate.js?v=29"></script>
+<script type="module" src="js/app.js?v=136"></script>
 </head>
 <body>
 
@@ -1024,6 +1024,16 @@ html[data-pre-auth] #app { visibility: hidden; }
           <div class="set-row-control">
             <button class="secondary" id="askDateBtn" title="Ask her in chat">Ask her</button>
             <button class="secondary force-btn" id="forceDateBtn" hidden title="Walk to the restaurant">Force her</button>
+          </div>
+        </div>
+        <div class="set-row" id="watchRow" hidden>
+          <div class="set-row-text">
+            <div class="set-row-title">Watch something</div>
+            <div class="set-row-desc">A video from your computer or a browser tab. She watches along and says what she thinks.</div>
+          </div>
+          <div class="set-row-control">
+            <button class="secondary" id="askWatchBtn" title="Ask her in chat">Ask her</button>
+            <button class="secondary force-btn" id="forceWatchBtn" hidden title="Sit down on the couch">Force her</button>
           </div>
         </div>
       </section>

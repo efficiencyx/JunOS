@@ -10,7 +10,7 @@ function provider_chat_payload(
     if (!provider_uses_openai_protocol($provider)) {
         $payload = [
             'model' => $model,
-            'messages' => $messages,
+            'messages' => provider_messages($provider, $messages),
             'stream' => true,
             // keep her loaded between turns. an eviction takes the
             // KV prompt cache with it, so the next reply has to read
@@ -33,7 +33,7 @@ function provider_chat_payload(
 
     $payload = [
         'model' => $model,
-        'messages' => $messages,
+        'messages' => provider_messages($provider, $messages),
         'stream' => true,
         'temperature' => CHAT_TEMPERATURE,
         'top_p' => 0.95,
@@ -51,9 +51,6 @@ function provider_chat_payload(
     // the same kwarg off the safetensors repo's chat_template.jinja
     if ($provider === 'llamacpp' || $provider === 'vllm') {
         $payload['chat_template_kwargs'] = ['enable_thinking' => $think];
-    }
-    if ($provider === 'llamacpp') {
-        $payload['messages'] = array_map('llamacpp_audio_parts', $messages);
     }
     return $payload;
 }
@@ -82,19 +79,35 @@ function tool_call_args(array $call): array {
     return is_array($args) ? $args : [];
 }
 
-// prompt.php hangs the recording off `images` because that's the
-// only field ollama reads media from. llama.cpp wants openai parts
-// instead. audio FIRST, ollama puts the media tag in front of the
-// text too. done here, last thing, so everything upstream keeps
-// treating content as a string.
-function llamacpp_audio_parts(array $message): array {
-    if (empty($message['images'])) return $message;
+// runs on EVERY round, or a tool round resends the raw messages
+// and loses the recording. ollama only reads media out of `images`
+// (tells wav from jpeg by the bytes), openai servers want parts.
+// so only they get a [m:ss] label above each frame
+function provider_messages(string $provider, array $messages): array {
+    return array_map(fn($m) => provider_media_message($provider, $m), $messages);
+}
+
+function provider_media_message(string $provider, array $message): array {
+    $media = $message['media'] ?? null;
+    unset($message['media']);
+    if (!is_array($media)) return $message;
+    $images = $media['images'] ?? [];
+    $audio = $media['audio'] ?? [];
+    if (!$images && !$audio) return $message;
+    if (!provider_uses_openai_protocol($provider)) {
+        $message['images'] = [...$images, ...$audio];
+        return $message;
+    }
+    $labels = $media['labels'] ?? [];
     $parts = [];
-    foreach ($message['images'] as $wav) {
+    foreach ($images as $i => $jpeg) {
+        if (isset($labels[$i])) $parts[] = ['type' => 'text', 'text' => '[' . $labels[$i] . ']'];
+        $parts[] = ['type' => 'image_url', 'image_url' => ['url' => 'data:image/jpeg;base64,' . $jpeg]];
+    }
+    foreach ($audio as $wav) {
         $parts[] = ['type' => 'input_audio', 'input_audio' => ['data' => $wav, 'format' => 'wav']];
     }
     $parts[] = ['type' => 'text', 'text' => (string)($message['content'] ?? '')];
     $message['content'] = $parts;
-    unset($message['images']);
     return $message;
 }

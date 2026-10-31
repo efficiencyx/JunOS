@@ -56,6 +56,7 @@ There is no single project-wide local test command. Run checks proportional to t
 
 ```sh
 php -l webapp/api/changed-file.php
+php .github/scripts/lib.test.php
 python -m py_compile path/to/changed_file.py
 cp webapp/js/changed-file.js /tmp/changed-file.mjs
 node --check /tmp/changed-file.mjs

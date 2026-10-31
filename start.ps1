@@ -85,6 +85,58 @@ function Get-GpuSignature {
     return 'nvidia:' + ($cards -join ',')
 }
 
+# php can't see the card, OMEGA_GPU_VRAM_MB is the only way
+# default_num_ctx() hears its size. same probe as install.ps1,
+# keep Get-AmdMemoryMb byte for byte the same as the copies there
+# and in installer-gui.ps1.
+function Get-AmdMemoryMb([object[]]$controllers) {
+    $entries = @(Get-ItemProperty -Path 'HKLM:\SYSTEM\CurrentControlSet\Control\Video\*\000*' -ErrorAction SilentlyContinue)
+    $capMb = 4095
+    return @($controllers | ForEach-Object {
+        $card = $_
+        $pci = if ([string]$card.PNPDeviceID -match '(?i)^PCI\\VEN_[0-9A-F]{4}&DEV_[0-9A-F]{4}') { $Matches[0] } else { '' }
+        $keys = @($entries | Where-Object {
+            ($pci -and ([string]$_.MatchingDeviceId) -like "$pci*") -or
+            ([string]$_.DriverDesc -eq [string]$card.Name)
+        })
+        $mb = @($keys | ForEach-Object {
+            $memory = $_.'HardwareInformation.qwMemorySize'
+            if ($memory -is [byte[]] -and $memory.Length -ge 8) {
+                [BitConverter]::ToUInt64($memory, 0)
+            } elseif ($null -ne $memory -and $memory -isnot [byte[]]) {
+                [uint64]$memory
+            }
+        } | Where-Object { $_ -gt 0 } | ForEach-Object { [int]($_ / 1MB) } |
+            Sort-Object -Descending | Select-Object -First 1)
+        if ($mb.Count -eq 0 -and $card.AdapterRAM -gt 0) {
+            $wmiMb = [int]([uint64]$card.AdapterRAM / 1MB)
+            if ($wmiMb -lt $capMb) { $mb = @($wmiMb) }
+        }
+        $mb
+    } | Where-Object { $_ -ge 1024 })
+}
+
+function Get-GpuMemoryMb {
+    if (Get-Command nvidia-smi -ErrorAction SilentlyContinue) {
+        $out = & nvidia-smi --query-gpu=memory.total --format=csv,noheader,nounits 2>$null
+        $mb = @($out | Where-Object { $_ -match '\d' } | ForEach-Object { [int]($_.Trim()) })
+        if ($mb.Count -gt 0) { return $mb }
+    }
+    try {
+        $amd = @(Get-CimInstance Win32_VideoController -ErrorAction Stop |
+            Where-Object { $_.Name -match '(?i)AMD|Radeon' })
+        return @(Get-AmdMemoryMb $amd)
+    } catch {
+        return @()
+    }
+}
+
+function Get-VramMb {
+    $mb = @(Get-GpuMemoryMb)
+    if ($mb.Count -eq 0) { return $null }
+    return [int](($mb | Measure-Object -Maximum).Maximum)
+}
+
 $Runtime  = Join-Path $PSScriptRoot 'runtime'
 $LogDir   = Join-Path $Runtime 'logs'
 $PidFile  = Join-Path $Runtime 'pids.json'
@@ -393,6 +445,11 @@ if (-not $GpuDevices -or $GpuDevices -eq 'auto') {
 # pick it up from here.
 if ($GpuDevices) { $env:CUDA_VISIBLE_DEVICES = $GpuDevices }
 $TensorParallel = $env:TENSOR_PARALLEL -match '^(on|1|true|yes)$'
+# a hand-set value wins, same as start.sh
+if ($Provider -eq 'ollama' -and -not $env:OMEGA_GPU_VRAM_MB) {
+    $vramMb = Get-VramMb
+    if ($vramMb) { $env:OMEGA_GPU_VRAM_MB = "$vramMb" }
+}
 
 if ($Action -eq 'start') {
     if ($GpuDevices -and ($GpuDevices -split ',').Count -gt 1) {
