@@ -1426,7 +1426,7 @@ function Install-Tts([string]$Karaoke = 'off') {
         # CPU torch wheel first so the resolver doesn't drag CUDA builds
         # in as a transitive dep. both voice models hit real-time on CPU
         # anyway.
-        & $py -m pip install torch --index-url https://download.pytorch.org/whl/cpu
+        & $py -m pip install 'torch>=2.5,<2.15' --index-url https://download.pytorch.org/whl/cpu
         & $py -m pip install -r (Join-Path (Get-Location) 'tts\requirements.txt')
         if ($LASTEXITCODE -ne 0) {
             Warn_ 'TTS setup failed - continuing text-only. Re-run install.ps1 to retry.'
@@ -1454,7 +1454,7 @@ function Install-Tts([string]$Karaoke = 'off') {
     if ($LASTEXITCODE -eq 0) { return }
 
     Step 'set up karaoke stem separation (a few GB, one-time)'
-    & $py -m pip install torchaudio --index-url https://download.pytorch.org/whl/cpu
+    & $py -m pip install 'torch>=2.5,<2.15' torchaudio --index-url https://download.pytorch.org/whl/cpu
     & $py -m pip install -r (Join-Path (Get-Location) 'tts\requirements-karaoke.txt')
     if ($LASTEXITCODE -ne 0) {
         Warn_ 'karaoke setup failed - the rest still works. Re-run install.ps1 to retry.'

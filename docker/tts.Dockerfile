@@ -34,7 +34,7 @@ ARG TORCH_INDEX=https://download.pytorch.org/whl/cpu
 # re-run this install. no BuildKit cache mount here, on purpose.
 # `docker compose build` on the legacy builder errors on --mount,
 # so we rely on uv's speed instead.
-RUN UV_HTTP_TIMEOUT=120 uv pip install --system torch --index-url ${TORCH_INDEX}
+RUN UV_HTTP_TIMEOUT=120 uv pip install --system "torch>=2.5,<2.15" --index-url ${TORCH_INDEX}
 
 COPY tts/requirements.txt /app/requirements.txt
 RUN uv pip install --system -r /app/requirements.txt

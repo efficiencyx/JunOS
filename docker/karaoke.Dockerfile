@@ -32,7 +32,7 @@ ARG TORCH_INDEX=https://download.pytorch.org/whl/cpu
 # from the same place so its build matches torch's, demucs uses
 # it to read audio. UV_HTTP_TIMEOUT goes up for the slow ROCm
 # CDN, or a big wheel trips uv's stall timeout.
-RUN UV_HTTP_TIMEOUT=300 uv pip install --system torch torchaudio --index-url ${TORCH_INDEX}
+RUN UV_HTTP_TIMEOUT=300 uv pip install --system "torch>=2.5,<2.15" torchaudio --index-url ${TORCH_INDEX}
 
 COPY tts/requirements-karaoke.txt /app/requirements.txt
 RUN uv pip install --system -r /app/requirements.txt

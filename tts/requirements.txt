@@ -24,6 +24,8 @@ faster-whisper==1.2.1
 # cu124 and rocm indexes carry different version numbers than
 # PyPI does, so no single pinned number exists on all three. the
 # cap at least stops a new major landing on someone mid-install.
+# both Dockerfiles and install.ps1 repeat it on their torch-first
+# install, MOVE THEM TOGETHER or uv swaps in PyPI's CUDA torch
 torch>=2.5,<2.15
 fastapi==0.162.0
 uvicorn[standard]==0.54.0
