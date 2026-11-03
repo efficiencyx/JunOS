@@ -68,6 +68,7 @@ import com.efficiencyx.junos.away.AwayNotify
 import com.efficiencyx.junos.colab.ColabKeepAliveService
 import com.efficiencyx.junos.colab.ColabSession
 import com.efficiencyx.junos.colab.ColabState
+import com.efficiencyx.junos.pairing.ChatGptLogin
 import com.efficiencyx.junos.pairing.SessionMode
 import com.efficiencyx.junos.setup.SetupScreen
 import com.journeyapps.barcodescanner.ScanContract
@@ -113,7 +114,7 @@ class MainActivity : ComponentActivity() {
 
     private fun handle(intent: Intent) {
         if (intent.action == ColabKeepAliveService.ACTION_SHOW) (application as JunApplication).colab.show()
-        else intent.dataString?.let(viewModel::offerPairing)
+        else intent.dataString?.takeUnless(ChatGptLogin::isReturn)?.let(viewModel::offerPairing)
     }
 }
 
@@ -168,7 +169,10 @@ private fun JunRoot(viewModel: MainViewModel) {
                     onSaveApiKey = viewModel::saveApiKey,
                     onChatGptSignIn = { model ->
                         viewModel.signInChatGpt(model) { url ->
-                            context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(url)).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
+                            // the session extra makes it a custom tab in OUR task, so coming back closes it
+                            val tab = Bundle().apply { putBinder("android.support.customtabs.extra.SESSION", null) }
+                            val open = Intent(Intent.ACTION_VIEW, Uri.parse(url)).putExtras(tab)
+                            activity?.startActivity(open) ?: context.startActivity(open.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
                         }
                     },
                     onForgetApi = viewModel::forgetApi,

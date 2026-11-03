@@ -8,6 +8,7 @@ import com.efficiencyx.junos.inference.RemoteEngine
 import com.efficiencyx.junos.inference.RemoteError
 import com.efficiencyx.junos.inference.RemoteWire
 import com.efficiencyx.junos.pairing.ChatGptLogin
+import com.efficiencyx.junos.pairing.SignInService
 import com.efficiencyx.junos.pairing.Pairing
 import com.efficiencyx.junos.pairing.SessionMode
 import com.efficiencyx.junos.server.LocalServer
@@ -123,10 +124,13 @@ class SetupCoordinator(
             mutableState.value = mutableState.value.copy(pickError = "Pick a model name first.")
             return
         }
-        signInJob?.cancel()
+        val previous = signInJob?.also { it.cancel() }
         val session = ChatGptLogin.begin()
         mutableState.value = mutableState.value.copy(signingIn = true, pickError = null)
         signInJob = scope.launch {
+            // the old one's finally stops the service and frees :1455, let it finish first
+            previous?.join()
+            SignInService.start(app)
             try {
                 val code = ChatGptLogin.awaitCode(session)
                 pairings.save(ChatGptLogin.exchange(session, code, name).copy(ctx = API_CONTEXT))
@@ -137,6 +141,8 @@ class SetupCoordinator(
             } catch (error: Throwable) {
                 Log.w(TAG, "chatgpt sign-in failed", error)
                 mutableState.value = mutableState.value.copy(signingIn = false, pickError = explainSignIn(error))
+            } finally {
+                SignInService.stop(app)
             }
         }
         openBrowser(session.authorizeUrl)

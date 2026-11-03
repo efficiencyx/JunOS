@@ -289,7 +289,9 @@ or `chatgpt.com` and `auth.openai.com` for the ChatGPT sign-in), under the key
 or account you gave it. Keys and ChatGPT tokens sit in the same Keystore-sealed
 store as pairings and only go to that provider. The ChatGPT sign-in listens on
 `localhost:1455` (loopback only) for up to five minutes while the browser
-comes back, and takes only a callback with the `state` it sent. Chats, memory and the
+comes back, and takes only a callback with the `state` it sent. The answer to that
+callback redirects to `junos://signed-in`, a link that carries nothing and that
+the app only uses to come back to the front. Chats, memory and the
 database stay on the phone in every mode. A pairing only ever comes from a code
 you confirm in the app, deep links from a web page included. The one exception
 is **Start Colab session**: the app opens Colab in its own WebView, and Step 3

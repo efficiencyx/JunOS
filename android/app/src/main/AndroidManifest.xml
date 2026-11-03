@@ -35,12 +35,21 @@
                 <category android:name="android.intent.category.DEFAULT" />
                 <category android:name="android.intent.category.BROWSABLE" />
                 <data android:scheme="junos" android:host="pair" />
+                <data android:scheme="junos" android:host="signed-in" />
             </intent-filter>
         </activity>
         <service
             android:name=".inference.GenerationService"
             android:exported="false"
             android:foregroundServiceType="dataSync" />
+        <service
+            android:name=".pairing.SignInService"
+            android:exported="false"
+            android:foregroundServiceType="specialUse">
+            <property
+                android:name="android.app.PROPERTY_SPECIAL_USE_FGS_SUBTYPE"
+                android:value="Answers the ChatGPT sign-in redirect on localhost while the browser is in front" />
+        </service>
         <!-- specialUse, not dataSync: android 15 caps dataSync at 6 h a day and a free colab session runs up to 12 -->
         <service
             android:name=".colab.ColabKeepAliveService"

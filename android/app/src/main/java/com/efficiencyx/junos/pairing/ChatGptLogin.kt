@@ -1,14 +1,12 @@
 package com.efficiencyx.junos.pairing
 
 import android.util.Base64
+import com.efficiencyx.junos.BuildConfig
 import com.efficiencyx.junos.inference.RemoteError
+import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.async
-import kotlinx.coroutines.awaitCancellation
-import kotlinx.coroutines.awaitAll
-import kotlinx.coroutines.coroutineScope
-import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import kotlinx.coroutines.withTimeoutOrNull
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.contentOrNull
@@ -22,11 +20,13 @@ import java.io.IOException
 import java.net.InetAddress
 import java.net.InetSocketAddress
 import java.net.ServerSocket
+import java.net.Socket
 import java.net.URLDecoder
 import java.net.URLEncoder
 import java.security.MessageDigest
 import java.security.SecureRandom
 import java.util.concurrent.TimeUnit
+import kotlin.concurrent.thread
 
 // the Codex CLI's OAuth app. its redirect is registered as
 // localhost:1455 and NOTHING else, so the phone listens there
@@ -36,6 +36,10 @@ object ChatGptLogin {
     private const val PORT = 1455
     private const val REDIRECT = "http://localhost:$PORT/auth/callback"
     private const val TIMEOUT_MS = 5 * 60 * 1000
+    private const val RETURN = "junos://signed-in"
+
+    // package= or debug and release both claim junos:// and android asks which one
+    private val returnIntent = "intent://signed-in#Intent;scheme=junos;package=${BuildConfig.APPLICATION_ID};end"
 
     private val json = Json { ignoreUnknownKeys = true }
     private val http = OkHttpClient.Builder().connectTimeout(15, TimeUnit.SECONDS).readTimeout(30, TimeUnit.SECONDS).build()
@@ -61,54 +65,57 @@ object ChatGptLogin {
         return Session(verifier, state, "$ISSUER/oauth/authorize?$query")
     }
 
-    // both loopbacks: chrome tries ::1 first for "localhost". the first
-    // answer closes every socket, the other accept() then returns null
+    // both loopbacks: chrome tries ::1 first for "localhost"
     suspend fun awaitCode(session: Session): String = withContext(Dispatchers.IO) {
         val sockets = listOf("127.0.0.1", "::1").mapNotNull { host ->
             runCatching {
                 ServerSocket().apply {
                     reuseAddress = true
-                    soTimeout = TIMEOUT_MS
                     bind(InetSocketAddress(InetAddress.getByName(host), PORT))
                 }
             }.getOrNull()
         }
         if (sockets.isEmpty()) throw RemoteError("chatgpt_port_busy")
-        val closeAll = { sockets.forEach { runCatching { it.close() } } }
-        coroutineScope {
-            // accept() never sees cancellation, closing the socket is the only way out
-            val closer = launch { try { awaitCancellation() } finally { closeAll() } }
-            val code = sockets.map { socket ->
-                async {
-                    try { accept(socket, session.state) } finally { closeAll() }
-                }
-            }.awaitAll().firstOrNull { it != null }
-            closer.cancel()
-            code ?: throw RemoteError("chatgpt_cancelled")
+        val result = CompletableDeferred<String>()
+        sockets.forEach { server -> thread(isDaemon = true) { acceptAll(server, session.state, result) } }
+        // accept() never sees cancellation, closing the sockets is the only way out
+        try {
+            withTimeoutOrNull(TIMEOUT_MS.toLong()) { result.await() } ?: throw RemoteError("chatgpt_cancelled")
+        } finally {
+            sockets.forEach { runCatching { it.close() } }
         }
     }
 
-    private fun accept(server: ServerSocket, state: String): String? {
+    // one thread per connection. chrome preconnects a socket and sends NOTHING on it,
+    // serving them in turn blocks on that one while the real callback waits behind it
+    private fun acceptAll(server: ServerSocket, state: String, result: CompletableDeferred<String>) {
         while (true) {
-            val client = try { server.accept() } catch (_: IOException) { return null }
-            client.use { socket ->
-                val head = socket.getInputStream().bufferedReader().readLine().orEmpty()
-                val target = head.split(' ').getOrNull(1).orEmpty()
-                val params = target.substringAfter('?', "").split('&').associate {
-                    it.substringBefore('=') to URLDecoder.decode(it.substringAfter('=', ""), "UTF-8")
-                }
-                val code = params["code"]
-                val ok = target.startsWith("/auth/callback") && params["state"] == state && !code.isNullOrEmpty()
-                val page = if (ok) "Signed in. Go back to Jun OS." else "That sign-in didn't work. Go back to Jun OS and try again."
-                val body = "<!doctype html><meta charset=utf-8><meta name=viewport content=\"width=device-width\"><body style=\"font:18px sans-serif;padding:32px\">$page"
-                socket.getOutputStream().write(
-                    ("HTTP/1.1 200 OK\r\nContent-Type: text/html; charset=utf-8\r\nContent-Length: ${body.toByteArray().size}\r\n" +
-                        "Connection: close\r\n\r\n$body").toByteArray(),
-                )
-                if (ok) return code
-                if (target.startsWith("/auth/callback") && params["error"] != null) throw RemoteError("chatgpt_cancelled")
+            val client = try { server.accept() } catch (_: IOException) { return }
+            thread(isDaemon = true) {
+                runCatching { client.use { serve(it, state, result) } }
             }
         }
+    }
+
+    private fun serve(socket: Socket, state: String, result: CompletableDeferred<String>) {
+        socket.soTimeout = 60_000
+        val head = socket.getInputStream().bufferedReader().readLine().orEmpty()
+        val target = head.split(' ').getOrNull(1).orEmpty()
+        val params = target.substringAfter('?', "").split('&').associate {
+            it.substringBefore('=') to URLDecoder.decode(it.substringAfter('=', ""), "UTF-8")
+        }
+        val code = params["code"]
+        val ok = target.startsWith("/auth/callback") && params["state"] == state && !code.isNullOrEmpty()
+        // the redirect brings MainActivity (singleTask) back, which drops the custom tab on top of it
+        val response = if (ok) {
+            "HTTP/1.1 302 Found\r\nLocation: $returnIntent\r\nContent-Length: 0\r\nConnection: close\r\n\r\n"
+        } else {
+            val body = "<!doctype html><meta charset=utf-8><meta name=viewport content=\"width=device-width\"><body style=\"font:18px sans-serif;padding:32px\">That sign-in didn't work. Go back to Jun OS and try again."
+            "HTTP/1.1 200 OK\r\nContent-Type: text/html; charset=utf-8\r\nContent-Length: ${body.toByteArray().size}\r\nConnection: close\r\n\r\n$body"
+        }
+        socket.getOutputStream().write(response.toByteArray())
+        if (ok) result.complete(code!!)
+        else if (target.startsWith("/auth/callback") && params["error"] != null) result.completeExceptionally(RemoteError("chatgpt_cancelled"))
     }
 
     suspend fun exchange(session: Session, code: String, model: String): Pairing = withContext(Dispatchers.IO) {
@@ -135,6 +142,8 @@ object ChatGptLogin {
         )
         pairing(tokens, pairing.model.orEmpty(), previous = pairing)
     }
+
+    fun isReturn(link: String) = link.startsWith(RETURN)
 
     fun needsRefresh(pairing: Pairing): Boolean = pairing.expires - System.currentTimeMillis() < 120_000
 
