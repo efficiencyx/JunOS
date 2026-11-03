@@ -31,6 +31,10 @@ class PairingStore(context: Context) {
         prefs.edit().putString(pairing.mode.name, seal(json.encodeToString(pairing))).apply()
     }
 
+    fun remove(mode: SessionMode) {
+        prefs.edit().remove(mode.name).apply()
+    }
+
     fun caPem(fingerprint: String): String? = prefs.getString("ca_$fingerprint", null)
 
     fun saveCa(fingerprint: String, pem: String) {

@@ -1,0 +1,124 @@
+# This is the root settings. Everything above will be ignored
+root = true
+
+# Settings for all files
+[*]
+charset = utf-8
+end_of_line = lf
+trim_trailing_whitespace = true
+insert_final_newline = true
+indent_style = space
+indent_size = 2
+
+# Settings for C# files
+[*.cs]
+# Settings for opening braces
+csharp_new_line_before_open_brace = none
+
+# Additional useful settings
+csharp_new_line_before_else = false
+csharp_new_line_before_catch = false
+csharp_new_line_before_finally = false
+
+# Spaces
+csharp_space_after_keywords_in_control_flow_statements = true
+csharp_space_before_colon_in_inheritance_clause = true
+csharp_space_after_colon_in_inheritance_clause = true
+csharp_space_between_method_declaration_empty_parameter_list_parentheses = false
+csharp_space_between_method_call_empty_parameter_list_parentheses = false
+csharp_space_between_brackets = false
+csharp_space_between_empty_square_brackets = false
+csharp_space_between_method_declaration_parameter_list_parentheses = false
+csharp_space_between_parentheses = false
+csharp_space_between_empty_braces = false  # This one controls empty block spaces
+
+# Use language keywords instead of framework type names for type references
+dotnet_style_predefined_type_for_locals_parameters_members = true:suggestion
+dotnet_style_predefined_type_for_member_access = true:suggestion
+
+# Suggest more modern language features when available
+dotnet_style_object_initializer = true:suggestion
+dotnet_style_collection_initializer = true:suggestion
+dotnet_style_coalesce_expression = true:suggestion
+dotnet_style_null_propagation = true:suggestion
+dotnet_style_explicit_tuple_names = true:suggestion
+
+# Naming rules
+dotnet_naming_rule.class_naming.symbols = class_symbol
+dotnet_naming_rule.class_naming.style = pascal_case
+dotnet_naming_rule.class_naming.severity = error
+
+dotnet_naming_rule.interface_naming.symbols = interface_symbol
+dotnet_naming_rule.interface_naming.style = pascal_case
+dotnet_naming_rule.interface_naming.severity = error
+
+dotnet_naming_rule.method_naming.symbols = method_symbol
+dotnet_naming_rule.method_naming.style = pascal_case
+dotnet_naming_rule.method_naming.severity = error
+
+dotnet_naming_rule.property_naming.symbols = property_symbol
+dotnet_naming_rule.property_naming.style = pascal_case
+dotnet_naming_rule.property_naming.severity = error
+
+dotnet_naming_rule.field_naming.symbols = field_symbol
+dotnet_naming_rule.field_naming.style = camel_case
+dotnet_naming_rule.field_naming.severity = error
+
+dotnet_naming_rule.variable_naming.symbols = variable_symbol
+dotnet_naming_rule.variable_naming.style = camel_case
+dotnet_naming_rule.variable_naming.severity = error
+
+# Symbol specifications
+dotnet_naming_symbols.class_symbol.applicable_kinds = class
+dotnet_naming_symbols.class_symbol.applicable_accessibilities = *
+
+dotnet_naming_symbols.interface_symbol.applicable_kinds = interface
+dotnet_naming_symbols.interface_symbol.applicable_accessibilities = *
+
+dotnet_naming_symbols.method_symbol.applicable_kinds = method
+dotnet_naming_symbols.method_symbol.applicable_accessibilities = *
+
+dotnet_naming_symbols.property_symbol.applicable_kinds = property
+dotnet_naming_symbols.property_symbol.applicable_accessibilities = *
+
+dotnet_naming_symbols.field_symbol.applicable_kinds = field
+dotnet_naming_symbols.field_symbol.applicable_accessibilities = *
+
+dotnet_naming_symbols.variable_symbol.applicable_kinds = local,parameter
+dotnet_naming_symbols.variable_symbol.applicable_accessibilities = *
+
+# Naming styles
+dotnet_naming_style.pascal_case.capitalization = pascal_case
+dotnet_naming_style.camel_case.capitalization = camel_case
+
+# Code style
+dotnet_style_qualification_for_field = false:suggestion
+dotnet_style_qualification_for_property = false:suggestion
+dotnet_style_qualification_for_method = false:suggestion
+dotnet_style_qualification_for_event = false:suggestion
+
+# Disable naming rules for parameters in patch files only
+[src/Patches/**.cs]
+dotnet_naming_rule.variable_naming.symbols = patch_parameters
+dotnet_naming_rule.variable_naming.style = any_style
+dotnet_naming_rule.variable_naming.severity = none
+
+# Define symbols for parameters only
+dotnet_naming_symbols.patch_parameters.applicable_kinds = parameter
+dotnet_naming_symbols.patch_parameters.applicable_accessibilities = *
+
+# Style that allows any naming
+dotnet_naming_style.any_style.capitalization = none
+
+# Keep all other naming rules for these files
+dotnet_naming_rule.class_naming.severity = error
+dotnet_naming_rule.interface_naming.severity = error
+dotnet_naming_rule.method_naming.severity = error
+dotnet_naming_rule.property_naming.severity = error
+dotnet_naming_rule.field_naming.severity = error
+
+# Directory structure rules
+[*.{cs,vb}]
+# Does not work because of the `src` folder
+dotnet_style_namespace_match_folder = false
+dotnet_diagnostic.IDE0130.severity = none

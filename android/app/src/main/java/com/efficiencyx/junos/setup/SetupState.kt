@@ -50,6 +50,8 @@ data class SetupState(
     val mode: SessionMode = SessionMode.LOCAL,
     val lan: Pairing? = null,
     val cloud: Pairing? = null,
+    val api: Pairing? = null,
+    val signingIn: Boolean = false,
     // a scanned or pasted code, waiting for a yes
     val offer: Pairing? = null,
     val pickError: String? = null,
@@ -57,6 +59,7 @@ data class SetupState(
     fun pairing(mode: SessionMode): Pairing? = when (mode) {
         SessionMode.LAN -> lan
         SessionMode.CLOUD -> cloud
+        SessionMode.API -> api
         SessionMode.LOCAL -> null
     }
 }

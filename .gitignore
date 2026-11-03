@@ -33,6 +33,7 @@ tools/dataset_v5
 tools/dataset_v6
 tools/dataset_v7
 tools/dataset_v8
+tools/dataset_v9/toolsets/batches/
 
 # the LoRA training pipeline (LoRA = the small adapter trained on
 # top of the base model) and its debug scratch. runs on the

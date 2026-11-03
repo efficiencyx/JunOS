@@ -1,0 +1,68 @@
+using System;
+using System.Collections.Generic;
+using System.Text.Json;
+using MelonLoader;
+using UnityEngine;
+using Il2Cpp;
+
+namespace JunBridge.Utils;
+
+[MonoSingleton]
+[RegisterTypeInIl2Cpp]
+public class SaveStorage : MonoBehaviour {
+  public static SaveStorage Instance => MonoSingletonManager.Get<SaveStorage>();
+  private static readonly Logger logger = new("SaveStorage");
+
+  private const string prefix = "JunBridge_";
+  private readonly Dictionary<string, object> cache = [];
+
+  public void Awake() {
+    this.ValidateSingleton();
+  }
+
+  public void SetValue<T>(string key, T value) {
+    cache[key] = value;
+
+    try {
+      string fullKey = prefix + key;
+      string json = JsonSerializer.Serialize(value);
+
+      GameScript.Instance?.GameVariables.customData.SetStringSpecialVariable(fullKey, json);
+    } catch (Exception e) {
+      logger.LogError($"Error saving key {key}: {e.Message}");
+    }
+  }
+
+  public T GetValue<T>(string key, T defaultValue = default) {
+    if (cache.TryGetValue(key, out var cachedValue)) {
+      if (cachedValue == null) {
+        return default;
+      }
+      if (cachedValue is T typedValue) {
+        return typedValue;
+      }
+      logger.LogWarning($"Cache type mismatch for key '{key}'. Reloading from save.");
+      cache.Remove(key);
+    }
+
+    try {
+      string fullKey = prefix + key;
+      string json = GameScript.Instance?.GameVariables.customData.GetStringSpecialVariableOrDefault(fullKey);
+
+      if (!string.IsNullOrEmpty(json)) {
+        T value = JsonSerializer.Deserialize<T>(json);
+        cache[key] = value;
+        return value;
+      }
+    } catch (Exception e) {
+      logger.LogError($"Error loading key {key}: {e.Message}");
+    }
+
+    return defaultValue;
+  }
+
+  public void InvalidateCache() {
+    cache.Clear();
+    logger.Log("Cache invalidated");
+  }
+}

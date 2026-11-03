@@ -1,6 +1,6 @@
 ﻿[CmdletBinding()]
 param(
-    [ValidateSet('start', 'stop', 'status', 'trust', 'link', 'phone')]
+    [ValidateSet('start', 'stop', 'status', 'trust', 'link', 'phone', 'bridge')]
     [string]$Action = 'start',
     [switch]$NoBrowser,
     [switch]$IgnoreSecurity,
@@ -698,6 +698,39 @@ if ($Action -eq 'trust') {
     if (Update-CaTrust $true) { exit 0 } else { exit 1 }
 }
 
+# JunBridge reads ApiUrl from its cfg and JunOS's own CA from
+# JunBridge.ca.pem, so a new JUN_PORT or CA reaches the game next start
+function Update-BridgeMod {
+    $gameDir = $env:JUN_GAME_DIR
+    if (-not $gameDir -or -not (Test-Path -LiteralPath (Join-Path $gameDir 'Mods\JunBridge.dll'))) { return $false }
+    $userData = Join-Path $gameDir 'UserData'
+    New-Item -ItemType Directory -Force -Path $userData | Out-Null
+    $ca = Join-Path $CertDir 'ca.pem'
+    if (Test-Path -LiteralPath $ca) { Copy-Item -LiteralPath $ca -Destination (Join-Path $userData 'JunBridge.ca.pem') -Force }
+    $cfg = Join-Path $userData 'JunBridge.cfg'
+    $line = 'ApiUrl = "' + $SiteUrl + '"'
+    $text = if (Test-Path -LiteralPath $cfg) { [IO.File]::ReadAllText($cfg) } else { '' }
+    if ($text -match '(?m)^ApiUrl\s*=') {
+        $text = [regex]::Replace($text, '(?m)^ApiUrl\s*=.*?(?=\r?$)', $line)
+    } elseif ($text -match '(?m)^\[Jun\]') {
+        $text = [regex]::Replace($text, '(?m)^\[Jun\][ \t]*(?=\r?$)', "[Jun]`r`n$line", 1)
+    } else {
+        $text = "[Jun]`r`n$line`r`n`r`n" + $text
+    }
+    # no BOM, 5.1's -Encoding UTF8 writes one
+    [IO.File]::WriteAllText($cfg, $text)
+    return $true
+}
+
+if ($Action -eq 'bridge') {
+    if (-not (Update-BridgeMod)) {
+        Warn_ 'no JunBridge mod in JUN_GAME_DIR. re-run install.ps1 with JUN_BRIDGE=1'
+        exit 1
+    }
+    Ok 'JunBridge points at her. start the game, it asks you to sign in'
+    exit 0
+}
+
 function Get-PhpExe {
     $exe = Join-Path $Runtime 'php\php.exe'
     if (Test-Path $exe) { return $exe }
@@ -1087,6 +1120,20 @@ $env:TRUST_PROXY            = '1'
 $libPath = (Join-Path $PSScriptRoot 'webapp\api\lib\bootstrap.php').Replace('\', '/')
 & $phpExe -r "require '$libPath'; db();"
 if ($LASTEXITCODE -ne 0) { throw 'database migration failed' }
+# the game's save into her memory, gauges and wardrobe, once per
+# boot. never writes while the game runs, it'd save over us on exit
+if ("$env:GAME_BRIDGE" -match '^(on|1|true|yes)$' -and $env:GAME_SAVE_DIR) {
+    Step 'game bridge'
+    $bridgeArgs = @((Join-Path $PSScriptRoot 'webapp\api\bridge-sync.php'))
+    if ("$env:GAME_SAVE_WRITE" -match '^(on|1|true|yes)$') {
+        if (Get-Process -Name 'My Dystopian Robot Girlfriend' -ErrorAction SilentlyContinue) {
+            Note 'the game is running, its save is left alone'
+        } else {
+            $bridgeArgs += '--write'
+        }
+    }
+    & $phpExe @bridgeArgs | ForEach-Object { Note $_ }
+}
 $oldMemory = Get-TrackedProcess $oldPids 'memory'
 if ($oldMemory) { Stop-Process -Id $oldMemory.Id -Force -ErrorAction SilentlyContinue }
 Start-Tracked 'memory' $phpExe @((Join-Path $PSScriptRoot 'webapp\api\consolidation-worker.php')) | Out-Null
@@ -1118,6 +1165,7 @@ Wait-Up 'php' $phpProc { Test-Http $PhpUrl }
 & $phpExe (Join-Path $PSScriptRoot 'tools\local-cert.php') $CertDir @SiteHosts
 if ($LASTEXITCODE -ne 0) { throw 'could not make the certificate (see above)' }
 $null = Update-CaTrust ($env:JUN_TRUST_CA -match '^(1|on|yes|true)$')
+$null = Update-BridgeMod
 
 # admin off: the admin API would want :2019 and we never
 #   reconfigure a running caddy anyway.

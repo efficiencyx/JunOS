@@ -76,11 +76,16 @@ public sealed class JunProcessOutput
 <Window xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         Title="Jun OS"
-        Width="620" Height="520" MinWidth="520" MinHeight="420"
+        Width="640" Height="620" MinWidth="540" MinHeight="500"
         WindowStartupLocation="CenterScreen"
         Background="#111318" Foreground="#F3F4F6"
         FontFamily="Segoe UI" FontSize="14">
     <Window.Resources>
+        <Style x:Key="SectionLabel" TargetType="TextBlock">
+            <Setter Property="Foreground" Value="#8D95A5" />
+            <Setter Property="FontSize" Value="12" />
+            <Setter Property="Margin" Value="2,8,0,2" />
+        </Style>
         <Style TargetType="Button">
             <Setter Property="MinWidth" Value="96" />
             <Setter Property="Padding" Value="14,8" />
@@ -131,17 +136,31 @@ public sealed class JunProcessOutput
                 <TextBlock x:Name="DetailText" Foreground="#AEB5C2" Margin="0,6,0,0" TextWrapping="Wrap" />
             </StackPanel>
         </Border>
-        <WrapPanel Grid.Row="2">
-            <Button x:Name="StartButton" Content="Start" Background="#0078D4" BorderBrush="#168CE0" />
-            <Button x:Name="StopButton" Content="Stop" />
-            <Button x:Name="OpenButton" Content="Open Jun OS" />
-            <Button x:Name="FolderButton" Content="Open folder" />
-            <Button x:Name="LogsButton" Content="Logs" />
-            <Button x:Name="LinkButton" Content="Notebook link" />
-            <Button x:Name="PhoneButton" Content="Phone" />
-            <Button x:Name="UpdateButton" Content="Update" />
-            <Button x:Name="UninstallButton" Content="Uninstall" />
-        </WrapPanel>
+        <StackPanel Grid.Row="2">
+            <TextBlock Text="Her" Style="{StaticResource SectionLabel}" />
+            <WrapPanel>
+                <Button x:Name="StartButton" Content="Start" Background="#0078D4" BorderBrush="#168CE0" />
+                <Button x:Name="StopButton" Content="Stop" />
+                <Button x:Name="RestartButton" Content="Restart" />
+                <Button x:Name="OpenButton" Content="Open Jun OS" />
+                <Button x:Name="LogsButton" Content="Logs" />
+            </WrapPanel>
+            <TextBlock Text="Setup" Style="{StaticResource SectionLabel}" />
+            <WrapPanel>
+                <Button x:Name="ConfigureButton" Content="Configure" />
+                <Button x:Name="UpdateButton" Content="Update" />
+                <Button x:Name="MtpButton" Content="Tune MTP" />
+                <Button x:Name="FolderButton" Content="Open folder" />
+                <Button x:Name="UninstallButton" Content="Uninstall" />
+            </WrapPanel>
+            <TextBlock Text="Connections" Style="{StaticResource SectionLabel}" />
+            <WrapPanel>
+                <Button x:Name="PhoneButton" Content="Phone" />
+                <Button x:Name="LinkButton" Content="Notebook link" />
+                <Button x:Name="BridgeButton" Content="Game bridge" />
+                <Button x:Name="TrustButton" Content="Certificate" />
+            </WrapPanel>
+        </StackPanel>
         <TextBox x:Name="OutputBox" Grid.Row="3" IsReadOnly="True" TextWrapping="NoWrap"
                  VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Auto"
                  FontFamily="Consolas" FontSize="12" Background="#0C0E12" Foreground="#C1C6D0"
@@ -152,7 +171,8 @@ public sealed class JunProcessOutput
 
 $window = [Windows.Markup.XamlReader]::Load([Xml.XmlNodeReader]::new($xaml))
 foreach ($name in 'FolderText', 'StateText', 'DetailText', 'StartButton', 'StopButton', 'OpenButton',
-        'FolderButton', 'LogsButton', 'LinkButton', 'PhoneButton', 'UpdateButton', 'UninstallButton', 'OutputBox') {
+        'FolderButton', 'LogsButton', 'LinkButton', 'PhoneButton', 'ConfigureButton', 'UpdateButton',
+        'RestartButton', 'MtpButton', 'BridgeButton', 'TrustButton', 'UninstallButton', 'OutputBox') {
     Set-Variable -Name $name -Value $window.FindName($name) -Scope Script
 }
 $FolderText.Text = $script:Root
@@ -198,6 +218,7 @@ function Get-RunningServices {
 }
 
 $script:busy = $false
+$script:then = $null
 $script:brushes = [Windows.Media.BrushConverter]::new()
 
 function Set-State([string]$text, [string]$color) {
@@ -227,6 +248,11 @@ function Update-Status {
     $StopButton.IsEnabled = -not $script:busy -and ($services.Count -gt 0 -or $webUp)
     $OpenButton.IsEnabled = $webUp
     $UpdateButton.IsEnabled = -not $script:busy
+    $ConfigureButton.IsEnabled = -not $script:busy
+    $RestartButton.IsEnabled = -not $script:busy
+    $MtpButton.IsEnabled = -not $script:busy -and $webUp
+    $BridgeButton.IsEnabled = -not $script:busy
+    $TrustButton.IsEnabled = -not $script:busy
     $PhoneButton.IsEnabled = -not $script:busy
     $UninstallButton.IsEnabled = -not $script:busy
 }
@@ -272,8 +298,10 @@ function Invoke-StartScript([string]$action) {
 # ShellExecute because that's what opens a NEW console. without it
 # the script version of this window (hidden powershell) hands the
 # child its own hidden console and the questions go nowhere.
-function Start-ConsoleScript([string]$file) {
+function Start-ConsoleScript([string]$file, [switch]$FullSetup, [string]$Only = '') {
     $env:JUN_DIR = $script:Root
+    $env:JUN_ONLY = $Only
+    if ($file -eq 'install.ps1') { $env:JUN_REUSE = if ($FullSetup) { '0' } else { '1' } }
     Start-Process -FilePath $script:PowerShellExe -WorkingDirectory $script:Root `
         -ArgumentList '-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', "`"$(Join-Path $script:Root $file)`""
 }
@@ -307,9 +335,14 @@ $timer.Add_Tick({
                 Start-ConsoleScript 'install.ps1'
             }
         } elseif ($code -ne 0) {
+            $script:then = $null
             Add-OutputLine "start.ps1 exited with code $code. The Logs button has the details."
         } elseif ($script:action -like 'phone*' -and $script:pairLink) {
             Show-PhoneDialog $script:pairLink
+        } elseif ($script:then) {
+            $next = $script:then
+            $script:then = $null
+            Invoke-StartScript $next
         }
     }
     $script:ticks++
@@ -453,6 +486,99 @@ function Show-PhoneDialog([string]$link) {
     [void]$dialog.ShowDialog()
 }
 
+function Set-ManagerEnv([hashtable]$values) {
+    $envPath = Join-Path $script:Root '.env'
+    $lines = @(Get-Content -LiteralPath $envPath)
+    foreach ($key in $values.Keys) {
+        $lines = @($lines | Where-Object { $_ -notmatch "^$key=" }) + "$key=$($values[$key])"
+    }
+    Set-Content -LiteralPath $envPath -Value $lines
+}
+
+function Test-EnvOn([string]$key, [string]$fallback) {
+    return (Get-EnvValue $key $fallback) -match '^(on|1|true|yes)$'
+}
+
+function Show-ConfigureDialog {
+    [xml]$dialogXaml = @'
+<Window xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="Jun OS" Width="500" SizeToContent="Height" WindowStartupLocation="CenterOwner" ResizeMode="NoResize"
+        Background="#111318" Foreground="#F3F4F6" FontFamily="Segoe UI" FontSize="14">
+    <StackPanel Margin="24,20,24,16">
+        <CheckBox x:Name="VoiceBox" Content="Voice (text to speech and the mic)" Foreground="#F3F4F6" />
+        <CheckBox x:Name="KaraokeBox" Content="Karaoke (adds a few GB, songs split on the CPU here)" Foreground="#F3F4F6" Margin="22,8,0,0" />
+        <CheckBox x:Name="BridgeBox" Content="Game bridge (her and your game save)" Foreground="#F3F4F6" Margin="0,8,0,0" />
+        <CheckBox x:Name="UpdateBox" Content="Check for new releases when she starts" Foreground="#F3F4F6" Margin="0,8,0,0" />
+        <TextBlock TextWrapping="Wrap" Foreground="#AEB5C2" FontSize="12" Margin="0,14,0,16"
+                   Text="Turning voice, karaoke or the bridge on installs what they need, the installer opens in its own window for that. Provider and model live in Full setup." />
+        <StackPanel Orientation="Horizontal" HorizontalAlignment="Right">
+            <Button x:Name="SetupButton" Content="Full setup" Padding="14,8" Margin="0,0,8,0" />
+            <Button x:Name="SaveButton" Content="Save" Padding="14,8" Margin="0,0,8,0" />
+            <Button x:Name="CancelButton" Content="Cancel" Padding="14,8" />
+        </StackPanel>
+    </StackPanel>
+</Window>
+'@
+    $dialog = [Windows.Markup.XamlReader]::Load([Xml.XmlNodeReader]::new($dialogXaml))
+    $dialog.Owner = $window
+    $voice = $dialog.FindName('VoiceBox'); $karaoke = $dialog.FindName('KaraokeBox')
+    $bridge = $dialog.FindName('BridgeBox'); $updates = $dialog.FindName('UpdateBox')
+    $was = @{ voice = Test-EnvOn 'VOICE' 'on'; karaoke = Test-EnvOn 'KARAOKE' 'off'; bridge = Test-EnvOn 'GAME_BRIDGE' 'off' }
+    $voice.IsChecked = $was.voice
+    $karaoke.IsChecked = $was.voice -and $was.karaoke
+    $karaoke.IsEnabled = $was.voice
+    $bridge.IsChecked = $was.bridge
+    $updates.IsChecked = Test-EnvOn 'UPDATE_CHECK' 'off'
+    $voice.Add_Click({
+        $karaoke.IsEnabled = $voice.IsChecked -eq $true
+        if (-not $karaoke.IsEnabled) { $karaoke.IsChecked = $false }
+    })
+    $dialog.FindName('CancelButton').Add_Click({ $dialog.Close() })
+    $dialog.FindName('SetupButton').Add_Click({
+        $dialog.Close()
+        Start-ConsoleScript 'install.ps1' -FullSetup
+    })
+    $dialog.FindName('SaveButton').Add_Click({
+        $now = @{ voice = $voice.IsChecked -eq $true; karaoke = $karaoke.IsChecked -eq $true; bridge = $bridge.IsChecked -eq $true }
+        $onOff = { param($b) if ($b) { 'on' } else { 'off' } }
+        Set-ManagerEnv @{
+            VOICE = & $onOff $now.voice; KARAOKE = & $onOff $now.karaoke
+            GAME_BRIDGE = & $onOff $now.bridge; UPDATE_CHECK = & $onOff ($updates.IsChecked -eq $true)
+        }
+        if ($now.karaoke) { Set-ManagerEnv @{ SEP_DEVICE = 'cpu' } }
+        $dialog.Close()
+        $only = @()
+        if (($now.voice -and -not $was.voice) -or ($now.karaoke -and -not $was.karaoke)) { $only += 'voice' }
+        if ($now.bridge -and -not $was.bridge) { $only += 'bridge' }
+        if ($only) {
+            Start-ConsoleScript 'install.ps1' -Only ($only -join ',')
+        } elseif (@(Get-RunningServices).Count -gt 0) {
+            Add-OutputLine 'Saved. Restart her to use it.'
+        }
+    })
+    [void]$dialog.ShowDialog()
+}
+
+$ConfigureButton.Add_Click({ Show-ConfigureDialog })
+$RestartButton.Add_Click({
+    if (-not (Confirm-CloudLink)) { return }
+    if (@(Get-RunningServices).Count -gt 0) {
+        $script:then = 'start'
+        Invoke-StartScript 'stop'
+    } else {
+        Invoke-StartScript 'start'
+    }
+})
+$TrustButton.Add_Click({ Invoke-StartScript 'trust' })
+$MtpButton.Add_Click({ Start-ConsoleScript 'mtp-autotune.ps1' })
+$BridgeButton.Add_Click({
+    $modIn = (Get-EnvValue 'JUN_GAME_DIR' '') -and (Test-Path -LiteralPath (Join-Path (Get-EnvValue 'JUN_GAME_DIR' '') 'Mods\JunBridge.dll'))
+    if ($modIn) { Invoke-StartScript 'bridge'; return }
+    if (Confirm-Action "The game mod isn't installed yet.`n`nInstall it now? A window opens and looks for the game, nothing else changes.") {
+        Start-ConsoleScript 'install.ps1' -Only 'bridge'
+    }
+})
 $StartButton.Add_Click({ if (Confirm-CloudLink) { Invoke-StartScript 'start' } })
 $LinkButton.Add_Click({
     [void](Show-CloudDialog 'Lend her brain to the Colab or Kaggle notebook in inference only mode. Stop then Start afterwards to use it.' 'Save' 'Cancel')

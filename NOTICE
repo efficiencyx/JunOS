@@ -135,3 +135,33 @@ libraries the same commit ships under prebuilt/android_arm64/ (Apache License
 2.0; libwebgpu_dawn.so is Dawn, BSD 3-Clause). That commit is the first with
 Session.clone(), which the on-device prefix cache needs. Once a Maven release
 includes it, the APK goes back to the Maven AAR.
+
+================================================================================
+7. JunBridge game mod (bridge/)
+================================================================================
+
+bridge/ is a MelonLoader mod for "My Dystopian Robot Girlfriend". Its chat,
+voice, Jun provider, patches and utilities are adapted from MdrgAiDialog
+(https://github.com/StLyn4/MdrgAiDialog, Apache License 2.0), with the other
+providers and the provider picker removed and the sync code added. Those files
+stay under the Apache License 2.0.
+
+The mod links against MelonLoader (Apache License 2.0,
+https://github.com/LavaGang/MelonLoader), HarmonyX and Il2CppInterop, and
+against assemblies MelonLoader generates from your own copy of the game.
+The game assemblies fall under section 1: never commit or publish them.
+The installers download MelonLoader from its own GitHub releases when you
+ask for the in-game mod.
+
+The native Linux JunBridge.LinuxFix.dll embeds Dobby from
+https://github.com/Ketlark/Dobby at 642dd93513d890acb7ceb0312b2c1a0a27668cce
+(derived from https://github.com/jmpews/Dobby, Apache License 2.0). The checked-in
+patch adds Linux compatibility, disables allocation inside existing code
+pages and rejects failed relocation before patching the target. The pinned
+Dobby source supplies safe allocation and x64 far-trampoline relocation.
+The DLL embeds the Apache license, source/change attribution and TinySTL's
+BSD-2-Clause notice (Copyright 2012-2018 Matthew Endsley) as
+JunBridge.LinuxFix.NOTICES.txt; it also writes these notices beside the
+extracted helper under UserData/JunBridge.LinuxFix/. Build dependencies are
+fetched by bridge/LinuxFix/build.sh; no game material is needed and the
+stock MelonLoader bootstrap is not rebuilt or distributed by this build.

@@ -1,0 +1,71 @@
+diff --git a/external/logging/logging.cc b/external/logging/logging.cc
+index 86ead3d..b8ab2e3 100644
+--- a/external/logging/logging.cc
++++ b/external/logging/logging.cc
+@@ -15,0 +16 @@
++#include <sys/time.h>
+diff --git a/source/Backend/UserMode/ExecMemory/code-patch-tool-posix.cc b/source/Backend/UserMode/ExecMemory/code-patch-tool-posix.cc
+index bfe7361..2870197 100644
+--- a/source/Backend/UserMode/ExecMemory/code-patch-tool-posix.cc
++++ b/source/Backend/UserMode/ExecMemory/code-patch-tool-posix.cc
+@@ -3 +3 @@
+-#include "core/arch/Cpu.h"
++#include "PlatformUnifiedInterface/ExecMemory/ClearCacheTool.h"
+diff --git a/source/Backend/UserMode/PlatformUtil/Linux/ProcessRuntime.cc b/source/Backend/UserMode/PlatformUtil/Linux/ProcessRuntime.cc
+index 776d25e..af4d41c 100644
+--- a/source/Backend/UserMode/PlatformUtil/Linux/ProcessRuntime.cc
++++ b/source/Backend/UserMode/PlatformUtil/Linux/ProcessRuntime.cc
+@@ -17 +17 @@ static bool memory_region_comparator(MemRange a, MemRange b) {
+-  return (a.start < b.start);
++  return (a.start() < b.start());
+@@ -30 +30,2 @@ const stl::vector<MemRegion> &ProcessRuntime::getMemoryLayout() {
+-    fgets(line_buffer, LINE_MAX, fp);
++    if (!fgets(line_buffer, LINE_MAX, fp))
++      break;
+@@ -70,10 +71,4 @@ const stl::vector<MemRegion> &ProcessRuntime::getMemoryLayout() {
+-    MemoryPermission permission;
+-    if (permissions[0] == 'r' && permissions[1] == 'w') {
+-      permission = MemoryPermission::kReadWrite;
+-    } else if (permissions[0] == 'r' && permissions[2] == 'x') {
+-      permission = MemoryPermission::kReadExecute;
+-    } else if (permissions[0] == 'r' && permissions[1] == 'w' && permissions[2] == 'x') {
+-      permission = MemoryPermission::kReadWriteExecute;
+-    } else {
+-      permission = MemoryPermission::kNoAccess;
+-    }
++    int permission = 0;
++    if (permissions[0] == 'r') permission |= MEM_PERM_R;
++    if (permissions[1] == 'w') permission |= MEM_PERM_W;
++    if (permissions[2] == 'x') permission |= MEM_PERM_X;
+@@ -106 +101,2 @@ static stl::vector<RuntimeModule> &get_process_map_with_proc_maps() {
+-    fgets(line_buffer, LINE_MAX, fp);
++    if (!fgets(line_buffer, LINE_MAX, fp))
++      break;
+@@ -166 +162 @@ static stl::vector<RuntimeModule> &get_process_map_with_proc_maps() {
+-    module.load_address = (void *)region_start;
++    module.base = (void *)region_start;
+@@ -194 +190 @@ static stl::vector<RuntimeModule> get_process_map_with_linker_iterator() {
+-        module.load_address = (void *)info->dlpi_addr;
++        module.base = (void *)info->dlpi_addr;
+@@ -198 +194 @@ static stl::vector<RuntimeModule> get_process_map_with_linker_iterator() {
+-            module.load_address = (void *)((addr_t)module.load_address + load_bias);
++            module.base = (void *)((addr_t)module.base + load_bias);
+diff --git a/source/InterceptRouting/InlineHookRouting.h b/source/InterceptRouting/InlineHookRouting.h
+index 55cd20a..7f55f95 100644
+--- a/source/InterceptRouting/InlineHookRouting.h
++++ b/source/InterceptRouting/InlineHookRouting.h
+@@ -53,0 +54,5 @@ PUBLIC inline int DobbyHook(void *address, void *fake_func, void **out_origin_fu
++  if (routing->error) {
++    delete routing;
++    delete entry;
++    return -1;
++  }
+diff --git a/source/MemoryAllocator/NearMemoryAllocator.h b/source/MemoryAllocator/NearMemoryAllocator.h
+index c9de050..ea2d7cb 100644
+--- a/source/MemoryAllocator/NearMemoryAllocator.h
++++ b/source/MemoryAllocator/NearMemoryAllocator.h
+@@ -128,0 +129 @@ struct NearMemoryAllocator {
++#if !defined(__linux__)
+@@ -152,0 +154,2 @@ struct NearMemoryAllocator {
++#endif
++

@@ -20,14 +20,20 @@ class RemoteError(val code: String, cause: Throwable? = null) : Exception(code, 
 // "jun" is the desktop's api/model.php: openai-shaped, but php picks
 // the model and the sampling, same as for her chat page
 internal object RemoteWire {
+    const val OPENROUTER = "https://openrouter.ai/api"
+    const val OPENAI = "https://api.openai.com"
+
     fun chatUrl(api: String, base: String): String = when (api) {
-        "openai" -> base.trimEnd('/') + "/v1/chat/completions"
+        "openai", "openrouter", "openai-key" -> base.trimEnd('/') + "/v1/chat/completions"
         "ollama" -> base.trimEnd('/') + "/api/chat"
+        "chatgpt" -> ResponsesWire.URL
         else -> base
     }
 
+    // openrouter's /models answers without a key, /key doesn't
     fun probeUrl(api: String, base: String): String = when (api) {
-        "openai" -> base.trimEnd('/') + "/v1/models"
+        "openai", "openai-key" -> base.trimEnd('/') + "/v1/models"
+        "openrouter" -> base.trimEnd('/') + "/v1/key"
         "ollama" -> base.trimEnd('/') + "/api/tags"
         else -> base
     }
@@ -69,6 +75,24 @@ internal object RemoteWire {
                     // asking for thinking means LEAVING think out. think:true
                     // trips a capability check her GGUFs fail, ollama 400s
                     if (!think) put("think", false)
+                }
+                "openrouter" -> {
+                    put("model", model)
+                    put("stream", true)
+                    put("temperature", temperature)
+                    put("top_p", 0.95); put("top_k", 80); put("min_p", 0.01)
+                    put("max_tokens", maxTokens)
+                    if (think) put("reasoning", buildJsonObject { put("effort", effort) })
+                    put("stream_options", buildJsonObject { put("include_usage", true) })
+                }
+                // reasoning models 400 on temperature, top_p and max_tokens.
+                // they reason even unasked and it comes out of this same budget
+                "openai-key" -> {
+                    put("model", model)
+                    put("stream", true)
+                    put("max_completion_tokens", maxTokens + 4096)
+                    if (think) put("reasoning_effort", effort)
+                    put("stream_options", buildJsonObject { put("include_usage", true) })
                 }
                 else -> {
                     put("model", model)
@@ -120,7 +144,13 @@ internal object RemoteWire {
 
 // SSE for jun/openai, NDJSON for ollama. openai sends a tool call in
 // fragments, so calls only come out at finish()
-internal class StreamParser(private val ollama: Boolean) {
+internal interface TurnParser {
+    fun line(raw: String): List<TurnEvent>
+    fun finish(): List<TurnEvent>
+    fun stats(elapsedMs: Long): JsonObject
+}
+
+internal class StreamParser(private val ollama: Boolean) : TurnParser {
     private val json = Json { ignoreUnknownKeys = true }
     private val fragments = sortedMapOf<Int, Array<StringBuilder>>()
     var promptTokens = 0
@@ -130,7 +160,7 @@ internal class StreamParser(private val ollama: Boolean) {
     var model: String? = null
         private set
 
-    fun line(raw: String): List<TurnEvent> {
+    override fun line(raw: String): List<TurnEvent> {
         val line = raw.trim()
         val payload = if (ollama) line else line.removePrefix("data:").trim().takeIf { line.startsWith("data:") }
         if (payload.isNullOrEmpty() || payload == "[DONE]") return emptyList()
@@ -143,7 +173,7 @@ internal class StreamParser(private val ollama: Boolean) {
         return if (ollama) ollamaLine(obj) else openAiLine(obj)
     }
 
-    fun finish(): List<TurnEvent> = fragments.values.mapNotNull { (_, name, args) ->
+    override fun finish(): List<TurnEvent> = fragments.values.mapNotNull { (_, name, args) ->
         if (name.isEmpty()) null else TurnEvent.Call(ParsedToolCall(name.toString(), parseArgs(args.toString())))
     }.also { fragments.clear() }
 
@@ -197,7 +227,7 @@ internal class StreamParser(private val ollama: Boolean) {
     private fun parseArgs(raw: String): JsonObject =
         runCatching { json.parseToJsonElement(raw).jsonObject }.getOrNull() ?: JsonObject(emptyMap())
 
-    fun stats(elapsedMs: Long): JsonObject = buildJsonObject {
+    override fun stats(elapsedMs: Long): JsonObject = buildJsonObject {
         put("eval_count", evalTokens)
         put("eval_ms", elapsedMs)
         put("prompt_eval_count", promptTokens)

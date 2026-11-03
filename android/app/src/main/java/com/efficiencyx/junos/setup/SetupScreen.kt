@@ -16,14 +16,20 @@ import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
+import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.RadioButton
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import com.efficiencyx.junos.pairing.SessionMode
@@ -43,6 +49,9 @@ fun SetupScreen(
     colabRunning: Boolean,
     onColab: () -> Unit,
     onColabInBrowser: () -> Unit,
+    onSaveApiKey: (provider: String, key: String, model: String) -> Unit,
+    onChatGptSignIn: (model: String) -> Unit,
+    onForgetApi: () -> Unit,
     onStart: () -> Unit,
     onRetry: () -> Unit,
 ) {
@@ -112,6 +121,12 @@ fun SetupScreen(
                         " Chats pass through Google and Cloudflare.",
                     onSelectMode,
                 )
+                ModeOption(
+                    state, SessionMode.API, "Online API",
+                    state.api?.let { "${it.name}, ${it.model}. Chats leave this phone." }
+                        ?: "OpenRouter, OpenAI or your ChatGPT plan. Chats leave this phone.",
+                    onSelectMode,
+                )
                 state.pickError?.let {
                     Spacer(Modifier.height(8.dp))
                     Text(it, color = MaterialTheme.colorScheme.error, textAlign = TextAlign.Center)
@@ -131,6 +146,7 @@ fun SetupScreen(
                             Button(onClick = onDownloadModel, modifier = Modifier.fillMaxWidth()) { Text("Download Jun model") }
                         }
                     }
+                    state.mode == SessionMode.API && paired == null -> ApiForm(state, onSaveApiKey, onChatGptSignIn)
                     state.mode == SessionMode.CLOUD && (paired == null || colabRunning) ->
                         Button(onClick = onColab, modifier = Modifier.fillMaxWidth()) {
                             Text(if (colabRunning) "Back to Colab" else "Start Colab session")
@@ -152,7 +168,12 @@ fun SetupScreen(
                         modifier = Modifier.padding(top = 8.dp),
                     )
                 }
-                if (state.mode != SessionMode.LOCAL) {
+                if (state.mode == SessionMode.API && paired != null) {
+                    TextButton(onClick = onForgetApi, modifier = Modifier.fillMaxWidth()) {
+                        Text(if (paired.api == "chatgpt") "Sign out, or use a key instead" else "Use another key or provider")
+                    }
+                }
+                if (state.mode == SessionMode.LAN || state.mode == SessionMode.CLOUD) {
                     Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.Center) {
                         if (paired != null || state.mode == SessionMode.CLOUD) TextButton(onClick = onScan) {
                             Text(if (paired != null) "Scan a new code" else "Scan code")
@@ -190,6 +211,83 @@ fun SetupScreen(
                 Text("Free storage", style = MaterialTheme.typography.bodySmall)
                 Text(formatBytes(device.freeStorageBytes), style = MaterialTheme.typography.bodySmall)
             }
+        }
+    }
+}
+
+private val API_MODELS = mapOf(
+    "openrouter" to "openrouter/auto",
+    "openai-key" to "gpt-5-mini",
+    "chatgpt" to "gpt-5.1",
+)
+
+@Composable
+private fun ApiForm(
+    state: SetupState,
+    onSaveApiKey: (provider: String, key: String, model: String) -> Unit,
+    onChatGptSignIn: (model: String) -> Unit,
+) {
+    var provider by rememberSaveable { mutableStateOf("openrouter") }
+    var key by rememberSaveable { mutableStateOf("") }
+    var model by rememberSaveable(provider) { mutableStateOf(API_MODELS.getValue(provider)) }
+    val chatgpt = provider == "chatgpt"
+    Column(Modifier.fillMaxWidth()) {
+        ProviderOption(provider, "openrouter", "OpenRouter", "Most hosted models, with a key from openrouter.ai/keys.") { provider = it }
+        ProviderOption(provider, "openai-key", "OpenAI API", "A key from platform.openai.com, billed per message.") { provider = it }
+        ProviderOption(provider, "chatgpt", "ChatGPT plan", "Sign in with your ChatGPT account, it uses the plan's limits.") { provider = it }
+        Spacer(Modifier.height(8.dp))
+        if (!chatgpt) {
+            OutlinedTextField(
+                value = key,
+                onValueChange = { key = it },
+                label = { Text("API key") },
+                singleLine = true,
+                visualTransformation = PasswordVisualTransformation(),
+                modifier = Modifier.fillMaxWidth(),
+            )
+        }
+        OutlinedTextField(
+            value = model,
+            onValueChange = { model = it },
+            label = { Text("Model") },
+            singleLine = true,
+            modifier = Modifier.fillMaxWidth(),
+        )
+        Text(
+            "Chats go to ${if (provider == "openrouter") "OpenRouter and the model's company" else "OpenAI"}. " +
+                "It isn't her own fine-tune, and most of these models won't do 18+.",
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            modifier = Modifier.padding(vertical = 8.dp),
+        )
+        Button(
+            onClick = { if (chatgpt) onChatGptSignIn(model) else onSaveApiKey(provider, key, model) },
+            enabled = !state.signingIn,
+            modifier = Modifier.fillMaxWidth(),
+        ) {
+            Text(
+                when {
+                    !chatgpt -> "Save"
+                    state.signingIn -> "Finish signing in in the browser"
+                    else -> "Sign in with ChatGPT"
+                },
+            )
+        }
+    }
+}
+
+@Composable
+private fun ProviderOption(current: String, value: String, title: String, detail: String, onSelect: (String) -> Unit) {
+    Row(
+        Modifier.fillMaxWidth()
+            .selectable(selected = current == value, onClick = { onSelect(value) }, role = Role.RadioButton)
+            .padding(vertical = 6.dp),
+        verticalAlignment = Alignment.Top,
+    ) {
+        RadioButton(selected = current == value, onClick = null)
+        Column(Modifier.padding(start = 12.dp)) {
+            Text(title, style = MaterialTheme.typography.bodyLarge)
+            Text(detail, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
         }
     }
 }

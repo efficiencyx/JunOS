@@ -4,10 +4,11 @@ import kotlinx.serialization.Serializable
 import java.net.URI
 import java.net.URLDecoder
 
-enum class SessionMode { LOCAL, LAN, CLOUD }
+enum class SessionMode { LOCAL, LAN, CLOUD, API }
 
 // api is the wire protocol: "jun" is the desktop's api/model.php,
-// "openai" vllm and "ollama" ollama, both behind the notebook's gate
+// "openai" vllm and "ollama" ollama, both behind the notebook's gate.
+// API mode ("openrouter", "openai-key", "chatgpt") is never scanned
 @Serializable
 data class Pairing(
     val mode: SessionMode,
@@ -18,6 +19,9 @@ data class Pairing(
     val api: String = "jun",
     val model: String? = null,
     val ctx: Int? = null,
+    val refresh: String? = null,
+    val account: String? = null,
+    val expires: Long = 0,
 ) {
     val host: String get() = runCatching { URI(urls.first()).host }.getOrNull() ?: name
 

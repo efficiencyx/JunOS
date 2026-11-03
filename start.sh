@@ -2,6 +2,13 @@
 set -euo pipefail
 cd "$(dirname "$0")"
 
+# no arguments in a terminal opens the menu. install.sh, systemd and
+# scripts have no tty here and still just start her
+if [ $# -eq 0 ] && [ -t 0 ] && [ -t 1 ] && [ -z "${JUN_NO_MENU:-}" ] && [ -f tools/start-menu.sh ]; then
+  exec bash tools/start-menu.sh
+fi
+case "${1:-}" in start|up) shift ;; esac
+
 # dockerd only offers driver: nvidia when one of these hooks is on
 # its PATH at startup. no hook = "could not select device driver"
 docker_sees_nvidia() {
@@ -460,6 +467,13 @@ export SEP_DEVICE="$sep_device"
 gpu="$(detect_gpu)"
 files=(-f docker-compose.yml)
 [ -z "${LLAMACPP_MODEL_FILE:-}" ] || files+=(-f docker-compose.llamacpp-local.yml)
+game_save_dir="${GAME_SAVE_DIR:-$(env_get GAME_SAVE_DIR)}"
+if [ -n "$game_save_dir" ] && [ -d "$game_save_dir" ]; then
+  export GAME_SAVE_DIR="$game_save_dir"
+  GAME_SAVE_GID="$(stat -c '%g' "$game_save_dir")"
+  export GAME_SAVE_GID
+  files+=(-f docker-compose.bridge.yml)
+fi
 
 case "$gpu" in
   nvidia)
@@ -790,11 +804,31 @@ wait_for_model_server() {
 # compose call gets to run, mtp_recheck included. set -e still
 # takes a compose failure out on the spot, with compose's own
 # exit code.
+# never writes while the game runs, it'd save its own copy over ours on exit
+bridge_sync() {
+  is_on "$(env_get GAME_BRIDGE)" || return 0
+  if [ -z "${GAME_SAVE_GID:-}" ]; then
+    echo "bridge: no GAME_SAVE_DIR folder, only the mod syncs"
+    return 0
+  fi
+  local args=()
+  if is_on "$(env_get GAME_SAVE_WRITE)"; then
+    if pgrep -fi "My Dystopian Robot Girlfriend" >/dev/null 2>&1; then
+      echo "bridge: the game is running, its save is left alone"
+    else
+      args+=(--write)
+    fi
+  fi
+  docker exec omega-php php /var/www/omega/api/bridge-sync.php "${args[@]}" || true
+}
+
 up_and_check() {
   set -x; docker compose "${files[@]}" up -d --build "$@"
   { set +x; } 2>/dev/null
   report_gpu_placement
   load_llamacpp
+  bridge_sync
+  bridge_mod_config || true
   mtp_recheck
   check_trusted_ca
   [ -z "$update_note" ] || echo "$update_note"
@@ -956,6 +990,32 @@ phone_pair() {
   echo "the code holds the token: anyone who scans it gets her model. a new JUN_LAN_TOKEN in .env cuts everyone off."
 }
 
+# JunBridge reads ApiUrl from its cfg and JunOS's own CA from
+# JunBridge.ca.pem, so a new CA or DOMAIN reaches the game next start
+bridge_mod_config() {
+  local game cfg url line
+  game="$(env_get JUN_GAME_DIR)"
+  [ -n "$game" ] && [ -f "$game/Mods/JunBridge.dll" ] || return 1
+  cfg="$game/UserData/JunBridge.cfg"
+  mkdir -p "$game/UserData"
+  case "$(printf '%s' "${TLS_MODE:-off}" | tr '[:upper:]' '[:lower:]')" in
+    off|'')
+      url="https://localhost"
+      current_ca >"$game/UserData/JunBridge.ca.pem" 2>/dev/null || rm -f "$game/UserData/JunBridge.ca.pem" ;;
+    *)
+      url="https://$(env_get DOMAIN)"
+      rm -f "$game/UserData/JunBridge.ca.pem" ;;
+  esac
+  line="ApiUrl = \"$url\""
+  if [ -f "$cfg" ] && grep -q '^ApiUrl *=' "$cfg"; then
+    sed -i "s|^ApiUrl *=.*|$line|" "$cfg"
+  elif [ -f "$cfg" ] && grep -q '^\[Jun\]' "$cfg"; then
+    sed -i "s|^\[Jun\]\$|&\n$line|" "$cfg"
+  else
+    { printf '[Jun]\n%s\n\n' "$line"; [ ! -f "$cfg" ] || cat "$cfg"; } >"$cfg.tmp" && mv "$cfg.tmp" "$cfg"
+  fi
+}
+
 # a bare first word is a lifecycle subcommand. anything else (a
 # flag like --build, or service names) goes straight through to
 # `up -d`.
@@ -967,6 +1027,11 @@ case "${1:-up}" in
   logs)       shift; set -x; exec docker compose "${files[@]}" logs -f "$@" ;;
   trust)      mkdir -p runtime; trust_ca ;;
   phone)      phone_pair ;;
+  bridge)     if bridge_mod_config; then
+                echo "JunBridge points at her. start the game, it asks you to sign in"
+              else
+                echo "no JunBridge mod in JUN_GAME_DIR. re-run install.sh with JUN_BRIDGE=1" >&2; exit 1
+              fi ;;
   *)          if staged_up "$@"; then
                 set -x
                 docker compose "${files[@]}" up -d --build --scale karaoke=0

@@ -13,6 +13,9 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  linux-fix:
+    uses: ./.github/workflows/linux-fix.yml
+
   static:
     name: static checks
     runs-on: ubuntu-latest
@@ -61,6 +64,9 @@ jobs:
         # quote in install.sh, a stray space after = in
         # sync-webapp.sh. go to -S warning once those are fixed.
         run: git ls-files '*.sh' | xargs -r shellcheck -S error
+
+      - name: Game bridge installer
+        run: bash .github/scripts/bridge-install.test.sh
 
       - name: JSON
         run: git ls-files '*.json' | xargs -r -n1 python3 -m json.tool > /dev/null
@@ -140,6 +146,9 @@ jobs:
 
       - name: Lib units
         run: php .github/scripts/lib.test.php
+
+      - name: Game bridge
+        run: php .github/scripts/bridge.test.php
 
       - name: Migrations
         run: php .github/scripts/migrations.test.php

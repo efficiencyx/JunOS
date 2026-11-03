@@ -33,6 +33,9 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     fun offerPairing(link: String) = coordinator.offerPairing(link)
     fun acceptOffer() = coordinator.acceptOffer()
     fun dismissOffer() = coordinator.dismissOffer()
+    fun saveApiKey(provider: String, key: String, model: String) = coordinator.saveApiKey(provider, key, model)
+    fun signInChatGpt(model: String, openBrowser: (String) -> Unit) = coordinator.signInChatGpt(model, openBrowser)
+    fun forgetApi() = coordinator.forgetApi()
 
     fun startApp() {
         viewModelScope.launch {

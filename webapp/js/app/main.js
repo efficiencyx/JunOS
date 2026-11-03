@@ -3,11 +3,11 @@ import { chatInput, devNoIdleChk, missingParamsEl, modelSelect, narrowSidebarQue
 import { faceBubble, hideFaceBubble, latestAssistantReply, restartFaceBubbleHide, scheduleFaceBubblePosition, setLatestAssistantReply } from './face-bubble.js?v=90';
 import { logAction, logMissing, setStageStatus } from './logging.js?v=78';
 import { loadMood } from './mood.js?v=90';
-import { applyRoleGates, setSiteVolume, syncThinkToggle, updateSiteVolumeLabel, wireNameSettings } from './settings.js?v=120';
+import { applyRoleGates, setSiteVolume, syncThinkToggle, updateSiteVolumeLabel, wireNameSettings } from './settings.js?v=122';
 import { loadConversation, refreshSidebar, setSidebarOpen } from './sidebar.js?v=117';
 import { escapeHtml, mealNow } from '../core/util.js?v=1';
-import { wireTts } from './wire-tts.js?v=119';
-import { wireVoice } from './wire-voice.js?v=120';
+import { wireTts } from './wire-tts.js?v=121';
+import { wireVoice } from './wire-voice.js?v=122';
 import { WELCOME_TIERS, fetchWelcome, playWelcome, previewWelcome } from './welcome.js?v=97';
 import * as Names from '../core/names.js?v=1';
 import * as AwayNotify from './away-notify.js?v=5';

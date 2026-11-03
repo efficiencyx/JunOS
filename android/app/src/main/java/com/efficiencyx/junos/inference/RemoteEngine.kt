@@ -1,5 +1,6 @@
 package com.efficiencyx.junos.inference
 
+import com.efficiencyx.junos.pairing.ChatGptLogin
 import com.efficiencyx.junos.pairing.Pairing
 import com.efficiencyx.junos.pairing.PairingStore
 import com.efficiencyx.junos.pairing.SessionMode
@@ -18,6 +19,8 @@ import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.jsonObject
+import kotlinx.serialization.json.jsonPrimitive
 import okhttp3.Call
 import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.OkHttpClient
@@ -35,9 +38,10 @@ import javax.net.ssl.SSLException
 import javax.net.ssl.TrustManagerFactory
 import javax.net.ssl.X509TrustManager
 
-// her brain on the PC (LAN) or the notebook's tunnel (Cloud). chats,
+// her brain on the PC, the notebook's tunnel or a hosted API. chats,
 // memory and the whole prompt stay on the phone either way
-class RemoteEngine(private val pairing: Pairing, private val store: PairingStore) : InferenceEngine {
+class RemoteEngine(initial: Pairing, private val store: PairingStore) : InferenceEngine {
+    @Volatile private var pairing = initial
     private val loadMutex = Mutex()
     private val _state = MutableStateFlow<EngineState>(EngineState.Idle)
     private val _lastStats = MutableStateFlow<JsonObject?>(null)
@@ -48,9 +52,14 @@ class RemoteEngine(private val pairing: Pairing, private val store: PairingStore
 
     override val state: StateFlow<EngineState> = _state.asStateFlow()
     override val lastStats: StateFlow<JsonObject?> = _lastStats.asStateFlow()
-    override val label: String = pairing.name
+    override val label: String = initial.name
     override val contextTokens: Int get() = window
-    private val unreachable = if (pairing.mode == SessionMode.LAN) "lan_unreachable" else "cloud_unreachable"
+    private val unreachable = when (initial.mode) {
+        SessionMode.LAN -> "lan_unreachable"
+        SessionMode.API -> "api_unreachable"
+        else -> "cloud_unreachable"
+    }
+    private val chatgpt = initial.api == "chatgpt"
 
     override suspend fun ensureLoaded(): Unit = loadMutex.withLock {
         if (base != null) return
@@ -66,8 +75,14 @@ class RemoteEngine(private val pairing: Pairing, private val store: PairingStore
 
     // every address the QR listed, in order. a 401 isn't an address
     // problem, the next one would say the same
-    private fun connect() {
+    private suspend fun connect() {
         val http = httpClient()
+        if (chatgpt) {
+            freshToken()
+            base = pairing.urls.first()
+            client = http
+            return
+        }
         var last: Throwable? = null
         for (url in pairing.urls) {
             try {
@@ -90,9 +105,27 @@ class RemoteEngine(private val pairing: Pairing, private val store: PairingStore
         throw last as? RemoteError ?: RemoteError(unreachable, last)
     }
 
+    private suspend fun freshToken() {
+        if (!ChatGptLogin.needsRefresh(pairing)) return
+        pairing = try {
+            ChatGptLogin.refresh(pairing)
+        } catch (error: IOException) {
+            throw RemoteError(unreachable, error)
+        }
+        store.save(pairing)
+    }
+
+    // hosted APIs say WHY they 400
+    private fun refusal(body: String): String = runCatching {
+        val obj = Json.parseToJsonElement(body).jsonObject
+        ((obj["error"] as? JsonObject)?.get("message") ?: obj["detail"])!!.jsonPrimitive.content
+    }.getOrDefault("http 400")
+
     private fun checkStatus(code: Int) {
         when {
             code == 401 || code == 403 -> throw RemoteError("unauthorized")
+            code == 402 -> throw RemoteError("no_credit")
+            code == 429 -> throw RemoteError("rate_limited")
             code == 404 && pairing.api == "jun" -> throw RemoteError("lan_mode_off")
             code >= 400 -> throw IOException("http $code")
         }
@@ -110,7 +143,9 @@ class RemoteEngine(private val pairing: Pairing, private val store: PairingStore
         reasoning: String,
     ): Flow<TurnEvent> = flow {
         ensureLoaded()
-        val body = RemoteWire.request(pairing.api, pairing.model, messages, tools, think, maxTokens, temperature, reasoning, window)
+        if (chatgpt) freshToken()
+        val body = if (chatgpt) ResponsesWire.request(pairing.model, messages, tools, think, reasoning)
+        else RemoteWire.request(pairing.api, pairing.model, messages, tools, think, maxTokens, temperature, reasoning, window)
         val request = Request.Builder().url(RemoteWire.chatUrl(pairing.api, base!!)).authorized()
             .post(body.toString().toRequestBody(JSON)).build()
         val call = client!!.newCall(request)
@@ -118,9 +153,10 @@ class RemoteEngine(private val pairing: Pairing, private val store: PairingStore
         currentCoroutineContext().job.invokeOnCompletion { call.cancel() }
         _state.value = EngineState.Prefill(messages.sumOf { it.content.length } / 4)
         val started = System.nanoTime()
-        val parser = StreamParser(ollama = pairing.api == "ollama")
+        val parser: TurnParser = if (chatgpt) ResponsesParser() else StreamParser(ollama = pairing.api == "ollama")
         try {
             call.execute().use { response ->
+                if (response.code == 400 && pairing.mode == SessionMode.API) throw RemoteError(refusal(response.body.string()))
                 checkStatus(response.code)
                 val source = response.body.source()
                 while (true) {
@@ -152,7 +188,16 @@ class RemoteEngine(private val pairing: Pairing, private val store: PairingStore
         _state.value = EngineState.Idle
     }
 
-    private fun Request.Builder.authorized() = header("Authorization", "Bearer ${pairing.token}")
+    private fun Request.Builder.authorized(): Request.Builder {
+        header("Authorization", "Bearer ${pairing.token}")
+        if (chatgpt) {
+            pairing.account?.let { header("chatgpt-account-id", it) }
+            header("OpenAI-Beta", "responses=experimental")
+            header("originator", ChatGptLogin.ORIGINATOR)
+            header("Accept", "text/event-stream")
+        }
+        return this
+    }
 
     private fun httpClient(): OkHttpClient {
         // idle = the gap between two tokens. a cold model on a CPU box

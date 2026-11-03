@@ -1,0 +1,6 @@
+<Project>
+  <PropertyGroup>
+    <!-- build.ps1 passes -p:GamePath, set it here for a plain dotnet build -->
+    <GamePath>C:\YOUR_GAME_PATH_HERE</GamePath>
+  </PropertyGroup>
+</Project>

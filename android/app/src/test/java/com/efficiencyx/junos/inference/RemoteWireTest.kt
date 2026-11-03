@@ -117,6 +117,22 @@ class RemoteWireTest {
     }
 
     @Test
+    fun hostedApisGetOnlyWhatTheyAccept() {
+        val openRouter = request("openrouter", true)
+        val openAi = request("openai-key", false)
+
+        assertEquals("medium", openRouter["reasoning"]!!.jsonObject["effort"]!!.jsonPrimitive.content)
+        assertNull(openRouter["chat_template_kwargs"])
+        assertNull(openAi["temperature"])
+        assertNull(openAi["top_k"])
+        assertNull(openAi["max_tokens"])
+        assertNull(openAi["reasoning_effort"])
+        assertTrue(openAi["max_completion_tokens"]!!.jsonPrimitive.int > 1024)
+        assertEquals("https://openrouter.ai/api/v1/chat/completions", RemoteWire.chatUrl("openrouter", RemoteWire.OPENROUTER))
+        assertEquals("https://api.openai.com/v1/models", RemoteWire.probeUrl("openai-key", RemoteWire.OPENAI))
+    }
+
+    @Test
     fun probeReadsTheWindow() {
         assertEquals(16384, Json.parseToJsonElement("""{"model":"x","ctx":16384}""").ctxFromProbe("jun"))
         assertEquals(8192, Json.parseToJsonElement("""{"data":[{"id":"jun","max_model_len":8192}]}""").ctxFromProbe("openai"))

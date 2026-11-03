@@ -165,6 +165,13 @@ private fun JunRoot(viewModel: MainViewModel) {
                     colabRunning = colabState.running,
                     onColab = { if (colabState.running) colab.show() else activity?.let(colab::start) },
                     onColabInBrowser = { colab.openInBrowser(context) },
+                    onSaveApiKey = viewModel::saveApiKey,
+                    onChatGptSignIn = { model ->
+                        viewModel.signInChatGpt(model) { url ->
+                            context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(url)).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
+                        }
+                    },
+                    onForgetApi = viewModel::forgetApi,
                     onStart = viewModel::startApp,
                     onRetry = viewModel::refresh,
                 )

@@ -129,7 +129,7 @@ const memoryCount = document.getElementById('memoryCount');
 let MemoryGraph = null;
 async function loadMemories() {
   if (!MemoryGraph) {
-    MemoryGraph = await import('./memory-graph.js?v=6');
+    MemoryGraph = await import('./memory-graph.js?v=7');
     const { renderNoteActions } = await import('./memory-actions.js?v=3');
     MemoryGraph.onNoteActions((node, body) => renderNoteActions(node, body, { isAdmin, reload: loadMemories }));
     MemoryGraph.onOpenChat((conv, messageId) => {
@@ -335,3 +335,54 @@ if (factoryResetBtn) factoryResetBtn.addEventListener('click', async () => {
   try { for (const k of Object.keys(localStorage)) if (k.startsWith('draft.')) localStorage.removeItem(k); } catch (e) {}
   location.reload();
 });
+
+const bridgeRow = document.getElementById('bridgeRow');
+const bridgeDesc = document.getElementById('bridgeDesc');
+const bridgeToken = document.getElementById('bridgeTokenInput');
+const bridgePairBtn = document.getElementById('bridgePairBtn');
+const bridgeUnpairBtn = document.getElementById('bridgeUnpairBtn');
+
+function showBridge(status) {
+  bridgeRow.hidden = !status.enabled;
+  const paired = !!status.paired_at;
+  bridgeUnpairBtn.hidden = !paired;
+  bridgePairBtn.textContent = paired ? 'New token' : 'Pair';
+  if (!paired) bridgeDesc.textContent = 'Not paired. Signing in from the game pairs it.';
+  else if (status.synced_at) bridgeDesc.textContent = `Last synced ${new Date(status.synced_at * 1000).toLocaleString()}.`;
+  else bridgeDesc.textContent = 'Paired, no sync yet.';
+}
+
+async function loadBridge() {
+  try {
+    const r = await fetch('api/bridge-pair.php', { credentials: 'same-origin' });
+    if (r.ok) showBridge(await r.json());
+  } catch (e) {}
+}
+
+if (bridgeRow) {
+  loadBridge();
+  bridgePairBtn.addEventListener('click', async () => {
+    bridgePairBtn.disabled = true;
+    try {
+      const r = await fetch('api/bridge-pair.php', { method: 'POST', credentials: 'same-origin' });
+      const j = await r.json().catch(() => ({}));
+      if (!r.ok || !j.token) throw new Error('http ' + r.status);
+      await loadBridge();
+      bridgeToken.value = j.token;
+      bridgeToken.hidden = false;
+      bridgeToken.select();
+      bridgeDesc.textContent = 'Paste it as Token under [Sync] in the mod\'s UserData/JunBridge.cfg. It only shows once.';
+    } catch (e) {
+      bridgeDesc.textContent = 'Could not pair.';
+    }
+    bridgePairBtn.disabled = false;
+  });
+  bridgeUnpairBtn.addEventListener('click', async () => {
+    try {
+      await fetch('api/bridge-pair.php', { method: 'DELETE', credentials: 'same-origin' });
+    } catch (e) {}
+    bridgeToken.hidden = true;
+    bridgeToken.value = '';
+    loadBridge();
+  });
+}

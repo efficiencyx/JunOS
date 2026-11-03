@@ -29,6 +29,7 @@ EXPRESS=0
 # 1 for Cloud: the model runs on colab.ipynb (or Kaggle) in
 # inference only mode, everything else here
 CLOUD=0
+REUSE=0
 if [ "$HANDOFF" = 1 ]; then
     NEED_SG="${JUN_NEED_SG:-0}"
     NEED_SUDO="${JUN_NEED_SUDO:-0}"
@@ -673,6 +674,10 @@ configure_cloud() {
 # shipped and isn't planned, nothing in the app ever read them.
 
 configure() {
+    if [ "$REUSE" = 1 ]; then
+        configure_from_env
+        return
+    fi
     local provider voice ans profiles
 
     step "configure"
@@ -833,6 +838,20 @@ configure() {
     ensure_key SIDECAR_SECRET
     ok "registration key ready"
 
+    ask_update_check
+}
+
+configure_from_env() {
+    local voice karaoke
+    voice="$(env_value VOICE)"; karaoke="$(env_value KARAOKE)"
+    ok "provider $(env_value AI_PROVIDER)"
+    ok "voice ${voice:-on}, karaoke ${karaoke:-off}"
+    # keys a newer release reads that an older configure() never wrote
+    if [ "${voice:-on}" != off ] && [ -z "$(env_value TTS_DEVICE)" ]; then
+        set_env TTS_DEVICE cpu
+    fi
+    ensure_key OMEGA_REGISTRATION_KEY
+    ensure_key SIDECAR_SECRET
     ask_update_check
 }
 
@@ -1114,6 +1133,192 @@ install_asset_recovery() {
     done
 
     return 1
+}
+
+GAME_NAME="My Dystopian Robot Girlfriend"
+
+find_game_save_dir() {
+    local d
+    for d in "$HOME/.config/unity3d/IncontinentCell/$GAME_NAME" \
+             "$HOME"/.steam/steam/steamapps/compatdata/*/pfx/drive_c/users/steamuser/AppData/LocalLow/IncontinentCell/"$GAME_NAME" \
+             "$HOME"/.local/share/Steam/steamapps/compatdata/*/pfx/drive_c/users/steamuser/AppData/LocalLow/IncontinentCell/"$GAME_NAME"; do
+        [ -d "$d" ] && { printf '%s\n' "$d"; return 0; }
+    done
+    return 1
+}
+
+steam_libraries() {
+    local root vdf
+    for root in "$HOME/.steam/steam" "$HOME/.local/share/Steam" "$HOME/.var/app/com.valvesoftware.Steam/.local/share/Steam"; do
+        vdf="$root/steamapps/libraryfolders.vdf"
+        [ -d "$root/steamapps" ] && printf '%s\n' "$root"
+        [ -f "$vdf" ] && sed -n 's/^[[:space:]]*"path"[[:space:]]*"\(.*\)"[[:space:]]*$/\1/p' "$vdf"
+    done | awk '!seen[$0]++'
+}
+
+# the native build or the windows one under proton, whichever is there
+find_bridge_game_dir() {
+    local d lib
+    is_game_dir() { [ -f "$1/$GAME_NAME.x86_64" ] || [ -f "$1/$GAME_NAME.exe" ]; }
+    [ -n "${JUN_GAME_DIR:-}" ] && is_game_dir "$JUN_GAME_DIR" && { printf '%s\n' "$JUN_GAME_DIR"; return 0; }
+    while IFS= read -r lib; do
+        d="$lib/steamapps/common/$GAME_NAME"
+        is_game_dir "$d" && { printf '%s\n' "$d"; return 0; }
+    done < <(steam_libraries)
+    # the itch zip unpacks as factorial-omega-linux-64 wherever they put it
+    for d in "$HOME"/.config/itch/apps/*/ "$HOME"/{Downloads,Desktop,Documents,Documenti,Games,games}/{,*/}factorial-omega-*-64/; do
+        d="${d%/}"
+        is_game_dir "$d" && { printf '%s\n' "$d"; return 0; }
+    done
+    return 1
+}
+
+# $1 = game folder. proton keeps the save in that app's own prefix
+game_save_dir() {
+    local game="$1" lib acf id
+    if [ -f "$game/$GAME_NAME.exe" ] && [ ! -f "$game/$GAME_NAME.x86_64" ]; then
+        lib="$(dirname "$(dirname "$(dirname "$game")")")"
+        acf="$(grep -l "\"installdir\"[[:space:]]*\"$GAME_NAME\"" "$lib"/steamapps/appmanifest_*.acf 2>/dev/null | head -n1)"
+        id="${acf##*appmanifest_}"; id="${id%.acf}"
+        [ -n "$id" ] && { printf '%s\n' "$lib/steamapps/compatdata/$id/pfx/drive_c/users/steamuser/AppData/LocalLow/IncontinentCell/$GAME_NAME"; return 0; }
+        return 1
+    fi
+    printf '%s\n' "$HOME/.config/unity3d/IncontinentCell/$GAME_NAME"
+}
+
+fetch_release_asset() {
+    local slug tag tmp want name extension="${3:-dll}"
+    slug="$(github_slug "$REPO")" && tag="$(git describe --tags --exact-match HEAD 2>/dev/null || release_tag stable)" || return 1
+    name="$1-$tag.$extension"
+    tmp="$(mktemp -d)"
+    if ! curl -fsSL -o "$tmp/asset" "https://github.com/$slug/releases/download/$tag/$name" \
+        || ! curl -fsSL -o "$tmp/SHA256SUMS" "https://github.com/$slug/releases/download/$tag/SHA256SUMS"; then
+        rm -rf "$tmp"; return 1
+    fi
+    want="$(awk -v name="$name" '$2 == name || $2 == "*" name { print $1 }' "$tmp/SHA256SUMS")"
+    if [ -z "$want" ] || [ "$(sha256sum "$tmp/asset" | cut -d' ' -f1)" != "$want" ]; then
+        warn_ "$name doesn't match the SHA256SUMS of $tag"
+        rm -rf "$tmp"; return 1
+    fi
+    if ! mkdir -p "$(dirname "$2")" || ! cp "$tmp/asset" "$2"; then
+        rm -rf "$tmp"; return 1
+    fi
+    rm -rf "$tmp"
+    ok "$1 $tag"
+}
+
+# native: MelonLoader 0.7.3 (the one JunBridge.LinuxFix was checked
+# against) loads through LD_PRELOAD, junos-game.sh does that
+install_bridge_mod() {
+    local game="$1" tmp process executable native=0 ml=MelonLoader.x64.zip marker=version.dll
+    if [ -f "$game/My Dystopian Robot Girlfriend.x86_64" ]; then
+        native=1 ml=MelonLoader.Linux.x64.zip marker=MelonLoader.Bootstrap.so
+    fi
+    if [ "$native" = 1 ]; then
+        executable="$(readlink -f "$game/My Dystopian Robot Girlfriend.x86_64")"
+        for process in /proc/[0-9]*/exe; do
+            if [ "$(readlink "$process" 2>/dev/null)" = "$executable" ]; then
+                warn_ "close the game before repairing its mod loader"
+                return 1
+            fi
+        done
+    fi
+    tmp="$(mktemp -d)"
+    fetch_release_asset JunBridge "$tmp/tree/Mods/JunBridge.dll" || { rm -rf "$tmp"; return 1; }
+    if [ "$native" = 1 ]; then
+        if ! fetch_release_asset JunBridge.LinuxFix "$tmp/tree/Plugins/JunBridge.LinuxFix.dll"; then
+            rm -rf "$tmp"; return 1
+        fi
+    fi
+    if [ ! -f "$game/$marker" ]; then
+        if ! curl -fsSL -o "$tmp/ml.zip" "https://github.com/LavaGang/MelonLoader/releases/download/v0.7.3/$ml" \
+            || ! unzip -oq "$tmp/ml.zip" -d "$tmp/tree"; then
+            rm -rf "$tmp"; return 1
+        fi
+        ok "MelonLoader"
+    fi
+    if ! cp -a "$tmp/tree/." "$game/"; then
+        rm -rf "$tmp"; return 1
+    fi
+    rm -rf "$tmp"
+    if [ "$native" = 0 ]; then
+        note "steam launch options for the game: WINEDLLOVERRIDES=\"version=n,b\" %command%"
+        return 0
+    fi
+    cat > "$game/junos-game.sh" <<'LAUNCH'
+#!/bin/sh
+cd "$(dirname "$0")" || exit 1
+LD_PRELOAD="$PWD/MelonLoader.Bootstrap.so${LD_PRELOAD:+:$LD_PRELOAD}" exec "./My Dystopian Robot Girlfriend.x86_64" "$@"
+LAUNCH
+    chmod +x "$game/junos-game.sh"
+    note "start the game with $game/junos-game.sh"
+    note "steam launch options: \"$game/junos-game.sh\" # %command%"
+}
+
+# MelonLoader builds its Il2CppAssemblies on the game's first start,
+# a minute or two. done here so the first real start is a normal one
+init_melonloader() {
+    local game="$1" log pid i
+    log="$game/MelonLoader/Latest.log"
+    [ -x "$game/junos-game.sh" ] || return 0
+    [ -f "$game/MelonLoader/Il2CppAssemblies/Assembly-CSharp.dll" ] && return 0
+    if [ -z "${DISPLAY:-}${WAYLAND_DISPLAY:-}" ]; then
+        note "no screen here, MelonLoader sets itself up the first time you start the game"
+        return 0
+    fi
+    if pgrep -f "$GAME_NAME" >/dev/null 2>&1; then
+        note "the game is open, MelonLoader sets itself up the next time it starts"
+        return 0
+    fi
+    step "set up MelonLoader"
+    note "the game opens once for a minute or two and closes on its own. leave it be"
+    rm -f "$log"
+    "$game/junos-game.sh" >/dev/null 2>&1 &
+    pid=$!
+    for i in $(seq 1 200); do
+        sleep 3
+        grep -qE '[0-9]+ Mods? loaded' "$log" 2>/dev/null && break
+        kill -0 "$pid" 2>/dev/null || break
+    done
+    sleep 3
+    if grep -qE '[0-9]+ Mods? loaded' "$log" 2>/dev/null; then
+        ok "MelonLoader is set up"
+    else
+        warn_ "MelonLoader didn't finish, the game's next start takes a minute longer. why: $log"
+    fi
+    kill "$pid" 2>/dev/null || true
+    pkill -f "$GAME_NAME.x86_64" 2>/dev/null || true
+}
+
+install_game_bridge() {
+    local saves game
+    if ! game="$(find_bridge_game_dir)" && [ -r /dev/tty ] && [ "${JUN_YES:-}" != "1" ]; then
+        printf '     %s$%s game folder for the in-game mod %s[Enter = skip the mod]%s %s→%s ' \
+            "$OK" "$R" "$DIM" "$R" "$ACCENT" "$R" > /dev/tty
+        read -r game < /dev/tty || game=""
+        game="${game%\'}"; game="${game#\'}"; game="${game%\"}"; game="${game#\"}"
+        [ -f "$game" ] && game="$(dirname "$game")"
+        [ -d "$game/${GAME_NAME}_Data" ] || game=""
+    fi
+    set_env GAME_BRIDGE on
+    # set before the first save too, the boot sync skips a folder that isn't there yet
+    if saves="$(find_game_save_dir)" || saves="$(game_save_dir "${game:-}")"; then
+        set_env GAME_SAVE_DIR "$saves"
+        if [ -d "$saves" ]; then ok "game saves: $saves"; else note "no saves yet, she reads them from $saves once you've played"; fi
+    else
+        note "couldn't tell where proton keeps the save. set GAME_SAVE_DIR in .env, the mod syncs either way"
+    fi
+    if [ -z "${game:-}" ]; then
+        note "game folder not found (set JUN_GAME_DIR), so no in-game mod. the boot sync still works"
+        return 0
+    fi
+    set_env JUN_GAME_DIR "$game"
+    if install_bridge_mod "$game"; then
+        init_melonloader "$game"
+        note "once she is up, start the game. it asks you to sign in with your Jun OS account"
+    else
+        warn_ "in-game mod not installed. the boot sync still works"
+    fi
 }
 
 # Homebrew's Linux Docker engine is rootless, and its Compose
@@ -1449,6 +1654,31 @@ confirm_deps() {
         fi
         prepare_docker
     fi
+}
+
+# Express alone puts llama.cpp and karaoke back over what they
+# picked. a yes skips configure() and .env stays as it is
+choose_reuse() {
+    local ans
+    [ -n "$EXISTING" ] && grep -qE '^AI_PROVIDER=.' "$EXISTING/.env" 2>/dev/null || return 0
+    case "$(printf '%s' "${JUN_REUSE:-}" | tr '[:upper:]' '[:lower:]')" in
+        0|off|no|false) return 0 ;;
+        1|on|yes|true) ;;
+        *)
+            [ "$HANDOFF" = 1 ] && return 0
+            [ -z "${JUN_EXPRESS:-}${JUN_CLOUD:-}${JUN_YES:-}" ] || return 0
+            if { true >/dev/tty; } 2>/dev/null; then
+                printf '\n     %sfound Jun in %s%s\n' "$B" "$EXISTING" "$R" > /dev/tty
+                printf '     %s$%s update her with the settings she has now? %s[Y/n, n = set up again]%s %s→%s ' \
+                    "$OK" "$R" "$DIM" "$R" "$ACCENT" "$R" > /dev/tty
+                read -r ans < /dev/tty || ans=""
+                case "$ans" in n|N|no|NO) JUN_REUSE=0; export JUN_REUSE; return 0 ;; esac
+            fi
+            ;;
+    esac
+    REUSE=1; JUN_REUSE=1; JUN_YES=1
+    export JUN_REUSE JUN_YES
+    ok "updating with the settings in .env"
 }
 
 # first thing a non-technical user sees. Express sets JUN_YES=1
@@ -1827,6 +2057,8 @@ hand_off() {
         exit 1
     fi
     { [ -f install.sh ] && grep -q JUN_HANDOFF install.sh; } || return 0
+    # an older one reads our JUN_YES=1 as Express and redoes .env
+    [ "$REUSE" = 1 ] && ! grep -q JUN_REUSE install.sh && return 0
     [ -f "$0" ] && cmp -s "$0" install.sh && return 0
     export JUN_HANDOFF=1 JUN_DIR="$PWD" JUN_CHANNEL="$CHANNEL" \
         JUN_NEED_SG="$NEED_SG" JUN_NEED_SUDO="$NEED_SUDO" \
@@ -1834,10 +2066,20 @@ hand_off() {
     exec bash ./install.sh
 }
 
+# the start menu's bridge switch. the code doesn't move
+if [ "${JUN_ONLY:-}" = bridge ]; then
+    is_jun_checkout . && [ -f .env ] || { fail_ "run JUN_ONLY=bridge from an installed Jun folder"; exit 1; }
+    JUN_GAME_DIR="${JUN_GAME_DIR:-$(env_value JUN_GAME_DIR)}"
+    step "game bridge"
+    install_game_bridge
+    exit $?
+fi
+
 [ "$HANDOFF" = 1 ] || banner
-choose_install_mode
 EXISTING=""
 locate_install || true
+choose_reuse
+[ "$REUSE" = 1 ] || choose_install_mode
 # nothing gets cloned when she's already here, so the fork
 # warning has nothing to warn about.
 [ -n "$EXISTING" ] || check_repo_source
@@ -1900,7 +2142,9 @@ case "$(printf '%s' "${JUN_EXTRACT:-}" | tr '[:upper:]' '[:lower:]')" in
     1|on|yes|true) extract=1 ;;
     0|off|no|false) extract=0 ;;
     *)
-        if [ "${JUN_YES:-}" = "1" ]; then
+        if [ "$REUSE" = 1 ]; then
+            [ -d webapp/assets ] || extract=1
+        elif [ "${JUN_YES:-}" = "1" ]; then
             extract=1
         elif [ -r /dev/tty ]; then
             printf '     %s$%s extract them now from your game install? %s[y/N]%s %s→%s ' \
@@ -1914,6 +2158,29 @@ if [ "$extract" = 1 ]; then
     install_asset_recovery || true
 else
     note "skipped - re-run this installer with JUN_EXTRACT=1 anytime to extract."
+fi
+
+step "game bridge"
+# JUN_BRIDGE=1 forces it, 0 opts out. otherwise only when asked
+bridge=0
+case "$(printf '%s' "${JUN_BRIDGE:-}" | tr '[:upper:]' '[:lower:]')" in
+    1|on|yes|true) bridge=1 ;;
+    0|off|no|false) bridge=0 ;;
+    *)
+        if [ "$REUSE" = 1 ]; then
+            case "$(env_value GAME_BRIDGE)" in on|1|true|yes) bridge=1 ;; esac
+        elif [ -r /dev/tty ] && [ "${JUN_YES:-}" != "1" ]; then
+            printf '     %s$%s bridge her with your game save (affection, outfit, what happened)? %s[y/N]%s %s→%s ' \
+                "$OK" "$R" "$DIM" "$R" "$ACCENT" "$R" > /dev/tty
+            read -r b < /dev/tty || b=""
+            case "$b" in y|Y|yes|YES) bridge=1 ;; esac
+        fi
+        ;;
+esac
+if [ "$bridge" = 1 ]; then
+    install_game_bridge || true
+else
+    note "skipped - re-run this installer with JUN_BRIDGE=1 anytime."
 fi
 
 [ "$DOCKER_JUST_INSTALLED" = 1 ] && wait_for_docker || true
@@ -1967,6 +2234,7 @@ if docker_run docker info >/dev/null 2>&1; then
         1|on|yes|true) trust=1 ;;
         0|off|no|false) trust=0 ;;
         *)
+            [ "$REUSE" = 1 ] && trust=0
             if [ "${JUN_YES:-}" != "1" ] && [ -r /dev/tty ]; then
                 printf '     %s$%s trust her certificate on this machine, so the browser stops warning? %s[Y/n]%s %s→%s ' \
                     "$OK" "$R" "$DIM" "$R" "$ACCENT" "$R" > /dev/tty

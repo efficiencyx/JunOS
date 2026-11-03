@@ -96,6 +96,7 @@ services:
       WATCH_FRAME_EVERY: "${WATCH_FRAME_EVERY:-auto}"
       LAN_INFERENCE: "${LAN_INFERENCE:-off}"
       JUN_LAN_TOKEN: "${JUN_LAN_TOKEN:-}"
+      GAME_BRIDGE: "${GAME_BRIDGE:-off}"
       CONSOLIDATION_THINK: "${CONSOLIDATION_THINK:-}"
       CONSOLIDATION_STALL_SECONDS: "${CONSOLIDATION_STALL_SECONDS:-}"
       # KOKORO_URL is the old name, kept so existing .env files

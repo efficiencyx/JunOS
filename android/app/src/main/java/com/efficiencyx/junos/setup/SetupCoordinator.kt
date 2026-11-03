@@ -6,6 +6,8 @@ import android.util.Log
 import com.efficiencyx.junos.JunApplication
 import com.efficiencyx.junos.inference.RemoteEngine
 import com.efficiencyx.junos.inference.RemoteError
+import com.efficiencyx.junos.inference.RemoteWire
+import com.efficiencyx.junos.pairing.ChatGptLogin
 import com.efficiencyx.junos.pairing.Pairing
 import com.efficiencyx.junos.pairing.SessionMode
 import com.efficiencyx.junos.server.LocalServer
@@ -31,6 +33,7 @@ class SetupCoordinator(
     private val pairings = app.pairingStore
     private var modelJob: kotlinx.coroutines.Job? = null
     private var voiceJob: kotlinx.coroutines.Job? = null
+    private var signInJob: kotlinx.coroutines.Job? = null
     private var voiceSkipped = false
     private var mode = pairings.lastMode
 
@@ -59,6 +62,7 @@ class SetupCoordinator(
             mode = mode,
             lan = pairings.get(SessionMode.LAN),
             cloud = pairings.get(SessionMode.CLOUD),
+            api = pairings.get(SessionMode.API),
             offer = mutableState.value.offer,
         )
     }
@@ -87,6 +91,60 @@ class SetupCoordinator(
         pairings.save(pairing)
         mode = pairing.mode
         mutableState.value = mutableState.value.copy(offer = null)
+        refresh()
+    }
+
+    fun saveApiKey(provider: String, key: String, model: String) {
+        val token = key.trim()
+        val name = model.trim()
+        if (token.isEmpty() || name.isEmpty()) {
+            mutableState.value = mutableState.value.copy(pickError = "Paste the key and a model name.")
+            return
+        }
+        val openRouter = provider == "openrouter"
+        pairings.save(
+            Pairing(
+                mode = SessionMode.API,
+                name = if (openRouter) "OpenRouter" else "OpenAI",
+                urls = listOf(if (openRouter) RemoteWire.OPENROUTER else RemoteWire.OPENAI),
+                token = token,
+                api = if (openRouter) "openrouter" else "openai-key",
+                model = name,
+                ctx = API_CONTEXT,
+            ),
+        )
+        mode = SessionMode.API
+        refresh()
+    }
+
+    fun signInChatGpt(model: String, openBrowser: (String) -> Unit) {
+        val name = model.trim()
+        if (name.isEmpty()) {
+            mutableState.value = mutableState.value.copy(pickError = "Pick a model name first.")
+            return
+        }
+        signInJob?.cancel()
+        val session = ChatGptLogin.begin()
+        mutableState.value = mutableState.value.copy(signingIn = true, pickError = null)
+        signInJob = scope.launch {
+            try {
+                val code = ChatGptLogin.awaitCode(session)
+                pairings.save(ChatGptLogin.exchange(session, code, name).copy(ctx = API_CONTEXT))
+                mode = SessionMode.API
+                refresh()
+            } catch (error: CancellationException) {
+                throw error
+            } catch (error: Throwable) {
+                Log.w(TAG, "chatgpt sign-in failed", error)
+                mutableState.value = mutableState.value.copy(signingIn = false, pickError = explainSignIn(error))
+            }
+        }
+        openBrowser(session.authorizeUrl)
+    }
+
+    fun forgetApi() {
+        signInJob?.cancel()
+        pairings.remove(SessionMode.API)
         refresh()
     }
 
@@ -238,6 +296,8 @@ class SetupCoordinator(
 
     companion object {
         private const val TAG = "JunOS"
+        // every turn sends (and bills) the whole history again
+        private const val API_CONTEXT = 32768
     }
 
     private fun phaseMessage(phase: SetupPhase) = when (phase) {
@@ -250,7 +310,25 @@ class SetupCoordinator(
         SetupPhase.ERROR -> "Setup needs attention"
     }
 
-    private fun explain(error: Throwable, pairing: Pairing): String = when ((error as? RemoteError)?.code) {
+    private fun explainSignIn(error: Throwable): String = when ((error as? RemoteError)?.code) {
+        "chatgpt_port_busy" -> "Another app on this phone holds port 1455, the one ChatGPT sends you back to. Close it and try again."
+        "chatgpt_cancelled" -> "Sign-in was cancelled or took longer than 5 minutes."
+        "unauthorized" -> "ChatGPT turned the sign-in down. Try again."
+        else -> "Couldn't reach ChatGPT. Is the phone online?"
+    }
+
+    private fun explain(error: Throwable, pairing: Pairing): String {
+        val code = (error as? RemoteError)?.code
+        if (code == "unauthorized" && pairing.mode == SessionMode.API) {
+            return if (pairing.api == "chatgpt") "ChatGPT signed this phone out. Sign in again." else "${pairing.name} turned the key down. Paste a new one."
+        }
+        return explainCode(code, error, pairing)
+    }
+
+    private fun explainCode(code: String?, error: Throwable, pairing: Pairing): String = when (code) {
+        "api_unreachable" -> "Can't reach ${pairing.name}. Is the phone online?"
+        "no_credit" -> "${pairing.name} says the key is out of credit."
+        "rate_limited" -> "${pairing.name} is rate limiting you. Wait a minute, or check the plan's limits."
         "lan_unreachable" -> "Can't reach ${pairing.name}. Is Jun OS running there, on the same wifi as this phone?"
         "cloud_unreachable" -> "Can't reach the notebook. Every run of Step 3 makes a new code, scan the new one."
         "unauthorized" -> "${pairing.name} doesn't know this phone anymore. Scan a fresh code."

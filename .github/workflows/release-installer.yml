@@ -168,9 +168,12 @@ jobs:
           name: JunOS-android
           path: dist/JunOS-*.apk
 
+  linux-fix:
+    uses: ./.github/workflows/linux-fix.yml
+
   draft:
     name: Draft release
-    needs: [installer, android]
+    needs: [installer, android, linux-fix]
     if: startsWith(github.ref, 'refs/tags/')
     runs-on: ubuntu-latest
     steps:
@@ -186,6 +189,11 @@ jobs:
           name: JunOS-android
           path: dist
 
+      - uses: actions/download-artifact@v8
+        with:
+          name: JunBridge-LinuxFix
+          path: dist
+
       - name: Attach to the draft
         env:
           GH_TOKEN: ${{ github.token }}
@@ -193,11 +201,18 @@ jobs:
         run: |
           exe="JunSetup-$TAG.exe"
           apk="JunOS-$TAG.apk"
-          for f in "$exe" JunOS.exe "$apk"; do
+          linuxfix="JunBridge.LinuxFix-$TAG.dll"
+          mv dist/JunBridge.LinuxFix.dll "dist/$linuxfix"
+          for f in "$exe" JunOS.exe "$apk" "$linuxfix"; do
             [ -f "dist/$f" ] || { echo "::error::dist/$f missing, the build job named it something else"; exit 1; }
           done
           cp install.sh install.ps1 installer-gui.ps1 dist/
-          (cd dist && sha256sum "$exe" JunOS.exe "$apk" install.sh install.ps1 installer-gui.ps1 > SHA256SUMS)
+          # JunBridge needs the game's own assemblies to build, so it's
+          # attached to the draft by hand. a re-run of this job puts its
+          # line in SHA256SUMS, the installers won't take it without one
+          sums=("$exe" JunOS.exe "$apk" "$linuxfix" install.sh install.ps1 installer-gui.ps1)
+          if gh release download "$TAG" -p "JunBridge-$TAG.dll" -D dist 2>/dev/null; then sums+=("JunBridge-$TAG.dll"); fi
+          (cd dist && sha256sum "${sums[@]}" > SHA256SUMS)
 
           # gh release view finds drafts by tag too, the plain API doesn't
           if gh release view "$TAG" --json isDraft --jq .isDraft > state 2>/dev/null; then
@@ -218,4 +233,4 @@ jobs:
             case "$TAG" in *-security) ;; *-*) pre="--prerelease" ;; esac
             gh release create "$TAG" --draft --verify-tag --title "$TAG" --generate-notes $pre
           fi
-          gh release upload "$TAG" "dist/$exe" dist/JunOS.exe "dist/$apk" dist/install.sh dist/install.ps1 dist/installer-gui.ps1 dist/SHA256SUMS --clobber
+          gh release upload "$TAG" "dist/$exe" dist/JunOS.exe "dist/$apk" "dist/$linuxfix" dist/install.sh dist/install.ps1 dist/installer-gui.ps1 dist/SHA256SUMS --clobber

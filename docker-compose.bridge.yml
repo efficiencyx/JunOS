@@ -1,0 +1,10 @@
+services:
+  # start.sh adds this when GAME_SAVE_DIR is set. group_add = the
+  # folder's group, so GAME_SAVE_WRITE works when that group can write
+  php:
+    volumes:
+      - "${GAME_SAVE_DIR}:/var/lib/omega-game"
+    environment:
+      GAME_SAVE_DIR: /var/lib/omega-game
+    group_add:
+      - "${GAME_SAVE_GID:-0}"

@@ -120,7 +120,7 @@ public sealed class InstallerProcessOutput
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         x:Name="InstallerWindow"
         Title="Jun OS Setup"
-        Width="860" Height="650" MinWidth="760" MinHeight="580"
+        Width="860" Height="650" MinWidth="760" MinHeight="440"
         WindowStartupLocation="CenterScreen"
         Background="#111318" Foreground="#F3F4F6"
         FontFamily="Segoe UI" FontSize="14">
@@ -449,29 +449,31 @@ public sealed class InstallerProcessOutput
 
         <Grid Grid.Row="1" Margin="30,24,30,18">
             <Grid x:Name="WelcomePage">
-                <StackPanel MaxWidth="720" HorizontalAlignment="Left">
-                    <TextBlock Text="Welcome" FontSize="28" FontWeight="SemiBold" />
-                    <TextBlock Text="Set up Jun locally on this Windows PC. The installer will detect your hardware, download the components you select, and start the application." TextWrapping="Wrap" Foreground="#C1C6D0" Margin="0,10,0,24" />
+                <ScrollViewer VerticalScrollBarVisibility="Auto">
+                    <StackPanel MaxWidth="720" HorizontalAlignment="Left">
+                        <TextBlock Text="Welcome" FontSize="28" FontWeight="SemiBold" />
+                        <TextBlock Text="Set up Jun locally on this Windows PC. The installer will detect your hardware, download the components you select, and start the application." TextWrapping="Wrap" Foreground="#C1C6D0" Margin="0,10,0,24" />
 
-                    <Border Background="#1A1D24" BorderBrush="#343945" BorderThickness="1" CornerRadius="6" Padding="18">
-                        <StackPanel>
-                            <TextBlock Text="Installation folder" FontWeight="SemiBold" />
-                            <Grid Margin="0,8,0,0">
-                                <Grid.ColumnDefinitions>
-                                    <ColumnDefinition Width="*" />
-                                    <ColumnDefinition Width="Auto" />
-                                </Grid.ColumnDefinitions>
-                                <TextBox x:Name="InstallLocation" VerticalContentAlignment="Center" />
-                                <Button x:Name="BrowseInstallButton" Grid.Column="1" Content="Browse..." />
-                            </Grid>
-                            <TextBlock Text="The application, local models, settings, and chat history will live in this folder." TextWrapping="Wrap" Foreground="#8D95A5" FontSize="12" Margin="0,8,0,0" />
-                        </StackPanel>
-                    </Border>
+                        <Border Background="#1A1D24" BorderBrush="#343945" BorderThickness="1" CornerRadius="6" Padding="18">
+                            <StackPanel>
+                                <TextBlock Text="Installation folder" FontWeight="SemiBold" />
+                                <Grid Margin="0,8,0,0">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="*" />
+                                        <ColumnDefinition Width="Auto" />
+                                    </Grid.ColumnDefinitions>
+                                    <TextBox x:Name="InstallLocation" VerticalContentAlignment="Center" />
+                                    <Button x:Name="BrowseInstallButton" Grid.Column="1" Content="Browse..." />
+                                </Grid>
+                                <TextBlock Text="The application, local models, settings, and chat history will live in this folder." TextWrapping="Wrap" Foreground="#8D95A5" FontSize="12" Margin="0,8,0,0" />
+                            </StackPanel>
+                        </Border>
 
-                    <Border Background="#16242B" BorderBrush="#315467" BorderThickness="1" CornerRadius="6" Padding="16" Margin="0,18,0,0">
-                        <TextBlock x:Name="HardwareText" TextWrapping="Wrap" Foreground="#CBEFFF" />
-                    </Border>
-                </StackPanel>
+                        <Border Background="#16242B" BorderBrush="#315467" BorderThickness="1" CornerRadius="6" Padding="16" Margin="0,18,0,0">
+                            <TextBlock x:Name="HardwareText" TextWrapping="Wrap" Foreground="#CBEFFF" />
+                        </Border>
+                    </StackPanel>
+                </ScrollViewer>
             </Grid>
 
             <Grid x:Name="OptionsPage" Visibility="Collapsed">
@@ -481,10 +483,18 @@ public sealed class InstallerProcessOutput
                         <TextBlock Text="Express uses hardware-aware defaults. Custom exposes providers and optional features. Cloud installs everything but the model, which runs on your Colab or Kaggle notebook." TextWrapping="Wrap" Foreground="#C1C6D0" Margin="0,8,0,16" />
 
                         <StackPanel Orientation="Horizontal">
+                            <RadioButton x:Name="UpdateRadio" GroupName="Mode" Content="Update, keep my settings" Visibility="Collapsed" />
                             <RadioButton x:Name="ExpressRadio" GroupName="Mode" Content="Express (recommended)" IsChecked="True" />
                             <RadioButton x:Name="CustomRadio" GroupName="Mode" Content="Custom" />
                             <RadioButton x:Name="CloudRadio" GroupName="Mode" Content="Cloud inference" />
                         </StackPanel>
+
+                        <Border x:Name="UpdateSummary" Background="#16242B" BorderBrush="#315467" BorderThickness="1" CornerRadius="6" Padding="18" Margin="0,16,0,0" Visibility="Collapsed">
+                            <StackPanel>
+                                <TextBlock Text="Jun OS is already installed here" FontWeight="SemiBold" Foreground="#CBEFFF" />
+                                <TextBlock x:Name="UpdateSummaryText" TextWrapping="Wrap" Foreground="#C1C6D0" Margin="0,8,0,0" LineHeight="22" />
+                            </StackPanel>
+                        </Border>
 
                         <Border x:Name="ExpressSummary" Background="#16242B" BorderBrush="#315467" BorderThickness="1" CornerRadius="6" Padding="18" Margin="0,16,0,0">
                             <StackPanel>
@@ -568,50 +578,55 @@ public sealed class InstallerProcessOutput
             </Grid>
 
             <Grid x:Name="AssetsPage" Visibility="Collapsed">
-                <StackPanel MaxWidth="720" HorizontalAlignment="Left">
-                    <TextBlock Text="Live2D assets" FontSize="28" FontWeight="SemiBold" />
-                    <TextBlock Text="Jun's original model and textures are not distributed with this project. If you own My Dystopian Robot Girlfriend, the installer can reconstruct them locally from your copy." TextWrapping="Wrap" Foreground="#C1C6D0" Margin="0,9,0,20" />
+                <ScrollViewer VerticalScrollBarVisibility="Auto">
+                    <StackPanel MaxWidth="720" HorizontalAlignment="Left">
+                        <TextBlock Text="Live2D assets" FontSize="28" FontWeight="SemiBold" />
+                        <TextBlock Text="Jun's original model and textures are not distributed with this project. If you own My Dystopian Robot Girlfriend, the installer can reconstruct them locally from your copy." TextWrapping="Wrap" Foreground="#C1C6D0" Margin="0,9,0,20" />
 
-                    <CheckBox x:Name="ExtractCheck" Content="Recover Live2D assets from my game installation" FontWeight="SemiBold" />
-                    <Border x:Name="AssetOptions" Background="#1A1D24" BorderBrush="#343945" BorderThickness="1" CornerRadius="6" Padding="18" Margin="0,12,0,0" Visibility="Collapsed">
-                        <StackPanel>
-                            <TextBlock Text="Game folder (optional)" />
-                            <Grid Margin="0,7,0,0">
-                                <Grid.ColumnDefinitions>
-                                    <ColumnDefinition Width="*" />
-                                    <ColumnDefinition Width="Auto" />
-                                </Grid.ColumnDefinitions>
-                                <TextBox x:Name="GameLocation" />
-                                <Button x:Name="BrowseGameButton" Grid.Column="1" Content="Browse..." />
-                            </Grid>
-                            <TextBlock Text="Leave empty to search the usual Steam and itch.io locations automatically." Foreground="#8D95A5" FontSize="12" Margin="0,7,0,0" />
-                            <CheckBox x:Name="AssetAgreement" Margin="0,16,0,0">
-                                <TextBlock Text="I understand these assets are for my personal use only and must not be redistributed." TextWrapping="Wrap" />
-                            </CheckBox>
-                        </StackPanel>
-                    </Border>
+                        <CheckBox x:Name="ExtractCheck" Content="Recover Live2D assets from my game installation" FontWeight="SemiBold" />
+                        <CheckBox x:Name="BridgeCheck" Content="Bridge her with my game save (affection, outfit, what happened)" FontWeight="SemiBold" Margin="0,10,0,0" />
+                        <Border x:Name="AssetOptions" Background="#1A1D24" BorderBrush="#343945" BorderThickness="1" CornerRadius="6" Padding="18" Margin="0,12,0,0" Visibility="Collapsed">
+                            <StackPanel>
+                                <TextBlock Text="Game folder (optional)" />
+                                <Grid Margin="0,7,0,0">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="*" />
+                                        <ColumnDefinition Width="Auto" />
+                                    </Grid.ColumnDefinitions>
+                                    <TextBox x:Name="GameLocation" />
+                                    <Button x:Name="BrowseGameButton" Grid.Column="1" Content="Browse..." />
+                                </Grid>
+                                <TextBlock Text="Leave empty to search the usual Steam and itch.io locations automatically." Foreground="#8D95A5" FontSize="12" Margin="0,7,0,0" />
+                                <CheckBox x:Name="AssetAgreement" Margin="0,16,0,0">
+                                    <TextBlock Text="I understand these assets are for my personal use only and must not be redistributed." TextWrapping="Wrap" />
+                                </CheckBox>
+                            </StackPanel>
+                        </Border>
 
-                    <Border Background="#2B2116" BorderBrush="#72552E" BorderThickness="1" CornerRadius="6" Padding="16" Margin="0,18,0,0">
-                        <TextBlock Text="Recovered assets remain on this computer. They are ignored by Git and are never uploaded off this machine." TextWrapping="Wrap" Foreground="#FFD79A" />
-                    </Border>
-                </StackPanel>
+                        <Border Background="#2B2116" BorderBrush="#72552E" BorderThickness="1" CornerRadius="6" Padding="16" Margin="0,18,0,0">
+                            <TextBlock Text="Recovered assets remain on this computer. They are ignored by Git and are never uploaded off this machine." TextWrapping="Wrap" Foreground="#FFD79A" />
+                        </Border>
+                    </StackPanel>
+                </ScrollViewer>
             </Grid>
 
             <Grid x:Name="ReviewPage" Visibility="Collapsed">
-                <StackPanel MaxWidth="720" HorizontalAlignment="Left">
-                    <TextBlock Text="Ready to install" FontSize="28" FontWeight="SemiBold" />
-                    <TextBlock Text="Review your choices before downloads begin." Foreground="#C1C6D0" Margin="0,8,0,16" />
-                    <Border Background="#1A1D24" BorderBrush="#343945" BorderThickness="1" CornerRadius="6" Padding="18">
-                        <TextBlock x:Name="ReviewText" TextWrapping="Wrap" FontFamily="Consolas" LineHeight="24" />
-                    </Border>
-                    <CheckBox x:Name="UpdateCheck" IsChecked="True" Margin="0,18,0,0">
-                        <TextBlock Text="Check for new releases and security fixes when Jun OS starts. It asks GitHub and only warns you, it never updates anything for you." TextWrapping="Wrap" MaxWidth="690" />
-                    </CheckBox>
-                    <CheckBox x:Name="DependencyAgreement" Margin="0,18,0,0">
-                        <TextBlock Text="Install missing machine-wide prerequisites. Git, llama.cpp, Python and the Microsoft Visual C++ runtime come through winget, Ollama straight from ollama.com." TextWrapping="Wrap" MaxWidth="690" />
-                    </CheckBox>
-                    <TextBlock Text="Everything else stays inside the selected Jun folder and can be removed with uninstall.ps1." TextWrapping="Wrap" Foreground="#8D95A5" FontSize="12" Margin="22,8,0,0" />
-                </StackPanel>
+                <ScrollViewer VerticalScrollBarVisibility="Auto">
+                    <StackPanel MaxWidth="720" HorizontalAlignment="Left">
+                        <TextBlock Text="Ready to install" FontSize="28" FontWeight="SemiBold" />
+                        <TextBlock Text="Review your choices before downloads begin." Foreground="#C1C6D0" Margin="0,8,0,16" />
+                        <Border Background="#1A1D24" BorderBrush="#343945" BorderThickness="1" CornerRadius="6" Padding="18">
+                            <TextBlock x:Name="ReviewText" TextWrapping="Wrap" FontFamily="Consolas" LineHeight="24" />
+                        </Border>
+                        <CheckBox x:Name="UpdateCheck" IsChecked="True" Margin="0,18,0,0">
+                            <TextBlock Text="Check for new releases and security fixes when Jun OS starts. It asks GitHub and only warns you, it never updates anything for you." TextWrapping="Wrap" MaxWidth="690" />
+                        </CheckBox>
+                        <CheckBox x:Name="DependencyAgreement" Margin="0,18,0,0">
+                            <TextBlock Text="Install missing machine-wide prerequisites. Git, llama.cpp, Python and the Microsoft Visual C++ runtime come through winget, Ollama straight from ollama.com." TextWrapping="Wrap" MaxWidth="690" />
+                        </CheckBox>
+                        <TextBlock Text="Everything else stays inside the selected Jun folder and can be removed with uninstall.ps1." TextWrapping="Wrap" Foreground="#8D95A5" FontSize="12" Margin="22,8,0,0" />
+                    </StackPanel>
+                </ScrollViewer>
             </Grid>
 
             <Grid x:Name="InstallPage" Visibility="Collapsed">
@@ -651,13 +666,13 @@ $window = [Windows.Markup.XamlReader]::Load($reader)
 $controlNames = @(
     'HeaderSubtitle', 'StepText', 'WelcomePage', 'OptionsPage', 'AssetsPage',
     'ReviewPage', 'InstallPage', 'InstallLocation', 'BrowseInstallButton',
-    'HardwareText', 'ExpressRadio', 'CustomRadio', 'CloudRadio', 'ExpressSummary', 'ExpressSummaryText',
+    'HardwareText', 'UpdateRadio', 'UpdateSummary', 'UpdateSummaryText', 'ExpressRadio', 'CustomRadio', 'CloudRadio', 'ExpressSummary', 'ExpressSummaryText',
     'CloudOptions', 'CloudLines', 'CloudVoiceCheck', 'CloudKaraokeCheck',
     'CustomOptions', 'ChannelPanel', 'ChannelCombo', 'ProviderCombo',
     'OpenRouterPanel', 'OpenRouterKey', 'OpenRouterModel', 'LlamaPanel', 'LlamaUrl',
     'LocalModelPanel', 'ModelCombo', 'TensorParallelCheck', 'TensorParallelHint', 'VoiceCheck',
     'KaraokeCheck', 'ShortcutCheck', 'MtpCheck', 'MtpDepthPanel', 'MtpDepthCombo', 'ExtractCheck',
-    'AssetOptions', 'GameLocation', 'BrowseGameButton', 'AssetAgreement',
+    'BridgeCheck', 'AssetOptions', 'GameLocation', 'BrowseGameButton', 'AssetAgreement',
     'ReviewText', 'UpdateCheck', 'DependencyAgreement', 'InstallHeading', 'InstallStatus',
     'InstallProgress', 'InstallLog', 'CompletionActions', 'OpenFolderButton',
     'OpenSiteButton', 'BackButton', 'NextButton', 'CancelButton'
@@ -840,10 +855,93 @@ function Show-Message([string]$message, [string]$title = 'Jun OS Setup') {
     ) | Out-Null
 }
 
+$script:existingEnv = @{}
+
+function Read-ExistingEnv([string]$path) {
+    $values = @{}
+    $file = Join-Path $path '.env'
+    if (-not (Test-Path -LiteralPath $file)) { return $values }
+    foreach ($line in Get-Content -LiteralPath $file) {
+        if ($line -match '^([A-Z0-9_]+)=(.*)$') { $values[$Matches[1]] = $Matches[2] }
+    }
+    return $values
+}
+
+function Test-EnvOn([string]$value, [bool]$default) {
+    if (-not $value) { return $default }
+    return $value -match '^(on|1|true|yes)$'
+}
+
+function Select-Tag($combo, [string]$tag) {
+    foreach ($item in $combo.Items) {
+        if ($item.Tag -eq $tag) { $combo.SelectedItem = $item; return }
+    }
+}
+
+function Get-ExistingModel {
+    $e = $script:existingEnv
+    if ($e['LLAMACPP_MODEL_HF']) { return 'hf.co/' + $e['LLAMACPP_MODEL_HF'] }
+    if ($e['OLLAMA_MODELS_TO_PULL']) { return ($e['OLLAMA_MODELS_TO_PULL'] -split ',')[0].Trim() }
+    return ''
+}
+
+function Test-ManagedLlamaUrl([string]$url) {
+    return (-not $url) -or $url -match '://(127\.0\.0\.1:8081|llamacpp:8080)'
+}
+
+function Set-CustomFromEnv {
+    $e = $script:existingEnv
+    if (-not $e['AI_PROVIDER']) { return }
+    $provider = $e['AI_PROVIDER'].ToLower()
+    if ($provider -in 'llamacpp', 'openrouter', 'ollama') { Select-Tag $ProviderCombo $provider }
+    if ($e['JUN_CHANNEL']) { Select-Tag $ChannelCombo $e['JUN_CHANNEL'] }
+    $model = Get-ExistingModel
+    if ($model) { Select-Model $model }
+    if ($e['OPENROUTER_MODEL']) { $OpenRouterModel.Text = $e['OPENROUTER_MODEL'] }
+    if ($provider -eq 'llamacpp' -and -not (Test-ManagedLlamaUrl $e['LLAMACPP_URL'])) { $LlamaUrl.Text = $e['LLAMACPP_URL'] }
+    $voice = Test-EnvOn $e['VOICE'] $true
+    $VoiceCheck.IsChecked = $voice
+    $KaraokeCheck.IsChecked = $voice -and (Test-EnvOn $e['KARAOKE'] $false)
+    $KaraokeCheck.Visibility = if ($voice) { 'Visible' } else { 'Collapsed' }
+    $ShortcutCheck.IsChecked = Test-EnvOn $e['JUN_SHORTCUTS'] $true
+    $TensorParallelCheck.IsChecked = Test-EnvOn $e['TENSOR_PARALLEL'] $false
+}
+
+function Use-ExistingSettings([string]$path) {
+    $script:existingEnv = Read-ExistingEnv $path
+    $e = $script:existingEnv
+    $found = [bool]$e['AI_PROVIDER']
+    $UpdateRadio.Visibility = if ($found) { 'Visible' } else { 'Collapsed' }
+    if (-not $found) {
+        if ($UpdateRadio.IsChecked -eq $true) { $ExpressRadio.IsChecked = $true }
+        Update-Mode
+        return
+    }
+    $voice = Test-EnvOn $e['VOICE'] $true
+    $karaoke = $voice -and (Test-EnvOn $e['KARAOKE'] $false)
+    $model = Get-ExistingModel
+    $modelLine = if ($e['AI_PROVIDER'] -eq 'openrouter') { $e['OPENROUTER_MODEL'] } elseif ($model) { $model -replace '^hf\.co/efficiencyx/', '' } else { '' }
+    $lines = @("Provider: $($e['AI_PROVIDER'])")
+    if ($modelLine) { $lines += "Model: $modelLine" }
+    $lines += "Voice $(if ($voice) { 'on' } else { 'off' }), karaoke $(if ($karaoke) { 'on' } else { 'off' }), game bridge $(if (Test-EnvOn $e['GAME_BRIDGE'] $false) { 'on' } else { 'off' })"
+    $lines += 'Only the code moves. Chats, memories, accounts and .env stay as they are. Custom starts from these settings too.'
+    $UpdateSummaryText.Text = $lines -join "`n"
+
+    $UpdateCheck.IsChecked = Test-EnvOn $e['UPDATE_CHECK'] $true
+    $BridgeCheck.IsChecked = Test-EnvOn $e['GAME_BRIDGE'] $false
+    if ($e['JUN_GAME_DIR']) { $GameLocation.Text = $e['JUN_GAME_DIR'] }
+    if (Test-Path -LiteralPath (Join-Path $path 'webapp\assets')) { $ExtractCheck.IsChecked = $false }
+    Update-AssetOptions
+    $UpdateRadio.IsChecked = $true
+    Update-Mode
+}
+
 function Update-Mode {
+    $update = $UpdateRadio.IsChecked -eq $true
     $custom = $CustomRadio.IsChecked -eq $true
     $cloud = $CloudRadio.IsChecked -eq $true
-    $ExpressSummary.Visibility = if ($custom -or $cloud) { 'Collapsed' } else { 'Visible' }
+    $UpdateSummary.Visibility = if ($update) { 'Visible' } else { 'Collapsed' }
+    $ExpressSummary.Visibility = if ($custom -or $cloud -or $update) { 'Collapsed' } else { 'Visible' }
     $CustomOptions.Visibility = if ($custom) { 'Visible' } else { 'Collapsed' }
     $CloudOptions.Visibility = if ($cloud) { 'Visible' } else { 'Collapsed' }
     if (-not $custom) {
@@ -856,6 +954,7 @@ function Update-Mode {
         $KaraokeCheck.Visibility = 'Visible'
         $MtpCheck.IsChecked = $true
         $MtpDepthPanel.Visibility = 'Visible'
+        Set-CustomFromEnv
     }
 }
 
@@ -913,6 +1012,7 @@ function Get-CloudValues {
 }
 
 function Validate-Options {
+    if ($UpdateRadio.IsChecked -eq $true) { return }
     if ($CloudRadio.IsChecked -eq $true) {
         if ($CloudLines.Text.Trim()) {
             $cloud = Get-CloudValues
@@ -925,7 +1025,7 @@ function Validate-Options {
     }
     $provider = Get-SelectedTag $ProviderCombo
     if ($provider -eq 'openrouter') {
-        if ([string]::IsNullOrWhiteSpace($OpenRouterKey.Password)) {
+        if ([string]::IsNullOrWhiteSpace($OpenRouterKey.Password) -and -not $script:existingEnv['OPENROUTER_API_KEY']) {
             throw 'Enter an OpenRouter API key, or choose a local provider.'
         }
         if ([string]::IsNullOrWhiteSpace($OpenRouterModel.Text)) {
@@ -939,8 +1039,8 @@ function Validate-Options {
 }
 
 function Validate-Assets {
-    if ($ExtractCheck.IsChecked -ne $true) { return }
-    if ($AssetAgreement.IsChecked -ne $true) {
+    if ($ExtractCheck.IsChecked -ne $true -and $BridgeCheck.IsChecked -ne $true) { return }
+    if ($ExtractCheck.IsChecked -eq $true -and $AssetAgreement.IsChecked -ne $true) {
         throw 'Confirm the personal-use asset agreement to enable recovery.'
     }
     $gamePath = $GameLocation.Text.Trim()
@@ -950,11 +1050,13 @@ function Validate-Assets {
 }
 
 function Get-SetupValues {
+    $update = $UpdateRadio.IsChecked -eq $true
     $express = $ExpressRadio.IsChecked -eq $true
     $cloud = $CloudRadio.IsChecked -eq $true
-    $provider = if ($cloud) { 'cloud' } elseif ($express) { 'llamacpp' } else { Get-SelectedTag $ProviderCombo }
+    $provider = if ($update) { $script:existingEnv['AI_PROVIDER'] } elseif ($cloud) { 'cloud' } elseif ($express) { 'llamacpp' } else { Get-SelectedTag $ProviderCombo }
     $model = if ($express) { $script:recommendedModel } else { Get-SelectedTag $ModelCombo }
     return @{
+        Update = $update
         Express = $express
         Cloud = $cloud
         # Express and Cloud leave it to install.ps1: stable for a new
@@ -969,6 +1071,7 @@ function Get-SetupValues {
         Mtp = (-not $cloud -and ($express -or $MtpCheck.IsChecked -eq $true))
         MtpDepth = (Get-SelectedTag $MtpDepthCombo)
         Extract = ($ExtractCheck.IsChecked -eq $true)
+        Bridge = ($BridgeCheck.IsChecked -eq $true)
     }
 }
 
@@ -976,6 +1079,16 @@ function Update-Review {
     $values = Get-SetupValues
     $path = Resolve-InstallLocation
     $providerNames = @{ ollama = 'Ollama (local)'; openrouter = 'OpenRouter (cloud)'; llamacpp = 'llama.cpp (local)'; cloud = 'Your Colab or Kaggle notebook' }
+    if ($values.Update) {
+        $ReviewText.Text = @(
+            "Folder       $path",
+            'Setup        Update, settings from .env',
+            "Version      $(if ($script:PinnedRef) { "$($script:PinnedRef), pinned" } else { 'The channel this install already follows' })",
+            "Live2D       $(if ($values.Extract) { 'Recover from your game copy' } else { 'Keep what is there' })",
+            "Game bridge  $(if ($values.Bridge) { 'On, the mod gets updated' } else { 'Off' })"
+        ) -join [Environment]::NewLine
+        return
+    }
     $modelText = if ($values.Cloud) {
         $cloud = Get-CloudValues
         $url = if ($cloud['AI_PROVIDER'] -eq 'vllm') { $cloud['VLLM_URL'] } else { $cloud['OLLAMA_URL'] }
@@ -996,7 +1109,8 @@ function Update-Review {
         "Voice        $(if ($values.Voice) { 'On' } else { 'Off' })",
         "Karaoke      $(if ($values.Karaoke) { 'On' } else { 'Off' })",
         "Shortcut     $(if ($values.Shortcuts) { 'Desktop and Start menu' } else { 'None' })",
-        "Live2D       $(if ($values.Extract) { 'Recover from your game copy' } else { 'Use placeholders for now' })"
+        "Live2D       $(if ($values.Extract) { 'Recover from your game copy' } else { 'Use placeholders for now' })",
+        "Game bridge  $(if ($values.Bridge) { 'On' } else { 'Off' })"
     )
     if ($values.TensorParallel) { $lines += 'Multi-GPU    On' }
     if ($values.Mtp) { $lines += "MTP           On (depth: $($values.MtpDepth))" }
@@ -1169,8 +1283,8 @@ function Start-Installation {
     $managedKeys = @(
         'JUN_YES', 'JUN_EXPRESS', 'JUN_DIR', 'JUN_CHANNEL', 'JUN_REF', 'JUN_PIN_SHA', 'JUN_PROVIDER', 'JUN_MODEL',
         'JUN_TENSOR_PARALLEL', 'JUN_MTP', 'JUN_MTP_DEPTH', 'JUN_KARAOKE',
-        'JUN_EXTRACT', 'JUN_SHORTCUTS', 'JUN_UPDATE_CHECK', 'JUN_TRUST_CA', 'JUN_MANAGER_EXE', 'JUN_GAME_DIR', 'JUN_BOOTSTRAP_WINGET', 'VOICE',
-        'KARAOKE', 'OPENROUTER_API_KEY', 'OPENROUTER_MODEL', 'LLAMACPP_URL', 'JUN_CLOUD', 'JUN_CLOUD_ASK'
+        'JUN_EXTRACT', 'JUN_BRIDGE', 'JUN_SHORTCUTS', 'JUN_UPDATE_CHECK', 'JUN_TRUST_CA', 'JUN_MANAGER_EXE', 'JUN_GAME_DIR', 'JUN_BOOTSTRAP_WINGET', 'VOICE',
+        'KARAOKE', 'OPENROUTER_API_KEY', 'OPENROUTER_MODEL', 'LLAMACPP_URL', 'JUN_CLOUD', 'JUN_CLOUD_ASK', 'JUN_REUSE'
     ) + $CloudKeys
     foreach ($key in $managedKeys) { $info.EnvironmentVariables.Remove($key) }
 
@@ -1181,28 +1295,33 @@ function Start-Installation {
         $info.EnvironmentVariables['JUN_REF'] = $script:PinnedRef
         $info.EnvironmentVariables['JUN_PIN_SHA'] = $script:PinnedSha
     }
-    $info.EnvironmentVariables['JUN_PROVIDER'] = $values.Provider
-    $info.EnvironmentVariables['JUN_MODEL'] = $values.Model
-    $info.EnvironmentVariables['JUN_TENSOR_PARALLEL'] = if ($values.TensorParallel) { 'on' } else { 'off' }
-    $info.EnvironmentVariables['VOICE'] = if ($values.Voice) { 'on' } else { 'off' }
-    $info.EnvironmentVariables['JUN_KARAOKE'] = if ($values.Karaoke) { 'on' } else { 'off' }
-    $info.EnvironmentVariables['JUN_MTP'] = if ($values.Mtp) { 'on' } else { 'off' }
-    $info.EnvironmentVariables['JUN_MTP_DEPTH'] = $values.MtpDepth
+    $info.EnvironmentVariables['JUN_REUSE'] = if ($values.Update) { '1' } else { '0' }
+    if (-not $values.Update) {
+        $info.EnvironmentVariables['JUN_PROVIDER'] = $values.Provider
+        $info.EnvironmentVariables['JUN_MODEL'] = $values.Model
+        $info.EnvironmentVariables['JUN_TENSOR_PARALLEL'] = if ($values.TensorParallel) { 'on' } else { 'off' }
+        $info.EnvironmentVariables['VOICE'] = if ($values.Voice) { 'on' } else { 'off' }
+        $info.EnvironmentVariables['JUN_KARAOKE'] = if ($values.Karaoke) { 'on' } else { 'off' }
+        $info.EnvironmentVariables['JUN_MTP'] = if ($values.Mtp) { 'on' } else { 'off' }
+        $info.EnvironmentVariables['JUN_MTP_DEPTH'] = $values.MtpDepth
+        $info.EnvironmentVariables['JUN_SHORTCUTS'] = if ($values.Shortcuts) { 'on' } else { 'off' }
+    }
     $info.EnvironmentVariables['JUN_EXTRACT'] = if ($values.Extract) { 'on' } else { 'off' }
-    $info.EnvironmentVariables['JUN_SHORTCUTS'] = if ($values.Shortcuts) { 'on' } else { 'off' }
+    $info.EnvironmentVariables['JUN_BRIDGE'] = if ($values.Bridge) { '1' } else { '0' }
     $info.EnvironmentVariables['JUN_UPDATE_CHECK'] = if ($UpdateCheck.IsChecked -eq $true) { 'on' } else { 'off' }
     $managerExe = Resolve-ManagerExe
     if ($managerExe) { $info.EnvironmentVariables['JUN_MANAGER_EXE'] = $managerExe }
     $info.EnvironmentVariables['JUN_BOOTSTRAP_WINGET'] = '1'
 
-    if ($values.Extract -and $GameLocation.Text.Trim()) {
+    if (($values.Extract -or $values.Bridge) -and $GameLocation.Text.Trim()) {
         $info.EnvironmentVariables['JUN_GAME_DIR'] = $GameLocation.Text.Trim()
     }
-    if ($values.Provider -eq 'openrouter') {
-        $info.EnvironmentVariables['OPENROUTER_API_KEY'] = $OpenRouterKey.Password
+    if (-not $values.Update -and $values.Provider -eq 'openrouter') {
+        $key = if ($OpenRouterKey.Password) { $OpenRouterKey.Password } else { $script:existingEnv['OPENROUTER_API_KEY'] }
+        $info.EnvironmentVariables['OPENROUTER_API_KEY'] = $key
         $info.EnvironmentVariables['OPENROUTER_MODEL'] = $OpenRouterModel.Text.Trim()
     }
-    if ($values.Provider -eq 'llamacpp' -and $LlamaUrl.Text.Trim()) {
+    if (-not $values.Update -and $values.Provider -eq 'llamacpp' -and $LlamaUrl.Text.Trim()) {
         $info.EnvironmentVariables['LLAMACPP_URL'] = $LlamaUrl.Text.Trim()
     }
     if ($values.Cloud) {
@@ -1235,6 +1354,7 @@ $BrowseGameButton.Add_Click({
     if ($selected) { $GameLocation.Text = $selected }
 })
 
+$UpdateRadio.Add_Checked({ Update-Mode })
 $ExpressRadio.Add_Checked({ Update-Mode })
 $CustomRadio.Add_Checked({ Update-Mode })
 $CloudRadio.Add_Checked({ Update-Mode })
@@ -1254,9 +1374,12 @@ $CloudVoiceCheck.Add_Click({
 $MtpCheck.Add_Click({
     $MtpDepthPanel.Visibility = if ($MtpCheck.IsChecked -eq $true) { 'Visible' } else { 'Collapsed' }
 })
-$ExtractCheck.Add_Click({
-    $AssetOptions.Visibility = if ($ExtractCheck.IsChecked -eq $true) { 'Visible' } else { 'Collapsed' }
-})
+function Update-AssetOptions {
+    $AssetOptions.Visibility = if ($ExtractCheck.IsChecked -eq $true -or $BridgeCheck.IsChecked -eq $true) { 'Visible' } else { 'Collapsed' }
+    $AssetAgreement.Visibility = if ($ExtractCheck.IsChecked -eq $true) { 'Visible' } else { 'Collapsed' }
+}
+$ExtractCheck.Add_Click({ Update-AssetOptions })
+$BridgeCheck.Add_Click({ Update-AssetOptions })
 $DependencyAgreement.Add_Click({
     if ($script:pageIndex -eq 3) { $NextButton.IsEnabled = $DependencyAgreement.IsChecked -eq $true }
 })
@@ -1271,7 +1394,7 @@ $NextButton.Add_Click({
     try {
         switch ($script:pageIndex) {
             0 {
-                $null = Resolve-InstallLocation
+                Use-ExistingSettings (Resolve-InstallLocation)
                 Set-Page 1
             }
             1 {
@@ -1318,4 +1441,7 @@ $window.Add_Closing({
 Update-Mode
 Update-ProviderPanels
 Set-Page 0
+# 650 tall doesn't fit a 768p laptop at 125% scaling, the pages scroll instead
+$workArea = [System.Windows.SystemParameters]::WorkArea
+if ($window.Height -gt $workArea.Height) { $window.Height = $workArea.Height }
 $null = $window.ShowDialog()

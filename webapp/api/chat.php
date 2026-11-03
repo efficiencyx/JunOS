@@ -12,6 +12,7 @@ require_once __DIR__ . '/lib/chat/websearch.php';
 require_once __DIR__ . '/lib/chat/flee.php';
 require_once __DIR__ . '/lib/chat/tags.php';
 require_once __DIR__ . '/lib/chat/persist.php';
+require_once __DIR__ . '/lib/bridge/apply.php';
 
 sse_open();
 $PROVIDER = ai_provider();
@@ -35,7 +36,10 @@ require_content_type('application/json');
 
 $req = chat_parse_request($PROVIDER);
 $model = $req['model'];
-if (!$req['idle']) consolidation_touch((int)$user['id']);
+if (!$req['idle']) {
+    consolidation_touch((int)$user['id']);
+    bridge_signed_in((int)$user['id']);
+}
 $convId = chat_require_conversation($user, $req['body']);
 
 $lastUserMsg = chat_last_user_message($req);

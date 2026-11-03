@@ -1,0 +1,36 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <MelonLoaderPath Condition="'$(MelonLoaderPath)'==''">$(GamePath)/MelonLoader</MelonLoaderPath>
+    <TargetFramework>net6.0</TargetFramework>
+    <AssemblyName>JunBridge.LinuxFix</AssemblyName>
+    <RootNamespace>JunBridge.LinuxFix</RootNamespace>
+    <Version>0.2.0</Version>
+    <Nullable>disable</Nullable>
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+    <IsPackable>false</IsPackable>
+    <PathMap>$(MSBuildProjectDirectory)=./</PathMap>
+    <Deterministic>true</Deterministic>
+  </PropertyGroup>
+
+  <PropertyGroup Condition="'$(Configuration)'=='Release'">
+    <DebugType>none</DebugType>
+    <DebugSymbols>false</DebugSymbols>
+  </PropertyGroup>
+
+  <ItemGroup Condition="Exists('$(NativeHookLibraryPath)')">
+    <EmbeddedResource Include="$(NativeHookLibraryPath)" LogicalName="JunBridge.LinuxFix.dobby.so" />
+    <EmbeddedResource Include="$(NativeHookNoticesPath)" LogicalName="JunBridge.LinuxFix.NOTICES.txt" />
+  </ItemGroup>
+
+  <Target Name="RequireNativeHooks" BeforeTargets="PrepareForBuild">
+    <Error Condition="!Exists('$(NativeHookLibraryPath)') Or !Exists('$(NativeHookNoticesPath)')" Text="Build with bridge/LinuxFix/build.sh to embed the native hooks and their licenses." />
+  </Target>
+
+  <ItemGroup>
+    <Compile Remove="tests/**/*.cs" />
+    <Reference Include="MelonLoader" HintPath="$(MelonLoaderPath)/net6/MelonLoader.dll" Private="false" />
+    <Reference Include="0Harmony" HintPath="$(MelonLoaderPath)/net6/0Harmony.dll" Private="false" />
+    <Reference Include="Il2CppInterop.Common" HintPath="$(MelonLoaderPath)/net6/Il2CppInterop.Common.dll" Private="false" />
+    <Reference Include="Il2CppInterop.Runtime" HintPath="$(MelonLoaderPath)/net6/Il2CppInterop.Runtime.dll" Private="false" />
+  </ItemGroup>
+</Project>

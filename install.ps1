@@ -445,6 +445,28 @@ function Enter-CloudMode {
     Ok "cloud install - no model here, I'll ask for the notebook's lines"
 }
 
+# Express alone puts llama.cpp and karaoke back over what they
+# picked. a yes skips Configure-Jun and .env stays as it is
+function Choose-Reuse([string]$existing) {
+    if (-not $existing) { return }
+    $envFile = Join-Path $existing '.env'
+    if (-not (Get-EnvValue 'AI_PROVIDER' $envFile)) { return }
+    if ($env:JUN_REUSE -match '^(0|off|no|false)$') { return }
+    if ($env:JUN_REUSE -notmatch '^(1|on|yes|true)$') {
+        if ($handoff -or $env:JUN_EXPRESS -or $env:JUN_CLOUD -or $env:JUN_YES) { return }
+        if ([Environment]::UserInteractive) {
+            Write-Host ''
+            Write-Host "     ${B}found Jun in $existing${R}"
+            $ans = Read-Styled "     ${OK}▸${R} update her with the settings she has now? ${DIM}[Y/n, n = set up again]${R} ${ACCENT}›${R} "
+            if ($ans -match '^(n|no)$') { $env:JUN_REUSE = '0'; return }
+        }
+    }
+    $script:reuse = $true
+    $env:JUN_REUSE = '1'; $env:JUN_YES = '1'
+    $script:interactive = $false
+    Ok 'updating with the settings in .env'
+}
+
 function Choose-InstallMode {
     if ($script:cloud -and -not $handoff) {
         $env:JUN_CLOUD = '1'
@@ -715,7 +737,30 @@ function Configure-Cloud {
     return $provider
 }
 
+function Configure-FromEnv {
+    $provider = (Get-EnvValue 'AI_PROVIDER').ToLower()
+    $voice = if ((Get-EnvValue 'VOICE') -match '^(off|0|false|no)$') { 'off' } else { 'on' }
+    $karaoke = if ((Get-EnvValue 'KARAOKE') -match '^(on|1|true|yes)$') { 'on' } else { 'off' }
+    $shortcuts = if ((Get-EnvValue 'JUN_SHORTCUTS') -match '^(off|0|false|no)$') { 'off' } else { 'on' }
+    $ollamaUrl = Get-EnvValue 'OLLAMA_URL'
+    $llamaUrl = Get-EnvValue 'LLAMACPP_URL'
+    Step 'configure'
+    Ok "provider $provider"
+    Ok "voice $voice, karaoke $karaoke"
+    # keys a newer release reads that an older Configure-Jun never wrote
+    if ($voice -eq 'on' -and -not (Get-EnvValue 'TTS_DEVICE')) { Set-EnvKey 'TTS_DEVICE' 'cpu' }
+    if ($karaoke -eq 'on' -and -not (Get-EnvValue 'SEP_DEVICE')) { Set-EnvKey 'SEP_DEVICE' 'cpu' }
+    Add-EnvKeyIfMissing 'OMEGA_REGISTRATION_KEY'
+    Add-EnvKeyIfMissing 'SIDECAR_SECRET'
+    Ask-UpdateCheck
+    return @{ provider = $provider; voice = $voice; karaoke = $karaoke; shortcuts = $shortcuts
+              needsOllama = ($provider -eq 'ollama' -and (-not $ollamaUrl -or $ollamaUrl -match '://(localhost|127\.0\.0\.1|ollama)[:/]'))
+              needsLlamacpp = ($provider -eq 'llamacpp' -and (-not $llamaUrl -or $llamaUrl -match '://127\.0\.0\.1:8081'))
+}
+}
+
 function Configure-Jun {
+    if ($script:reuse) { return Configure-FromEnv }
     $provider = if ($script:cloud) { 'cloud' } elseif ($env:JUN_PROVIDER) { $env:JUN_PROVIDER.ToLower() } else { '' }
     if (-not $provider) {
         if ($interactive) {
@@ -1555,6 +1600,140 @@ function Install-AssetRecovery {
     }
 }
 
+$GameName = 'My Dystopian Robot Girlfriend'
+
+function Find-GameDir {
+    $marker = "${GameName}_Data"
+    $cands = @($env:JUN_GAME_DIR, (Get-EnvValue 'JUN_GAME_DIR'))
+    $libs = @((Get-ItemProperty 'HKCU:\Software\Valve\Steam' -ErrorAction SilentlyContinue).SteamPath,
+              (Join-Path ${env:ProgramFiles(x86)} 'Steam')) | Where-Object { $_ }
+    foreach ($lib in @($libs)) {
+        $vdf = Join-Path $lib 'steamapps\libraryfolders.vdf'
+        if (Test-Path -LiteralPath $vdf) {
+            $libs += [regex]::Matches((Get-Content -LiteralPath $vdf -Raw), '"path"\s+"([^"]+)"') |
+                ForEach-Object { $_.Groups[1].Value.Replace('\\', '\') }
+        }
+    }
+    $cands += $libs | ForEach-Object { Join-Path $_ "steamapps\common\$GameName" }
+    foreach ($c in $cands) {
+        if ($c -and (Test-Path -LiteralPath (Join-Path $c $marker))) { return $c }
+    }
+    # the itch zip unpacks as factorial-omega-windows-64 wherever they put it
+    foreach ($root in @((Join-Path $env:APPDATA 'itch\apps'), (Join-Path $env:USERPROFILE 'Downloads'),
+                        (Join-Path $env:USERPROFILE 'Desktop'), (Join-Path $env:USERPROFILE 'Documents'), 'C:\Games')) {
+        if (-not (Test-Path -LiteralPath $root)) { continue }
+        $hit = Get-ChildItem -LiteralPath $root -Directory -Recurse -Depth 2 -Filter $marker -ErrorAction SilentlyContinue | Select-Object -First 1
+        if ($hit) { return $hit.Parent.FullName }
+    }
+    return ''
+}
+
+function Install-BridgeMod([string]$gameDir) {
+    if (-not (Test-Path -LiteralPath (Join-Path $gameDir 'version.dll'))) {
+        Step 'install MelonLoader'
+        $zip = Join-Path $env:TEMP ('melonloader-' + [guid]::NewGuid().ToString('N') + '.zip')
+        try {
+            Invoke-WebRequest -Uri 'https://github.com/LavaGang/MelonLoader/releases/download/v0.7.3/MelonLoader.x64.zip' -OutFile $zip -UseBasicParsing
+            Expand-Archive -LiteralPath $zip -DestinationPath $gameDir -Force
+        } finally {
+            Remove-Item -LiteralPath $zip -Force -ErrorAction SilentlyContinue
+        }
+        if (-not (Test-Path -LiteralPath (Join-Path $gameDir 'version.dll'))) { throw 'MelonLoader did not unpack into the game folder' }
+        Ok 'MelonLoader'
+    }
+
+    $slug = Get-GitHubSlug $repo
+    $tag = (Invoke-Git describe --tags --exact-match HEAD) -join ''
+    if ($LASTEXITCODE -ne 0) { $tag = Get-ReleaseTag 'latest' }
+    if (-not $slug -or -not $tag) { throw 'no release to take JunBridge.dll from' }
+    $tmpDir = Join-Path $env:TEMP ('junbridge-' + [guid]::NewGuid().ToString('N'))
+    New-Item -ItemType Directory -Force -Path $tmpDir | Out-Null
+    try {
+        $base = "https://github.com/$slug/releases/download/$tag"
+        $dll = Join-Path $tmpDir 'JunBridge.dll'
+        $sums = Join-Path $tmpDir 'SHA256SUMS'
+        Invoke-WebRequest -Uri "$base/JunBridge-$tag.dll" -OutFile $dll -UseBasicParsing
+        Invoke-WebRequest -Uri "$base/SHA256SUMS" -OutFile $sums -UseBasicParsing
+        $want = Get-Content -LiteralPath $sums | ForEach-Object {
+            if ($_ -match "^([0-9a-fA-F]{64})\s+\*?JunBridge-$([regex]::Escape($tag))\.dll$") { $matches[1] }
+        } | Select-Object -First 1
+        if (-not (Test-Sha256 $dll $want)) { throw "JunBridge-$tag.dll doesn't match the SHA256SUMS of $tag" }
+        $mods = Join-Path $gameDir 'Mods'
+        New-Item -ItemType Directory -Force -Path $mods | Out-Null
+        Copy-Item -LiteralPath $dll -Destination (Join-Path $mods 'JunBridge.dll') -Force
+        Ok "JunBridge $tag"
+    } finally {
+        Remove-Item -LiteralPath $tmpDir -Recurse -Force -ErrorAction SilentlyContinue
+    }
+}
+
+# MelonLoader builds its Il2CppAssemblies on the game's first start,
+# a minute or two. done here so their first real start is a normal one
+function Initialize-MelonLoader([string]$gameDir) {
+    $exe = Join-Path $gameDir "$GameName.exe"
+    $log = Join-Path $gameDir 'MelonLoader\Latest.log'
+    if (-not (Test-Path -LiteralPath $exe)) { return }
+    if (Test-Path -LiteralPath (Join-Path $gameDir 'MelonLoader\Il2CppAssemblies\Assembly-CSharp.dll')) { return }
+    if (Get-Process -Name $GameName -ErrorAction SilentlyContinue) {
+        Note 'the game is open, MelonLoader sets itself up the next time it starts'
+        return
+    }
+    Step 'set up MelonLoader'
+    Note 'the game opens once for a minute or two and closes on its own. leave it be'
+    Remove-Item -LiteralPath $log -Force -ErrorAction SilentlyContinue
+    Start-Process -FilePath $exe -WorkingDirectory $gameDir | Out-Null
+    $deadline = (Get-Date).AddMinutes(10)
+    $ready = $false
+    $gone = 0
+    while ((Get-Date) -lt $deadline -and $gone -lt 5) {
+        Start-Sleep -Seconds 3
+        try {
+            if ((Test-Path -LiteralPath $log) -and (Select-String -LiteralPath $log -Pattern '\d+ Mods? loaded' -Quiet)) { $ready = $true; break }
+        } catch { }
+        # steam can relaunch the exe through itself, a few misses in a row is a real exit
+        $gone = if (Get-Process -Name $GameName -ErrorAction SilentlyContinue) { 0 } else { $gone + 1 }
+    }
+    Start-Sleep -Seconds 3
+    Get-Process -Name $GameName -ErrorAction SilentlyContinue | Stop-Process -Force -ErrorAction SilentlyContinue
+    if ($ready) {
+        Ok 'MelonLoader is set up'
+    } else {
+        Warn_ "MelonLoader didn't finish, the game's next start takes a minute longer. why: $log"
+    }
+}
+
+function Install-GameBridge {
+    # set before the first save too, the boot sync skips a folder that isn't there yet
+    $saveDir = Join-Path $env:USERPROFILE "AppData\LocalLow\IncontinentCell\$GameName"
+    Set-EnvKey 'GAME_BRIDGE' 'on'
+    Set-EnvKey 'GAME_SAVE_DIR' $saveDir
+    if (Test-Path -LiteralPath $saveDir -PathType Container) {
+        Ok "game saves: $saveDir"
+    } else {
+        Note "no saves yet, she reads them from $saveDir once you've played"
+    }
+
+    $gameDir = Find-GameDir
+    if (-not $gameDir -and $interactive) {
+        $p = Read-Styled "     ${OK}▸${R} paste the game folder or drag $GameName.exe here ${DIM}[Enter = skip the mod]${R} ${ACCENT}›${R} "
+        $p = $p.Trim().Trim('"').Trim("'")
+        if ($p -and (Test-Path -LiteralPath $p -PathType Leaf)) { $p = Split-Path -Parent $p }
+        if ($p -and (Test-Path -LiteralPath (Join-Path $p "${GameName}_Data"))) { $gameDir = $p }
+    }
+    if (-not $gameDir) {
+        Note 'no game folder, so no in-game mod. the boot sync still works'
+        return
+    }
+    Set-EnvKey 'JUN_GAME_DIR' $gameDir
+    try {
+        Install-BridgeMod $gameDir
+        Initialize-MelonLoader $gameDir
+        Note 'once she is up, start the game. it asks you to sign in with your Jun OS account'
+    } catch {
+        Warn_ ("in-game mod not installed: {0}. the boot sync still works" -f $_.Exception.Message)
+    }
+}
+
 
 # markers, not the folder name. JUN_DIR lets people call it
 # whatever they want, and "Jun" on its own could be anything.
@@ -2002,6 +2181,8 @@ function Invoke-Handoff([string]$path) {
     }
     if (-not (Test-Path -LiteralPath $theirs)) { return }
     if (-not (Select-String -LiteralPath $theirs -Pattern 'JUN_HANDOFF' -SimpleMatch -Quiet)) { return }
+    # an older one reads our JUN_YES=1 as Express and redoes .env
+    if ($script:reuse -and -not (Select-String -LiteralPath $theirs -Pattern 'JUN_REUSE' -SimpleMatch -Quiet)) { return }
     if ($PSCommandPath -and (Test-Path -LiteralPath $PSCommandPath) -and
         (Get-FileHash -LiteralPath $PSCommandPath).Hash -eq (Get-FileHash -LiteralPath $theirs).Hash) { return }
     $env:JUN_HANDOFF = '1'
@@ -2030,9 +2211,29 @@ if (-not [Environment]::Is64BitOperatingSystem) {
     Exit-Install 1
 }
 
+# the manager's Configure switches. the code doesn't move
+$only = @("$env:JUN_ONLY" -split ',' | ForEach-Object { $_.Trim() } | Where-Object { $_ })
+if ($only) {
+    if (-not (Test-JunCheckout (Get-Location).Path) -or -not (Test-Path .env)) {
+        Fail_ "run JUN_ONLY=$($env:JUN_ONLY) from an installed Jun folder"
+        Exit-Install 1
+    }
+    if ('voice' -in $only) {
+        $karaoke = if ((Get-EnvValue 'KARAOKE') -match '^(on|1|true|yes)$') { 'on' } else { 'off' }
+        Install-Tts $karaoke
+    }
+    if ('bridge' -in $only) {
+        Step 'game bridge'
+        Install-GameBridge
+    }
+    Exit-Install 0
+}
+
 if (-not $handoff) { Show-Banner }
-Choose-InstallMode
+$script:reuse = $false
 $existing = Find-JunInstall
+Choose-Reuse $existing
+if (-not $script:reuse) { Choose-InstallMode }
 # nothing gets cloned when she's already here, so the fork
 # warning has nothing to warn about.
 if (-not $existing) { Confirm-RepoSource }
@@ -2124,7 +2325,9 @@ switch -Regex ($env:JUN_EXTRACT) {
     '^(1|on|yes|true)$'  { $extract = $true }
     '^(0|off|no|false)$' { $extract = $false }
     default {
-        if ($env:JUN_YES -eq '1') {
+        if ($script:reuse) {
+            $extract = -not (Test-Path 'webapp\assets')
+        } elseif ($env:JUN_YES -eq '1') {
             $extract = $true
         } elseif ($interactive) {
             $e = Read-Styled "     ${OK}▸${R} extract them now from your game install? ${DIM}[y/N]${R} ${ACCENT}›${R} "
@@ -2144,6 +2347,23 @@ if ($extract) {
 } else {
     Note 'skipped - re-run install.ps1 with JUN_EXTRACT=1 anytime to extract.'
 }
+
+Step 'game bridge'
+# JUN_BRIDGE=1 forces it, 0 opts out. otherwise only when asked
+$bridge = $false
+switch -Regex ($env:JUN_BRIDGE) {
+    '^(1|on|yes|true)$'  { $bridge = $true }
+    '^(0|off|no|false)$' { $bridge = $false }
+    default {
+        if ($script:reuse) {
+            $bridge = (Get-EnvValue 'GAME_BRIDGE') -match '^(on|1|true|yes)$'
+        } elseif ($interactive) {
+            $b = Read-Styled "     ${OK}▸${R} bridge her with your game save (affection, outfit, what happened)? ${DIM}[y/N]${R} ${ACCENT}›${R} "
+            $bridge = $b -match '^(y|yes)$'
+        }
+    }
+}
+if ($bridge) { Install-GameBridge } else { Note 'skipped - re-run install.ps1 with JUN_BRIDGE=1 anytime.' }
 
 Write-Host ''
 Step 'install summary'
@@ -2187,8 +2407,10 @@ switch -Regex ($env:JUN_TRUST_CA) {
         }
     }
 }
+# 0 on an update keeps whatever trust start.ps1 already set up, no dialog
+if ($script:reuse -and -not $env:JUN_TRUST_CA) { $trust = $false; $env:JUN_TRUST_CA = '0' }
 $env:JUN_TRUST_CA = if ($trust) { '1' } else { '0' }
-if (-not $trust) { Note 'certificate not trusted - ./start.ps1 trust does it anytime.' }
+if (-not $trust -and -not $script:reuse) { Note 'certificate not trusted - ./start.ps1 trust does it anytime.' }
 
 Write-Host ''
 Write-Host "  ${OK}▸${R} ${B}${OK}starting${R} ${DIM}-${R} launching start.ps1"

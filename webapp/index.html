@@ -637,7 +637,7 @@ html[data-pre-auth] #app { visibility: hidden; }
 
 <script type="module" src="js/core/pwa.js?v=2"></script>
 <script src="js/boot-gate.js?v=29"></script>
-<script type="module" src="js/app.js?v=136"></script>
+<script type="module" src="js/app.js?v=138"></script>
 </head>
 <body>
 
@@ -1244,6 +1244,17 @@ html[data-pre-auth] #app { visibility: hidden; }
             <div class="set-row-title">Rated replies</div>
           </div>
           <div class="set-row-control"><button class="secondary" id="ratingsExportBtn">Export</button></div>
+        </div>
+        <div class="set-row" id="bridgeRow" hidden>
+          <div class="set-row-text">
+            <div class="set-row-title">Game bridge</div>
+            <div class="set-row-desc" id="bridgeDesc">Not paired.</div>
+          </div>
+          <div class="set-row-control">
+            <input type="text" id="bridgeTokenInput" readonly hidden aria-label="Bridge token">
+            <button class="secondary" id="bridgePairBtn">Pair</button>
+            <button class="secondary danger" id="bridgeUnpairBtn" hidden>Unpair</button>
+          </div>
         </div>
         <form class="set-row account-password" id="passwordRow">
           <div class="set-row-text">

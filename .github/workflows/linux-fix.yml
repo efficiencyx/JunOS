@@ -1,0 +1,26 @@
+name: Native Linux bridge plugin
+
+on:
+  workflow_call:
+
+permissions:
+  contents: read
+
+jobs:
+  plugin:
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-dotnet@v5
+        with:
+          dotnet-version: '8.0.427'
+      - name: Native build dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y cmake g++ unzip
+      - name: Build and test LinuxFix
+        run: bridge/LinuxFix/build.sh '' Release "$PWD/dist"
+      - uses: actions/upload-artifact@v7
+        with:
+          name: JunBridge-LinuxFix
+          path: dist/JunBridge.LinuxFix.dll

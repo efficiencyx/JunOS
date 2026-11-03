@@ -195,6 +195,15 @@ release when it's on `main`, and installs it only when it matches that
 release's `SHA256SUMS`. Without a match it skips it and the shortcut runs
 `jun-manager.ps1` from the checkout instead.
 
+The native Linux bridge downloads `JunBridge.LinuxFix-<tag>.dll` and verifies
+it against the release's `SHA256SUMS`. CI builds it from checksum-pinned stock
+MelonLoader references and pinned Dobby source with the checked-in Linux patch.
+Its native library and licenses are embedded; at runtime it extracts them into
+`UserData/JunBridge.LinuxFix/` using atomic replacement, checking cached content
+against the embedded bytes. Runtime extraction makes no network requests. It
+redirects later hook callbacks in memory and leaves the bootstrap file intact.
+Windows and Proton do not use this plugin.
+
 ## What talks to the internet
 
 **During install:** github.com and api.github.com (which release is current), your distro's package mirrors or Homebrew,
@@ -202,6 +211,13 @@ release's `SHA256SUMS`. Without a match it skips it and the shortcut runs
 only when an NVIDIA card needs the container toolkit), Docker Hub and ghcr.io
 for base images, `windows.php.net`, `curl.se` and `ollama.com` (Windows), winget
 and PSGallery (Windows), PyPI and `download.pytorch.org` when voice or karaoke is on.
+With the game bridge and a game folder found, the MelonLoader release zip from
+`github.com/LavaGang/MelonLoader` (pinned to v0.7.3) and `JunBridge-<tag>.dll`
+from this repo's release (plus `JunBridge.LinuxFix-<tag>.dll` for the native
+Linux build), checked against that release's `SHA256SUMS`. The first game start
+with MelonLoader is MelonLoader's own: it asks `api.melonloader.com` about the
+game and pulls Cpp2IL, Unity's base assemblies and, when no .NET 6 is
+installed, a portable one from GitHub.
 
 **On first run:** Hugging Face, for the chat model through Ollama or llama.cpp,
 the title model and the MTP drafter when those are on, and again for the voice
@@ -250,11 +266,30 @@ downloads or changes anything.
   finds the URL can't use the GPU or touch the model store. Cloudflare
   terminates TLS on a quick tunnel, so it can read that traffic in transit.
 
+**The game bridge** talks to nothing outside your machine. `bridge-sync.php` reads
+the save folder you gave it, and the JunBridge mod only talks to the JunOS address
+in its `UserData/JunBridge.cfg`, which the start scripts point at this machine.
+It trusts a certificate the system trusts or one from JunOS's own local CA
+(`UserData/JunBridge.ca.pem`), nothing else. You sign in from a box in the game,
+the password is never written down. The session cookies, which include your data
+key the way the browser's do, go to `JunBridge/session` in your local app data
+(mode 600 on Linux) and stop working after 30 days or a password change.
+`api/bridge.php` wants a per-user bearer token, which the mod gets from
+`api/bridge-pair.php` with that session, stored as a SHA-256 hash. It can
+change her affection, her wardrobe and add to her memory, nothing else. It never reads anything back except her current
+sympathy and outfit.
+
 **The Android app** sends nothing anywhere in Local mode beyond the one-time
 model, voice and asset downloads. In LAN mode it talks to the paired PC on your
 network and nothing else. In Cloud mode it sends every prompt to the notebook's
 `*.trycloudflare.com` URL, with the same contents and the same gate as the PC
-case above, and the picker says so next to the option. Chats, memory and the
+case above, and the picker says so next to the option. In Online API mode it
+sends every prompt to OpenRouter (`openrouter.ai`) or OpenAI (`api.openai.com`,
+or `chatgpt.com` and `auth.openai.com` for the ChatGPT sign-in), under the key
+or account you gave it. Keys and ChatGPT tokens sit in the same Keystore-sealed
+store as pairings and only go to that provider. The ChatGPT sign-in listens on
+`localhost:1455` (loopback only) for up to five minutes while the browser
+comes back, and takes only a callback with the `state` it sent. Chats, memory and the
 database stay on the phone in every mode. A pairing only ever comes from a code
 you confirm in the app, deep links from a web page included. The one exception
 is **Start Colab session**: the app opens Colab in its own WebView, and Step 3
@@ -311,6 +346,13 @@ Discord: effx__
   every message, rolling summaries, relationship scores, wardrobe state and
   saved looks, the welcome queue and the texts she planned (encrypted), the walk-out lockouts (`user_bans`), and
   the open outing grant (`trips`).
+* `bridge_inbox`, `bridge_sync`, `bridge_seen`, `bridge_tokens` in the same
+  database - game events waiting for your next sign-in, sealed to a per-user key
+  only your data key opens, the last synced sympathy, outfit and game counters
+  (readable, the boot sync has no key, same numbers as in the save itself), the
+  hashed ids of events already queued, and the hashed bridge token.
+* `bridge-backups/` - the last 10 copies of a game save from before the bridge
+  wrote to it (`GAME_SAVE_WRITE=on` only). Not encrypted, it's the game's file.
 * `memory/user-<id>/` - encrypted category notes, `journal.md` and `meta.json`.
   The filenames keep their Markdown/JSON extensions; their stored contents
   are ciphertext after encryption, not directly editable documents.

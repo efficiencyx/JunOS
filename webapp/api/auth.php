@@ -1,5 +1,6 @@
 <?php
 require_once __DIR__ . '/lib/bootstrap.php';
+require_once __DIR__ . '/lib/bridge/apply.php';
 
 function user_keys_mint(string $password): array {
     $dek = random_bytes(SODIUM_CRYPTO_SECRETBOX_KEYBYTES);
@@ -127,6 +128,7 @@ case 'login':
 
     crypt_bind($dek);
     crypt_encrypt_backlog((int)$user['id']);
+    bridge_signed_in((int)$user['id']);
     start_session((int)$user['id'], $dek);
     json_out($out);
 
@@ -243,7 +245,8 @@ case 'factory_reset':
         foreach (['conversations', 'preferences', 'relationship', 'memory_consolidation',
                   'user_bans', 'wardrobe_presets', 'wardrobe_state', 'welcome_queue', 'trips',
                   'achievement_stats', 'achievement_seen', 'karaoke_takes', 'reply_ratings',
-                  'mood_log', 'relationship_history', 'planned_messages'] as $table) {
+                  'mood_log', 'relationship_history', 'planned_messages',
+                  'bridge_tokens', 'bridge_sync', 'bridge_seen', 'bridge_inbox'] as $table) {
             $db->prepare('DELETE FROM ' . $table . ' WHERE user_id = ?')->execute([$userId]);
         }
         $token = (string)($_COOKIE['omega_session'] ?? '');
