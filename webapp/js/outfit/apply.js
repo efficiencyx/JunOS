@@ -1,12 +1,13 @@
-import * as Live2D from '../live2d/live2d.js?v=89';
-import * as Mods from '../mods/mods.js?v=94';
-import { ALWAYS_HIDDEN, COLOR_GROUPS, ITEMS, VARIANTS, VARIANT_OWNER } from './catalog.js?v=3';
-import { applyGlassesTexture, applyStockingTexture, cancelStockingTexture, stockingColorMode } from './composite.js?v=23';
-import { colors, state, variantState } from './current.js?v=3';
+import * as Live2D from '../live2d/live2d.js?v=90';
+import * as Mods from '../mods/mods.js?v=99';
+import { ALWAYS_HIDDEN, COLOR_GROUPS, ITEMS, VARIANTS, VARIANT_OWNER } from './catalog.js?v=4';
+import { applyGlassesTexture, applyStockingTexture, cancelStockingTexture, stockingColorMode } from './composite.js?v=28';
+import { colors, state, variantState } from './current.js?v=4';
 import { hexToRgb01, normalizeHex } from './colors.js?v=1';
-import { queueWardrobe, saveColors, textureAvailable } from './sync.js?v=23';
-import { snapshot } from './chat-tools.js?v=23';
+import { queueWardrobe, saveColors, textureAvailable } from './sync.js?v=28';
+import { snapshot } from './chat-tools.js?v=28';
 import { hooks } from './hooks.js?v=1';
+import { applyDecals, forgetTints } from './decals.js?v=5';
 
 export const itemPatterns = (it) => it.colorPatterns || it.visibilityPatterns || [];
 
@@ -76,6 +77,7 @@ export function applyItems(onlyItems) {
   }
   if (Object.keys(textureMap).length) Live2D.setDrawableTextures(textureMap);
   applyFootCover();
+  applyDecals();
 }
 
 export function applyAll() {
@@ -109,6 +111,7 @@ export function applyVariants(onlyKey) {
     applyVariantVisibility(v);
   }
   applyFootCover();
+  applyDecals();
 }
 
 // stocking's soft edge is ~1px inside the mech foot and the grey shows
@@ -174,6 +177,7 @@ export function setVariant(key, index) {
 }
 
 export function applyColors() {
+  forgetTints();
   // clear first, or a small tint wipes out the colors of a bigger
   // group
   const touched = new Set();
@@ -199,6 +203,7 @@ export function applyColors() {
   // skin.
   if ((variantState.glasses_style || 0) > 0) Live2D.setDrawableTint('ModdableFace', null);
   applyGlassesTexture();
+  applyDecals();
   // a mod holding one of these drawables took its tint off the
   // shader and bakes it in itself, so it has to re-read whatever we
   // just set. every path that recolors her comes through here,

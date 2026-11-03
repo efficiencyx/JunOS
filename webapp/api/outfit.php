@@ -1,13 +1,18 @@
 <?php
 require_once __DIR__ . '/lib/bootstrap.php';
 require_once __DIR__ . '/lib/wardrobe.php';
+require_once __DIR__ . '/lib/bridge/apply.php';
 
 $user = require_user();
 $userId = (int)$user['id'];
 
 if (require_method('GET', 'PUT') === 'GET') {
     $state = wardrobe_state($userId);
-    json_out(['initialized' => $state !== null, 'state' => $state ?? wardrobe_default_state()]);
+    json_out([
+        'initialized' => $state !== null,
+        'state' => $state ?? wardrobe_default_state(),
+        'game_look' => bridge_enabled() ? bridge_look_take($userId) : null,
+    ]);
 }
 
 rate_limit('outfit_change_' . $userId, 2, 1);

@@ -1,8 +1,8 @@
-import * as Live2D from '../live2d/live2d.js?v=89';
-import { ITEMS, VARIANTS, VARIANT_OWNER } from '../outfit/catalog.js?v=3';
-import { applyChanged, exportPreset, loadPresetState } from '../outfit/presets.js?v=23';
-import { itemPatterns } from '../outfit/apply.js?v=23';
-import { state, variantState } from '../outfit/current.js?v=3';
+import * as Live2D from '../live2d/live2d.js?v=90';
+import { ITEMS, VARIANTS, VARIANT_OWNER } from '../outfit/catalog.js?v=4';
+import { applyChanged, exportPreset, loadPresetState } from '../outfit/presets.js?v=28';
+import { itemPatterns } from '../outfit/apply.js?v=28';
+import { state, variantState } from '../outfit/current.js?v=4';
 
 // tiles baked by tools/bake-items.html, sitting in the gitignored
 // webapp/assets/items/. they're game art, so they never ship.
@@ -86,6 +86,7 @@ export async function bakeAll(onProgress) {
 }
 
 export function itemThumb(it) {
+  if (it.decal) return `assets/variants/decals/${it.decal}.png`;
   const baked = bakedTile(it.key);
   if (baked) return baked;
   const ids = Live2D.findDrawables(itemPatterns(it), it.colorExcludes);
@@ -115,6 +116,7 @@ export function variantThumb(v, opt) {
   // shots), so it reads whether or not she's wearing it.
   // api/assets.php serves those ungated for exactly this.
   if (opt.thumb) return opt.thumb;
+  if (opt.decal) return `assets/variants/decals/${opt.decal}.png`;
   const owners = VARIANT_OWNER[v.key];
   const active = v.options[variantState[v.key] || 0] === opt
     && (!owners || owners.some(key => state[key]));

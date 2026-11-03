@@ -67,6 +67,16 @@ export const ITEMS = [
     textures: { H3_Front: { url: 'assets/variants/hair/hime/H3_Front.png', overlay: true } } },
   { key: 'hair_h4', label: 'Ponytail', section: 'hair', defaultOn: false,
     visibilityPatterns: ['h4_'], visOn: 1, visOff: 0 },
+
+  { key: 'heart_choker', label: 'Heart choker', defaultOn: false, decal: 'heart_choker', defaultColor: '#de5d83' },
+
+  ...[
+    ['eyeshadow', 'Eyeshadow', '#de5d83'], ['goth_eyeshadow', 'Goth eyeshadow', '#242424'],
+    ['eyeliner', 'Eyeliner', '#242424'], ['lashes', 'Lashes', '#242424'],
+    ['eye_sticker', 'Heart eye sticker', '#de5d83'], ['lipstick', 'Lipstick', '#c8385a'],
+    ['septum', 'Septum piercing', null], ['septum2', 'Septum ring', null],
+    ['tongue_piercing', 'Tongue piercing', null], ['manicure', 'Manicure', '#de5d83'], ['pedicure', 'Pedicure', '#de5d83'],
+  ].map(([key, label, defaultColor]) => ({ key, label, section: 'makeup', defaultOn: false, decal: key, defaultColor })),
 ];
 
 export const COLOR_GROUPS = [
@@ -112,6 +122,7 @@ export const COLOR_GROUPS = [
   // mesh of the rig), so there's nothing to include here
   { key: 'glasses_frame', label: 'Glasses frame', includes: [], excludes: [] },
   { key: 'glasses_lens', label: 'Glasses lens', includes: [], excludes: [] },
+  { key: 'eyepatch', label: 'Eyepatch', includes: [], excludes: [] },
 
   { key: 'stockings_accent', label: 'Accent', includes: [], excludes: [] },
 
@@ -121,10 +132,14 @@ export const COLOR_GROUPS = [
     key: it.key, label: it.label,
     includes: it.colorPatterns, excludes: it.colorExcludes || [],
   })),
+
+  ...ITEMS.filter(it => it.decal).map(it => ({
+    key: it.key, label: it.label, includes: [], excludes: [], defaultColor: it.defaultColor,
+  })),
 ];
 
 export const ITEM_COLOR_GROUPS = {
-  ...Object.fromEntries(ITEMS.filter(it => it.colorPatterns).map(it => [it.key, [it.key]])),
+  ...Object.fromEntries(ITEMS.filter(it => it.colorPatterns || it.decal).map(it => [it.key, [it.key]])),
   hoodie: ['hoodie', 'hoodie_strings'],
   stockings: ['stockings', 'stockings_accent'],
   cat_ears: ['ear', 'ear_mid'],
@@ -144,6 +159,8 @@ export const ITEM_VARIANTS = {
   hoodie: ['hoodie_logo'],
   panties: ['panties_logo'],
   skirt: ['skirt_style'],
+  choker: ['choker_style'],
+  bow: ['bow_style'],
   stockings: ['sock_style'],
   shoe_l: ['shoe_style'],
   shoe_r: ['shoe_style'],
@@ -350,6 +367,26 @@ export const VARIANTS = [
       { name: 'None', textures: {} },
       { name: 'Classic', textures: {}, show: ['ModdableFace'], thumb: 'assets/variants/glasses.png' },
       { name: 'Hearts', textures: {}, show: ['ModdableFace'], thumb: 'assets/variants/heartGlasses.png' },
+      { name: 'Eyepatch', textures: {}, show: ['ModdableFace'], thumb: 'assets/variants/glasses/eyepatch_main.png' },
+    ],
+  },
+  {
+    key: 'choker_style', label: 'Choker style',
+    drawables: [],
+    options: [
+      { name: 'Bell', show: ['BellChokerBell'] },
+      { name: 'Simple', decal: 'choker_simple', hide: ['BellChokerBell'] },
+      { name: 'Buckle collar', decal: 'choker_buckle', hide: ['BellChokerBell'] },
+      { name: 'Spiked collar', decal: 'choker_spiked', hide: ['BellChokerBell'] },
+    ],
+  },
+  {
+    key: 'bow_style', label: 'Hair accessory',
+    drawables: [],
+    options: [
+      { name: 'Bow' },
+      { name: 'Hair clips', decal: 'bow_clips' },
+      { name: 'Pumpkin hairpin', decal: 'bow_pumpkin' },
     ],
   },
   {
@@ -388,6 +425,7 @@ export const GLASSES_STYLES = [
   null,
   { base: 'glasses', layers: [['lens', 'glasses_lens'], ['highlight', null], ['frame', 'glasses_frame']] },
   { base: 'heartGlasses', layers: [['lens', 'glasses_lens'], ['frame', 'glasses_frame'], ['heart', 'glasses_frame'], ['highlight', null]] },
+  { base: 'eyepatch', layers: [['main', 'eyepatch']] },
 ];
 
 export const colorGroup = (key) => COLOR_GROUPS.find(g => g.key === key);

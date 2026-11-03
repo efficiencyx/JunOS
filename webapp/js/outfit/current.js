@@ -1,4 +1,4 @@
-import { COLOR_GROUPS, ITEMS, VARIANTS } from './catalog.js?v=3';
+import { COLOR_GROUPS, ITEMS, VARIANTS } from './catalog.js?v=4';
 
 export const state = {};
 for (const it of ITEMS) state[it.key] = it.defaultOn;

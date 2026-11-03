@@ -37,12 +37,15 @@ object Wardrobe {
         "cat_ears" to true, "pointy_ears" to false, "tail" to true,
         "hair_hologram" to true, "hair_h0" to true, "hair_h1" to false,
         "hair_h2" to false, "hair_h3" to false, "hair_h4" to false,
+        "heart_choker" to false, "eyeshadow" to false, "goth_eyeshadow" to false, "eyeliner" to false,
+        "lashes" to false, "eye_sticker" to false, "lipstick" to false, "septum" to false, "septum2" to false,
+        "tongue_piercing" to false, "manicure" to false, "pedicure" to false,
     )
 
     val VARIANT_MAX: Map<String, Int> = linkedMapOf(
         "hair_h0_style" to 1, "arm_style" to 2, "leg_style" to 2, "hightech_skin" to 1,
         "skirt_style" to 1, "sock_style" to 7, "shoe_style" to 2,
-        "glasses_style" to 2, "shirt_logo" to 100, "sleeve_logo" to 100,
+        "glasses_style" to 3, "choker_style" to 3, "bow_style" to 2, "shirt_logo" to 100, "sleeve_logo" to 100,
         "hoodie_logo" to 100, "panties_logo" to 100,
     )
 
@@ -93,13 +96,14 @@ object Wardrobe {
         "hair_h2" to "front bang", "hair_h3" to "hime cut hair",
         "hair_h4" to "ponytail", "hair_hologram" to "hair hologram",
         "choker" to "bell choker",
+        "eye_sticker" to "heart eye sticker", "septum" to "septum piercing", "septum2" to "septum ring",
     )
 
     // "nude" means these and only these. ears and tail stay.
     val CLOTHING: List<String> = listOf(
         "shirt", "hoodie", "dress", "dress1", "skirt", "pants", "bra", "panties",
         "bikini_top", "bikini_bot", "shoe_l", "shoe_r", "stockings", "headband",
-        "wizard_hat", "bow", "choker",
+        "wizard_hat", "bow", "choker", "heart_choker",
     )
 
     val STRIP_WORDS: List<String> = listOf("nude", "naked", "everything", "all", "clothes", "all clothes", "undress")

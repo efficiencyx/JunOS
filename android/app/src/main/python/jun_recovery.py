@@ -10,6 +10,7 @@ STAGES = (
     ("logos", "Recovering clothing logos", "recover_logos"),
     ("limbs", "Recovering limb variants", "recover_limbs"),
     ("hair", "Recovering hair variants", "recover_hair_strands"),
+    ("decals", "Recovering makeup and accessories", "recover_decals"),
     ("items", "Building wardrobe catalog", "recover_item_catalog"),
 )
 

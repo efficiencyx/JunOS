@@ -170,6 +170,17 @@ server {
         fastcgi_pass  $php_upstream;
     }
 
+    # The game mod posts its whole GameVariables json, ~420KB on a
+    # long save. Keep it in step with read_json_body in bridge.php.
+    location = /api/bridge.php {
+        limit_req zone=api_other burst=20 delay=10;
+        client_max_body_size 2m;
+
+        include fastcgi_params;
+        fastcgi_param SCRIPT_FILENAME /var/www/omega/api/bridge.php;
+        fastcgi_pass  $php_upstream;
+    }
+
     # Larger body for the WAV upload. Keep it in step with PHP's
     # post_max_size, STT_MAX_BYTES in tts/sidecar/config.py and the
     # chat.php limit above, since an utterance goes to one or the

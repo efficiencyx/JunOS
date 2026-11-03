@@ -1150,7 +1150,9 @@ if ($Provider -eq 'ollama') {
 # streaming (TTS, say) just queue until it finishes. fine for a
 # single local user.
 $env:PHP_CLI_SERVER_WORKERS = '8'
+# php.ini only gets rewritten with a new php, older installs still say 512K
 $phpProc = Start-Tracked 'php' $phpExe @(
+    '-d', 'post_max_size=30M', '-d', 'upload_max_filesize=30M',
     '-S', "127.0.0.1:$PhpPort",
     '-t', (Join-Path $PSScriptRoot 'webapp'),
     (Join-Path $PSScriptRoot 'tools\php-router.php')

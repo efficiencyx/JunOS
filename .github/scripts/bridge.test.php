@@ -39,6 +39,57 @@ $snap = bridge_snapshot(bridge_vars($newest));
 $eq('snapshot: sympathy', $snap['sympathy'], 820);
 $eq('outfit: worn items by id', [$snap['outfit']['hoodie'], $snap['outfit']['shirt'], $snap['outfit']['shoe_r']], [true, false, true]);
 $eq('outfit: in the bag is not worn', $snap['outfit']['pants'], false);
+$worn = fn(array ...$items) => array_keys(array_filter(bridge_outfit_from_equipped($items)));
+$eq('outfit: mod furniture is not a tail or ears', $worn(
+    ['id' => 9, 'slot' => 'Room_TV', 'mod' => true], ['id' => 1, 'slot' => 'Room_Plush', 'mod' => true],
+    ['id' => 6, 'slot' => 'LegR', 'mod' => true], ['id' => 1, 'slot' => 'Skin', 'mod' => true],
+), []);
+$eq('outfit: a modded shirt counts by its slot', $worn(['id' => 5, 'slot' => 'UpperBody', 'mod' => true]), ['shirt']);
+$eq('outfit: dresses', [$worn(['id' => 18000, 'slot' => 'UpperBody']), $worn(['id' => 18001, 'slot' => 'UpperBody'])], [['dress'], ['dress1']]);
+$modGuid = ['_guid' => ['serializedGuid' => '5bc5b141'], '_id' => 9];
+$eq('outfit: the save _guid marks a mod item', bridge_snapshot(['_sympathy' => 1, 'itemManager' => ['items' => [
+    ['_gameId' => $modGuid, '_equipedSlot' => 'Room_TV'],
+]]])['outfit']['tail'], false);
+$look = bridge_look_from_equipped([
+    ['id' => 17102, 'slot' => 'UpperBodyOuter', 'colors' => ['#333333', '#db2220']],
+    ['id' => 10000, 'slot' => 'UpperBody', 'colors' => ['#111111']],
+    ['id' => 12005, 'slot' => 'StockingR', 'colors' => ['#505050']],
+    ['id' => 16004, 'slot' => 'ShoeR', 'colors' => ['#fcfbfb']],
+    ['id' => 15002, 'slot' => 'LowerBody', 'colors' => ['#222222']],
+    ['id' => 1008, 'slot' => 'Head', 'colors' => ['#242424', '#ee0055']],
+    ['id' => 1006, 'slot' => 'Eyes', 'colors' => ['#010101', '#010101', '#020202', '#020202', '#030303']],
+    ['id' => 1, 'slot' => 'Skin', 'mod' => true, 'colors' => ['#d5a391']],
+    ['id' => 9, 'slot' => 'Room_TV', 'mod' => true, 'colors' => ['#ffffff']],
+    ['id' => 2000001, 'slot' => 'Anon_FishingRod', 'colors' => ['#ffffff']],
+]);
+$eq('look: styles', $look['variants'], ['skirt_style' => 1, 'shoe_style' => 2, 'sock_style' => 4, 'glasses_style' => 0]);
+$eq('look: logos, plain clears', $look['logos'], ['hoodie_logo' => 'bloodyMoon', 'shirt_logo' => '']);
+$eq('look: colours', [$look['colors']['hoodie_strings'], $look['colors']['ear_mid'], $look['colors']['eye_iris'], $look['colors']['eye_pupil'], $look['colors']['skin']],
+    ['#db2220', '#ee0055', '#010101', '#020202', '#d5a391']);
+$eq('look: furniture has no colour', count($look['colors']), 13);
+$eq('look: the halo is white, whatever her hair says', bridge_look_from_equipped([
+    ['id' => 1005, 'slot' => 'HairMain', 'colors' => ['#242424', '#ee0055', '#796f45']],
+])['colors'], ['hair_hologram' => '#ffffff', 'hair' => '#242424', 'hair_h0_strand' => '#ee0055']);
+$eq('look: a hologram item colours it', bridge_look_from_equipped([
+    ['id' => 1506, 'slot' => 'Hologram', 'colors' => ['#00ff00']],
+])['colors']['hair_hologram'], '#00ff00');
+$eq('outfit: makeup and accessories', $worn(
+    ['id' => 13003, 'slot' => 'EyeMakeup'], ['id' => 13019, 'slot' => 'Pedicure'], ['id' => 13001, 'slot' => 'NeckAccessory'],
+), ['heart_choker', 'eyeshadow', 'pedicure']);
+$accessories = bridge_look_from_equipped([
+    ['id' => 13026, 'slot' => 'NeckAccessory', 'colors' => ['#111111']],
+    ['id' => 13007, 'slot' => 'HairAccessoryL', 'colors' => ['#222222']],
+    ['id' => 13014, 'slot' => 'Glasses', 'colors' => ['#333333']],
+    ['id' => 13011, 'slot' => 'Lipstick', 'colors' => ['#444444']],
+]);
+$eq('look: accessory styles', [$accessories['variants']['choker_style'], $accessories['variants']['bow_style'], $accessories['variants']['glasses_style']], [3, 2, 3]);
+$eq('look: accessory colours', [$accessories['colors']['eyepatch'], $accessories['colors']['lipstick'], $accessories['colors']['choker']],
+    ['#333333', '#444444', '#111111']);
+$eq('look: hex from unity floats', bridge_hex(['r' => 0.125490203, 'g' => 0.886274516, 'b' => 1.0, 'a' => 1.0]), '#20e2ff');
+foreach (['omega.conf.template', 'omega-tls.conf.template'] as $conf) {
+    $text = (string)file_get_contents(__DIR__ . "/../../docker/nginx/templates/$conf");
+    $eq("nginx: $conf takes the mod's body", preg_match('#location = /api/bridge\.php \{[^}]*client_max_body_size 2m;#', $text), 1);
+}
 $eq('parse: slot file is raw GameVariables', bridge_read_save($vars(1, 1, []))['shape'], 'vars');
 $eq('parse: junk refused', bridge_read_save('{"saves": "nope"}'), null);
 

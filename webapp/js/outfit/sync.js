@@ -1,13 +1,13 @@
 import * as Prefs from '../core/prefs.js?v=6';
 import { api, apiJson } from '../core/api.js?v=1';
-import { COLOR_GROUPS, GLASSES_STYLES, ITEMS, VARIANTS, VARIANT_OWNER } from './catalog.js?v=3';
-import { Presets, applyChanged, loadPresetState } from './presets.js?v=23';
-import { applyGlassesTexture } from './composite.js?v=23';
-import { applyItems, applyVariants } from './apply.js?v=23';
-import { colors, state, variantState } from './current.js?v=3';
-import { loadBakedTiles } from '../wardrobe/tile-bake.js?v=23';
+import { COLOR_GROUPS, GLASSES_STYLES, ITEMS, VARIANTS, VARIANT_OWNER } from './catalog.js?v=4';
+import { Presets, applyChanged, loadPresetState } from './presets.js?v=28';
+import { applyGlassesTexture } from './composite.js?v=28';
+import { applyItems, applyVariants } from './apply.js?v=28';
+import { colors, state, variantState } from './current.js?v=4';
+import { loadBakedTiles } from '../wardrobe/tile-bake.js?v=28';
 import { normalizeHex } from './colors.js?v=1';
-import * as Mods from '../mods/mods.js?v=94';
+import * as Mods from '../mods/mods.js?v=99';
 import { hooks } from './hooks.js?v=1';
 
 const STORAGE_KEY = 'omega.outfit.v1';
@@ -105,6 +105,22 @@ function importWardrobe(saved) {
   }
 }
 
+async function importGameLook(look) {
+  for (const g of COLOR_GROUPS) {
+    const hex = normalizeHex(look.colors?.[g.key]);
+    if (hex) colors[g.key] = hex;
+  }
+  for (const v of VARIANTS) {
+    const value = look.variants?.[v.key];
+    if (Number.isInteger(value) && v.options[value]) variantState[v.key] = value;
+    const logo = look.logos?.[v.key];
+    if (logo === undefined) continue;
+    variantState[v.key] = Math.max(0, v.options.findIndex(o => o.thumb === `assets/variants/logos/${logo}.png`));
+  }
+  saveColors();
+  importWardrobe(await writeWardrobe({ ...state }, { ...variantState }));
+}
+
 export function queueWardrobe(mutator, after) {
   const change = () => updateWardrobe(mutator, after);
   return hooks.curtains ? hooks.curtains(change) : change();
@@ -186,6 +202,7 @@ export async function load() {
   const remote = await r.json();
   if (remote.initialized) importWardrobe(remote.state);
   else importWardrobe(await writeWardrobe({ ...state }, { ...variantState }));
+  if (remote.game_look) await importGameLook(remote.game_look);
   try { localStorage.setItem(STORAGE_KEY, JSON.stringify(state)); } catch (e) {}
   try { localStorage.setItem(VARIANT_KEY, JSON.stringify(variantState)); } catch (e) {}
   // describe() reads the saved-look names straight off this cache

@@ -318,13 +318,14 @@ function recompositeTexture(texIndex, dirtyIds) {
     t.width = w; t.height = h;
     const tc = ctx2d(t);
     tc.drawImage(c, x, y, w, h, 0, 0, w, h);
-    tc.globalCompositeOperation = 'multiply';
-    tc.fillStyle = a.entry.baseTint;
-    tc.fillRect(0, 0, w, h);
-    // multiply floods the transparent texels too, cut it back to the
-    // art
-    tc.globalCompositeOperation = 'destination-in';
-    tc.drawImage(c, x, y, w, h, 0, 0, w, h);
+    // by hand. a multiply fill floods low-alpha texels with the tint
+    // and a soft edge comes out as a bright ring on her cheek
+    const px = tc.getImageData(0, 0, w, h);
+    const tint = [1, 3, 5].map(i => parseInt(a.entry.baseTint.slice(i, i + 2), 16) / 255);
+    for (let i = 0; i < px.data.length; i += 4) {
+      for (let ch = 0; ch < 3; ch++) px.data[i + ch] *= tint[ch];
+    }
+    tc.putImageData(px, 0, 0);
     ctx.save();
     ctx.clip(meshPath(a.id, W, H));
     ctx.clearRect(x, y, w, h);

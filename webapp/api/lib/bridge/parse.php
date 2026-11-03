@@ -1,5 +1,7 @@
 <?php
 
+require_once __DIR__ . '/look.php';
+
 // Saves/save.mdrg is the slot index with savedata "", each slot's raw
 // GameVariables json is M<slot+1>.mdrgslot (A<n> for autosaves) next to
 // it. an export is that index with savedata inline, as a json STRING
@@ -13,17 +15,30 @@ const BRIDGE_COUNTERS = [
 
 // by the ranges of the game's ItemEnum, 10xxx shirts ... 17xxx hoodies
 const BRIDGE_OUTFIT_KEYS = [
-    'shirt', 'hoodie', 'skirt', 'pants', 'bra', 'panties', 'bikini_top', 'bikini_bot',
+    'shirt', 'hoodie', 'dress', 'dress1', 'skirt', 'pants', 'bra', 'panties', 'bikini_top', 'bikini_bot',
     'stockings', 'shoe_l', 'shoe_r', 'choker', 'bow', 'wizard_hat', 'headband',
-    'cat_ears', 'pointy_ears', 'tail',
+    'cat_ears', 'pointy_ears', 'tail', 'hair_h1', 'hair_h2', 'hair_h3', 'hair_h4',
+    'heart_choker', 'eyeshadow', 'goth_eyeshadow', 'eyeliner', 'lashes', 'eye_sticker', 'lipstick',
+    'septum', 'septum2', 'tongue_piercing', 'manicure', 'pedicure',
 ];
 const BRIDGE_OUTFIT_IDS = [
     1 => ['cat_ears'], 1008 => ['cat_ears'], 1009 => ['pointy_ears'], 13008 => ['pointy_ears'],
     11003 => ['bikini_bot'], 11004 => ['bikini_bot'], 11150 => ['bikini_top', 'bikini_bot'], 11151 => ['bikini_top', 'bikini_bot'],
     14002 => ['bikini_top'], 14003 => ['bikini_top'],
-    13000 => ['bow'], 13006 => ['wizard_hat'], 13027 => ['headband'],
-    13001 => ['choker'], 13005 => ['choker'], 13020 => ['choker'], 13024 => ['choker'], 13025 => ['choker'], 13026 => ['choker'],
-    15001 => ['pants'],
+    13000 => ['bow'], 13007 => ['bow'], 13015 => ['bow'], 13006 => ['wizard_hat'], 13027 => ['headband'],
+    13001 => ['heart_choker'], 13003 => ['eyeshadow'], 13004 => ['goth_eyeshadow'], 13021 => ['eyeliner'],
+    13023 => ['lashes'], 13022 => ['eye_sticker'], 13011 => ['lipstick'], 13009 => ['septum'], 13010 => ['septum2'],
+    13016 => ['tongue_piercing'], 13018 => ['manicure'], 13019 => ['pedicure'],
+    13005 => ['choker'], 13020 => ['choker'], 13024 => ['choker'], 13025 => ['choker'], 13026 => ['choker'],
+    15001 => ['pants'], 18000 => ['dress'], 18001 => ['dress1'],
+    200 => ['hair_h1'], 201 => ['hair_h2'], 202 => ['hair_h3'], 203 => ['hair_h4'],
+];
+// mod items (a _guid) reuse low ids, a modded Room_TV is 9 same as the
+// fluffy tail. on those only the slot means anything
+const BRIDGE_OUTFIT_SLOTS = [
+    'UpperBody' => ['shirt'], 'UpperBodyOuter' => ['hoodie'], 'LowerBody' => ['skirt'],
+    'Bra' => ['bra'], 'Panties' => ['panties'], 'StockingL' => ['stockings'], 'StockingR' => ['stockings'],
+    'ShoeL' => ['shoe_l'], 'ShoeR' => ['shoe_r'], 'NeckAccessory' => ['choker'], 'Tail' => ['tail'],
 ];
 
 function bridge_outfit_keys(int $id): array {
@@ -108,7 +123,13 @@ function bridge_snapshot(array $vars): ?array {
     $counters = [];
     foreach (BRIDGE_COUNTERS as $k) $counters[$k] = (int)($vars[$k] ?? 0);
     $equipped = $vars['equipped'] ?? array_map(
-        fn($i) => ['id' => (int)($i['_gameId']['_id'] ?? 0), 'slot' => (string)($i['_equipedSlot'] ?? '')],
+        fn($i) => [
+            'id' => (int)($i['_gameId']['_id'] ?? 0),
+            'slot' => (string)($i['_equipedSlot'] ?? ''),
+            'mod' => (string)($i['_gameId']['_guid']['serializedGuid'] ?? '') !== '',
+            'colors' => array_map('bridge_hex', (array)($i['_colors'] ?? [])),
+            'clip' => in_array(['K' => 'FrontClippedUp', 'V' => 1], (array)($i['I'] ?? [])),
+        ],
         (array)($vars['itemManager']['items'] ?? [])
     );
     $botName = mb_substr(trim((string)($vars['botName'] ?? '')), 0, 40);
@@ -123,6 +144,7 @@ function bridge_snapshot(array $vars): ?array {
         'flags' => $flags,
         'counters' => $counters,
         'outfit' => bridge_outfit_from_equipped((array)$equipped),
+        'look' => bridge_look_from_equipped((array)$equipped),
     ];
 }
 
@@ -137,12 +159,20 @@ function bridge_sympathy_for(int $affection, int $gameSympathy): int {
 }
 
 // worn = any slot but '' (in the bag) and Anon_* (the player's)
+function bridge_item_worn(array $item): bool {
+    $slot = (string)($item['slot'] ?? '');
+    return $slot !== '' && !str_starts_with($slot, 'Anon_');
+}
+
+function bridge_item_keys(array $item): array {
+    return empty($item['mod']) ? bridge_outfit_keys((int)($item['id'] ?? 0)) : (BRIDGE_OUTFIT_SLOTS[$item['slot']] ?? []);
+}
+
 function bridge_outfit_from_equipped(array $equipped): array {
     $outfit = array_fill_keys(BRIDGE_OUTFIT_KEYS, false);
     foreach ($equipped as $item) {
-        $slot = (string)($item['slot'] ?? '');
-        if ($slot === '' || str_starts_with($slot, 'Anon_')) continue;
-        foreach (bridge_outfit_keys((int)($item['id'] ?? 0)) as $key) $outfit[$key] = true;
+        if (!bridge_item_worn($item)) continue;
+        foreach (bridge_item_keys($item) as $key) $outfit[$key] = true;
     }
     return $outfit;
 }

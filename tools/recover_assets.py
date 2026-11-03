@@ -16,6 +16,8 @@ no intermediate dumps. these are the files the webapp needs:
                                ColorIndex
   variants/hair/**             separately colorable native hair
                                strands
+  variants/decals/**           makeup, piercings and accessories,
+                               one sheet per item + mapping.json
   variants/limbs/**            per-drawable crops of packed variant
                                textures (Experimental limbs +
                                High-Tech skin), with mapping.json
@@ -185,6 +187,28 @@ DECALS = {
     "wyldSpace": "WyldSpace",
     "xoulion": "XoulionLogo",
     "yaranaika": "yaranaika",
+}
+
+# one sheet per item, not a png per drawable (nails alone are 22).
+# outfit/catalog.js names these keys
+DECALS = {
+    "eyeshadow": ["eyeShadow_common"],
+    "goth_eyeshadow": ["gothEyeShadow_common"],
+    "eyeliner": ["eyeliner_common"],
+    "lashes": ["naturalEyeLashes_common"],
+    "eye_sticker": ["heartEyeSticker_common"],
+    "lipstick": ["lipstick_common"],
+    "septum": ["septumPiercing_common"],
+    "septum2": ["septumPiercing2_common"],
+    "tongue_piercing": ["tongue_piercing_common"],
+    "manicure": ["manicure_left_interaction", "manicure_right_interaction"],
+    "pedicure": ["pedicure_interaction"],
+    "heart_choker": ["heartChoker_interact"],
+    "choker_simple": ["simpleChoker_common"],
+    "choker_buckle": ["beltCollar_common"],
+    "choker_spiked": ["spikedcollar_common"],
+    "bow_clips": ["hairclips_common"],
+    "bow_pumpkin": ["pumpkinHairpinFix_common"],
 }
 
 # PackedTexturesContainer sources for the limb crops, in
@@ -596,6 +620,49 @@ class Recovery:
             f.write(json.dumps(mapping, indent=1) + "\n")
         print("  wrote variants/hair/mapping.json")
 
+    def recover_decal(self, key, cnames):
+        crops = []
+        for cname in cnames:
+            for sec in self.containers[cname]:
+                img = self.tex_by_path(sec["path"]).convert("RGBA")
+                for drawable, entry in sec["entries"].items():
+                    checked_name(drawable)
+                    crop = img.crop(crop_box(img, entry["rect"]))
+                    if crop.getchannel("A").getextrema()[1] > 0:
+                        crops.append((drawable, sec["layer"], entry["color_index"], crop))
+        sheet = Image.new("RGBA", (max(c[3].width for c in crops), sum(c[3].height for c in crops)))
+        layers, top = [], 0
+        for drawable, layer, color_index, crop in crops:
+            sheet.paste(crop, (0, top))
+            top += crop.height
+            # y from the bottom, RectInt style. mods/layers.js flips it
+            layers.append({
+                "drawable": drawable, "layer": layer, "color_index": color_index,
+                "rect": {"x": 0, "y": sheet.height - top, "w": crop.width, "h": crop.height},
+            })
+        self.save(sheet, f"variants/decals/{key}.png")
+        return layers
+
+    def recover_decals(self):
+        mapping = {}
+        for key, cnames in DECALS.items():
+            self.attempt(key, lambda k=key, c=cnames: mapping.__setitem__(k, self.recover_decal(k, c)))
+        path = os.path.join(self.out, "variants", "decals", "mapping.json")
+        os.makedirs(os.path.dirname(path), exist_ok=True)
+        with open(path, "w") as f:
+            f.write(json.dumps(mapping, indent=1) + "\n")
+        print("  wrote variants/decals/mapping.json")
+
+        def eyepatch():
+            sec = self.containers["eyepatch_common"][0]
+            img = self.tex_by_path(sec["path"]).convert("RGBA")
+            # same frame as the glasses layers, they share one canvas
+            rect = sec["entries"]["ModdableFace"]["rect"]
+            framed = Image.new("RGBA", (rect[2] + 2 * rect[0], rect[3] + 2 * rect[1]))
+            framed.paste(img.crop(crop_box(img, rect)), (rect[0], rect[1]))
+            self.save(framed, "variants/glasses/eyepatch_main.png")
+        self.attempt("eyepatch", eyepatch)
+
     def recover_item_catalog(self):
         # keep every packed game item layer and its ColorIndex from
         # every scene, not just the interaction model. texture
@@ -651,6 +718,7 @@ def main():
     print("logos...");    r.recover_logos()
     print("limbs...");    r.recover_limbs()
     print("hair...");     r.recover_hair_strands()
+    print("decals...");   r.recover_decals()
     print("items...");    r.recover_item_catalog()
     if r.failures:
         print(f"\nWARNING: {len(r.failures)} item(s) not found in this game "

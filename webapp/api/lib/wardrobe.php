@@ -17,12 +17,15 @@ const WARDROBE_ITEM_DEFAULTS = [
     'cat_ears' => true, 'pointy_ears' => false, 'tail' => true,
     'hair_hologram' => true, 'hair_h0' => true, 'hair_h1' => false,
     'hair_h2' => false, 'hair_h3' => false, 'hair_h4' => false,
+    'heart_choker' => false, 'eyeshadow' => false, 'goth_eyeshadow' => false, 'eyeliner' => false,
+    'lashes' => false, 'eye_sticker' => false, 'lipstick' => false, 'septum' => false, 'septum2' => false,
+    'tongue_piercing' => false, 'manicure' => false, 'pedicure' => false,
 ];
 
 const WARDROBE_VARIANT_MAX = [
     'hair_h0_style' => 1, 'arm_style' => 2, 'leg_style' => 2, 'hightech_skin' => 1,
     'skirt_style' => 1, 'sock_style' => 7, 'shoe_style' => 2,
-    'glasses_style' => 2, 'shirt_logo' => 100, 'sleeve_logo' => 100,
+    'glasses_style' => 3, 'choker_style' => 3, 'bow_style' => 2, 'shirt_logo' => 100, 'sleeve_logo' => 100,
     'hoodie_logo' => 100, 'panties_logo' => 100,
 ];
 
@@ -39,6 +42,9 @@ const WARDROBE_COLOR_DEFAULTS = [
     'bikini_top' => null, 'bikini_bot' => null, 'shoe_l' => null,
     'shoe_r' => null, 'stockings' => null, 'stockings_accent' => null, 'headband' => null,
     'wizard_hat' => null, 'bow' => null, 'choker' => null, 'hair_clip' => null,
+    'eyepatch' => null, 'heart_choker' => null, 'eyeshadow' => null, 'goth_eyeshadow' => null, 'eyeliner' => null,
+    'lashes' => null, 'eye_sticker' => null, 'lipstick' => null, 'septum' => null, 'septum2' => null,
+    'tongue_piercing' => null, 'manicure' => null, 'pedicure' => null,
 ];
 
 // pairs that cannot both be on. this is the same list
@@ -96,6 +102,7 @@ const WARDROBE_LABELS = [
     'hair_h2' => 'front bang', 'hair_h3' => 'hime cut hair',
     'hair_h4' => 'ponytail', 'hair_hologram' => 'hair hologram',
     'choker' => 'bell choker',
+    'eye_sticker' => 'heart eye sticker', 'septum' => 'septum piercing', 'septum2' => 'septum ring',
 ];
 
 function wardrobe_label(string $key): string {
@@ -137,7 +144,7 @@ function wardrobe_resolve_item(string $name): array {
 const WARDROBE_CLOTHING = [
     'shirt', 'hoodie', 'dress', 'dress1', 'skirt', 'pants', 'bra', 'panties',
     'bikini_top', 'bikini_bot', 'shoe_l', 'shoe_r', 'stockings', 'headband',
-    'wizard_hat', 'bow', 'choker',
+    'wizard_hat', 'bow', 'choker', 'heart_choker',
 ];
 
 // turn one item on or off in a state, resolving the conflicts the
@@ -288,6 +295,7 @@ function wardrobe_asset_matches_state(string $asset, array $state): bool {
     if ($asset === 'variants/glasses.png' || str_starts_with($asset, 'variants/glasses/glasses_')) {
         return $variants['glasses_style'] === 1;
     }
+    if ($asset === 'variants/glasses/eyepatch_main.png') return $variants['glasses_style'] === 3;
     if ($asset === 'variants/heartGlasses.png' || str_starts_with($asset, 'variants/glasses/heartGlasses_')) {
         return $variants['glasses_style'] === 2;
     }
@@ -490,7 +498,11 @@ function wardrobe_state(int $userId): ?array {
     $raw = $stmt->fetchColumn();
     if ($raw === false) return null;
     $parsed = json_decode((string)$raw, true);
-    return is_array($parsed) ? $parsed : null;
+    if (!is_array($parsed)) return null;
+    $defaults = wardrobe_default_state();
+    $parsed['items'] = (array)($parsed['items'] ?? []) + $defaults['items'];
+    $parsed['variants'] = (array)($parsed['variants'] ?? []) + $defaults['variants'];
+    return $parsed;
 }
 
 function wardrobe_save_state(int $userId, array $state): void {

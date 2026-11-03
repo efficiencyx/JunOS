@@ -1,14 +1,14 @@
-import * as Live2D from '../live2d/live2d.js?v=89';
-import { BODY_VARIANTS, CLOTHING_VARIANTS, COLOR_GROUPS, ITEMS, ITEM_COLOR_GROUPS, ITEM_VARIANTS, VARIANTS } from '../outfit/catalog.js?v=3';
-import { fillTile, makeOptOrb, makeSwatch, makeTile, openTilePopup, syncOptionsPopup, wdMoveGhost, wdShowGhost } from './tiles.js?v=26';
-import { state, variantState } from '../outfit/current.js?v=3';
-import { itemThumb, variantThumb } from './tile-bake.js?v=23';
-import { looksOpen, toggleLooks } from './looks.js?v=26';
-import { reset, setItem } from '../outfit/apply.js?v=23';
-import { wornDrawableMap, wornHitAt, wornLabel, wornRemove, wornWear } from './worn.js?v=24';
-import { buildWardrobeSection, syncModTiles } from '../mods/section.js?v=26';
-import { activate, playOutro } from './reactions.js?v=87';
-import { refreshColorButtons } from './color-picker.js?v=26';
+import * as Live2D from '../live2d/live2d.js?v=90';
+import { BODY_VARIANTS, CLOTHING_VARIANTS, COLOR_GROUPS, ITEMS, ITEM_COLOR_GROUPS, ITEM_VARIANTS, VARIANTS } from '../outfit/catalog.js?v=4';
+import { fillTile, makeOptOrb, makeSwatch, makeTile, openTilePopup, syncOptionsPopup, wdMoveGhost, wdShowGhost } from './tiles.js?v=31';
+import { state, variantState } from '../outfit/current.js?v=4';
+import { itemThumb, variantThumb } from './tile-bake.js?v=28';
+import { looksOpen, toggleLooks } from './looks.js?v=31';
+import { reset, setItem } from '../outfit/apply.js?v=28';
+import { wornDrawableMap, wornHitAt, wornLabel, wornRemove, wornWear } from './worn.js?v=29';
+import { buildWardrobeSection, syncModTiles } from '../mods/section.js?v=31';
+import { activate, playOutro } from './reactions.js?v=88';
+import { refreshColorButtons } from './color-picker.js?v=31';
 import { hooks } from '../outfit/hooks.js?v=1';
 
 export let clearWornHover = null;
@@ -140,7 +140,7 @@ function buildWardrobe() {
     return tile;
   };
 
-  for (const [sec, name] of [[undefined, 'Clothing'], ['body', 'Body'], ['hair', 'Hair']]) {
+  for (const [sec, name] of [[undefined, 'Clothing'], ['makeup', 'Makeup'], ['body', 'Body'], ['hair', 'Hair']]) {
     const { title, grid } = section(name);
     addNav(name, title);
     if (sec === undefined) wornScopes.push(grid);
@@ -161,7 +161,7 @@ function buildWardrobe() {
     if (sec === undefined) {
       for (const key of CLOTHING_VARIANTS) {
         const v = VARIANTS.find(x => x.key === key);
-        if (v) grid.appendChild(makeVariantTile(v, key === 'glasses_style' ? ['glasses_frame', 'glasses_lens'] : []));
+        if (v) grid.appendChild(makeVariantTile(v, key === 'glasses_style' ? ['glasses_frame', 'glasses_lens', 'eyepatch'] : []));
       }
     }
     if (sec === 'body') {

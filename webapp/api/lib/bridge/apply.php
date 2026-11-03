@@ -149,7 +149,8 @@ function bridge_sync(int $userId, array $snap, bool $dry = false): array {
     $report['affection'] = $rel['affection'];
 
     $wardrobeAt = bridge_wardrobe_at($userId);
-    $gameChanged = $prev === null || $prev['outfit'] !== $snap['outfit'];
+    $look = json_encode($snap['look'], JSON_UNESCAPED_SLASHES);
+    $gameChanged = $prev === null || $prev['outfit'] !== $snap['outfit'] || $prev['look'] !== $look;
     $junChanged = $prev !== null && $wardrobeAt > (int)$prev['wardrobe_at'];
     $report['outfit_from_game'] = $gameChanged && !$junChanged;
     if ($report['outfit_from_game'] && !$dry) {
@@ -173,14 +174,16 @@ function bridge_sync(int $userId, array $snap, bool $dry = false): array {
         foreach ($events as $e) $mark->execute([$userId, hash('sha256', $e['id'])]);
     }
     db()->prepare(
-        'INSERT INTO bridge_sync (user_id, timeline, sympathy, ingame_time, counters, outfit, wardrobe_at, synced_at)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+        'INSERT INTO bridge_sync (user_id, timeline, sympathy, ingame_time, counters, outfit, look, look_pending, wardrobe_at, synced_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
          ON CONFLICT(user_id) DO UPDATE SET timeline=excluded.timeline, sympathy=excluded.sympathy,
            ingame_time=excluded.ingame_time, counters=excluded.counters, outfit=excluded.outfit,
+           look=excluded.look, look_pending=excluded.look_pending,
            wardrobe_at=excluded.wardrobe_at, synced_at=excluded.synced_at'
     )->execute([
         $userId, $snap['timeline'], $snap['sympathy'], $snap['ingame_time'],
-        json_encode($snap['counters']), json_encode($snap['outfit']), $wardrobeAt, time(),
+        json_encode($snap['counters']), json_encode($snap['outfit']), $look,
+        $report['outfit_from_game'] ? $look : (string)($prev['look_pending'] ?? ''), $wardrobeAt, time(),
     ]);
     return $report;
 }
@@ -188,6 +191,16 @@ function bridge_sync(int $userId, array $snap, bool $dry = false): array {
 // the game has $sympathy now, the next delta counts from there
 function bridge_sync_settle(int $userId, int $sympathy): void {
     db()->prepare('UPDATE bridge_sync SET sympathy = ? WHERE user_id = ?')->execute([$sympathy, $userId]);
+}
+
+// once, the browser saves it into the wardrobe and her prefs
+function bridge_look_take(int $userId): ?array {
+    $st = db()->prepare('SELECT look_pending FROM bridge_sync WHERE user_id = ?');
+    $st->execute([$userId]);
+    $look = json_decode((string)$st->fetchColumn(), true);
+    if (!is_array($look)) return null;
+    db()->prepare("UPDATE bridge_sync SET look_pending = '' WHERE user_id = ?")->execute([$userId]);
+    return $look;
 }
 
 function bridge_outfit_for_game(int $userId): array {
