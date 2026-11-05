@@ -2358,7 +2358,7 @@ switch -Regex ($env:JUN_BRIDGE) {
     default {
         if ($script:reuse) {
             $bridge = (Get-EnvValue 'GAME_BRIDGE') -match '^(on|1|true|yes)$'
-        } elseif ($interactive) {
+        } elseif ($interactive -or $script:expressInteractive) {
             $b = Read-Styled "     ${OK}▸${R} bridge her with your game save (affection, outfit, what happened)? ${DIM}[y/N]${R} ${ACCENT}›${R} "
             $bridge = $b -match '^(y|yes)$'
         }

@@ -2169,7 +2169,7 @@ case "$(printf '%s' "${JUN_BRIDGE:-}" | tr '[:upper:]' '[:lower:]')" in
     *)
         if [ "$REUSE" = 1 ]; then
             case "$(env_value GAME_BRIDGE)" in on|1|true|yes) bridge=1 ;; esac
-        elif [ -r /dev/tty ] && [ "${JUN_YES:-}" != "1" ]; then
+        elif [ -r /dev/tty ] && { [ "${JUN_YES:-}" != "1" ] || [ "$EXPRESS" = 1 ]; }; then
             printf '     %s$%s bridge her with your game save (affection, outfit, what happened)? %s[y/N]%s %s→%s ' \
                 "$OK" "$R" "$DIM" "$R" "$ACCENT" "$R" > /dev/tty
             read -r b < /dev/tty || b=""

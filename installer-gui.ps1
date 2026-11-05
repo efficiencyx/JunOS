@@ -580,8 +580,8 @@ public sealed class InstallerProcessOutput
             <Grid x:Name="AssetsPage" Visibility="Collapsed">
                 <ScrollViewer VerticalScrollBarVisibility="Auto">
                     <StackPanel MaxWidth="720" HorizontalAlignment="Left">
-                        <TextBlock Text="Live2D assets" FontSize="28" FontWeight="SemiBold" />
-                        <TextBlock Text="Jun's original model and textures are not distributed with this project. If you own My Dystopian Robot Girlfriend, the installer can reconstruct them locally from your copy." TextWrapping="Wrap" Foreground="#C1C6D0" Margin="0,9,0,20" />
+                        <TextBlock Text="Your game" FontSize="28" FontWeight="SemiBold" />
+                        <TextBlock Text="Jun's original model and textures are not distributed with this project. If you own My Dystopian Robot Girlfriend, the installer can reconstruct them locally from your copy and bridge her with your game save." TextWrapping="Wrap" Foreground="#C1C6D0" Margin="0,9,0,20" />
 
                         <CheckBox x:Name="ExtractCheck" Content="Recover Live2D assets from my game installation" FontWeight="SemiBold" />
                         <CheckBox x:Name="BridgeCheck" Content="Bridge her with my game save (affection, outfit, what happened)" FontWeight="SemiBold" Margin="0,10,0,0" />
@@ -1118,7 +1118,7 @@ function Update-Review {
 }
 
 $pages = @($WelcomePage, $OptionsPage, $AssetsPage, $ReviewPage, $InstallPage)
-$pageTitles = @('Choose a location', 'Installation options', 'Personal game assets', 'Review', 'Installation')
+$pageTitles = @('Choose a location', 'Installation options', 'Your game', 'Review', 'Installation')
 $script:pageIndex = 0
 $script:installing = $false
 $script:process = $null
