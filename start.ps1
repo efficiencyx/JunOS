@@ -946,7 +946,7 @@ function Write-LlamacppPresets([string]$path, [string[]]$chatModels) {
         $lines += "[$m]", "hf-repo = $m"
         if ($env:OMEGA_NUM_CTX) { $lines += "ctx-size = $($env:OMEGA_NUM_CTX)" }
         else { $lines += 'override-kv = gemma4.context_length=int:16384', 'fit-ctx = 6144' }
-        $lines += 'fit-target = 1024', 'parallel = 1'
+        $lines += 'fit-target = 1024', "parallel = $(if ($env:LLAMACPP_PARALLEL) { $env:LLAMACPP_PARALLEL } else { '1' })"
         if ($TensorParallel) { $lines += 'split-mode = row' }
         if ($first -and $env:LLAMACPP_MTP) {
             $nMax = if ($env:LLAMACPP_MTP_N_MAX) { $env:LLAMACPP_MTP_N_MAX } else { '4' }

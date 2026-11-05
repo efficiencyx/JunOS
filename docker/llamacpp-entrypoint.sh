@@ -27,8 +27,8 @@ chat_section() {  # name, where-the-weights-are line, mtp yes/no
     else
         printf 'override-kv = gemma4.context_length=int:16384\nfit-ctx = 6144\n'
     fi
-    # the 3 extra default slots cost the 12B ~940 MiB of VRAM
-    printf 'fit-target = 1024\nparallel = 1\n'
+    # every slot past the first costs the 12B ~310 MiB of VRAM
+    printf 'fit-target = 1024\nparallel = %s\n' "${LLAMACPP_PARALLEL:-1}"
     # the drafter matches ONE gemma 4 size, so only the default
     # model gets it
     if [ "$3" = yes ] && [ -n "${LLAMACPP_MTP:-}" ]; then

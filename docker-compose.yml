@@ -182,6 +182,7 @@ services:
       LLAMACPP_MODEL_ALIAS: "${LLAMACPP_MODEL_ALIAS:-jun-local}"
       LLAMACPP_MTP: "${LLAMACPP_MTP:-}"
       LLAMACPP_MTP_N_MAX: "${LLAMACPP_MTP_N_MAX:-4}"
+      LLAMACPP_PARALLEL: "${LLAMACPP_PARALLEL:-1}"
       TITLE_MODEL: "${TITLE_MODEL-hf.co/efficiencyx/Titlewen-GGUF:F16}"
       OMEGA_NUM_CTX: "${OMEGA_NUM_CTX:-}"
       # -hf downloads land in the HF hub layout under HF_HOME now,
