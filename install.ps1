@@ -1249,6 +1249,7 @@ function Install-Php {
         'post_max_size=30M'
         'upload_max_filesize=30M'
         'memory_limit=128M'
+        'max_execution_time=0'
         'expose_php=Off'
         'display_errors=Off'
         'log_errors=On'

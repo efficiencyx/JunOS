@@ -1,9 +1,10 @@
+using System.Collections;
 using System.Threading.Tasks;
 using MelonLoader;
 using UnityEngine;
 using JunBridge.Utils;
 
-[assembly: MelonInfo(typeof(JunBridge.Core), "JunBridge", "0.1.0", "JunOS", null)]
+[assembly: MelonInfo(typeof(JunBridge.Core), "JunBridge", "0.1.1", "JunOS", null)]
 [assembly: MelonGame("IncontinentCell", "My Dystopian Robot Girlfriend")]
 
 namespace JunBridge;
@@ -28,6 +29,18 @@ public class Core : MelonMod {
 
     Sync.BridgeSync.Start();
     _ = SignInOnStart();
+  }
+
+  // ModSettingsMenu hooks MainMenuScene.Prepare, a second hook on it crashed the game on boot
+  public override void OnSceneWasInitialized(int buildIndex, string sceneName) {
+    if (sceneName == "MainScene") {
+      MelonCoroutines.Start(WaitForMainMenu());
+    }
+  }
+
+  private static IEnumerator WaitForMainMenu() {
+    yield return new WaitWhile((System.Func<bool>)(() => Object.FindObjectOfType<Il2Cpp.MenuStaticGui>() == null));
+    JunApi.LoginPrompt.MainMenuReady();
   }
 
   public override void OnUpdate() {

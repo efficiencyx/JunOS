@@ -208,7 +208,7 @@ Memory filenames retain `.md` and `.json` extensions, but encrypted contents can
 |---|---|---|---|
 | `VIDEO_GID` | the literal group name `video` (compose fallback) | `docker-compose.amd.yml` | GID the `tts`/`ollama`/`llamacpp` containers join so they can access `/dev/dri` render nodes. `start.sh` fills in the host's numeric gid on AMD detection. |
 | `RENDER_GID` | the literal group name `render` (compose fallback) | `docker-compose.amd.yml` | Same, for the `render` group; `start.sh` reads it off `/dev/dri/renderD128`. |
-| `HSA_OVERRIDE_GFX_VERSION` | unset | `docker-compose.amd.yml` (passed through to ROCm) | Consumer-card ROCm override, e.g. `11.0.0` for RDNA3, `10.3.0` for RDNA2. |
+| `HSA_OVERRIDE_GFX_VERSION` | auto | `start.sh` (`amd_hsa_override()`), `docker-compose.amd.yml` (passed through to ROCm) | Makes ROCm treat the card as a close sibling it ships kernels for. `start.sh` reads the biggest card's gfx target from `/sys/class/kfd` and sets `10.3.0` for gfx1031-1036 and `11.0.0` for gfx1102, gfx1103 and gfx115x. RDNA1, RDNA4 and cards ROCm supports directly stay unset. Any line in `.env`, blank included, turns the detection off. It reaches the Ollama and karaoke containers only: llama.cpp runs on Vulkan and ignores it. Linux only, Windows has no such override. |
 
 ## 7b. Multi-token prediction (experimental)
 

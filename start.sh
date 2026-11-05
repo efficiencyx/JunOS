@@ -70,6 +70,30 @@ amd_visible() {
     | sort -t, -k1 -nr | cut -d, -f2 | paste -sd, - || true
 }
 
+# gfx1031 reads 100301 here. biggest card ON PURPOSE, the override
+# hits every card and an iGPU's value breaks the real one next to it
+amd_gfx_target() {
+  local node size best=0 target=""
+  for node in /sys/class/kfd/kfd/topology/nodes/*; do
+    [ -r "$node/mem_banks/0/properties" ] || continue
+    size="$(awk '$1 == "size_in_bytes" { print $2 }' "$node/mem_banks/0/properties")"
+    if [ "${size:-0}" -gt "$best" ]; then
+      best="$size"
+      target="$(awk '$1 == "gfx_target_version" { print $2 }' "$node/properties")"
+    fi
+  done
+  printf '%s' "$target"
+}
+
+# only siblings of a target ROCm ships kernels for. RDNA1 and RDNA4
+# have none to borrow, a different ISA crashes instead of helping
+amd_hsa_override() {
+  case "$1" in
+    10030[1-6])               echo 10.3.0 ;;
+    11000[23]|1105[0-9][0-9]) echo 11.0.0 ;;
+  esac
+}
+
 # the card the MTP tune was measured on, as one string. MTP is
 # multi-token prediction, a small drafter model guesses the next
 # few tokens (how many = the draft depth) and the chat model
@@ -498,6 +522,10 @@ case "$gpu" in
     export VIDEO_GID="${vgid:-44}"
     export RENDER_GID="${rgid:-105}"
     probed_vram_mb="$(amd_vram_mb)"
+    if [ -z "${HSA_OVERRIDE_GFX_VERSION+x}" ] && ! grep -q '^HSA_OVERRIDE_GFX_VERSION=' .env 2>/dev/null; then
+      hsa_override="$(amd_hsa_override "$(amd_gfx_target)")"
+      [ -z "$hsa_override" ] || export HSA_OVERRIDE_GFX_VERSION="$hsa_override"
+    fi
     ;;
 esac
 
