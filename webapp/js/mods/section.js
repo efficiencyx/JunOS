@@ -1,5 +1,5 @@
-import { makeItemColorButton } from '../wardrobe/color-picker.js?v=31';
-import { bindTileDrag } from '../wardrobe/tiles.js?v=31';
+import { makeItemColorButton } from '../wardrobe/color-picker.js?v=32';
+import { bindTileDrag } from '../wardrobe/tiles.js?v=32';
 import { modItemKey } from '../wardrobe/worn.js?v=29';
 import { itemThumbUrl } from './layers.js?v=18';
 import { ensureLoaded, followsHerColors, importZip, isEquipped, modState, mods, removeMod, setColor, setEquipped, setFollowsHerColors } from './engine.js?v=28';
@@ -23,23 +23,39 @@ export function buildWardrobeSection(body) {
   bar.style.cssText = 'display:flex;gap:8px;align-items:center;margin:4px 0 8px';
   bar.innerHTML = `<button class="ghost" data-mod-load>Load mod (.zip)</button>
     <span data-mod-msg style="font-size:12px;opacity:.7">Mods stay in your browser - nothing is uploaded</span>
-    <input type="file" accept=".zip" hidden>`;
+    <input type="file" accept=".zip" multiple hidden>`;
   const input = bar.querySelector('input');
   const msg = bar.querySelector('[data-mod-msg]');
   bar.querySelector('[data-mod-load]').addEventListener('click', () => input.click());
   input.addEventListener('change', async () => {
-    const f = input.files[0];
+    // copy first: clearing the value also empties the live FileList
+    const files = [...input.files];
     input.value = '';
-    if (!f) return;
-    msg.textContent = 'Loading…';
-    try {
-      const mod = await importZip(await f.arrayBuffer());
-      msg.textContent = `Loaded "${mod.name}" - click an item to equip it`;
-      renderMods();
-    } catch (e) {
-      console.error(e);
-      msg.textContent = 'Failed: ' + e.message;
+    if (!files.length) return;
+    const loaded = [], failed = [];
+    for (const [n, f] of files.entries()) {
+      msg.textContent = files.length > 1 ? `Loading ${n + 1}/${files.length}…` : 'Loading…';
+      // one at a time: importZip rewrites the shared mod list and state,
+      // and one bad zip must not stop the rest
+      try {
+        const mod = await importZip(await f.arrayBuffer());
+        loaded.push(mod.name);
+        renderMods();
+      } catch (e) {
+        console.error(e);
+        failed.push({ file: f.name, error: e.message });
+      }
     }
+    if (files.length === 1) {
+      msg.textContent = loaded.length
+        ? `Loaded "${loaded[0]}" - click an item to equip it`
+        : 'Failed: ' + failed[0].error;
+      return;
+    }
+    const parts = [];
+    if (loaded.length) parts.push(`Loaded ${loaded.length} mod${loaded.length > 1 ? 's' : ''} - click an item to equip it`);
+    if (failed.length) parts.push('Failed: ' + failed.map(x => `${x.file} (${x.error})`).join(', '));
+    msg.textContent = parts.join('. ');
   });
   const list = document.createElement('div');
   list.dataset.modList = '1';
