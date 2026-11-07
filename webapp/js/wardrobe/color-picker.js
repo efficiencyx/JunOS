@@ -3,7 +3,7 @@ import * as MobileViewport from '../core/viewport.js?v=1';
 import { colorGroup } from '../outfit/catalog.js?v=4';
 import { colors } from '../outfit/current.js?v=4';
 import { hexToHsv, hsvToHex, normalizeHex } from '../outfit/colors.js?v=1';
-import { optPopEl, positionOptionsPopup } from './tiles.js?v=31';
+import { optPopEl, positionOptionsPopup } from './tiles.js?v=32';
 import { setColor } from '../outfit/apply.js?v=28';
 
 function paintColorButton(button) {
