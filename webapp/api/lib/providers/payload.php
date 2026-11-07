@@ -61,6 +61,19 @@ function provider_chat_endpoint(string $provider): string {
         : chat_api_base($provider) . '/api/chat';
 }
 
+// one bad UTF-8 byte and json_encode returns false, curl posts an
+// empty body and the server 400s with "attempting to parse an empty input"
+function provider_json_body(array $payload, int $flags = JSON_UNESCAPED_UNICODE): string {
+    $body = json_encode($payload, $flags);
+    if ($body !== false) return $body;
+    $bad = [];
+    foreach ($payload['messages'] ?? [] as $i => $m) {
+        if (json_encode($m) === false) $bad[] = $i . ':' . ($m['role'] ?? '?');
+    }
+    log_event(['msg' => 'payload_not_json', 'err' => json_last_error_msg(), 'messages' => $bad]);
+    return (string)json_encode($payload, $flags | JSON_INVALID_UTF8_SUBSTITUTE | JSON_PARTIAL_OUTPUT_ON_ERROR);
+}
+
 function provider_tool_message(string $provider, string $name, string $callId, string $result): array {
     $message = [
         'role' => 'tool',

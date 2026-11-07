@@ -43,7 +43,13 @@ function fail(int $code, string $key, array $extra = []): never {
 function json_out(mixed $data, int $code = 200): never {
     http_response_code($code);
     header('Content-Type: application/json');
-    echo json_encode($data, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
+    $flags = JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES;
+    $body = json_encode($data, $flags);
+    if ($body === false) {
+        log_event(['msg' => 'json_out_failed', 'script' => basename($_SERVER['SCRIPT_NAME'] ?? ''), 'err' => json_last_error_msg()]);
+        $body = json_encode($data, $flags | JSON_INVALID_UTF8_SUBSTITUTE | JSON_PARTIAL_OUTPUT_ON_ERROR);
+    }
+    echo $body;
     exit;
 }
 

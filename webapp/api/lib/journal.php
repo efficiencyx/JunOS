@@ -33,9 +33,11 @@ function memory_journal_write(int $userId, string $text): array {
 
 function journal_parse(string $doc): array {
     $entries = [];
-    foreach (preg_split('/\R/', $doc) as $line) {
+    // NOT \R. without /u it also matches the byte 0x85, which sits
+    // inside lots of CJK and cyrillic chars and cut entries in half
+    foreach (preg_split('/\r\n|\n|\r/', $doc) as $line) {
         if (!preg_match('/^\s*[*-]\s+(\d{4}-\d{2}-\d{2})\s*:\s*(.+)$/', $line, $m)) continue;
-        $text = trim(preg_replace('/\s+/', ' ', $m[2]));
+        $text = trim(preg_replace('/\s+/', ' ', mb_scrub($m[2], 'UTF-8')));
         if ($text === '') continue;
         $entries[] = ['date' => $m[1], 'text' => $text];
     }

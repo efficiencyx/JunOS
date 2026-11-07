@@ -1,13 +1,15 @@
 import * as Live2D from '../live2d/live2d.js?v=90';
 import { api, apiJson } from '../core/api.js?v=1';
+import { SCRIPT_LANGS, scriptLang } from './languages.js?v=1';
 
 let enabled = false;
 let engine = 'kokoro';
 let voice = 'af_heart';
-// lang is a pocket-tts thing. Kokoro ignores it completely, and
-// autoLang just lets the reply text pick one.
+// pocket-tts checkpoint or Kokoro G2P. autoLang = the text picks it
 let lang = 'english';
 let autoLang = false;
+// Kokoro only, language id -> voice. missing falls back to `voice`
+let langVoices = {};
 let speed = 1.0;
 let volume = 1.0;
 let duckLevel = 1.0;
@@ -60,6 +62,10 @@ export function isEnabled() { return enabled; }
 
 export function setEngine(e) { if (e) engine = e; }
 export function setVoice(v) { if (v) voice = v; }
+export function setLangVoices(m) { langVoices = (m && typeof m === 'object') ? { ...m } : {}; }
+function voiceFor(l) {
+  return (engine === 'kokoro' && langVoices[l]) || voice;
+}
 // 'auto' turns detection on per reply, a real id pins that
 // language. the detector only ever hands back ids the sidecar
 // knows, so 'auto' never leaves this file.
@@ -97,20 +103,23 @@ export async function listVoices() {
 // playful "~" is always a break, so each bit between tildes
 // becomes its own utterance and the voice can fall at the end
 // instead of running into the next one
-const HARD_BREAK_RE = /[.!?~\n]/;
+// fullwidth ends + danda, or a Chinese/Hindi reply is one chunk that
+// waits for her to finish and blows the 2000 char cap in tts.php
+const HARD_BREAK_RE = /[.!?~\n\u3002\uff01\uff1f\uff5e\u0964\u0965]/;
 // only real punctuation breaks a chunk. keep dashes out, an ASCII
 // hyphen lands mid-word ("co-op", Jun's "H-hey" stutters) and
 // putting it in the class between the colon and an en dash
 // silently made a range over every letter, which cut the first
 // chunk at whatever character followed the third word. took a
 // while to find that one
-const SOFT_BREAK_RE = /[,;:]/g;
+const SOFT_BREAK_RE = /[,;:\uff0c\uff1b\uff1a\u3001]/g;
 // "Oh," on its own reads as a whole falling utterance. wait for
 // three words before the first soft split.
 const MIN_FIRST_WORDS = 3;
 
+// no spaces in Chinese, a hanzi counts as a word
 function wordCount(s) {
-  const m = s.match(/\S+/g);
+  const m = s.match(/[\u3400-\u9fff\uf900-\ufaff]|[^\s\u3400-\u9fff\uf900-\ufaff]+/g);
   return m ? m.length : 0;
 }
 
@@ -137,7 +146,7 @@ function hardBreak(buf) {
   return -1;
 }
 
-function nextChunk(buf, first) {
+export function nextChunk(buf, first) {
   const hard = hardBreak(buf);
   if (!first) return hard < 0 ? null : cutAt(buf, hard);
 
@@ -213,28 +222,37 @@ function detectLang(text) {
 }
 
 // conversation's language is the fallback. one short reply must
-// NEVER reset an Italian chat to English.
+// NEVER reset an Italian chat to English. script languages (Kokoro)
+// go per chunk, replyScript keeps an "OK!" in a Chinese reply Chinese
 let lastLang = 'english';
 let detectBuf = '';
 let replyLang = null;
 let replyLangLocked = false;
+let replyScript = null;
 
-// guess off your message so the caller can start loading the right
-// pocket-tts model while Jun is still writing. can't tell? keep the
-// language the conversation is already in. not English.
+function scriptFor(text) {
+  const l = engine === 'kokoro' ? scriptLang(text) : null;
+  return l === 'english' ? null : l;
+}
+
+// guess off your message so the pocket-tts model (or Kokoro's G2P)
+// loads while Jun is still writing. can't tell? keep the language
+// the conversation is already in. not English.
 export function predictLang(text) {
-  if (!enabled || !autoLang || engine !== 'pockettts') return null;
-  return detectLang(text || '') || lastLang;
+  if (!enabled) return null;
+  if (!autoLang) return engine === 'kokoro' && lang !== 'english' ? lang : null;
+  return scriptFor(text || '') || detectLang(text || '') || lastLang;
 }
 
 export function warmLang(l) {
-  if (!enabled || !autoLang || engine !== 'pockettts' || !l) return;
-  apiJson('tts.php?action=warm', { lang: l, voice, engine }).catch(() => {});
+  if (!enabled || !l || (engine === 'kokoro' && l === 'english')) return;
+  apiJson('tts.php?action=warm', { lang: l, voice: voiceFor(l), engine }).catch(() => {});
 }
 
 export function setReplyLang(l) {
-  if (!autoLang || engine !== 'pockettts') return;
-  replyLang = l || lastLang;
+  if (!autoLang) return;
+  replyScript = SCRIPT_LANGS.has(l) ? l : null;
+  replyLang = (!replyScript && l) || lastLang;
   replyLangLocked = false;
 }
 
@@ -243,7 +261,7 @@ export function setReplyLang(l) {
 // locked it Never moves again, so one foreign word mid-reply
 // can't trigger a model reload.
 function updateDetect(text) {
-  if (!autoLang || engine !== 'pockettts' || replyLangLocked) return;
+  if (!autoLang || replyLangLocked) return;
   detectBuf += ' ' + text;
   const guess = detectLang(detectBuf);
   if (guess) {
@@ -252,8 +270,11 @@ function updateDetect(text) {
   }
 }
 
-function effectiveLang() {
-  if (!autoLang || engine !== 'pockettts') return lang;
+function effectiveLang(text) {
+  if (!autoLang) return lang;
+  const script = scriptFor(text);
+  if (script) { replyScript = script; return script; }
+  if (replyScript && !detectLang(text)) return replyScript;
   return replyLang || lastLang;
 }
 
@@ -286,6 +307,7 @@ function resetReply() {
   if (replyLang) lastLang = replyLang;
   detectBuf = '';
   replyLangLocked = false;
+  replyScript = null;
 }
 
 // first chunk gets the machine to itself. later ones can overlap
@@ -301,11 +323,13 @@ function enqueue(text, hooks) {
 
   updateDetect(text);
   const id = nextId++;
+  // each chunk keeps the language it started with. a later guess
+  // must not rewrite one already in flight
+  const jobLang = effectiveLang(text);
   const job = {
     id, text,
-    // each chunk keeps the language it started with. a later guess
-    // must not rewrite one already in flight
-    lang: effectiveLang(),
+    lang: jobLang,
+    voice: voiceFor(jobLang),
     abort: new AbortController(),
     status: 'queued',
     audioBuffer: null,
@@ -330,7 +354,7 @@ function startJob(job) {
 
   job.blobPromise = (async () => {
     try {
-      const res = await apiJson('tts.php?action=tts', { text: job.text, voice, speed, engine, lang: job.lang },
+      const res = await apiJson('tts.php?action=tts', { text: job.text, voice: job.voice, speed, engine, lang: job.lang },
         { signal: job.abort.signal });
       // 204 (nothing to say) is still a 2xx, so !res.ok won't catch it
       if (res.status === 204) { job.status = 'done'; return; }

@@ -143,10 +143,13 @@ function provider_parse_openai_chunk(
 function provider_finish_openai_tool_calls(array $toolAcc, array &$state, int $round): void {
     foreach ($toolAcc as $index => $tool) {
         if ($tool['name'] === '') continue;
+        // a no-arg call can stream back "". llama-server json::parse's
+        // it when we send the history back and 400s "empty input"
+        $args = is_array(json_decode($tool['arguments'], true)) ? $tool['arguments'] : '{}';
         $state['tool_calls'][] = [
             'id' => $tool['id'] !== '' ? $tool['id'] : 'call_' . $round . '_' . $index,
             'type' => 'function',
-            'function' => ['name' => $tool['name'], 'arguments' => $tool['arguments']],
+            'function' => ['name' => $tool['name'], 'arguments' => $args],
         ];
     }
 }
@@ -249,7 +252,7 @@ function provider_stream_round(string $provider, array $payload, callable $emit,
     $ch = curl_init(provider_chat_endpoint($provider));
     curl_setopt($ch, CURLOPT_POST, true);
     curl_setopt($ch, CURLOPT_HTTPHEADER, chat_request_headers($provider));
-    curl_setopt($ch, CURLOPT_POSTFIELDS, json_encode($payload, JSON_UNESCAPED_UNICODE));
+    curl_setopt($ch, CURLOPT_POSTFIELDS, provider_json_body($payload));
     curl_setopt($ch, CURLOPT_RETURNTRANSFER, false);
     curl_setopt($ch, CURLOPT_TIMEOUT_MS, max(1000, (int)((($deadline ?? stream_turn_deadline()) - $started) * 1000)));
     curl_setopt($ch, CURLOPT_LOW_SPEED_LIMIT, 1);

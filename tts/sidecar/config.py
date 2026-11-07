@@ -11,6 +11,30 @@ KOKORO_VOICES = [
     "bf_alice", "bf_emma", "bf_isabella", "bf_lily",
 ]
 
+# ids are pocket-tts's where both speak it, so tts.lang carries over.
+# `needs` missing ("espeak" = the lib really loads) = off /voices. no Japanese, misaki[ja] wants
+# pyopenjtalk (no wheels, C++ build) and a 770 MB unidic download
+KOKORO_LANGUAGES = [
+    {"id": "english", "label": "English", "lang_code": "a",
+     "voices": KOKORO_VOICES, "default": KOKORO_DEFAULT, "needs": (), "script": None},
+    {"id": "french_24l", "label": "French", "lang_code": "f",
+     "voices": ["ff_siwis"], "default": "ff_siwis", "needs": ("espeak",), "script": None},
+    {"id": "hindi", "label": "Hindi", "lang_code": "h",
+     "voices": ["hf_alpha", "hf_beta"], "default": "hf_alpha", "needs": ("espeak",),
+     "script": r"[\u0900-\u097f]"},
+    {"id": "italian", "label": "Italian", "lang_code": "i",
+     "voices": ["if_sara"], "default": "if_sara", "needs": ("espeak",), "script": None},
+    {"id": "mandarin", "label": "Mandarin Chinese", "lang_code": "z",
+     "voices": ["zf_xiaobei", "zf_xiaoni", "zf_xiaoxiao", "zf_xiaoyi"], "default": "zf_xiaobei",
+     "needs": ("jieba", "pypinyin", "cn2an"), "script": r"[\u3400-\u9fff\uf900-\ufaff]"},
+    {"id": "portuguese", "label": "Portuguese (Brazil)", "lang_code": "p",
+     "voices": ["pf_dora"], "default": "pf_dora", "needs": ("espeak",), "script": None},
+    {"id": "spanish_24l", "label": "Spanish", "lang_code": "e",
+     "voices": ["ef_dora"], "default": "ef_dora", "needs": ("espeak",), "script": None},
+]
+KOKORO_DEFAULT_LANG = "english"
+KOKORO_LANG_BY_ID = {lang["id"]: lang for lang in KOKORO_LANGUAGES}
+
 # pocket-tts voice names pick timbre, not language. each has an
 # embedding for every POCKET_LANGUAGES entry. giovanni, lola,
 # juergen, rafael and estelle keep the accent of their non-English

@@ -13,6 +13,8 @@ log = logging.getLogger("tts")
 # them. the loaders in tts.py and karaoke.py fill them in. whisper
 # isn't here, it never gets unloaded.
 pipeline = None
+# lang_code -> KPipeline, G2Ps sharing pipeline's model. they go with it
+kokoro_g2p = {}
 pocket_model = None
 pocket_lang = None
 pocket_states = {}
@@ -36,7 +38,7 @@ tts_slots = threading.BoundedSemaphore(max(1, int(os.environ.get("TTS_MAX_CONCUR
 
 def loaded_engines():
     live = []
-    if pipeline is not None: live.append("kokoro")
+    if pipeline is not None or kokoro_g2p: live.append("kokoro")
     if pocket_model is not None: live.append("pockettts")
     if separator is not None: live.append("demucs")
     return live
@@ -55,11 +57,11 @@ def free_torch():
 def unload(names):
     # caller holds lock. drops the model refs, then gc and
     # empty_cache hand the VRAM back.
-    global pipeline, pocket_model, pocket_lang, pocket_states, separator
+    global pipeline, kokoro_g2p, pocket_model, pocket_lang, pocket_states, separator
     freed = []
     for name in names:
-        if name == "kokoro" and pipeline is not None:
-            pipeline = None; freed.append(name)
+        if name == "kokoro" and (pipeline is not None or kokoro_g2p):
+            pipeline = None; kokoro_g2p = {}; freed.append(name)
         elif name == "pockettts" and pocket_model is not None:
             pocket_model = None; pocket_lang = None; pocket_states = {}; freed.append(name)
         elif name == "demucs" and separator is not None:

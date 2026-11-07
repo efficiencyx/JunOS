@@ -350,7 +350,7 @@ function memory_notes_load_unlocked(int $userId): array {
         $notes = [];
         $rewrite = false;
         $mtime = (int)(filemtime($path) ?: time());
-        foreach (preg_split('/\R/', (string)dec((string)@file_get_contents($path))) as $line) {
+        foreach (preg_split('/\r\n|\n|\r/', (string)dec((string)@file_get_contents($path))) as $line) {
             if (preg_match('/^\s*#\s+(.+?)\s*$/u', $line, $heading)) {
                 $name = trim($heading[1]);
                 continue;

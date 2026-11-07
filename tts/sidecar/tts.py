@@ -1,4 +1,7 @@
+import functools
+import importlib.util
 import logging
+import re
 import threading
 from typing import Annotated
 
@@ -9,7 +12,8 @@ from pydantic import BaseModel, Field, StringConstraints
 
 from . import state
 from .audio import to_wav
-from .config import (DEFAULT_ENGINE, KOKORO_DEFAULT, KOKORO_SAMPLE_RATE, KOKORO_VOICES, POCKET_DEFAULT,
+from .config import (DEFAULT_ENGINE, KOKORO_DEFAULT, KOKORO_DEFAULT_LANG, KOKORO_LANG_BY_ID, KOKORO_LANGUAGES,
+                     KOKORO_SAMPLE_RATE, KOKORO_VOICES, POCKET_DEFAULT,
                      POCKET_DEFAULT_LANG, POCKET_LANG_IDS, POCKET_LANGUAGES, POCKET_VOICES, TTS_ENGINES,
                      TTS_MAX_QUEUE, TTS_QUEUE_WAIT_S)
 from .devices import get_device
@@ -24,6 +28,11 @@ router = APIRouter()
 _pocket_load_lock = threading.Lock()
 _tts_waiting = 0
 
+# a G2P that won't build stays broken till restart, don't retry it every chunk
+_kokoro_load_lock = threading.Lock()
+_kokoro_g2p_failed = set()
+_kokoro_scripts = {lang["id"]: re.compile(lang["script"]) for lang in KOKORO_LANGUAGES if lang["script"]}
+
 
 def get_pipeline():
     # loaded late so a failure at import (missing espeak-ng,
@@ -35,6 +44,50 @@ def get_pipeline():
         state.pipeline = KPipeline(lang_code="a", device=device)
         log.info("Kokoro ready.")
     return state.pipeline
+
+
+@functools.cache
+def _espeak_loads():
+    # finding the module isn't enough, a noexec /tmp breaks the dlopen
+    try:
+        from misaki import espeak
+        espeak.EspeakG2P(language="en-us")
+        return True
+    except Exception:
+        log.exception("espeak-ng won't load, Kokoro's espeak languages stay off")
+        return False
+
+
+def _has(module):
+    return _espeak_loads() if module == "espeak" else importlib.util.find_spec(module) is not None
+
+
+def kokoro_languages():
+    return [lang for lang in KOKORO_LANGUAGES if all(_has(m) for m in lang["needs"])]
+
+
+def get_kokoro_pipeline(lang):
+    english = get_pipeline()
+    code = lang["lang_code"]
+    if code == english.lang_code:
+        return english
+    g2p = state.kokoro_g2p.get(code)
+    if g2p is not None or code in _kokoro_g2p_failed:
+        return g2p
+    with _kokoro_load_lock:
+        g2p = state.kokoro_g2p.get(code)
+        if g2p is None and code not in _kokoro_g2p_failed:
+            try:
+                from kokoro import KPipeline
+                log.info("loading Kokoro %s G2P (lang_code=%r), sharing the loaded model...", lang["label"], code)
+                # model= shares the loaded weights, no second copy
+                g2p = KPipeline(lang_code=code, repo_id="hexgrad/Kokoro-82M", model=english.model)
+                state.kokoro_g2p[code] = g2p
+                log.info("Kokoro %s ready.", lang["label"])
+            except Exception:
+                _kokoro_g2p_failed.add(code)
+                log.exception("Kokoro %s unavailable, it gets the English G2P until restart", lang["label"])
+    return g2p
 
 
 def get_pocket_model(language=POCKET_DEFAULT_LANG):
@@ -84,8 +137,7 @@ class TTSReq(BaseModel):
     # has no rate
     speed: float = Field(default=1.0, ge=0.5, le=2.0)
     engine: str = DEFAULT_ENGINE
-    # pocket-tts only. Kokoro ignores it, it speaks american english
-    # and that's that.
+    # an id the engine doesn't speak falls back to english
     lang: str = POCKET_DEFAULT_LANG
 
 
@@ -99,7 +151,7 @@ class WarmReq(BaseModel):
 def voices():
     return {
         "engines": {
-            "kokoro": {"voices": KOKORO_VOICES, "default": KOKORO_DEFAULT},
+            "kokoro": _kokoro_voices_info(),
             "pockettts": {
                 "voices": POCKET_VOICES,
                 "default": POCKET_DEFAULT,
@@ -111,15 +163,55 @@ def voices():
     }
 
 
-def synth_kokoro(text, voice, speed):
-    voice = voice if voice in KOKORO_VOICES else KOKORO_DEFAULT
+def _kokoro_voices_info():
+    info = {"voices": KOKORO_VOICES, "default": KOKORO_DEFAULT}
+    langs = kokoro_languages()
+    if len(langs) > 1:
+        info["languages"] = [{"id": lang["id"], "label": lang["label"], "voices": lang["voices"],
+                              "default": lang["default"]} for lang in langs]
+        info["default_language"] = KOKORO_DEFAULT_LANG
+    return info
+
+
+def _kokoro_chunks(pipeline, text, voice, speed):
     chunks = []
-    for _gs, _ps, audio in get_pipeline()(text, voice=voice, speed=speed):
+    for _gs, _ps, audio in pipeline(text, voice=voice, speed=speed):
         if audio is None:
             continue
         if hasattr(audio, "detach"):
             audio = audio.detach().cpu().numpy()
         chunks.append(np.asarray(audio, dtype=np.float32))
+    return chunks
+
+
+# only the English G2P splits long text itself. the others cut the
+# phonemes at 510 and drop the rest, so give them a line per clause
+_CLAUSE_END = re.compile(r"([,;:\uff0c\uff1b\uff1a\u3001])\s*")
+
+
+def _clause_lines(text):
+    return _CLAUSE_END.sub("\\1\n", text) if len(text) > 150 else text
+
+
+def synth_kokoro(text, voice, speed, lang_id=KOKORO_DEFAULT_LANG):
+    lang = KOKORO_LANG_BY_ID.get(lang_id) or KOKORO_LANG_BY_ID[KOKORO_DEFAULT_LANG]
+    voice = voice if voice in lang["voices"] else lang["default"]
+    pipeline = None
+    script = _kokoro_scripts.get(lang["id"])
+    # the zh G2P turns "OK!" into noise. English G2P, same voice
+    if script is None or script.search(text):
+        pipeline = get_kokoro_pipeline(lang)
+    chunks = None
+    if pipeline is not None:
+        try:
+            lines = text if pipeline is state.pipeline else _clause_lines(text)
+            chunks = _kokoro_chunks(pipeline, lines, voice, speed)
+        except Exception:
+            if pipeline is state.pipeline:
+                raise
+            log.exception("Kokoro %s synth failed, retrying this chunk with the English G2P", lang["label"])
+    if chunks is None:
+        chunks = _kokoro_chunks(get_pipeline(), text, voice, speed)
     if not chunks:
         return None
     return np.concatenate(chunks), KOKORO_SAMPLE_RATE
@@ -171,7 +263,7 @@ def tts(req: TTSReq):
             if engine == "pockettts":
                 result = synth_pocket(req.text, req.voice, req.lang)
             else:
-                result = synth_kokoro(req.text, req.voice, req.speed)
+                result = synth_kokoro(req.text, req.voice, req.speed, req.lang)
         finally:
             state.end_use()
     finally:
@@ -193,7 +285,9 @@ def warm(req: WarmReq):
     # the client warms pocket-tts language weights and voice state
     # while Jun is still writing, so the multi second reload is
     # done before /tts asks. a language change is still a full
-    # reload. Kokoro has no language checkpoints, nothing to warm.
+    # reload. Kokoro only builds the G2P and fetches the voice.
+    if req.engine == "kokoro":
+        return _warm_kokoro(req)
     if req.engine != "pockettts":
         return {"ok": True, "warmed": None}
     language = req.lang if req.lang in POCKET_LANG_IDS else POCKET_DEFAULT_LANG
@@ -210,3 +304,27 @@ def warm(req: WarmReq):
     finally:
         state.tts_slots.release()
     return {"ok": True, "warmed": language}
+
+
+def _warm_kokoro(req):
+    lang = KOKORO_LANG_BY_ID.get(req.lang)
+    if lang is None or lang["id"] == KOKORO_DEFAULT_LANG:
+        return {"ok": True, "warmed": None}
+    voice = req.voice if req.voice in lang["voices"] else lang["default"]
+    if not _acquire_tts_slot():
+        return _tts_busy()
+    warmed = None
+    try:
+        state.begin_use("kokoro")
+        try:
+            pipeline = get_kokoro_pipeline(lang)
+            if pipeline is not None:
+                pipeline.load_voice(voice)
+                warmed = lang["id"]
+        except Exception:
+            log.exception("Kokoro warm for %s failed", lang["label"])
+        finally:
+            state.end_use()
+    finally:
+        state.tts_slots.release()
+    return {"ok": True, "warmed": warmed}

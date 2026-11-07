@@ -15,7 +15,7 @@ function provider_post_chat(string $provider, array $payload, ?string &$error = 
         curl_setopt_array($ch, [
             CURLOPT_POST => true,
             CURLOPT_HTTPHEADER => chat_request_headers($provider),
-            CURLOPT_POSTFIELDS => json_encode($payload, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES),
+            CURLOPT_POSTFIELDS => provider_json_body($payload, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES),
             CURLOPT_RETURNTRANSFER => true,
             CURLOPT_TIMEOUT => 120,
             CURLOPT_CONNECTTIMEOUT => 10,
@@ -99,7 +99,7 @@ function generate_chat_title(string $userMessage): ?string {
 
     $msg = spoken_text($userMessage);
     if ($msg === '') return null;
-    $msg = substr($msg, 0, 500);
+    $msg = mb_substr($msg, 0, 500);
 
     if ($provider === 'llamacpp') return clean_chat_title(llamacpp_title($model, $msg));
 

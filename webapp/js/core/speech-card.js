@@ -3,7 +3,7 @@ import { apiGet } from './api.js?v=1';
 import { gaugeTier } from './mood-tier.js?v=2';
 import * as Names from './names.js?v=1';
 import * as MobileViewport from './viewport.js?v=1';
-import * as TTS from '../voice/tts.js?v=90';
+import * as TTS from '../voice/tts.js?v=91';
 
 export let affection = 0;
 export let trust = 0;
@@ -52,6 +52,8 @@ export function configureTts() {
   TTS.setEnabled(localStorage.getItem('tts.enabled') === '1');
   TTS.setEngine(localStorage.getItem('tts.engine') || 'kokoro');
   TTS.setVoice(localStorage.getItem('tts.voice') || 'af_heart');
+  TTS.setLang(localStorage.getItem('tts.lang') || 'auto');
+  try { TTS.setLangVoices(JSON.parse(localStorage.getItem('tts.voices') || '{}')); } catch { TTS.setLangVoices({}); }
   TTS.setSpeed(parseFloat(localStorage.getItem('tts.speed') || '1') || 1);
   return TTS.isEnabled();
 }

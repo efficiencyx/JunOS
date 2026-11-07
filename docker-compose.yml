@@ -217,7 +217,9 @@ services:
     pids_limit: 256
     read_only: true
     tmpfs:
-      - /tmp:size=512m,mode=1777
+      # exec ON PURPOSE. phonemizer copies libespeak-ng.so in here and
+      # dlopens it, noexec = no espeak and her French/Italian/... comes out as English
+      - /tmp:size=512m,mode=1777,exec
     environment:
       SIDECAR_SECRET: "${SIDECAR_SECRET:-}"
       TTS_DEVICE: "${TTS_DEVICE:-cpu}"

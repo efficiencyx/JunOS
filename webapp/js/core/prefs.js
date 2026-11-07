@@ -10,6 +10,7 @@ export const TRACKED = [
   'tts.enabled',
   'tts.engine',
   'tts.voice',
+  'tts.voices',
   'tts.lang',
   'tts.speed',
   'audio.volume',
