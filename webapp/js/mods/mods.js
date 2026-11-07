@@ -1,1 +1,1 @@
-export { applyAll, describe, holds, setDecalHooks, itemNames, owns, refreshTints, wearByName } from './engine.js?v=28';
+export { applyAll, describe, holds, setDecalHooks, itemNames, owns, refreshTints, wearByName } from './engine.js?v=29';

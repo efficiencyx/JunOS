@@ -1,4 +1,6 @@
+import importlib.util
 import logging
+import re
 import threading
 from typing import Annotated
 
@@ -9,7 +11,8 @@ from pydantic import BaseModel, Field, StringConstraints
 
 from . import state
 from .audio import to_wav
-from .config import (DEFAULT_ENGINE, KOKORO_DEFAULT, KOKORO_SAMPLE_RATE, KOKORO_VOICES, POCKET_DEFAULT,
+from .config import (DEFAULT_ENGINE, KOKORO_DEFAULT, KOKORO_DEFAULT_LANG, KOKORO_LANG_BY_ID, KOKORO_LANGUAGES,
+                     KOKORO_SAMPLE_RATE, KOKORO_VOICES, POCKET_DEFAULT,
                      POCKET_DEFAULT_LANG, POCKET_LANG_IDS, POCKET_LANGUAGES, POCKET_VOICES, TTS_ENGINES,
                      TTS_MAX_QUEUE, TTS_QUEUE_WAIT_S)
 from .devices import get_device
@@ -24,6 +27,15 @@ router = APIRouter()
 _pocket_load_lock = threading.Lock()
 _tts_waiting = 0
 
+# serialises building Kokoro's non-English G2Ps, same idea as the
+# pocket lock. a lang_code lands in _kokoro_g2p_failed when its G2P
+# won't build (the misaki extra isn't installed, usually). that
+# doesn't fix itself without a restart, so stop retrying and stop
+# logging it on every chunk.
+_kokoro_load_lock = threading.Lock()
+_kokoro_g2p_failed = set()
+_kokoro_scripts = {lang["id"]: re.compile(lang["script"]) for lang in KOKORO_LANGUAGES if lang["script"]}
+
 
 def get_pipeline():
     # loaded late so a failure at import (missing espeak-ng,
@@ -35,6 +47,41 @@ def get_pipeline():
         state.pipeline = KPipeline(lang_code="a", device=device)
         log.info("Kokoro ready.")
     return state.pipeline
+
+
+def kokoro_languages():
+    # the KOKORO_LANGUAGES whose G2P modules are installed. find_spec
+    # only looks for them, it imports nothing, so /voices stays cheap.
+    return [lang for lang in KOKORO_LANGUAGES
+            if all(importlib.util.find_spec(m) is not None for m in lang["needs"])]
+
+
+def get_kokoro_pipeline(lang):
+    # the pipeline for one KOKORO_LANGUAGES entry, or None when its
+    # G2P can't be built. never part of the pre-warm, so a missing
+    # extra can't slow down or break startup.
+    english = get_pipeline()
+    code = lang["lang_code"]
+    if code == english.lang_code:
+        return english
+    g2p = state.kokoro_g2p.get(code)
+    if g2p is not None or code in _kokoro_g2p_failed:
+        return g2p
+    with _kokoro_load_lock:
+        g2p = state.kokoro_g2p.get(code)
+        if g2p is None and code not in _kokoro_g2p_failed:
+            try:
+                from kokoro import KPipeline
+                log.info("loading Kokoro %s G2P (lang_code=%r), sharing the loaded model...", lang["label"], code)
+                # model= hands it the weights already loaded, only the
+                # G2P is new. no second copy in memory.
+                g2p = KPipeline(lang_code=code, repo_id="hexgrad/Kokoro-82M", model=english.model)
+                state.kokoro_g2p[code] = g2p
+                log.info("Kokoro %s ready.", lang["label"])
+            except Exception:
+                _kokoro_g2p_failed.add(code)
+                log.exception("Kokoro %s unavailable, it gets the English G2P until restart", lang["label"])
+    return g2p
 
 
 def get_pocket_model(language=POCKET_DEFAULT_LANG):
@@ -84,8 +131,9 @@ class TTSReq(BaseModel):
     # has no rate
     speed: float = Field(default=1.0, ge=0.5, le=2.0)
     engine: str = DEFAULT_ENGINE
-    # pocket-tts only. Kokoro ignores it, it speaks american english
-    # and that's that.
+    # a POCKET_LANGUAGES id for pocket-tts, a KOKORO_LANGUAGES id for
+    # Kokoro. each engine puts an id it doesn't know back to its
+    # default, both of which are english.
     lang: str = POCKET_DEFAULT_LANG
 
 
@@ -99,7 +147,7 @@ class WarmReq(BaseModel):
 def voices():
     return {
         "engines": {
-            "kokoro": {"voices": KOKORO_VOICES, "default": KOKORO_DEFAULT},
+            "kokoro": _kokoro_voices_info(),
             "pockettts": {
                 "voices": POCKET_VOICES,
                 "default": POCKET_DEFAULT,
@@ -111,15 +159,49 @@ def voices():
     }
 
 
-def synth_kokoro(text, voice, speed):
-    voice = voice if voice in KOKORO_VOICES else KOKORO_DEFAULT
+def _kokoro_voices_info():
+    info = {"voices": KOKORO_VOICES, "default": KOKORO_DEFAULT}
+    # one language is no choice, so no `languages` and the client
+    # keeps the row hidden, same as before any of this existed.
+    langs = kokoro_languages()
+    if len(langs) > 1:
+        info["languages"] = [{"id": lang["id"], "label": lang["label"], "voices": lang["voices"],
+                              "default": lang["default"]} for lang in langs]
+        info["default_language"] = KOKORO_DEFAULT_LANG
+    return info
+
+
+def _kokoro_chunks(pipeline, text, voice, speed):
     chunks = []
-    for _gs, _ps, audio in get_pipeline()(text, voice=voice, speed=speed):
+    for _gs, _ps, audio in pipeline(text, voice=voice, speed=speed):
         if audio is None:
             continue
         if hasattr(audio, "detach"):
             audio = audio.detach().cpu().numpy()
         chunks.append(np.asarray(audio, dtype=np.float32))
+    return chunks
+
+
+def synth_kokoro(text, voice, speed, lang_id=KOKORO_DEFAULT_LANG):
+    lang = KOKORO_LANG_BY_ID.get(lang_id) or KOKORO_LANG_BY_ID[KOKORO_DEFAULT_LANG]
+    voice = voice if voice in lang["voices"] else lang["default"]
+    pipeline = None
+    script = _kokoro_scripts.get(lang["id"])
+    # "OK!" in a Mandarin chat has nothing this G2P can read, it
+    # turns latin letters into noise. the English G2P in the same
+    # voice gives accented but real English.
+    if script is None or script.search(text):
+        pipeline = get_kokoro_pipeline(lang)
+    chunks = None
+    if pipeline is not None:
+        try:
+            chunks = _kokoro_chunks(pipeline, text, voice, speed)
+        except Exception:
+            if pipeline is state.pipeline:
+                raise
+            log.exception("Kokoro %s synth failed, retrying this chunk with the English G2P", lang["label"])
+    if chunks is None:
+        chunks = _kokoro_chunks(get_pipeline(), text, voice, speed)
     if not chunks:
         return None
     return np.concatenate(chunks), KOKORO_SAMPLE_RATE
@@ -171,7 +253,7 @@ def tts(req: TTSReq):
             if engine == "pockettts":
                 result = synth_pocket(req.text, req.voice, req.lang)
             else:
-                result = synth_kokoro(req.text, req.voice, req.speed)
+                result = synth_kokoro(req.text, req.voice, req.speed, req.lang)
         finally:
             state.end_use()
     finally:
@@ -193,7 +275,11 @@ def warm(req: WarmReq):
     # the client warms pocket-tts language weights and voice state
     # while Jun is still writing, so the multi second reload is
     # done before /tts asks. a language change is still a full
-    # reload. Kokoro has no language checkpoints, nothing to warm.
+    # reload. Kokoro has one model for every language, so its warm
+    # only builds a non-English G2P and fetches the voice, a second or
+    # so the first chunk doesn't have to wait for.
+    if req.engine == "kokoro":
+        return _warm_kokoro(req)
     if req.engine != "pockettts":
         return {"ok": True, "warmed": None}
     language = req.lang if req.lang in POCKET_LANG_IDS else POCKET_DEFAULT_LANG
@@ -210,3 +296,28 @@ def warm(req: WarmReq):
     finally:
         state.tts_slots.release()
     return {"ok": True, "warmed": language}
+
+
+def _warm_kokoro(req):
+    lang = KOKORO_LANG_BY_ID.get(req.lang)
+    if lang is None or lang["id"] == KOKORO_DEFAULT_LANG:
+        return {"ok": True, "warmed": None}
+    voice = req.voice if req.voice in lang["voices"] else lang["default"]
+    if not _acquire_tts_slot():
+        return _tts_busy()
+    warmed = None
+    try:
+        state.begin_use("kokoro")
+        try:
+            pipeline = get_kokoro_pipeline(lang)
+            if pipeline is not None:
+                pipeline.load_voice(voice)
+                warmed = lang["id"]
+        except Exception:
+            # best effort, the first real chunk just loads it instead
+            log.exception("Kokoro warm for %s failed", lang["label"])
+        finally:
+            state.end_use()
+    finally:
+        state.tts_slots.release()
+    return {"ok": True, "warmed": warmed}

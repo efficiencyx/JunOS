@@ -2,9 +2,9 @@
 
 import * as Feed from './consolidation-feed.js?v=3';
 import * as Live2D from '../live2d/live2d.js?v=90';
-import * as VoiceMode from '../voice/voicemode.js?v=90';
+import * as VoiceMode from '../voice/voicemode.js?v=91';
 import * as Achievements from '../achievements/achievements.js?v=8';
-import { showFaceBubble } from './face-bubble.js?v=91';
+import { showFaceBubble } from './face-bubble.js?v=92';
 import { escapeHtml } from '../core/util.js?v=1';
 
 const DRAWERS = [

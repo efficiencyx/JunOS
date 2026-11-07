@@ -637,7 +637,7 @@ html[data-pre-auth] #app { visibility: hidden; }
 
 <script type="module" src="js/core/pwa.js?v=2"></script>
 <script src="js/boot-gate.js?v=29"></script>
-<script type="module" src="js/app.js?v=143"></script>
+<script type="module" src="js/app.js?v=144"></script>
 </head>
 <body>
 
@@ -924,22 +924,22 @@ html[data-pre-auth] #app { visibility: hidden; }
             <option value="pockettts">Pocket-TTS</option>
           </select></div>
         </div>
+        <div class="set-row" data-dep="tts" id="ttsLangRow" hidden>
+          <div class="set-row-text">
+            <div class="set-row-title">Language</div>
+            <div class="set-row-desc">Which language she speaks. Auto-detect goes by the text: per reply on Pocket-TTS, per sentence on Kokoro, with each language's own voice.</div>
+          </div>
+          <div class="set-row-control"><select id="ttsLangSelect" aria-label="TTS language"></select></div>
+        </div>
         <div class="set-row" data-dep="tts">
           <div class="set-row-text">
             <div class="set-row-title">Voice</div>
-            <div class="set-row-desc">Which voice to use.</div>
+            <div class="set-row-desc">Which voice to use. On Kokoro, each language keeps its own.</div>
           </div>
           <div class="set-row-control voice-pick">
             <select id="ttsVoiceSelect" aria-label="TTS voice"></select>
             <button class="secondary" id="ttsPreviewBtn" type="button" title="Hear this voice">Play</button>
           </div>
-        </div>
-        <div class="set-row" data-dep="tts" id="ttsLangRow" hidden>
-          <div class="set-row-text">
-            <div class="set-row-title">Language</div>
-            <div class="set-row-desc">Which language Pocket-TTS speaks. Auto-detect routes each reply by its text.</div>
-          </div>
-          <div class="set-row-control"><select id="ttsLangSelect" aria-label="TTS language"></select></div>
         </div>
         <div class="set-row" data-dep="tts">
           <div class="set-row-text">

@@ -11,6 +11,37 @@ KOKORO_VOICES = [
     "bf_alice", "bf_emma", "bf_isabella", "bf_lily",
 ]
 
+# the languages Kokoro gets offered in. one entry each, and that's
+# the whole registry: id is what the client sends as `lang` (the
+# same field pocket-tts uses, tts.php already checks its shape),
+# lang_code picks Kokoro's G2P, voices are the ones made for it.
+# needs lists the modules that G2P imports. a language missing any
+# of them is left out of /voices, so the menu never offers it.
+# script, when set, is the characters only that language writes:
+# a chunk without any goes through the English G2P instead, in the
+# same voice, since this G2P would read latin letters as noise.
+#
+# adding a language: an entry here, its misaki extra pinned in
+# requirements.txt, and a rule in js/voice/kokoro-lang.js so
+# auto-detect can find it. female voices only, like the EN list
+# above. the 4 Mandarin ones are all graded D upstream, pick by ear.
+KOKORO_LANGUAGES = [
+    {
+        "id": "english", "label": "English", "lang_code": "a",
+        "voices": KOKORO_VOICES, "default": KOKORO_DEFAULT,
+        "needs": (), "script": None,
+    },
+    {
+        "id": "mandarin", "label": "Mandarin Chinese", "lang_code": "z",
+        "voices": ["zf_xiaobei", "zf_xiaoni", "zf_xiaoxiao", "zf_xiaoyi"],
+        "default": "zf_xiaobei",
+        "needs": ("jieba", "pypinyin", "cn2an"),
+        "script": r"[\u3400-\u9fff\uf900-\ufaff]",
+    },
+]
+KOKORO_DEFAULT_LANG = "english"
+KOKORO_LANG_BY_ID = {lang["id"]: lang for lang in KOKORO_LANGUAGES}
+
 # pocket-tts voice names pick timbre, not language. each has an
 # embedding for every POCKET_LANGUAGES entry. giovanni, lola,
 # juergen, rafael and estelle keep the accent of their non-English

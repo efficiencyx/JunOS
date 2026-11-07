@@ -1,4 +1,4 @@
-import * as Prefs from '../core/prefs.js?v=6';
+import * as Prefs from '../core/prefs.js?v=7';
 import * as Auth from '../core/auth.js?v=1';
 
 const authScreen = document.getElementById('authScreen');
