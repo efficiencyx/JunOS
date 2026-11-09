@@ -191,7 +191,7 @@ DECALS = {
 
 # one sheet per item, not a png per drawable (nails alone are 22).
 # outfit/catalog.js names these keys
-DECALS = {
+DECAL_SHEETS = {
     "eyeshadow": ["eyeShadow_common"],
     "goth_eyeshadow": ["gothEyeShadow_common"],
     "eyeliner": ["eyeliner_common"],
@@ -645,7 +645,7 @@ class Recovery:
 
     def recover_decals(self):
         mapping = {}
-        for key, cnames in DECALS.items():
+        for key, cnames in DECAL_SHEETS.items():
             self.attempt(key, lambda k=key, c=cnames: mapping.__setitem__(k, self.recover_decal(k, c)))
         path = os.path.join(self.out, "variants", "decals", "mapping.json")
         os.makedirs(os.path.dirname(path), exist_ok=True)
