@@ -1,6 +1,6 @@
 import { moodControlPhrases, moodControlVals, moodInputs, moodPhrases, moodRefreshBtn, moodVals } from './dom.js?v=77';
 import { renderGreeting } from './greetings.js?v=14';
-import * as Live2D from '../live2d/live2d.js?v=90';
+import * as Live2D from '../live2d/live2d.js?v=91';
 
 const MOOD_PHRASES = {
   affection: [

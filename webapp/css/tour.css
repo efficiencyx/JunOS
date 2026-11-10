@@ -1,0 +1,233 @@
+/* first-run tour, app/tour.js builds it. over the settings dialog
+   (200) and the confirm dialogs (300), under the welcome scene
+   (400). */
+
+.tour {
+  --tour-ease: cubic-bezier(.2, .7, .2, 1);
+  --tour-gutter: clamp(16px, 4vw, 56px);
+  --tour-dim: rgb(0 0 0 / .62);
+  position: fixed;
+  inset: 0;
+  z-index: 350;
+  overflow: hidden;
+  pointer-events: none;
+  transition: opacity .3s ease;
+}
+.tour.is-leaving { opacity: 0; }
+
+/* nothing under the tour takes a click until the last step, or a
+   half-typed message and her real reply land in the middle of it */
+.tour-block {
+  position: absolute;
+  inset: 0;
+  pointer-events: auto;
+  cursor: pointer;
+}
+.tour.is-last .tour-block,
+.tour.is-leaving .tour-block { pointer-events: none; }
+
+/* edges only. a tint in the middle would colour HER, and the
+   first thing she says is that she's white */
+.tour-fx {
+  position: absolute;
+  inset: 0;
+  background: radial-gradient(120% 90% at 50% 45%, transparent 38%,
+    color-mix(in srgb, var(--bg) 72%, transparent) 78%,
+    color-mix(in srgb, #000 82%, transparent) 100%);
+  opacity: 0;
+  transition: opacity .9s ease;
+}
+.tour.is-lit .tour-fx { opacity: 1; }
+.tour:not(.is-lit) .tour-fx { transition-duration: .6s; }
+
+/* the dim IS this box's shadow. no target, tour.js sizes it to
+   the whole window and the shadow is off screen */
+.tour-spot {
+  position: absolute;
+  top: 0;
+  left: 0;
+  box-sizing: border-box;
+  border: 1px solid transparent;
+  box-shadow: 0 0 0 100vmax transparent, inset 0 0 22px 4px transparent;
+  transition: box-shadow .5s ease, border-color .5s ease;
+}
+.tour.has-target .tour-spot {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 100vmax var(--tour-dim), inset 0 0 22px 4px var(--tour-dim);
+}
+.tour-spot::after {
+  content: '';
+  position: absolute;
+  inset: -1px;
+  border: 1px solid var(--accent);
+  border-radius: inherit;
+  opacity: 0;
+}
+.tour-spot.ping::after { animation: tourPing .6s var(--tour-ease); }
+@keyframes tourPing {
+  from { opacity: .9; }
+  to { opacity: 0; inset: -14px; }
+}
+
+.tour-scrim {
+  position: absolute;
+  right: 0;
+  bottom: 0;
+  left: 0;
+  height: 46%;
+  background: linear-gradient(0deg, color-mix(in srgb, var(--bg) 94%, transparent), transparent);
+  opacity: 0;
+  transition: opacity .4s ease;
+}
+.tour[data-dock^="t"] .tour-scrim {
+  top: 0;
+  bottom: auto;
+  background: linear-gradient(180deg, color-mix(in srgb, var(--bg) 94%, transparent), transparent);
+}
+.tour.captioned .tour-scrim { opacity: 1; }
+
+.tour-l3 {
+  position: absolute;
+  bottom: max(28px, calc(env(safe-area-inset-bottom, 0px) + 16px));
+  left: var(--tour-gutter);
+  display: flex;
+  align-items: flex-end;
+  gap: var(--space-5, 24px);
+  width: fit-content;
+  max-width: min(600px, calc(100% - 2 * var(--tour-gutter)));
+  color: var(--fg);
+  transition: opacity .24s ease;
+}
+.tour-l3[hidden] { display: none; }
+.tour-l3.swap { opacity: 0; }
+.tour[data-dock$="r"] .tour-l3 { right: var(--tour-gutter); left: auto; }
+/* the skip button has the row under the header */
+.tour[data-dock^="t"] .tour-l3 { top: calc(var(--header-h, 56px) + 52px); bottom: auto; }
+
+.tour-text {
+  flex: 1;
+  min-width: 0;
+}
+.tour-who {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2, 8px);
+  color: var(--dim, var(--muted));
+  font-family: ui-monospace, 'SF Mono', Menlo, Consolas, monospace;
+  font-size: 12px;
+}
+.tour-face { border-radius: 50%; }
+.tour-label {
+  margin: 6px 0 0;
+  color: var(--fg);
+  font-size: clamp(24px, 2.6vw, 38px);
+  font-weight: 700;
+  line-height: 1.08;
+  letter-spacing: -.02em;
+}
+.tour-rule {
+  width: 84px;
+  height: 3px;
+  margin: 12px 0 10px;
+  background: var(--grad, var(--accent));
+  border-radius: 2px;
+}
+.tour-cap {
+  margin: 0;
+  color: var(--muted);
+  font-size: 16px;
+  line-height: 1.45;
+  text-wrap: balance;
+}
+.tour-next {
+  flex: none;
+  padding: 8px 16px;
+  background: var(--bg-3);
+  border: 1px solid var(--border-2);
+  border-radius: 999px;
+  color: var(--fg);
+  font-size: 14px;
+  pointer-events: auto;
+}
+.tour-l3.swap .tour-next { pointer-events: none; }
+
+@keyframes tourMaskIn { from { clip-path: inset(0 100% 0 0); } to { clip-path: inset(0 0 0 0); } }
+@keyframes tourMaskOut { to { clip-path: inset(0 0 0 100%); } }
+@keyframes tourRiseIn { from { opacity: 0; transform: translateY(14px); } }
+@keyframes tourPopIn { from { opacity: 0; transform: scale(.6); } }
+
+.tour-l3.play .tour-label { animation: tourMaskIn .46s var(--tour-ease) both; }
+.tour-l3.play .tour-rule { animation: tourMaskIn .38s var(--tour-ease) .3s both; }
+.tour-l3.play .tour-cap { animation: tourMaskIn .48s var(--tour-ease) .42s both; }
+.tour-l3.play .tour-next { animation: tourRiseIn .4s var(--tour-ease) .7s both; }
+.tour-l3.signon.play .tour-face { animation: tourPopIn .42s var(--tour-ease) both; }
+.tour-l3.signon.play .tour-who { animation: tourMaskIn .4s var(--tour-ease) .12s both; }
+.tour-l3.signon.play .tour-label { animation-delay: .34s; }
+.tour-l3.signon.play .tour-rule { animation-delay: .64s; }
+.tour-l3.signon.play .tour-cap { animation-delay: .76s; }
+.tour-l3.signon.play .tour-next { animation-delay: 1.04s; }
+.tour-l3.out { animation: tourMaskOut .42s cubic-bezier(.65, 0, .35, 1) both; }
+
+.tour-skip {
+  position: absolute;
+  top: calc(var(--header-h, 0px) + var(--space-2, 8px));
+  right: var(--space-4, 16px);
+  font-family: ui-monospace, 'SF Mono', Menlo, Consolas, monospace;
+  font-size: 12px;
+  pointer-events: auto;
+  animation: tourRiseIn .4s var(--tour-ease) 1.2s both;
+}
+
+.tour-black {
+  position: absolute;
+  inset: 0;
+  background: var(--bg);
+  opacity: 0;
+  transition: opacity .9s ease;
+}
+.tour.is-dark .tour-black { opacity: 1; transition-duration: .26s; }
+
+/* she talks, the app clears the room. the hero text sits ON her
+   face on a fresh chat, so that one is gone for the whole tour */
+body.tour-mode .messages-empty,
+body.tour-mode .prompt-chips { visibility: hidden; }
+body.tour-mode .app-header,
+body.tour-mode .conv-sidebar,
+body.tour-mode .composer-area { transition: opacity .4s ease; }
+body.tour-stage .app-header,
+body.tour-stage .conv-sidebar,
+body.tour-stage .composer-area { opacity: 0; }
+
+body.tour-mode #stageStatus { visibility: hidden; }
+
+/* the caption gets the strip under the settings dialog */
+body.tour-band { --tour-band: 200px; }
+body.tour-band .settings-drawer {
+  top: calc(50% - var(--tour-band) / 2);
+  height: min(calc(100dvh - var(--tour-band) - 32px), max(580px, 76dvh), 1000px);
+}
+@media (max-width: 900px) {
+  body.tour-band .settings-drawer {
+    top: calc(var(--visual-viewport-top, 0px) + (var(--visual-viewport-height, 100dvh) - var(--tour-band)) / 2);
+    height: calc(var(--visual-viewport-height, 100dvh) - var(--tour-band) - 16px);
+  }
+}
+html.phone-ui body.tour-band .settings-drawer,
+html.phone-ui body.tour-band .settings-drawer.open {
+  top: var(--visual-viewport-top, 0px);
+  height: calc(var(--visual-viewport-height, 100dvh) - var(--tour-band));
+}
+
+@media (max-width: 600px) {
+  .tour-l3 { gap: var(--space-3, 12px); }
+  .tour-cap { font-size: 15px; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .tour, .tour-fx, .tour-spot, .tour-scrim, .tour-l3, .tour-black,
+  body.tour-mode .app-header, body.tour-mode .conv-sidebar, body.tour-mode .composer-area { transition: none; }
+  .tour-spot.ping::after, .tour-skip, .tour-l3.out,
+  .tour-l3.play .tour-label, .tour-l3.play .tour-rule, .tour-l3.play .tour-cap,
+  .tour-l3.play .tour-next, .tour-l3.signon.play .tour-face, .tour-l3.signon.play .tour-who { animation: none; }
+  .tour-l3.out { opacity: 0; }
+}

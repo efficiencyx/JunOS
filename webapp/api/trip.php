@@ -45,6 +45,16 @@ PROMPT;
     return $none;
 }
 
+// the first-run tour ends with her begging to go to the shop.
+// that one trip needs no grant from the model
+function tour_done(int $userId): bool {
+    $stmt = db()->prepare('SELECT data FROM preferences WHERE user_id=?');
+    $stmt->execute([$userId]);
+    $row = $stmt->fetch();
+    $prefs = $row ? json_decode((string)dec($row['data']), true) : null;
+    return is_array($prefs) && (string)($prefs['tour.done'] ?? '') === '1';
+}
+
 $user = require_user();
 rate_limit('trip', 30, 60);
 $userId = (int)$user['id'];
@@ -63,8 +73,9 @@ $action = $_GET['action'] ?? '';
 $body = ($_SERVER['CONTENT_LENGTH'] ?? 0) > 0 ? read_json_body(48 * 1024) : [];
 
 if ($action === 'go') {
-    if (!$canForce) fail(403, 'forbidden');
     $where = (string)($body['where'] ?? '');
+    $tourTrip = $where === 'shop' && ($body['tour'] ?? false) === true && !tour_done($userId);
+    if (!$canForce && !$tourTrip) fail(403, 'forbidden');
     if (!in_array($where, ['shop', 'karaoke', 'date', 'watch'], true)) fail(400, 'invalid_request');
     trip_set($userId, $where, (int)($body['conversation_id'] ?? 0));
     json_out(['ok' => true]);

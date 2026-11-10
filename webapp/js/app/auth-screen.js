@@ -1,4 +1,4 @@
-import * as Prefs from '../core/prefs.js?v=7';
+import * as Prefs from '../core/prefs.js?v=8';
 import * as Auth from '../core/auth.js?v=1';
 
 const authScreen = document.getElementById('authScreen');
@@ -9,39 +9,6 @@ const authFormSignup = document.getElementById('authFormSignup');
 const authFormRecover = document.getElementById('authFormRecover');
 const authRecoveryCode = document.getElementById('authRecoveryCode');
 const signOutBtn = document.getElementById('signOutBtn');
-
-function detectOS() {
-  const forced = new URLSearchParams(location.search).get('os');
-  if (forced === 'mac' || forced === 'windows' || forced === 'linux') return forced;
-  const p = (navigator.userAgentData && navigator.userAgentData.platform)
-    || navigator.platform || navigator.userAgent || '';
-  const s = p.toLowerCase();
-  if (/mac|iphone|ipad|ipod/.test(s)) return 'mac';
-  if (/win/.test(s)) return 'windows';
-  return 'linux';
-}
-(function flavorTerminals() {
-  const os = detectOS();
-  const authTitles = { mac: 'jun - -zsh - 80×24', windows: 'Windows PowerShell', linux: 'jun@junbuntu: ~' };
-  const bootTitles = { mac: 'jun - boot - 80×24', windows: 'Windows PowerShell', linux: 'jun@junbuntu: ~/boot' };
-  const names = { mac: 'macOS', windows: 'Windows', linux: 'Linux' };
-
-  const authTerm = document.getElementById('authTerm');
-  if (authTerm) {
-    authTerm.setAttribute('data-os', os);
-    const t = document.getElementById('authTermTitle');
-    if (t) t.textContent = authTitles[os];
-    const n = authTerm.querySelector('.auth-os-name');
-    if (n) n.textContent = names[os];
-  }
-
-  const bootTerm = document.querySelector('.boot-term');
-  if (bootTerm) {
-    bootTerm.setAttribute('data-os', os);
-    const bt = bootTerm.querySelector('.term-title');
-    if (bt) bt.textContent = bootTitles[os];
-  }
-})();
 
 export function showAuthScreen() {
   if (authScreen) authScreen.hidden = false;
@@ -86,6 +53,9 @@ if (authTabLogin && authTabSignup) {
     authFormLogin.hidden = true;
   });
 }
+
+const EMAIL_SHAPE = /^[^@\s]+@[^@\s]+\.[^@\s]+$/;
+const PASSWORD_TOO_SHORT = 'Password must be at least 8 characters.';
 
 function setAuthError(id, msg) {
   const el = document.getElementById(id);
@@ -133,6 +103,9 @@ if (authFormRecover) {
     const email = document.getElementById('recoverEmail').value.trim();
     const code = document.getElementById('recoverCode').value.trim();
     const password = document.getElementById('recoverPassword').value;
+    if (!EMAIL_SHAPE.test(email)) return setAuthError('recoverError', 'Invalid email address.');
+    if (!code) return setAuthError('recoverError', 'Enter your recovery code.');
+    if (password.length < 8) return setAuthError('recoverError', PASSWORD_TOO_SHORT);
     const btn = document.getElementById('recoverBtn');
     btn.disabled = true;
     try {
@@ -152,6 +125,7 @@ if (authFormLogin) {
     setAuthError('loginError', '');
     const email = document.getElementById('loginEmail').value.trim();
     const password = document.getElementById('loginPassword').value;
+    if (!email || !password) return setAuthError('loginError', 'Enter your email and password.');
     const btn = document.getElementById('loginBtn');
     btn.disabled = true;
     try {
@@ -173,6 +147,9 @@ if (authFormSignup) {
     const password = document.getElementById('signupPassword').value;
     const adultConsent = document.getElementById('signupAdult').checked;
     const regKey = (document.getElementById('signupRegKey')?.value || '').trim();
+    if (!EMAIL_SHAPE.test(email)) return setAuthError('signupError', 'Invalid email address.');
+    if (password.length < 8) return setAuthError('signupError', PASSWORD_TOO_SHORT);
+    if (!adultConsent) return setAuthError('signupError', 'You must confirm you are 18 or older.');
     const btn = document.getElementById('signupBtn');
     btn.disabled = true;
     try {

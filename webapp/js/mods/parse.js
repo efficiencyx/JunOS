@@ -1,4 +1,4 @@
-import * as Live2D from '../live2d/live2d.js?v=90';
+import * as Live2D from '../live2d/live2d.js?v=91';
 
 function displayText(value, fallback, max = 120) {
   const source = typeof value === 'string' ? value : fallback;

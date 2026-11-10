@@ -53,7 +53,6 @@ body.wardrobe-open .wardrobe-overlay { display: flex; animation: wd-slide-in 0.3
 
 .wd-head { padding: 27px 26px 20px; border-bottom: 1px solid var(--border); }
 .wd-titles { min-width: 0; }
-.wd-kicker { display: block; margin-bottom: 12px; color: var(--accent); font-size: 11px; letter-spacing: .19em; text-transform: uppercase; }
 .wd-title { display: block; margin: 0 0 10px; font: 400 37px/1.05 var(--serif); letter-spacing: -.035em; color: var(--fg); }
 .wd-hint { display: block; font-size: 11px; color: var(--muted); line-height: 1.5; }
 .wd-actions { display: flex; align-items: center; gap: 8px; padding: 16px 24px; border-top: 1px solid #c4a0f026; background: #c4a0f008; }
@@ -199,8 +198,7 @@ body.looks-open .wardrobe-overlay {
   color: var(--muted);
 }
 
-.wd-section:first-child { margin-top: 0; }
-.wd-section.wd-sub { margin-top: 14px; color: var(--muted); }
+.wd-section:first-child { display: none; }
 
 .wd-worn-only .wd-body > :not(.wd-worn-scope, .wd-worn-empty),
 .wd-grid[hidden], .wd-tile[hidden], .wd-worn-empty[hidden] { display: none; }
@@ -505,7 +503,6 @@ body .head-home { z-index: 83; }
 #stage .wardrobe-reaction-name { background: #5d3e75; border-color: #dfc3fa; }
 #stage .wardrobe-reaction-text { background: #241a32; color: #e8e4f0; font-weight: 500; }
 .wd-section::after { content: ""; flex: 1; height: 1px; background: #c4a0f026; }
-.wd-section > span { color: #bc9dd0; }
 .wd-optpop-title { color: var(--accent); }
 .wd-looks-name { background: #100b1880; }
 .wd-looks-name::placeholder { color: var(--muted); }
@@ -556,7 +553,6 @@ body .head-home { z-index: 83; }
   html.wd-landscape #stageStatus { bottom: max(12px, env(safe-area-inset-bottom)); max-width: calc(100vw - var(--panel-w) - 28px); }
   .wd-head { padding: 10px 14px 8px; }
   .wd-title { font-size: 27px; margin-bottom: 5px; }
-  .wd-kicker { display: none; }
   .wd-actions { padding: 9px 12px; gap: 6px; }
   .wd-actions .ghost { padding-inline: 10px; }
   .wd-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; }

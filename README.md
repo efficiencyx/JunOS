@@ -65,6 +65,7 @@ https://github.com/user-attachments/assets/f6c25482-611c-4dde-9f16-8e4cc9474dc2
 
 ## What she does
 
+- **She shows you around, sort of.** First time in she's bone white, blames her hypercamo and has no idea there's a screen. The right panel opens by itself while she talks, and a small card tells you what you're looking at.
 - **She reacts as she talks.** Gestures and expressions land on the word, not two seconds later.
 - **She has a voice**, and her mouth actually follows it.
 - **You can talk back.** Turn on the mic and it's a hands-free conversation. She can hear audio directly (Ollama or llama.cpp, the Jun models ship the bit that lets her hear), or use local speech-to-text. The **Hear everything** switch skips her attempt to ignore side-talk.
@@ -379,7 +380,7 @@ The plain-language versions live in the wiki: **[Common Fixes](https://github.co
 <details>
 <summary><b>The boot screen has a red KO</b></summary>
 
-Each line is a real check now. **neural-core** KO means the model server isn't answering (`./start.sh logs llamacpp` or `logs ollama`, Logs in JunOS.exe), and she keeps retrying until it does. **live2d-rig** KO is the placeholder art, the game assets were never extracted. **voice-synth** KO means the voice sidecar is off or down, chat works without it. **lore-corpus** KO means `webapp/lore_corpus.txt` is missing. Only neural-core keeps you on the boot screen.
+Each line is a real check now. **neural-core** KO means the model server isn't answering (`./start.sh logs llamacpp` or `logs ollama`, Logs in JunOS.exe), and she keeps retrying until it does (after a few tries a "continue without the model" link appears under the status line, the page opens but chat fails until the server is up). **live2d-rig** KO is the placeholder art, the game assets were never extracted. **voice-synth** KO means the voice sidecar is off or down, chat works without it. **lore-corpus** KO means `webapp/lore_corpus.txt` is missing. Only neural-core keeps you on the boot screen.
 </details>
 
 <details>

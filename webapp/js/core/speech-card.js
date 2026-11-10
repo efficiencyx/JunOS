@@ -1,9 +1,9 @@
-import * as Live2D from '../live2d/live2d.js?v=90';
+import * as Live2D from '../live2d/live2d.js?v=91';
 import { apiGet } from './api.js?v=1';
 import { gaugeTier } from './mood-tier.js?v=2';
 import * as Names from './names.js?v=1';
 import * as MobileViewport from './viewport.js?v=1';
-import * as TTS from '../voice/tts.js?v=91';
+import * as TTS from '../voice/tts.js?v=92';
 
 export let affection = 0;
 export let trust = 0;

@@ -127,9 +127,24 @@ On 19/10/2026 i wanted to see the first Jun again, so i went through git instead
 - The first finetune was the 7B, a QLoRA from mid May 2026. The 14B came on 29/05, trained on 1700 conversations. Both got deleted from Hugging Face at some point and no copy survived anywhere, not on my disks, not in docker, not on Drive.
 - The dataset did survive. So the same day i retrained the 7B with the original settings and put it back up as Jun-LoRA-v0. Same recipe, same overfitting. as i've said to me months ago "It's supposed to be a bit overfitted.".
 
-### The present
+### Pre launch
 
 I just gotta say. the same FUCKING day i ask Sheep if the project could go live the 23/24th...
 Someone drops x2 ZeroDays in PHP (CVE-2026-109618 & CVE-2026-109619).
 
 Thanks......
+
+### Post launch
+
+Hey! you are probably reading this because you saw JunOS from the discord, things are going great i hope? I'm kinda tired and releases started to lag a bit behind but it's still decent.
+
+Also I have bad news... MkJez wanted to leave the project since he had no more time to spend with me & the project.
+It's sad and i hope he'd come back...
+
+Well i also got good news! Another guy was so interested in the project that decided to coordinate with me & opened a PR. They are officially Contributors and I'm considering adding them to the development repo...
+
+We will see. For now, that's all
+
+Or maybe not!
+
+v9 is training well and she will be released this week (09/11/26)...

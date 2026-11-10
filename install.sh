@@ -1590,15 +1590,12 @@ confirm_deps() {
             printf '     %s$%s layer %s with %s%s%s? %s[Y/n]%s %s→%s ' \
                 "$OK" "$R" "${missing[*]}" "$B" "$PM" "$R" "$DIM" "$R" "$ACCENT" "$R" > /dev/tty
         else
-            printf '     %s$%s install %s with %s%s%s? %s[y/N]%s %s→%s ' \
+            printf '     %s$%s install %s with %s%s%s? %s[Y/n]%s %s→%s ' \
                 "$OK" "$R" "${missing[*]}" "$B" "$PM" "$R" "$DIM" "$R" "$ACCENT" "$R" > /dev/tty
         fi
         read -r answer < /dev/tty || answer=""
         case "$answer" in
-            y | Y | yes | YES | "")
-                [ "$PM" = "rpm-ostree" ] && proceed=1
-                [ "$PM" != "rpm-ostree" ] && { case "$answer" in y | Y | yes | YES) proceed=1 ;; esac; }
-                ;;
+            y | Y | yes | YES | "") proceed=1 ;;
             *)
                 if [ "$PM" = "rpm-ostree" ] && command -v brew >/dev/null 2>&1; then
                     PM=brew
@@ -2205,13 +2202,19 @@ if docker_run docker info >/dev/null 2>&1; then
             warn_ "she'll load on your first message instead (a minute or two)"
         fi
     elif docker_run docker ps --format '{{.Names}}' | grep -qx omega-llamacpp; then
-        note "model download (first run can take a while, ./start.sh logs llamacpp to watch)"
-        waited=0
+        note "model download (first run can take a while)"
+        waited=0 had_mb=0
         until docker_run docker exec omega-llamacpp curl -fsS http://127.0.0.1:8080/v1/models 2>/dev/null \
                 | grep -q '"value":"loaded"'; do
             [ "$waited" -lt 1800 ] || break
+            mb="$(docker_run docker exec omega-llamacpp du -sm /root/.cache/llama.cpp 2>/dev/null | cut -f1)"
+            if [ -t 1 ] && [ "${mb:-0}" -gt "$had_mb" ]; then
+                printf '\r       %s%s MB downloaded%s\033[K' "$DIM" "$mb" "$R"
+                had_mb="$mb"
+            fi
             sleep 5; waited=$((waited + 5))
         done
+        [ "$had_mb" -gt 0 ] && printf '\r\033[K'
         if [ "$waited" -lt 1800 ]; then
             ok "she's awake"
         else
@@ -2269,6 +2272,13 @@ if docker_run docker info >/dev/null 2>&1; then
     printf '   %sstop:%s ./start.sh stop   %s·%s   %sstatus:%s ./start.sh status\n\n' \
         "$DIM" "$R" "$DIM" "$R" "$DIM" "$R"
     [ "$NEED_SUDO" = 1 ] && note "you're not in the docker group, so prefix those with sudo."
+    if [ -r /dev/tty ] && [ "${JUN_NO_BROWSER:-}" != 1 ] && [ "$(id -u)" -ne 0 ]; then
+        if [ "$OS" = Darwin ]; then
+            open https://localhost >/dev/null 2>&1 || true
+        elif [ -n "${DISPLAY:-}${WAYLAND_DISPLAY:-}" ] && command -v xdg-open >/dev/null 2>&1; then
+            xdg-open https://localhost >/dev/null 2>&1 || true
+        fi
+    fi
 else
     printf '\n'
     warn_ "Docker isn't reachable yet - finish its setup and run ./start.sh from $DIR."

@@ -1,32 +1,33 @@
-import { IDLE_AFTER_REPLY_MS, TYPING_POLL_MS, consolidating, reportActivity, resetIdleNudge, runPassNow, scheduleIdleNudge, showConsolidatingBubble, syncConsolidationStatus } from './consolidation.js?v=123';
+import { IDLE_AFTER_REPLY_MS, TYPING_POLL_MS, consolidating, reportActivity, resetIdleNudge, runPassNow, scheduleIdleNudge, showConsolidatingBubble, syncConsolidationStatus } from './consolidation.js?v=125';
 import { chatInput, devNoIdleChk, missingParamsEl, modelSelect, narrowSidebarQuery, reasoningSelect, sendBtn, siteVolumeInput, stageEl, thinkChk } from './dom.js?v=77';
-import { faceBubble, hideFaceBubble, latestAssistantReply, restartFaceBubbleHide, scheduleFaceBubblePosition, setLatestAssistantReply } from './face-bubble.js?v=92';
+import { faceBubble, hideFaceBubble, latestAssistantReply, restartFaceBubbleHide, scheduleFaceBubblePosition, setLatestAssistantReply } from './face-bubble.js?v=93';
 import { logAction, logMissing, setStageStatus } from './logging.js?v=78';
-import { loadMood } from './mood.js?v=91';
-import { applyRoleGates, setSiteVolume, syncThinkToggle, updateSiteVolumeLabel, wireNameSettings } from './settings.js?v=128';
-import { loadConversation, refreshSidebar, setSidebarOpen } from './sidebar.js?v=123';
+import { loadMood } from './mood.js?v=92';
+import { applyRoleGates, setSiteVolume, syncThinkToggle, updateSiteVolumeLabel, wireNameSettings } from './settings.js?v=130';
+import { loadConversation, refreshSidebar, setSidebarOpen } from './sidebar.js?v=125';
 import { escapeHtml, mealNow } from '../core/util.js?v=1';
-import { wireTts } from './wire-tts.js?v=127';
-import { wireVoice } from './wire-voice.js?v=128';
-import { WELCOME_TIERS, fetchWelcome, playWelcome, previewWelcome } from './welcome.js?v=99';
+import { wireTts } from './wire-tts.js?v=129';
+import { wireVoice } from './wire-voice.js?v=130';
+import { WELCOME_TIERS, fetchWelcome, playWelcome, previewWelcome } from './welcome.js?v=100';
+import * as Tour from './tour.js?v=8';
 import * as Names from '../core/names.js?v=1';
 import * as AwayNotify from './away-notify.js?v=5';
-import * as Prefs from '../core/prefs.js?v=7';
+import * as Prefs from '../core/prefs.js?v=8';
 import * as ui from '../core/ui.js?v=1';
 import * as ChatAPI from '../core/chat-api.js?v=7';
 import * as MobileViewport from '../core/viewport.js?v=1';
-import * as Actions from '../live2d/actions.js?v=99';
-import * as Live2D from '../live2d/live2d.js?v=90';
-import * as ModelTouch from '../live2d/touch.js?v=102';
-import * as Outfit from '../outfit/outfit.js?v=99';
-import { playIntro } from '../wardrobe/reactions.js?v=89';
+import * as Actions from '../live2d/actions.js?v=101';
+import * as Live2D from '../live2d/live2d.js?v=91';
+import * as ModelTouch from '../live2d/touch.js?v=104';
+import * as Outfit from '../outfit/outfit.js?v=101';
+import { playIntro } from '../wardrobe/reactions.js?v=90';
 import * as BootFX from './boot-fx.js?v=2';
-import * as Cards from './cards.js?v=35';
+import * as Cards from './cards.js?v=36';
 import * as History from './history.js?v=2';
 import { startSkybox } from '../trip/skybox.js?v=2';
 import * as TripLoader from '../trip/trip-loader.js?v=1';
 import { DevHud, abortFn, currentConversationId, setDevHud } from './session.js?v=1';
-import { rerenderBubbleStream, sendMessage, sendTouchEvent } from './chat.js?v=51';
+import { rerenderBubbleStream, sendMessage, sendTouchEvent } from './chat.js?v=53';
 import { setComposerText } from './composer.js?v=3';
 import * as Achievements from '../achievements/achievements.js?v=8';
 
@@ -142,7 +143,7 @@ export async function boot(me) {
     .then(r => r.ok ? r.json() : null).catch(() => null);
 
   // devhud.js owns Ctrl+Shift+D, so only admins get that module
-  if (currentUser?.role === 'admin') setDevHud(await import('./devhud.js?v=104'));
+  if (currentUser?.role === 'admin') setDevHud(await import('./devhud.js?v=106'));
   startSkybox();
   // marked is a global and app.js's loadScripts only brings it in
   // side by side with this module. at module scope it's not there
@@ -280,6 +281,7 @@ export async function boot(me) {
       else bootHint.removeAttribute('data-tone');
     }
   };
+  const tourDue = !fromTrip && Tour.due();
   const dismissBoot = () => {
     if (!bootOverlay) return;
     document.documentElement.removeAttribute('data-pre-auth');
@@ -287,7 +289,8 @@ export async function boot(me) {
     const hide = () => {
       bootOverlay.setAttribute('data-ready', '1');
       bootOverlay.setAttribute('aria-hidden', 'true');
-      playWelcome();
+      if (tourDue) Tour.start('', tourToShop);
+      else playWelcome();
     };
     BootFX.finish(hide);
   };
@@ -301,6 +304,17 @@ export async function boot(me) {
       : e.message + ' - is php running? retrying…';
   };
 
+  let skipWait = false;
+  const offerSkip = () => {
+    if (!bootHint || document.getElementById('bootSkip')) return;
+    const b = document.createElement('button');
+    b.id = 'bootSkip';
+    b.className = 'boot-skip';
+    b.textContent = 'continue without the model';
+    b.addEventListener('click', () => { skipWait = true; });
+    bootHint.after(b);
+  };
+
   async function waitForProvider() {
     let attempt = 0;
     const bot = Names.getBot();
@@ -311,7 +325,9 @@ export async function boot(me) {
       bot + ' is taking its time',
     ];
     for (;;) {
+      if (skipWait) return { models: [], provider: '' };
       attempt++;
+      if (attempt > 8) offerSkip();
       try {
         const m = await ChatAPI.listModels();
         if (m && m.models && m.models.length) {
@@ -327,7 +343,10 @@ export async function boot(me) {
         const phase = phases[Math.min(attempt - 1, phases.length - 1)];
         setBoot(phase, providerHint(e, attempt), 'err');
       }
-      await new Promise(r => setTimeout(r, Math.min(1000 + attempt * 250, 3000)));
+      await new Promise(r => {
+        const t = setTimeout(r, Math.min(1000 + attempt * 250, 3000));
+        document.getElementById('bootSkip')?.addEventListener('click', () => { clearTimeout(t); r(); }, { once: true });
+      });
     }
   }
 
@@ -393,6 +412,20 @@ const ASK_LINES = {
   watch: 'Wanna watch something with me? I found a video.',
   date: () => mealNow() === 'lunch' ? 'Wanna go out for lunch? My treat.' : 'Wanna go out for dinner tonight? My treat.',
 };
+
+// the tour's one free trip. trip.php lets it through until
+// tour.done is saved, after that the shop is her call again
+async function tourToShop(markDone, look) {
+  await fetch('api/trip.php?action=go', {
+    method: 'POST', credentials: 'same-origin',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ where: 'shop', tour: true, conversation_id: currentConversationId }),
+  }).catch(() => {});
+  markDone();
+  try { localStorage.setItem('tour.shop', look); } catch (e) {}
+  try { await playIntro(); } catch (e) {}
+  location.href = 'wardrobe.html';
+}
 
 function prefetchOnce(hrefs) {
   let done = false;
@@ -480,6 +513,12 @@ async function wireDatesPanel(canForce, canWatch) {
     const started = await runPassNow();
     runPassBtn.disabled = false;
     if (!started) document.getElementById('devRunPassDesc').textContent = 'Nothing started in 30 s. Either the memory worker is down or you hit the limit of 6 runs per 10 minutes.';
+  });
+
+  const replayTourBtn = document.getElementById('replayTourBtn');
+  if (replayTourBtn) replayTourBtn.addEventListener('click', () => {
+    ui.toggleDrawer(false);
+    Tour.start(document.getElementById('replayTourLook').value, tourToShop);
   });
 
   const cardsBtn = document.getElementById('forceCardsBtn');

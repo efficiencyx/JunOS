@@ -21,6 +21,7 @@ export const TRACKED = [
   'reasoning_level',
   'think',
   'cabinet.rules_seen',
+  'tour.done',
 ];
 
 function debounce(fn, ms) {

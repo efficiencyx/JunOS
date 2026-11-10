@@ -850,6 +850,18 @@ bridge_sync() {
   docker exec omega-php php /var/www/omega/api/bridge-sync.php "${args[@]}" || true
 }
 
+# only for a person at a desktop: a terminal, a display, not root
+# (sudo ./start.sh would start the browser as root)
+open_browser() {
+  [ -t 1 ] && [ "${JUN_NO_BROWSER:-}" != 1 ] && [ "$(id -u)" -ne 0 ] || return 0
+  case "$(printf '%s' "${TLS_MODE:-off}" | tr '[:upper:]' '[:lower:]')" in off|'') ;; *) return 0 ;; esac
+  if [ "$(uname -s)" = Darwin ]; then
+    open https://localhost >/dev/null 2>&1 || true
+  elif [ -n "${DISPLAY:-}${WAYLAND_DISPLAY:-}" ] && command -v xdg-open >/dev/null 2>&1; then
+    xdg-open https://localhost >/dev/null 2>&1 || true
+  fi
+}
+
 up_and_check() {
   set -x; docker compose "${files[@]}" up -d --build "$@"
   { set +x; } 2>/dev/null
@@ -860,6 +872,7 @@ up_and_check() {
   mtp_recheck
   check_trusted_ca
   [ -z "$update_note" ] || echo "$update_note"
+  open_browser
 }
 
 # runtime/jun-ca.pem is the copy of the CA we put in the trust

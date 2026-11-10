@@ -1038,8 +1038,8 @@ function Install-MachineTools([string[]]$missing, [switch]$Optional) {
             Note "re-run in an interactive terminal (or set `$env:JUN_YES='1') to install them."
             if ($Optional) { return } else { Exit-Install 1 }
         }
-        $answer = Read-Styled ("     ${OK}▸${R} install {0} now? ${DIM}[y/N]${R} ${ACCENT}›${R} " -f ($missing -join ' and '))
-        $proceed = $answer -match '^(y|yes)$'
+        $answer = Read-Styled ("     ${OK}▸${R} install {0} now? ${DIM}[Y/n]${R} ${ACCENT}›${R} " -f ($missing -join ' and '))
+        $proceed = $answer -notmatch '^(n|no)$'
     }
     if (-not $proceed) {
         Note 'okay, leaving it to you - install the tools above and re-run this installer.'

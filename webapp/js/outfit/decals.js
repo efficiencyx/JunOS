@@ -1,6 +1,6 @@
-import * as Live2D from '../live2d/live2d.js?v=90';
-import * as Mods from '../mods/mods.js?v=100';
-import { bakeDrawable } from '../mods/layers.js?v=18';
+import * as Live2D from '../live2d/live2d.js?v=91';
+import * as Mods from '../mods/mods.js?v=102';
+import { bakeDrawable } from '../mods/layers.js?v=19';
 import { ITEMS, VARIANTS, VARIANT_OWNER, colorGroup } from './catalog.js?v=4';
 import { hexToRgb01 } from './colors.js?v=1';
 import { colors, state, variantState } from './current.js?v=4';

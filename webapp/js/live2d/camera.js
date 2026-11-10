@@ -321,8 +321,10 @@ let savedCamera = null;
 export let cameraTween = null;
 
 const FACE_CENTER_FRAC = 0.12;
-export const FACE_SCREEN_Y = 0.42;
-export const FACE_HEAD_FRAC = 0.30;
+const FACE_FRAME = { head: 0.30, y: 0.42 };
+// head height and face centre as fractions of the stage. 'face'
+// with a smaller head is a waist-up shot, same preset to every guard
+export let faceFrame = FACE_FRAME;
 
 function computeFaceCamera() {
   const usable = usableStage();
@@ -331,13 +333,13 @@ function computeFaceCamera() {
     (usable.width * margin) / model.internalModel.width,
     (usable.height * margin) / model.internalModel.height
   );
-  const zoom = Math.min(5, (usable.height * FACE_HEAD_FRAC) / (sBase * model.internalModel.height * 0.22));
+  const zoom = Math.min(5, (usable.height * faceFrame.head) / (sBase * model.internalModel.height * 0.22));
   const modelH = model.internalModel.height * sBase * zoom;
   const baseY = usable.y + usable.height / 2 - modelH / 2;
   return {
     zoom,
     offsetX: 0,
-    offsetY: (usable.y + usable.height * FACE_SCREEN_Y - FACE_CENTER_FRAC * modelH) - baseY,
+    offsetY: (usable.y + usable.height * faceFrame.y - FACE_CENTER_FRAC * modelH) - baseY,
   };
 }
 
@@ -371,24 +373,29 @@ export function standInModeChanged(next) {
   else resetCameraForMode(next);
 }
 
-export function setCameraPreset(preset) {
-  if (!model && standIn && preset !== cameraPreset) {
-    cameraPreset = preset === 'face' ? 'face' : 'default';
+export function setCameraPreset(preset, { head = FACE_FRAME.head, y = FACE_FRAME.y, ms = 450 } = {}) {
+  preset = preset === 'face' ? 'face' : 'default';
+  const reframed = preset === 'face' && (head !== faceFrame.head || y !== faceFrame.y);
+  if (preset === cameraPreset && !reframed) return;
+  if (preset === 'face') faceFrame = { head, y };
+  if (!model && standIn) {
+    cameraPreset = preset;
     standIn.fit();
     return;
   }
-  if (!model || !app || preset === cameraPreset) return;
+  if (!model || !app) return;
   if (preset === 'face') {
-    savedCamera = currentCameraSnapshot();
+    // a return tween still running holds the REAL resting camera
+    if (!savedCamera) savedCamera = currentCameraSnapshot();
     cameraPreset = 'face';
     // fitModel must NOT stack its resting offset on top of this
     S.hasUserPos = true;
-    tweenCameraTo(computeFaceCamera(), 450);
+    tweenCameraTo(computeFaceCamera(), ms);
   } else {
     cameraPreset = 'default';
     const back = savedCamera || cameraSnapshotForMode(S.cameraMode);
     S.hasUserPos = true;
-    tweenCameraTo(cameraTarget(back), 450, () => {
+    tweenCameraTo(cameraTarget(back), ms, () => {
       S.hasUserPos = back.hasUserPos;
       savedCamera = null;
       fitModel();

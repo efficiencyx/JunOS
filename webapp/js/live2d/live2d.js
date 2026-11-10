@@ -3,16 +3,16 @@
 // builds a second copy of the module graph, and the two copies
 // don't share state.
 
-import { playSequence, releaseAll, resetIdle, renderIfDirty, setFidgetsEnabled, setMood, setMouthOverride, startIdle, stopIdle, tick } from './anim.js?v=85';
+import { playSequence, releaseAll, resetIdle, renderIfDirty, setFidgetsEnabled, setMood, setMouthOverride, startIdle, stopIdle, tick } from './anim.js?v=86';
 import { bakeThumb } from './bake.js?v=2';
-import { cameraStates, captureCameraState, currentCameraMode, fitModel, loadPos, measureStage, rendererResolution, setCameraPreset as setRigCameraPreset, watchStageSize, writeCameraStates } from './camera.js?v=78';
-import { drawableAt, faceAnchor, findDrawables, hitTest, isOverModel } from './geometry.js?v=80';
-import { installStageInput } from './input.js?v=9';
-import { mountPlaceholder } from './placeholder.js?v=7';
+import { cameraStates, captureCameraState, currentCameraMode, fitModel, loadPos, measureStage, rendererResolution, setCameraPreset as setRigCameraPreset, watchStageSize, writeCameraStates } from './camera.js?v=79';
+import { drawableAt, faceAnchor, findDrawables, hitTest, isOverModel } from './geometry.js?v=81';
+import { installStageInput } from './input.js?v=10';
+import { mountPlaceholder } from './placeholder.js?v=8';
 import { cancelPending, debugParam, hold, knows, scheduleSequence, setNow, setOnMissingParam, setTarget, startLoop, stopAllLoops, stopLoop } from './params.js?v=4';
 import { installColorShaderPatch, patchRenderer } from './renderer.js?v=2';
 import { S, app, currentValues, model, paramDefault, paramIndex, paramMax, paramMin, publicTint, raw, setApp, setModel, setParamRanges, setRaw } from './state.js?v=75';
-import { drawableThumb, getDrawableTint, installVariantCompositor, listDrawables, opacityByPattern, screenByPattern, setDrawableOpacity, setDrawableOrderBelow, setDrawableScreen, setDrawableTexture, setDrawableTextures, setDrawableTint, texturesSettled, tintByPattern } from './textures.js?v=81';
+import { drawableThumb, getDrawableTint, installVariantCompositor, listDrawables, opacityByPattern, screenByPattern, setDrawableOpacity, setDrawableOrderBelow, setDrawableScreen, setDrawableTexture, setDrawableTextures, setDrawableTint, texturesSettled, tintByPattern } from './textures.js?v=82';
 
 export {
   bakeThumb, cancelPending, debugParam, drawableAt, drawableThumb, faceAnchor, findDrawables, fitModel,
@@ -36,8 +36,8 @@ function getRaw(m) {
 
 export function hasModel() { return !!model; }
 
-export function setCameraPreset(preset) {
-  setRigCameraPreset(preset);
+export function setCameraPreset(preset, frame) {
+  setRigCameraPreset(preset, frame);
 }
 
 // anything but a clear "no" means try the real rig, so a probe

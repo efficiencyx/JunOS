@@ -1,4 +1,4 @@
-import { FACE_HEAD_FRAC, FACE_SCREEN_Y, cameraPreset, currentCameraMode, setStandIn, standInModeChanged, usableStage } from './camera.js?v=78';
+import { cameraPreset, currentCameraMode, faceFrame, setStandIn, standInModeChanged, usableStage } from './camera.js?v=79';
 import { S } from './state.js?v=75';
 
 // no rig on disk (webapp/assets/ is gitignored game art, a fresh
@@ -20,13 +20,12 @@ function place(img) {
   if (mode !== S.cameraMode) standInModeChanged(mode);
   const u = usableStage();
   if (cameraPreset === 'face') {
-    // same framing computeFaceCamera gives the rig: head is 30% of
-    // the stage height, face centre at 42% down
-    const h = u.height * FACE_HEAD_FRAC / ((HEAD_BOTTOM - HEAD_TOP) / VIEW_H);
+    // same framing computeFaceCamera gives the rig
+    const h = u.height * faceFrame.head / ((HEAD_BOTTOM - HEAD_TOP) / VIEW_H);
     const w = h * VIEW_W / VIEW_H;
     Object.assign(img.style, {
       left: `${u.x + (u.width - w) / 2}px`,
-      top: `${u.y + u.height * FACE_SCREEN_Y - h * FACE_CENTER_Y / VIEW_H}px`,
+      top: `${u.y + u.height * faceFrame.y - h * FACE_CENTER_Y / VIEW_H}px`,
       width: `${w}px`,
       height: `${h}px`,
     });

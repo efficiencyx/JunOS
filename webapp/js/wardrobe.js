@@ -1,13 +1,14 @@
-import * as Live2D from './live2d/live2d.js?v=90';
+import * as Live2D from './live2d/live2d.js?v=91';
 import * as MobileViewport from './core/viewport.js?v=1';
 import * as Names from './core/names.js?v=1';
 import { api } from './core/api.js?v=1';
-import * as Outfit from './outfit/outfit.js?v=99';
+import * as Outfit from './outfit/outfit.js?v=101';
 import * as Scene from './trip/scene.js?v=1';
 import { startSkybox } from './trip/skybox.js?v=2';
 import * as TripLoader from './trip/trip-loader.js?v=1';
-import { armCurtains } from './wardrobe/curtains.js?v=17';
-import { openWardrobe } from './wardrobe/panel.js?v=33';
+import { armCurtains } from './wardrobe/curtains.js?v=18';
+import { openWardrobe } from './wardrobe/panel.js?v=36';
+import { shopLeg } from './wardrobe/tour-shop.js?v=1';
 
 const status = document.getElementById('stageStatus');
 const HEAD_HOME_ICON = '<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="19" y1="12" x2="5" y2="12"/><polyline points="12 19 5 12 12 5"/></svg>';
@@ -31,14 +32,11 @@ function dressPanel() {
   panel.setAttribute('role', 'region');
   panel.setAttribute('aria-labelledby', 'collectionTitle');
   const titles = panel.querySelector('.wd-titles');
-  const kicker = document.createElement('span');
-  kicker.className = 'wd-kicker';
-  kicker.textContent = 'The dressing room · Annalie’s collection';
   const title = document.createElement('h2');
   title.className = 'wd-title';
   title.id = 'collectionTitle';
   title.textContent = 'Find her next look.';
-  titles.prepend(kicker, title);
+  titles.prepend(title);
   const actions = panel.querySelector('.wd-actions');
   panel.appendChild(actions);
   actions.querySelector('.wd-looks').textContent = 'Saved looks';
@@ -99,6 +97,7 @@ async function main() {
       : `Shift+wheel to zoom · drag items onto ${bot} to dress her`;
     TripLoader.setStage("Welcome to Annalie's");
     await TripLoader.finish();
+    shopLeg();
   } catch (e) {
     console.error(e);
     status.textContent = 'Load error: ' + e.message;

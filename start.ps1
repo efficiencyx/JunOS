@@ -1013,11 +1013,19 @@ if ($Provider -eq 'llamacpp' -and $LlamacppUrl -match '://(127\.0\.0\.1|localhos
                 -Body (@{ model = $chatModels[0] } | ConvertTo-Json) -TimeoutSec 10 | Out-Null
         } catch {}
         $deadline = (Get-Date).AddMinutes(30)
+        $hadMb = 0
         while ((Get-LlamacppStatus $chatModels[0]) -ne 'loaded') {
             if ($llamaProc.HasExited) { throw "llama-server exited (code $($llamaProc.ExitCode)) - see runtime\logs\llamacpp.err.log" }
             if ((Get-Date) -gt $deadline) { Warn_ "$($chatModels[0]) still isn't loaded, she loads on the first message instead"; break }
+            $mb = [int]((Get-ChildItem -LiteralPath $env:LLAMA_CACHE -Recurse -File -Force -ErrorAction SilentlyContinue |
+                Measure-Object -Property Length -Sum).Sum / 1MB)
+            if ($mb -gt $hadMb) {
+                Write-Host -NoNewline ("`r    ${DIM}  {0:N0} MB downloaded${R}" -f $mb)
+                $hadMb = $mb
+            }
             Start-Sleep -Seconds 3
         }
+        if ($hadMb -gt 0) { Write-Host '' }
         Ok 'llama-server ready'
     }
 }

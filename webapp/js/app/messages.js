@@ -1,5 +1,5 @@
 import { messagesEl, messagesEmpty } from './dom.js?v=77';
-import { hideFaceBubble } from './face-bubble.js?v=92';
+import { hideFaceBubble } from './face-bubble.js?v=93';
 import { escapeHtml } from '../core/util.js?v=1';
 import { commandLength } from './composer.js?v=3';
 

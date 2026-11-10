@@ -1,15 +1,15 @@
 import { abortFn, currentConversationId } from './session.js?v=1';
-import { sendMessage } from './chat.js?v=51';
-import { cancelIdleNudge } from './consolidation.js?v=123';
+import { sendMessage } from './chat.js?v=53';
+import { cancelIdleNudge } from './consolidation.js?v=125';
 import { closeSettingsBtn, devNoIdleChk, drawerBackdrop, modelSelect, openSettingsBtn, reasoningSelect, sendBtn, siteVolumeInput, thinkChk, ttsChk, ttsSpeedInput, voiceChk, voiceSilenceInput } from './dom.js?v=77';
 import { logAction } from './logging.js?v=78';
-import { loadMood, setMoodEditingEnabled } from './mood.js?v=91';
-import { loadConversation, setSidebarOpen } from './sidebar.js?v=123';
+import { loadMood, setMoodEditingEnabled } from './mood.js?v=92';
+import { loadConversation, setSidebarOpen } from './sidebar.js?v=125';
 import { loadTimeline } from './timeline.js?v=3';
 import * as Names from '../core/names.js?v=1';
-import * as Prefs from '../core/prefs.js?v=7';
+import * as Prefs from '../core/prefs.js?v=8';
 import * as ui from '../core/ui.js?v=1';
-import * as TTS from '../voice/tts.js?v=91';
+import * as TTS from '../voice/tts.js?v=92';
 
 export function syncThinkToggle() {
   thinkChk.disabled = reasoningSelect.value === 'auto';
