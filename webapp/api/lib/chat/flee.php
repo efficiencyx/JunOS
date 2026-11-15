@@ -17,7 +17,13 @@ function flee_scene_excerpt(array $msgs): string {
 // the same scene with the persona off, which she can't sweet-talk
 // her way past from inside the roleplay. fails closed. anything
 // short of a clear yes and she stays.
-function flee_adjudicate(string $provider, string $model, array $msgs, string $reason, string $destination): array {
+const FLEE_LEANS = [
+    'neutral' => '',
+    'kind' => "\n\nRead Anon charitably: take the most innocent reading of what he said and did that the scene allows.",
+    'hurt' => "\n\nTake Jun's side seriously: do not excuse or explain away what Anon did to her.",
+];
+
+function flee_adjudicate(string $provider, string $model, array $msgs, string $reason, string $destination, string $lean = 'neutral'): array {
     $system = <<<TXT
 You are a neutral referee for the physics of a roleplay scene. You have no persona and no stake in the story.
 
@@ -34,6 +40,7 @@ Answer YES only when all three hold: she is physically free to move, the reason 
 Reason it through first. Then, on the last line and nothing after it, output only a JSON object:
 {"can_leave": true|false, "why": "<one short sentence>"}
 TXT;
+    $system .= FLEE_LEANS[$lean];
 
     $scene = flee_scene_excerpt($msgs);
     $userMsg = "SCENE:\n" . ($scene !== '' ? $scene : '(no dialogue)')
@@ -64,13 +71,26 @@ TXT;
 
 // the referee and, on a yes, the ban. the flee tool and a bare
 // [A:flee] tag both land here. $via is only for the log.
+// blocking is forever, so it takes 2 of 3 referees leaning different ways
+function flee_vote(array $ctx, string $reason, string $destination): array {
+    $yes = $no = 0;
+    foreach (array_keys(FLEE_LEANS) as $lean) {
+        $verdict = flee_adjudicate($ctx['provider'], $ctx['model'], $ctx['req']['body']['messages'], $reason, $destination, $lean);
+        $verdict['can_leave'] ? $yes++ : $no++;
+        if ($yes === 2 || $no === 2) break;
+    }
+    return ['can_leave' => $yes === 2, 'why' => $verdict['why'], 'votes' => [$yes, $no]];
+}
+
 function chat_flee(array $ctx, array &$state, string $reason, string $destination, string $via): array {
-    $verdict = flee_adjudicate($ctx['provider'], $ctx['model'], $ctx['req']['body']['messages'], $reason, $destination);
+    $final = flee_bans_enabled() && ban_is_final((int)$ctx['user']['id']);
+    $verdict = $final ? flee_vote($ctx, $reason, $destination)
+        : flee_adjudicate($ctx['provider'], $ctx['model'], $ctx['req']['body']['messages'], $reason, $destination);
     // no reason, no why. both are his words retold and the log
     // isn't encrypted.
     log_event(['msg' => 'flee_adjudication', 'user_id' => (int)$ctx['user']['id'],
                'conversation_id' => $ctx['conv_id'], 'via' => $via,
-               'can_leave' => $verdict['can_leave']]);
+               'can_leave' => $verdict['can_leave'], 'votes' => $verdict['votes'] ?? null]);
     if ($verdict['can_leave']) {
         mood_log_clear((int)$ctx['user']['id']);
         relationship_history_add((int)$ctx['user']['id'], null, 'walkout');

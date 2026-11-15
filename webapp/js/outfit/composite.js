@@ -1,7 +1,8 @@
-import * as Live2D from '../live2d/live2d.js?v=91';
-import { GLASSES_STYLES, VARIANTS } from './catalog.js?v=4';
-import { availableAssets, textureAvailable } from './sync.js?v=31';
-import { colors, variantState } from './current.js?v=4';
+import * as Live2D from '../live2d/live2d.js?v=92';
+import * as Mods from '../mods/mods.js?v=113';
+import { GLASSES_STYLES, VARIANTS, VARIANT_OWNER } from './catalog.js?v=5';
+import { availableAssets, textureAvailable } from './sync.js?v=42';
+import { colors, state, variantState } from './current.js?v=6';
 import { hexToRgb01 } from './colors.js?v=1';
 
 const textureImgCache = {};
@@ -48,6 +49,26 @@ function duotoneLayer(img, mainHex, accentHex) {
   return c;
 }
 
+// a mod bake replaces the whole texture, her style goes in under it or
+// it's the default art. tint is for her-colour mod layers on coloured styles
+export async function styleBase(id) {
+  const v = VARIANTS.find(x => x.drawables.includes(id));
+  if (!v || !VARIANT_OWNER[v.key]?.some(k => state[k])) return null;
+  const opt = v.options[variantState[v.key] || 0];
+  const texture = opt.textures?.[id];
+  if (!texture || !textureAvailable(texture)) return null;
+  const url = typeof texture === 'object' ? texture.url : texture;
+  const img = await textureImg(url);
+  const r = { x: 0, y: 0, w: img.width, h: img.height };
+  if (!opt.colorMode) return { url, img, r, bypassColorScaler: false, tint: null, keepVanilla: false };
+  const main = colors.stockings, accent = colors.stockings_accent;
+  const overlay = opt.colorMode === 'overlay';
+  return {
+    url: `${url}|${main || ''}|${accent || ''}`, r, bypassColorScaler: true, tint: main || null, keepVanilla: overlay,
+    img: overlay ? tintedLayer(img, accent) : duotoneLayer(img, main, accent),
+  };
+}
+
 export function stockingColorMode() {
   const variant = VARIANTS.find(v => v.key === 'sock_style');
   return variant.options[variantState.sock_style || 0].colorMode || null;
@@ -66,8 +87,11 @@ export async function applyStockingTexture() {
   if (!mode) return;
   const entries = Object.entries(opt.textures || {}).filter(([, texture]) => textureAvailable(texture));
   const job = ++stockingsJob;
+  const modded = variant.drawables.filter(d => Mods.owns(d));
+  if (modded.length) Mods.applyAll();
+  const free = variant.drawables.filter(d => !modded.includes(d));
   if (entries.length !== variant.drawables.length) {
-    Live2D.setDrawableTextures(Object.fromEntries(variant.drawables.map(drawable => [drawable, null])));
+    Live2D.setDrawableTextures(Object.fromEntries(free.map(drawable => [drawable, null])));
     return;
   }
   let loaded;
@@ -85,6 +109,7 @@ export async function applyStockingTexture() {
   const accent = colors.stockings_accent;
   const map = {};
   for (const [drawable, url, img] of loaded) {
+    if (!free.includes(drawable)) continue;
     if (mode === 'overlay') {
       map[drawable] = {
         img: tintedLayer(img, accent),
@@ -101,7 +126,7 @@ export async function applyStockingTexture() {
   }
   await Live2D.setDrawableTextures(map);
   if (job !== stockingsJob || (variantState.sock_style || 0) !== index) return;
-  for (const drawable of variant.drawables) Live2D.setDrawableTint(drawable, null);
+  for (const drawable of free) Live2D.setDrawableTint(drawable, null);
 }
 
 let glassesJob = 0;

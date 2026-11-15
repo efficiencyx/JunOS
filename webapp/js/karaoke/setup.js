@@ -1,10 +1,11 @@
-import * as ui from '../core/ui.js?v=1';
-import { assignOwners, buildSections, fetchLrclib, parseId3Lyrics, trackMeta } from './lyrics.js?v=1';
-import { audioCtx, ensureCtx, renderLyrics, start } from './playback.js?v=21';
-import { $, overlay } from './karaoke.js?v=28';
+import * as ui from '../core/ui.js?v=10';
+import { assignOwners, buildSections, fetchLrclib, parseId3Lyrics, trackMeta } from './lyrics.js?v=2';
+import { audioCtx, ensureCtx, renderLyrics, start } from './playback.js?v=25';
+import { $, overlay } from './karaoke.js?v=32';
 import { api, apiJson } from '../core/api.js?v=1';
 import { idbStore } from '../core/idb.js?v=1';
 import { escapeHtml } from '../core/util.js?v=1';
+import { t } from '../core/i18n.js?v=1';
 
 let healthCache = null;
 export let track = null;
@@ -39,7 +40,7 @@ export function setStatus(msg) {
   const el = $('karaokeStatus');
   if (el) el.textContent = msg || '';
   const setupStatus = $('karaokeSetupStatus');
-  if (setupStatus) setupStatus.textContent = msg || 'Preparing the stage…';
+  if (setupStatus) setupStatus.textContent = msg || t('karaoke.preparing', 'Preparing the stage…');
 }
 
 function setBusy(b) {
@@ -74,16 +75,16 @@ function estimateSeparation(duration, device) {
 function fmtEta(eta) {
   const mins = (s) => Math.max(1, Math.round(s / 60));
   const low = mins(eta[0]), high = mins(eta[1]);
-  return low === high ? `usually about ${low} min` : `usually ${low}-${high} min`;
+  return low === high ? t('karaoke.etaAbout', 'usually about {n} min', { n: low }) : t('karaoke.etaRange', 'usually {low}-{high} min', { low, high });
 }
 
 function renderClock() {
   const el = $('karaokeProgressDetail');
   if (!el || !clockStartedAt) return;
   const elapsed = (Date.now() - clockStartedAt) / 1000;
-  let text = fmtClock(elapsed) + ' elapsed';
+  let text = t('karaoke.elapsed', '{time} elapsed', { time: fmtClock(elapsed) });
   if (clockEta) {
-    text += elapsed > clockEta[1] ? ' · longer than expected, still working' : ' · ' + fmtEta(clockEta);
+    text += ' · ' + (elapsed > clockEta[1] ? t('karaoke.slow', 'longer than expected, still working') : fmtEta(clockEta));
   }
   el.textContent = text;
 }
@@ -112,18 +113,18 @@ function setCancellable(fn) {
 
 function setLyricsSrc(src) {
   const el = $('karaokeLyricsSrc');
-  if (el) el.textContent = src ? `Lyrics: ${src}` : '';
+  if (el) el.textContent = src ? t('karaoke.lyricsSrc', 'Lyrics: {src}', { src }) : '';
 }
 
 function updateSetupSummary() {
   const el = $('karaokeSetupSummary');
   if (!el) return;
   const modes = {
-    solo: 'Solo',
-    duo: 'Sing together',
-    split: 'Pick our lines',
+    solo: t('karaoke.mode.solo', 'Solo'),
+    duo: t('karaoke.mode.duo', 'Sing together'),
+    split: t('karaoke.mode.split', 'Pick our lines'),
   };
-  el.textContent = `${modes[mode]} · ${pendingLyrics ? pendingLyrics.name : 'automatic lyrics'}`;
+  el.textContent = `${modes[mode]} · ${pendingLyrics ? pendingLyrics.name : t('karaoke.autoLyrics', 'automatic lyrics')}`;
 }
 
 export function setLyricsChoice(choice) {
@@ -141,7 +142,7 @@ export function setLyricsChoice(choice) {
 export function queueLyrics(lyrics) {
   pendingLyrics = lyrics;
   setLyricsChoice('file');
-  setLyricsSrc(`${lyrics.name} (queued)`);
+  setLyricsSrc(t('karaoke.queued', '{name} (queued)', { name: lyrics.name }));
 }
 
 export function platformFlavor() {
@@ -200,15 +201,15 @@ export async function loadFile(file) {
       const h = await health();
       let sourceDuration = 0;
       try {
-        setStatus('Reading the track…');
+        setStatus(t('karaoke.reading', 'Reading the track…'));
         sourceDuration = (await decodeCopy(raw)).duration;
       } catch (e) {
         // only needed for the estimate, separation reports a bad file
         // properly
       }
       setStatus(h.device === 'cpu'
-        ? 'Splitting the vocals off on CPU…'
-        : 'Splitting the vocals off…');
+        ? t('karaoke.splittingCpu', 'Splitting the vocals off on CPU…')
+        : t('karaoke.splitting', 'Splitting the vocals off…'));
       startClock(estimateSeparation(sourceDuration, h.device));
       // aborting only stops US waiting. the sidecar carries right
       // on to the end of the job it started, there's no cancel on
@@ -229,7 +230,7 @@ export async function loadFile(file) {
       }
       if (!sepRes.ok) throw new Error(`separate http ${sepRes.status}`);
       const meta = await sepRes.json();
-      setStatus('Fetching the stems…');
+      setStatus(t('karaoke.fetchingStems', 'Fetching the stems…'));
       startClock(null);
       const [instrumental, guide] = await Promise.all([
         fetchStem('instrumental', meta.token),
@@ -238,7 +239,7 @@ export async function loadFile(file) {
       rec = { hash, instrumental, guide, lyrics: meta.lyrics || [], duration: meta.duration || 0 };
       await tracks.put(rec);
     } else {
-      setStatus('Already split - loading from cache…');
+      setStatus(t('karaoke.cached', 'Already split - loading from cache…'));
     }
     stopClock();
 
@@ -246,7 +247,7 @@ export async function loadFile(file) {
     const duration = rec.duration || Math.max(instrBuf.duration, guideBuf.duration);
 
     if (!pendingLyrics) {
-      setStatus('Looking up lyrics…');
+      setStatus(t('karaoke.lookingUp', 'Looking up lyrics…'));
       pendingLrclib = await fetchLrclib(meta, duration);
     }
 
@@ -266,10 +267,10 @@ export async function loadFile(file) {
   } catch (e) {
     setStatus('');
     if (e.name === 'AbortError') {
-      ui.toast('Stopped waiting on the split', 'info');
+      ui.toast(t('karaoke.stoppedWaiting', 'Stopped waiting on the split'), 'info');
     } else {
       console.error(e);
-      ui.toast('⚠ Karaoke failed: ' + e.message, 'error');
+      ui.toast(t('karaoke.err.failed', '⚠ Karaoke failed: {err}', { err: e.message }), 'error');
     }
   } finally {
     setCancellable(null);
@@ -287,7 +288,7 @@ function showAssign() {
     return `<div class="karaoke-assign-row">
       <span class="karaoke-assign-preview">${preview}</span>
       <span class="karaoke-assign-toggle">
-        <button type="button" data-i="${i}" data-owner="you" class="${splitPicks[i] === 'you' ? 'selected' : ''}">You</button>
+        <button type="button" data-i="${i}" data-owner="you" class="${splitPicks[i] === 'you' ? 'selected' : ''}">${t('cards.you', 'You')}</button>
         <button type="button" data-i="${i}" data-owner="jun" class="${splitPicks[i] === 'jun' ? 'selected' : ''}">Jun</button>
       </span></div>`;
   }).join('');
@@ -338,8 +339,8 @@ export function setMode(m) {
   if (sel) sel.querySelectorAll('[data-mode]').forEach(b => b.classList.toggle('selected', b.dataset.mode === m));
   const desc = $('karaokeModeDesc');
   if (desc) desc.textContent =
-    m === 'duo' ? 'Sing the whole song together.' :
-    m === 'split' ? 'Assign each line to you or Jun after the song loads.' :
-    'You sing the full song first, then Jun takes a solo turn.';
+    m === 'duo' ? t('karaoke.desc.duo', 'Sing the whole song together.') :
+    m === 'split' ? t('karaoke.desc.split', 'Assign each line to you or Jun after the song loads.') :
+    t('karaoke.desc.solo', 'You sing the full song first, then Jun takes a solo turn.');
   updateSetupSummary();
 }

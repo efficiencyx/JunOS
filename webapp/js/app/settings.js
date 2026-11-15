@@ -1,15 +1,18 @@
 import { abortFn, currentConversationId } from './session.js?v=1';
-import { sendMessage } from './chat.js?v=53';
-import { cancelIdleNudge } from './consolidation.js?v=125';
+import { sendMessage } from './chat.js?v=68';
+import { cancelIdleNudge } from './consolidation.js?v=141';
 import { closeSettingsBtn, devNoIdleChk, drawerBackdrop, modelSelect, openSettingsBtn, reasoningSelect, sendBtn, siteVolumeInput, thinkChk, ttsChk, ttsSpeedInput, voiceChk, voiceSilenceInput } from './dom.js?v=77';
 import { logAction } from './logging.js?v=78';
-import { loadMood, setMoodEditingEnabled } from './mood.js?v=92';
-import { loadConversation, setSidebarOpen } from './sidebar.js?v=125';
-import { loadTimeline } from './timeline.js?v=3';
+import { loadMood, setMoodEditingEnabled } from './mood.js?v=93';
+import { loadConversation, setSidebarOpen } from './sidebar.js?v=140';
+import { loadTimeline } from './timeline.js?v=4';
 import * as Names from '../core/names.js?v=1';
-import * as Prefs from '../core/prefs.js?v=8';
-import * as ui from '../core/ui.js?v=1';
-import * as TTS from '../voice/tts.js?v=92';
+import { locale, t } from '../core/i18n.js?v=1';
+import * as Prefs from '../core/prefs.js?v=9';
+import * as ui from '../core/ui.js?v=10';
+import { hold } from '../core/hold.js?v=2';
+import { factoryReset } from './difficulty.js?v=5';
+import * as TTS from '../voice/tts.js?v=93';
 
 export function syncThinkToggle() {
   thinkChk.disabled = reasoningSelect.value === 'auto';
@@ -28,6 +31,12 @@ thinkChk.addEventListener('change', () => persistPref('think', thinkChk.checked 
 devNoIdleChk.addEventListener('change', () => {
   if (devNoIdleChk.checked) cancelIdleNudge();
   persistPref('no_idle_nudges', devNoIdleChk.checked ? '1' : '0');
+});
+const uiLangSelect = document.getElementById('uiLangSelect');
+uiLangSelect.value = localStorage.getItem('ui.lang') || 'auto';
+uiLangSelect.addEventListener('change', () => {
+  persistPref('ui.lang', uiLangSelect.value);
+  location.reload();
 });
 
 sendBtn.addEventListener('click', sendMessage);
@@ -129,8 +138,8 @@ const memoryCount = document.getElementById('memoryCount');
 let MemoryGraph = null;
 async function loadMemories() {
   if (!MemoryGraph) {
-    MemoryGraph = await import('./memory-graph.js?v=7');
-    const { renderNoteActions } = await import('./memory-actions.js?v=3');
+    MemoryGraph = await import('./memory-graph.js?v=8');
+    const { renderNoteActions } = await import('./memory-actions.js?v=6');
     MemoryGraph.onNoteActions((node, body) => renderNoteActions(node, body, { isAdmin, reload: loadMemories }));
     MemoryGraph.onOpenChat((conv, messageId) => {
       ui.toggleDrawer(false);
@@ -139,7 +148,7 @@ async function loadMemories() {
     });
   }
   MemoryGraph.setActive(true);
-  MemoryGraph.setStatus('Loading…');
+  MemoryGraph.setStatus(t('common.loading', 'Loading…'));
   try {
     const r = await fetch('/api/memory.php', { credentials: 'same-origin' });
     if (!r.ok) throw new Error('http ' + r.status);
@@ -147,7 +156,7 @@ async function loadMemories() {
     if (memoryCount) memoryCount.textContent = Array.isArray(memoryData.notes) ? memoryData.notes.length : 0;
     MemoryGraph.setData(memoryData);
   } catch (e) {
-    MemoryGraph.setStatus('Could not load memories.');
+    MemoryGraph.setStatus(t('memory.loadFailed', 'Could not load memories.'));
   }
 }
 const memoryAddBtn = document.getElementById('memoryAddBtn');
@@ -173,15 +182,7 @@ async function addMemory() {
 if (memoryAddBtn) memoryAddBtn.addEventListener('click', addMemory);
 if (memoryAddInput) memoryAddInput.addEventListener('keydown', (e) => { if (e.key === 'Enter') addMemory(); });
 const memoryClearBtn = document.getElementById('memoryClearBtn');
-if (memoryClearBtn) memoryClearBtn.addEventListener('click', async () => {
-  const ok = await ui.confirm({
-    title: 'Delete all memories',
-    message: 'Delete every saved note and journal entry? This cannot be undone.',
-    confirmLabel: 'Delete all',
-    cancelLabel: 'Cancel',
-    danger: true,
-  });
-  if (!ok) return;
+if (memoryClearBtn) hold(memoryClearBtn, async () => {
   try {
     const r = await fetch('/api/memory.php', {
       method: 'DELETE',
@@ -215,13 +216,13 @@ export function applyRoleGates(user) {
   // Everyone else wipes memories through Factory Reset, the DELETE
   // is admin only.
   if (memoryClearBtn) memoryClearBtn.hidden = !isAdmin;
-  for (const id of ['devBadge', 'statusPill', 'resetLive2DBtn', 'ratingsExportRow']) {
+  for (const id of ['devBadge', 'statusPill', 'resetLive2DBtn', 'ratingsExportRow', 'fleeSkipBtn']) {
     const el = document.getElementById(id);
     if (el) el.hidden = !isAdmin;
   }
   if (isAdmin && devAccessRow) {
     devAccessRow.hidden = false;
-    if (devAccessDesc) devAccessDesc.textContent = 'Developer access is enabled on this account.';
+    if (devAccessDesc) devAccessDesc.textContent = t('settings.devAccess.enabled', 'Developer access is enabled on this account.');
     if (devKeyInput) devKeyInput.hidden = true;
     if (promoteBtn) promoteBtn.hidden = true;
   }
@@ -251,26 +252,26 @@ if (promoteBtn) promoteBtn.addEventListener('click', async () => {
       body: JSON.stringify({ key: devKeyInput?.value || '' }),
     });
     if (r.ok) {
-      ui.toast('Developer tools unlocked.', 'ok');
+      ui.toast(t('settings.devAccess.unlocked', 'Developer tools unlocked.'), 'ok');
       location.reload();
       return;
     }
     const j = await r.json().catch(() => ({}));
-    const msgs = { invalid_dev_key: 'Wrong key.', dev_promotion_disabled: 'Developer access is disabled on this server.' };
+    const msgs = { invalid_dev_key: t('settings.devAccess.wrongKey', 'Wrong key.'), dev_promotion_disabled: t('settings.devAccess.disabled', 'Developer access is disabled on this server.') };
     if (r.status === 429 || j.error === 'rate_limit_exceeded') {
       const retryAfter = Number(j.retry_after || r.headers.get('Retry-After'));
-      let wait = 'a moment';
+      let wait = t('time.aMoment', 'a moment');
       if (Number.isFinite(retryAfter) && retryAfter > 0) {
-        const count = Math.ceil(retryAfter < 60 ? retryAfter : retryAfter / 60);
-        const unit = retryAfter < 60 ? 'second' : 'minute';
-        wait = `${count} ${unit}${count === 1 ? '' : 's'}`;
+        const n = Math.ceil(retryAfter < 60 ? retryAfter : retryAfter / 60);
+        if (retryAfter < 60) wait = n === 1 ? t('time.second', '1 second') : t('time.seconds', '{n} seconds', { n });
+        else wait = n === 1 ? t('time.minute', '1 minute') : t('time.minutes', '{n} minutes', { n });
       }
-      if (devAccessDesc) devAccessDesc.textContent = `Too many attempts. Try again in ${wait}.`;
+      if (devAccessDesc) devAccessDesc.textContent = t('settings.devAccess.tooMany', 'Too many attempts. Try again in {wait}.', { wait });
     } else if (devAccessDesc) {
-      devAccessDesc.textContent = msgs[j.error] || 'Could not unlock developer access.';
+      devAccessDesc.textContent = msgs[j.error] || t('settings.devAccess.failed', 'Could not unlock developer access.');
     }
   } catch (e) {
-    if (devAccessDesc) devAccessDesc.textContent = 'Network error.';
+    if (devAccessDesc) devAccessDesc.textContent = t('common.networkError', 'Network error.');
   }
   promoteBtn.disabled = false;
 });
@@ -288,9 +289,9 @@ if (passwordRow) passwordRow.addEventListener('submit', async (e) => {
   const next = document.getElementById('newPasswordInput');
   const btn = document.getElementById('changePasswordBtn');
   const msgs = {
-    invalid_credentials: 'Current password is wrong.',
-    password_too_short: 'New password needs at least 8 characters.',
-    rate_limit_exceeded: 'Too many tries, wait an hour.',
+    invalid_credentials: t('settings.password.wrong', 'Current password is wrong.'),
+    password_too_short: t('settings.password.short', 'New password needs at least 8 characters.'),
+    rate_limit_exceeded: t('settings.password.rateLimit', 'Too many tries, wait an hour.'),
   };
   btn.disabled = true;
   try {
@@ -303,38 +304,21 @@ if (passwordRow) passwordRow.addEventListener('submit', async (e) => {
     const j = await r.json().catch(() => ({}));
     if (r.ok) {
       passwordRow.reset();
-      passwordDesc.textContent = 'Changed. Other devices are signed out.';
+      passwordDesc.textContent = t('settings.password.changed', 'Changed. Other devices are signed out.');
     } else {
-      passwordDesc.textContent = msgs[j.error] || 'Could not change the password.';
+      passwordDesc.textContent = msgs[j.error] || t('settings.password.failed', 'Could not change the password.');
     }
   } catch (err) {
-    passwordDesc.textContent = 'Network error.';
+    passwordDesc.textContent = t('common.networkError', 'Network error.');
   }
   btn.disabled = false;
 });
 
 const factoryResetBtn = document.getElementById('factoryResetBtn');
-if (factoryResetBtn) factoryResetBtn.addEventListener('click', async () => {
-  const ok = await ui.confirm({
-    title: 'Factory Reset',
-    message: 'Erase every conversation, memory and setting on this account? This cannot be undone.',
-    confirmLabel: 'Erase everything',
-    cancelLabel: 'Cancel',
-    danger: true,
-  });
-  if (!ok) return;
-  try {
-    const r = await fetch('/api/auth.php?action=factory_reset', { method: 'POST', credentials: 'same-origin' });
-    if (!r.ok) throw new Error('http ' + r.status);
-  } catch (e) {
-    logAction('err', 'factory reset failed');
-    ui.toast('Factory reset failed.', 'error');
-    return;
-  }
-  Prefs.clearLocal();
-  try { for (const k of Object.keys(localStorage)) if (k.startsWith('draft.')) localStorage.removeItem(k); } catch (e) {}
-  location.reload();
-});
+if (factoryResetBtn) hold(factoryResetBtn, () => factoryReset().catch(() => {
+  logAction('err', 'factory reset failed');
+  ui.toast(t('settings.reset.failed', 'Factory reset failed.'), 'error');
+}));
 
 const bridgeRow = document.getElementById('bridgeRow');
 const bridgeDesc = document.getElementById('bridgeDesc');
@@ -346,10 +330,10 @@ function showBridge(status) {
   bridgeRow.hidden = !status.enabled;
   const paired = !!status.paired_at;
   bridgeUnpairBtn.hidden = !paired;
-  bridgePairBtn.textContent = paired ? 'New token' : 'Pair';
-  if (!paired) bridgeDesc.textContent = 'Not paired. Signing in from the game pairs it.';
-  else if (status.synced_at) bridgeDesc.textContent = `Last synced ${new Date(status.synced_at * 1000).toLocaleString()}.`;
-  else bridgeDesc.textContent = 'Paired, no sync yet.';
+  bridgePairBtn.textContent = paired ? t('settings.bridge.newToken', 'New token') : t('settings.bridge.pair', 'Pair');
+  if (!paired) bridgeDesc.textContent = t('settings.bridge.notPaired', 'Not paired. Signing in from the game pairs it.');
+  else if (status.synced_at) bridgeDesc.textContent = t('settings.bridge.synced', 'Last synced {when}.', { when: new Date(status.synced_at * 1000).toLocaleString(locale) });
+  else bridgeDesc.textContent = t('settings.bridge.noSync', 'Paired, no sync yet.');
 }
 
 async function loadBridge() {
@@ -371,9 +355,9 @@ if (bridgeRow) {
       bridgeToken.value = j.token;
       bridgeToken.hidden = false;
       bridgeToken.select();
-      bridgeDesc.textContent = 'Paste it as Token under [Sync] in the mod\'s UserData/JunBridge.cfg. It only shows once.';
+      bridgeDesc.textContent = t('settings.bridge.paste', 'Paste it as Token under [Sync] in the mod\'s UserData/JunBridge.cfg. It only shows once.');
     } catch (e) {
-      bridgeDesc.textContent = 'Could not pair.';
+      bridgeDesc.textContent = t('settings.bridge.failed', 'Could not pair.');
     }
     bridgePairBtn.disabled = false;
   });

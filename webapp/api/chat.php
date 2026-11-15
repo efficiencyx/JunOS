@@ -25,7 +25,7 @@ if (consolidation_locked((int)$user['id'])) fail(418, 'consolidating');
 
 $ban = ban_active((int)$user['id']);
 if ($ban !== null) {
-    sse_send(['error' => 'user_fled', 'until' => $ban['until'],
+    sse_send(['error' => 'user_fled', 'until' => $ban['until'], 'blocked' => $ban['blocked'],
               'seconds_left' => $ban['seconds_left'], 'reason' => $ban['reason']]);
     sse_done();
     exit;
@@ -322,6 +322,7 @@ if ($state['silenced']) {
         'until' => $state['fled']['until'],
         'minutes' => $state['fled']['minutes'],
         'reason' => $state['fled']['reason'],
+        'blocked' => $state['fled']['blocked'] ?? false,
     ]]);
     ach_add((int)$user['id'], 'fled');
 }

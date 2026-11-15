@@ -1,3 +1,4 @@
+import { t } from './i18n.js?v=1';
 // the gauge bucketing, shared by her face and by the chat copy.
 // it sits out here so both read the SAME tier off the same
 // numbers. two copies of this arithmetic and the greeting
@@ -25,6 +26,31 @@ export function moodTier(mood) {
 // keyed on
 export function gaugeTier(v) {
   return v < 34 ? 0 : v < 67 ? 1 : 2;
+}
+
+const MOOD_PHRASES = {
+  affection: [
+    [90, t('jun.mood.affection.90', 'i\'m completely yours')], [80, t('jun.mood.affection.80', 'i love you so much')], [70, t('jun.mood.affection.70', 'i love you')],
+    [60, t('jun.mood.affection.60', 'i\'m so happy with you')], [50, t('jun.mood.affection.50', 'i really like you')], [40, t('jun.mood.affection.40', 'i like being with you')],
+    [30, t('jun.mood.affection.30', 'you\'re growing on me')], [20, t('jun.mood.affection.20', 'you seem nice')], [10, t('jun.mood.affection.10', 'still getting to know you')],
+    [0, t('jun.mood.affection.0', 'who are you again?')],
+  ],
+  trust: [
+    [90, t('jun.mood.trust.90', 'i\'d trust you with anything')], [80, t('jun.mood.trust.80', 'i trust you completely')], [70, t('jun.mood.trust.70', 'i trust you')],
+    [60, t('jun.mood.trust.60', 'i\'m starting to rely on you')], [50, t('jun.mood.trust.50', 'i want to trust you')], [40, t('jun.mood.trust.40', 'i\'m still a little guarded')],
+    [30, t('jun.mood.trust.30', 'i\'m not sure about you yet')], [20, t('jun.mood.trust.20', 'you\'ll have to earn it')], [10, t('jun.mood.trust.10', 'i barely know you')],
+    [0, t('jun.mood.trust.0', 'i don\'t trust you')],
+  ],
+  tension: [
+    [90, t('jun.mood.tension.90', 'i\'m terrified')], [80, t('jun.mood.tension.80', 'i\'m really scared')], [70, t('jun.mood.tension.70', 'i\'m scared')],
+    [60, t('jun.mood.tension.60', 'this is too much')], [50, t('jun.mood.tension.50', 'i\'m on edge')], [40, t('jun.mood.tension.40', 'a little tense')],
+    [30, t('jun.mood.tension.30', 'slightly uneasy')], [20, t('jun.mood.tension.20', 'mostly calm')], [10, t('jun.mood.tension.10', 'i feel relaxed')],
+    [0, t('jun.mood.tension.0', 'totally at ease')],
+  ],
+};
+export function moodPhrase(gauge, value) {
+  const band = (MOOD_PHRASES[gauge] || []).find(([min]) => value >= min);
+  return band ? band[1] : '';
 }
 
 export function daypart(d) {

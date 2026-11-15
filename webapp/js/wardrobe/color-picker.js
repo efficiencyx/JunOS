@@ -1,10 +1,11 @@
-import * as Live2D from '../live2d/live2d.js?v=91';
+import * as Live2D from '../live2d/live2d.js?v=92';
 import * as MobileViewport from '../core/viewport.js?v=1';
-import { colorGroup } from '../outfit/catalog.js?v=4';
-import { colors } from '../outfit/current.js?v=4';
+import { colorGroup } from '../outfit/catalog.js?v=5';
+import { colors } from '../outfit/current.js?v=6';
 import { hexToHsv, hsvToHex, normalizeHex } from '../outfit/colors.js?v=1';
-import { optPopEl, positionOptionsPopup } from './tiles.js?v=36';
-import { setColor } from '../outfit/apply.js?v=31';
+import { optPopEl, positionOptionsPopup } from './tiles.js?v=49';
+import { setColor } from '../outfit/apply.js?v=42';
+import { t } from '../core/i18n.js?v=1';
 
 function paintColorButton(button) {
   const keys = (button.dataset.colorKeys || '').split(',').filter(Boolean);
@@ -116,7 +117,7 @@ function updatePickerUI() {
   svThumb.style.top = `${(1 - pickerState.hsv.v) * 100}%`;
   colorPickerEl.querySelector('.ocp-hue-thumb').style.left = `${pickerState.hsv.h / 3.6}%`;
   colorPickerEl.querySelector('.ocp-sv').setAttribute('aria-valuetext',
-    `Saturation ${Math.round(pickerState.hsv.s * 100)}%, brightness ${Math.round(pickerState.hsv.v * 100)}%`);
+    t('color.svValue', 'Saturation {s}%, brightness {v}%', { s: Math.round(pickerState.hsv.s * 100), v: Math.round(pickerState.hsv.v * 100) }));
   colorPickerEl.querySelector('.ocp-hue').setAttribute('aria-valuenow', String(Math.round(pickerState.hsv.h)));
   colorPickerEl.querySelector('.ocp-current').style.background = shown;
   const input = colorPickerEl.querySelector('.ocp-hex');
@@ -124,7 +125,7 @@ function updatePickerUI() {
   input.classList.remove('invalid');
   const clear = colorPickerEl.querySelector('.ocp-clear');
   clear.disabled = !hex;
-  clear.textContent = hex ? 'Use default' : 'Using default';
+  clear.textContent = hex ? t('color.useDefault', 'Use default') : t('color.usingDefault', 'Using default');
   colorPickerEl.querySelectorAll('.ocp-channel').forEach((button, i) => {
     button.classList.toggle('active', i === pickerState.index);
     button.setAttribute('aria-selected', String(i === pickerState.index));
@@ -172,14 +173,14 @@ function buildColorPicker() {
   colorPickerEl.className = 'omega-color-picker';
   colorPickerEl.hidden = true;
   colorPickerEl.setAttribute('role', 'dialog');
-  colorPickerEl.setAttribute('aria-label', 'Color picker');
+  colorPickerEl.setAttribute('aria-label', t('color.picker', 'Color picker'));
   colorPickerEl.innerHTML = `
-    <div class="ocp-head"><div><b class="ocp-title"></b><span>Item colors</span></div><button type="button" class="ocp-close" aria-label="Close color picker">×</button></div>
+    <div class="ocp-head"><div><b class="ocp-title"></b><span>${t('color.itemColors', 'Item colors')}</span></div><button type="button" class="ocp-close" aria-label="${t('color.close', 'Close color picker')}">×</button></div>
     <div class="ocp-channels" role="tablist"></div>
-    <div class="ocp-sv" role="slider" tabindex="0" aria-label="Saturation and brightness"><i class="ocp-sv-thumb"></i></div>
-    <div class="ocp-hue" role="slider" tabindex="0" aria-label="Hue"><i class="ocp-hue-thumb"></i></div>
-    <div class="ocp-value-row"><i class="ocp-current"></i><input class="ocp-hex" type="text" maxlength="7" spellcheck="false" aria-label="Hex color"></div>
-    <div class="ocp-presets" aria-label="Color presets"></div><button type="button" class="ocp-clear">Use default</button>
+    <div class="ocp-sv" role="slider" tabindex="0" aria-label="${t('color.sv', 'Saturation and brightness')}"><i class="ocp-sv-thumb"></i></div>
+    <div class="ocp-hue" role="slider" tabindex="0" aria-label="${t('color.hue', 'Hue')}"><i class="ocp-hue-thumb"></i></div>
+    <div class="ocp-value-row"><i class="ocp-current"></i><input class="ocp-hex" type="text" maxlength="7" spellcheck="false" aria-label="${t('color.hex', 'Hex color')}"></div>
+    <div class="ocp-presets" aria-label="${t('color.presets', 'Color presets')}"></div><button type="button" class="ocp-clear">${t('color.useDefault', 'Use default')}</button>
     <label class="ocp-toggle" hidden><span class="ocp-toggle-text"></span><input type="checkbox"><i></i></label>`;
   document.body.appendChild(colorPickerEl);
   colorPickerEl.querySelector('.ocp-close').addEventListener('click', () => closeColorPicker(true));
@@ -236,7 +237,7 @@ function buildColorPicker() {
     button.type = 'button';
     button.style.background = color;
     button.title = color.toUpperCase();
-    button.setAttribute('aria-label', `Use ${color}`);
+    button.setAttribute('aria-label', t('color.use', 'Use {color}', { color }));
     button.addEventListener('click', () => {
       pickerState.hsv = hexToHsv(color);
       commitPickerColor(color);
@@ -316,8 +317,8 @@ export function makeItemColorButton(label, slotLabels, initialValues, onChange, 
   const button = document.createElement('button');
   button.type = 'button';
   button.className = className;
-  button.title = `${label} colors · right-click to clear`;
-  button.setAttribute('aria-label', `Choose ${label} colors`);
+  button.title = t('color.buttonTitle', '{item} colors · right-click to clear', { item: label });
+  button.setAttribute('aria-label', t('color.choose', 'Choose {item} colors', { item: label }));
   const segments = slotLabels.map(() => {
     const segment = document.createElement('i');
     segment.className = 'color-preview-segment';
@@ -356,8 +357,8 @@ export function makeColorButton(groupKeys, label, className) {
   button.className = className;
   button.dataset.colorKeys = groupKeys.join(',');
   button.dataset.colorLabel = label.toLowerCase();
-  button.title = `${label} colors · right-click to clear`;
-  button.setAttribute('aria-label', `Choose ${label} colors`);
+  button.title = t('color.buttonTitle', '{item} colors · right-click to clear', { item: label });
+  button.setAttribute('aria-label', t('color.choose', 'Choose {item} colors', { item: label }));
   for (let i = 0; i < groupKeys.length; i++) {
     const segment = document.createElement('i');
     segment.className = 'color-preview-segment';

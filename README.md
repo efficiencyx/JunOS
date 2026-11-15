@@ -69,7 +69,7 @@ https://github.com/user-attachments/assets/f6c25482-611c-4dde-9f16-8e4cc9474dc2
 - **She reacts as she talks.** Gestures and expressions land on the word, not two seconds later.
 - **She has a voice**, and her mouth actually follows it.
 - **You can talk back.** Turn on the mic and it's a hands-free conversation. She can hear audio directly (Ollama or llama.cpp, the Jun models ship the bit that lets her hear), or use local speech-to-text. The **Hear everything** switch skips her attempt to ignore side-talk.
-- **She has feelings about you.** Affection, trust and tension move with every exchange, and she treats you accordingly. Push her far enough and she goes quiet, or walks out - and the door stays shut for a few minutes.
+- **She has feelings about you.** Affection, trust and tension move with every exchange, and she treats you accordingly. Push her far enough and she goes quiet, or walks out - and the door stays shut for a few minutes. Pick **Hard** on first start and she warms up slowly and stays gone for days. Pick **Hardcore** and her last walkout is the end.
 - **She can think before she answers.** A reasoning knob (auto / low / medium / high) and a toggle to watch the chain of thought stream by.
 - **She remembers.** She'll bring up things you said in other chats, and quietly keeps notes and a journal between sessions. Tell her about tomorrow's exam and she might write it down mid-chat, or text you the next day to ask how it went (on the phone that needs notifications on).
 - **Help her tidy up.** Catch her sorting her memory and you can sit with her and file the notes she's writing into her cabinet. She'll tell you when she'd have put one somewhere else. Or interrupt her, she picks it up next time.
@@ -79,8 +79,9 @@ https://github.com/user-attachments/assets/f6c25482-611c-4dde-9f16-8e4cc9474dc2
 - **Take her out.** Shopping at Annalie's, karaoke night, lunch or dinner at a restaurant, a few hands of blackjack, or the couch: open a video from your disk or share a browser tab (yes, YouTube) and she watches it with you, sees the picture, hears the sound, and pipes up when something actually happens. Ask her (the buttons in Settings, or just type "wanna grab dinner?") and it's *her* call - if she says yes she takes you there. She'll ask you out herself now and then too.
 - **Make you regret every bad decision** Jun reacts to the way you treat her, for better or worse. Treat her well and she'll return it. Treat her badly and don't expect her to forget it.
 - **Collect achievements.** 32 of them, from *Yapper* to *Door Slammed*, each climbing Bronze → Silver → Gold → Diamond. They don't unlock anything, they're just for bragging. Some stay hidden until you stumble into them.
-- **Bring your mods.** Game-mod zips load straight into the browser.
+- **Bring your mods.** Load a game-mod zip once in the wardrobe and she can wear it in every browser you sign in from. The mod clothes she wears in the game come along too.
 - **Bridge her with the game.** Say yes in the installer and every start reads your newest save: what you did together lands in her memory, the game's sympathy moves her affection (with `GAME_SAVE_WRITE=on` hers goes back into the save too), and the wardrobe picks up what she's wearing. With the JunBridge mod (Windows, Linux, Proton) it happens live and lets you chat with this Jun right inside the game. [How it works](docs/game-bridge.md).
+- **Your language.** The app follows your browser (or your phone): English, Italian, German, French, Spanish, Brazilian Portuguese, Hindi, Simplified Chinese or Japanese, switch in Settings. Talk to her in yours and she answers in it.
 - **It's yours.** She runs on your machine. No external account, no cloud inference by default, no analytics, nothing reporting back to us - the only things that leave your box are the ones you ask for: [The full list](SECURITY.md#what-talks-to-the-internet).
 
 Curious how any of it works? [Under the hood](#under-the-hood).
@@ -176,9 +177,11 @@ Pair the phone app with this PC: `./JunOS/start.sh phone`, or the **Phone** butt
 
 ### Why the first start is slow
 
-The very first boot downloads her brain - whatever model is listed in `LLAMACPP_MODEL_HF` (`OLLAMA_MODELS_TO_PULL` if you picked Ollama), by default `efficiencyx/Jun-LoRA-E2B-GGUF:Q4_K_M`, which is the one that runs fine without a fancy graphics card. It's a big file. The tiny model that names your chats (`TITLE_MODEL`, ~1.2 GB, lives on the CPU) comes too, on llama.cpp the first time a chat needs a name, and so does the MTP drafter if you said yes to it. Watch it all crawl in with `./start.sh logs llamacpp` (or `logs ollama`).
+The very first boot downloads her brain - whatever model is listed in `LLAMACPP_MODEL_HF` (`OLLAMA_MODELS_TO_PULL` if you picked Ollama), by default `efficiencyx/Jun-LoRA-E2B-GGUF:Q6_K`, which is the one that runs fine without a fancy graphics card. It's a big file. The tiny model that names your chats (`TITLE_MODEL`, ~1.2 GB, lives on the CPU) comes too, on llama.cpp the first time a chat needs a name, and so does the MTP drafter if you said yes to it. Watch it all crawl in with `./start.sh logs llamacpp` (or `logs ollama`).
 
 She's ready once everything reports **healthy**. After that first download it's usually 30-90 seconds.
+
+When her model gets a new upload under the same name, `./start.sh` (or `start.ps1`) asks before pulling the new one, and once it's loaded offers to delete the old file so you don't carry both. Say no and she runs on the one you have until the next start.
 
 
 > ### Her body isn't in this repo
@@ -248,13 +251,13 @@ The `prod` profile adds the certbot sidecar. On a fresh box nginx comes up first
 
 ## Her brains
 
-The fine-tune comes in 12B, E4B and E2B on Hugging Face. The installer picks a conservative quant for your VRAM; move a column right when the rest of your workload leaves room.
+The fine-tune comes in 12B, E4B and E2B on Hugging Face. The installer picks a quant for your VRAM; move a column right when the rest of your workload leaves room. E2B and E4B default to Q6_K wherever it fits, Q4_K_M costs them a lot more than it costs the 12B (stray tool calls triple on the E2B).
 
 | VRAM | Default | Higher quality |
 |---:|---|---|
 | 4 GB | E2B Q4_K_M | E2B Q6_K |
 | 6 GB | E2B Q6_K | E2B Q8_0 |
-| 8 GB | E4B Q4_K_M | E4B Q8_0 |
+| 8 GB | E4B Q6_K | E4B Q8_0 |
 | 10 GB | E4B Q8_0 | 12B Q4_K_M |
 | 12 GB | 12B Q4_K_M | 12B Q6_K |
 | 16 GB | 12B Q6_K | 12B Q8_0 |
@@ -302,13 +305,13 @@ Everything is environment variables in `.env` - the full reference is [`docs/con
 | `BIND_ADDR` | Where nginx (Caddy on Windows) listens. `0.0.0.0` for the phone on your wifi | `127.0.0.1` |
 | `AI_PROVIDER` | `llamacpp` \| `ollama` \| `openrouter` \| `vllm` | `llamacpp` (an old `.env` with no line keeps `ollama`) |
 | `OLLAMA_URL` + `OLLAMA_API_KEY` / `VLLM_*` | Her brain on another machine, like the Colab notebook in inference-only mode, which prints all of them | this machine |
-| `OLLAMA_MODELS_TO_PULL` | Downloaded on first boot and re-checked on every start, so a new upload under the same tag arrives with your next restart; the **first** one is pre-warmed | `hf.co/efficiencyx/Jun-LoRA-E2B-GGUF:Q4_K_M` |
-| `LLAMACPP_MODEL_HF` / `LLAMACPP_MODEL_FILE` | Model for the managed llama-server: pull from HF, or serve one off disk | `efficiencyx/Jun-LoRA-E2B-GGUF:Q4_K_M` |
+| `OLLAMA_MODELS_TO_PULL` | Downloaded on first boot and re-checked on every start, so a new upload under the same tag arrives with your next restart; the **first** one is pre-warmed | `hf.co/efficiencyx/Jun-LoRA-E2B-GGUF:Q6_K` |
+| `LLAMACPP_MODEL_HF` / `LLAMACPP_MODEL_FILE` | Model for the managed llama-server: pull from HF, or serve one off disk | `efficiencyx/Jun-LoRA-E2B-GGUF:Q6_K` |
 | `TITLE_MODEL` | The little CPU-pinned model that names new chats (Ollama and llama.cpp); empty disables it | `hf.co/efficiencyx/Titlewen-GGUF:F16` |
 | `OLLAMA_MTP` / `LLAMACPP_MTP` | HF repo of the [MTP](#faster-tokens-mtp) drafter; empty = off. `MTP_AUTOTUNE=off` stops the re-tune after a GPU change | *(empty)* · `on` |
 | `COMPOSE_PROFILES` | Optional containers: `ollama`, `llamacpp`, `voice`, `karaoke`, `prod`. `start.sh` derives them from the knobs below (an `ollama` or `llamacpp` written here is ignored), you only set this by hand for `prod` | `ollama` |
 | `VOICE` | `off` skips the voice sidecar: the `tts` container under Docker (`voice` profile), the sidecar process on bare-metal Windows. Chat degrades to text-only | `on` |
-| `FLEE_BANS` | When she walks out of a scene, `on` locks that account out of chat for 5 min, doubling per repeat up to 30. `off` lets her leave without the lockout | `on` |
+| `FLEE_BANS` | When she walks out of a scene, `on` locks that account out of chat: 5 min doubling up to 30 on Normal, days on Hard, for good on the last Hardcore one. `off` lets her leave without the lockout | `on` |
 | `FREE_ROAM` | Going out is her call: the shop, karaoke, date and watch pages bounce home unless she agreed in chat. `on` drops that gate and gives everyone the "Force her" buttons and the restaurant's "Skip the wait" (admins have them regardless) | `off` |
 | `WATCH_FRAME_EVERY` | Seconds between the frames she sees when you watch something together, 1-5. Lower = she follows the scene better and reads more per window. `auto` is 2 with a graphics card, 5 on CPU | `auto` |
 | `LAN_INFERENCE` | Lends her brain to the phone app on your wifi. `./start.sh phone` turns it on for you, with a fresh `JUN_LAN_TOKEN`; change the token to unpair every phone | `off` |
@@ -367,7 +370,7 @@ Editing anything under `webapp/`? Run **`./sync-webapp.sh`** - it pushes the fil
 Her world knowledge is `tools/lore_dataset.jsonl`: about 2900 Q&A rows about the game's story and characters, mined from its text and shipped here with the dev's OK. Edit it, then rebuild the corpus and commit both (CI fails if they don't match):
 
 ```sh
-php tools/build_lore_index.php   # any PHP 8, no extensions
+php tools/build/build_lore_index.php   # any PHP 8, no extensions
 ./sync-webapp.sh                 # the php restart drops the cached index
 ```
 
@@ -436,7 +439,7 @@ First check `VOICE` in `.env` - `off` means the `tts` container was never starte
 <details>
 <summary><b>She walked out and now every message is refused</b></summary>
 
-That's the flee lockout, not a bug: the stream answers `user_fled` with a countdown, and the chat UI shows it. 5 minutes the first time, doubling per repeat up to 30, reset after a day of good behaviour. `FLEE_BANS=off` in `.env` lets her leave a scene without locking the account. A referee pass has to agree she could physically leave and had a reason, so "I told her to test the flee tool" doesn't count.
+That's the flee lockout, not a bug: the stream answers `user_fled` with a countdown, and the chat UI shows it. On Normal it's 5 minutes the first time, doubling per repeat up to 30, reset after a day of good behaviour. Hard goes 1 hour, 4 hours, then a day, and forgets one strike per two clean weeks. Hardcore goes 4 hours, a day, two days, and the fourth time she's gone: the app shows her goodbye and the only way back is holding the wipe button, which is a factory reset. `FLEE_BANS=off` in `.env` lets her leave a scene without locking the account. A referee pass has to agree she could physically leave and had a reason, so "I told her to test the flee tool" doesn't count.
 </details>
 
 <details>

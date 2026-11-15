@@ -1,3 +1,5 @@
+import { t } from './i18n.js?v=1';
+import { hold } from './hold.js?v=2';
 var toastTimer = {};
 var toastSeq = 0;
 
@@ -105,7 +107,7 @@ export function confirm(opts) {
 
     var body = document.createElement('div');
     body.className = 'confirm-message';
-    body.textContent = opts.message || 'Are you sure?';
+    body.textContent = opts.message || t('ui.sure', 'Are you sure?');
     dialog.appendChild(body);
 
     var actions = document.createElement('div');
@@ -114,14 +116,15 @@ export function confirm(opts) {
     var cancelBtn = document.createElement('button');
     cancelBtn.type = 'button';
     cancelBtn.className = 'confirm-btn confirm-cancel';
-    cancelBtn.textContent = opts.cancelLabel || 'Cancel';
+    cancelBtn.textContent = opts.cancelLabel || t('common.cancel', 'Cancel');
     cancelBtn.addEventListener('click', function () { close(false); });
 
     var okBtn = document.createElement('button');
     okBtn.type = 'button';
-    okBtn.className = 'confirm-btn confirm-ok' + (opts.danger ? ' danger' : '');
-    okBtn.textContent = opts.confirmLabel || 'Confirm';
-    okBtn.addEventListener('click', function () { close(true); });
+    okBtn.className = 'confirm-btn confirm-ok' + (opts.danger || opts.hold ? ' danger' : '');
+    okBtn.textContent = opts.confirmLabel || t('ui.confirm', 'Confirm');
+    if (opts.hold) hold(okBtn, function () { close(true); });
+    else okBtn.addEventListener('click', function () { close(true); });
 
     actions.appendChild(cancelBtn);
     actions.appendChild(okBtn);
@@ -137,6 +140,6 @@ export function confirm(opts) {
     // force layout NOW, or the fade has nothing to start from
     backdrop.getBoundingClientRect();
     backdrop.classList.add('open');
-    (opts.danger ? cancelBtn : okBtn).focus();
+    (opts.danger || opts.hold ? cancelBtn : okBtn).focus();
   });
 }

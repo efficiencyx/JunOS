@@ -28,12 +28,6 @@ webapp/assets/
 # don't commit it
 unsloth_compiled_cache/
 
-# dataset generation tools
-tools/dataset_v5
-tools/dataset_v6
-tools/dataset_v7
-tools/dataset_v8
-tools/dataset_v9/toolsets/batches/
 
 # the LoRA training pipeline (LoRA = the small adapter trained on
 # top of the base model) and its debug scratch. runs on the
@@ -42,7 +36,6 @@ tools/dataset_v9/toolsets/batches/
 # and stays tracked.
 train_jun.py
 train_think_colab.ipynb
-tools/build_dataset_v6.py
 diag_labels.py
 diag_thinking.py
 smoke_thinking.py
@@ -72,10 +65,10 @@ letsencrypt/
 
 # local render rig for clothing shots. opens the shipped webapp
 # assets, not something a user needs
-tools/clothing-render.html
-tools/clothing-render.js
+tools/render/clothing-render.html
+tools/render/clothing-render.js
 
-# build output from tools/build-installer-exe.ps1, and the exe
+# build output from tools/build/build-installer-exe.ps1, and the exe
 # `gh run download` drops wherever you run it
 dist/
 JunSetup*.exe
@@ -104,7 +97,9 @@ webapp/showcase-release.css
 webapp/js/showcase-release.js
 webapp/showcase-release-audio/
 webapp/showcase-release-media/
-tools/*showcase*
+tools/promo/*showcase*
+!tools/promo/showcase-rec/
+tools/promo/showcase-rec/profile/
 
 # the landing page is tracked here, publish.sh keeps the whole
 # folder out of the public tree. the stills are renders of her

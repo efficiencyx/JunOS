@@ -98,7 +98,7 @@ object AwayNotify {
                 if (!stillAway(applicationContext, leftAt)) return Result.success()
                 val written = if (modelOk) write(app, spec, lines, sent) else emptyList()
                 if (written.isEmpty()) modelOk = false
-                val texts = written.ifEmpty { AwayTexts.fallback(spec.tier, Random.nextInt()) }
+                val texts = written.ifEmpty { AwayTexts.fallback(applicationContext, spec.tier, Random.nextInt()) }
                 tiers[spec.tier] = texts
                 texts.forEach { sent += "(${spec.whenText} in) $it" }
             }
@@ -164,7 +164,7 @@ object AwayNotify {
             val bot = prefs.getString("bot", null) ?: "Jun"
             val text = AwayTexts.applyNames(inputData.getString("text").orEmpty(), player, bot)
             val manager = context.getSystemService(NotificationManager::class.java)
-            manager.createNotificationChannel(NotificationChannel(CHANNEL, "Texts from $bot while you're away", NotificationManager.IMPORTANCE_DEFAULT))
+            manager.createNotificationChannel(NotificationChannel(CHANNEL, context.getString(R.string.notif_away_channel, bot), NotificationManager.IMPORTANCE_DEFAULT))
             val open = PendingIntent.getActivity(
                 context, 0,
                 Intent(context, MainActivity::class.java).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_SINGLE_TOP),

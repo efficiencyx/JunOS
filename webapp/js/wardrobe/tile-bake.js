@@ -1,10 +1,10 @@
-import * as Live2D from '../live2d/live2d.js?v=91';
-import { ITEMS, VARIANTS, VARIANT_OWNER } from '../outfit/catalog.js?v=4';
-import { applyChanged, exportPreset, loadPresetState } from '../outfit/presets.js?v=31';
-import { itemPatterns } from '../outfit/apply.js?v=31';
-import { state, variantState } from '../outfit/current.js?v=4';
+import * as Live2D from '../live2d/live2d.js?v=92';
+import { ITEMS, VARIANTS, VARIANT_OWNER } from '../outfit/catalog.js?v=5';
+import { applyChanged, exportPreset, loadPresetState } from '../outfit/presets.js?v=42';
+import { itemPatterns } from '../outfit/apply.js?v=42';
+import { state, variantState } from '../outfit/current.js?v=6';
 
-// tiles baked by tools/bake-items.html, sitting in the gitignored
+// tiles baked by tools/render/bake-items.html, sitting in the gitignored
 // webapp/assets/items/. they're game art, so they never ship.
 // whoever ran the extractor bakes their own. no manifest means no
 // bake ran here and every tile falls back to the atlas crop
@@ -59,7 +59,7 @@ function bakeShots() {
   return shots;
 }
 
-// maintainer-only, driven by tools/bake-items.html. moves state
+// maintainer-only, driven by tools/render/bake-items.html. moves state
 // through loadPresetState/applyChanged rather than setItem, so it
 // never PUTs and never waits out writeWardrobe's 500ms spacing.
 // 40 shots would otherwise be half a minute of round trips.

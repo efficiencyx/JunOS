@@ -30,7 +30,7 @@ function prompt_apply_tool_gate(string $prompt, bool $toolsOffered): string {
 function chat_system_content(bool $toolsOffered, int $userId): string {
     // she learns how to read the blocks and when to reach for a tool
     // from TRAINING, not from here, so the prompt stays thin. must
-    // match tools/dataset_v5.
+    // match tools/train/dataset_v5.
     $systemContent = prompt_apply_tool_gate(chat_system_prompt(), $toolsOffered);
     $journalContext = journal_context($userId);
     if ($journalContext !== '') $systemContent .= "\n\n" . $journalContext;
@@ -65,7 +65,7 @@ function chat_build_messages(array $req, string $systemContent, string $liveCont
     // here, how to read them lives in the cached system message.
     //
     // and what he SAID comes first, context after. that's the shape
-    // she was trained on, tools/build_dataset_v6.py writes every row
+    // she was trained on, tools/train/build_dataset_v6.py writes every row
     // as user_text + "\n\n# Live context ..." and splits his words
     // back off on that same marker. put the block in front instead
     // and his message becomes a loose line dangling off the end of a

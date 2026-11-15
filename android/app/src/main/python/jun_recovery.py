@@ -4,14 +4,14 @@ from recover_assets import Recovery
 
 
 STAGES = (
-    ("model", "Recovering Live2D model", "recover_moc3"),
-    ("atlases", "Recovering base textures", "recover_atlases"),
-    ("variants", "Recovering wardrobe variants", "recover_variants"),
-    ("logos", "Recovering clothing logos", "recover_logos"),
-    ("limbs", "Recovering limb variants", "recover_limbs"),
-    ("hair", "Recovering hair variants", "recover_hair_strands"),
-    ("decals", "Recovering makeup and accessories", "recover_decals"),
-    ("items", "Building wardrobe catalog", "recover_item_catalog"),
+    ("model", "recover_moc3"),
+    ("atlases", "recover_atlases"),
+    ("variants", "recover_variants"),
+    ("logos", "recover_logos"),
+    ("limbs", "recover_limbs"),
+    ("hair", "recover_hair_strands"),
+    ("decals", "recover_decals"),
+    ("items", "recover_item_catalog"),
 )
 
 
@@ -19,10 +19,10 @@ def recover(game_root, output_dir, callback):
     try:
         worker = Recovery(str(game_root), str(output_dir), 2048)
         total = len(STAGES)
-        for index, (_, message, method) in enumerate(STAGES):
-            callback.onProgress(index, total, message)
+        for index, (stage, method) in enumerate(STAGES):
+            callback.onProgress(index, total, stage)
             getattr(worker, method)()
-        callback.onProgress(total, total, "Validating recovered assets")
+        callback.onProgress(total, total, "validate")
         return {"failures": list(worker.failures)}
     except SystemExit as error:
         raise RuntimeError(str(error)) from error

@@ -1,11 +1,12 @@
 // never writes a note, the server only scores it (consolidate.php?action=game)
 
 import * as Feed from './consolidation-feed.js?v=3';
-import * as Live2D from '../live2d/live2d.js?v=91';
-import * as VoiceMode from '../voice/voicemode.js?v=92';
-import * as Achievements from '../achievements/achievements.js?v=8';
-import { showFaceBubble } from './face-bubble.js?v=93';
+import * as Live2D from '../live2d/live2d.js?v=92';
+import * as VoiceMode from '../voice/voicemode.js?v=96';
+import * as Achievements from '../achievements/achievements.js?v=9';
+import { showFaceBubble } from './face-bubble.js?v=95';
 import { escapeHtml } from '../core/util.js?v=1';
+import { t } from '../core/i18n.js?v=1';
 
 const DRAWERS = [
   ['likes', 'preferences'],
@@ -83,10 +84,10 @@ function deal() {
 }
 
 function tallyText() {
-  const parts = [`streak ${streak}`, `agreed with her ${agreed}/${total}`];
-  if (progress?.step === 1) parts.push(`chat ${progress.i} of ${progress.n}`);
-  else if (progress?.step === 2) parts.push(`old notes ${progress.i} of ${progress.n}`);
-  else if (progress?.step === 3) parts.push('journal');
+  const parts = [t('cabinet.streak', 'streak {n}', { n: streak }), t('cabinet.agreed', 'agreed with her {a}/{b}', { a: agreed, b: total })];
+  if (progress?.step === 1) parts.push(t('cabinet.chat', 'chat {i} of {n}', progress));
+  else if (progress?.step === 2) parts.push(t('cabinet.oldNotes', 'old notes {i} of {n}', progress));
+  else if (progress?.step === 3) parts.push(t('cabinet.journal', 'journal'));
   return parts.join(' · ');
 }
 
@@ -121,19 +122,19 @@ function file(drawer) {
   }
   if (card.junk) {
     plays.push({ junk: true, drawer });
-    if (drawer !== 'shred') say("That's junk and you know it.");
+    if (drawer !== 'shred') say(t('jun.cabinet.junk', "That's junk and you know it."));
   } else {
     plays.push({ id: card.id, drawer });
     total++;
     if (drawer === 'shred') {
       streak = 0;
-      say("Hey. I'm keeping that one.");
+      say(t('jun.cabinet.keep', "Hey. I'm keeping that one."));
     } else if (DRAWER_OF[card.category] === drawer) {
       agreed++;
       streak++;
     } else {
       streak = 0;
-      say(`I put that under ${DRAWER_OF[card.category]}.`);
+      say(t('jun.cabinet.filed', 'I put that under {drawer}.', { drawer: DRAWER_OF[card.category] }));
     }
   }
   deal();
@@ -147,7 +148,7 @@ function onFeed(ev) {
     pool = pool.filter(c => c.id !== ev.id);
     queue.push({ id: ev.id, category: ev.category, text: ev.text });
   } else if (ev.type === 'stall') {
-    say('Lost my train of thought. One sec.');
+    say(t('jun.cabinet.stall', 'Lost my train of thought. One sec.'));
   } else if (ev.type === 'done') {
     finish(ev.status);
     return;
@@ -182,7 +183,7 @@ async function finish(status) {
   render();
   if (status !== 'ok') { settle(false); teardown(); return; }
   const score = await settle(true);
-  if (score && score.total > 0) say(`Done. You put ${score.agreed} of ${score.total} where I would have.`);
+  if (score && score.total > 0) say(t('jun.cabinet.done', 'Done. You put {agreed} of {total} where I would have.', score));
   setTimeout(teardown, CLOSE_AFTER_DONE_MS);
 }
 
@@ -228,9 +229,9 @@ function build() {
   overlay.hidden = true;
   overlay.setAttribute('role', 'dialog');
   overlay.setAttribute('aria-modal', 'true');
-  overlay.setAttribute('aria-label', 'Filing cabinet');
+  overlay.setAttribute('aria-label', t('cabinet.aria', 'Filing cabinet'));
   overlay.innerHTML = `
-    <button class="voice-overlay-btn cabinet-close" type="button" aria-label="Back to the chat" title="Back to the chat">
+    <button class="voice-overlay-btn cabinet-close" type="button" aria-label="${t('cabinet.back', 'Back to the chat')}" title="${t('cabinet.back', 'Back to the chat')}">
       <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
     </button>
     <div class="cabinet-tally" aria-live="polite"></div>
@@ -239,12 +240,12 @@ function build() {
         <p>I'm sorting what I know about you. You can help.</p>
         <p>Tap a card, then the drawer it goes in. Junk goes in the shredder.</p>
         <p>I'll tell you if I'd have put it somewhere else.</p>
-        <button type="button">Fine</button>
+        <button type="button">${t('cabinet.fine', 'Fine')}</button>
       </div>
       <div class="cabinet-hand"></div>
       <div class="cabinet-drawers">
         ${DRAWERS.map(([drawer]) => `<button type="button" class="cabinet-drawer" data-drawer="${drawer}">${drawer}</button>`).join('')}
-        <button type="button" class="cabinet-drawer cabinet-shredder" data-drawer="shred">shredder</button>
+        <button type="button" class="cabinet-drawer cabinet-shredder" data-drawer="shred">${t('cabinet.shredder', 'shredder')}</button>
       </div>
     </div>`;
   document.body.append(overlay);
@@ -299,8 +300,8 @@ export async function open({ ask = false, onStop: stopHandler = null } = {}) {
     if (!active) return;
     if (ask) {
       choosing = true;
-      hand = [{ key: ++seq, choice: 'keep', text: 'Keep playing' }, { key: ++seq, choice: 'stop', text: 'Stop' }];
-      say("Almost done. Shred the one you don't want.");
+      hand = [{ key: ++seq, choice: 'keep', text: t('cabinet.keep', 'Keep playing') }, { key: ++seq, choice: 'stop', text: t('karaoke.stop', 'Stop') }];
+      say(t('jun.cabinet.almost', "Almost done. Shred the one you don't want."));
       render();
     } else {
       deal();

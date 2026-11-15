@@ -61,8 +61,9 @@ $userId = (int)$user['id'];
 $canForce = is_admin($user) || free_roam_enabled();
 
 if (require_method('GET', 'POST') === 'GET') {
-    $trip = trip_get($userId) ?? ['where' => '', 'since' => 0, 'conversation_id' => 0];
-    $trip['gated'] = !free_roam_enabled();
+    $blocked = ban_blocked($userId);
+    $trip = ($blocked ? null : trip_get($userId)) ?? ['where' => '', 'since' => 0, 'conversation_id' => 0];
+    $trip['gated'] = $blocked || !free_roam_enabled();
     $trip['can_force'] = $canForce;
     $trip['watch'] = true;
     $trip['frame_every'] = watch_frame_every();
@@ -75,7 +76,7 @@ $body = ($_SERVER['CONTENT_LENGTH'] ?? 0) > 0 ? read_json_body(48 * 1024) : [];
 if ($action === 'go') {
     $where = (string)($body['where'] ?? '');
     $tourTrip = $where === 'shop' && ($body['tour'] ?? false) === true && !tour_done($userId);
-    if (!$canForce && !$tourTrip) fail(403, 'forbidden');
+    if ((!$canForce && !$tourTrip) || ban_blocked($userId)) fail(403, 'forbidden');
     if (!in_array($where, ['shop', 'karaoke', 'date', 'watch'], true)) fail(400, 'invalid_request');
     trip_set($userId, $where, (int)($body['conversation_id'] ?? 0));
     json_out(['ok' => true]);

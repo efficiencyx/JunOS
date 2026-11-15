@@ -3,8 +3,8 @@
 # section 6 (the first with Session.clone(), so the phone's prefix cache
 # is on) and swaps it into the draft, SHA256SUMS included.
 #
-#   tools/release-apk-local.sh v1.1.0            build + check only
-#   tools/release-apk-local.sh v1.1.0 --upload   then swap it into the draft
+#   tools/build/release-apk-local.sh v1.1.0            build + check only
+#   tools/build/release-apk-local.sh v1.1.0 --upload   then swap it into the draft
 #
 # Signing comes from the environment, the same names CI uses:
 #   JUN_ANDROID_KEYSTORE_BASE64 (or JUN_ANDROID_KEYSTORE, a path)
@@ -20,7 +20,7 @@
 # every .so in that commit's prebuilt/android_arm64/ (git lfs pull first).
 set -euo pipefail
 
-tag="${1:?usage: tools/release-apk-local.sh vX.Y.Z [--upload]}"
+tag="${1:?usage: tools/build/release-apk-local.sh vX.Y.Z [--upload]}"
 upload="${2:-}"
 repo="${JUN_RELEASE_REPO:-efficiencyx/JunOS}"
 public="${JUN_PUBLIC:-$HOME/Documenti/Jun-public}"

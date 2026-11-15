@@ -46,7 +46,7 @@ object Wardrobe {
         "hair_h0_style" to 1, "arm_style" to 2, "leg_style" to 2, "hightech_skin" to 1,
         "skirt_style" to 1, "sock_style" to 7, "shoe_style" to 2,
         "glasses_style" to 3, "choker_style" to 3, "bow_style" to 2, "shirt_logo" to 100, "sleeve_logo" to 100,
-        "hoodie_logo" to 100, "panties_logo" to 100,
+        "hoodie_logo" to 100, "panties_logo" to 100, "bikini_top_style" to 1, "bikini_bot_style" to 1,
     )
 
     // pairs that cannot both be on. same list as ITEMS[].excludes

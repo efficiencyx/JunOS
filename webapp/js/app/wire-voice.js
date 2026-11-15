@@ -1,22 +1,23 @@
 import { renderVoiceDraft, stopActiveStream } from './session.js?v=1';
-import { sendAudioFromVoice, sendFromVoice } from './chat.js?v=53';
+import { sendAudioFromVoice, sendFromVoice } from './chat.js?v=68';
 import { voiceBargeChk, voiceChk, voiceHearAllChk, voiceSilenceInput, voiceState } from './dom.js?v=77';
-import { hideFaceBubble } from './face-bubble.js?v=93';
+import { hideFaceBubble } from './face-bubble.js?v=95';
 import { logAction } from './logging.js?v=78';
-import { syncVoiceDeps, updateVoiceSilenceLabel } from './settings.js?v=130';
-import * as Prefs from '../core/prefs.js?v=8';
-import * as ui from '../core/ui.js?v=1';
-import * as Voice from '../voice/voice.js?v=93';
-import * as VoiceMode from '../voice/voicemode.js?v=92';
+import { syncVoiceDeps, updateVoiceSilenceLabel } from './settings.js?v=145';
+import * as Prefs from '../core/prefs.js?v=9';
+import * as ui from '../core/ui.js?v=10';
+import * as Voice from '../voice/voice.js?v=94';
+import * as VoiceMode from '../voice/voicemode.js?v=96';
+import { t } from '../core/i18n.js?v=1';
 
 const VOICE_STATE_LABELS = {
-  idle: 'off',
-  calibrating: 'listening to the room…',
-  listening: 'listening',
+  idle: t('voice.state.off', 'off'),
+  calibrating: t('voice.state.calibrating', 'listening to the room…'),
+  listening: t('voice.state.listening', 'listening'),
   // maybe lasts ~96ms. way too short to flicker another label
-  maybe: 'listening',
-  speech: 'hearing you',
-  thinking: 'transcribing…',
+  maybe: t('voice.state.listening', 'listening'),
+  speech: t('voice.state.speech', 'hearing you'),
+  thinking: t('voice.state.thinking', 'transcribing…'),
 };
 
 async function sttAvailable() {
@@ -52,10 +53,10 @@ export async function wireVoice() {
       const turn = sendAudioFromVoice(b64, () => {
         audioTurns = false;
         if (sttOk) {
-          ui.toast('⚠ This model can\'t hear - falling back to transcription', 'error');
+          ui.toast(t('voice.err.noAudio', '⚠ This model can\'t hear - falling back to transcription'), 'error');
           text.then(t => { if (t) sendFromVoice(t); });
         } else {
-          ui.toast('⚠ This model can\'t hear and speech-to-text is not running - voice needs one of the two', 'error');
+          ui.toast(t('voice.err.noAudioNoStt', '⚠ This model can\'t hear and speech-to-text is not running - voice needs one of the two'), 'error');
         }
       });
       text.then(t => { if (t) turn.setTranscript(t); });
@@ -83,13 +84,13 @@ export async function wireVoice() {
     if (!sup.ok) {
       voiceChk.disabled = true;
       const why = sup.reason === 'insecure_context'
-        ? 'needs HTTPS (or localhost) - see TLS_MODE in .env'
+        ? t('voice.why.https', 'needs HTTPS (or localhost) - see TLS_MODE in .env')
         : sup.reason === 'no_getusermedia'
-          ? 'no microphone API in this browser'
-          : 'no AudioWorklet in this browser';
-      if (voiceState) voiceState.textContent = 'unavailable';
+          ? t('voice.why.noMic', 'no microphone API in this browser')
+          : t('voice.why.noWorklet', 'no AudioWorklet in this browser');
+      if (voiceState) voiceState.textContent = t('voice.state.unavailable', 'unavailable');
       const voiceModeBtn = document.getElementById('voiceModeBtn');
-      if (voiceModeBtn) { voiceModeBtn.disabled = true; voiceModeBtn.title = `Voice mode unavailable: ${why}`; }
+      if (voiceModeBtn) { voiceModeBtn.disabled = true; voiceModeBtn.title = t('voice.modeUnavailable', 'Voice mode unavailable: {why}', { why }); }
       logAction('warn', `Voice mode unavailable: ${why}`);
     } else {
       if (!sttOk) logAction('warn', 'No speech-to-text on the sidecar - voice works only while the chat model can hear (Ollama + audio capability)');
@@ -109,8 +110,8 @@ export async function wireVoice() {
         if (voiceOverlay) voiceOverlay.classList.toggle('hear-all', on);
         if (hearAllBtn) {
           hearAllBtn.title = hearAllBtn.ariaLabel = on
-            ? 'She hears everything - click so she ignores side-talk'
-            : 'She ignores side-talk - click so she hears everything';
+            ? t('voice.hearAll.on', 'She hears everything - click so she ignores side-talk')
+            : t('voice.hearAll.title', 'She ignores side-talk - click so she hears everything');
         }
         if (!save) return;
         localStorage.setItem('voice.hear_all', on ? '1' : '0');
@@ -130,7 +131,7 @@ export async function wireVoice() {
           } catch (e) {
             voiceChk.checked = false;
             syncVoiceDeps();
-            ui.toast('⚠ Mic blocked - check the browser permission', 'error');
+            ui.toast(t('voice.err.micBlocked', '⚠ Mic blocked - check the browser permission'), 'error');
           }
         } else {
           Voice.disable();

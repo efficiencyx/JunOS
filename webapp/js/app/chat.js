@@ -1,26 +1,27 @@
-import { armIdleAfterReply, cancelActiveIdleNudge, cancelAutoReset, cancelIdleNudge, composerPlaceholder, consolidating, fleeActive, reportActivity, resetIdleNudge, scheduleAutoReset, setCancelActiveIdleNudge, setConsolidating, showConsolidatingBubble, startFleeLock, syncConsolidationStatus } from './consolidation.js?v=125';
+import { armIdleAfterReply, cancelActiveIdleNudge, cancelAutoReset, cancelIdleNudge, composerPlaceholder, consolidating, fleeActive, reportActivity, resetIdleNudge, scheduleAutoReset, setCancelActiveIdleNudge, setConsolidating, showConsolidatingBubble, startFleeLock, syncConsolidationStatus } from './consolidation.js?v=141';
 import { chatInput, messagesEl, modelSelect, reasoningSelect, sendBtn, sendButtonIdleMarkup, sendButtonStopMarkup, thinkChk } from './dom.js?v=77';
-import { announceMobileReply, hideFaceBubble, scheduleFaceBubbleHide, setLatestAssistantReply, showFaceBubble } from './face-bubble.js?v=93';
+import { announceMobileReply, hideFaceBubble, scheduleFaceBubbleHide, setLatestAssistantReply, showFaceBubble } from './face-bubble.js?v=95';
 import { appendDebugReply, appendDebugThinking, beginDebugTurn, logToolStatus, setDebugPrompt } from './logging.js?v=78';
-import { loadMood } from './mood.js?v=92';
-import { refreshSidebar } from './sidebar.js?v=125';
-import { makeNameFilter, makeStreamBuffer } from './stream-filters.js?v=104';
+import { loadMood } from './mood.js?v=93';
+import { refreshSidebar } from './sidebar.js?v=140';
+import { makeNameFilter, makeStreamBuffer } from './stream-filters.js?v=115';
 import { localTimeString, phoneMode } from '../core/util.js?v=1';
 import * as Names from '../core/names.js?v=1';
-import * as ui from '../core/ui.js?v=1';
+import * as ui from '../core/ui.js?v=10';
 import { apiJson } from '../core/api.js?v=1';
 import * as ChatAPI from '../core/chat-api.js?v=7';
-import * as Mods from '../mods/mods.js?v=102';
-import * as Outfit from '../outfit/outfit.js?v=101';
-import * as Cards from './cards.js?v=36';
-import * as Achievements from '../achievements/achievements.js?v=8';
+import * as Mods from '../mods/mods.js?v=113';
+import * as Outfit from '../outfit/outfit.js?v=112';
+import * as Cards from './cards.js?v=40';
+import * as Achievements from '../achievements/achievements.js?v=9';
 import * as History from './history.js?v=2';
-import * as TTS from '../voice/tts.js?v=92';
-import * as Voice from '../voice/voice.js?v=93';
-import * as VoiceMode from '../voice/voicemode.js?v=92';
+import * as TTS from '../voice/tts.js?v=93';
+import * as Voice from '../voice/voice.js?v=94';
+import * as VoiceMode from '../voice/voicemode.js?v=96';
 import { DevHud, abortFn, currentConversationId, messages, setAbortFn, setRenderVoiceDraft, setStopActiveStream, stopActiveStream } from './session.js?v=1';
-import { appendMsg, followLatest, renderMarkdown, updateEmptyState } from './messages.js?v=22';
+import { appendMsg, followLatest, renderMarkdown, updateEmptyState } from './messages.js?v=24';
 import { setComposerText } from './composer.js?v=3';
+import { t } from '../core/i18n.js?v=1';
 
 const THUMBS_UP_ICON = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M14 9V5a3 3 0 0 0-3-3l-4 9v11h11.28a2 2 0 0 0 2-1.7l1.38-9a2 2 0 0 0-2-2.3zM7 22H4a2 2 0 0 1-2-2v-7a2 2 0 0 1 2-2h3"/></svg>';
 const THUMBS_DOWN_ICON = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M10 15v4a3 3 0 0 0 3 3l4-9V2H5.72a2 2 0 0 0-2 1.7l-1.38 9a2 2 0 0 0 2 2.3zm7-13h2.67A2.31 2.31 0 0 1 22 4v7a2.31 2.31 0 0 1-2.33 2H17"/></svg>';
@@ -54,9 +55,9 @@ export function addReplyActions(message, model = null) {
   document.querySelectorAll('.msg-actions').forEach(el => el.remove());
   const row = document.createElement('div');
   row.className = 'msg-actions';
-  const regen = actionButton(REGENERATE_ICON, 'Regenerate', 'msg-regen');
-  const up = actionButton(THUMBS_UP_ICON, 'Good reply', 'msg-rate-btn');
-  const down = actionButton(THUMBS_DOWN_ICON, 'Bad reply', 'msg-rate-btn');
+  const regen = actionButton(REGENERATE_ICON, t('chat.regenerate', 'Regenerate'), 'msg-regen');
+  const up = actionButton(THUMBS_UP_ICON, t('chat.goodReply', 'Good reply'), 'msg-rate-btn');
+  const down = actionButton(THUMBS_DOWN_ICON, t('chat.badReply', 'Bad reply'), 'msg-rate-btn');
   row.append(regen, up, down);
   message.appendChild(row);
 
@@ -71,7 +72,7 @@ export function addReplyActions(message, model = null) {
     } catch (e) {
       up.classList.remove('selected');
       down.classList.remove('selected');
-      ui.toast('⚠ Rating not saved.', 'error');
+      ui.toast(t('chat.ratingFailed', '⚠ Rating not saved.'), 'error');
     }
   };
   if (model == null && currentConversationId != null) {
@@ -171,7 +172,7 @@ export function sendAudioFromVoice(b64, onUnsupported) {
   resetIdleNudge();
   reportActivity();
   const bubble = appendMsg('user', '');
-  setSpokenText(bubble, 'spoken message');
+  setSpokenText(bubble, t('chat.spokenMessage', 'spoken message'));
   const entry = { role: 'user', content: '<audio>' };
   const convId = currentConversationId;
   messages.push(entry);
@@ -240,19 +241,19 @@ export function runChat({ idle, ephemeral, audio, voice, invite = '', regenerate
   body.appendChild(typing);
 
   let thinkEl = null, thinkBody = null, thinking = '';
-  function pushThinking(t) {
+  function pushThinking(chunk) {
     if (!thinkEl) {
       thinkEl = document.createElement('details');
       thinkEl.className = 'msg-think';
       thinkEl.open = true;
       const summary = document.createElement('summary');
-      summary.textContent = 'Thinking…';
+      summary.textContent = t('chat.thinking', 'Thinking…');
       thinkBody = document.createElement('div');
       thinkBody.className = 'msg-think-body';
       thinkEl.append(summary, thinkBody);
       draft.insertBefore(thinkEl, body);
     }
-    thinking += t;
+    thinking += chunk;
     thinkBody.textContent = thinking;
     followLatest();
   }
@@ -261,7 +262,7 @@ export function runChat({ idle, ephemeral, audio, voice, invite = '', regenerate
     if (!thinkEl || thinkSettled) return;
     thinkSettled = true;
     thinkEl.open = false;
-    thinkEl.querySelector('summary').textContent = 'Thought process';
+    thinkEl.querySelector('summary').textContent = t('chat.thoughtProcess', 'Thought process');
   }
 
   let visible = '';
@@ -307,7 +308,7 @@ export function runChat({ idle, ephemeral, audio, voice, invite = '', regenerate
 
   sendBtn.disabled = false;
   sendBtn.innerHTML = sendButtonStopMarkup;
-  sendBtn.setAttribute('aria-label', 'Stop response');
+  sendBtn.setAttribute('aria-label', t('chat.stop', 'Stop response'));
 
   setStopActiveStream((discard = false) => {
     if (!isCurrent()) return;
@@ -404,11 +405,11 @@ export function runChat({ idle, ephemeral, audio, voice, invite = '', regenerate
           return;
         }
         draft.className = 'msg silence';
-        draft.textContent = Names.getBot() + ' says nothing.';
+        draft.textContent = t('chat.saysNothing', '{name} says nothing.', { name: Names.getBot() });
       },
       onFled: (info) => {
         if (!isCurrent()) return;
-        startFleeLock((info.until || 0) * 1000, info.reason);
+        startFleeLock((info.until || 0) * 1000, info.reason, info.blocked);
       },
       onRestart: (r) => {
         if (!isCurrent()) return;
@@ -485,7 +486,7 @@ export function runChat({ idle, ephemeral, audio, voice, invite = '', regenerate
         if (!visible.trim()) draft.remove();
         if (err.message === 'user_fled') {
           const info = err.data || {};
-          startFleeLock((info.until || 0) * 1000, info.reason);
+          startFleeLock((info.until || 0) * 1000, info.reason, info.blocked);
         } else if (err.message === 'audio_unsupported') {
           // refused before anything was written, so the turn leaves no trace
           // here either. wire-voice decides what happens to the wav
@@ -495,7 +496,9 @@ export function runChat({ idle, ephemeral, audio, voice, invite = '', regenerate
           showConsolidatingBubble();
           setTimeout(syncConsolidationStatus, 3000);
         } else if (err.message === 'looping') {
-          ui.toast(`⚠ ${Names.getBot()} broke. She got stuck repeating herself, four times in a row.`, 'error');
+          ui.toast(t('chat.err.looping', '⚠ {name} broke. She got stuck repeating herself, four times in a row.', { name: Names.getBot() }), 'error');
+        } else if (err.message === 'upstream_unavailable') {
+          ui.toast(t('chat.err.upstream', '⚠ the model server stopped answering. check `./start.sh logs` (JunOS.exe > Logs on Windows)'), 'error');
         } else {
           ui.toast('⚠ ' + err.message, 'error');
         }
@@ -528,7 +531,7 @@ export function runChat({ idle, ephemeral, audio, voice, invite = '', regenerate
     setStopActiveStream(null);
     sendBtn.disabled = consolidating || fleeActive();
     sendBtn.innerHTML = sendButtonIdleMarkup;
-    sendBtn.setAttribute('aria-label', 'Send');
+    sendBtn.setAttribute('aria-label', t('chat.send', 'Send'));
     sendBtn.removeEventListener('click', onClickStop);
   }
 }
@@ -549,7 +552,7 @@ export function discardActiveResponse() {
   setRenderVoiceDraft(null);
   sendBtn.disabled = consolidating || fleeActive();
   sendBtn.innerHTML = sendButtonIdleMarkup;
-  sendBtn.setAttribute('aria-label', 'Send');
+  sendBtn.setAttribute('aria-label', t('chat.send', 'Send'));
   ui.setStatus('idle', 'idle');
 }
 

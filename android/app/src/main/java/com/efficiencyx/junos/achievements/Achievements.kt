@@ -115,8 +115,8 @@ class Achievements(private val context: Context, private val database: JunDataba
         return tier
     }
 
-    // the phone's one account is the admin, so it always sees through the ???
-    suspend fun list(): JsonObject {
+    // the dev account sees through the ??? or it couldn't move a counter it can't even name
+    suspend fun list(reveal: Boolean): JsonObject {
         val stats = dao.achievementStats().associate { it.stat to it.value }
         val seen = dao.achievementSeen().associate { it.ach to it.tier }
         val fresh = mutableListOf<JsonObject>()
@@ -124,11 +124,13 @@ class Achievements(private val context: Context, private val database: JunDataba
             for (a in catalog) {
                 val value = stats[a.stat]
                 val tier = tier(a, value)
+                val redact = a.hidden && tier == 0 && !reveal
                 add(buildJsonObject {
-                    put("id", a.id); put("group", a.group); put("name", a.name); put("desc", a.desc)
+                    put("id", a.id); put("group", a.group)
+                    put("name", if (redact) JsonNull else JsonPrimitive(a.name)); put("desc", if (redact) JsonNull else JsonPrimitive(a.desc))
                     put("secret", a.hidden && tier == 0); put("low", a.low)
-                    put("tiers", JsonArray(a.tiers.map { JsonPrimitive(it) }))
-                    put("value", value?.let { JsonPrimitive(it) } ?: JsonNull)
+                    put("tiers", if (redact) JsonNull else JsonArray(a.tiers.map { JsonPrimitive(it) }))
+                    put("value", if (redact) JsonNull else value?.let { JsonPrimitive(it) } ?: JsonNull)
                     put("tier", tier)
                 })
                 if (tier > (seen[a.id] ?: 0)) fresh += buildJsonObject { put("id", a.id); put("name", a.name); put("tier", tier) }
@@ -138,7 +140,7 @@ class Achievements(private val context: Context, private val database: JunDataba
             put("tier_names", JsonArray(TIERS.map { JsonPrimitive(it) }))
             put("list", list)
             put("fresh", JsonArray(fresh))
-            put("dev", true)
+            put("dev", reveal)
         }
     }
 

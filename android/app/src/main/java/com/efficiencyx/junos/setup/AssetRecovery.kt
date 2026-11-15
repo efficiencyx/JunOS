@@ -6,6 +6,7 @@ import android.os.ParcelFileDescriptor
 import android.util.Log
 import com.chaquo.python.Python
 import com.chaquo.python.android.AndroidPlatform
+import com.efficiencyx.junos.R
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.withContext
@@ -54,13 +55,13 @@ class AssetRecovery(private val context: Context) {
         try {
             gameRoot.mkdirs()
             output.mkdirs()
-            progress(0, 10, "Checking game ZIP")
+            progress(0, 10, context.getString(R.string.setup_recovery_checking_zip))
             val sourceLabel = extractUnityData(uri, gameRoot) { done, total ->
-                progress(done, total, "Extracting required Unity data")
+                progress(done, total, context.getString(R.string.setup_recovery_extracting))
             }
             coroutineContext.ensureActive()
-            runPythonRecovery(gameRoot, output) { done, total, message ->
-                progress(done, total, message)
+            runPythonRecovery(gameRoot, output) { done, total, stage ->
+                progress(done, total, STAGES[stage]?.let(context::getString) ?: stage)
             }
             validateOutput(output)
             writeManifest(output, sourceLabel)
@@ -77,7 +78,7 @@ class AssetRecovery(private val context: Context) {
         progress: (Long, Long) -> Unit,
     ): String {
         val descriptor = context.contentResolver.openFileDescriptor(uri, "r")
-            ?: error("Could not open selected ZIP")
+            ?: error(context.getString(R.string.err_zip_open))
         var prefix: String? = null
         ParcelFileDescriptor.AutoCloseInputStream(descriptor).use { input ->
             // the game ZIP puts each size in a trailing data
@@ -89,7 +90,7 @@ class AssetRecovery(private val context: Context) {
                 ZipFile.builder().setSeekableByteChannel(input.channel).get()
             } catch (error: IOException) {
                 throw IllegalStateException(
-                    "Could not read the selected ZIP - copy it onto this device's storage and pick it again",
+                    context.getString(R.string.err_zip_read),
                     error,
                 )
             }
@@ -103,7 +104,7 @@ class AssetRecovery(private val context: Context) {
                     entries++
                     if (entry.isDirectory) continue
                     val normalized = normalizeZipPath(entry.name)
-                    if (normalized == "AndroidManifest.xml") error("Select the Windows or Linux game ZIP, not an Android APK")
+                    if (normalized == "AndroidManifest.xml") error(context.getString(R.string.err_zip_is_apk))
                     val marker = "/$GAME_DATA/"
                     val at = normalized.indexOf(marker)
                     val relative = when {
@@ -114,7 +115,7 @@ class AssetRecovery(private val context: Context) {
                     if (relative == null || !wanted(relative)) continue
                     val currentPrefix = normalized.removeSuffix(relative).removeSuffix("/")
                     if (prefix == null) prefix = currentPrefix
-                    check(prefix == currentPrefix) { "ZIP contains more than one game data directory" }
+                    check(prefix == currentPrefix) { context.getString(R.string.err_zip_multiple_games) }
                     val base = relative.substringAfterLast('/')
                     if (base in CRITICAL) check(critical.add(base)) { "ZIP contains duplicate $base" }
                     selected += entry to relative
@@ -123,10 +124,10 @@ class AssetRecovery(private val context: Context) {
                 Log.i(TAG, "ZIP scan completed: $entries entries, ${selected.size} selected, $total bytes")
                 val missing = CRITICAL - critical
                 check(missing.isEmpty()) {
-                    "Unsupported game ZIP: missing ${missing.sorted().joinToString(", ")}"
+                    context.getString(R.string.err_zip_unsupported, missing.sorted().joinToString(", "))
                 }
-                check(selected.size <= MAX_FILES) { "Too many Unity resource files in ZIP" }
-                check(total <= MAX_EXPANDED) { "Unity data exceeds the 3 GB recovery limit" }
+                check(selected.size <= MAX_FILES) { context.getString(R.string.err_zip_too_many) }
+                check(total <= MAX_EXPANDED) { context.getString(R.string.err_zip_too_big) }
                 var expanded = 0L
                 for ((entry, relative) in selected) {
                     val target = File(gameRoot, "$GAME_DATA/$relative").canonicalFile
@@ -141,7 +142,7 @@ class AssetRecovery(private val context: Context) {
                                 if (read < 0) break
                                 output.write(buffer, 0, read)
                                 expanded += read
-                                check(expanded <= MAX_EXPANDED) { "Unity data exceeds the 3 GB recovery limit" }
+                                check(expanded <= MAX_EXPANDED) { context.getString(R.string.err_zip_too_big) }
                                 progress(expanded, total)
                             }
                             output.fd.sync()
@@ -239,6 +240,17 @@ class AssetRecovery(private val context: Context) {
         private const val GAME_DATA = "My Dystopian Robot Girlfriend_Data"
         private const val MAX_EXPANDED = 3L * 1024 * 1024 * 1024
         private const val MAX_FILES = 512
+        private val STAGES = mapOf(
+            "model" to R.string.setup_recovery_model,
+            "atlases" to R.string.setup_recovery_atlases,
+            "variants" to R.string.setup_recovery_variants,
+            "logos" to R.string.setup_recovery_logos,
+            "limbs" to R.string.setup_recovery_limbs,
+            "hair" to R.string.setup_recovery_hair,
+            "decals" to R.string.setup_recovery_decals,
+            "items" to R.string.setup_recovery_items,
+            "validate" to R.string.setup_recovery_validate,
+        )
         private val CRITICAL = setOf("resources.assets", "sharedassets0.assets", "globalgamemanagers")
         private val REQUIRED_OUTPUTS = listOf(
             "interaction_model.moc3", "interaction_model.model3.json",

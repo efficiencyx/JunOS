@@ -24,7 +24,7 @@ if ($method === 'GET' && $action === 'status') {
         ];
     }
     $ban = ban_active($userId);
-    if ($ban !== null) $status['ban'] = ['until' => $ban['until'], 'reason' => $ban['reason']];
+    if ($ban !== null) $status['ban'] = ['until' => $ban['until'], 'reason' => $ban['reason'], 'blocked' => $ban['blocked']];
     json_out($status);
 }
 
@@ -52,7 +52,7 @@ if ($method === 'GET' && $action === 'welcome') {
 // server running or not
 if ($method === 'GET' && $action === 'pending') {
     rate_limit('consolidate_pending', 30, 60);
-    $after = array_column(WELCOME_TIERS, 'after', 'tier');
+    $after = array_column(welcome_tiers(), 'after', 'tier');
     $tiers = [];
     foreach (welcome_queue_read($userId, false) as $tier => $texts) {
         if (!isset($after[$tier], WELCOME_MILESTONES[$tier])) continue;

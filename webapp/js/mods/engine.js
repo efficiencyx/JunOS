@@ -1,18 +1,26 @@
-import * as Live2D from '../live2d/live2d.js?v=91';
-import * as Prefs from '../core/prefs.js?v=8';
+import * as Live2D from '../live2d/live2d.js?v=92';
 import { idbStore } from '../core/idb.js?v=1';
-import { hexToRgb01 } from '../outfit/colors.js?v=1';
-import { applyDrawOrder, applyFootCover, hiddenItemDrawables, refreshVisibility, setModdedDrawables } from '../outfit/apply.js?v=31';
+import { hexToRgb01, normalizeHex } from '../outfit/colors.js?v=1';
+import { applyDrawOrder, applyFootCover, applyVariants, hiddenItemDrawables, refreshVisibility, setModdedDrawables } from '../outfit/apply.js?v=42';
+import { styleBase } from '../outfit/composite.js?v=42';
+import { VARIANTS } from '../outfit/catalog.js?v=5';
 import { unzip } from './zip.js?v=1';
-import { itemDrawables, parseMod } from './parse.js?v=19';
-import { MOD_SLOT, bakeDrawable, fileUrl } from './layers.js?v=19';
+import { deleteRemote, fetchRemote, listRemote, saveRemoteState, uploadRemote } from './server.js?v=2';
+import { itemDrawables, parseMod } from './parse.js?v=23';
+import { MOD_SLOT, bakeDrawable, fileUrl } from './layers.js?v=25';
 import { hooks } from '../outfit/hooks.js?v=1';
 
 const STATE_KEY = 'omega.mods.state.v1';
+const REMOVED_KEY = 'omega.mods.removed.v1';
+const GAME_KEY = 'omega.mods.game.v1';
+const SYNC_KEY = 'omega.mods.sync.v1';
 const zips = idbStore('omega-mods', 'zips', 'guid');
 
 export let mods = [];
 let state = {};
+let removed = [];
+let sync = { epoch: null, version: 0, dirty: false };
+let edits = 0;
 let readyPromise = null;
 let appliedIds = new Set();
 
@@ -24,11 +32,41 @@ const shownSlots = new Set();
 
 function loadState() {
   try { state = JSON.parse(localStorage.getItem(STATE_KEY)) || {}; } catch (e) { state = {}; }
+  try { removed = JSON.parse(localStorage.getItem(REMOVED_KEY)) || []; } catch (e) { removed = []; }
+  try { sync = { ...sync, ...JSON.parse(localStorage.getItem(SYNC_KEY)) }; } catch (e) { }
 }
+
+function writeLocal() {
+  try {
+    localStorage.setItem(STATE_KEY, JSON.stringify(state));
+    localStorage.setItem(REMOVED_KEY, JSON.stringify(removed));
+    localStorage.setItem(SYNC_KEY, JSON.stringify(sync));
+  } catch (e) { }
+}
+
+let pushTimer = null;
+async function pushState(keepalive = false) {
+  clearTimeout(pushTimer);
+  pushTimer = null;
+  const mark = edits;
+  const version = await saveRemoteState({ state, game: gameWorn(), removed }, keepalive);
+  if (version === null) return;
+  sync.version = version;
+  if (mark === edits) sync.dirty = false;
+  writeLocal();
+}
+
 function saveState() {
-  try { localStorage.setItem(STATE_KEY, JSON.stringify(state)); } catch (e) { }
-  Prefs.pushToServer();
+  edits++;
+  sync.dirty = true;
+  writeLocal();
+  clearTimeout(pushTimer);
+  pushTimer = setTimeout(pushState, 1000);
 }
+
+// a closing tab would drop the debounced push and the next load would
+// take the server's older copy over this change
+addEventListener('pagehide', () => { if (pushTimer) pushState(true); });
 export const modState = (guid) => (state[guid] = state[guid] || { items: {}, colors: [] });
 export const isEquipped = (mod, i) => !!modState(mod.guid).items[i];
 
@@ -36,13 +74,69 @@ export async function ensureLoaded() {
   if (!readyPromise) {
     readyPromise = (async () => {
       loadState();
-      for (const rec of await zips.all()) {
+      const local = await zips.all();
+      for (const rec of local) {
         try { mods.push(parseMod(rec.guid, await unzip(rec.buf))); }
         catch (e) { console.warn('Mod load failed', rec.guid, e); }
       }
+      await syncRemote(local).catch(e => console.warn('mods: server sync failed', e));
     })();
   }
   return readyPromise;
+}
+
+const plainObject = (v) => (v && typeof v === 'object' && !Array.isArray(v) ? v : {});
+
+// a guid on the removed list got deleted in another browser,
+// uploading it again would bring it back from the dead
+async function syncRemote(local) {
+  const remote = await listRemote();
+  if (!remote || !Array.isArray(remote.mods)) return;
+  // another account, or a factory reset, since this browser last synced
+  if (sync.epoch && sync.epoch !== remote.epoch) {
+    for (const rec of local) await zips.delete(rec.guid);
+    local = [];
+    mods = [];
+    state = {};
+    removed = [];
+    setGameWorn([]);
+    sync = { epoch: null, version: 0, dirty: false };
+  }
+  sync.epoch = remote.epoch;
+  const doc = remote.state;
+  if (doc && !(sync.dirty && doc.version === sync.version)) {
+    state = plainObject(doc.state);
+    removed = Array.isArray(doc.removed) ? doc.removed.filter(g => typeof g === 'string') : [];
+    setGameWorn(Array.isArray(doc.game) ? doc.game : []);
+    sync.version = doc.version || 0;
+    sync.dirty = false;
+  }
+  const onServer = new Set(remote.mods.map(m => m.guid));
+  for (const rec of local) {
+    if (onServer.has(rec.guid)) continue;
+    if (removed.includes(rec.guid)) {
+      mods = mods.filter(m => m.guid !== rec.guid);
+      await zips.delete(rec.guid);
+    } else {
+      uploadRemote(rec.guid, rec.buf).catch(e => console.warn('mod upload failed', rec.guid, e));
+    }
+  }
+  const have = new Set(local.map(rec => rec.guid));
+  for (const guid of onServer) {
+    if (have.has(guid)) continue;
+    if (removed.includes(guid)) {
+      deleteRemote(guid);
+      continue;
+    }
+    try {
+      const buf = await fetchRemote(guid);
+      if (!buf) continue;
+      mods.push(parseMod(guid, await unzip(buf)));
+      await zips.put({ guid, buf });
+    } catch (e) { console.warn('mod download failed', guid, e); }
+  }
+  if (!doc || sync.dirty) saveState();
+  else writeLocal();
 }
 
 // the outfit colour of every drawable we took the shader tint
@@ -149,7 +243,14 @@ async function applyPass() {
     });
   }
   for (const [id, layers] of decalHooks?.layers(byDrawable) || []) byDrawable.get(id).push(...layers);
-  const controllerDrawables = setModdedDrawables(new Set(byDrawable.keys()));
+  // garments losing their mod go down before the vanilla art comes back,
+  // new ones come up after the bake lands, or the vanilla hoodie flashes
+  setModdedDrawables(new Set([...byDrawable.keys()].filter(id => appliedIds.has(id))));
+  for (const [id, entries] of byDrawable) {
+    if (entries.some(e => e.mod && LIMB_SLOT.test(e.mod.items[e.itemIndex].equip || ''))) continue;
+    const base = await styleBase(id).catch(e => (console.warn('style under mod failed', id, e), null));
+    if (base) entries.push({ ...base, layer: -1, colorIndex: -1, colorOf: () => null, styleBase: true });
+  }
   // mod items land in vanilla drawables as often as in the
   // Moddable* slots, and the rig keeps those at zero opacity while
   // the wardrobe item that owns them is off. parameter-driven
@@ -166,13 +267,15 @@ async function applyPass() {
   }
   const fresh = new Map();
   for (const [id, entries] of byDrawable) {
-    const tint = entries.some(e => e.bypassColorScaler) ? hostTintFor(id) : null;
+    const base = entries.find(e => e.styleBase);
+    const tint = base?.tint || (entries.some(e => e.bypassColorScaler && !e.styleBase) ? hostTintFor(id) : null);
     // ColorIndex points into the owning item's ColorSlots list
     const colorsFor = (e) => (e.colorOf ? e.colorOf(e) : ((modState(e.mod.guid).colors || {})[e.itemIndex] || [])[e.colorIndex] || null);
     // a limb slot item IS the limb. layered over the dark mech art,
     // its soft edges go grey
     const replaceVanilla = hiddenByOutfit.has(id)
-      || entries.some(e => e.mod && LIMB_SLOT.test(e.mod.items[e.itemIndex].equip || ''));
+      || entries.some(e => e.mod && LIMB_SLOT.test(e.mod.items[e.itemIndex].equip || ''))
+      || entries.some(e => e.styleBase && !e.keepVanilla);
     const key = bakeKey(id, entries, colorsFor, tint, replaceVanilla);
     let baked = bakeCache.get(key);
     if (!baked) {
@@ -203,7 +306,15 @@ async function applyPass() {
     }
   }
   bakeCache = fresh;
+  const before = appliedIds;
   appliedIds = new Set(byDrawable.keys());
+  const tt = performance.now();
+  await Live2D.setDrawableTextures(map);
+  // a released drawable is back on the default art, not her style
+  const freed = [...before].filter(id => !appliedIds.has(id));
+  const styles = VARIANTS.filter(v => v.drawables.some(d => freed.includes(d))).map(v => v.key);
+  if (styles.length) applyVariants(styles);
+  const controllerDrawables = setModdedDrawables(appliedIds);
   applyDrawOrder();
   applyFootCover();
   const hold = new Set();
@@ -225,8 +336,6 @@ async function applyPass() {
   // take them down with it, so hand the slot back and let outfit
   // re-claim it.
   if (released) refreshVisibility();
-  const tt = performance.now();
-  await Live2D.setDrawableTextures(map);
   decalHooks?.settled();
   const total = performance.now() - t0;
   if (total > 200) {
@@ -255,12 +364,19 @@ export async function importZip(buf) {
   mods = mods.filter(m => m.guid !== guid);
   mods.push(mod);
   await zips.put({ guid, buf });
+  removed = removed.filter(g => g !== guid);
+  try { await uploadRemote(guid, buf); } catch (e) {
+    console.warn('mod upload failed', guid, e);
+    mod.localOnly = true;
+  }
   // NOTHING is auto-equipped. like the game, items land in the
   // "inventory" and the user equips them, because mods often ship
   // mutually exclusive variants (three alternative skins, say) that
   // must not stack. re-importing resets the equip state, item
-  // indices may have moved anyway.
+  // indices may have moved anyway. the one exception is what the
+  // game had on her while this zip was missing.
   state[guid] = { items: {}, colors: {} };
+  gameWorn().filter(w => w.guid === guid).forEach(wearGameItem);
   saveState();
   await applyAll();
   return mod;
@@ -269,7 +385,9 @@ export async function importZip(buf) {
 export async function removeMod(guid) {
   mods = mods.filter(m => m.guid !== guid);
   delete state[guid];
+  removed = [...removed.filter(g => g !== guid), guid].slice(-200);
   saveState();
+  deleteRemote(guid);
   await zips.delete(guid);
   await applyAll();
 }
@@ -294,6 +412,63 @@ function applyEquipped(guid, index, on) {
   saveState();
   return applyAll();
 }
+
+function setGameWorn(list) {
+  try { localStorage.setItem(GAME_KEY, JSON.stringify(list)); } catch (e) { }
+}
+
+function gameWorn() {
+  try {
+    const list = JSON.parse(localStorage.getItem(GAME_KEY));
+    return Array.isArray(list) ? list : [];
+  } catch (e) { return []; }
+}
+
+function gameItem(worn) {
+  const mod = mods.find(m => m.guid === worn.guid);
+  if (!mod) return null;
+  let index = mod.items.findIndex(it => it.gameId === worn.id);
+  if (index < 0) {
+    const unnumbered = mod.items.flatMap((it, i) => (it.gameId === null && it.equip === worn.slot ? [i] : []));
+    if (unnumbered.length === 1) index = unnumbered[0];
+  }
+  return index < 0 ? null : { mod, index };
+}
+
+function wearGameItem(worn) {
+  const hit = gameItem(worn);
+  if (!hit) return [];
+  for (const mod of mods) {
+    mod.items.forEach((it, i) => { if (it.equip === worn.slot) modState(mod.guid).items[i] = false; });
+  }
+  const st = modState(hit.mod.guid);
+  st.items[hit.index] = true;
+  // _colors read in ColorSlots order. counts match on real saves, the order is assumed
+  const colors = (Array.isArray(worn.colors) ? worn.colors : [])
+    .slice(0, hit.mod.items[hit.index].slots.length).map(normalizeHex);
+  if (colors.length) {
+    st.colors = st.colors || {};
+    st.colors[hit.index] = colors;
+  }
+  return Array.isArray(worn.keys) ? worn.keys : [];
+}
+
+// only moves state, the caller applies the rig. returns the built-in stand-ins
+export async function applyGameMods(list) {
+  await ensureLoaded();
+  for (const mod of mods) modState(mod.guid).items = {};
+  const next = (Array.isArray(list) ? list : []).filter(w => w && typeof w.guid === 'string');
+  setGameWorn(next);
+  const standIns = next.flatMap(wearGameItem);
+  saveState();
+  return standIns;
+}
+
+export const gameStandIns = (guid) => gameWorn()
+  .filter(w => w.guid === guid && gameItem(w))
+  .flatMap(w => (Array.isArray(w.keys) ? w.keys : []));
+
+export const missingGameItems = () => gameWorn().filter(w => !gameItem(w)).length;
 
 export function setColor(guid, itemIndex, slotIndex, hex) {
   const st = modState(guid);

@@ -4,10 +4,10 @@
 // tools/lore_dataset.jsonl into one answer row. no Ollama, no
 // embeddings, none of that. --dry-run counts without writing.
 
-define('DATASET_PATH', __DIR__ . '/lore_dataset.jsonl');
+define('DATASET_PATH', __DIR__ . '/../lore_dataset.jsonl');
 // in the repo it's ../webapp. deployed copies keep the files
-// one level above tools/ in /var/www/omega/.
-$webappDir = is_dir(__DIR__ . '/../webapp') ? __DIR__ . '/../webapp' : __DIR__ . '/..';
+// two levels above tools/build/ in /var/www/omega/.
+$webappDir = is_dir(__DIR__ . '/../../webapp') ? __DIR__ . '/../../webapp' : __DIR__ . '/../..';
 define('CORPUS_OUT', $webappDir . '/lore_corpus.txt');
 
 function collapse(string $s): string {

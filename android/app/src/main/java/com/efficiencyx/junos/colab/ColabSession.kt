@@ -18,6 +18,7 @@ import androidx.webkit.WebSettingsCompat
 import androidx.webkit.WebViewCompat
 import androidx.webkit.WebViewFeature
 import com.efficiencyx.junos.JunApplication
+import com.efficiencyx.junos.R
 import com.efficiencyx.junos.pairing.Pairing
 import com.efficiencyx.junos.pairing.SessionMode
 import kotlinx.coroutines.flow.MutableSharedFlow
@@ -86,8 +87,8 @@ class ColabSession(private val app: JunApplication) {
 
     private fun onMessage(data: String) {
         when (data) {
-            "still_there" -> attention("Colab wants to know you're still there.")
-            "disconnected" -> attention("Colab dropped the runtime. Run Step 3 again, or stop the session.")
+            "still_there" -> attention(app.getString(R.string.colab_still_there))
+            "disconnected" -> attention(app.getString(R.string.colab_disconnected))
             else -> {
                 val pairing = Pairing.parse(data)?.takeIf { it.mode == SessionMode.CLOUD } ?: return
                 app.pairingStore.save(pairing)
@@ -134,7 +135,7 @@ class ColabSession(private val app: JunApplication) {
             // returning false here kills the whole app along with the page
             override fun onRenderProcessGone(view: WebView, detail: RenderProcessGoneDetail): Boolean {
                 stop()
-                ColabKeepAliveService.attention(app, "The Colab page crashed. Start a new session, Colab picks the same runtime back up.")
+                ColabKeepAliveService.attention(app, app.getString(R.string.colab_crashed))
                 return true
             }
         }

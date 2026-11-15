@@ -1,27 +1,8 @@
 import { moodControlPhrases, moodControlVals, moodInputs, moodPhrases, moodRefreshBtn, moodVals } from './dom.js?v=77';
-import { renderGreeting } from './greetings.js?v=14';
-import * as Live2D from '../live2d/live2d.js?v=91';
+import { renderGreeting } from './greetings.js?v=16';
+import { moodPhrase } from '../core/mood-tier.js?v=4';
+import * as Live2D from '../live2d/live2d.js?v=92';
 
-const MOOD_PHRASES = {
-  affection: [
-    [90, "i'm completely yours"], [80, 'i love you so much'], [70, 'i love you'],
-    [60, "i'm so happy with you"], [50, 'i really like you'], [40, 'i like being with you'],
-    [30, "you're growing on me"], [20, 'you seem nice'], [10, 'still getting to know you'],
-    [0, 'who are you again?'],
-  ],
-  trust: [
-    [90, "i'd trust you with anything"], [80, 'i trust you completely'], [70, 'i trust you'],
-    [60, "i'm starting to rely on you"], [50, 'i want to trust you'], [40, "i'm still a little guarded"],
-    [30, "i'm not sure about you yet"], [20, "you'll have to earn it"], [10, 'i barely know you'],
-    [0, "i don't trust you"],
-  ],
-  tension: [
-    [90, "i'm terrified"], [80, "i'm really scared"], [70, "i'm scared"],
-    [60, 'this is too much'], [50, "i'm on edge"], [40, 'a little tense'],
-    [30, 'slightly uneasy'], [20, 'mostly calm'], [10, 'i feel relaxed'],
-    [0, 'totally at ease'],
-  ],
-};
 const EMOTION_TINTS = {
   angry:       { hue: 5,   sat: 20,  light: -8, w: .85 },
   crying:      { hue: 205, sat: -16, light: -6, w: .8 },
@@ -153,8 +134,7 @@ function setMoodFill(k, value) {
   setMoodPhrase(k, value);
 }
 function setMoodPhrase(k, value) {
-  const band = (MOOD_PHRASES[k] || []).find(([min]) => value >= min);
-  const text = band ? band[1] : '';
+  const text = moodPhrase(k, value);
   const next = (text ? text.padEnd(30, '\u2003') : '').repeat(6);
   for (const el of [moodPhrases[k], moodControlPhrases[k]]) {
     if (el && el.textContent !== next) el.textContent = next;

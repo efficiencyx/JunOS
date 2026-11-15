@@ -1,6 +1,6 @@
 ﻿[CmdletBinding()]
 param(
-    [ValidateSet('start', 'stop', 'status', 'trust', 'link', 'phone', 'bridge')]
+    [ValidateSet('start', 'stop', 'status', 'trust', 'link', 'phone', 'bridge', 'model')]
     [string]$Action = 'start',
     [switch]$NoBrowser,
     [switch]$IgnoreSecurity,
@@ -9,7 +9,51 @@ param(
 )
 
 $ErrorActionPreference = 'Stop'
-Set-Location -LiteralPath $PSScriptRoot
+
+# windows PowerShell can't write or delete through an 8.3 path
+# (the DOS alias, C:\Users\USURIO~2). TEMP is often one
+function Add-JunPathApi {
+    if ('Jun.PathApi' -as [type]) { return }
+    Add-Type -Namespace Jun -Name PathApi -MemberDefinition @'
+[DllImport("kernel32.dll", CharSet = CharSet.Unicode)] public static extern uint GetLongPathNameW(string path, System.Text.StringBuilder result, uint size);
+[DllImport("kernel32.dll", CharSet = CharSet.Unicode)] public static extern uint GetShortPathNameW(string path, System.Text.StringBuilder result, uint size);
+'@
+}
+
+function ConvertTo-LongPath([string]$path) {
+    if ($path -notmatch '~' -or -not [IO.Path]::IsPathRooted($path)) { return $path }
+    try {
+        Add-JunPathApi
+        $head = [IO.Path]::GetFullPath($path)
+        $tail = @()
+        while ($head -and -not ([IO.Directory]::Exists($head) -or [IO.File]::Exists($head))) {
+            $tail = @([IO.Path]::GetFileName($head)) + $tail
+            $head = [IO.Path]::GetDirectoryName($head)
+        }
+        if (-not $head) { return $path }
+        $buf = [Text.StringBuilder]::new(32767)
+        if ([Jun.PathApi]::GetLongPathNameW($head, $buf, $buf.Capacity) -eq 0) { return $path }
+        return [IO.Path]::Combine([string[]](@($buf.ToString()) + $tail))
+    } catch {
+        return $path
+    }
+}
+
+function ConvertTo-ShortPath([string]$path) {
+    try {
+        Add-JunPathApi
+        $buf = [Text.StringBuilder]::new(32767)
+        if ([Jun.PathApi]::GetShortPathNameW($path, $buf, $buf.Capacity) -eq 0) { return $path }
+        return $buf.ToString()
+    } catch {
+        return $path
+    }
+}
+
+$env:TEMP = ConvertTo-LongPath $env:TEMP
+$env:TMP  = ConvertTo-LongPath $env:TMP
+$JunRoot  = ConvertTo-LongPath $PSScriptRoot
+Set-Location -LiteralPath $JunRoot
 
 try {
     [Console]::OutputEncoding = [Text.Encoding]::UTF8
@@ -137,7 +181,7 @@ function Get-VramMb {
     return [int](($mb | Measure-Object -Maximum).Maximum)
 }
 
-$Runtime  = Join-Path $PSScriptRoot 'runtime'
+$Runtime  = Join-Path $JunRoot 'runtime'
 $LogDir   = Join-Path $Runtime 'logs'
 $PidFile  = Join-Path $Runtime 'pids.json'
 $StateDir = Join-Path $Runtime 'state'
@@ -236,6 +280,73 @@ function Read-CloudLines {
     if ($saved) { Ok "saved $saved line(s) to .env" }
 }
 
+function Get-HfGguf([string]$repo, [string]$rev, [string]$quant) {
+    [Net.ServicePointManager]::SecurityProtocol = [Net.ServicePointManager]::SecurityProtocol -bor [Net.SecurityProtocolType]::Tls12
+    try { $tree = Invoke-RestMethod -Uri "https://huggingface.co/api/models/$repo/tree/$rev" -TimeoutSec 10 } catch { return $null }
+    @($tree | Where-Object { $_.lfs -and $_.path -like "*.$quant.gguf" })[0].lfs
+}
+
+# a blob symlink is named by its sha. no Developer Mode = no
+# symlinks, llama.cpp moves the file into the snapshot instead
+function Get-CachedGguf([string]$repoDir, [string]$repo, [string]$quant) {
+    foreach ($f in @(Get-ChildItem -Path (Join-Path $repoDir 'snapshots\*\*') -Filter "*.$quant.gguf" -Force -ErrorAction SilentlyContinue)) {
+        $sha = if ($f.LinkType) { Split-Path -Leaf (@($f.Target)[0]) } else { (Get-HfGguf $repo $f.Directory.Name $quant).oid }
+        [pscustomobject]@{ Dir = $f.Directory.FullName; Sha = $sha }
+    }
+}
+
+function Get-OldSnapshots([string]$repoDir, [string]$keepDir) {
+    $linkSha = { Split-Path -Leaf (@($args[0].Target)[0]) }
+    $kept = @(Get-ChildItem -LiteralPath $keepDir -Force | Where-Object LinkType | ForEach-Object { & $linkSha $_ })
+    $snaps = @(Get-ChildItem -LiteralPath (Join-Path $repoDir 'snapshots') -Directory -Force | Where-Object { $_.FullName -ne $keepDir })
+    $files = foreach ($s in $snaps) {
+        foreach ($f in @(Get-ChildItem -LiteralPath $s.FullName -File -Force)) {
+            if (-not $f.LinkType) { $f; continue }
+            $sha = & $linkSha $f
+            if ($sha -notin $kept) { Get-Item -LiteralPath (Join-Path $repoDir "blobs\$sha") -Force -ErrorAction SilentlyContinue }
+        }
+    }
+    [pscustomobject]@{ Snapshots = $snaps; Files = @($files | Sort-Object FullName -Unique) }
+}
+
+function Get-ModelUpdate([string]$ref) {
+    if ("$env:LLAMACPP_OFFLINE" -match '^(on|1|true|yes)$') { return $null }
+    $repo, $quant = $ref -split ':', 2
+    if (-not $quant) { return $null }
+    $dir = Join-Path $Runtime "llama-cache\huggingface\hub\models--$($repo -replace '/', '--')"
+    $cached = @(Get-CachedGguf $dir $repo $quant)
+    if (-not $cached.Count) { return $null }
+    $remote = Get-HfGguf $repo 'main' $quant
+    if (-not $remote) { return $null }
+    [pscustomobject]@{ Ref = $ref; Repo = $repo; Quant = $quant; Dir = $dir; Sha = $remote.oid; Size = $remote.size; New = $cached.Sha -notcontains $remote.oid }
+}
+
+function Get-OldModelBytes($update) {
+    $keep = @(Get-CachedGguf $update.Dir $update.Repo $update.Quant | Where-Object { $_.Sha -eq $update.Sha })[0]
+    if (-not $keep) { return $null }
+    $old = Get-OldSnapshots $update.Dir $keep.Dir
+    [pscustomobject]@{ Old = $old; Bytes = [long]($old.Files | Measure-Object -Property Length -Sum).Sum }
+}
+
+$ChatModels = @("$(if ($env:LLAMACPP_MODEL_HF) { $env:LLAMACPP_MODEL_HF } else { 'efficiencyx/Jun-LoRA-E2B-GGUF:Q6_K' })" -split ',' | ForEach-Object { $_.Trim() } | Where-Object { $_ })
+
+# JunOS.exe has no console to ask in. it runs this first, asks in
+# its own dialogs and hands the answers over as JUN_MODEL_UPDATE/PRUNE
+if ($Action -eq 'model') {
+    $update = Get-ModelUpdate $ChatModels[0]
+    if ($update -and $update.New) {
+        $oldBytes = (@(Get-CachedGguf $update.Dir $update.Repo $update.Quant) | ForEach-Object {
+            $f = Get-ChildItem -Path (Join-Path $_.Dir "*.$($update.Quant).gguf") -Force | Select-Object -First 1
+            if ($f.LinkType) { (Get-Item -LiteralPath (Join-Path $update.Dir "blobs\$($_.Sha)") -Force -ErrorAction SilentlyContinue).Length } else { $f.Length }
+        } | Measure-Object -Sum).Sum
+        "model-update|$($update.Ref)|$($update.Size)|$oldBytes"
+    } elseif ($update) {
+        $old = Get-OldModelBytes $update
+        if ($old -and $old.Bytes -gt 0) { "model-old|$($update.Ref)|$($old.Bytes)" }
+    }
+    exit 0
+}
+
 if ($Action -eq 'link') {
     Read-CloudLines
     Note 'Stop then Start (or .\start.ps1) to bring her up with them'
@@ -294,9 +405,9 @@ function Get-UpdateNote {
     if (-not (Get-Command git -ErrorAction SilentlyContinue)) { return '' }
     # native stderr under Stop throws on 5.1, and "no tag here" is a normal answer
     $ErrorActionPreference = 'Continue'
-    $current = (& git -C $PSScriptRoot describe --tags --exact-match HEAD 2>$null) -join ''
+    $current = (& git -C $JunRoot describe --tags --exact-match HEAD 2>$null) -join ''
     if ($LASTEXITCODE -ne 0 -or -not $current) { return '' }
-    $origin = (& git -C $PSScriptRoot remote get-url origin 2>$null) -join ''
+    $origin = (& git -C $JunRoot remote get-url origin 2>$null) -join ''
     if ($origin -notmatch '^(https://github\.com/|git@github\.com:)([^/]+/[^/]+?)(\.git)?/?$') { return '' }
     $slug = $Matches[2]
     $prereleases = "$env:JUN_CHANNEL" -in 'latest', 'experimental'
@@ -475,13 +586,18 @@ function Get-TrackedProcess([object]$pids, [string]$name) {
 # what pids.json lost track of still holds JUN_PORT and the files
 # under runtime\, so the uninstaller can't delete caddy.exe
 function Stop-Strays([int[]]$keep = @()) {
-    $here = $PSScriptRoot.TrimEnd('\') + '\'
+    # an earlier start through the 8.3 alias left that in their command lines
+    $roots = @($JunRoot, (ConvertTo-ShortPath $JunRoot)) | Select-Object -Unique |
+        ForEach-Object { $_.TrimEnd('\') + '\' }
     Get-CimInstance Win32_Process -ErrorAction SilentlyContinue `
         -Filter "Name='caddy.exe' OR Name='php.exe' OR Name='python.exe' OR Name='pythonw.exe' OR Name='llama-server.exe'" |
         Where-Object {
-            $_.ProcessId -ne $PID -and $_.ProcessId -notin $keep -and $_.ParentProcessId -notin $keep -and (
-                ($_.ExecutablePath -and $_.ExecutablePath.StartsWith($here, [StringComparison]::OrdinalIgnoreCase)) -or
-                ($_.CommandLine -and $_.CommandLine.IndexOf($here, [StringComparison]::OrdinalIgnoreCase) -ge 0))
+            $proc = $_
+            $proc.ProcessId -ne $PID -and $proc.ProcessId -notin $keep -and $proc.ParentProcessId -notin $keep -and
+                @($roots | Where-Object {
+                    ($proc.ExecutablePath -and $proc.ExecutablePath.StartsWith($_, [StringComparison]::OrdinalIgnoreCase)) -or
+                    ($proc.CommandLine -and $proc.CommandLine.IndexOf($_, [StringComparison]::OrdinalIgnoreCase) -ge 0)
+                }).Count -gt 0
         } | ForEach-Object {
             try {
                 Stop-Process -Id $_.ProcessId -Force -ErrorAction Stop
@@ -609,7 +725,7 @@ function Invoke-MtpRecheck {
 
     try {
         $env:MTP_AUTOTUNE_RUNNING = '1'
-        & "$PSScriptRoot\mtp-autotune.ps1"
+        & "$JunRoot\mtp-autotune.ps1"
     } catch {
         Warn_ "autotune did not finish, run .\mtp-autotune.ps1 by hand ($_)"
     } finally {
@@ -810,7 +926,7 @@ if ($Action -eq 'phone') {
 
     # drawn here from 0s and 1s, not as ANSI. the old console
     # without VT would print the escape codes as garbage
-    $rows = @(& $phpExe (Join-Path $PSScriptRoot 'tools\qr.php') $link rows)
+    $rows = @(& $phpExe (Join-Path $JunRoot 'tools\qr.php') $link rows)
     $blank = '0' * $rows[0].Length
     $rows = @($blank) * 4 + $rows + @($blank) * 5
     Write-Host ''
@@ -985,8 +1101,6 @@ if ($Provider -eq 'llamacpp' -and $LlamacppUrl -match '://(127\.0\.0\.1|localhos
         if (-not (Get-Command llama-server -ErrorAction SilentlyContinue)) {
             throw 'llama-server is not installed. Run install.ps1 first (it installs llama.cpp via winget).'
         }
-        $hfList = if ($env:LLAMACPP_MODEL_HF) { $env:LLAMACPP_MODEL_HF } else { 'efficiencyx/Jun-LoRA-E2B-GGUF:Q4_K_M' }
-        $chatModels = @($hfList -split ',' | ForEach-Object { $_.Trim() } | Where-Object { $_ })
         $presets = Join-Path $Runtime 'llamacpp-models.ini'
         Write-LlamacppPresets $presets $chatModels
         Step "start llama-server ($($chatModels[0]))"
@@ -995,6 +1109,24 @@ if ($Provider -eq 'llamacpp' -and $LlamacppUrl -match '://(127\.0\.0\.1|localhos
         # HF_HOME, LLAMA_CACHE alone doesn't keep them in the folder
         $env:LLAMA_CACHE = Join-Path $Runtime 'llama-cache'
         $env:HF_HOME = Join-Path $Runtime 'llama-cache\huggingface'
+
+        # llama.cpp re-resolves the repo on EVERY load, a same-tag re-upload
+        # downloads by itself and the old file stays. a no = offline this start
+        $askUser = -not $Yes -and [Environment]::UserInteractive -and -not [Console]::IsInputRedirected
+        $offline = "$env:LLAMACPP_OFFLINE" -match '^(on|1|true|yes)$'
+        $update = Get-ModelUpdate $chatModels[0]
+        if ($update -and $update.New) {
+            $ans = "$env:JUN_MODEL_UPDATE"
+            if (-not $ans -and $askUser) {
+                $ans = Read-Host ("    $($update.Ref) has a new version on Hugging Face ({0:N1} GB). download it now? [Y/n]" -f ($update.Size / 1e9))
+            }
+            if ($ans -match '^(n|no)$') {
+                $offline = $true
+                $update = $null
+                Note 'keeping the one you have, the next start asks again'
+            } else { Note "downloading the new $($update.Ref)" }
+        }
+        if ($offline) { $env:LLAMA_ARG_OFFLINE = 'on' } else { Remove-Item Env:LLAMA_ARG_OFFLINE -ErrorAction SilentlyContinue }
         $llamaArgs = @('--models-preset', $presets, '--models-max', '2', '--host', '127.0.0.1', '--port', $LlamaPort)
         $llamaProc = Start-Tracked 'llamacpp' 'llama-server' $llamaArgs
 
@@ -1027,6 +1159,17 @@ if ($Provider -eq 'llamacpp' -and $LlamacppUrl -match '://(127\.0\.0\.1|localhos
         }
         if ($hadMb -gt 0) { Write-Host '' }
         Ok 'llama-server ready'
+
+        $prune = "$env:JUN_MODEL_PRUNE"
+        $old = if ($update -and ($prune -match '^(y|yes)$' -or (-not $prune -and $askUser))) { Get-OldModelBytes $update }
+        if ($old -and $old.Bytes -gt 0) {
+            if (-not $prune) { $prune = Read-Host ("    remove the old version of $($update.Ref)? frees {0:N1} GB [Y/n]" -f ($old.Bytes / 1e9)) }
+            if ($prune -notmatch '^(n|no)$') {
+                $old.Old.Files | Remove-Item -Force
+                $old.Old.Snapshots | Remove-Item -Recurse -Force
+                Ok "old $($update.Ref) removed"
+            }
+        }
     }
 }
 
@@ -1044,7 +1187,7 @@ if (-not $voiceOff -and (Test-Path $ttsPython)) {
         $env:TTS_PORT    = '8001'
         $env:SIDECAR_SECRET = $SidecarSecret
         $env:HF_HOME     = Join-Path $Runtime 'hf-cache'
-        Start-Tracked 'tts' $ttsPython @((Join-Path $PSScriptRoot 'tts\server.py')) | Out-Null
+        Start-Tracked 'tts' $ttsPython @((Join-Path $JunRoot 'tts\server.py')) | Out-Null
     }
 } elseif (-not $voiceOff) {
     Warn_ 'voice is on but the TTS venv is missing - re-run install.ps1 to set it up. Continuing text-only.'
@@ -1125,14 +1268,14 @@ $env:OMEGA_ALLOWED_ORIGINS  = $SiteUrl
 # the client sent and writes the real address, and php only
 # listens on loopback, so here the header is safe to believe.
 $env:TRUST_PROXY            = '1'
-$libPath = (Join-Path $PSScriptRoot 'webapp\api\lib\bootstrap.php').Replace('\', '/')
+$libPath = (Join-Path $JunRoot 'webapp\api\lib\bootstrap.php').Replace('\', '/')
 & $phpExe -r "require '$libPath'; db();"
 if ($LASTEXITCODE -ne 0) { throw 'database migration failed' }
 # the game's save into her memory, gauges and wardrobe, once per
 # boot. never writes while the game runs, it'd save over us on exit
 if ("$env:GAME_BRIDGE" -match '^(on|1|true|yes)$' -and $env:GAME_SAVE_DIR) {
     Step 'game bridge'
-    $bridgeArgs = @((Join-Path $PSScriptRoot 'webapp\api\bridge-sync.php'))
+    $bridgeArgs = @((Join-Path $JunRoot 'webapp\api\bridge-sync.php'))
     if ("$env:GAME_SAVE_WRITE" -match '^(on|1|true|yes)$') {
         if (Get-Process -Name 'My Dystopian Robot Girlfriend' -ErrorAction SilentlyContinue) {
             Note 'the game is running, its save is left alone'
@@ -1144,14 +1287,14 @@ if ("$env:GAME_BRIDGE" -match '^(on|1|true|yes)$' -and $env:GAME_SAVE_DIR) {
 }
 $oldMemory = Get-TrackedProcess $oldPids 'memory'
 if ($oldMemory) { Stop-Process -Id $oldMemory.Id -Force -ErrorAction SilentlyContinue }
-Start-Tracked 'memory' $phpExe @((Join-Path $PSScriptRoot 'webapp\api\consolidation-worker.php')) | Out-Null
+Start-Tracked 'memory' $phpExe @((Join-Path $JunRoot 'webapp\api\consolidation-worker.php')) | Out-Null
 # pre-warm. php does it because only php knows the num_ctx chat
 # sends, a warm at any other one gets thrown out and reloaded on
 # the first message. it waits out the pull too. logs\prewarm.log
 if ($Provider -eq 'ollama') {
     Step 'pre-warm'
     Note 'loading her in the background'
-    Start-Tracked 'prewarm' $phpExe @((Join-Path $PSScriptRoot 'webapp\api\prewarm.php')) | Out-Null
+    Start-Tracked 'prewarm' $phpExe @((Join-Path $JunRoot 'webapp\api\prewarm.php')) | Out-Null
 }
 # PHP honors this on unix ONLY. on windows the built-in server
 # stays single-worker, so requests made while a chat reply is
@@ -1164,8 +1307,8 @@ $phpProc = Start-Tracked 'php' $phpExe @(
     '-d', 'max_execution_time=0',
     '-d', 'post_max_size=30M', '-d', 'upload_max_filesize=30M',
     '-S', "127.0.0.1:$PhpPort",
-    '-t', (Join-Path $PSScriptRoot 'webapp'),
-    (Join-Path $PSScriptRoot 'tools\php-router.php')
+    '-t', (Join-Path $JunRoot 'webapp'),
+    (Join-Path $JunRoot 'tools\php-router.php')
 )
 $newPids | ConvertTo-Json | Set-Content $PidFile
 Wait-Up 'php' $phpProc { Test-Http $PhpUrl }
@@ -1174,7 +1317,7 @@ Wait-Up 'php' $phpProc { Test-Http $PhpUrl }
 # https://192.168.1.42 gets the untrusted warning and not a
 # name mismatch on top. a new host list is a new leaf from the
 # same local CA, so a box that trusts the CA never notices.
-& $phpExe (Join-Path $PSScriptRoot 'tools\local-cert.php') $CertDir @SiteHosts
+& $phpExe (Join-Path $JunRoot 'tools\local-cert.php') $CertDir @SiteHosts
 if ($LASTEXITCODE -ne 0) { throw 'could not make the certificate (see above)' }
 $null = Update-CaTrust ($env:JUN_TRUST_CA -match '^(1|on|yes|true)$')
 $null = Update-BridgeMod

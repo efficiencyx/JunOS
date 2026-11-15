@@ -99,6 +99,8 @@ remains under its own license, NOT the Apache License 2.0 of this repository:
   cubism4.min.js             pixi-live2d-display 0.4.0  MIT
   marked.umd.js              marked 18.1.1              MIT
   purify.min.js              DOMPurify 3.4.17           Apache-2.0 / MPL-2.0
+  caveat/                    Caveat (latin subset)      SIL OFL 1.1, see
+                                                        caveat/OFL.txt
   live2dcubismcore.min.js    Live2D Cubism Core         Live2D Proprietary
                                                         Software License
 
@@ -126,7 +128,7 @@ repository:
 6. LiteRT-LM in the Android app
 ================================================================================
 
-Release APKs built with tools/release-apk-local.sh do not use the LiteRT-LM
+Release APKs built with tools/build/release-apk-local.sh do not use the LiteRT-LM
 AAR from Maven. They carry a build of LiteRT-LM (Apache License 2.0,
 https://github.com/google-ai-edge/LiteRT-LM) from upstream commit
 c30ab949d5605022d2ccf714794e99d5f5effe4c, unmodified, built for arm64-v8a

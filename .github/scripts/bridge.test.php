@@ -50,6 +50,23 @@ $modGuid = ['_guid' => ['serializedGuid' => '5bc5b141'], '_id' => 9];
 $eq('outfit: the save _guid marks a mod item', bridge_snapshot(['_sympathy' => 1, 'itemManager' => ['items' => [
     ['_gameId' => $modGuid, '_equipedSlot' => 'Room_TV'],
 ]]])['outfit']['tail'], false);
+$modItem = fn(string $guid, int $id, string $slot, array $colors = []) =>
+    ['_gameId' => ['_guid' => ['serializedGuid' => $guid], '_id' => $id], '_equipedSlot' => $slot, '_colors' => $colors];
+$modSnap = bridge_snapshot(['_sympathy' => 1, 'itemManager' => ['items' => [
+    $modItem('bbbb2222', 3, 'UpperBody', [['r' => 1, 'g' => 0, 'b' => 0]]),
+    $modItem('aaaa1111', 1, 'StockingR'),
+    $modItem('aaaa1111', 8, 'GloveL'),
+    $modItem('aaaa1111', 4, ''),
+    $modItem('5bc5b141', 9, 'Room_TV'),
+    $modItem('../etc', 2, 'Tail'),
+]]]);
+$eq('look: worn mod items keep guid, id, slot and colours', $modSnap['look']['mods'], [
+    ['guid' => 'aaaa1111', 'id' => 1, 'slot' => 'StockingR', 'colors' => [], 'keys' => ['stockings']],
+    ['guid' => 'aaaa1111', 'id' => 8, 'slot' => 'GloveL', 'colors' => [], 'keys' => []],
+    ['guid' => 'bbbb2222', 'id' => 3, 'slot' => 'UpperBody', 'colors' => ['#ff0000'], 'keys' => ['shirt']],
+]);
+$eq('outfit: the built-in piece still stands in for a mod item', [$modSnap['outfit']['shirt'], $modSnap['outfit']['stockings']], [true, true]);
+$eq('look: no mod items, no mods key', isset($snap['look']['mods']), false);
 $look = bridge_look_from_equipped([
     ['id' => 17102, 'slot' => 'UpperBodyOuter', 'colors' => ['#333333', '#db2220']],
     ['id' => 10000, 'slot' => 'UpperBody', 'colors' => ['#111111']],
@@ -128,5 +145,7 @@ $eq('sympathy: over 1000 is affection 100', bridge_affection_of(2400), 100);
 $eq('sympathy: over 1000 left alone', bridge_sympathy_for(100, 2400), 2400);
 $eq('sympathy: 1300 to 1250 moves nothing', bridge_affection_of(1250) - bridge_affection_of(1300), 0);
 $eq('snapshot: no 1000 cap', bridge_snapshot(['_sympathy' => 2400])['sympathy'], 2400);
+$bikini = bridge_look_from_equipped([['id' => 14003, 'slot' => 'Bra'], ['id' => 11003, 'slot' => 'Panties']])['variants'];
+$eq('look: see-through bikini top, plain bottom', [$bikini['bikini_top_style'], $bikini['bikini_bot_style']], [1, 0]);
 
 exit($fails ? 1 : 0);

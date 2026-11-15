@@ -1,6 +1,7 @@
 import { modelSelect } from './dom.js?v=77';
 import * as Names from '../core/names.js?v=1';
-import * as ui from '../core/ui.js?v=1';
+import * as ui from '../core/ui.js?v=10';
+import { t } from '../core/i18n.js?v=1';
 
 // her answer to an edit survives the reload that redraws the reader
 const replies = new Map();
@@ -44,9 +45,9 @@ export function renderNoteActions(node, body, { isAdmin, reload }) {
     input.rows = 3;
     input.maxLength = journal ? 1600 : 800;
     input.value = node.text;
-    input.setAttribute('aria-label', journal ? 'Edit this journal entry' : 'Edit this memory');
-    const save = button('Save', 'secondary');
-    const del = button('Delete', 'secondary danger');
+    input.setAttribute('aria-label', journal ? t('memory.editJournal', 'Edit this journal entry') : t('memory.edit', 'Edit this memory'));
+    const save = button(t('common.save', 'Save'), 'secondary');
+    const del = button(t('common.delete', 'Delete'), 'secondary danger');
     const row = document.createElement('div');
     row.className = 'memory-actions-row';
     row.append(save, del);
@@ -55,15 +56,18 @@ export function renderNoteActions(node, body, { isAdmin, reload }) {
       const memory = input.value.trim();
       if (!memory || memory === node.text) return;
       const r = await sendJson('PUT', 'api/memory.php', { ...target, memory }).catch(() => null);
-      if (!r || !r.ok) { ui.toast('Memory not saved.', 'error'); return; }
+      if (!r || !r.ok) { ui.toast(t('memory.notSaved', 'Memory not saved.'), 'error'); return; }
       reload();
     });
     del.addEventListener('click', async () => {
-      const what = journal ? 'journal entry' : 'memory';
-      const ok = await ui.confirm({ title: 'Delete ' + what, message: `Delete this ${what}? This cannot be undone.`, confirmLabel: 'Delete', cancelLabel: 'Cancel', danger: true });
+      const ok = await ui.confirm({
+        title: journal ? t('memory.deleteJournal', 'Delete journal entry') : t('memory.delete', 'Delete memory'),
+        message: journal ? t('memory.deleteJournalConfirm', 'Delete this journal entry? This cannot be undone.') : t('memory.deleteConfirm', 'Delete this memory? This cannot be undone.'),
+        confirmLabel: t('ui.holdDelete', 'Hold to delete'), cancelLabel: t('common.cancel', 'Cancel'), hold: true,
+      });
       if (!ok) return;
       const r = await sendJson('DELETE', 'api/memory.php', target).catch(() => null);
-      if (!r || !r.ok) { ui.toast('Memory not deleted.', 'error'); return; }
+      if (!r || !r.ok) { ui.toast(t('memory.notDeleted', 'Memory not deleted.'), 'error'); return; }
       reload();
     });
     body.appendChild(box);
@@ -72,13 +76,13 @@ export function renderNoteActions(node, body, { isAdmin, reload }) {
 
   const details = document.createElement('details');
   const summary = document.createElement('summary');
-  summary.textContent = 'Ask her to change this';
+  summary.textContent = t('memory.askChange', 'Ask her to change this');
   const input = document.createElement('textarea');
   input.rows = 3;
   input.maxLength = 500;
-  input.placeholder = 'What should she change or forget, and why?';
-  input.setAttribute('aria-label', 'Your request');
-  const ask = button('Ask her', 'secondary');
+  input.placeholder = t('memory.askPlaceholder', 'What should she change or forget, and why?');
+  input.setAttribute('aria-label', t('memory.request', 'Your request'));
+  const ask = button(t('settings.ask', 'Ask her'), 'secondary');
   const status = document.createElement('div');
   status.setAttribute('aria-live', 'polite');
   details.append(summary, input, ask, status);
@@ -87,25 +91,25 @@ export function renderNoteActions(node, body, { isAdmin, reload }) {
     const request = input.value.trim();
     if (!request) return;
     ask.disabled = true;
-    status.replaceChildren(Object.assign(document.createElement('p'), { className: 'memory-source', textContent: 'She is thinking it over…' }));
+    status.replaceChildren(Object.assign(document.createElement('p'), { className: 'memory-source', textContent: t('memory.thinking', 'She is thinking it over…') }));
     let res = null;
     try {
       const r = await sendJson('POST', 'api/memory.php?action=request', { id: node.noteId, request, model: modelSelect?.value || '' });
-      if (r.status === 429) throw new Error('Too many requests. Try again later.');
-      if (!r.ok) throw new Error('She could not answer right now.');
+      if (r.status === 429) throw new Error(t('memory.tooMany', 'Too many requests. Try again later.'));
+      if (!r.ok) throw new Error(t('memory.noAnswer', 'She could not answer right now.'));
       res = await r.json();
     } catch (e) {
       status.replaceChildren(Object.assign(document.createElement('p'), { className: 'memory-source', textContent: e.message }));
       ask.disabled = false;
       return;
     }
-    const reply = res.reply || (res.decision === 'refuse' ? 'She left it as it is.' : '');
+    const reply = res.reply || (res.decision === 'refuse' ? t('memory.leftIt', 'She left it as it is.') : '');
     if (res.decision === 'refuse') {
       status.replaceChildren(herReply(reply));
       ask.disabled = false;
       return;
     }
-    if (res.decision === 'delete') ui.toast(Names.apply(reply || 'She let that memory go.'), 'ok');
+    if (res.decision === 'delete') ui.toast(Names.apply(reply || t('memory.letGo', 'She let that memory go.')), 'ok');
     else if (reply) replies.set(node.noteId, reply);
     reload();
   });

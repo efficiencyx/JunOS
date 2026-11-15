@@ -1,1 +1,1 @@
-export { applyAll, describe, holds, setDecalHooks, itemNames, owns, refreshTints, wearByName } from './engine.js?v=31';
+export { applyAll, applyGameMods, describe, holds, setDecalHooks, itemNames, owns, refreshTints, wearByName } from './engine.js?v=42';

@@ -1,5 +1,7 @@
-import { Presets, applyPreset, decodeOutfitCode, encodeOutfitCode, endPreview, schedulePreview } from '../outfit/presets.js?v=31';
-import { clearWornHover, wdOverlay } from './panel.js?v=36';
+import { Presets, applyPreset, decodeOutfitCode, encodeOutfitCode, endPreview, schedulePreview } from '../outfit/presets.js?v=42';
+import { clearWornHover, wdOverlay } from './panel.js?v=49';
+import { locale, t } from '../core/i18n.js?v=1';
+import { hold } from '../core/hold.js?v=2';
 
 export const looksOpen = () => document.body.classList.contains('looks-open');
 
@@ -11,21 +13,21 @@ function buildLooks() {
   looksEl.hidden = true;
   looksEl.setAttribute('role', 'dialog');
   looksEl.setAttribute('aria-modal', 'true');
-  looksEl.setAttribute('aria-label', 'Saved outfits');
+  looksEl.setAttribute('aria-label', t('shop.savedOutfits', 'Saved outfits'));
   looksEl.innerHTML = `<div class="wd-looks-backdrop"></div>
     <div class="wd-looks-dialog">
       <div class="wd-looks-side">
         <div class="wd-optpop-head">
-          <div class="wd-optpop-title">Saved outfits</div>
-          <button type="button" class="wd-optpop-close" aria-label="Close saved outfits" title="Close">×</button>
+          <div class="wd-optpop-title">${t('shop.savedOutfits', 'Saved outfits')}</div>
+          <button type="button" class="wd-optpop-close" aria-label="${t('shop.closeOutfits', 'Close saved outfits')}" title="${t('common.close', 'Close')}">×</button>
         </div>
         <div class="wd-looks-save">
-          <input class="wd-looks-name" type="text" maxlength="60" placeholder="Name this outfit" aria-label="Outfit name">
-          <button type="button" class="ghost wd-looks-add">Save current</button>
+          <input class="wd-looks-name" type="text" maxlength="60" placeholder="${t('shop.namePlaceholder', 'Name this outfit')}" aria-label="${t('shop.outfitName', 'Outfit name')}">
+          <button type="button" class="ghost wd-looks-add">${t('shop.saveCurrent', 'Save current')}</button>
         </div>
         <div class="wd-looks-share">
-          <button type="button" class="ghost wd-looks-copy">Copy share code</button>
-          <button type="button" class="ghost wd-looks-import">Wear shared code</button>
+          <button type="button" class="ghost wd-looks-copy">${t('shop.copyCode', 'Copy share code')}</button>
+          <button type="button" class="ghost wd-looks-import">${t('shop.wearCode', 'Wear shared code')}</button>
         </div>
         <div class="wd-looks-list" role="list"></div>
         <div class="wd-looks-hint"></div>
@@ -39,9 +41,9 @@ function buildLooks() {
   const nameInput = looksEl.querySelector('.wd-looks-name');
   const coarsePointer = matchMedia('(pointer: coarse)');
 
-  const stamp = (t) => {
-    const d = new Date(t * 1000);
-    return d.toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
+  const stamp = (at) => {
+    const d = new Date(at * 1000);
+    return d.toLocaleDateString(locale, { month: 'short', day: 'numeric' });
   };
 
   function render() {
@@ -75,17 +77,16 @@ function buildLooks() {
       const del = document.createElement('button');
       del.type = 'button';
       del.className = 'wd-look-del';
-      del.title = `Delete "${p.name}"`;
-      del.setAttribute('aria-label', `Delete ${p.name}`);
+      del.title = t('shop.holdDeleteOutfit', 'Hold to delete "{name}"', { name: p.name });
+      del.setAttribute('aria-label', t('shop.deleteOutfit', 'Delete {name}', { name: p.name }));
       del.textContent = '×';
-      del.addEventListener('click', async () => {
-        if (!window.confirm(`Delete the outfit "${p.name}"?`)) return;
+      hold(del, async () => {
         endPreview();
         try {
           await Presets.remove(p.id);
           if (String(looksActiveId) === String(p.id)) looksActiveId = null;
           render();
-        } catch (e) { hint.textContent = 'Could not delete that outfit.'; }
+        } catch (e) { hint.textContent = t('shop.err.delete', 'Could not delete that outfit.'); }
       });
 
       row.append(main, del);
@@ -94,11 +95,11 @@ function buildLooks() {
     if (!Presets.cache.length) {
       const empty = document.createElement('div');
       empty.className = 'wd-looks-empty';
-      empty.textContent = 'No outfits saved yet. Dress Jun, then name and save the outfit.';
+      empty.textContent = t('shop.empty', 'No outfits saved yet. Dress Jun, then name and save the outfit.');
       list.appendChild(empty);
     }
     hint.textContent = Presets.cache.length
-      ? (coarsePointer.matches ? 'Tap an outfit to wear it' : 'Hover an outfit to preview it on Jun · click to wear it')
+      ? (coarsePointer.matches ? t('shop.looksTouch', 'Tap an outfit to wear it') : t('shop.looksHover', 'Hover an outfit to preview it on Jun · click to wear it'))
       : '';
   }
 
@@ -111,7 +112,7 @@ function buildLooks() {
       const saved = Presets.cache.find(p => p.name === name);
       looksActiveId = saved ? saved.id : null;
       render();
-    } catch (e) { hint.textContent = 'Could not save that outfit.'; }
+    } catch (e) { hint.textContent = t('shop.err.save', 'Could not save that outfit.'); }
   }
   looksEl.querySelector('.wd-looks-add').addEventListener('click', saveCurrent);
   looksEl.querySelector('.wd-looks-copy').addEventListener('click', async () => {
@@ -120,23 +121,23 @@ function buildLooks() {
       code = encodeOutfitCode();
       if (!navigator.clipboard?.writeText) throw new Error('clipboard unavailable');
       await navigator.clipboard.writeText(code);
-      hint.textContent = 'Outfit code copied. Anyone can import it from this panel.';
+      hint.textContent = t('shop.copied', 'Outfit code copied. Anyone can import it from this panel.');
     } catch (e) {
-      if (code) window.prompt('Copy this outfit code:', code);
-      else hint.textContent = 'Could not create an outfit code.';
+      if (code) window.prompt(t('shop.copyPrompt', 'Copy this outfit code:'), code);
+      else hint.textContent = t('shop.err.code', 'Could not create an outfit code.');
     }
   });
   looksEl.querySelector('.wd-looks-import').addEventListener('click', async () => {
-    const code = window.prompt('Paste an outfit code:');
+    const code = window.prompt(t('shop.pastePrompt', 'Paste an outfit code:'));
     if (code === null) return;
     try {
       await applyPreset(decodeOutfitCode(code));
       looksActiveId = null;
       nameInput.value = '';
       render();
-      hint.textContent = 'Shared outfit equipped. Name it above if you want to save it.';
+      hint.textContent = t('shop.equipped', 'Shared outfit equipped. Name it above if you want to save it.');
     } catch (e) {
-      hint.textContent = 'That outfit code is invalid.';
+      hint.textContent = t('shop.invalidCode', 'That outfit code is invalid.');
     }
   });
   nameInput.addEventListener('keydown', (e) => {
@@ -156,7 +157,7 @@ function buildLooks() {
 
   looksEl.render = render;
   render();
-  Presets.list().then(render).catch(() => { hint.textContent = 'Could not load your saved outfits.'; });
+  Presets.list().then(render).catch(() => { hint.textContent = t('shop.err.load', 'Could not load your saved outfits.'); });
 }
 
 function syncStageHole() {

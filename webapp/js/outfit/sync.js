@@ -1,13 +1,13 @@
-import * as Prefs from '../core/prefs.js?v=8';
+import * as Prefs from '../core/prefs.js?v=9';
 import { api, apiJson } from '../core/api.js?v=1';
-import { COLOR_GROUPS, GLASSES_STYLES, ITEMS, VARIANTS, VARIANT_OWNER } from './catalog.js?v=4';
-import { Presets, applyChanged, loadPresetState } from './presets.js?v=31';
-import { applyGlassesTexture } from './composite.js?v=31';
-import { applyItems, applyVariants } from './apply.js?v=31';
-import { colors, state, variantState } from './current.js?v=4';
-import { loadBakedTiles } from '../wardrobe/tile-bake.js?v=31';
+import { COLOR_GROUPS, GLASSES_STYLES, ITEMS, VARIANTS, VARIANT_OWNER } from './catalog.js?v=5';
+import { Presets, applyChanged, loadPresetState } from './presets.js?v=42';
+import { applyGlassesTexture } from './composite.js?v=42';
+import { applyItems, applyVariants } from './apply.js?v=42';
+import { colors, state, variantState } from './current.js?v=6';
+import { loadBakedTiles } from '../wardrobe/tile-bake.js?v=42';
 import { normalizeHex } from './colors.js?v=1';
-import * as Mods from '../mods/mods.js?v=102';
+import * as Mods from '../mods/mods.js?v=113';
 import { hooks } from './hooks.js?v=1';
 
 const STORAGE_KEY = 'omega.outfit.v1';
@@ -83,11 +83,11 @@ function drawablesForAssets(assets) {
   return drawables;
 }
 
-export async function writeWardrobe(items, variants) {
+export async function writeWardrobe(items, variants, gameLook = false) {
   const wait = nextWardrobeWrite - Date.now();
   if (wait > 0) await new Promise(resolve => setTimeout(resolve, wait));
   nextWardrobeWrite = Date.now() + 500;
-  const r = await apiJson('outfit.php', { items, variants, assets: activeAssets(items, variants) }, { method: 'PUT' });
+  const r = await apiJson('outfit.php', { items, variants, assets: activeAssets(items, variants), game_look: gameLook }, { method: 'PUT' });
   if (!r.ok) throw new Error(`wardrobe update failed: ${r.status}`);
   return (await r.json()).state;
 }
@@ -118,7 +118,9 @@ async function importGameLook(look) {
     variantState[v.key] = Math.max(0, v.options.findIndex(o => o.thumb === `assets/variants/logos/${logo}.png`));
   }
   saveColors();
-  importWardrobe(await writeWardrobe({ ...state }, { ...variantState }));
+  const items = { ...state };
+  for (const key of await Mods.applyGameMods(look.mods)) if (key in items) items[key] = false;
+  importWardrobe(await writeWardrobe(items, { ...variantState }, true));
 }
 
 export function queueWardrobe(mutator, after) {

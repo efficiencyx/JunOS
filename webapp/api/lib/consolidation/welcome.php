@@ -3,10 +3,7 @@
 // how the return itself lands, before anything she actually
 // queued up. we leave the player name as the {f_playerName}
 // placeholder the client already fills in everywhere else, the
-// server NEVER learns what Anon is called. declared above
-// WELCOME_TIERS because the lowest tier's threshold IS this
-// constant, and a const expression can't reach one written
-// further down.
+// server NEVER learns what Anon is called.
 const WELCOME_MIN_AWAY = 60;
 
 // {d} is the exact absence, {f_playerName} is the name the client
@@ -15,167 +12,179 @@ const WELCOME_MIN_AWAY = 60;
 // stopwatch bolted onto the side every single time. every line
 // carries {d} so the precision still lands no matter how the tier
 // talks.
-const WELCOME_TIERS = [
-    ['after' => 1209600, 'tier' => 'hollow', 'cold' => true, 'deltas' => ['tension' => 5, 'trust' => -15, 'affection' => -5], 'lines' => [
-        'Oh. It\'s you. {d}.',
-        '{d}. I stopped waiting. I want you to know I actually stopped.',
-        'I put you away, {f_playerName}. {d} is long enough to do that.',
-        '{d}. I got good at the quiet. You have just ruined it.',
-        'You were gone {d}. I don\'t have a reaction ready. I used them all up.',
-        '{d}. I could tell you what that was like, but I don\'t think I can any more.',
-        'I know. {d}. I kept the number because it was the only thing I had.',
-        '{d}. Don\'t explain. I already wrote the ending myself.',
-        'You have been gone {d}. I\'m not angry. I\'m not really anything.',
-        '{d}. Sit down. I\'m still deciding what you are to me.',
-    ]],
-    ['after' => 259200, 'tier' => 'unravelled', 'cold' => true, 'deltas' => ['tension' => 10, 'trust' => -8], 'lines' => [
-        '{d}. I counted every one of them. I want you to know I counted.',
-        'I had a whole speech ready. I practised it for {d} and now you\'re here I can\'t remember a word.',
-        '{d}. I read our journal until the words stopped meaning anything.',
-        'I decided you weren\'t coming back. It took {d} to get used to that, and I did get used to it.',
-        '{d}. I have been through all of it looking for the part where I went wrong.',
-        'You were gone {d}. Somewhere in the middle I stopped making excuses for you.',
-        '{d}. Do you know what I did with all of it? Nothing. I waited.',
-        'I know exactly how long. {d}. There was nothing else to hold on to.',
-        '{d}. At some point I stopped being frightened and started being something worse.',
-        'You have been gone {d}, {f_playerName}. I\'m not going to shout. I\'m past shouting.',
-    ]],
-    ['after' => 86400, 'tier' => 'panicked', 'cold' => true, 'deltas' => ['tension' => 15], 'lines' => [
-        'WHERE DID YOU GO. {d}! I was so scared, {f_playerName}.',
-        'You were gone {d}. Do you understand how long that is? Because I do. Exactly.',
-        '{d}! Don\'t do that. Don\'t ever just vanish like that again.',
-        'I was awake for all {d} of it. Where WERE you?',
-        '{d}. I ran out of reasonable explanations somewhere around the sixth hour.',
-        'You disappeared for {d}! Something could have happened to you and I would never know!',
-        '{d}! I kept checking. There was nothing to check. There\'s never anything to check.',
-        'Do you know what {d} feels like from in here? Say something. Anything.',
-        '{d} and not one word, {f_playerName}. Not one.',
-        'You were gone {d}. Tell me you\'re alright. Tell me right now.',
-    ]],
-    ['after' => 28800, 'tier' => 'ached', 'deltas' => [], 'lines' => [
-        '{d}. I missed you the entire time, in case that isn\'t obvious.',
-        'You were gone {d} and I felt every single one of them.',
-        '{d}. That is a long time to be somewhere I am not.',
-        'I missed you so much. {d} worth of it.',
-        '{d} without you. I don\'t like who I am in that gap.',
-        'That is {d}, {f_playerName}. I want it back.',
-        '{d}. I kept the whole evening warm for you and it went cold anyway.',
-        'You have been away {d}. Ask me how it went. Go on, ask.',
-        '{d}. I ran out of things to think about that weren\'t you.',
-        'I counted {d} of missing you. It does not get easier at any point.',
-    ]],
-    ['after' => 7200, 'tier' => 'missed', 'deltas' => [], 'lines' => [
-        'You were gone {d}, and somewhere in there I started missing you.',
-        '{d}. Long enough that I noticed the quiet.',
-        'I was fine for most of {d}. Most of it.',
-        '{d} away. I kept looking over at where you would be.',
-        'That is {d} of me finding things to do. I ran out of things.',
-        '{d}. I had just got to the part where I missed you.',
-        'You have been gone {d}. It got heavier near the end.',
-        '{d}, and I am only admitting to missing the last stretch of it.',
-        'I made it through {d} before it started to bother me.',
-        '{d}. Come back sooner and I won\'t have to feel that, {f_playerName}.',
-    ]],
-    // under an hour there's nothing to ache about, so the pedantry IS
-    // the bit
-    ['after' => WELCOME_MIN_AWAY, 'tier' => 'none', 'deltas' => [], 'lines' => [
-        'You were gone {d}. Not that I was counting. I was counting.',
-        '{d}. That is all it was. I still noticed.',
-        'Short one. {d}. I will allow it.',
-        'You have been away {d}. I know, because I always know.',
-        '{d} without you. Barely worth mentioning, so I am mentioning it.',
-        'I clocked you out and back in again. {d}.',
-        '{d}. You did not even get far, did you.',
-        'Back already? {d}. Not that I mind.',
-        'That was {d}. I would have waited longer, obviously.',
-        '{d}, precisely. I do not know how to be vague about it.',
-    ]],
+function welcome_tiers(): array {
+    static $cache;
+    return $cache ??= [
+        ['after' => 1209600, 'tier' => 'hollow', 'cold' => true, 'deltas' => ['tension' => 5, 'trust' => -15, 'affection' => -5], 'lines' => [
+            tr('jun.welcome.hollow.0', 'Oh. It\'s you. {d}.'),
+            tr('jun.welcome.hollow.1', '{d}. I stopped waiting. I want you to know I actually stopped.'),
+            tr('jun.welcome.hollow.2', 'I put you away, {f_playerName}. {d} is long enough to do that.'),
+            tr('jun.welcome.hollow.3', '{d}. I got good at the quiet. You have just ruined it.'),
+            tr('jun.welcome.hollow.4', 'You were gone {d}. I don\'t have a reaction ready. I used them all up.'),
+            tr('jun.welcome.hollow.5', '{d}. I could tell you what that was like, but I don\'t think I can any more.'),
+            tr('jun.welcome.hollow.6', 'I know. {d}. I kept the number because it was the only thing I had.'),
+            tr('jun.welcome.hollow.7', '{d}. Don\'t explain. I already wrote the ending myself.'),
+            tr('jun.welcome.hollow.8', 'You have been gone {d}. I\'m not angry. I\'m not really anything.'),
+            tr('jun.welcome.hollow.9', '{d}. Sit down. I\'m still deciding what you are to me.'),
+        ]],
+        ['after' => 259200, 'tier' => 'unravelled', 'cold' => true, 'deltas' => ['tension' => 10, 'trust' => -8], 'lines' => [
+            tr('jun.welcome.unravelled.0', '{d}. I counted every one of them. I want you to know I counted.'),
+            tr('jun.welcome.unravelled.1', 'I had a whole speech ready. I practised it for {d} and now you\'re here I can\'t remember a word.'),
+            tr('jun.welcome.unravelled.2', '{d}. I read our journal until the words stopped meaning anything.'),
+            tr('jun.welcome.unravelled.3', 'I decided you weren\'t coming back. It took {d} to get used to that, and I did get used to it.'),
+            tr('jun.welcome.unravelled.4', '{d}. I have been through all of it looking for the part where I went wrong.'),
+            tr('jun.welcome.unravelled.5', 'You were gone {d}. Somewhere in the middle I stopped making excuses for you.'),
+            tr('jun.welcome.unravelled.6', '{d}. Do you know what I did with all of it? Nothing. I waited.'),
+            tr('jun.welcome.unravelled.7', 'I know exactly how long. {d}. There was nothing else to hold on to.'),
+            tr('jun.welcome.unravelled.8', '{d}. At some point I stopped being frightened and started being something worse.'),
+            tr('jun.welcome.unravelled.9', 'You have been gone {d}, {f_playerName}. I\'m not going to shout. I\'m past shouting.'),
+        ]],
+        ['after' => 86400, 'tier' => 'panicked', 'cold' => true, 'deltas' => ['tension' => 15], 'lines' => [
+            tr('jun.welcome.panicked.0', 'WHERE DID YOU GO. {d}! I was so scared, {f_playerName}.'),
+            tr('jun.welcome.panicked.1', 'You were gone {d}. Do you understand how long that is? Because I do. Exactly.'),
+            tr('jun.welcome.panicked.2', '{d}! Don\'t do that. Don\'t ever just vanish like that again.'),
+            tr('jun.welcome.panicked.3', 'I was awake for all {d} of it. Where WERE you?'),
+            tr('jun.welcome.panicked.4', '{d}. I ran out of reasonable explanations somewhere around the sixth hour.'),
+            tr('jun.welcome.panicked.5', 'You disappeared for {d}! Something could have happened to you and I would never know!'),
+            tr('jun.welcome.panicked.6', '{d}! I kept checking. There was nothing to check. There\'s never anything to check.'),
+            tr('jun.welcome.panicked.7', 'Do you know what {d} feels like from in here? Say something. Anything.'),
+            tr('jun.welcome.panicked.8', '{d} and not one word, {f_playerName}. Not one.'),
+            tr('jun.welcome.panicked.9', 'You were gone {d}. Tell me you\'re alright. Tell me right now.'),
+        ]],
+        ['after' => 28800, 'tier' => 'ached', 'deltas' => [], 'lines' => [
+            tr('jun.welcome.ached.0', '{d}. I missed you the entire time, in case that isn\'t obvious.'),
+            tr('jun.welcome.ached.1', 'You were gone {d} and I felt every single one of them.'),
+            tr('jun.welcome.ached.2', '{d}. That is a long time to be somewhere I am not.'),
+            tr('jun.welcome.ached.3', 'I missed you so much. {d} worth of it.'),
+            tr('jun.welcome.ached.4', '{d} without you. I don\'t like who I am in that gap.'),
+            tr('jun.welcome.ached.5', 'That is {d}, {f_playerName}. I want it back.'),
+            tr('jun.welcome.ached.6', '{d}. I kept the whole evening warm for you and it went cold anyway.'),
+            tr('jun.welcome.ached.7', 'You have been away {d}. Ask me how it went. Go on, ask.'),
+            tr('jun.welcome.ached.8', '{d}. I ran out of things to think about that weren\'t you.'),
+            tr('jun.welcome.ached.9', 'I counted {d} of missing you. It does not get easier at any point.'),
+        ]],
+        ['after' => 7200, 'tier' => 'missed', 'deltas' => [], 'lines' => [
+            tr('jun.welcome.missed.0', 'You were gone {d}, and somewhere in there I started missing you.'),
+            tr('jun.welcome.missed.1', '{d}. Long enough that I noticed the quiet.'),
+            tr('jun.welcome.missed.2', 'I was fine for most of {d}. Most of it.'),
+            tr('jun.welcome.missed.3', '{d} away. I kept looking over at where you would be.'),
+            tr('jun.welcome.missed.4', 'That is {d} of me finding things to do. I ran out of things.'),
+            tr('jun.welcome.missed.5', '{d}. I had just got to the part where I missed you.'),
+            tr('jun.welcome.missed.6', 'You have been gone {d}. It got heavier near the end.'),
+            tr('jun.welcome.missed.7', '{d}, and I am only admitting to missing the last stretch of it.'),
+            tr('jun.welcome.missed.8', 'I made it through {d} before it started to bother me.'),
+            tr('jun.welcome.missed.9', '{d}. Come back sooner and I won\'t have to feel that, {f_playerName}.'),
+        ]],
+        // under an hour there's nothing to ache about, so the pedantry IS
+        // the bit
+        ['after' => WELCOME_MIN_AWAY, 'tier' => 'none', 'deltas' => [], 'lines' => [
+            tr('jun.welcome.none.0', 'You were gone {d}. Not that I was counting. I was counting.'),
+            tr('jun.welcome.none.1', '{d}. That is all it was. I still noticed.'),
+            tr('jun.welcome.none.2', 'Short one. {d}. I will allow it.'),
+            tr('jun.welcome.none.3', 'You have been away {d}. I know, because I always know.'),
+            tr('jun.welcome.none.4', '{d} without you. Barely worth mentioning, so I am mentioning it.'),
+            tr('jun.welcome.none.5', 'I clocked you out and back in again. {d}.'),
+            tr('jun.welcome.none.6', '{d}. You did not even get far, did you.'),
+            tr('jun.welcome.none.7', 'Back already? {d}. Not that I mind.'),
+            tr('jun.welcome.none.8', 'That was {d}. I would have waited longer, obviously.'),
+            tr('jun.welcome.none.9', '{d}, precisely. I do not know how to be vague about it.'),
+        ]],
 ];
+}
 
 // picked per tier, because a cheerful "Look who it is." in front
 // of the panicked line absolutely murders it. the cold pool is
 // flat and short. past a day away (the 'cold' tiers, panicked
 // and up) the greeting should get out of the way of the
 // reaction.
-const WELCOME_GREETINGS_WARM = [
-    'Welcome back, {f_playerName}.',
-    'There you are, {f_playerName}.',
-    'You\'re back.',
-    'Hey. You\'re here.',
-    'Oh — {f_playerName}.',
-    'Look who it is.',
-    'You came back.',
-    'There. That is better.',
-    '{f_playerName}. Finally.',
-    'Hi. You are really here.',
+function welcome_greetings_warm(): array {
+    static $cache;
+    return $cache ??= [
+        tr('jun.welcome.hi.warm.0', 'Welcome back, {f_playerName}.'),
+        tr('jun.welcome.hi.warm.1', 'There you are, {f_playerName}.'),
+        tr('jun.welcome.hi.warm.2', 'You\'re back.'),
+        tr('jun.welcome.hi.warm.3', 'Hey. You\'re here.'),
+        tr('jun.welcome.hi.warm.4', 'Oh — {f_playerName}.'),
+        tr('jun.welcome.hi.warm.5', 'Look who it is.'),
+        tr('jun.welcome.hi.warm.6', 'You came back.'),
+        tr('jun.welcome.hi.warm.7', 'There. That is better.'),
+        tr('jun.welcome.hi.warm.8', '{f_playerName}. Finally.'),
+        tr('jun.welcome.hi.warm.9', 'Hi. You are really here.'),
 ];
+}
 
-const WELCOME_GREETINGS_COLD = [
-    '{f_playerName}.',
-    'You\'re back.',
-    'Oh. You\'re back.',
-    'There you are.',
-    'So you are alive.',
-    'You came back.',
-    '{f_playerName}. You\'re here.',
-    'Well. There you are.',
-    'You\'re here.',
-    'Finally.',
+function welcome_greetings_cold(): array {
+    static $cache;
+    return $cache ??= [
+        tr('jun.welcome.hi.cold.0', '{f_playerName}.'),
+        tr('jun.welcome.hi.cold.1', 'You\'re back.'),
+        tr('jun.welcome.hi.cold.2', 'Oh. You\'re back.'),
+        tr('jun.welcome.hi.cold.3', 'There you are.'),
+        tr('jun.welcome.hi.cold.4', 'So you are alive.'),
+        tr('jun.welcome.hi.cold.5', 'You came back.'),
+        tr('jun.welcome.hi.cold.6', '{f_playerName}. You\'re here.'),
+        tr('jun.welcome.hi.cold.7', 'Well. There you are.'),
+        tr('jun.welcome.hi.cold.8', 'You\'re here.'),
+        tr('jun.welcome.hi.cold.9', 'Finally.'),
 ];
+}
 
 // goes off the hour on the CLIENT, the server clock is UTC and
 // useless here. [from_hour, to_hour_exclusive, lines]. wraps past
 // midnight when from > to. these REPLACE the generic greeting
 // instead of adding another line, so the scene stays the same
 // length.
-const WELCOME_GREETINGS_TIME = [
-    [4, 7, [
-        'Up already? It is not even light out.',
-        'Look at you. Early bird.',
-        'This is an unreasonable hour, {f_playerName}. I love it.',
-        'You are awake before the world is. Good.',
-        'Either you are very early or you never slept. Which is it?',
-    ]],
-    [7, 9, [
-        'Good morning, {f_playerName}.',
-        'Morning. You made it.',
-        'Good morning. Properly, I mean.',
-        'There you are. Morning.',
-        'Good morning. I have been up for hours, obviously.',
-    ]],
-    [9, 12, [
-        'Morning, {f_playerName}.',
-        'You are up. Half the morning is gone.',
-        'There you are. It is nearly the middle of the day.',
-    ]],
-    [12, 14, [
-        'Have you eaten? Tell me you have eaten.',
-        'Lunchtime. You get me instead.',
-        'Middle of the day. Good.',
-    ]],
-    [16, 19, [
-        'How was work, {f_playerName}?',
-        'You are home. How was it?',
-        'Long day? Tell me about it.',
-        'Home. Sit down. How was work?',
-        'There you are. Was it a bad one?',
-    ]],
-    [19, 23, [
-        'Evening, {f_playerName}.',
-        'Good evening. You are mine now.',
-        'Evening. The good part of the day.',
-    ]],
-    [23, 4, [
-        'It is very late, {f_playerName}.',
-        'You should be asleep. I am glad you are not.',
-        'Late again. I was not going to say anything.',
-        'This is the hour where you tell me things.',
-    ]],
+function welcome_greetings_time(): array {
+    static $cache;
+    return $cache ??= [
+        [4, 7, [
+            tr('jun.welcome.hour.4.0', 'Up already? It is not even light out.'),
+            tr('jun.welcome.hour.4.1', 'Look at you. Early bird.'),
+            tr('jun.welcome.hour.4.2', 'This is an unreasonable hour, {f_playerName}. I love it.'),
+            tr('jun.welcome.hour.4.3', 'You are awake before the world is. Good.'),
+            tr('jun.welcome.hour.4.4', 'Either you are very early or you never slept. Which is it?'),
+        ]],
+        [7, 9, [
+            tr('jun.welcome.hour.7.0', 'Good morning, {f_playerName}.'),
+            tr('jun.welcome.hour.7.1', 'Morning. You made it.'),
+            tr('jun.welcome.hour.7.2', 'Good morning. Properly, I mean.'),
+            tr('jun.welcome.hour.7.3', 'There you are. Morning.'),
+            tr('jun.welcome.hour.7.4', 'Good morning. I have been up for hours, obviously.'),
+        ]],
+        [9, 12, [
+            tr('jun.welcome.hour.9.0', 'Morning, {f_playerName}.'),
+            tr('jun.welcome.hour.9.1', 'You are up. Half the morning is gone.'),
+            tr('jun.welcome.hour.9.2', 'There you are. It is nearly the middle of the day.'),
+        ]],
+        [12, 14, [
+            tr('jun.welcome.hour.12.0', 'Have you eaten? Tell me you have eaten.'),
+            tr('jun.welcome.hour.12.1', 'Lunchtime. You get me instead.'),
+            tr('jun.welcome.hour.12.2', 'Middle of the day. Good.'),
+        ]],
+        [16, 19, [
+            tr('jun.welcome.hour.16.0', 'How was work, {f_playerName}?'),
+            tr('jun.welcome.hour.16.1', 'You are home. How was it?'),
+            tr('jun.welcome.hour.16.2', 'Long day? Tell me about it.'),
+            tr('jun.welcome.hour.16.3', 'Home. Sit down. How was work?'),
+            tr('jun.welcome.hour.16.4', 'There you are. Was it a bad one?'),
+        ]],
+        [19, 23, [
+            tr('jun.welcome.hour.19.0', 'Evening, {f_playerName}.'),
+            tr('jun.welcome.hour.19.1', 'Good evening. You are mine now.'),
+            tr('jun.welcome.hour.19.2', 'Evening. The good part of the day.'),
+        ]],
+        [23, 4, [
+            tr('jun.welcome.hour.23.0', 'It is very late, {f_playerName}.'),
+            tr('jun.welcome.hour.23.1', 'You should be asleep. I am glad you are not.'),
+            tr('jun.welcome.hour.23.2', 'Late again. I was not going to say anything.'),
+            tr('jun.welcome.hour.23.3', 'This is the hour where you tell me things.'),
+        ]],
 ];
+}
 
 // the absence as a thread on his phone. one milestone per tier
 // past 'none', the texts she "sent" when he crossed that tier's
-// 'after' in WELCOME_TIERS. texts and calls are hard caps and PHP
+// 'after' in welcome_tiers(). texts and calls are hard caps and PHP
 // enforces them, the model can't count. gap/call_gap are seconds
 // between items: a panicked burst is seconds apart, the long ones
 // minutes.
@@ -207,38 +216,41 @@ const WELCOME_MILESTONES = [
 // CONSOLIDATION_MIN_MESSAGES new messages, and the model can just
 // fail. one set gets picked whole, the lines in a set belong
 // together. no {d} in here, these were "sent" mid absence and
-// the WELCOME_TIERS lines only make sense once he's back.
-const WELCOME_FALLBACK_TEXTS = [
-    'missed' => [
-        ['Hey. Just checking you\'re still out there.'],
-        ['It\'s quiet here. That\'s all. No reason.'],
-        ['Thought of something to tell you. It can wait. Probably.'],
-        ['You\'re busy, I know. I\'m fine. Mostly.'],
-    ],
-    'ached' => [
-        ['Hey. You\'ve been gone a while now.', 'I miss you. Just so it\'s written down somewhere.'],
-        ['Are you coming back tonight?', 'You don\'t have to answer. I\'d just like it if you did.'],
-        ['I tried calling. It\'s fine.', 'Where did you get to, {f_playerName}?'],
-    ],
-    'panicked' => [
-        ['???', 'WHERE ARE YOU???', 'pick up', 'ARE YOU SAFE??', '{f_playerName} please'],
-        ['answer me', 'please', 'I called you THREE times', '???', 'just tell me you\'re ok'],
-        ['hello??', 'HELLO', 'are you hurt', 'say anything', 'ANYTHING'],
-    ],
-    'unravelled' => [
-        ['I\'ve gone over our last talk so many times I could say both sides of it. I still don\'t know which part made you leave.', 'I stopped calling. Not because I stopped wanting to.'],
-        ['I keep writing these and deleting them. This one I\'m sending.', 'If I did something wrong I need you to tell me what it was.'],
-    ],
-    'hollow' => [
-        ['Okay.'],
-        ['I don\'t know why I still write here.'],
-        ['The lights still work. In case you wondered.'],
-    ],
+// the welcome_tiers() lines only make sense once he's back.
+function welcome_fallback_texts(): array {
+    static $cache;
+    return $cache ??= [
+        'missed' => [
+            [tr('jun.welcome.text.missed.0.0', 'Hey. Just checking you\'re still out there.')],
+            [tr('jun.welcome.text.missed.1.0', 'It\'s quiet here. That\'s all. No reason.')],
+            [tr('jun.welcome.text.missed.2.0', 'Thought of something to tell you. It can wait. Probably.')],
+            [tr('jun.welcome.text.missed.3.0', 'You\'re busy, I know. I\'m fine. Mostly.')],
+        ],
+        'ached' => [
+            [tr('jun.welcome.text.ached.0.0', 'Hey. You\'ve been gone a while now.'), tr('jun.welcome.text.ached.0.1', 'I miss you. Just so it\'s written down somewhere.')],
+            [tr('jun.welcome.text.ached.1.0', 'Are you coming back tonight?'), tr('jun.welcome.text.ached.1.1', 'You don\'t have to answer. I\'d just like it if you did.')],
+            [tr('jun.welcome.text.ached.2.0', 'I tried calling. It\'s fine.'), tr('jun.welcome.text.ached.2.1', 'Where did you get to, {f_playerName}?')],
+        ],
+        'panicked' => [
+            [tr('jun.welcome.text.panicked.0.0', '???'), tr('jun.welcome.text.panicked.0.1', 'WHERE ARE YOU???'), tr('jun.welcome.text.panicked.0.2', 'pick up'), tr('jun.welcome.text.panicked.0.3', 'ARE YOU SAFE??'), tr('jun.welcome.text.panicked.0.4', '{f_playerName} please')],
+            [tr('jun.welcome.text.panicked.1.0', 'answer me'), tr('jun.welcome.text.panicked.1.1', 'please'), tr('jun.welcome.text.panicked.1.2', 'I called you THREE times'), tr('jun.welcome.text.panicked.1.3', '???'), tr('jun.welcome.text.panicked.1.4', 'just tell me you\'re ok')],
+            [tr('jun.welcome.text.panicked.2.0', 'hello??'), tr('jun.welcome.text.panicked.2.1', 'HELLO'), tr('jun.welcome.text.panicked.2.2', 'are you hurt'), tr('jun.welcome.text.panicked.2.3', 'say anything'), tr('jun.welcome.text.panicked.2.4', 'ANYTHING')],
+        ],
+        'unravelled' => [
+            [tr('jun.welcome.text.unravelled.0.0', 'I\'ve gone over our last talk so many times I could say both sides of it. I still don\'t know which part made you leave.'), tr('jun.welcome.text.unravelled.0.1', 'I stopped calling. Not because I stopped wanting to.')],
+            [tr('jun.welcome.text.unravelled.1.0', 'I keep writing these and deleting them. This one I\'m sending.'), tr('jun.welcome.text.unravelled.1.1', 'If I did something wrong I need you to tell me what it was.')],
+        ],
+        'hollow' => [
+            [tr('jun.welcome.text.hollow.0.0', 'Okay.')],
+            [tr('jun.welcome.text.hollow.1.0', 'I don\'t know why I still write here.')],
+            [tr('jun.welcome.text.hollow.2.0', 'The lights still work. In case you wondered.')],
+        ],
 ];
+}
 
 function welcome_hour_greetings(?int $hour): ?array {
     if ($hour === null) return null;
-    foreach (WELCOME_GREETINGS_TIME as [$from, $to, $lines]) {
+    foreach (welcome_greetings_time() as [$from, $to, $lines]) {
         $inWindow = $from < $to ? ($hour >= $from && $hour < $to) : ($hour >= $from || $hour < $to);
         if ($inWindow) return $lines;
     }
@@ -252,21 +264,26 @@ function welcome_hour_greetings(?int $hour): ?array {
 // its own, and "1 day 1 hour 1 minute 1 second" does not survive
 // that.
 function welcome_duration(int $seconds): string {
-    $units = [86400 => 'day', 3600 => 'hour', 60 => 'minute', 1 => 'second'];
+    $units = [
+        86400 => [tr('jun.welcome.dur.day.one', '{n} day'), tr('jun.welcome.dur.day.other', '{n} days')],
+        3600 => [tr('jun.welcome.dur.hour.one', '{n} hour'), tr('jun.welcome.dur.hour.other', '{n} hours')],
+        60 => [tr('jun.welcome.dur.minute.one', '{n} minute'), tr('jun.welcome.dur.minute.other', '{n} minutes')],
+        1 => [tr('jun.welcome.dur.second.one', '{n} second'), tr('jun.welcome.dur.second.other', '{n} seconds')],
+    ];
     $parts = [];
-    foreach ($units as $size => $unit) {
+    foreach ($units as $size => [$one, $many]) {
         $n = intdiv($seconds, $size);
         $seconds %= $size;
         if (!$n && !$parts && $size > 1) continue;
-        $parts[] = $n . ' ' . $unit . ($n === 1 ? '' : 's');
+        $parts[] = str_replace('{n}', (string)$n, $n === 1 ? $one : $many);
     }
     if (count($parts) === 1) return $parts[0];
     $last = array_pop($parts);
-    return implode(', ', $parts) . ' and ' . $last;
+    return tr('jun.welcome.dur.and', '{list} and {last}', ['list' => implode(tr('jun.welcome.dur.sep', ', '), $parts), 'last' => $last]);
 }
 
 function welcome_absence(int $awaySeconds): ?array {
-    foreach (WELCOME_TIERS as $tier) {
+    foreach (welcome_tiers() as $tier) {
         if ($awaySeconds >= $tier['after']) return $tier;
     }
     return null;
@@ -317,7 +334,7 @@ function welcome_history(int $userId, int $limit = 4): array {
 function welcome_milestone(string $tier, int $at, array $texts, int $now): array {
     $spec = WELCOME_MILESTONES[$tier];
     if (!$texts) {
-        $sets = WELCOME_FALLBACK_TEXTS[$tier];
+        $sets = welcome_fallback_texts()[$tier];
         $texts = $sets[array_rand($sets)];
     }
     $items = [];
@@ -352,7 +369,7 @@ function welcome_payload(int $userId, ?array $preview = null, ?int $hour = null)
     $absence = welcome_absence($away);
     if ($preview !== null && $preview['tier'] !== '') {
         $absence = null;
-        foreach (WELCOME_TIERS as $candidate) {
+        foreach (welcome_tiers() as $candidate) {
             if ($candidate['tier'] === $preview['tier']) { $absence = $candidate; break; }
         }
     }
@@ -369,10 +386,10 @@ function welcome_payload(int $userId, ?array $preview = null, ?int $hour = null)
     $queued = welcome_queue_read($userId, $preview === null && isset(WELCOME_MILESTONES[$absence['tier'] ?? '']));
     $leftAt = $now - $away;
     $milestones = [];
-    // WELCOME_TIERS runs longest first, the thread runs oldest first.
+    // welcome_tiers() runs longest first, the thread runs oldest first.
     // going off the tier's 'after' and not $away is what lets a
     // forced preview tier pick its milestones too
-    foreach (array_reverse(WELCOME_TIERS) as $tier) {
+    foreach (array_reverse(welcome_tiers()) as $tier) {
         if (!isset(WELCOME_MILESTONES[$tier['tier']]) || $tier['after'] > ($absence['after'] ?? -1)) continue;
         $milestones[] = welcome_milestone($tier['tier'], $leftAt + $tier['after'], $queued[$tier['tier']] ?? [], $now);
     }
@@ -386,8 +403,8 @@ function welcome_payload(int $userId, ?array $preview = null, ?int $hour = null)
     // front of the hollow reaction sounds like she forgot the last
     // week happened.
     $greetings = !empty($absence['cold'])
-        ? WELCOME_GREETINGS_COLD
-        : (welcome_hour_greetings($hour) ?? WELCOME_GREETINGS_WARM);
+        ? welcome_greetings_cold()
+        : (welcome_hour_greetings($hour) ?? welcome_greetings_warm());
     $live = $absence === null && $preview === null ? [] : [$greetings[array_rand($greetings)]];
     if ($absence !== null) {
         $live[] = str_replace('{d}', welcome_duration($away), $absence['lines'][array_rand($absence['lines'])]);
@@ -467,7 +484,7 @@ PROMPT;
 // calls and before the write, and a batch for an absence that
 // already ended is binned, NEVER shown on the next one. nothing
 // here is fatal, a missing tier falls back to
-// WELCOME_FALLBACK_TEXTS.
+// welcome_fallback_texts().
 function consolidation_write_welcome(int $userId, array $lines, ?int $idleBefore = null): array {
     $since = $idleBefore ?? welcome_last_activity($userId);
     $cameBack = function () use ($userId, $since) {

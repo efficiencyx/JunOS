@@ -224,7 +224,7 @@ function Tune-Ollama {
     }
 
     $bestN = 0; $best = $base
-    $mf = Join-Path $env:TEMP 'Modelfile.tune'
+    $mf = Join-Path $PSScriptRoot 'runtime\Modelfile.tune'
     foreach ($n in 1..4) {
         "FROM $chat`nDRAFT $blob`nPARAMETER draft_num_predict $n$renderer" | Set-Content -Path $mf -Encoding UTF8
         & ollama create jun-mtp-tune -f $mf 2>$null | Out-Null
@@ -256,7 +256,7 @@ function Measure-Llamacpp([string]$url) {
     $tok = 0; $ms = 0.0
     # router mode wants the model named, same pick as start.ps1
     $hf = Get-EnvKey 'LLAMACPP_MODEL_HF'
-    $model = if ($hf) { ($hf -split ',')[0].Trim() } else { 'efficiencyx/Jun-LoRA-E2B-GGUF:Q4_K_M' }
+    $model = if ($hf) { ($hf -split ',')[0].Trim() } else { 'efficiencyx/Jun-LoRA-E2B-GGUF:Q6_K' }
     foreach ($p in $Prompts) {
         $r = Invoke-Chat "$url/v1/chat/completions" @{
             model = $model

@@ -2,6 +2,7 @@
 
 require_once __DIR__ . '/http.php';
 require_once __DIR__ . '/text.php';
+require_once __DIR__ . '/i18n.php';
 require_once __DIR__ . '/env.php';
 require_once __DIR__ . '/sidecar.php';
 require_once __DIR__ . '/guards.php';
@@ -13,6 +14,7 @@ require_once __DIR__ . '/journal.php';
 require_once __DIR__ . '/consolidation/state.php';
 require_once __DIR__ . '/crypto.php';
 require_once __DIR__ . '/trips.php';
+require_once __DIR__ . '/difficulty.php';
 require_once __DIR__ . '/relationship.php';
 require_once __DIR__ . '/achievements.php';
 require_once __DIR__ . '/providers/config.php';

@@ -1,4 +1,5 @@
 import * as Names from '../core/names.js?v=1';
+import { t } from '../core/i18n.js?v=1';
 
 // her absence texts as desktop notifications. the server writes them
 // during the idle pass, this page fetches them while it still can and
@@ -106,12 +107,12 @@ export async function initNative(toast) {
   let state;
   try { state = await nativeCall(); } catch (e) { return; }
   row.hidden = false;
-  row.querySelector('.set-row-desc').textContent = 'Even with the app closed.';
+  row.querySelector('.set-row-desc').textContent = t('notify.evenClosed', 'Even with the app closed.');
   chk.checked = state.enabled;
   if (state.enabled) nativeCall(true).catch(() => {});
   chk.addEventListener('change', async () => {
     try { state = await nativeCall(chk.checked); } catch (e) { state = { enabled: false, permitted: true }; }
     chk.checked = state.enabled;
-    if (!state.permitted) toast?.('Allow notifications for Jun OS in Android settings first.', 'error');
+    if (!state.permitted) toast?.(t('notify.allowAndroid', 'Allow notifications for Jun OS in Android settings first.'), 'error');
   });
 }

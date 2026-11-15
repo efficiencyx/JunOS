@@ -1,3 +1,4 @@
+import { t } from '../core/i18n.js?v=1';
 // the rank emblems. one 64x64 family, each tier adds a layer the
 // one below it doesn't have: bronze is a plain medallion, silver
 // turns it into a shield, gold puts wings and a crown on that,
@@ -10,7 +11,7 @@
 // document, and if THAT one sits in a display:none subtree the
 // gradient just doesn't paint. in chrome AND firefox. cool.
 
-export const TIER_NAMES = ['Bronze', 'Silver', 'Gold', 'Diamond'];
+export const TIER_NAMES = [t('ach.tier.bronze', 'Bronze'), t('ach.tier.silver', 'Silver'), t('ach.tier.gold', 'Gold'), t('ach.tier.diamond', 'Diamond')];
 
 let seq = 0;
 

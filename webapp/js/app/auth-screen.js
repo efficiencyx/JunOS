@@ -1,5 +1,6 @@
-import * as Prefs from '../core/prefs.js?v=8';
+import * as Prefs from '../core/prefs.js?v=9';
 import * as Auth from '../core/auth.js?v=1';
+import { t } from '../core/i18n.js?v=1';
 
 const authScreen = document.getElementById('authScreen');
 const authTabLogin = document.getElementById('authTabLogin');
@@ -55,7 +56,7 @@ if (authTabLogin && authTabSignup) {
 }
 
 const EMAIL_SHAPE = /^[^@\s]+@[^@\s]+\.[^@\s]+$/;
-const PASSWORD_TOO_SHORT = 'Password must be at least 8 characters.';
+const PASSWORD_TOO_SHORT = t('auth.err.short', 'Password must be at least 8 characters.');
 
 function setAuthError(id, msg) {
   const el = document.getElementById(id);
@@ -80,7 +81,7 @@ document.getElementById('authRecoveryCopy')?.addEventListener('click', async (e)
   const code = document.getElementById('authRecoveryCodeValue');
   try {
     await navigator.clipboard.writeText(code.textContent);
-    e.target.textContent = 'copied';
+    e.target.textContent = t('auth.code.copied', 'copied');
   } catch {
     // no clipboard API over plain http on the LAN, select it so ctrl+c works
     getSelection().selectAllChildren(code);
@@ -103,8 +104,8 @@ if (authFormRecover) {
     const email = document.getElementById('recoverEmail').value.trim();
     const code = document.getElementById('recoverCode').value.trim();
     const password = document.getElementById('recoverPassword').value;
-    if (!EMAIL_SHAPE.test(email)) return setAuthError('recoverError', 'Invalid email address.');
-    if (!code) return setAuthError('recoverError', 'Enter your recovery code.');
+    if (!EMAIL_SHAPE.test(email)) return setAuthError('recoverError', t('auth.err.email', 'Invalid email address.'));
+    if (!code) return setAuthError('recoverError', t('auth.err.code', 'Enter your recovery code.'));
     if (password.length < 8) return setAuthError('recoverError', PASSWORD_TOO_SHORT);
     const btn = document.getElementById('recoverBtn');
     btn.disabled = true;
@@ -112,9 +113,9 @@ if (authFormRecover) {
       const r = await Auth.recover(email, code, password);
       if (r.ok) { location.reload(); return; }
       const j = await r.json().catch(() => ({}));
-      const msgs = { invalid_recovery_code: 'That email and recovery code do not match.', password_too_short: 'Password must be at least 8 characters.', rate_limit_exceeded: 'Too many attempts - try again in an hour.' };
-      setAuthError('recoverError', msgs[j.error] || 'Recovery failed.');
-    } catch { setAuthError('recoverError', 'Network error.'); }
+      const msgs = { invalid_recovery_code: t('auth.err.codeMismatch', 'That email and recovery code do not match.'), password_too_short: t('auth.err.short', 'Password must be at least 8 characters.'), rate_limit_exceeded: t('auth.err.rateHour', 'Too many attempts - try again in an hour.') };
+      setAuthError('recoverError', msgs[j.error] || t('auth.err.recover', 'Recovery failed.'));
+    } catch { setAuthError('recoverError', t('common.networkError', 'Network error.')); }
     btn.disabled = false;
   });
 }
@@ -125,16 +126,16 @@ if (authFormLogin) {
     setAuthError('loginError', '');
     const email = document.getElementById('loginEmail').value.trim();
     const password = document.getElementById('loginPassword').value;
-    if (!email || !password) return setAuthError('loginError', 'Enter your email and password.');
+    if (!email || !password) return setAuthError('loginError', t('auth.err.missing', 'Enter your email and password.'));
     const btn = document.getElementById('loginBtn');
     btn.disabled = true;
     try {
       const r = await Auth.login(email, password);
       const j = await r.json().catch(() => ({}));
       if (r.ok) { j.recovery_code ? showRecoveryCode(j.recovery_code) : location.reload(); return; }
-      const msgs = { invalid_credentials: 'Wrong email or password.', rate_limit_exceeded: 'Too many attempts - wait a minute.', data_key_unavailable: 'Your data key would not open. Use your recovery code.' };
-      setAuthError('loginError', msgs[j.error] || 'Login failed.');
-    } catch { setAuthError('loginError', 'Network error.'); }
+      const msgs = { invalid_credentials: t('auth.err.credentials', 'Wrong email or password.'), rate_limit_exceeded: t('auth.err.rateMinute', 'Too many attempts - wait a minute.'), data_key_unavailable: t('auth.err.dataKey', 'Your data key would not open. Use your recovery code.') };
+      setAuthError('loginError', msgs[j.error] || t('auth.err.login', 'Login failed.'));
+    } catch { setAuthError('loginError', t('common.networkError', 'Network error.')); }
     btn.disabled = false;
   });
 }
@@ -147,22 +148,22 @@ if (authFormSignup) {
     const password = document.getElementById('signupPassword').value;
     const adultConsent = document.getElementById('signupAdult').checked;
     const regKey = (document.getElementById('signupRegKey')?.value || '').trim();
-    if (!EMAIL_SHAPE.test(email)) return setAuthError('signupError', 'Invalid email address.');
+    if (!EMAIL_SHAPE.test(email)) return setAuthError('signupError', t('auth.err.email', 'Invalid email address.'));
     if (password.length < 8) return setAuthError('signupError', PASSWORD_TOO_SHORT);
-    if (!adultConsent) return setAuthError('signupError', 'You must confirm you are 18 or older.');
+    if (!adultConsent) return setAuthError('signupError', t('auth.err.adult', 'You must confirm you are 18 or older.'));
     const btn = document.getElementById('signupBtn');
     btn.disabled = true;
     try {
       const r = await Auth.signup(email, password, adultConsent, regKey);
       const j = await r.json().catch(() => ({}));
       if (r.ok) { showRecoveryCode(j.recovery_code); return; }
-      const msgs = { email_taken: 'That email is already registered.', invalid_email: 'Invalid email address.', password_too_short: 'Password must be at least 8 characters.', adult_consent_required: 'You must confirm you are 18 or older.', registration_closed: 'Sign-ups on this server need a registration key.', invalid_registration_key: 'Wrong registration key.', rate_limit_exceeded: 'Too many attempts - wait a minute.' };
+      const msgs = { email_taken: t('auth.err.taken', 'That email is already registered.'), invalid_email: t('auth.err.email', 'Invalid email address.'), password_too_short: t('auth.err.short', 'Password must be at least 8 characters.'), adult_consent_required: t('auth.err.adult', 'You must confirm you are 18 or older.'), registration_closed: t('auth.err.closed', 'Sign-ups on this server need a registration key.'), invalid_registration_key: t('auth.err.regKey', 'Wrong registration key.'), rate_limit_exceeded: t('auth.err.rateMinute', 'Too many attempts - wait a minute.') };
       if (j.error === 'registration_closed') {
         const field = document.getElementById('signupRegKeyField');
         if (field) field.hidden = false;
       }
-      setAuthError('signupError', msgs[j.error] || 'Sign up failed.');
-    } catch { setAuthError('signupError', 'Network error.'); }
+      setAuthError('signupError', msgs[j.error] || t('auth.err.signup', 'Sign up failed.'));
+    } catch { setAuthError('signupError', t('common.networkError', 'Network error.')); }
     btn.disabled = false;
   });
 }

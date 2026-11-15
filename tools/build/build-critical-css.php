@@ -4,7 +4,7 @@
 // screens need it before async styles.css loads. sync-webapp.sh
 // updates it. --check just compares and exits 1 when stale.
 
-$webappDir = is_dir(__DIR__ . '/../webapp') ? __DIR__ . '/../webapp' : __DIR__ . '/..';
+$webappDir = is_dir(__DIR__ . '/../../webapp') ? __DIR__ . '/../../webapp' : __DIR__ . '/../..';
 $cssPath  = $webappDir . '/css/boot.css';
 $htmlPath = $webappDir . '/index.html';
 
@@ -32,12 +32,12 @@ if ($end === false) {
     exit(1);
 }
 
-$banner  = "\n/* generated from css/boot.css by tools/build-critical-css.php. do NOT edit. */\n";
+$banner  = "\n/* generated from css/boot.css by tools/build/build-critical-css.php. do NOT edit. */\n";
 $updated = substr($html, 0, $bodyAt) . $banner . $css . "\n" . substr($html, $end);
 
 if (in_array('--check', $argv, true)) {
     if ($updated !== $html) {
-        fprintf(STDERR, "index.html critical CSS is stale - run: php tools/build-critical-css.php\n");
+        fprintf(STDERR, "index.html critical CSS is stale - run: php tools/build/build-critical-css.php\n");
         exit(1);
     }
     echo "critical CSS up to date\n";

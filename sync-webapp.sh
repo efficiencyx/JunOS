@@ -48,9 +48,9 @@ fi
 # apart.
 echo "→ inlining critical css"
 if command -v php >/dev/null; then
-  php tools/build-critical-css.php
+  php tools/build/build-critical-css.php
 else
-  docker run --rm -v "$PWD:/w" -w /w php:cli php tools/build-critical-css.php
+  docker run --rm -v "$PWD:/w" -w /w php:cli php tools/build/build-critical-css.php
 fi
 
 # docker cp keeps the host's uid and mode bits, and the containers

@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, interactive-widget=resizes-content">
-<title>Out to eat</title>
+<title data-i18n="date.pageTitle">Out to eat</title>
 <link rel="icon" type="image/png" href="jun_os.png">
 <link rel="stylesheet" href="css/trip-loader.css?v=1">
 <link rel="stylesheet" href="css/pages/date.css?v=14">
@@ -11,12 +11,12 @@
 </head>
 <body>
 <main class="date-layout">
-  <a class="head-home" href="index.html"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="19" y1="12" x2="5" y2="12"/><polyline points="12 19 5 12 12 5"/></svg>Head home</a>
-  <section class="restaurant" aria-label="Your table">
+  <a class="head-home" href="index.html"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="19" y1="12" x2="5" y2="12"/><polyline points="12 19 5 12 12 5"/></svg><span data-i18n="page.headHome">Head home</span></a>
+  <section class="restaurant" aria-label="Your table" data-i18n-aria-label="date.table">
     <div class="room" aria-hidden="true"></div>
     <div id="stage"></div>
     <div class="table" aria-hidden="true"></div>
-    <div id="stageStatus" role="status">Loading…</div>
+    <div id="stageStatus" role="status" data-i18n="stage.loadingCap">Loading…</div>
   </section>
 
   <section class="menu-card" id="menuCard" aria-labelledby="menuTitle">
@@ -25,7 +25,7 @@
       <p class="page-meta"><span id="menuDate"></span><span id="menuPlace"></span></p>
     </header>
     <div class="page">
-      <h2 class="menu-title" id="menuTitle"><svg class="flourish" viewBox="0 0 60 20" aria-hidden="true"><path d="M2 12Q14 2 30 10T58 8M18 12Q22 4 30 10" fill="none" stroke="currentColor" stroke-width="1.1"/></svg>Menu<svg class="flourish mirror" viewBox="0 0 60 20" aria-hidden="true"><path d="M2 12Q14 2 30 10T58 8M18 12Q22 4 30 10" fill="none" stroke="currentColor" stroke-width="1.1"/></svg></h2>
+      <h2 class="menu-title" id="menuTitle"><svg class="flourish" viewBox="0 0 60 20" aria-hidden="true"><path d="M2 12Q14 2 30 10T58 8M18 12Q22 4 30 10" fill="none" stroke="currentColor" stroke-width="1.1"/></svg><span data-i18n="date.menu">Menu</span><svg class="flourish mirror" viewBox="0 0 60 20" aria-hidden="true"><path d="M2 12Q14 2 30 10T58 8M18 12Q22 4 30 10" fill="none" stroke="currentColor" stroke-width="1.1"/></svg></h2>
       <div class="menu-list" id="menuList" aria-describedby="menuHint"></div>
     </div>
     <p class="menu-hint" id="menuHint"></p>
@@ -35,11 +35,11 @@
     <p class="kitchen" id="kitchen" hidden><span id="kitchenText" aria-live="polite"></span><span class="kitchen-bar" aria-hidden="true"></span></p>
     <p class="last-line" id="lastLine" aria-live="polite"></p>
     <div class="composer-row">
-      <input id="sayInput" type="text" maxlength="500" placeholder="Say something…" aria-label="Say something" disabled>
-      <button type="submit" id="sendBtn" disabled>Say</button>
-      <button type="button" id="orderBtn" disabled>Call the waiter</button>
-      <button type="button" id="billBtn" hidden>Ask for the bill</button>
-      <button type="button" id="skipBtn" hidden>Skip the wait</button>
+      <input id="sayInput" type="text" maxlength="500" placeholder="Say something…" data-i18n-placeholder="page.say" aria-label="Say something" data-i18n-aria-label="page.sayAria" disabled>
+      <button type="submit" id="sendBtn" disabled data-i18n="page.sayBtn">Say</button>
+      <button type="button" id="orderBtn" disabled data-i18n="date.callWaiter">Call the waiter</button>
+      <button type="button" id="billBtn" hidden data-i18n="date.askBill">Ask for the bill</button>
+      <button type="button" id="skipBtn" hidden data-i18n="date.skipWait">Skip the wait</button>
     </div>
   </form>
 </main>
@@ -48,6 +48,6 @@
 <script defer src="vendor/pixi.min.js"></script>
 <script defer src="vendor/pixi-unsafe-eval.min.js"></script>
 <script defer src="vendor/cubism4.min.js"></script>
-<script type="module" src="js/date.js?v=46"></script>
+<script type="module" src="js/date.js?v=58"></script>
 </body>
 </html>

@@ -1,8 +1,9 @@
-import * as Live2D from '../live2d/live2d.js?v=91';
-import { $, active, hooks } from './karaoke.js?v=28';
-import { mode, setStatus, track } from './setup.js?v=21';
-import { startRecording, stopRecording } from './recorder.js?v=21';
+import * as Live2D from '../live2d/live2d.js?v=92';
+import { $, active, hooks } from './karaoke.js?v=32';
+import { mode, setStatus, track } from './setup.js?v=25';
+import { startRecording, stopRecording } from './recorder.js?v=25';
 import { clamp } from '../core/util.js?v=1';
+import { t } from '../core/i18n.js?v=1';
 
 // queue both stems (the split vocal and backing tracks) 0.1
 // seconds ahead, so they start on the exact same sample.
@@ -99,13 +100,13 @@ function updateTurn(si, owner) {
   const key = owner + '>' + (next || '');
   if (key === lastOwnerKey) return;
   lastOwnerKey = key;
-  const label = owner === 'you' ? 'Your turn' : owner === 'jun' ? "Jun's turn" : 'Together';
+  const label = owner === 'you' ? t('karaoke.turn.you', 'Your turn') : owner === 'jun' ? t('karaoke.turn.jun', "Jun's turn") : t('karaoke.turn.both', 'Together');
   const nextLabel = next && next !== owner
-    ? next === 'you' ? 'you' : next === 'jun' ? 'Jun' : 'together'
+    ? next === 'you' ? t('karaoke.next.you', 'next: you') : next === 'jun' ? t('karaoke.next.jun', 'next: Jun') : t('karaoke.next.both', 'next: together')
     : null;
   el.dataset.owner = owner;
   el.innerHTML = `<span class="karaoke-turn-main">${label}</span>` +
-    (nextLabel ? `<span class="karaoke-turn-next">next: ${nextLabel}</span>` : '');
+    (nextLabel ? `<span class="karaoke-turn-next">${nextLabel}</span>` : '');
 }
 
 function setActiveLine(si) {
@@ -197,15 +198,15 @@ export function start(nextSoloPhase = 'you') {
       return;
     }
     stopPlayback();
-    setStatus(mode === 'solo' ? 'Solo relay complete' : 'Take complete');
+    setStatus(mode === 'solo' ? t('karaoke.soloDone', 'Solo relay complete') : t('karaoke.takeDone', 'Take complete'));
   };
 
   if (hooks.onPlaybackChange) hooks.onPlaybackChange(true);
   if (mode !== 'solo' || soloPhase === 'you') startRecording();
   if (!rafId) rafId = requestAnimationFrame(loop);
   setStatus(mode === 'solo'
-    ? soloPhase === 'you' ? 'Your solo… Jun goes next' : "Jun's solo…"
-    : 'Singing… tap Stop when done');
+    ? soloPhase === 'you' ? t('karaoke.yourSolo', 'Your solo… Jun goes next') : t('karaoke.junSolo', "Jun's solo…")
+    : t('karaoke.singing', 'Singing… tap Stop when done'));
 }
 
 function makeSources() {
@@ -244,7 +245,7 @@ export function practice(sectionIndex) {
   };
   if (hooks.onPlaybackChange) hooks.onPlaybackChange(true);
   if (!rafId) rafId = requestAnimationFrame(loop);
-  setStatus('Practice, this one is not scored');
+  setStatus(t('karaoke.practiceNote', 'Practice, this one is not scored'));
 }
 
 export function stopPlayback() {

@@ -1,14 +1,16 @@
 import * as Auth from './core/auth.js?v=1';
 import { api } from './core/api.js?v=1';
-import * as Prefs from './core/prefs.js?v=8';
-import * as Karaoke from './karaoke/karaoke.js?v=28';
-import * as Live2D from './live2d/live2d.js?v=91';
-import * as Outfit from './outfit/outfit.js?v=101';
+import * as Prefs from './core/prefs.js?v=9';
+import * as Karaoke from './karaoke/karaoke.js?v=32';
+import * as Live2D from './live2d/live2d.js?v=92';
+import * as Outfit from './outfit/outfit.js?v=112';
 import * as Scene from './trip/scene.js?v=1';
 import { startSkybox } from './trip/skybox.js?v=2';
-import * as TripLoader from './trip/trip-loader.js?v=1';
+import * as TripLoader from './trip/trip-loader.js?v=75';
+import { applyI18n, t } from './core/i18n.js?v=1';
 
 async function main() {
+  applyI18n();
   startSkybox();
   const status = document.getElementById('karaokePageStatus');
   const backLink = document.getElementById('karaokeBackLink');
@@ -52,7 +54,7 @@ async function main() {
   // mount AFTER the gate, same as date.js. otherwise a bounced user
   // sits through the whole walk just to get redirected at the end
   TripLoader.mount();
-  TripLoader.setStage('Walking to the lounge');
+  TripLoader.setStage(t('karaoke.walking', 'Walking to the lounge'));
   Scene.inject('.music-room', 'scene/lounge.svg?v=4');
   Scene.inject('.music-room-front', 'scene/lounge-front.svg?v=2');
   Scene.inject('#karaokeMic', 'scene/props/desk-mic.svg?v=2');
@@ -77,10 +79,10 @@ async function main() {
 
   Karaoke.init({
     cameraPreset: 'default',
-    onEnter: () => { badge.textContent = 'Ready for your song'; },
+    onEnter: () => { badge.textContent = t('karaoke.badge.ready', 'Ready for your song'); },
     onPlaybackChange: (playing) => {
       document.body.classList.toggle('is-singing', playing);
-      badge.textContent = playing ? 'On air · Just us two' : 'Between songs';
+      badge.textContent = playing ? t('karaoke.badge.onAir', 'On air · Just us two') : t('karaoke.badge.between', 'Between songs');
     },
     onLevel: (level) => { room.style.setProperty('--vocal-level', String(Math.min(1, level * 5))); },
     onExit: () => { location.href = 'index.html?from=karaoke'; },
@@ -107,18 +109,18 @@ async function main() {
     Live2D.startIdle();
     cancelAnimationFrame(micFrame);
     positionMic();
-    status.textContent = 'Ready';
+    status.textContent = t('boot.ready', 'Ready');
   } catch (error) {
     console.error(error);
-    status.textContent = 'Jun could not load: ' + error.message;
+    status.textContent = t('karaoke.junFailed', 'Jun could not load: {err}', { err: error.message });
   }
 
   const entered = await Karaoke.enter();
   if (!entered) {
-    badge.textContent = 'Taking a break';
-    status.textContent = 'Karaoke is unavailable because source separation is not running.';
+    badge.textContent = t('karaoke.badge.break', 'Taking a break');
+    status.textContent = t('karaoke.unavailable', 'Karaoke is unavailable because source separation is not running.');
   }
-  TripLoader.setStage(entered ? 'Welcome to the lounge' : 'The lounge is closed tonight');
+  TripLoader.setStage(entered ? t('karaoke.welcome', 'Welcome to the lounge') : t('karaoke.closed', 'The lounge is closed tonight'));
   await TripLoader.finish();
 }
 

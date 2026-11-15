@@ -216,6 +216,28 @@ if command -v sqlite3 >/dev/null; then
 	fi
 fi
 
+echo "mods"
+printf 'PK\003\004smoke-mod-bytes' >"$work/mod.zip"
+modput() {
+	ct=$1 query=$2
+	shift 2
+	check_status -X PUT -H "Origin: $BASE" -H "Content-Type: $ct" --data-binary @"$work/mod.zip" "$BASE/api/mods.php?$query" "$@"
+}
+case "$(modput application/octet-stream 'guid=smoke-1&part=0&parts=1')" in
+	401|403) pass 'mods.php wants a session' ;;
+	*) fail 'mods.php took an upload without a session' ;;
+esac
+if [ "$(modput application/octet-stream 'guid=smoke-1&part=0&parts=1' -b "$cookies")" = "200" ]; then pass 'a mod zip goes up'; else fail 'mod upload refused'; fi
+curl -sS -b "$cookies" "$BASE/api/mods.php" >"$work/body"
+if grep -q '"guid":"smoke-1"' "$work/body"; then pass 'and gets listed'; else fail 'uploaded mod not listed'; fi
+curl -sS -b "$cookies" -o "$work/mod.back" "$BASE/api/mods.php?guid=smoke-1"
+if cmp -s "$work/mod.zip" "$work/mod.back"; then pass 'and comes back byte for byte'; else fail 'the mod came back different'; fi
+if grep -rq 'smoke-mod-bytes' "$work/state/mods"; then fail 'the mod zip sits on disk in clear'; else pass 'sealed on disk'; fi
+if [ "$(modput application/octet-stream 'guid=..%2Fx&part=0&parts=1' -b "$cookies")" = "400" ]; then pass 'a guid with a slash is refused'; else fail 'mods.php took a guid with a slash'; fi
+if [ "$(modput application/json 'guid=smoke-2&part=0&parts=1' -b "$cookies")" = "415" ]; then pass 'a part has to be octet-stream'; else fail 'mods.php took a json part'; fi
+check_status -X DELETE -H "Origin: $BASE" -b "$cookies" "$BASE/api/mods.php?guid=smoke-1" >/dev/null
+if [ "$(check_status -b "$cookies" "$BASE/api/mods.php?guid=smoke-1")" = "404" ]; then pass 'and goes away'; else fail 'deleted mod still served'; fi
+
 echo "php log"
 if grep -Ei 'PHP (Warning|Notice|Fatal|Parse|Deprecated)' "$work/server.log"; then
 	fail 'php complained during the run (above)'

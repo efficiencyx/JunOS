@@ -18,10 +18,10 @@ class SignInService : Service() {
     override fun onCreate() {
         super.onCreate()
         getSystemService(NotificationManager::class.java)
-            .createNotificationChannel(NotificationChannel(CHANNEL, "Sign-in", NotificationManager.IMPORTANCE_LOW))
+            .createNotificationChannel(NotificationChannel(CHANNEL, getString(R.string.notif_signin_channel), NotificationManager.IMPORTANCE_LOW))
         val notification = NotificationCompat.Builder(this, CHANNEL)
             .setSmallIcon(R.drawable.ic_launcher_foreground)
-            .setContentTitle("Signing in to ChatGPT")
+            .setContentTitle(getString(R.string.notif_signin))
             .setOngoing(true)
             .build()
         ServiceCompat.startForeground(

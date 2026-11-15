@@ -1,4 +1,5 @@
-import { SKIPPED, caption, close, makeRun, unionRect } from '../core/tour-kit.js?v=1';
+import { SKIPPED, caption, close, makeRun, unionRect } from '../core/tour-kit.js?v=2';
+import { t } from '../core/i18n.js?v=1';
 
 // app/main.js leaves the look here on the way out of the tour
 const FLAG = 'tour.shop';
@@ -28,7 +29,7 @@ export async function shopLeg() {
       const targets = [...document.querySelectorAll(sel)];
       if (!targets.length) continue;
       s.aim(targets);
-      el.next.textContent = sel === steps.at(-1)[0] ? 'done' : 'next';
+      el.next.textContent = sel === steps.at(-1)[0] ? t('tour.done', 'done') : t('tour.next', 'next');
       await caption(s, [label, cap], unionRect(targets));
       el.next.focus({ preventScroll: true });
       await s.until((done) => { el.next.onclick = el.block.onclick = done; });

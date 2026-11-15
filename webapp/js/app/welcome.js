@@ -1,12 +1,13 @@
 import { chatInput, sendBtn } from './dom.js?v=77';
-import { replayFaceBubbleIntro, scheduleFaceBubbleHide, showFaceBubble } from './face-bubble.js?v=93';
-import { loadMood } from './mood.js?v=92';
+import { replayFaceBubbleIntro, scheduleFaceBubbleHide, showFaceBubble } from './face-bubble.js?v=95';
+import { loadMood } from './mood.js?v=93';
 import { escapeHtml } from '../core/util.js?v=1';
 import * as Names from '../core/names.js?v=1';
 import { inject } from '../trip/scene.js?v=1';
-import * as TTS from '../voice/tts.js?v=92';
-import * as VoiceMode from '../voice/voicemode.js?v=92';
-import * as Live2D from '../live2d/live2d.js?v=91';
+import * as TTS from '../voice/tts.js?v=93';
+import * as VoiceMode from '../voice/voicemode.js?v=96';
+import * as Live2D from '../live2d/live2d.js?v=92';
+import { lang, locale, t } from '../core/i18n.js?v=1';
 
 // the phone's slide in welcome.css is .6s after a .15s delay
 const RIG_IN_MS = 750;
@@ -109,7 +110,7 @@ export async function previewWelcome(tier = 'unravelled', away = TIER_AWAY[tier]
   // ALWAYS sent, 'none' included. leave the tier out and the server
   // derives one from the duration, which is the exact opposite of
   // forcing it.
-  const query = new URLSearchParams({ preview: '1', away: String(away), tier, hour: String(new Date().getHours()) });
+  const query = new URLSearchParams({ preview: '1', away: String(away), tier, hour: String(new Date().getHours()), lang });
   try {
     const response = await fetch('api/consolidate.php?action=welcome&' + query, { credentials: 'same-origin' });
     if (!response.ok) { console.warn('welcome preview failed:', response.status); return; }
@@ -126,7 +127,7 @@ export async function previewWelcome(tier = 'unravelled', away = TIER_AWAY[tier]
 export async function fetchWelcome() {
   try {
     // server runs in UTC. the greeting goes off the clock on HIS wall.
-    const response = await fetch('api/consolidate.php?action=welcome&hour=' + new Date().getHours(), { credentials: 'same-origin' });
+    const response = await fetch('api/consolidate.php?action=welcome&hour=' + new Date().getHours() + '&lang=' + lang, { credentials: 'same-origin' });
     if (!response.ok) return;
     const payload = await response.json();
     if (payload && payload.show && (listOf(payload.live).length || listOf(payload.milestones).length)) pending = payload;
@@ -135,24 +136,24 @@ export async function fetchWelcome() {
 
 const listOf = (v) => Array.isArray(v) ? v : [];
 
-const clock = new Intl.DateTimeFormat(undefined, { hour: '2-digit', minute: '2-digit' });
-const weekday = new Intl.DateTimeFormat('en-GB', { weekday: 'short' });
-const dayMonth = new Intl.DateTimeFormat('en-GB', { day: 'numeric', month: 'short' });
-const lockDate = new Intl.DateTimeFormat('en-GB', { weekday: 'long', day: 'numeric', month: 'long' });
+const dayFirst = lang === 'en' ? 'en-GB' : locale;
+const clock = new Intl.DateTimeFormat(locale, { hour: '2-digit', minute: '2-digit' });
+const weekday = new Intl.DateTimeFormat(dayFirst, { weekday: 'short' });
+const dayMonth = new Intl.DateTimeFormat(dayFirst, { day: 'numeric', month: 'short' });
+const lockDate = new Intl.DateTimeFormat(dayFirst, { weekday: 'long', day: 'numeric', month: 'long' });
 
-function stamp(at) {
+function stamp(at, bareToday) {
   const when = new Date(at * 1000);
   const time = clock.format(when);
   const day = new Date(when).setHours(0, 0, 0, 0);
   // round, not floor. a DST night is 23 or 25 hours long
   const daysAgo = Math.round((new Date().setHours(0, 0, 0, 0) - day) / 86400000);
-  if (daysAgo <= 0) return 'Today ' + time;
-  if (daysAgo === 1) return 'Yesterday ' + time;
+  if (daysAgo <= 0) return bareToday ? time : t('time.today', 'Today {time}', { time });
+  if (daysAgo === 1) return t('time.yesterday', 'Yesterday {time}', { time });
   if (daysAgo < 7) return weekday.format(when) + ' ' + time;
   return dayMonth.format(when) + ' ' + time;
 }
 
-const plural = (n, one) => n + ' ' + one + (n === 1 ? '' : 's');
 
 function el(tag, className, text) {
   const node = document.createElement(tag);
@@ -172,7 +173,7 @@ function missedCall(at, tier) {
   li.dataset.tier = tier;
   const time = el('time', null, clock.format(new Date(at * 1000)));
   time.dateTime = new Date(at * 1000).toISOString();
-  li.append(el('span', null, 'Missed call'), ' ', time);
+  li.append(el('span', null, t('phone.missedCall', 'Missed call')), ' ', time);
   return li;
 }
 
@@ -200,7 +201,7 @@ function note(name, line, preview, at) {
   icon.alt = '';
   const body = el('span', 'wp-note-body');
   const top = el('span', 'wp-note-top');
-  const time = el('time', null, stamp(at).replace(/^Today /, ''));
+  const time = el('time', null, stamp(at, true));
   time.dateTime = new Date(at * 1000).toISOString();
   top.append(el('b', null, name), time);
   body.append(top, el('span', 'wp-note-line', line));
@@ -220,9 +221,9 @@ function buildLock(milestones) {
   const notes = [];
   if (texts.length) {
     const latest = texts[texts.length - 1];
-    notes.push(note(bot, plural(texts.length, 'new message'), String(latest.text || ''), latest.at));
+    notes.push(note(bot, texts.length === 1 ? t('phone.newMessage', '1 new message') : t('phone.newMessages', '{n} new messages', { n: texts.length }), String(latest.text || ''), latest.at));
   }
-  if (calls.length) notes.push(note(bot, plural(calls.length, 'missed call'), '', calls[calls.length - 1].at));
+  if (calls.length) notes.push(note(bot, calls.length === 1 ? t('phone.missedCallOne', '1 missed call') : t('phone.missedCalls', '{n} missed calls', { n: calls.length }), '', calls[calls.length - 1].at));
   stack.append(...notes);
   lock.append(time, el('div', 'wp-lock-date', lockDate.format(new Date())), stack);
   return { lock, time, notes };
@@ -233,7 +234,7 @@ function buildScene(tier, milestones, locked) {
   const root = el('div', 'welcome-phone-scene');
   root.setAttribute('role', 'dialog');
   root.setAttribute('aria-modal', 'true');
-  root.setAttribute('aria-label', `Messages from ${bot}`);
+  root.setAttribute('aria-label', t('phone.fromName', 'Messages from {name}', { name: bot }));
   root.tabIndex = -1;
   root.dataset.tier = tier;
   if (TIER_TINT[tier]) root.style.setProperty('--scene-tint', TIER_TINT[tier]);
@@ -267,19 +268,19 @@ function buildScene(tier, milestones, locked) {
   const composer = el('form', 'wp-composer');
   const input = el('input', 'wp-input');
   input.type = 'text';
-  input.placeholder = 'Message';
+  input.placeholder = t('chat.message', 'Message');
   input.autocomplete = 'off';
-  input.setAttribute('aria-label', 'Reply');
+  input.setAttribute('aria-label', t('phone.reply', 'Reply'));
   const send = el('button', 'wp-send');
   send.type = 'submit';
-  send.setAttribute('aria-label', 'Send');
+  send.setAttribute('aria-label', t('chat.send', 'Send'));
   send.innerHTML = ARROW;
   composer.append(input, send);
 
   const chin = el('div', 'wp-chin');
   const home = el('button', 'wp-home');
   home.type = 'button';
-  home.setAttribute('aria-label', 'Put the phone away');
+  home.setAttribute('aria-label', t('phone.putAway', 'Put the phone away'));
   chin.append(home);
 
   app.append(head, thread, composer);
@@ -340,7 +341,7 @@ export function playWelcome() {
     for (const turn of history) append(thread, bubble(turn.role === 'user' ? 'his' : 'her', String(turn.text || '')));
   }
   scene.unread.textContent = String(unreadCount);
-  const mark = append(thread, el('li', 'wp-divider wp-unread-mark', unreadCount + ' unread'));
+  const mark = append(thread, el('li', 'wp-divider wp-unread-mark', t('phone.unread', '{n} unread', { n: unreadCount })));
   for (const m of milestones) {
     const divider = append(thread, el('li', 'wp-divider', stamp(m.at)));
     divider.dataset.tier = m.tier;

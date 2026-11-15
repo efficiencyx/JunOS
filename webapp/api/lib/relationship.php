@@ -7,49 +7,68 @@ function flee_bans_enabled(): bool {
     return strtolower(env_str('FLEE_BANS', 'on')) !== 'off';
 }
 
+function ban_row(int $userId): ?array {
+    $st = db()->prepare('SELECT until, strikes, last_ban, reason, blocked FROM user_bans WHERE user_id=?');
+    $st->execute([$userId]);
+    $row = $st->fetch();
+    $st->closeCursor();
+    return $row ?: null;
+}
+
 function ban_active(int $userId): ?array {
     if (!flee_bans_enabled()) return null;
     try {
-        $st = db()->prepare('SELECT until, reason FROM user_bans WHERE user_id=?');
-        $st->execute([$userId]);
-        $row = $st->fetch();
-        $st->closeCursor();
+        $row = ban_row($userId);
         if (!$row) return null;
         $until = (int)$row['until'];
-        if ($until <= time()) return null;
+        $blocked = (int)$row['blocked'] === 1;
+        if (!$blocked && $until <= time()) return null;
         // a reason that won't open costs the reason, NOT the ban.
         // let dec throw up to the catch below and she's back early.
         try { $reason = (string)dec($row['reason']); } catch (Throwable $e) { $reason = ''; }
-        return ['until' => $until, 'reason' => $reason, 'seconds_left' => $until - time()];
+        return ['until' => $blocked ? 0 : $until, 'reason' => $reason,
+                'seconds_left' => $blocked ? 0 : $until - time(), 'blocked' => $blocked];
     } catch (Throwable $e) {
         log_event(['msg' => 'ban_active_error', 'err' => $e->getMessage()]);
         return null;
     }
 }
 
+function ban_blocked(int $userId): bool {
+    return (ban_active($userId)['blocked'] ?? false) === true;
+}
+
+function ban_strikes(int $userId): int {
+    $row = ban_row($userId);
+    return $row ? difficulty_strikes(difficulty_of($userId), (int)$row['strikes'], (int)$row['last_ban'], time()) : 0;
+}
+
+function ban_is_final(int $userId): bool {
+    try {
+        return difficulty_ban_minutes(difficulty_of($userId), ban_strikes($userId) + 1) === null;
+    } catch (Throwable $e) {
+        log_event(['msg' => 'ban_is_final_error', 'err' => $e->getMessage()]);
+        return false;
+    }
+}
+
 function ban_apply(int $userId, string $reason): array {
     $now = time();
-    $strikes = 0;
     try {
-        $st = db()->prepare('SELECT strikes, last_ban FROM user_bans WHERE user_id=?');
-        $st->execute([$userId]);
-        $row = $st->fetch();
-        $st->closeCursor();
-        // one day without walking out and the escalation resets
-        if ($row && $now - (int)$row['last_ban'] < 86400) $strikes = (int)$row['strikes'];
-        $strikes++;
-        $minutes = (int)min(30, 5 * (2 ** ($strikes - 1)));
-        $until = $now + $minutes * 60;
+        $strikes = ban_strikes($userId) + 1;
+        $minutes = difficulty_ban_minutes(difficulty_of($userId), $strikes);
+        $blocked = $minutes === null;
+        $until = $blocked ? 0 : $now + $minutes * 60;
         $reason = mb_substr(trim($reason), 0, 300);
         db()->prepare(
-            'INSERT INTO user_bans (user_id, until, strikes, last_ban, reason) VALUES (?, ?, ?, ?, ?)
+            'INSERT INTO user_bans (user_id, until, strikes, last_ban, reason, blocked) VALUES (?, ?, ?, ?, ?, ?)
              ON CONFLICT(user_id) DO UPDATE SET until=excluded.until, strikes=excluded.strikes,
-                                                last_ban=excluded.last_ban, reason=excluded.reason'
-        )->execute([$userId, $until, $strikes, $now, crypt_key() !== null ? enc($reason) : null]);
-        return ['until' => $until, 'minutes' => $minutes];
+                                                last_ban=excluded.last_ban, reason=excluded.reason, blocked=excluded.blocked'
+        )->execute([$userId, $until, $strikes, $now, crypt_key() !== null ? enc($reason) : null, (int)$blocked]);
+        return ['until' => $until, 'minutes' => $minutes ?? 0, 'blocked' => $blocked];
     } catch (Throwable $e) {
         log_event(['msg' => 'ban_apply_error', 'err' => $e->getMessage()]);
-        return ['until' => $now + 300, 'minutes' => 5];
+        return ['until' => $now + 300, 'minutes' => 5, 'blocked' => false];
     }
 }
 
@@ -132,9 +151,10 @@ function relationship_history(int $userId): array {
 // drama.
 function relationship_apply(int $userId, array $cur, array $deltas): void {
     $clampDelta = fn($d) => max(-50, min(50, (int)$d));
+    $scaled = difficulty_deltas($userId, $deltas);
     $next = [];
     foreach (['affection', 'trust', 'tension'] as $k) {
-        $next[$k] = max(0, min(100, $cur[$k] + $clampDelta($deltas[$k] ?? 0)));
+        $next[$k] = max(0, min(100, $cur[$k] + $clampDelta($scaled[$k] ?? 0)));
     }
     relationship_set($userId, $next);
     mood_log_add($userId, $deltas);
@@ -143,11 +163,10 @@ function relationship_apply(int $userId, array $cur, array $deltas): void {
 
 // the last 3 mood shifts, and how many of the 9 gauge moves in them
 // went the wrong way (tension up, trust down, affection down).
-// 5 of 9 is the point where we tell her leaving is on the table.
+// sour_moves of 9 is where we tell her leaving is on the table.
 // the 30 min window is so an old fight doesn't nag her on the next
 // visit.
 const MOOD_SOUR_TURNS = 3;
-const MOOD_SOUR_MOVES = 5;
 const MOOD_SOUR_WINDOW = 1800;
 
 function mood_log_add(int $userId, array $deltas): void {
@@ -182,7 +201,7 @@ function mood_is_souring(int $userId): bool {
         foreach ($rows as $r) {
             $bad += ((int)$r['tension'] > 0) + ((int)$r['trust'] < 0) + ((int)$r['affection'] < 0);
         }
-        return $bad >= MOOD_SOUR_MOVES;
+        return $bad >= difficulty_of($userId)['sour_moves'];
     } catch (Throwable $e) {
         log_event(['msg' => 'mood_is_souring_error', 'err' => $e->getMessage()]);
         return false;

@@ -10,6 +10,7 @@ require "$lib/chat/websearch.php";
 require "$lib/chat/tags.php";
 require "$lib/providers/config.php";
 require "$lib/providers/payload.php";
+require "$lib/difficulty.php";
 
 $applied = [];
 function relationship_apply(int $userId, array $rel, array $deltas): void { $GLOBALS['applied'][] = $deltas; }
@@ -129,5 +130,19 @@ $eq('watch: cleaned', [$w['title'], $w['at']], ['a b', 0]);
 $eq('watch: bad turn refused', (function () {
     try { chat_parse_watch(['watch' => ['turn' => 'rewind', 'source' => 'file']]); return false; } catch (RuntimeException $e) { return true; }
 })(), true);
+
+$hc = DIFFICULTY['hardcore'];
+$carry = [];
+$sum = 0;
+foreach (range(1, 5) as $_) { [$a, $carry] = difficulty_scale($hc, ['affection' => 1], $carry); $sum += $a['affection']; }
+$eq('difficulty: five +1 at x0.2 pay out one', $sum, 1);
+$eq('difficulty: losses double', difficulty_scale($hc, ['trust' => -3, 'tension' => 3], [])[0], ['trust' => -6, 'tension' => 6]);
+$eq('difficulty: tension down is a gain', difficulty_scale(DIFFICULTY['hard'], ['tension' => -4], [])[0], ['tension' => -2]);
+$eq('difficulty: normal is untouched', difficulty_scale(DIFFICULTY['normal'], ['affection' => 3, 'trust' => -2], [])[0], ['affection' => 3, 'trust' => -2]);
+$eq('difficulty: hardcore ladder', array_map(fn($s) => difficulty_ban_minutes($hc, $s), [1, 2, 3, 4]), [240, 1440, 2880, null]);
+$eq('difficulty: hard caps at a day', difficulty_ban_minutes(DIFFICULTY['hard'], 9), 1440);
+$eq('difficulty: hard drops one per 14 days', difficulty_strikes(DIFFICULTY['hard'], 3, 0, 29 * 86400), 1);
+$eq('difficulty: hardcore never forgets', difficulty_strikes($hc, 3, 0, 999 * 86400), 3);
+$eq('difficulty: normal resets after a day', difficulty_strikes(DIFFICULTY['normal'], 4, 0, 86400), 0);
 
 exit($fails ? 1 : 0);

@@ -37,16 +37,16 @@ interface InferenceEngine : Closeable {
     val contextTokens: Int
 
     suspend fun ensureLoaded()
-    fun generate(messages: List<ChatMessage>, maxTokens: Int = 768, temperature: Float = 0.4f): Flow<String>
+    fun generate(messages: List<ChatMessage>, maxTokens: Int = 768, temperature: Float = 0.5f): Flow<String>
     fun turn(
         messages: List<ChatMessage>,
         tools: List<String>,
         think: Boolean,
         maxTokens: Int = 768,
-        temperature: Float = 0.4f,
+        temperature: Float = 0.5f,
         reasoning: String = "low",
     ): Flow<TurnEvent>
     fun cancel()
     // messages = what the next turn will start with, his message without live context
-    fun warm(messages: List<ChatMessage>, tools: List<String>, think: Boolean, temperature: Float = 0.4f) {}
+    fun warm(messages: List<ChatMessage>, tools: List<String>, think: Boolean, temperature: Float = 0.5f) {}
 }

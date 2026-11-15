@@ -5,6 +5,7 @@ import android.content.Context
 import android.util.Log
 import com.efficiencyx.junos.achievements.Achievements
 import com.efficiencyx.junos.away.AwayNotify
+import com.efficiencyx.junos.data.BanEntity
 import com.efficiencyx.junos.data.ConsolidationEntity
 import com.efficiencyx.junos.data.ConversationEntity
 import com.efficiencyx.junos.data.JunDatabase
@@ -13,6 +14,8 @@ import com.efficiencyx.junos.data.ReplyRatingEntity
 import com.efficiencyx.junos.data.RelationshipEntity
 import com.efficiencyx.junos.data.WardrobePresetEntity
 import com.efficiencyx.junos.data.WardrobeStateEntity
+import com.efficiencyx.junos.difficulty.DevAccess
+import com.efficiencyx.junos.difficulty.Difficulty
 import com.efficiencyx.junos.inference.ChatEngine
 import com.efficiencyx.junos.inference.ChatRequest
 import com.efficiencyx.junos.inference.Trip
@@ -137,16 +140,24 @@ class LocalServer(
             get("/api/auth.php") {
                 if (!call.authorized()) return@get
                 when (call.request.queryParameters["action"]) {
-                    "me" -> call.json(buildJsonObject {
-                        // whoever's holding the phone owns the install, so the
-                        // dev panel and the memory tools stay unlocked here
-                        put("user", buildJsonObject { put("id", 1); put("email", "local@jun.os"); put("role", "admin") })
-                    })
+                    "me" -> {
+                        val blocked = Difficulty.active(database.dao(), now())?.blocked == true
+                        call.json(buildJsonObject {
+                            put("user", buildJsonObject {
+                                put("id", 1); put("email", "local@jun.os"); put("role", if (isAdmin()) "admin" else "user"); put("blocked", blocked)
+                            })
+                        })
+                    }
                     else -> call.error(HttpStatusCode.BadRequest, "unknown_action")
                 }
             }
             post("/api/auth.php") {
                 if (!call.authorized()) return@post
+                if (call.request.queryParameters["action"] == "promote") {
+                    val body = call.jsonBody(4096) ?: return@post
+                    if (!DevAccess.promote(context, (body["key"] as? JsonPrimitive)?.contentOrNull.orEmpty())) return@post call.error(HttpStatusCode.Forbidden, "invalid_dev_key")
+                    return@post call.json(buildJsonObject { put("user", buildJsonObject { put("id", 1); put("email", "local@jun.os"); put("role", "admin") }) })
+                }
                 if (call.request.queryParameters["action"] != "factory_reset") return@post call.error(HttpStatusCode.NotFound, "local_profile_only")
                 withContext(Dispatchers.IO) { database.clearAllTables() }
                 memory.clear()
@@ -156,7 +167,7 @@ class LocalServer(
 
             get("/api/achievements.php") {
                 if (!call.authorized()) return@get
-                call.json(achievements.list())
+                call.json(achievements.list(isAdmin()))
             }
             post("/api/achievements.php") {
                 if (!call.authorized()) return@post
@@ -173,19 +184,20 @@ class LocalServer(
                         call.ok()
                     }
                     "set" -> {
+                        if (!isAdmin()) return@post call.error(HttpStatusCode.Forbidden, "forbidden")
                         val raw = body["value"]
                         val value = if (raw == null || raw is JsonNull) null
                             else (raw as? JsonPrimitive)?.takeIf { !it.isString }?.longOrNull ?: return@post call.error(HttpStatusCode.BadRequest, "invalid_request")
                         val id = (body["id"] as? JsonPrimitive)?.contentOrNull.orEmpty()
                         if (!achievements.set(id, value)) return@post call.error(HttpStatusCode.BadRequest, "invalid_request")
-                        call.json(achievements.list())
+                        call.json(achievements.list(true))
                     }
                     else -> call.error(HttpStatusCode.BadRequest, "invalid_request")
                 }
             }
 
-            get("/api/ratings.php") { if (call.authorized()) ratings() }
-            post("/api/ratings.php") { if (call.authorized()) ratings() }
+            get("/api/ratings.php") { if (call.authorized() && (call.request.queryParameters["action"] == "get" || call.admin())) ratings() }
+            post("/api/ratings.php") { if (call.authorized() && call.admin()) ratings() }
 
             get("/api/models.php") {
                 if (!call.authorized()) return@get
@@ -241,7 +253,10 @@ class LocalServer(
             }
 
             get("/api/relationship.php") { if (call.authorized()) relationship() }
-            put("/api/relationship.php") { if (call.authorized()) relationship() }
+            put("/api/relationship.php") { if (call.authorized() && call.admin()) relationship() }
+
+            get("/api/difficulty.php") { if (call.authorized()) difficulty() }
+            post("/api/difficulty.php") { if (call.authorized()) difficulty() }
 
             get("/api/wardrobe.php") { if (call.authorized()) wardrobe() }
             post("/api/wardrobe.php") { if (call.authorized()) wardrobe() }
@@ -287,7 +302,7 @@ class LocalServer(
                 call.respondText(json.encodeToString(note), ContentType.Application.Json)
             }
             put("/api/memory.php") {
-                if (!call.authorized()) return@put
+                if (!call.authorized() || !call.admin()) return@put
                 val body = call.jsonBody(8 * 1024) ?: return@put
                 val id = body["id"]?.jsonPrimitive?.content.orEmpty()
                 val text = body["memory"]?.jsonPrimitive?.content.orEmpty()
@@ -297,7 +312,7 @@ class LocalServer(
                 call.ok()
             }
             delete("/api/memory.php") {
-                if (!call.authorized()) return@delete
+                if (!call.authorized() || !call.admin()) return@delete
                 val body = call.jsonBody(8 * 1024) ?: return@delete
                 if (body["all"]?.jsonPrimitive?.content == "true") memory.clear()
                 else {
@@ -322,13 +337,12 @@ class LocalServer(
                 })
             }
 
-            // the only user here is admin, so Force her is always on
             get("/api/trip.php") {
                 if (!call.authorized()) return@get
-                val trip = Trips.current
+                val trip = Trips.current.takeIf { Difficulty.active(database.dao(), now())?.blocked != true }
                 call.json(buildJsonObject {
                     put("where", trip?.where.orEmpty()); put("since", trip?.since ?: 0); put("conversation_id", trip?.conversationId ?: 0)
-                    put("gated", true); put("can_force", true)
+                    put("gated", true); put("can_force", isAdmin())
                 })
             }
             post("/api/trip.php") {
@@ -339,6 +353,8 @@ class LocalServer(
                     "go" -> {
                         val where = (body["where"] as? JsonPrimitive)?.contentOrNull
                         if (where !in setOf("shop", "karaoke", "date")) return@post call.error(HttpStatusCode.BadRequest, "invalid_request")
+                        val tourTrip = where == "shop" && (body["tour"] as? JsonPrimitive)?.contentOrNull == "true" && !tourDone()
+                        if ((!isAdmin() && !tourTrip) || Difficulty.active(database.dao(), now())?.blocked == true) return@post call.error(HttpStatusCode.Forbidden, "forbidden")
                         Trips.current = Trip(where!!, now(), (body["conversation_id"] as? JsonPrimitive)?.longOrNull ?: 0)
                         call.ok()
                     }
@@ -564,6 +580,65 @@ class LocalServer(
         }
     }
 
+    private fun isAdmin() = DevAccess.isAdmin(context)
+
+    private suspend fun io.ktor.server.application.ApplicationCall.admin(): Boolean {
+        if (isAdmin()) return true
+        error(HttpStatusCode.Forbidden, "forbidden")
+        return false
+    }
+
+    private suspend fun tourDone(): Boolean {
+        val prefs = database.dao().preferences()?.data ?: return false
+        return runCatching { json.parseToJsonElement(prefs).jsonObject["tour.done"]?.jsonPrimitive?.contentOrNull == "1" }.getOrDefault(false)
+    }
+
+    private suspend fun io.ktor.server.routing.RoutingContext.difficulty() {
+        val dao = database.dao(); dao.ensureDefaults(now())
+        val action = call.request.queryParameters["action"].orEmpty()
+        suspend fun status() = buildJsonObject {
+            val ban = Difficulty.active(dao, now())
+            put("level", Difficulty.name(dao)?.let { JsonPrimitive(it) } ?: JsonNull)
+            put("bans", Difficulty.bansOn(dao)); put("strikes", Difficulty.strikesNow(dao, now()))
+            put("until", if (ban?.blocked == false) ban.until else 0); put("blocked", ban?.blocked == true)
+        }
+        if (call.request.httpMethod == HttpMethod.Get) {
+            if (action != "farewell") return call.json(status())
+            val ban = Difficulty.active(dao, now())
+            if (ban?.blocked != true && !isAdmin()) return call.error(HttpStatusCode.Forbidden, "forbidden")
+            val first = dao.firstConversationAt() ?: now()
+            return call.json(buildJsonObject {
+                put("reason", ban?.reason.orEmpty()); put("days", maxOf(1L, (now() - first) / 86400))
+                put("messages", dao.messageCount()); put("walkouts", dao.walkouts())
+                put("peak", dao.peakAffection() ?: 60); put("affection", dao.relationship()?.affection ?: 60)
+                put("memories", JsonArray(memory.snapshot().notes.map { JsonPrimitive(it.text) }))
+            })
+        }
+        val body = call.jsonBody(1024) ?: return
+        val level = (body["level"] as? JsonPrimitive)?.contentOrNull.orEmpty()
+        if (action == "pick") {
+            if (level !in Difficulty.LEVELS) return call.error(HttpStatusCode.BadRequest, "invalid_request")
+            if (!Difficulty.pick(dao, level, now())) return call.error(HttpStatusCode.Conflict, "already_picked")
+            return call.json(status())
+        }
+        if (!call.admin()) return
+        val ban = dao.ban() ?: BanEntity(lastBan = now())
+        when (action) {
+            "level" -> if (!Difficulty.pick(dao, level, now(), force = true)) return call.error(HttpStatusCode.BadRequest, "invalid_request")
+            "strike" -> {
+                val step = if (((body["delta"] as? JsonPrimitive)?.intOrNull ?: 0) < 0) -1 else 1
+                dao.putBan(ban.copy(strikes = maxOf(0, Difficulty.strikesNow(dao, now()) + step), lastBan = now()))
+            }
+            "lift", "skip" -> dao.putBan(when {
+                ban.blocked -> ban.copy(blocked = false, until = 0, strikes = 2, lastBan = now())
+                action == "lift" -> ban.copy(until = 0)
+                else -> ban.copy(until = minOf(ban.until, now() + 3))
+            })
+            else -> return call.error(HttpStatusCode.BadRequest, "invalid_request")
+        }
+        call.json(status())
+    }
+
     private suspend fun io.ktor.server.routing.RoutingContext.relationship() {
         val dao = database.dao(); dao.ensureDefaults(now())
         if (call.request.httpMethod == HttpMethod.Get && call.request.queryParameters["action"] == "history") {
@@ -615,6 +690,7 @@ class LocalServer(
                 call.json(buildJsonObject {
                     put("enabled", state.enabled); put("running", false); put("pending", 0); put("last_activity", state.lastActivity)
                     if (state.lastRun > 0) put("last", buildJsonObject { put("at", state.lastRun); put("status", state.lastStatus); put("notes", state.lastNoteCount) })
+                    Difficulty.active(dao, now())?.let { ban -> put("ban", buildJsonObject { put("until", ban.until); put("reason", ban.reason); put("blocked", ban.blocked) }) }
                 })
             }
             "welcome" -> if (call.requireMethod(HttpMethod.Get)) call.json(buildJsonObject { put("messages", JsonArray(emptyList())); put("away", 0); put("tier", "none") })
@@ -735,6 +811,7 @@ class LocalServer(
         "mp3" -> ContentType.Audio.MPEG
         "webm" -> ContentType.parse("video/webm")
         "wasm" -> ContentType.Application.Wasm
+        "woff2" -> ContentType.parse("font/woff2")
         else -> ContentType.Application.OctetStream
     }
 

@@ -1,3 +1,4 @@
+import { t } from './i18n.js?v=1';
 // the tour's chrome: spotlight, lower third, the skippable waits.
 // app/tour.js runs the chat page on it, wardrobe/tour-shop.js the shop
 
@@ -28,9 +29,9 @@ function build() {
         <div class="tour-rule"></div>
         <p class="tour-cap"></p>
       </div>
-      <button class="tour-next" type="button">next</button>
+      <button class="tour-next" type="button">${t('tour.next', 'next')}</button>
     </div>
-    <button class="tour-skip ghost" type="button">skip</button>
+    <button class="tour-skip ghost" type="button">${t('tour.skip', 'skip')}</button>
     <div class="tour-black"></div>`;
   const q = (c) => root.querySelector(c);
   return {

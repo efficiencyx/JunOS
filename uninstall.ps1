@@ -24,7 +24,31 @@
 param([switch]$Yes)
 
 $ErrorActionPreference = 'Stop'
-$root = $PSScriptRoot
+
+# Windows PowerShell cannot delete through an 8.3 short path such
+# as C:\Users\USURIO~2, so resolve the folder to its long name.
+function ConvertTo-LongPath([string]$path) {
+    if ($path -notmatch '~' -or -not [IO.Path]::IsPathRooted($path)) { return $path }
+    try {
+        if (-not ('Jun.LongPath' -as [type])) {
+            Add-Type -Namespace Jun -Name LongPath -MemberDefinition '[DllImport("kernel32.dll", CharSet = CharSet.Unicode)] public static extern uint GetLongPathNameW(string shortPath, System.Text.StringBuilder longPath, uint size);'
+        }
+        $head = [IO.Path]::GetFullPath($path)
+        $tail = @()
+        while ($head -and -not ([IO.Directory]::Exists($head) -or [IO.File]::Exists($head))) {
+            $tail = @([IO.Path]::GetFileName($head)) + $tail
+            $head = [IO.Path]::GetDirectoryName($head)
+        }
+        if (-not $head) { return $path }
+        $buf = [Text.StringBuilder]::new(32767)
+        if ([Jun.LongPath]::GetLongPathNameW($head, $buf, $buf.Capacity) -eq 0) { return $path }
+        return [IO.Path]::Combine([string[]](@($buf.ToString()) + $tail))
+    } catch {
+        return $path
+    }
+}
+
+$root = ConvertTo-LongPath $PSScriptRoot
 
 # JunOS.exe opens this in its own window, which closes the moment
 # the script ends. Keep the error on screen.

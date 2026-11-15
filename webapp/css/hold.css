@@ -1,0 +1,29 @@
+.hold {
+  --hold-fill: var(--danger);
+  position: relative;
+  overflow: hidden;
+  touch-action: none;
+  user-select: none;
+  -webkit-user-select: none;
+  -webkit-touch-callout: none;
+}
+.hold.calm { --hold-fill: var(--accent); }
+/* a copy of the label on top, in the fill colours, uncovered
+   left to right. that's what flips the text as the fill passes it */
+.hold::after {
+  content: attr(data-hold-label);
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  padding: inherit;
+  background: var(--hold-fill);
+  color: var(--bg);
+  clip-path: inset(0 100% 0 0);
+  transition: clip-path .2s ease-out;
+  pointer-events: none;
+}
+.hold.holding::after {
+  clip-path: inset(0);
+  transition: clip-path var(--hold-ms) linear;
+}

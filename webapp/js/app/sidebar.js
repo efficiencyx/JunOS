@@ -1,19 +1,20 @@
 import { currentConversationId, messages, setCurrentConversationId, stopActiveStream } from './session.js?v=1';
-import { appendMsg, renderMarkdown, scrollToLatest, updateEmptyState } from './messages.js?v=22';
+import { appendMsg, renderMarkdown, scrollToLatest, updateEmptyState } from './messages.js?v=24';
 import { dropDraft, useDraftFor } from './composer.js?v=3';
-import { addReplyActions, discardActiveResponse } from './chat.js?v=53';
-import { setConversationTitle } from './face-bubble.js?v=93';
-import { announceMobileReply, faceBubble, hideFaceBubble, latestAssistantReply, scheduleFaceBubbleHide, setLatestAssistantReply, showFaceBubble } from './face-bubble.js?v=93';
-import { IDLE_AFTER_JOIN_MS, cancelAutoReset, reportActivity, resetIdleNudge, scheduleIdleNudge } from './consolidation.js?v=125';
+import { addReplyActions, discardActiveResponse } from './chat.js?v=68';
+import { setConversationTitle } from './face-bubble.js?v=95';
+import { announceMobileReply, faceBubble, hideFaceBubble, latestAssistantReply, scheduleFaceBubbleHide, setLatestAssistantReply, showFaceBubble } from './face-bubble.js?v=95';
+import { IDLE_AFTER_JOIN_MS, cancelAutoReset, reportActivity, resetIdleNudge, scheduleIdleNudge } from './consolidation.js?v=141';
 import { chatInput, conversationSidebar, messagesEl, mobileConversationTitle, mobileMenuBtn, narrowSidebarQuery, reloadPromptBtn, resetLive2DBtn, sidebarBackdrop, sidebarBackground } from './dom.js?v=77';
 import { logAction } from './logging.js?v=78';
-import { makeStreamBuffer } from './stream-filters.js?v=104';
+import { makeStreamBuffer } from './stream-filters.js?v=115';
 import { escapeHtml, phoneMode } from '../core/util.js?v=1';
 import * as Names from '../core/names.js?v=1';
-import * as ui from '../core/ui.js?v=1';
+import * as ui from '../core/ui.js?v=10';
 import * as History from './history.js?v=2';
-import * as TTS from '../voice/tts.js?v=92';
-import * as Live2D from '../live2d/live2d.js?v=91';
+import * as TTS from '../voice/tts.js?v=93';
+import * as Live2D from '../live2d/live2d.js?v=92';
+import { t } from '../core/i18n.js?v=1';
 
 const conversationTitles = new Map();
 let sidebarRefreshGeneration = 0;
@@ -43,14 +44,14 @@ export async function refreshSidebar() {
 function loadOlderItem(ul, last) {
   const li = document.createElement('li');
   li.className = 'conv-more';
-  li.innerHTML = '<button class="sidebar-item" type="button"><span>Load older</span></button>';
+  li.innerHTML = `<button class="sidebar-item" type="button"><span>${escapeHtml(t('sidebar.older', 'Load older'))}</span></button>`;
   const btn = li.querySelector('button');
   btn.addEventListener('click', async () => {
     btn.disabled = true;
     const refreshGeneration = sidebarRefreshGeneration;
     let page;
     try { page = await History.list(last); } catch (e) {
-      ui.toast('Failed to load older chats: ' + e.message, 'error');
+      ui.toast(t('sidebar.err.older', 'Failed to load older chats: {err}', { err: e.message }), 'error');
       btn.disabled = false;
       return;
     }
@@ -67,13 +68,13 @@ function conversationItem(c) {
   const li = document.createElement('li');
   li.className = 'conv-item' + (c.id === currentConversationId ? ' active' : '');
   li.dataset.id = String(c.id);
-  const title = c.title || 'New conversation';
+  const title = c.title || t('chat.newConversation', 'New conversation');
   conversationTitles.set(c.id, title);
   li.innerHTML = `<button class="conv-open" type="button"><span class="conv-title">${escapeHtml(title)}</span></button>`
-    + `<button class="conv-rename" type="button" title="Rename conversation" aria-label="Rename conversation">`
+    + `<button class="conv-rename" type="button" title="${escapeHtml(t('sidebar.rename', 'Rename conversation'))}" aria-label="${escapeHtml(t('sidebar.rename', 'Rename conversation'))}">`
     + `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M17 3a2.83 2.83 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z"/><path d="M15 5l4 4"/></svg>`
     + `</button>`
-    + `<button class="conv-delete" type="button" title="Delete conversation" aria-label="Delete conversation">`
+    + `<button class="conv-delete" type="button" title="${escapeHtml(t('sidebar.delete', 'Delete conversation'))}" aria-label="${escapeHtml(t('sidebar.delete', 'Delete conversation'))}">`
     + `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/><path d="M10 11v6"/><path d="M14 11v6"/><path d="M9 6V4a2 2 0 0 1 2-2h2a2 2 0 0 1 2 2v2"/></svg>`
     + `</button>`;
   const openBtn = li.querySelector('.conv-open');
@@ -131,13 +132,13 @@ async function runSearch() {
   const terms = searchTerms(q);
   searchResults.innerHTML = '';
   if (!hits.length) {
-    searchResults.innerHTML = '<li class="conv-empty">Nothing matches.</li>';
+    searchResults.innerHTML = `<li class="conv-empty">${escapeHtml(t('sidebar.noMatch', 'Nothing matches.'))}</li>`;
     return;
   }
   for (const hit of hits) {
     const li = document.createElement('li');
     li.className = 'conv-item hit' + (hit.id === currentConversationId ? ' active' : '');
-    const title = hit.title || 'New conversation';
+    const title = hit.title || t('chat.newConversation', 'New conversation');
     conversationTitles.set(hit.id, title);
     li.innerHTML = `<button class="conv-open" type="button"><span class="conv-title">${markTerms(title, terms)}</span>`
       + (hit.snippet ? `<span class="conv-snippet">${markTerms(Names.apply(hit.snippet), terms)}</span>` : '')
@@ -205,7 +206,7 @@ function startRename(li, id) {
       restore(next);
       if (id === currentConversationId) setConversationTitle(next);
     } catch (e) {
-      ui.toast('Failed to rename conversation: ' + e.message, 'error');
+      ui.toast(t('sidebar.err.rename', 'Failed to rename conversation: {err}', { err: e.message }), 'error');
       restore(oldTitle);
     }
   };
@@ -225,11 +226,11 @@ function startRename(li, id) {
 
 async function deleteConversation(id, title) {
   const ok = await ui.confirm({
-    title: 'Delete chat',
-    message: `Do you want to delete ${Names.getBot()}'s memory of "${title}"?`,
-    confirmLabel: 'Delete',
-    cancelLabel: 'Cancel',
-    danger: true,
+    title: t('sidebar.deleteChat', 'Delete chat'),
+    message: t('sidebar.deleteConfirm', 'Do you want to delete {name}\'s memory of "{title}"?', { name: Names.getBot(), title }),
+    confirmLabel: t('ui.holdDelete', 'Hold to delete'),
+    cancelLabel: t('common.cancel', 'Cancel'),
+    hold: true,
   });
   if (!ok) return;
   if (id === currentConversationId) {
@@ -253,7 +254,7 @@ async function deleteConversation(id, title) {
       await refreshSidebar();
     }
   } catch (e) {
-    ui.toast('Failed to delete conversation: ' + e.message, 'error');
+    ui.toast(t('sidebar.err.delete', 'Failed to delete conversation: {err}', { err: e.message }), 'error');
   }
 }
 
@@ -318,7 +319,7 @@ export async function loadConversation(id, find = null) {
     else scrollToLatest();
   } catch (e) {
     if (loadGeneration !== conversationLoadGeneration || currentConversationId !== id) return;
-    ui.toast('Failed to load conversation: ' + e.message, 'error');
+    ui.toast(t('sidebar.err.load', 'Failed to load conversation: {err}', { err: e.message }), 'error');
   }
 }
 
@@ -375,7 +376,7 @@ export function setSidebarOpen(open) {
   sidebarBackdrop.classList.toggle('open', open);
   sidebarBackdrop.setAttribute('aria-hidden', String(!open));
   mobileMenuBtn.setAttribute('aria-expanded', String(open));
-  mobileMenuBtn.setAttribute('aria-label', open ? 'Close conversations' : 'Open conversations');
+  mobileMenuBtn.setAttribute('aria-label', open ? t('header.closeConversations', 'Close conversations') : t('header.openConversations', 'Open conversations'));
   [...sidebarBackground, document.getElementById('toasts'), document.getElementById('devHud')]
     .filter(Boolean).forEach(element => {
     element.inert = open;
@@ -452,7 +453,7 @@ if (newChatBtn) {
       await loadConversation(id);
     } catch (e) {
       if (requestGeneration !== conversationLoadGeneration) return;
-      ui.toast('Failed to create conversation: ' + e.message, 'error');
+      ui.toast(t('sidebar.err.create', 'Failed to create conversation: {err}', { err: e.message }), 'error');
     } finally {
       newChatBtn.disabled = false;
     }

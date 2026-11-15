@@ -26,7 +26,7 @@ const WARDROBE_VARIANT_MAX = [
     'hair_h0_style' => 1, 'arm_style' => 2, 'leg_style' => 2, 'hightech_skin' => 1,
     'skirt_style' => 1, 'sock_style' => 7, 'shoe_style' => 2,
     'glasses_style' => 3, 'choker_style' => 3, 'bow_style' => 2, 'shirt_logo' => 100, 'sleeve_logo' => 100,
-    'hoodie_logo' => 100, 'panties_logo' => 100,
+    'hoodie_logo' => 100, 'panties_logo' => 100, 'bikini_top_style' => 1, 'bikini_bot_style' => 1,
 ];
 
 const WARDROBE_COLOR_DEFAULTS = [

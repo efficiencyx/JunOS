@@ -72,6 +72,26 @@ data class RelationshipHistoryEntity(
     val at: Long,
 )
 
+@Entity(tableName = "difficulty")
+data class DifficultyEntity(
+    @PrimaryKey val id: Int = 1,
+    val level: String,
+    val carryAffection: Int = 0,
+    val carryTrust: Int = 0,
+    val carryTension: Int = 0,
+    val pickedAt: Long,
+)
+
+@Entity(tableName = "bans")
+data class BanEntity(
+    @PrimaryKey val id: Int = 1,
+    val until: Long = 0,
+    val strikes: Int = 0,
+    val lastBan: Long = 0,
+    val reason: String = "",
+    val blocked: Boolean = false,
+)
+
 @Entity(
     tableName = "wardrobe_presets",
     indices = [Index(value = ["name"], unique = true)],
@@ -205,6 +225,40 @@ abstract class JunDao {
     @Query("SELECT * FROM relationship_history ORDER BY at, id")
     abstract suspend fun relationshipHistory(): List<RelationshipHistoryEntity>
 
+    @Query("SELECT * FROM difficulty WHERE id = 1")
+    abstract suspend fun difficulty(): DifficultyEntity?
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    abstract suspend fun putDifficulty(value: DifficultyEntity)
+
+    @Insert(onConflict = OnConflictStrategy.IGNORE)
+    abstract suspend fun pickDifficulty(value: DifficultyEntity): Long
+
+    @Query("SELECT * FROM bans WHERE id = 1")
+    abstract suspend fun ban(): BanEntity?
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    abstract suspend fun putBan(value: BanEntity)
+
+    @Transaction
+    open suspend fun addWalkout(at: Long) {
+        val now = relationship() ?: RelationshipEntity(updatedAt = at)
+        insertHistory(RelationshipHistoryEntity(affection = now.affection, trust = now.trust, tension = now.tension, event = "walkout", at = at))
+        trimHistory()
+    }
+
+    @Query("SELECT COUNT(*) FROM relationship_history WHERE event = 'walkout'")
+    abstract suspend fun walkouts(): Int
+
+    @Query("SELECT MAX(affection) FROM relationship_history")
+    abstract suspend fun peakAffection(): Int?
+
+    @Query("SELECT COUNT(*) FROM messages")
+    abstract suspend fun messageCount(): Int
+
+    @Query("SELECT MIN(createdAt) FROM conversations")
+    abstract suspend fun firstConversationAt(): Long?
+
     // same as relationship_set() in php: a timeline row only when a gauge actually moved
     @Transaction
     open suspend fun putRelationship(value: RelationshipEntity) {
@@ -320,8 +374,10 @@ abstract class JunDao {
         AchievementSeenEntity::class,
         ReplyRatingEntity::class,
         PlannedMessageEntity::class,
+        DifficultyEntity::class,
+        BanEntity::class,
     ],
-    version = 5,
+    version = 6,
     exportSchema = true,
 )
 abstract class JunDatabase : RoomDatabase() {
@@ -332,7 +388,7 @@ abstract class JunDatabase : RoomDatabase() {
             context.applicationContext,
             JunDatabase::class.java,
             "jun.db",
-        ).addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5).build()
+        ).addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6).build()
 
         private val MIGRATION_1_2 = object : Migration(1, 2) {
             override fun migrate(db: SupportSQLiteDatabase) {
@@ -358,6 +414,13 @@ abstract class JunDatabase : RoomDatabase() {
         private val MIGRATION_4_5 = object : Migration(4, 5) {
             override fun migrate(db: SupportSQLiteDatabase) {
                 db.execSQL("CREATE TABLE IF NOT EXISTS `planned_messages` (`id` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, `text` TEXT NOT NULL, `dueAt` INTEGER NOT NULL, `createdAt` INTEGER NOT NULL, `deliveredAt` INTEGER)")
+            }
+        }
+
+        private val MIGRATION_5_6 = object : Migration(5, 6) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL("CREATE TABLE IF NOT EXISTS `difficulty` (`id` INTEGER NOT NULL, `level` TEXT NOT NULL, `carryAffection` INTEGER NOT NULL, `carryTrust` INTEGER NOT NULL, `carryTension` INTEGER NOT NULL, `pickedAt` INTEGER NOT NULL, PRIMARY KEY(`id`))")
+                db.execSQL("CREATE TABLE IF NOT EXISTS `bans` (`id` INTEGER NOT NULL, `until` INTEGER NOT NULL, `strikes` INTEGER NOT NULL, `lastBan` INTEGER NOT NULL, `reason` TEXT NOT NULL, `blocked` INTEGER NOT NULL, PRIMARY KEY(`id`))")
             }
         }
     }

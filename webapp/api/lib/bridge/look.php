@@ -1,5 +1,7 @@
 <?php
 
+require_once __DIR__ . '/../mods.php';
+
 // styles, logos and colours. colours sit in encrypted prefs and the
 // mod has no data key, so the browser merges this on its next load
 
@@ -28,6 +30,8 @@ const BRIDGE_ID_VARIANTS = [
     13000 => ['bow_style' => 0], 13015 => ['bow_style' => 1], 13007 => ['bow_style' => 2],
     13005 => ['choker_style' => 0], 13024 => ['choker_style' => 1], 13020 => ['choker_style' => 2],
     13025 => ['choker_style' => 2], 13026 => ['choker_style' => 3], 13014 => ['glasses_style' => 3],
+    14002 => ['bikini_top_style' => 0], 14003 => ['bikini_top_style' => 1],
+    11003 => ['bikini_bot_style' => 0], 11004 => ['bikini_bot_style' => 1],
 ];
 const BRIDGE_ID_COLORS = [1506 => ['hair_hologram'], 13014 => ['eyepatch']];
 
@@ -70,14 +74,29 @@ function bridge_item_variants(int $id, string $slot, bool $clip): array {
     };
 }
 
+const BRIDGE_MOD_ITEMS_MAX = 64;
+
+// the browser matches these to a zip it holds. Room_* is furniture
+function bridge_mod_item(array $item): ?array {
+    $guid = (string)($item['guid'] ?? '');
+    $slot = (string)$item['slot'];
+    if (!preg_match(MOD_GUID, $guid) || str_starts_with($slot, 'Room_')) return null;
+    return [
+        'guid' => $guid, 'id' => (int)($item['id'] ?? 0), 'slot' => $slot,
+        'colors' => array_values((array)($item['colors'] ?? [])), 'keys' => bridge_item_keys($item),
+    ];
+}
+
 function bridge_look_from_equipped(array $equipped): array {
     // the third HairMain colour is NOT her halo, that stays white in the
     // game unless a DefaultHologram (1506) says otherwise
     $look = ['variants' => ['glasses_style' => 0], 'logos' => [], 'colors' => ['hair_hologram' => '#ffffff']];
+    $mods = [];
     foreach ($equipped as $item) {
         if (!bridge_item_worn($item)) continue;
         $id = (int)($item['id'] ?? 0);
         $slot = (string)$item['slot'];
+        if (!empty($item['mod']) && ($mod = bridge_mod_item($item))) $mods[] = $mod;
         if (empty($item['mod'])) {
             $look['variants'] = (BRIDGE_ID_VARIANTS[$id] ?? []) + bridge_item_variants($id, $slot, !empty($item['clip'])) + $look['variants'];
             if (isset(BRIDGE_LOGO_SLOTS[$slot])) $look['logos'][BRIDGE_LOGO_SLOTS[$slot]] = BRIDGE_LOGOS[$id] ?? '';
@@ -89,5 +108,7 @@ function bridge_look_from_equipped(array $equipped): array {
             if ($group !== null && $hex !== null) $look['colors'][$group] = $hex;
         }
     }
+    usort($mods, fn($a, $b) => [$a['guid'], $a['id'], $a['slot']] <=> [$b['guid'], $b['id'], $b['slot']]);
+    if ($mods) $look['mods'] = array_slice($mods, 0, BRIDGE_MOD_ITEMS_MAX);
     return $look;
 }

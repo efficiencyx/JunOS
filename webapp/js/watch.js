@@ -6,14 +6,15 @@ import * as Auth from './core/auth.js?v=1';
 import { api, apiJson } from './core/api.js?v=1';
 import * as ChatAPI from './core/chat-api.js?v=7';
 import * as Names from './core/names.js?v=1';
-import * as Prefs from './core/prefs.js?v=8';
-import { say } from './core/speech-card.js?v=20';
+import * as Prefs from './core/prefs.js?v=9';
+import { say } from './core/speech-card.js?v=21';
 import { localTimeString } from './core/util.js?v=1';
-import * as Live2D from './live2d/live2d.js?v=91';
-import * as Outfit from './outfit/outfit.js?v=101';
+import * as Live2D from './live2d/live2d.js?v=92';
+import * as Outfit from './outfit/outfit.js?v=112';
 import * as Scene from './trip/scene.js?v=1';
-import * as TripLoader from './trip/trip-loader.js?v=1';
+import * as TripLoader from './trip/trip-loader.js?v=75';
 import { startCapture } from './watch/grab.js?v=2';
+import { applyI18n, t } from './core/i18n.js?v=1';
 
 const OOC = '(OOC stage direction, not spoken by Anon: ';
 const HISTORY_KEPT = 16;
@@ -23,6 +24,7 @@ const HEARD_KEPT = 300;
 const STT_JUNK = /^\W*(?:thanks? (?:you )?for watching|please subscribe|subscribe|you|bye)?\W*$/i;
 
 async function main() {
+  applyI18n();
   const status = document.getElementById('stageStatus');
   const video = document.getElementById('player');
   const picker = document.getElementById('picker');
@@ -157,7 +159,7 @@ async function main() {
     }
     if (quiet) {
       if (kind !== 'tick') history.push({ role: 'assistant', content: '...' });
-      if (res.error && kind !== 'tick') status.textContent = "She didn't catch that.";
+      if (res.error && kind !== 'tick') status.textContent = t('watch.missed', "She didn't catch that.");
       return '';
     }
     history.push({ role: 'assistant', content: res.text });
@@ -189,7 +191,7 @@ async function main() {
     cap = startCapture(video, { stream: src.stream, frameEvery, onWindow });
     setComposer();
     cap.hasAudio.then((ok) => {
-      if (!ok && src.stream) lastLine.textContent = 'No sound came with it. Only Chrome tabs share sound.';
+      if (!ok && src.stream) lastLine.textContent = t('watch.noSound', 'No sound came with it. Only Chrome tabs share sound.');
     });
     speak(await turn('start', `${OOC}you two sit down to watch it.)`));
   }
@@ -290,7 +292,7 @@ async function main() {
   const trip = await api('trip.php').then(r => r.ok ? r.json() : null).catch(() => null);
   if (trip && trip.gated && trip.where !== 'watch') { location.replace('index.html'); return; }
   TripLoader.mount();
-  TripLoader.setStage('Grabbing the remote');
+  TripLoader.setStage(t('watch.remote', 'Grabbing the remote'));
   Scene.inject('.room', 'scene/lounge.svg?v=4');
   conversationId = trip ? Number(trip.conversation_id) || 0 : 0;
   frameEvery = trip && trip.frame_every || 5;
@@ -329,8 +331,8 @@ async function main() {
     setComposer();
   } catch (e) {
     console.error(e);
-    status.textContent = 'Load error: ' + e.message;
-    TripLoader.fail('Load error: ' + e.message);
+    status.textContent = t('stage.loadError', 'Load error: {err}', { err: e.message });
+    TripLoader.fail(status.textContent);
   }
 }
 

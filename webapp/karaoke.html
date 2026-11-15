@@ -4,26 +4,26 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, interactive-widget=resizes-content">
 <meta name="color-scheme" content="dark">
-<title>Karaoke with Jun</title>
+<title data-i18n="karaoke.title">Karaoke with Jun</title>
 <link rel="icon" type="image/png" href="favicon.png?v=1">
 <link rel="stylesheet" href="css/boot.css?v=7">
-<link rel="stylesheet" href="styles.css?v=82">
+<link rel="stylesheet" href="styles.css?v=85">
 <link rel="stylesheet" href="css/pages/karaoke.css?v=7">
 <link rel="stylesheet" href="css/head-home.css?v=1">
 <link rel="stylesheet" href="css/trip-loader.css?v=1">
 </head>
 <body>
 <div class="music-room" aria-hidden="true"></div>
-<a id="karaokeBackLink" class="head-home" href="index.html"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="19" y1="12" x2="5" y2="12"/><polyline points="12 19 5 12 12 5"/></svg>Head home</a>
-<div id="stage" aria-label="Live2D stage"></div>
+<a id="karaokeBackLink" class="head-home" href="index.html"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="19" y1="12" x2="5" y2="12"/><polyline points="12 19 5 12 12 5"/></svg><span data-i18n="page.headHome">Head home</span></a>
+<div id="stage" aria-label="Live2D stage" data-i18n-aria-label="stage.aria"></div>
 <div id="karaokeMic" class="stage-microphone" aria-hidden="true" hidden></div>
 <div class="music-room music-room-front" aria-hidden="true"></div>
-<div class="room-session"><span id="karaokeRoomBadge">Soundcheck</span><div class="room-equalizer" aria-hidden="true"><i></i><i></i><i></i><i></i><i></i><i></i><i></i></div></div>
-<div id="karaokePageStatus" class="karaoke-page-status" role="status" aria-live="polite">Loading Jun…</div>
+<div class="room-session"><span id="karaokeRoomBadge" data-i18n="karaoke.soundcheck">Soundcheck</span><div class="room-equalizer" aria-hidden="true"><i></i><i></i><i></i><i></i><i></i><i></i><i></i></div></div>
+<div id="karaokePageStatus" class="karaoke-page-status" role="status" aria-live="polite" data-i18n="karaoke.loadingJun">Loading Jun…</div>
 <div id="toasts" aria-live="polite" aria-atomic="false"></div>
 
 <div id="karaokeOverlay" class="karaoke-overlay" hidden>
-  <button id="karaokeOverlayClose" class="voice-overlay-btn voice-overlay-close" type="button" aria-label="Head home" title="Head home">
+  <button id="karaokeOverlayClose" class="voice-overlay-btn voice-overlay-close" type="button" aria-label="Head home" data-i18n-aria-label="page.headHome" title="Head home" data-i18n-title="page.headHome">
     <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
   </button>
 
@@ -41,47 +41,47 @@
       </div>
 
       <div class="auth-motd">
-        <div class="auth-motd-line" id="karaokeTitle">Karaoke with Jun</div>
-        <div class="auth-motd-line auth-dim">shell detected: <b class="auth-os-name karaoke-os-name">linux</b> - pick a mode, pick a song<span class="auth-caret" aria-hidden="true"></span></div>
+        <div class="auth-motd-line" id="karaokeTitle" data-i18n="karaoke.title">Karaoke with Jun</div>
+        <div class="auth-motd-line auth-dim"><span data-i18n="auth.motd.shell">shell detected:</span> <b class="auth-os-name karaoke-os-name">linux</b> <span data-i18n="karaoke.motd">- pick a mode, pick a song</span><span class="auth-caret" aria-hidden="true"></span></div>
       </div>
 
       <section class="karaoke-field">
-        <h2 class="karaoke-question">How should we sing it?</h2>
-        <div id="karaokeModeSel" class="karaoke-mode-sel" role="group" aria-label="Karaoke mode">
+        <h2 class="karaoke-question" data-i18n="karaoke.how">How should we sing it?</h2>
+        <div id="karaokeModeSel" class="karaoke-mode-sel" role="group" aria-label="Karaoke mode" data-i18n-aria-label="karaoke.modeAria">
           <button class="karaoke-mode-chip" type="button" data-mode="solo">
-            <strong>Solo</strong>
-            <span>You sing the full song, then Jun takes over.</span>
+            <strong data-i18n="karaoke.mode.solo">Solo</strong>
+            <span data-i18n="karaoke.mode.soloDesc">You sing the full song, then Jun takes over.</span>
           </button>
           <button class="karaoke-mode-chip" type="button" data-mode="duo">
-            <strong>Sing together</strong>
-            <span>You and Jun sing every line.</span>
+            <strong data-i18n="karaoke.mode.duo">Sing together</strong>
+            <span data-i18n="karaoke.mode.duoDesc">You and Jun sing every line.</span>
           </button>
           <button class="karaoke-mode-chip" type="button" data-mode="split">
-            <strong>Pick our lines</strong>
-            <span>Choose who sings each line after loading.</span>
+            <strong data-i18n="karaoke.mode.split">Pick our lines</strong>
+            <span data-i18n="karaoke.mode.splitDesc">Choose who sings each line after loading.</span>
           </button>
         </div>
         <div id="karaokeModeDesc" class="karaoke-mode-desc" aria-live="polite"></div>
       </section>
 
       <section class="karaoke-field">
-        <button id="karaokeLoadBtn" class="auth-submit karaoke-load" type="button">choose an mp3 or wav</button>
+        <button id="karaokeLoadBtn" class="auth-submit karaoke-load" type="button" data-i18n="karaoke.load">choose an mp3 or wav</button>
         <input id="karaokeFileInput" type="file" accept="audio/*,.mp3,.wav" hidden>
         <div id="karaokeDeviceHint" class="karaoke-hint"></div>
         <div id="karaokeProgress" class="karaoke-progress" hidden>
           <span class="karaoke-spinner" aria-hidden="true"></span>
           <span class="karaoke-progress-text">
-            <span id="karaokeSetupStatus">Preparing the stage…</span>
+            <span id="karaokeSetupStatus" data-i18n="karaoke.preparing">Preparing the stage…</span>
             <span id="karaokeProgressDetail" class="karaoke-progress-detail"></span>
           </span>
-          <button id="karaokeCancelBtn" class="karaoke-cancel" type="button" hidden>cancel</button>
+          <button id="karaokeCancelBtn" class="karaoke-cancel" type="button" hidden data-i18n="karaoke.cancel">cancel</button>
         </div>
       </section>
 
       <section class="karaoke-field karaoke-lyrics-row">
-        <button id="karaokeLyricsBtn" class="karaoke-linkish" type="button">use my own lyrics file</button>
+        <button id="karaokeLyricsBtn" class="karaoke-linkish" type="button" data-i18n="karaoke.ownLyrics">use my own lyrics file</button>
         <span id="karaokeLyricsSrc" class="karaoke-lyrics-src" aria-live="polite"></span>
-        <button id="karaokeLyricsAuto" class="karaoke-linkish karaoke-lyrics-clear" type="button" hidden>clear</button>
+        <button id="karaokeLyricsAuto" class="karaoke-linkish karaoke-lyrics-clear" type="button" hidden data-i18n="karaoke.clear">clear</button>
         <input id="karaokeLyricsInput" type="file" accept=".lrc,.txt,text/plain" hidden>
       </section>
     </div>
@@ -95,11 +95,11 @@
     </div>
     <div class="auth-term-body karaoke-assign-body">
       <div>
-        <div class="karaoke-step-label"><span class="auth-ps" aria-hidden="true"></span> final check</div>
-        <h2 id="karaokeAssignTitle" class="karaoke-question">Who sings each line?</h2>
+        <div class="karaoke-step-label"><span class="auth-ps" aria-hidden="true"></span> <span data-i18n="karaoke.finalCheck">final check</span></div>
+        <h2 id="karaokeAssignTitle" class="karaoke-question" data-i18n="karaoke.whoSings">Who sings each line?</h2>
       </div>
       <div id="karaokeAssignList" class="karaoke-assign-list"></div>
-      <button id="karaokeAssignStart" class="auth-submit karaoke-load" type="button">start singing</button>
+      <button id="karaokeAssignStart" class="auth-submit karaoke-load" type="button" data-i18n="karaoke.start">start singing</button>
     </div>
   </section>
 
@@ -109,17 +109,17 @@
     <div id="karaokeProgressBar" class="karaoke-progress-bar"><span id="karaokeProgressFill" class="karaoke-progress-fill"></span></div>
     <div id="karaokeScore" class="karaoke-score" hidden></div>
     <div class="karaoke-controls">
-      <button id="karaokeStopBtn" class="voice-overlay-btn" type="button" aria-label="Stop" title="Stop">
+      <button id="karaokeStopBtn" class="voice-overlay-btn" type="button" aria-label="Stop" data-i18n-aria-label="karaoke.stop" title="Stop" data-i18n-title="karaoke.stop">
         <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><rect x="6" y="6" width="12" height="12" rx="2"/></svg>
       </button>
-      <button id="karaokeRestartBtn" class="voice-overlay-btn" type="button" aria-label="Restart" title="Restart">
+      <button id="karaokeRestartBtn" class="voice-overlay-btn" type="button" aria-label="Restart" data-i18n-aria-label="karaoke.restart" title="Restart" data-i18n-title="karaoke.restart">
         <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="1 4 1 10 7 10"/><path d="M3.51 15a9 9 0 1 0 2.13-9.36L1 10"/></svg>
       </button>
-      <label class="karaoke-volume-control">Master
-        <input id="karaokeMasterVol" class="karaoke-vol" type="range" min="0" max="1" step="0.05" value="1" aria-label="Master volume">
+      <label class="karaoke-volume-control"><span data-i18n="karaoke.master">Master</span>
+        <input id="karaokeMasterVol" class="karaoke-vol" type="range" min="0" max="1" step="0.05" value="1" aria-label="Master volume" data-i18n-aria-label="settings.volume.title">
       </label>
       <label class="karaoke-volume-control">Jun
-        <input id="karaokeGuideVol" class="karaoke-vol" type="range" min="0" max="1" step="0.05" value="0.8" aria-label="Jun volume">
+        <input id="karaokeGuideVol" class="karaoke-vol" type="range" min="0" max="1" step="0.05" value="0.8" aria-label="Jun volume" data-i18n-aria-label="karaoke.junVolume">
       </label>
     </div>
   </div>
@@ -131,6 +131,6 @@
 <script defer src="vendor/pixi.min.js"></script>
 <script defer src="vendor/pixi-unsafe-eval.min.js"></script>
 <script defer src="vendor/cubism4.min.js"></script>
-<script type="module" src="js/karaoke-page.js?v=46"></script>
+<script type="module" src="js/karaoke-page.js?v=59"></script>
 </body>
 </html>

@@ -4,6 +4,7 @@ import android.content.Context
 import android.net.Uri
 import android.util.Log
 import com.efficiencyx.junos.JunApplication
+import com.efficiencyx.junos.R
 import com.efficiencyx.junos.inference.RemoteEngine
 import com.efficiencyx.junos.inference.RemoteError
 import com.efficiencyx.junos.inference.RemoteWire
@@ -29,7 +30,7 @@ class SetupCoordinator(
 ) {
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
     private val prefs = app.getSharedPreferences("setup", Context.MODE_PRIVATE)
-    private val mutableState = MutableStateFlow(SetupState())
+    private val mutableState = MutableStateFlow(SetupState(message = app.getString(R.string.setup_checking)))
     val state: StateFlow<SetupState> = mutableState.asStateFlow()
     private val pairings = app.pairingStore
     private var modelJob: kotlinx.coroutines.Job? = null
@@ -59,7 +60,7 @@ class SetupCoordinator(
             assetsReady = assetsReady,
             voiceReady = voiceReady,
             message = phaseMessage(phase),
-            error = if (!device.supported) "This build requires a 64-bit ARM phone." else null,
+            error = if (!device.supported) app.getString(R.string.setup_needs_arm64) else null,
             mode = mode,
             lan = pairings.get(SessionMode.LAN),
             cloud = pairings.get(SessionMode.CLOUD),
@@ -81,7 +82,7 @@ class SetupCoordinator(
     fun offerPairing(link: String) {
         val pairing = Pairing.parse(link)
         mutableState.value = if (pairing == null) {
-            mutableState.value.copy(pickError = "That isn't a Jun OS pairing code.")
+            mutableState.value.copy(pickError = app.getString(R.string.err_not_pairing_code))
         } else {
             mutableState.value.copy(offer = pairing, pickError = null)
         }
@@ -99,7 +100,7 @@ class SetupCoordinator(
         val token = key.trim()
         val name = model.trim()
         if (token.isEmpty() || name.isEmpty()) {
-            mutableState.value = mutableState.value.copy(pickError = "Paste the key and a model name.")
+            mutableState.value = mutableState.value.copy(pickError = app.getString(R.string.err_api_missing))
             return
         }
         val openRouter = provider == "openrouter"
@@ -121,7 +122,7 @@ class SetupCoordinator(
     fun signInChatGpt(model: String, openBrowser: (String) -> Unit) {
         val name = model.trim()
         if (name.isEmpty()) {
-            mutableState.value = mutableState.value.copy(pickError = "Pick a model name first.")
+            mutableState.value = mutableState.value.copy(pickError = app.getString(R.string.err_model_name))
             return
         }
         val previous = signInJob?.also { it.cancel() }
@@ -132,7 +133,7 @@ class SetupCoordinator(
             previous?.join()
             SignInService.start(app)
             try {
-                val code = ChatGptLogin.awaitCode(session)
+                val code = ChatGptLogin.awaitCode(session, app.getString(R.string.pair_chatgpt_failed_page))
                 pairings.save(ChatGptLogin.exchange(session, code, name).copy(ctx = API_CONTEXT))
                 mode = SessionMode.API
                 refresh()
@@ -166,7 +167,7 @@ class SetupCoordinator(
     fun downloadModel() {
         if (modelJob?.isActive == true) return
         if (mutableState.value.device?.roomForModel == false) {
-            mutableState.value = mutableState.value.copy(pickError = "The model needs at least 5 GB of free storage.")
+            mutableState.value = mutableState.value.copy(pickError = app.getString(R.string.err_model_storage))
             return
         }
         modelJob = scope.launch {
@@ -181,12 +182,12 @@ class SetupCoordinator(
                 refresh()
             } catch (_: CancellationException) {
                 mutableState.value = mutableState.value.copy(
-                    pickError = "Download paused. Your progress is saved.",
+                    pickError = app.getString(R.string.setup_download_paused),
                     modelProgress = mutableState.value.modelProgress.copy(running = false),
                 )
             } catch (error: Throwable) {
                 mutableState.value = mutableState.value.copy(
-                    pickError = error.message ?: "Model download failed",
+                    pickError = error.message ?: app.getString(R.string.err_model_download),
                     modelProgress = mutableState.value.modelProgress.copy(running = false),
                 )
             }
@@ -199,7 +200,7 @@ class SetupCoordinator(
         scope.launch {
             mutableState.value = mutableState.value.copy(
                 phase = SetupPhase.ASSETS,
-                message = "Recovering Jun from your game ZIP…",
+                message = app.getString(R.string.setup_recovering),
                 error = null,
                 recoveryProgress = TransferProgress(running = true),
             )
@@ -215,7 +216,7 @@ class SetupCoordinator(
                 Log.e(TAG, "Asset recovery failed", error)
                 mutableState.value = mutableState.value.copy(
                     phase = SetupPhase.ERROR,
-                    error = error.message ?: "Asset recovery failed",
+                    error = error.message ?: app.getString(R.string.err_recovery),
                     recoveryProgress = mutableState.value.recoveryProgress.copy(running = false),
                 )
             }
@@ -234,7 +235,7 @@ class SetupCoordinator(
             } catch (error: Throwable) {
                 mutableState.value = mutableState.value.copy(
                     phase = SetupPhase.ERROR,
-                    error = error.message ?: "Voice download failed",
+                    error = error.message ?: app.getString(R.string.err_voice_download),
                     voiceProgress = mutableState.value.voiceProgress.copy(running = false),
                 )
             }
@@ -252,7 +253,7 @@ class SetupCoordinator(
         }
         mutableState.value = mutableState.value.copy(
             phase = SetupPhase.STARTING,
-            message = if (pairing != null) "Reaching ${pairing.name}…" else "Starting Jun OS…",
+            message = if (pairing != null) app.getString(R.string.pair_reaching, pairing.name) else app.getString(R.string.setup_starting),
             pickError = null,
         )
         if (engine is RemoteEngine) {
@@ -306,41 +307,48 @@ class SetupCoordinator(
         private const val API_CONTEXT = 32768
     }
 
-    private fun phaseMessage(phase: SetupPhase) = when (phase) {
-        SetupPhase.CHECKING -> "Checking this phone…"
-        SetupPhase.CONSENT -> "Before Jun wakes up"
-        SetupPhase.ASSETS -> "Jun's Live2D assets are not installed"
-        SetupPhase.VOICE -> "Add offline voice"
-        SetupPhase.PICK -> "Where does she think this time?"
-        SetupPhase.STARTING -> "Starting Jun OS…"
-        SetupPhase.ERROR -> "Setup needs attention"
-    }
+    private fun phaseMessage(phase: SetupPhase) = app.getString(
+        when (phase) {
+            SetupPhase.CHECKING -> R.string.setup_checking
+            SetupPhase.CONSENT -> R.string.setup_consent_title
+            SetupPhase.ASSETS -> R.string.setup_assets_title
+            SetupPhase.VOICE -> R.string.setup_voice_title
+            SetupPhase.PICK -> R.string.setup_pick_title
+            SetupPhase.STARTING -> R.string.setup_starting
+            SetupPhase.ERROR -> R.string.setup_error_title
+        },
+    )
 
-    private fun explainSignIn(error: Throwable): String = when ((error as? RemoteError)?.code) {
-        "chatgpt_port_busy" -> "Another app on this phone holds port 1455, the one ChatGPT sends you back to. Close it and try again."
-        "chatgpt_cancelled" -> "Sign-in was cancelled or took longer than 5 minutes."
-        "unauthorized" -> "ChatGPT turned the sign-in down. Try again."
-        else -> "Couldn't reach ChatGPT. Is the phone online?"
-    }
+    private fun explainSignIn(error: Throwable): String = app.getString(
+        when ((error as? RemoteError)?.code) {
+            "chatgpt_port_busy" -> R.string.err_chatgpt_port_busy
+            "chatgpt_cancelled" -> R.string.err_chatgpt_cancelled
+            "unauthorized" -> R.string.err_chatgpt_refused
+            else -> R.string.err_chatgpt_unreachable
+        },
+    )
 
     private fun explain(error: Throwable, pairing: Pairing): String {
         val code = (error as? RemoteError)?.code
         if (code == "unauthorized" && pairing.mode == SessionMode.API) {
-            return if (pairing.api == "chatgpt") "ChatGPT signed this phone out. Sign in again." else "${pairing.name} turned the key down. Paste a new one."
+            return if (pairing.api == "chatgpt") app.getString(R.string.err_chatgpt_signed_out) else app.getString(R.string.err_key_refused, pairing.name)
         }
         return explainCode(code, error, pairing)
     }
 
-    private fun explainCode(code: String?, error: Throwable, pairing: Pairing): String = when (code) {
-        "api_unreachable" -> "Can't reach ${pairing.name}. Is the phone online?"
-        "no_credit" -> "${pairing.name} says the key is out of credit."
-        "rate_limited" -> "${pairing.name} is rate limiting you. Wait a minute, or check the plan's limits."
-        "lan_unreachable" -> "Can't reach ${pairing.name}. Is Jun OS running there, on the same wifi as this phone?"
-        "cloud_unreachable" -> "Can't reach the notebook. Every run of Step 3 makes a new code, scan the new one."
-        "unauthorized" -> "${pairing.name} doesn't know this phone anymore. Scan a fresh code."
-        "lan_mode_off" -> "LAN mode is off on ${pairing.name}. Run ./start.sh phone there, or press Phone in the Jun OS app on Windows."
-        "ca_changed" -> "${pairing.name} has a new certificate. Scan a fresh code."
-        "certificate_mismatch" -> "${pairing.name}'s certificate doesn't cover this address. Scan a fresh code."
-        else -> error.message ?: "Can't reach ${pairing.name}."
+    private fun explainCode(code: String?, error: Throwable, pairing: Pairing): String {
+        val text = when (code) {
+            "api_unreachable" -> R.string.err_api_unreachable
+            "no_credit" -> R.string.err_no_credit
+            "rate_limited" -> R.string.err_rate_limited
+            "lan_unreachable" -> R.string.err_lan_unreachable
+            "cloud_unreachable" -> R.string.err_cloud_unreachable
+            "unauthorized" -> R.string.err_unauthorized
+            "lan_mode_off" -> R.string.err_lan_mode_off
+            "ca_changed" -> R.string.err_ca_changed
+            "certificate_mismatch" -> R.string.err_certificate_mismatch
+            else -> return error.message ?: app.getString(R.string.err_unreachable, pairing.name)
+        }
+        return app.getString(text, pairing.name)
     }
 }

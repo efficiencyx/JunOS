@@ -1,10 +1,11 @@
-import * as Live2D from '../live2d/live2d.js?v=91';
-import * as ui from '../core/ui.js?v=1';
-import { assignOwners } from './lyrics.js?v=1';
-import { health, loadFile, mode, platformFlavor, queueLyrics, resetPanels, setLyricsChoice, setMode, showStage, splitPicks, track } from './setup.js?v=21';
-import { renderLyrics, setJunVolume, start, stopPlayback } from './playback.js?v=21';
+import * as Live2D from '../live2d/live2d.js?v=92';
+import * as ui from '../core/ui.js?v=10';
+import { assignOwners } from './lyrics.js?v=2';
+import { health, loadFile, mode, platformFlavor, queueLyrics, resetPanels, setLyricsChoice, setMode, showStage, splitPicks, track } from './setup.js?v=25';
+import { renderLyrics, setJunVolume, start, stopPlayback } from './playback.js?v=25';
+import { t } from '../core/i18n.js?v=1';
 
-export { setVolume } from './playback.js?v=21';
+export { setVolume } from './playback.js?v=25';
 
 export let active = false;
 export let hooks = {};
@@ -25,7 +26,7 @@ export async function enter() {
   if (active) return true;
   const h = await health();
   if (!h.sep) {
-    ui.toast('⚠ Karaoke unavailable: stem separation is not running', 'error');
+    ui.toast(t('karaoke.err.unavailable', '⚠ Karaoke unavailable: stem separation is not running'), 'error');
     return false;
   }
   active = true;
@@ -35,7 +36,7 @@ export async function enter() {
   resetPanels();
   focusPanel();
   const hint = $('karaokeDeviceHint');
-  if (hint) hint.textContent = h.device === 'cpu' ? 'CPU - separation is slow' : 'GPU ⚡';
+  if (hint) hint.textContent = h.device === 'cpu' ? t('karaoke.cpuSlow', 'CPU - separation is slow') : 'GPU ⚡';
   Live2D.setCameraPreset(hooks.cameraPreset || 'face');
   if (hooks.onEnter) hooks.onEnter();
   return true;

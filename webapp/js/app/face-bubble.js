@@ -1,17 +1,18 @@
 import { mobileConversationTitle, mobileReplyStatus, sidebarBackground, stageEl } from './dom.js?v=77';
 import { phoneMode, visualRect } from '../core/util.js?v=1';
 import * as Names from '../core/names.js?v=1';
-import * as TTS from '../voice/tts.js?v=92';
-import * as Live2D from '../live2d/live2d.js?v=91';
+import * as TTS from '../voice/tts.js?v=93';
+import * as Live2D from '../live2d/live2d.js?v=92';
+import { t } from '../core/i18n.js?v=1';
 
-let currentConversationTitle = 'New conversation';
+let currentConversationTitle = t('chat.newConversation', 'New conversation');
 
 export function setConversationTitle(title) {
-  currentConversationTitle = title || 'New conversation';
+  currentConversationTitle = title || t('chat.newConversation', 'New conversation');
   if (!mobileConversationTitle) return;
   mobileConversationTitle.textContent = currentConversationTitle;
   mobileConversationTitle.setAttribute('aria-label', latestAssistantReply
-    ? `${currentConversationTitle}. Show latest reply`
+    ? t('chat.titleShowLatest', '{title}. Show latest reply', { title: currentConversationTitle })
     : currentConversationTitle);
 }
 
@@ -21,7 +22,7 @@ export const faceBubble = (() => {
   el.className = 'face-bubble';
   el.tabIndex = 0;
   el.setAttribute('role', 'region');
-  el.setAttribute('aria-label', Names.getBot() + ' reply');
+  el.setAttribute('aria-label', t('chat.botReply', '{name} reply', { name: Names.getBot() }));
   el.hidden = true;
   document.body.appendChild(el);
   return el;
@@ -108,7 +109,7 @@ export function showFaceBubble(html, source = 'ephemeral') {
   pendingFaceBubbleHide = null;
   faceBubble.dataset.source = source;
   const botName = Names.getBot();
-  faceBubble.setAttribute('aria-label', `${botName} reply`);
+  faceBubble.setAttribute('aria-label', t('chat.botReply', '{name} reply', { name: botName }));
   let name = faceBubble.querySelector('.fb-name');
   let txt = faceBubble.querySelector('.fb-text');
   if (!name || !txt) {
@@ -200,7 +201,7 @@ export function announceMobileReply(text) {
   mobileReplyStatus.textContent = '';
   requestAnimationFrame(() => {
     const botName = Names.getBot();
-    mobileReplyStatus.textContent = `${botName} replied: ${text}`;
+    mobileReplyStatus.textContent = t('chat.botReplied', '{name} replied: {text}', { name: botName, text });
   });
 }
 
@@ -208,7 +209,7 @@ export function setLatestAssistantReply(text) {
   latestAssistantReply = text.trim();
   if (mobileConversationTitle) {
     mobileConversationTitle.disabled = !latestAssistantReply || !phoneMode();
-    mobileConversationTitle.title = latestAssistantReply ? 'Show latest reply' : currentConversationTitle;
+    mobileConversationTitle.title = latestAssistantReply ? t('chat.showLatest', 'Show latest reply') : currentConversationTitle;
   }
   setConversationTitle(currentConversationTitle);
 }

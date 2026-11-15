@@ -1,4 +1,5 @@
 import { api } from '../core/api.js?v=1';
+import { t } from '../core/i18n.js?v=1';
 
 export const normWord = (w) => (w || '').toLowerCase().replace(/[^\p{L}\p{N}]/gu, '');
 
@@ -311,15 +312,15 @@ function sectionsFromPlainText(text, whisperWords, duration) {
 export function buildSections(whisperWords, duration, { pendingLyrics, pendingLrclib, pendingId3 }) {
   if (pendingLyrics && pendingLyrics.kind === 'lrc') {
     const lines = parseLrc(pendingLyrics.text);
-    if (lines.length) return { sections: sectionsFromLines(lines, duration), src: 'file (.lrc)' };
+    if (lines.length) return { sections: sectionsFromLines(lines, duration), src: t('karaoke.src.lrc', 'file (.lrc)') };
   }
   if (pendingLyrics && pendingLyrics.kind === 'txt') {
     const secs = sectionsFromPlainText(pendingLyrics.text, whisperWords, duration);
-    if (secs.length) return { sections: secs, src: 'file (.txt)' };
+    if (secs.length) return { sections: secs, src: t('karaoke.src.txt', 'file (.txt)') };
   }
   if (pendingLrclib && pendingLrclib.kind === 'lrc') {
     const lines = parseLrc(pendingLrclib.text);
-    if (lines.length) return { sections: sectionsFromLines(lines, duration), src: 'LRCLIB (synced)' };
+    if (lines.length) return { sections: sectionsFromLines(lines, duration), src: t('karaoke.src.lrclibSynced', 'LRCLIB (synced)') };
   }
   if (pendingLrclib && pendingLrclib.kind === 'txt') {
     const secs = sectionsFromPlainText(pendingLrclib.text, whisperWords, duration);
@@ -327,13 +328,13 @@ export function buildSections(whisperWords, duration, { pendingLyrics, pendingLr
   }
   if (pendingId3) {
     if (pendingId3.type === 'synced' && pendingId3.lines.length)
-      return { sections: sectionsFromLines(pendingId3.lines, duration), src: 'embedded' };
+      return { sections: sectionsFromLines(pendingId3.lines, duration), src: t('karaoke.src.embedded', 'embedded') };
     if (pendingId3.type === 'plain') {
       const secs = sectionsFromPlainText(pendingId3.text, whisperWords, duration);
-      if (secs.length) return { sections: secs, src: 'embedded' };
+      if (secs.length) return { sections: secs, src: t('karaoke.src.embedded', 'embedded') };
     }
   }
-  return { sections: buildLinesFromWords(whisperWords), src: 'auto-transcribed' };
+  return { sections: buildLinesFromWords(whisperWords), src: t('karaoke.src.auto', 'auto-transcribed') };
 }
 
 export function assignOwners(sections, m, picks) {

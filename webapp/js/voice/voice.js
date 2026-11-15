@@ -4,7 +4,7 @@
 import { api } from '../core/api.js?v=1';
 import * as Names from '../core/names.js?v=1';
 import { base64Of, encodeWav } from '../core/wav.js?v=1';
-import * as TTS from './tts.js?v=92';
+import * as TTS from './tts.js?v=93';
 
 // whisper wants 16 kHz. browser resamples for us, free real estate
 const SAMPLE_RATE = 16000;

@@ -141,9 +141,12 @@ function bridge_sync(int $userId, array $snap, bool $dry = false): array {
         if (!$dry) relationship_set($userId, $rel);
     } elseif ($sameRun) {
         $delta = bridge_affection_of($snap['sympathy']) - bridge_affection_of((int)$prev['sympathy']);
-        if ($delta !== 0) {
-            if (!$dry) relationship_apply($userId, $rel, ['affection' => $delta]);
-            $rel['affection'] = max(0, min(100, $rel['affection'] + max(-50, min(50, $delta))));
+        if ($delta !== 0 && $dry) {
+            $scaled = difficulty_deltas($userId, ['affection' => $delta], false)['affection'] ?? 0;
+            $rel['affection'] = max(0, min(100, $rel['affection'] + max(-50, min(50, $scaled))));
+        } elseif ($delta !== 0) {
+            relationship_apply($userId, $rel, ['affection' => $delta]);
+            $rel = relationship_get($userId);
         }
     }
     $report['affection'] = $rel['affection'];
@@ -193,13 +196,23 @@ function bridge_sync_settle(int $userId, int $sympathy): void {
     db()->prepare('UPDATE bridge_sync SET sympathy = ? WHERE user_id = ?')->execute([$sympathy, $userId]);
 }
 
+// look_pending after the browser took it, until it saves it
+const BRIDGE_LOOK_TAKEN = 'taken';
+
+// the browser just saved the look it took. without this the next sync
+// reads that save as a JunOS change and drops the game's next outfit
+function bridge_look_saved(int $userId): void {
+    db()->prepare("UPDATE bridge_sync SET wardrobe_at = ?, look_pending = '' WHERE user_id = ? AND look_pending = ?")
+        ->execute([bridge_wardrobe_at($userId), $userId, BRIDGE_LOOK_TAKEN]);
+}
+
 // once, the browser saves it into the wardrobe and her prefs
 function bridge_look_take(int $userId): ?array {
     $st = db()->prepare('SELECT look_pending FROM bridge_sync WHERE user_id = ?');
     $st->execute([$userId]);
     $look = json_decode((string)$st->fetchColumn(), true);
     if (!is_array($look)) return null;
-    db()->prepare("UPDATE bridge_sync SET look_pending = '' WHERE user_id = ?")->execute([$userId]);
+    db()->prepare('UPDATE bridge_sync SET look_pending = ? WHERE user_id = ?')->execute([BRIDGE_LOOK_TAKEN, $userId]);
     return $look;
 }
 

@@ -123,13 +123,17 @@ function bridge_snapshot(array $vars): ?array {
     $counters = [];
     foreach (BRIDGE_COUNTERS as $k) $counters[$k] = (int)($vars[$k] ?? 0);
     $equipped = $vars['equipped'] ?? array_map(
-        fn($i) => [
-            'id' => (int)($i['_gameId']['_id'] ?? 0),
-            'slot' => (string)($i['_equipedSlot'] ?? ''),
-            'mod' => (string)($i['_gameId']['_guid']['serializedGuid'] ?? '') !== '',
-            'colors' => array_map('bridge_hex', (array)($i['_colors'] ?? [])),
-            'clip' => in_array(['K' => 'FrontClippedUp', 'V' => 1], (array)($i['I'] ?? [])),
-        ],
+        function ($i) {
+            $guid = (string)($i['_gameId']['_guid']['serializedGuid'] ?? '');
+            return [
+                'id' => (int)($i['_gameId']['_id'] ?? 0),
+                'slot' => (string)($i['_equipedSlot'] ?? ''),
+                'mod' => $guid !== '',
+                'guid' => $guid,
+                'colors' => array_map('bridge_hex', (array)($i['_colors'] ?? [])),
+                'clip' => in_array(['K' => 'FrontClippedUp', 'V' => 1], (array)($i['I'] ?? [])),
+            ];
+        },
         (array)($vars['itemManager']['items'] ?? [])
     );
     $botName = mb_substr(trim((string)($vars['botName'] ?? '')), 0, 40);

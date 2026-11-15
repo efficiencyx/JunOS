@@ -1,13 +1,13 @@
-import * as Live2D from '../live2d/live2d.js?v=91';
-import * as Mods from '../mods/mods.js?v=102';
-import { ALWAYS_HIDDEN, COLOR_GROUPS, ITEMS, VARIANTS, VARIANT_OWNER } from './catalog.js?v=4';
-import { applyGlassesTexture, applyStockingTexture, cancelStockingTexture, stockingColorMode } from './composite.js?v=31';
-import { colors, state, variantState } from './current.js?v=4';
+import * as Live2D from '../live2d/live2d.js?v=92';
+import * as Mods from '../mods/mods.js?v=113';
+import { ALWAYS_HIDDEN, COLOR_GROUPS, ITEMS, VARIANTS, VARIANT_OWNER } from './catalog.js?v=5';
+import { applyGlassesTexture, applyStockingTexture, cancelStockingTexture, stockingColorMode } from './composite.js?v=42';
+import { colors, state, variantState } from './current.js?v=6';
 import { hexToRgb01, normalizeHex } from './colors.js?v=1';
-import { queueWardrobe, saveColors, textureAvailable } from './sync.js?v=31';
-import { snapshot } from './chat-tools.js?v=31';
+import { queueWardrobe, saveColors, textureAvailable } from './sync.js?v=42';
+import { snapshot } from './chat-tools.js?v=42';
 import { hooks } from './hooks.js?v=1';
-import { applyDecals, forgetTints } from './decals.js?v=8';
+import { applyDecals, forgetTints } from './decals.js?v=19';
 
 export const itemPatterns = (it) => it.colorPatterns || it.visibilityPatterns || [];
 
@@ -15,9 +15,12 @@ export const itemDrawableIds = (it) =>
   Live2D.findDrawables(itemPatterns(it), it.colorExcludes);
 
 const moddedItems = new Set();
+let moddedOwned = new Set();
+const modHidden = new Map();
 
 export function setModdedDrawables(drawables) {
   const owned = drawables instanceof Set ? drawables : new Set(drawables || []);
+  moddedOwned = owned;
   const next = new Set();
   const controlled = new Set();
   for (const it of ITEMS) {
@@ -31,7 +34,28 @@ export function setModdedDrawables(drawables) {
   moddedItems.clear();
   for (const key of next) moddedItems.add(key);
   if (changed.size) applyItems(changed);
+  const worn = onceWorn();
+  for (const it of ITEMS) if (next.has(it.key) && !changed.has(it.key)) hideUnpainted(it, !isOn(it), worn);
   return controlled;
+}
+
+const isOn = (it) => state[it.key] && (!it.requires || state[it.requires]);
+
+// worked out at most once per pass, every modded garment asks
+function onceWorn() {
+  let worn = null;
+  return () => (worn ??= new Set(ITEMS.filter(isOn).flatMap(it => Live2D.findDrawables(itemPatterns(it), []))));
+}
+
+// the param shows the whole garment, strings and logo included. worn
+// only for a mod, what it doesn't paint is art the game wouldn't show
+function hideUnpainted(it, modOnly, worn) {
+  const down = modOnly
+    ? Live2D.findDrawables(itemPatterns(it), []).filter(id => !moddedOwned.has(id) && !worn().has(id))
+    : [];
+  for (const id of modHidden.get(it.key) || []) if (!down.includes(id)) Live2D.setDrawableOpacity(id, null);
+  for (const id of down) Live2D.setDrawableOpacity(id, 0);
+  modHidden.set(it.key, down);
 }
 
 // mods/engine.js wakes hidden vanilla drawables, such as Skirt, and
@@ -40,8 +64,7 @@ export function setModdedDrawables(drawables) {
 export function hiddenItemDrawables() {
   const hidden = new Set(), worn = new Set();
   for (const it of ITEMS) {
-    const on = state[it.key] && (!it.requires || state[it.requires]);
-    for (const id of itemDrawableIds(it)) (on ? worn : hidden).add(id);
+    for (const id of itemDrawableIds(it)) (isOn(it) ? worn : hidden).add(id);
   }
   // patterns overlap ('dress' matches Dress1 too), and worn wins
   for (const id of worn) hidden.delete(id);
@@ -52,10 +75,14 @@ export function applyItems(onlyItems) {
   const setParam = hooks.curtains ? Live2D.setNow : Live2D.setTarget;
   const onlyKeys = onlyItems ? new Set(onlyItems) : null;
   const textureMap = {};
+  const worn = onceWorn();
   for (const it of ITEMS) {
     if (onlyKeys && !onlyKeys.has(it.key)) continue;
-    const on = state[it.key] && (!it.requires || state[it.requires]);
-    if (it.param) setParam(it.param, on || moddedItems.has(it.key) ? 1 : 0);
+    const on = isOn(it);
+    if (it.param) {
+      setParam(it.param, on || moddedItems.has(it.key) ? 1 : 0);
+      hideUnpainted(it, !on && moddedItems.has(it.key), worn);
+    }
     if (it.visibilityPatterns) {
       const visOn  = it.visOn  !== undefined ? it.visOn  : null;
       const visOff = it.visOff !== undefined ? it.visOff : 0;
@@ -94,15 +121,18 @@ export function applyVariants(onlyKey) {
     ? new Set(Array.isArray(onlyKey) ? onlyKey : [onlyKey])
     : null;
   applyDrawOrder();
+  let remod = false;
   for (const v of VARIANTS) {
     if (onlyKeys && !onlyKeys.has(v.key)) continue;
     const opt = v.options[variantState[v.key] || 0];
     if (v.key === 'sock_style' && stockingColorMode()) {
       applyStockingTexture();
-    } else {
+    } else if (!v.options.every(o => o.opacity)) {
       if (v.key === 'sock_style') cancelStockingTexture();
       const map = {};
       for (const d of v.drawables) {
+        // a mod bake holds the drawable and puts the style under itself
+        if (Mods.owns(d)) { remod = true; continue; }
         const texture = opt.textures ? opt.textures[d] || null : null;
         map[d] = texture && textureAvailable(texture) ? texture : null;
       }
@@ -110,6 +140,7 @@ export function applyVariants(onlyKey) {
     }
     applyVariantVisibility(v);
   }
+  if (remod) Mods.applyAll();
   applyFootCover();
   applyDecals();
 }
@@ -149,12 +180,13 @@ function applyVariantVisibility(v) {
   for (const o of v.options) {
     for (const d of o.show || []) controlled.add(d);
     for (const d of o.hide || []) controlled.add(d);
+    for (const d of Object.keys(o.opacity || {})) controlled.add(d);
   }
   for (const d of controlled) {
-    const op = owners && !worn ? 0 : show.has(d) ? 1 : hide.has(d) ? 0 : null;
-    // null hands the drawable back to the rig, and the rig parks every
-    // Moddable* slot at zero. a mod holding one needs it left on.
-    if (op === null && Mods.holds(d)) continue;
+    const op = owners && !worn ? 0 : show.has(d) ? 1 : hide.has(d) ? 0 : opt.opacity?.[d] ?? null;
+    // a mod holding a drawable up needs it left on. null hands it back to
+    // the rig, which parks every Moddable* slot at zero
+    if (op !== 1 && Mods.holds(d)) continue;
     Live2D.setDrawableOpacity(d, op);
   }
 }

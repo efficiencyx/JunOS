@@ -119,7 +119,7 @@ function default_chat_model(): string {
             // the router names her preset after the GGUF alias or the
             // first HF repo in the list, see docker/llamacpp-entrypoint.sh
             if (env_str('LLAMACPP_MODEL_FILE') !== '') return env_str('LLAMACPP_MODEL_ALIAS', 'jun-local');
-            return trim(explode(',', env_str('LLAMACPP_MODEL_HF', 'efficiencyx/Jun-LoRA-E2B-GGUF:Q4_K_M'))[0]);
+            return trim(explode(',', env_str('LLAMACPP_MODEL_HF', 'efficiencyx/Jun-LoRA-E2B-GGUF:Q6_K'))[0]);
         case 'vllm':
             // colab.ipynb serves whatever repo you picked as --served-model-name jun
             return env_str('VLLM_MODEL') ?: (array_key_first(vllm_models()) ?? 'jun');
@@ -139,7 +139,7 @@ function default_chat_model(): string {
                 if ($model !== '' && !preg_match('/embed/i', $model)) return $model;
             }
 
-            return 'hf.co/efficiencyx/Jun-LoRA-E2B-GGUF:Q4_K_M';
+            return 'hf.co/efficiencyx/Jun-LoRA-E2B-GGUF:Q6_K';
     }
 }
 

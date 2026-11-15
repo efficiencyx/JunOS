@@ -29,7 +29,7 @@ const THINK_MAX_TOKENS = 16384;
 // ceiling.
 const PLAIN_MAX_TOKENS = 512;
 
-const CHAT_TEMPERATURE = 0.4;
+const CHAT_TEMPERATURE = 0.5;
 
 // what's left on the card once the weights and a bit of working
 // room are gone, can go negative. null when we don't know the GPU

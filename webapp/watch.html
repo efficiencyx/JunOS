@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, interactive-widget=resizes-content">
-<title>Watching something</title>
+<title data-i18n="watch.pageTitle">Watching something</title>
 <link rel="icon" type="image/png" href="jun_os.png">
 <link rel="stylesheet" href="css/trip-loader.css?v=1">
 <link rel="stylesheet" href="css/pages/watch.css?v=1">
@@ -11,25 +11,25 @@
 </head>
 <body>
 <main class="watch-layout">
-  <a class="head-home" href="index.html"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="19" y1="12" x2="5" y2="12"/><polyline points="12 19 5 12 12 5"/></svg>Head home</a>
+  <a class="head-home" href="index.html"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="19" y1="12" x2="5" y2="12"/><polyline points="12 19 5 12 12 5"/></svg><span data-i18n="page.headHome">Head home</span></a>
   <div class="room" aria-hidden="true"></div>
-  <section class="screen" aria-label="The video">
+  <section class="screen" aria-label="The video" data-i18n-aria-label="watch.video">
     <video id="player" controls playsinline></video>
     <div class="picker" id="picker">
-      <button type="button" id="fileBtn">Open a video</button>
-      <button type="button" id="tabBtn" hidden>Share a tab</button>
+      <button type="button" id="fileBtn" data-i18n="watch.open">Open a video</button>
+      <button type="button" id="tabBtn" hidden data-i18n="watch.shareTab">Share a tab</button>
       <input id="fileInput" type="file" accept="video/*" hidden>
     </div>
   </section>
   <div id="stage"></div>
-  <div id="stageStatus" role="status">Loading…</div>
+  <div id="stageStatus" role="status" data-i18n="stage.loadingCap">Loading…</div>
 
   <form class="composer" id="composer" autocomplete="off">
     <p class="last-line" id="lastLine" aria-live="polite"></p>
     <div class="composer-row">
-      <input id="sayInput" type="text" maxlength="500" placeholder="Say something…" aria-label="Say something" disabled>
-      <button type="submit" id="sendBtn" disabled>Say</button>
-      <button type="button" id="homeBtn" disabled>Get up</button>
+      <input id="sayInput" type="text" maxlength="500" placeholder="Say something…" data-i18n-placeholder="page.say" aria-label="Say something" data-i18n-aria-label="page.sayAria" disabled>
+      <button type="submit" id="sendBtn" disabled data-i18n="page.sayBtn">Say</button>
+      <button type="button" id="homeBtn" disabled data-i18n="watch.getUp">Get up</button>
     </div>
   </form>
 </main>
@@ -38,6 +38,6 @@
 <script defer src="vendor/pixi.min.js"></script>
 <script defer src="vendor/pixi-unsafe-eval.min.js"></script>
 <script defer src="vendor/cubism4.min.js"></script>
-<script type="module" src="js/watch.js?v=15"></script>
+<script type="module" src="js/watch.js?v=26"></script>
 </body>
 </html>

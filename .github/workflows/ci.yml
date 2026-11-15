@@ -54,6 +54,9 @@ jobs:
       - name: Webapp references
         run: python3 .github/scripts/check-refs.py
 
+      - name: Translations
+        run: python3 .github/scripts/check-i18n.py
+
       - name: Repo invariants
         run: sh .github/scripts/check-consistency.sh
 
@@ -67,6 +70,9 @@ jobs:
 
       - name: Game bridge installer
         run: bash .github/scripts/bridge-install.test.sh
+
+      - name: Model update check
+        run: bash .github/scripts/model-update.test.sh
 
       - name: JSON
         run: git ls-files '*.json' | xargs -r -n1 python3 -m json.tool > /dev/null
@@ -149,6 +155,15 @@ jobs:
 
       - name: Game bridge
         run: php .github/scripts/bridge.test.php
+
+      - name: Game bridge outfit sync
+        run: php .github/scripts/bridge-db.test.php
+
+      - name: Difficulty ladders and carry
+        run: php .github/scripts/difficulty-db.test.php
+
+      - name: Mod storage
+        run: php .github/scripts/mods.test.php
 
       - name: Migrations
         run: php .github/scripts/migrations.test.php
@@ -242,8 +257,8 @@ jobs:
         # the framework host.
         shell: powershell
         run: |
-          ./tools/build-installer-exe.ps1 -Manager -Version "1.0.${{ github.run_number }}.0"
-          ./tools/build-installer-exe.ps1 -Version "1.0.${{ github.run_number }}.0" -EmbedManager dist\JunOS.exe
+          ./tools/build/build-installer-exe.ps1 -Manager -Version "1.0.${{ github.run_number }}.0"
+          ./tools/build/build-installer-exe.ps1 -Version "1.0.${{ github.run_number }}.0" -EmbedManager dist\JunOS.exe
 
       - uses: actions/upload-artifact@v7
         with:

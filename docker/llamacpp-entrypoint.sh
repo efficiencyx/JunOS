@@ -43,7 +43,7 @@ chat_section() {  # name, where-the-weights-are line, mtp yes/no
         chat_section "${LLAMACPP_MODEL_ALIAS:-jun-local}" "model = /models/$LLAMACPP_MODEL_FILE" yes
     else
         mtp=yes
-        for ref in $(printf '%s' "${LLAMACPP_MODEL_HF:-efficiencyx/Jun-LoRA-E2B-GGUF:Q4_K_M}" | tr ',' ' '); do
+        for ref in $(printf '%s' "${LLAMACPP_MODEL_HF:-efficiencyx/Jun-LoRA-E2B-GGUF:Q6_K}" | tr ',' ' '); do
             chat_section "$ref" "hf-repo = $ref" "$mtp"
             mtp=no
         done

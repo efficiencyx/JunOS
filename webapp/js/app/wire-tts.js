@@ -1,13 +1,14 @@
-import { IDLE_AFTER_REPLY_MS, scheduleIdleNudge } from './consolidation.js?v=125';
+import { IDLE_AFTER_REPLY_MS, scheduleIdleNudge } from './consolidation.js?v=141';
 import { ttsChk, ttsEngineSelect, ttsLangRow, ttsLangSelect, ttsSpeedInput, ttsVoiceSelect } from './dom.js?v=77';
-import { finishPendingFaceBubbleHide } from './face-bubble.js?v=93';
+import { finishPendingFaceBubbleHide } from './face-bubble.js?v=95';
 import { logAction } from './logging.js?v=78';
-import { syncVoiceDeps, updateTtsSpeedLabel } from './settings.js?v=130';
+import { syncVoiceDeps, updateTtsSpeedLabel } from './settings.js?v=145';
 import { escapeHtml } from '../core/util.js?v=1';
 import * as Names from '../core/names.js?v=1';
-import * as Prefs from '../core/prefs.js?v=8';
-import * as TTS from '../voice/tts.js?v=92';
+import * as Prefs from '../core/prefs.js?v=9';
+import * as TTS from '../voice/tts.js?v=93';
 import { previewLine } from '../voice/languages.js?v=1';
+import { t } from '../core/i18n.js?v=1';
 
 export async function wireTts() {
   TTS.setLogger(logAction);
@@ -77,7 +78,7 @@ export async function wireTts() {
     // 'auto' is a fake language that only exists in the client.
     // TTS works out each reply's language and sends a real id. it's
     // the default so this just works with zero setup.
-    const langs = [{ id: 'auto', label: 'Auto-detect' }, ...baseLangs];
+    const langs = [{ id: 'auto', label: t('settings.ttsLang.auto', 'Auto-detect') }, ...baseLangs];
     const ids = langs.map(l => l.id);
     const def = (preferred && ids.includes(preferred)) ? preferred : 'auto';
     if (ttsLangSelect) {
@@ -154,7 +155,7 @@ export async function wireTts() {
   const previewBtn = document.getElementById('ttsPreviewBtn');
   if (previewBtn) {
     let previewing = false;
-    const settle = () => { previewing = false; previewBtn.textContent = 'Play'; };
+    const settle = () => { previewing = false; previewBtn.textContent = t('settings.ttsVoice.play', 'Play'); };
     // stop() from anywhere else cancels without either hook, so the
     // button can't trust previewing alone
     ttsChk?.addEventListener('change', () => { if (!ttsChk.checked) settle(); });
@@ -169,7 +170,7 @@ export async function wireTts() {
       });
       if (!ok) { logAction('warn', 'voice preview: TTS is off or has no voice'); return; }
       previewing = true;
-      previewBtn.textContent = 'Stop';
+      previewBtn.textContent = t('karaoke.stop', 'Stop');
     });
   }
   if (ttsLangSelect) {

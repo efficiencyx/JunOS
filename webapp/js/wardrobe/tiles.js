@@ -1,10 +1,11 @@
-import * as Live2D from '../live2d/live2d.js?v=91';
-import { closeColorPicker, colorPickerEl, makeColorButton, phonePopupMode, pickerEmbedded, schedulePopupPosition, showColorPicker, visualViewportRect, watchPopupViewport } from './color-picker.js?v=36';
-import { colorGroup } from '../outfit/catalog.js?v=4';
-import { colors, state, variantState } from '../outfit/current.js?v=4';
-import { setItem, setVariant } from '../outfit/apply.js?v=31';
-import { variantThumb } from './tile-bake.js?v=31';
-import { wdGhost } from './panel.js?v=36';
+import * as Live2D from '../live2d/live2d.js?v=92';
+import { closeColorPicker, colorPickerEl, makeColorButton, phonePopupMode, pickerEmbedded, schedulePopupPosition, showColorPicker, visualViewportRect, watchPopupViewport } from './color-picker.js?v=49';
+import { colorGroup } from '../outfit/catalog.js?v=5';
+import { colors, state, variantState } from '../outfit/current.js?v=6';
+import { setItem, setVariant } from '../outfit/apply.js?v=42';
+import { variantThumb } from './tile-bake.js?v=42';
+import { wdGhost } from './panel.js?v=49';
+import { t } from '../core/i18n.js?v=1';
 
 export function wdMoveGhost(x, y) {
   wdGhost.style.left = (x + 10) + 'px';
@@ -58,7 +59,7 @@ function buildOptionsPopup() {
   optPopEl = document.createElement('div');
   optPopEl.className = 'wd-optpop';
   optPopEl.hidden = true;
-  optPopEl.innerHTML = '<div class="wd-optpop-head"><div class="wd-optpop-title"></div><button type="button" class="wd-optpop-close" aria-label="Close options" title="Close">×</button></div><div class="wd-optpop-row"></div><div class="wd-optpop-grid"></div><div class="wd-optpop-color"></div>';
+  optPopEl.innerHTML = '<div class="wd-optpop-head"><div class="wd-optpop-title"></div><button type="button" class="wd-optpop-close" aria-label="' + t('shop.closeOptions', 'Close options') + '" title="' + t('common.close', 'Close') + '">×</button></div><div class="wd-optpop-row"></div><div class="wd-optpop-grid"></div><div class="wd-optpop-color"></div>';
   document.body.appendChild(optPopEl);
   optPopEl.querySelector('.wd-optpop-close').addEventListener('click', () => closeOptionsPopup(true));
   document.addEventListener('pointerdown', (e) => {
@@ -146,7 +147,7 @@ export function syncOptionsPopup() {
   const eq = optPopEl.querySelector('.wd-opt-equip');
   if (eq && optPopItemKey) {
     const worn = !!state[optPopItemKey];
-    eq.textContent = worn ? 'Remove' : 'Wear';
+    eq.textContent = worn ? t('shop.remove', 'Remove') : t('shop.wear', 'Wear');
     eq.classList.toggle('worn', worn);
   }
 }
@@ -157,8 +158,8 @@ export function makeOptOrb(cfg) {
   orb.className = 'wd-optorb';
   if (cfg.variants && cfg.variants.length) orb.dataset.optOrb = cfg.variants[0].key;
   orb.textContent = '▾';
-  orb.title = `${cfg.title} options`;
-  orb.setAttribute('aria-label', `${cfg.title} options`);
+  orb.title = t('shop.options', '{item} options', { item: cfg.title });
+  orb.setAttribute('aria-label', orb.title);
   orb.addEventListener('pointerdown', (e) => e.stopPropagation());
   orb.addEventListener('click', (e) => { e.stopPropagation(); openTilePopup(orb, cfg); });
   return orb;
@@ -294,7 +295,7 @@ export function makeTile(label, thumbSrc, onEquip, colorKeys, popupCfg) {
   tile.className = 'wd-tile';
   tile.tabIndex = 0;
   tile.setAttribute('role', 'button');
-  tile.setAttribute('aria-label', `${label} options`);
+  tile.setAttribute('aria-label', t('shop.options', '{item} options', { item: label }));
   fillTile(tile, thumbSrc, label);
   if (colorKeys && colorKeys.length) tile.appendChild(makeSwatch(colorKeys, label));
   tile.appendChild(makeOptOrb(popupCfg));

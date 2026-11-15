@@ -149,37 +149,6 @@
   from { transform: scaleY(0); }
   to   { transform: scaleY(1); }
 }
-/* this sits over EVERY gate and drawer. while she's gone,
-   nothing under it should work. */
-#fleeOverlay {
-  position: fixed;
-  inset: 0;
-  z-index: 10001;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  padding: var(--space-4);
-  background: radial-gradient(1200px 800px at 50% 40%,
-    color-mix(in srgb, var(--bg-2) 88%, transparent) 0%,
-    color-mix(in srgb, var(--bg) 96%, transparent) 65%);
-  backdrop-filter: blur(14px) saturate(140%);
-  -webkit-backdrop-filter: blur(14px) saturate(140%);
-}
-#fleeOverlay[hidden] { display: none; }
-
-.flee-reason {
-  font-style: italic;
-  color: var(--muted);
-}
-.flee-eta {
-  font-size: 34px;
-  font-weight: 800;
-  line-height: 1;
-  color: var(--accent);
-  font-variant-numeric: tabular-nums;
-  letter-spacing: .02em;
-}
-
 .msg.silence {
   align-self: stretch;
   max-width: 100%;

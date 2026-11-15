@@ -66,7 +66,7 @@ object ChatGptLogin {
     }
 
     // both loopbacks: chrome tries ::1 first for "localhost"
-    suspend fun awaitCode(session: Session): String = withContext(Dispatchers.IO) {
+    suspend fun awaitCode(session: Session, failText: String): String = withContext(Dispatchers.IO) {
         val sockets = listOf("127.0.0.1", "::1").mapNotNull { host ->
             runCatching {
                 ServerSocket().apply {
@@ -77,7 +77,7 @@ object ChatGptLogin {
         }
         if (sockets.isEmpty()) throw RemoteError("chatgpt_port_busy")
         val result = CompletableDeferred<String>()
-        sockets.forEach { server -> thread(isDaemon = true) { acceptAll(server, session.state, result) } }
+        sockets.forEach { server -> thread(isDaemon = true) { acceptAll(server, session.state, failText, result) } }
         // accept() never sees cancellation, closing the sockets is the only way out
         try {
             withTimeoutOrNull(TIMEOUT_MS.toLong()) { result.await() } ?: throw RemoteError("chatgpt_cancelled")
@@ -88,16 +88,16 @@ object ChatGptLogin {
 
     // one thread per connection. chrome preconnects a socket and sends NOTHING on it,
     // serving them in turn blocks on that one while the real callback waits behind it
-    private fun acceptAll(server: ServerSocket, state: String, result: CompletableDeferred<String>) {
+    private fun acceptAll(server: ServerSocket, state: String, failText: String, result: CompletableDeferred<String>) {
         while (true) {
             val client = try { server.accept() } catch (_: IOException) { return }
             thread(isDaemon = true) {
-                runCatching { client.use { serve(it, state, result) } }
+                runCatching { client.use { serve(it, state, failText, result) } }
             }
         }
     }
 
-    private fun serve(socket: Socket, state: String, result: CompletableDeferred<String>) {
+    private fun serve(socket: Socket, state: String, failText: String, result: CompletableDeferred<String>) {
         socket.soTimeout = 60_000
         val head = socket.getInputStream().bufferedReader().readLine().orEmpty()
         val target = head.split(' ').getOrNull(1).orEmpty()
@@ -110,7 +110,7 @@ object ChatGptLogin {
         val response = if (ok) {
             "HTTP/1.1 302 Found\r\nLocation: $returnIntent\r\nContent-Length: 0\r\nConnection: close\r\n\r\n"
         } else {
-            val body = "<!doctype html><meta charset=utf-8><meta name=viewport content=\"width=device-width\"><body style=\"font:18px sans-serif;padding:32px\">That sign-in didn't work. Go back to Jun OS and try again."
+            val body = "<!doctype html><meta charset=utf-8><meta name=viewport content=\"width=device-width\"><body style=\"font:18px sans-serif;padding:32px\">$failText"
             "HTTP/1.1 200 OK\r\nContent-Type: text/html; charset=utf-8\r\nContent-Length: ${body.toByteArray().size}\r\nConnection: close\r\n\r\n$body"
         }
         socket.getOutputStream().write(response.toByteArray())

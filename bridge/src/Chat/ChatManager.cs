@@ -70,8 +70,8 @@ public class ChatManager : MonoBehaviour {
     currentController.SetEnabled(true);
   }
 
-  private static void ExitStoryState() {
-    InteractState.OnStoryStateFinished();
+  private static void ExitStoryState(bool zoomedIn) {
+    InteractState.OnStoryStateFinished(zoomedIn);
   }
 
   [HideFromIl2Cpp]
@@ -81,6 +81,10 @@ public class ChatManager : MonoBehaviour {
     var gameVariables = gameScript.GameVariables;
 
     IsChatActive = true;
+
+    var interactState = gameScript.GameState?.TryCast<InteractState>();
+    var wasZoomedIn = interactState != null && interactState._isZoomedIn;
+    var cuddle = CuddleReturn.Capture(gameScript);
 
     EnterStoryState();
 
@@ -104,7 +108,9 @@ public class ChatManager : MonoBehaviour {
       }
     }
 
-    ExitStoryState();
+    if (!CuddleReturn.TryRestore(cuddle)) {
+      ExitStoryState(wasZoomedIn);
+    }
   }
 
   private static bool ValidateUserInput(string userInput) {

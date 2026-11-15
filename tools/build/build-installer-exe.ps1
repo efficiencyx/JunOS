@@ -34,7 +34,7 @@ if ([Environment]::OSVersion.Platform -ne [PlatformID]::Win32NT) {
     throw 'JunSetup.exe can only be built on Windows.'
 }
 
-$repoRoot = Split-Path -Parent $PSScriptRoot
+$repoRoot = Split-Path -Parent (Split-Path -Parent $PSScriptRoot)
 $source = Join-Path $repoRoot $(if ($Manager) { 'jun-manager.ps1' } else { 'installer-gui.ps1' })
 if (-not (Test-Path -LiteralPath $source)) { throw "$(Split-Path -Leaf $source) not found at $source" }
 if ($Manager -and ($PinRef -or $PinSha)) { throw 'JunOS.exe is not pinned, it runs whatever code sits next to it.' }

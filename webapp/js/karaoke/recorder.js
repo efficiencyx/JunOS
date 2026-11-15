@@ -1,10 +1,11 @@
-import * as ui from '../core/ui.js?v=1';
-import { $, active } from './karaoke.js?v=28';
-import { instrSource, practice, soloPhase } from './playback.js?v=21';
-import { mode, setStatus, track } from './setup.js?v=21';
-import { normWord } from './lyrics.js?v=1';
+import * as ui from '../core/ui.js?v=10';
+import { $, active } from './karaoke.js?v=32';
+import { instrSource, practice, soloPhase } from './playback.js?v=25';
+import { mode, setStatus, track } from './setup.js?v=25';
+import { normWord } from './lyrics.js?v=2';
 import { api, apiJson } from '../core/api.js?v=1';
 import { escapeHtml } from '../core/util.js?v=1';
+import { t } from '../core/i18n.js?v=1';
 
 // a sung word can miss its timestamp by 1.25 seconds and
 // still count. generous on purpose.
@@ -20,7 +21,7 @@ export async function startRecording() {
   try {
     micStream = await navigator.mediaDevices.getUserMedia({ audio: true });
   } catch (e) {
-    ui.toast('⚠ Mic blocked - no scoring this take', 'error');
+    ui.toast(t('karaoke.err.micBlocked', '⚠ Mic blocked - no scoring this take'), 'error');
     return;
   }
   const sections = track.sections.map(section => ({
@@ -52,7 +53,7 @@ async function onRecordingStopped(chunks, sections, stream, activeRecorder) {
   stopMic(stream);
   if (!active || !chunks.length) return;
   const blob = new Blob(chunks, { type: 'audio/webm' });
-  setStatus('Scoring your take…');
+  setStatus(t('karaoke.scoring', 'Scoring your take…'));
   try {
     const r = await api('karaoke.php?action=transcribe', {
       method: 'POST',
@@ -68,10 +69,10 @@ async function onRecordingStopped(chunks, sections, stream, activeRecorder) {
     rememberTake(result, history);
   } catch (e) {
     console.error(e);
-    ui.toast('⚠ Scoring failed: ' + e.message, 'error');
+    ui.toast(t('karaoke.err.scoring', '⚠ Scoring failed: {err}', { err: e.message }), 'error');
   } finally {
     setStatus(active && mode === 'solo' && soloPhase === 'jun' && instrSource
-      ? "Jun's solo…"
+      ? t('karaoke.junSolo', "Jun's solo…")
       : '');
   }
 }
@@ -164,12 +165,12 @@ function scoreTake(sections, user) {
 }
 
 const SCORE_GRADES = [
-  [90, 'she is going to bring this up later'],
-  [75, 'you carried that'],
-  [60, 'solid - she covered for you on a few'],
-  [40, 'you knew the chorus, at least'],
-  [20, 'mostly enthusiasm'],
-  [0, 'she sang, you watched'],
+  [90, t('karaoke.grade.90', 'she is going to bring this up later')],
+  [75, t('karaoke.grade.75', 'you carried that')],
+  [60, t('karaoke.grade.60', 'solid - she covered for you on a few')],
+  [40, t('karaoke.grade.40', 'you knew the chorus, at least')],
+  [20, t('karaoke.grade.20', 'mostly enthusiasm')],
+  [0, t('karaoke.grade.0', 'she sang, you watched')],
 ];
 
 function gradeFor(score) {
@@ -180,18 +181,20 @@ function gradeFor(score) {
 function compareLine(r, history) {
   if (!history || !history.best) return '';
   const best = history.best.score;
-  if (r.score > best) return `New best on this song, up from ${best}`;
-  if (r.score === best) return `Ties your best on this song`;
-  return `Your best on this song is ${best}` + (history.last && history.last.score !== best ? `, last time ${history.last.score}` : '');
+  if (r.score > best) return t('karaoke.newBest', 'New best on this song, up from {best}', { best });
+  if (r.score === best) return t('karaoke.tiesBest', 'Ties your best on this song');
+  return t('karaoke.yourBest', 'Your best on this song is {best}', { best })
+    + (history.last && history.last.score !== best ? t('karaoke.lastTime', ', last time {score}', { score: history.last.score }) : '');
 }
 
 function timingLine(offset) {
   if (offset === null) return '';
-  if (Math.abs(offset) < ON_BEAT) return 'On the beat';
-  return `Mostly ${offset < 0 ? 'early' : 'late'}, by ${Math.abs(offset).toFixed(1)}s`;
+  if (Math.abs(offset) < ON_BEAT) return t('karaoke.onBeat', 'On the beat');
+  const by = Math.abs(offset).toFixed(1);
+  return offset < 0 ? t('karaoke.mostlyEarly', 'Mostly early, by {by}s', { by }) : t('karaoke.mostlyLate', 'Mostly late, by {by}s', { by });
 }
 
-const lineTiming = (offset) => offset === null || Math.abs(offset) < 0.25 ? '' : offset < 0 ? 'early' : 'late';
+const lineTiming = (offset) => offset === null || Math.abs(offset) < 0.25 ? '' : offset < 0 ? t('karaoke.early', 'early') : t('karaoke.late', 'late');
 
 function renderScore(r, history) {
   const box = $('karaokeScore');
@@ -199,7 +202,7 @@ function renderScore(r, history) {
   box.hidden = false;
   if (!r.scored) {
     box.innerHTML = `<div class="karaoke-score-num">-</div>
-      <div class="karaoke-score-sub">nothing of yours to score this take</div>`;
+      <div class="karaoke-score-sub">${escapeHtml(t('karaoke.nothingScored', 'nothing of yours to score this take'))}</div>`;
     return;
   }
   const rows = r.breakdown.map(b => {
@@ -211,14 +214,14 @@ function renderScore(r, history) {
     const weak = b.total && b.matched / b.total < WEAK_LINE;
     return `<li><span class="karaoke-score-words">${words}</span>
       <span class="karaoke-score-count">${timing ? `<span class="karaoke-score-timing">${timing}</span>` : ''}${b.matched}/${b.total}</span>`
-      + `<span class="karaoke-practice">${weak ? `<button class="karaoke-linkish" type="button" data-section="${b.index}">Practice</button>` : ''}</span>`
+      + `<span class="karaoke-practice">${weak ? `<button class="karaoke-linkish" type="button" data-section="${b.index}">${escapeHtml(t('karaoke.practice', 'Practice'))}</button>` : ''}</span>`
       + `</li>`;
   }).join('');
   const compare = compareLine(r, history);
   const timing = timingLine(r.offset);
   box.innerHTML = `<div class="karaoke-score-num">${r.score}</div>
     <div class="karaoke-score-grade">${escapeHtml(gradeFor(r.score))}</div>
-    <div class="karaoke-score-sub">${r.matched} of ${r.total} words landed in time</div>` +
+    <div class="karaoke-score-sub">${escapeHtml(t('karaoke.landed', '{n} of {total} words landed in time', { n: r.matched, total: r.total }))}</div>` +
     (compare || timing ? `<div class="karaoke-score-sub">${[compare, timing].filter(Boolean).join(' · ')}</div>` : '') +
     (rows ? `<ul class="karaoke-score-list">${rows}</ul>` : '');
   box.querySelectorAll('.karaoke-practice button').forEach(btn => {

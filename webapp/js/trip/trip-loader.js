@@ -1,7 +1,8 @@
+import { t } from '../core/i18n.js?v=1';
 const STAGES = {
-  'Initializing PIXI...': 'Lacing up shoes',
-  'Loading Live2D assets...': 'Counting the savings',
-  'Building model...': 'Almost there',
+  'Initializing PIXI...': t('trip.shoes', 'Lacing up shoes'),
+  'Loading Live2D assets...': t('trip.savings', 'Counting the savings'),
+  'Building model...': t('trip.almost', 'Almost there'),
 };
 const reduced = matchMedia('(prefers-reduced-motion: reduce)').matches;
 let root = null, statusEl = null, videoEl = null;
@@ -22,7 +23,7 @@ export function mount({ reverse = false } = {}) {
         </div>
       </div>
     </div>
-    <div class="trip-status">${reverse ? 'Heading home' : "Walking to Annalie's shop"}</div>`;
+    <div class="trip-status">${reverse ? t('trip.headingHome', 'Heading home') : t('trip.toShop', "Walking to Annalie's shop")}</div>`;
   statusEl = root.querySelector('.trip-status');
   videoEl = root.querySelector('.trip-walkers');
   videoEl.addEventListener('error', () => { videoEl.style.display = 'none'; });

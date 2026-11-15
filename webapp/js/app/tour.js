@@ -1,17 +1,18 @@
-import { hideFaceBubble, replayFaceBubbleIntro, showFaceBubble } from './face-bubble.js?v=93';
-import { setSidebarOpen } from './sidebar.js?v=125';
-import { DEV, JUN } from './tour-lines.js?v=7';
-import { SKIPPED, caption, close, hush, makeRun, unionRect } from '../core/tour-kit.js?v=1';
+import { hideFaceBubble, replayFaceBubbleIntro, showFaceBubble } from './face-bubble.js?v=95';
+import { setSidebarOpen } from './sidebar.js?v=140';
+import { DEV, JUN } from './tour-lines.js?v=8';
+import { SKIPPED, caption, close, hush, makeRun, unionRect } from '../core/tour-kit.js?v=2';
 import { escapeHtml } from '../core/util.js?v=1';
 import * as Names from '../core/names.js?v=1';
-import * as Prefs from '../core/prefs.js?v=8';
-import * as ui from '../core/ui.js?v=1';
-import * as Actions from '../live2d/actions.js?v=101';
-import * as Live2D from '../live2d/live2d.js?v=91';
-import { COLOR_GROUPS } from '../outfit/catalog.js?v=4';
-import { colors } from '../outfit/current.js?v=4';
-import * as Outfit from '../outfit/outfit.js?v=101';
-import * as TTS from '../voice/tts.js?v=92';
+import * as Prefs from '../core/prefs.js?v=9';
+import * as ui from '../core/ui.js?v=10';
+import * as Actions from '../live2d/actions.js?v=112';
+import * as Live2D from '../live2d/live2d.js?v=92';
+import { COLOR_GROUPS } from '../outfit/catalog.js?v=5';
+import { colors } from '../outfit/current.js?v=6';
+import * as Outfit from '../outfit/outfit.js?v=112';
+import * as TTS from '../voice/tts.js?v=93';
+import { t } from '../core/i18n.js?v=1';
 
 const DONE_KEY = 'tour.done';
 const LINE_GAP_MS = 420;
@@ -147,7 +148,7 @@ async function narrate(s, step) {
   if (!targets.length && !step.last && !step.go) return;
   if (targets.length) targets[0].scrollIntoView({ block: 'nearest' });
   s.aim(targets);
-  el.next.textContent = step.go ? 'take her' : step.last ? 'done' : 'next';
+  el.next.textContent = step.go ? t('tour.takeHer', 'take her') : step.last ? t('tour.done', 'done') : t('tour.next', 'next');
   // she begged. there is no way out of this one but yes
   el.skip.hidden = !!step.go;
   el.root.classList.toggle('is-last', !!step.last);

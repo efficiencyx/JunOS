@@ -674,7 +674,7 @@ llamacpp_chat_model() {
     return
   fi
   hf="$(env_get LLAMACPP_MODEL_HF)"
-  hf="${hf:-efficiencyx/Jun-LoRA-E2B-GGUF:Q4_K_M}"
+  hf="${hf:-efficiencyx/Jun-LoRA-E2B-GGUF:Q6_K}"
   echo "${hf%%,*}"
 }
 
@@ -685,17 +685,88 @@ llamacpp_status() {
     | sed 's/{"id":/\n&/g' | grep -F "{\"id\":\"$1\"" | grep -o '"value":"[a-z]*"' | head -n1 | cut -d'"' -f4 || true
 }
 
-load_llamacpp() {
-  local model i
-  case ",${profiles}," in *,llamacpp,*) ;; *) return 0 ;; esac
-  model="$(llamacpp_chat_model)"
+hf_gguf_lfs() {  # repo quant -> "sha256 bytes" of that quant's gguf on main
+  curl --proto '=https' -fsS -m 10 "https://huggingface.co/api/models/$1/tree/main" 2>/dev/null \
+    | sed 's/{"type"/\n&/g' | grep -i "\"path\":\"[^\"]*\.$2\.gguf\"" | head -n1 \
+    | sed -nE 's/.*"lfs":\{"oid":"([0-9a-f]+)","size":([0-9]+).*/\1 \2/p' || true
+}
+
+# blob names in the hf cache are the file's sha256, same as the lfs
+# oid. prints the bytes the other snapshots alone hold, "rm" deletes them
+llamacpp_old_snapshots() {  # repo-dir keep-sha256 [rm]
+  docker exec -i omega-llamacpp sh -s -- "$@" <<'EOF' || true
+cd "$1" 2>/dev/null || exit 0
+keep="$(find snapshots -type l -lname "*/$2" | head -n1 | cut -d/ -f2)"
+[ -n "$keep" ] || exit 0
+find snapshots/"$keep" -type l -exec readlink -f {} \; | sort -u > /tmp/keep
+old="$(find snapshots -mindepth 1 -maxdepth 1 -type d ! -name "$keep")"
+[ -n "$old" ] || exit 0
+for d in $old; do find "$d" -type l -exec readlink -f {} \; ; done | sort -u | grep -vxFf /tmp/keep > /tmp/drop
+if [ "${3:-}" = rm ]; then xargs -r rm -f < /tmp/drop; rm -rf $old; else xargs -r du -cb < /tmp/drop | tail -n1 | cut -f1; fi
+EOF
+}
+
+gb() { awk -v b="$1" 'BEGIN { printf "%.1f", b / 1e9 }'; }
+
+# llama.cpp re-resolves the repo on EVERY load, a same-tag re-upload
+# downloads by itself and the old blob stays. a no = offline restart
+llamacpp_model_update() {
+  local ref repo quant dir have want="" bytes="" ans freed
+  is_on "$(env_get LLAMACPP_OFFLINE)" && return 0
+  [ -z "$(env_get LLAMACPP_MODEL_FILE)" ] || return 0
+  ref="$(llamacpp_chat_model)"; repo="${ref%%:*}"; quant="${ref##*:}"
+  [ "$quant" != "$ref" ] && command -v curl >/dev/null 2>&1 || return 0
+  dir="/root/.cache/llama.cpp/huggingface/hub/models--${repo%%/*}--${repo#*/}"
+  have="$(docker exec omega-llamacpp sh -c 'find "$1/snapshots" -type l -iname "*.$2.gguf" -exec readlink -f {} \;' _ "$dir" "$quant" 2>/dev/null | sed 's#.*/##' || true)"
+  [ -n "$have" ] || return 0
+  read -r want bytes <<<"$(hf_gguf_lfs "$repo" "$quant")" || true
+  [ -n "$want" ] || return 0
+
+  if ! printf '%s\n' "$have" | grep -qx "$want"; then
+    { true >/dev/tty; } 2>/dev/null || { echo "llama.cpp: $ref changed on Hugging Face, downloading the new one"; return 0; }
+    printf '%s has a new version on Hugging Face (%s GB). download it now? [Y/n] ' "$ref" "$(gb "$bytes")" >/dev/tty
+    read -r ans </dev/tty || ans=n
+    case "$ans" in
+      ''|y|Y|yes) ;;
+      *) echo "keeping the one you have. llama.cpp runs offline this start, ./start.sh asks again next time"
+         LLAMACPP_OFFLINE=on docker compose "${files[@]}" up -d llamacpp >/dev/null 2>&1 \
+           || echo "warning: couldn't restart llama.cpp offline, it downloads the new one on load" >&2
+         wait_llamacpp_up
+         return 0 ;;
+    esac
+    llamacpp_post_load "$ref" || true
+    echo "llama.cpp: downloading the new $ref. ./start.sh logs llamacpp to watch"
+    wait_for_llamacpp_model
+  fi
+
+  freed="$(llamacpp_old_snapshots "$dir" "$want")"
+  [ "${freed:-0}" -gt 0 ] 2>/dev/null && { true >/dev/tty; } 2>/dev/null || return 0
+  printf 'remove the old version of %s? frees %s GB [Y/n] ' "$ref" "$(gb "$freed")" >/dev/tty
+  read -r ans </dev/tty || ans=n
+  case "$ans" in ''|y|Y|yes) llamacpp_old_snapshots "$dir" "$want" rm; echo "old $ref removed" ;; esac
+}
+
+llamacpp_post_load() {
+  docker exec omega-llamacpp curl -fsS -X POST http://127.0.0.1:8080/models/load \
+    -H 'Content-Type: application/json' -d "{\"model\":\"$1\"}" >/dev/null 2>&1
+}
+
+wait_llamacpp_up() {
+  local i
   for i in $(seq 1 45); do
-    docker exec omega-llamacpp curl -fsS http://127.0.0.1:8080/health >/dev/null 2>&1 && break
+    docker exec omega-llamacpp curl -fsS http://127.0.0.1:8080/health >/dev/null 2>&1 && return 0
     sleep 2
   done
+}
+
+load_llamacpp() {
+  local model
+  case ",${profiles}," in *,llamacpp,*) ;; *) return 0 ;; esac
+  model="$(llamacpp_chat_model)"
+  wait_llamacpp_up
+  llamacpp_model_update
   [ "$(llamacpp_status "$model")" = loaded ] && return 0
-  docker exec omega-llamacpp curl -fsS -X POST http://127.0.0.1:8080/models/load \
-    -H 'Content-Type: application/json' -d "{\"model\":\"$model\"}" >/dev/null 2>&1 \
+  llamacpp_post_load "$model" \
     || echo "warning: llama.cpp didn't take the load for $model, she loads on the first message instead" >&2
   echo "llama.cpp: loading $model (the first start downloads it, 2-12 GB. ./start.sh logs llamacpp to watch)"
 }

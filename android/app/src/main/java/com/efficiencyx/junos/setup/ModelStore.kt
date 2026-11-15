@@ -3,6 +3,7 @@ package com.efficiencyx.junos.setup
 import android.content.Context
 import com.chaquo.python.Python
 import com.chaquo.python.android.AndroidPlatform
+import com.efficiencyx.junos.R
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.withContext
@@ -138,7 +139,7 @@ class ModelStore(private val context: Context) {
             if (existing > 0) header("Range", "bytes=$existing-")
         }.build()
         client.newCall(request).execute().use { response ->
-            check(response.isSuccessful || response.code == 206) { "Download failed: HTTP ${response.code}" }
+            check(response.isSuccessful || response.code == 206) { context.getString(R.string.err_download_http, response.code) }
             val append = existing > 0 && response.code == 206
             val start = if (append) existing else 0L
             val total = response.body.contentLength().takeIf { it >= 0 }?.plus(start) ?: expectedSize
@@ -157,9 +158,9 @@ class ModelStore(private val context: Context) {
                 output.fd.sync()
             }
         }
-        check(expectedSize <= 0 || partial.length() == expectedSize) { "Downloaded model has the wrong size" }
-        check(sha256(partial).equals(expectedSha256, ignoreCase = true)) { "Downloaded model checksum does not match" }
-        check(partial.renameTo(destination)) { "Could not install downloaded model" }
+        check(expectedSize <= 0 || partial.length() == expectedSize) { context.getString(R.string.err_download_size) }
+        check(sha256(partial).equals(expectedSha256, ignoreCase = true)) { context.getString(R.string.err_download_checksum) }
+        check(partial.renameTo(destination)) { context.getString(R.string.err_download_install) }
     }
 
     private fun sha256(file: File): String {

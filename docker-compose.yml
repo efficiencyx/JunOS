@@ -64,14 +64,14 @@ services:
       AI_PROVIDER: "${AI_PROVIDER:-ollama}"
       OLLAMA_URL: "${OLLAMA_URL:-http://ollama:11434}"
       OLLAMA_API_KEY: "${OLLAMA_API_KEY:-}"
-      OLLAMA_MODELS_TO_PULL: "${OLLAMA_MODELS_TO_PULL:-hf.co/efficiencyx/Jun-LoRA-E2B-GGUF:Q4_K_M}"
+      OLLAMA_MODELS_TO_PULL: "${OLLAMA_MODELS_TO_PULL:-hf.co/efficiencyx/Jun-LoRA-E2B-GGUF:Q6_K}"
       TITLE_MODEL: "${TITLE_MODEL-hf.co/efficiencyx/Titlewen-GGUF:F16}"
       OLLAMA_MTP: "${OLLAMA_MTP:-}"
       OLLAMA_MTP_MODEL: "${OLLAMA_MTP_MODEL:-jun-mtp}"
       OPENROUTER_API_KEY: "${OPENROUTER_API_KEY:-}"
       OPENROUTER_MODEL: "${OPENROUTER_MODEL:-}"
       LLAMACPP_URL: "${LLAMACPP_URL:-http://llamacpp:8080}"
-      LLAMACPP_MODEL_HF: "${LLAMACPP_MODEL_HF:-efficiencyx/Jun-LoRA-E2B-GGUF:Q4_K_M}"
+      LLAMACPP_MODEL_HF: "${LLAMACPP_MODEL_HF:-efficiencyx/Jun-LoRA-E2B-GGUF:Q6_K}"
       LLAMACPP_MODEL_FILE: "${LLAMACPP_MODEL_FILE:-}"
       LLAMACPP_MODEL_ALIAS: "${LLAMACPP_MODEL_ALIAS:-jun-local}"
       LLAMACPP_MTP: "${LLAMACPP_MTP:-}"
@@ -135,7 +135,7 @@ services:
     tmpfs:
       - /tmp:size=256m,mode=1777
     environment:
-      OLLAMA_MODELS_TO_PULL: "${OLLAMA_MODELS_TO_PULL:-hf.co/efficiencyx/Jun-LoRA-E2B-GGUF:Q4_K_M}"
+      OLLAMA_MODELS_TO_PULL: "${OLLAMA_MODELS_TO_PULL:-hf.co/efficiencyx/Jun-LoRA-E2B-GGUF:Q6_K}"
       TITLE_MODEL: "${TITLE_MODEL-hf.co/efficiencyx/Titlewen-GGUF:F16}"
       OLLAMA_MTP: "${OLLAMA_MTP:-}"
       OLLAMA_MTP_N_MAX: "${OLLAMA_MTP_N_MAX:-4}"
@@ -177,7 +177,7 @@ services:
     # router mode, the preset file comes out of these on every start
     entrypoint: ["/bin/sh", "/jun/llamacpp-entrypoint.sh"]
     environment:
-      LLAMACPP_MODEL_HF: "${LLAMACPP_MODEL_HF:-efficiencyx/Jun-LoRA-E2B-GGUF:Q4_K_M}"
+      LLAMACPP_MODEL_HF: "${LLAMACPP_MODEL_HF:-efficiencyx/Jun-LoRA-E2B-GGUF:Q6_K}"
       LLAMACPP_MODEL_FILE: "${LLAMACPP_MODEL_FILE:-}"
       LLAMACPP_MODEL_ALIAS: "${LLAMACPP_MODEL_ALIAS:-jun-local}"
       LLAMACPP_MTP: "${LLAMACPP_MTP:-}"
@@ -185,6 +185,7 @@ services:
       LLAMACPP_PARALLEL: "${LLAMACPP_PARALLEL:-1}"
       TITLE_MODEL: "${TITLE_MODEL-hf.co/efficiencyx/Titlewen-GGUF:F16}"
       OMEGA_NUM_CTX: "${OMEGA_NUM_CTX:-}"
+      LLAMA_ARG_OFFLINE: "${LLAMACPP_OFFLINE:-}"
       # -hf downloads land in the HF hub layout under HF_HOME now,
       # not ~/.cache/llama.cpp. the root fs is read-only, so without
       # this every download dies on "Read-only file system"

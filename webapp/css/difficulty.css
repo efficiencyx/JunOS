@@ -1,0 +1,118 @@
+@font-face {
+  font-family: 'Caveat';
+  src: url("../vendor/caveat/caveat-latin-wght.woff2") format("woff2");
+  font-weight: 400 700;
+  font-display: swap;
+}
+
+/* over EVERY gate and drawer. while she's gone nothing under it works */
+#fleeOverlay, .lock-overlay {
+  --paper: #ece6d6;
+  --ink: #24211d;
+  --rule: #b9c2cf;
+  --hand: 'Caveat', ui-serif, Georgia, serif;
+  position: fixed;
+  inset: 0;
+  z-index: 10001;
+}
+
+.pick-overlay {
+  display: grid;
+  place-items: center;
+  padding: var(--space-4);
+  background: color-mix(in srgb, var(--bg) 72%, transparent);
+}
+.pick-panel {
+  width: min(400px, 100%);
+  padding: var(--space-5);
+  background: var(--bg-elev);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  touch-action: pan-y;
+}
+.pick-panel h1 { margin: 0 0 var(--space-1); font-size: 20px; font-weight: 600; color: var(--fg); }
+.pick-sub { margin: 0; color: var(--dim); font-size: 13px; }
+.pick-nav {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin: var(--space-6) 0 var(--space-2);
+}
+.pick-name { font-size: 26px; font-weight: 600; color: var(--fg); }
+.pick-panel[data-level="hardcore"] .pick-name { color: var(--danger); }
+.pick-arrow {
+  width: 36px;
+  height: 36px;
+  padding: 0;
+  font-size: 20px;
+  line-height: 1;
+  color: var(--fg);
+  background: transparent;
+  border-color: var(--border-2);
+}
+.pick-arrow:disabled { visibility: hidden; }
+.pick-line { min-height: 4.8em; margin: 0 0 var(--space-5); color: var(--muted); font-size: 14px; line-height: 1.6; }
+.pick-go { width: 100%; padding-block: var(--space-3); font-size: 14px; }
+
+.farewell { overflow-y: auto; padding: var(--space-6) var(--space-4); background: black; }
+.paper { filter: drop-shadow(0 2px 5px rgb(0 0 0 / .7)); rotate: var(--r, 0deg); }
+.sheet {
+  display: block;
+  padding: 12px 18px;
+  color: var(--ink);
+  font: 500 19px/24px var(--hand);
+  background: var(--paper) repeating-linear-gradient(transparent 0 23px, var(--rule) 23px 24px) 0 6px;
+  clip-path: var(--rip);
+  overflow-wrap: anywhere;
+}
+.note-wrap { position: relative; width: min(520px, 100%); margin: 0 auto; }
+.note { position: relative; z-index: 1; }
+.note .sheet {
+  padding: 48px 32px 28px;
+  background-position: 0 10px;
+}
+.note .sheet, #fleeOverlay .sheet {
+  font-size: 23px;
+  line-height: 30px;
+  background-image: repeating-linear-gradient(transparent 0 29px, var(--rule) 29px 30px);
+}
+.note p { margin: 0 0 30px; }
+.note p:first-child, .note p:last-child { font-weight: 700; }
+.note p:last-child { margin: 0; }
+
+.pile {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  align-items: flex-start;
+  width: min(820px, 100%);
+  margin: -6px auto 0;
+}
+.scrap { max-width: 240px; margin: var(--my, 0) var(--mx, 0); translate: var(--dx, 0) var(--dy, 0); }
+.tucks { width: 100%; }
+.tucks:empty { display: none; }
+@media (min-width: 1040px) {
+  .tucks { display: block; margin: 0; }
+  .tucks .scrap { position: absolute; top: calc(var(--ty) * 1%); width: max-content; margin: 0; }
+  .tucks .scrap:nth-child(odd) { right: calc(100% - 16px); }
+  .tucks .scrap:nth-child(even) { left: calc(100% - 16px); }
+}
+
+.lock-foot { width: min(520px, 100%); margin: var(--space-6) auto 0; }
+.lock-foot p { margin: 0 0 var(--space-3); color: var(--dim); font-size: 13px; line-height: 1.6; }
+.lock-actions { display: flex; flex-wrap: wrap; gap: var(--space-2); }
+
+#fleeOverlay {
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-end;
+  align-items: flex-start;
+  gap: var(--space-2);
+  padding: var(--space-6);
+  background: var(--bg);
+}
+#fleeOverlay[hidden] { display: none; }
+#fleeOverlay .scrap { max-width: min(340px, 100%); margin: 0 0 var(--space-4); }
+#fleeOverlay h1 { margin: 0; font-size: 14px; font-weight: 500; color: var(--dim); }
+.flee-eta { font-size: 28px; font-weight: 600; color: var(--fg); font-variant-numeric: tabular-nums; }
+#fleeSkipBtn { margin-top: var(--space-3); }

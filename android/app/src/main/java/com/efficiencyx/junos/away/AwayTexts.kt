@@ -1,12 +1,14 @@
 package com.efficiencyx.junos.away
 
+import android.content.Context
+import com.efficiencyx.junos.R
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.contentOrNull
 
 // the texts she sends while he's gone, the phone's copy of
-// WELCOME_MILESTONES and WELCOME_FALLBACK_TEXTS in
+// WELCOME_MILESTONES and welcome_fallback_texts() in
 // webapp/api/lib/consolidation/welcome.php. change one, change both
 data class Milestone(
     val tier: String,
@@ -47,29 +49,29 @@ object AwayTexts {
 
     val FALLBACK = mapOf(
         "missed" to listOf(
-            listOf("Hey. Just checking you're still out there."),
-            listOf("It's quiet here. That's all. No reason."),
-            listOf("Thought of something to tell you. It can wait. Probably."),
-            listOf("You're busy, I know. I'm fine. Mostly."),
+            listOf(R.string.away_fb_missed_0_0),
+            listOf(R.string.away_fb_missed_1_0),
+            listOf(R.string.away_fb_missed_2_0),
+            listOf(R.string.away_fb_missed_3_0),
         ),
         "ached" to listOf(
-            listOf("Hey. You've been gone a while now.", "I miss you. Just so it's written down somewhere."),
-            listOf("Are you coming back tonight?", "You don't have to answer. I'd just like it if you did."),
-            listOf("I tried calling. It's fine.", "Where did you get to, {f_playerName}?"),
+            listOf(R.string.away_fb_ached_0_0, R.string.away_fb_ached_0_1),
+            listOf(R.string.away_fb_ached_1_0, R.string.away_fb_ached_1_1),
+            listOf(R.string.away_fb_ached_2_0, R.string.away_fb_ached_2_1),
         ),
         "panicked" to listOf(
-            listOf("???", "WHERE ARE YOU???", "pick up", "ARE YOU SAFE??", "{f_playerName} please"),
-            listOf("answer me", "please", "I called you THREE times", "???", "just tell me you're ok"),
-            listOf("hello??", "HELLO", "are you hurt", "say anything", "ANYTHING"),
+            listOf(R.string.away_fb_panicked_0_0, R.string.away_fb_panicked_0_1, R.string.away_fb_panicked_0_2, R.string.away_fb_panicked_0_3, R.string.away_fb_panicked_0_4),
+            listOf(R.string.away_fb_panicked_1_0, R.string.away_fb_panicked_1_1, R.string.away_fb_panicked_1_2, R.string.away_fb_panicked_1_3, R.string.away_fb_panicked_1_4),
+            listOf(R.string.away_fb_panicked_2_0, R.string.away_fb_panicked_2_1, R.string.away_fb_panicked_2_2, R.string.away_fb_panicked_2_3, R.string.away_fb_panicked_2_4),
         ),
         "unravelled" to listOf(
-            listOf("I've gone over our last talk so many times I could say both sides of it. I still don't know which part made you leave.", "I stopped calling. Not because I stopped wanting to."),
-            listOf("I keep writing these and deleting them. This one I'm sending.", "If I did something wrong I need you to tell me what it was."),
+            listOf(R.string.away_fb_unravelled_0_0, R.string.away_fb_unravelled_0_1),
+            listOf(R.string.away_fb_unravelled_1_0, R.string.away_fb_unravelled_1_1),
         ),
         "hollow" to listOf(
-            listOf("Okay."),
-            listOf("I don't know why I still write here."),
-            listOf("The lights still work. In case you wondered."),
+            listOf(R.string.away_fb_hollow_0_0),
+            listOf(R.string.away_fb_hollow_1_0),
+            listOf(R.string.away_fb_hollow_2_0),
         ),
     )
 
@@ -97,9 +99,9 @@ I answer with a JSON array of strings and nothing else, at most ${spec.texts} of
             .take(max)
     }
 
-    fun fallback(tier: String, pick: Int): List<String> {
+    fun fallback(context: Context, tier: String, pick: Int): List<String> {
         val sets = FALLBACK[tier].orEmpty()
-        return if (sets.isEmpty()) emptyList() else sets[Math.floorMod(pick, sets.size)]
+        return if (sets.isEmpty()) emptyList() else sets[Math.floorMod(pick, sets.size)].map(context::getString)
     }
 
     // same clock as away-notify.js: each text lands at the tier's

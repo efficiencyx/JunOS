@@ -63,8 +63,8 @@ jobs:
           if ($tag -notmatch '^\d+(\.\d+)*$') { $tag = '0.0.0' }
           $parts = @($tag -split '\.') + @('0', '0', '0', '0')
           # manager first, the setup exe carries a copy of it
-          ./tools/build-installer-exe.ps1 -Manager -Version ($parts[0..3] -join '.') -OutputPath dist\JunOS.exe
-          ./tools/build-installer-exe.ps1 -Version ($parts[0..3] -join '.') -OutputPath $out -EmbedManager dist\JunOS.exe @pin
+          ./tools/build/build-installer-exe.ps1 -Manager -Version ($parts[0..3] -join '.') -OutputPath dist\JunOS.exe
+          ./tools/build/build-installer-exe.ps1 -Version ($parts[0..3] -join '.') -OutputPath $out -EmbedManager dist\JunOS.exe @pin
 
       - uses: actions/upload-artifact@v7
         with:

@@ -16,9 +16,11 @@ if (require_method('GET', 'PUT') === 'GET') {
 }
 
 rate_limit('outfit_change_' . $userId, 2, 1);
-$state = wardrobe_canonical_state(read_json_body(32 * 1024));
+$body = read_json_body(32 * 1024);
+$state = wardrobe_canonical_state($body);
 $before = wardrobe_state($userId);
 wardrobe_save_state($userId, $state);
+if (($body['game_look'] ?? false) === true && bridge_enabled()) bridge_look_saved($userId);
 // the first save is the page setting up, not a change. and the
 // browser re-saves after her change_outfit tool, which counted it
 // already, the same state twice is not a second change

@@ -50,11 +50,31 @@ public static class ChatExecutor {
   }
 
   public static void ResetBotEmotes(bool instantly = false) {
+    var isCuddling = Utils.GameState.IsStateType<CuddleState>();
+
     MainThreadRunner.Run(() => {
       var live2DController = Live2DControllerSingleton.Instance;
       var character = live2DController.GetReadyController("bot");
+      if (isCuddling) {
+        ResetEmotesExceptArms(character);
+        return;
+      }
       character?.SetDefaultEmote(instantly);
     });
+  }
+
+  // the arms slot's default is DownNormal, that flattens the cuddle arm pose and nothing puts it back
+  private static void ResetEmotesExceptArms(Live2DController character) {
+    var slots = character?.GetStoryEmoteManager()?._emoteSlots;
+    if (slots == null) {
+      return;
+    }
+    for (var i = 0; i < slots.Count; i++) {
+      var slot = slots[i];
+      if (slot.TryCast<Live2DInteractionController.StoryInteractionArmsSlot>() == null) {
+        slot.SetDefault();
+      }
+    }
   }
 
   public static void ResetBotArms() {

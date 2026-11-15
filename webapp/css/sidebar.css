@@ -170,6 +170,7 @@
   padding: 10px 14px 4px;
   white-space: nowrap;
   overflow: hidden;
+  flex-shrink: 0;
   transition: opacity 150ms cubic-bezier(.4,0,.2,1);
 }
 

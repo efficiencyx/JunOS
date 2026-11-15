@@ -1,5 +1,5 @@
 /* index.html never requests this file.
-   tools/build-critical-css.php drops it into index.html so the
+   tools/build/build-critical-css.php drops it into index.html so the
    age gate, auth screen and boot overlay have CSS before
    styles.css finishes loading. (karaoke, privacy and the
    showcase pages still link it the normal way, for the tokens.)

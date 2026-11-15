@@ -12,17 +12,19 @@
 import * as Auth from './core/auth.js?v=1';
 import { api, apiJson } from './core/api.js?v=1';
 import * as ChatAPI from './core/chat-api.js?v=7';
+import { applyI18n, locale, t } from './core/i18n.js?v=1';
 import * as Names from './core/names.js?v=1';
-import * as Prefs from './core/prefs.js?v=8';
-import { say } from './core/speech-card.js?v=20';
+import * as Prefs from './core/prefs.js?v=9';
+import { say } from './core/speech-card.js?v=21';
 import { localTimeString, mealNow } from './core/util.js?v=1';
-import * as Live2D from './live2d/live2d.js?v=91';
-import * as Outfit from './outfit/outfit.js?v=101';
+import * as Live2D from './live2d/live2d.js?v=92';
+import * as Outfit from './outfit/outfit.js?v=112';
 import * as Scene from './trip/scene.js?v=1';
 import { startSkybox } from './trip/skybox.js?v=2';
-import * as TripLoader from './trip/trip-loader.js?v=1';
+import * as TripLoader from './trip/trip-loader.js?v=75';
 
 async function main() {
+  applyI18n();
   startSkybox();
   const status = document.getElementById('stageStatus');
   const list = document.getElementById('menuList');
@@ -76,12 +78,12 @@ async function main() {
   const dishes = MENU[meal];
   document.body.dataset.meal = meal;
   const FALLBACK = {
-    arrive: "Okay. It's nicer than I expected. Don't make it weird.",
-    talk: "Sorry anon... I wasn't paying attention, could you say that again?",
-    order: "Fine. Let's see if the kitchen is as good as the menu makes it sound.",
-    lull: "...Are they growing it back there? Because it feels like they're growing it.",
-    served: 'Oh. Okay. That actually looks good. Hands off mine.',
-    leave: 'Walk me home. And no, that was not a thank you.',
+    arrive: t('jun.date.arrive', "Okay. It's nicer than I expected. Don't make it weird."),
+    talk: t('jun.date.talk', "Sorry anon... I wasn't paying attention, could you say that again?"),
+    order: t('jun.date.order', "Fine. Let's see if the kitchen is as good as the menu makes it sound."),
+    lull: t('jun.date.lull', "...Are they growing it back there? Because it feels like they're growing it."),
+    served: t('jun.date.served', 'Oh. Okay. That actually looks good. Hands off mine.'),
+    leave: t('jun.date.leave', 'Walk me home. And no, that was not a thank you.'),
   };
 
   const picks = { me: '', her: '' };
@@ -218,20 +220,20 @@ async function main() {
       const mine = b.dataset.name === picks.me;
       b.setAttribute('aria-pressed', String(mine));
       const notes = [];
-      if (b.dataset.name === picks.her) notes.push(`${h}'s choice`);
-      if (b.dataset.name === suggested) notes.push(mine ? `${h} suggested it` : `${h} says try it`);
+      if (b.dataset.name === picks.her) notes.push(t('date.herChoice', "{name}'s choice", { name: h }));
+      if (b.dataset.name === suggested) notes.push(mine ? t('date.suggested', '{name} suggested it', { name: h }) : t('date.tryIt', '{name} says try it', { name: h }));
       b.querySelector('.dish-note').textContent = notes.join(' · ');
     }
     setComposer();
   }
 
-  const hintText = () => `Tap what you'd like. ${her()} orders for herself.`;
+  const hintText = () => t('date.hint', "Tap what you'd like. {name} orders for herself.", { name: her() });
 
   function renderMenu() {
     const h = her();
-    document.title = meal === 'lunch' ? 'Lunch for two' : 'Dinner for two';
+    document.title = meal === 'lunch' ? t('date.lunchTitle', 'Lunch for two') : t('date.dinnerTitle', 'Dinner for two');
     document.getElementById('menuNames').textContent = `${Names.getPlayer()} & ${h}`;
-    document.getElementById('menuDate').textContent = `${meal === 'lunch' ? 'Lunch' : 'Dinner'} · ${new Date().toLocaleDateString(undefined, { day: 'numeric', month: 'long', year: 'numeric' })}`;
+    document.getElementById('menuDate').textContent = `${meal === 'lunch' ? t('date.lunch', 'Lunch') : t('date.dinner', 'Dinner')} · ${new Date().toLocaleDateString(locale, { day: 'numeric', month: 'long', year: 'numeric' })}`;
     document.getElementById('menuPlace').textContent = venue.name;
     document.getElementById('menuHint').textContent = hintText();
     let course = '';
@@ -266,7 +268,7 @@ async function main() {
       // dead disabled button teaches nobody anything. say what's
       // missing and put the cursor on the thing they have to touch
       const hint = document.getElementById('menuHint');
-      hint.textContent = `Pick something off the menu first. ${her()} orders for herself.`;
+      hint.textContent = t('date.pickFirst', 'Pick something off the menu first. {name} orders for herself.', { name: her() });
       const first = list.querySelector('.dish');
       if (first) first.focus();
       return;
@@ -298,8 +300,8 @@ async function main() {
     const now = Date.now();
     const left = Math.max(0, kitchen.due - now);
     ticket.style.setProperty('--done', String(Math.min(1, (now - kitchen.start) / (kitchen.due - kitchen.start))));
-    const text = left > 90e3 ? `The kitchen's on it · about ${Math.round(left / 60e3)} min`
-      : left > 25e3 ? "The kitchen's on it · almost ready" : 'Coming out now';
+    const text = left > 90e3 ? t('date.kitchenMin', "The kitchen's on it · about {n} min", { n: Math.round(left / 60e3) })
+      : left > 25e3 ? t('date.kitchenAlmost', "The kitchen's on it · almost ready") : t('date.comingOut', 'Coming out now');
     if (ticketText.textContent !== text) ticketText.textContent = text;
     if (busy || !ready) return;
     if (!left) { serve(); return; }
@@ -334,10 +336,10 @@ async function main() {
     });
     const heading = (text) => Object.assign(document.createElement('h3'), { className: 'menu-course', textContent: text });
     const title = document.getElementById('menuTitle');
-    title.lastChild.previousSibling.textContent = 'The bill';
+    title.lastChild.previousSibling.textContent = t('date.bill', 'The bill');
     list.replaceChildren(
-      ...(recap.moments.length ? [heading(`${her()} kept`), ...lines(recap.moments)] : []),
-      ...(recap.plans.length ? [heading('Still owed'), ...lines(recap.plans)] : []),
+      ...(recap.moments.length ? [heading(t('date.kept', '{name} kept', { name: her() })), ...lines(recap.moments)] : []),
+      ...(recap.plans.length ? [heading(t('date.owed', 'Still owed')), ...lines(recap.plans)] : []),
     );
     document.getElementById('menuHint').hidden = true;
     document.body.classList.remove('ordered');
@@ -347,7 +349,7 @@ async function main() {
     if (leaving === 'bill') { location.href = 'index.html?from=date'; return; }
     if (busy || leaving) return;
     leaving = true;
-    billBtn.textContent = 'Heading home…';
+    billBtn.textContent = t('date.headingHome', 'Heading home…');
     setComposer();
     const line = await ask(note('leave'), FALLBACK.leave);
     const home = apiJson('trip.php?action=home', { meal, venue: venue.name, dishes: picks, table })
@@ -360,7 +362,7 @@ async function main() {
     }
     showBill(recap);
     leaving = 'bill';
-    billBtn.textContent = 'Walk home';
+    billBtn.textContent = t('date.walkHome', 'Walk home');
     setComposer();
   }
 
@@ -375,7 +377,7 @@ async function main() {
   // mount AFTER the gate. otherwise a bounced user sits through the
   // whole walk just to get redirected at the end of it
   TripLoader.mount();
-  TripLoader.setStage('Finding your table');
+  TripLoader.setStage(t('date.findingTable', 'Finding your table'));
   // no trip row (gate off) means no seed, so fall back to the
   // day. at least it moves.
   const seed = (trip && Number(trip.since)) || Math.floor(Date.now() / 864e5);
@@ -431,15 +433,15 @@ async function main() {
     Outfit.applyAll();
     Live2D.startIdle();
     Live2D.setCameraPreset('face');
-    TripLoader.setStage(meal === 'lunch' ? 'Lunch, finally' : 'Table for two');
+    TripLoader.setStage(meal === 'lunch' ? t('date.lunchFinally', 'Lunch, finally') : t('date.tableForTwo', 'Table for two'));
     await TripLoader.finish();
     status.textContent = '';
     ready = true;
     say(await ask(note('arrive'), FALLBACK.arrive));
   } catch (e) {
     console.error(e);
-    status.textContent = 'Load error: ' + e.message;
-    TripLoader.fail('Load error: ' + e.message);
+    status.textContent = t('stage.loadError', 'Load error: {err}', { err: e.message });
+    TripLoader.fail(status.textContent);
   }
 }
 

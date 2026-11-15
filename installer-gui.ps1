@@ -9,7 +9,7 @@ if ([Environment]::OSVersion.Platform -ne [PlatformID]::Win32NT) {
     throw 'The Jun OS graphical installer can only run on Windows.'
 }
 
-# when this file is compiled with tools/build-installer-exe.ps1
+# when this file is compiled with tools/build/build-installer-exe.ps1
 # the host process is JunSetup.exe, NOT powershell.exe. so
 # MainModule is useless for "give me a shell to run install.ps1
 # in", it would relaunch the installer inside itself. resolve
@@ -25,7 +25,7 @@ if (-not $script:PowerShellExe) { $script:PowerShellExe = 'powershell.exe' }
 
 $script:IsCompiled = $PSCommandPath -and $PSCommandPath.EndsWith('.exe', 'OrdinalIgnoreCase')
 
-# tools/build-installer-exe.ps1 rewrites the next line, and only
+# tools/build/build-installer-exe.ps1 rewrites the next line, and only
 # that line, to base64 of install.ps1. leave the marker comment
 # and the exact assignment shape alone or the build stops
 # embedding and says nothing about it.
@@ -74,7 +74,7 @@ if ([Threading.Thread]::CurrentThread.GetApartmentState() -ne [Threading.Apartme
     # spawn another non-STA copy forever. ps2exe -STA is what makes
     # this branch unreachable, so an exe landing in it means the
     # build dropped the flag.
-    if ($script:IsCompiled) { throw 'This build was compiled without -STA. Rebuild with tools/build-installer-exe.ps1.' }
+    if ($script:IsCompiled) { throw 'This build was compiled without -STA. Rebuild with tools/build/build-installer-exe.ps1.' }
     $restart = [Diagnostics.ProcessStartInfo]::new()
     $restart.FileName = $script:PowerShellExe
     $restart.Arguments = "-NoProfile -ExecutionPolicy Bypass -STA -File `"$PSCommandPath`""
@@ -690,7 +690,7 @@ $modelChoices = @(
     @{ Label = 'Jun E4B — Q4_K_M, balanced'; Ref = 'hf.co/efficiencyx/Jun-LoRA-E4B-GGUF:Q4_K_M' },
     @{ Label = 'Jun E2B — Q8_0, lightweight'; Ref = 'hf.co/efficiencyx/Jun-LoRA-E2B-GGUF:Q8_0' },
     @{ Label = 'Jun E2B — Q6_K, lightweight'; Ref = 'hf.co/efficiencyx/Jun-LoRA-E2B-GGUF:Q6_K' },
-    @{ Label = 'Jun E2B — Q4_K_M, CPU-friendly'; Ref = 'hf.co/efficiencyx/Jun-LoRA-E2B-GGUF:Q4_K_M' }
+    @{ Label = 'Jun E2B — Q4_K_M, lightest'; Ref = 'hf.co/efficiencyx/Jun-LoRA-E2B-GGUF:Q4_K_M' }
 )
 foreach ($choice in $modelChoices) {
     $item = [System.Windows.Controls.ComboBoxItem]::new()
@@ -777,7 +777,7 @@ if ($script:gpuVendor -eq 'cpu') {
 
 function Get-RecommendedModel([bool]$allGpus) {
     if ($script:gpuMemory.Count -eq 0) {
-        return 'hf.co/efficiencyx/Jun-LoRA-E2B-GGUF:Q4_K_M'
+        return 'hf.co/efficiencyx/Jun-LoRA-E2B-GGUF:Q6_K'
     }
     $mb = if ($allGpus) {
         [int](($script:gpuMemory | Measure-Object -Sum).Sum)
@@ -788,8 +788,8 @@ function Get-RecommendedModel([bool]$allGpus) {
     if ($mb -ge 15500) { return 'hf.co/efficiencyx/Jun-LoRA-12B-GGUF:Q6_K' }
     if ($mb -ge 11500) { return 'hf.co/efficiencyx/Jun-LoRA-12B-GGUF:Q4_K_M' }
     if ($mb -ge 9500) { return 'hf.co/efficiencyx/Jun-LoRA-E4B-GGUF:Q8_0' }
-    if ($mb -ge 7500) { return 'hf.co/efficiencyx/Jun-LoRA-E4B-GGUF:Q4_K_M' }
-    if ($mb -ge 5500) { return 'hf.co/efficiencyx/Jun-LoRA-E2B-GGUF:Q6_K' }
+    if ($mb -ge 7500) { return 'hf.co/efficiencyx/Jun-LoRA-E4B-GGUF:Q6_K' }
+    if ($mb -ge 4500) { return 'hf.co/efficiencyx/Jun-LoRA-E2B-GGUF:Q6_K' }
     return 'hf.co/efficiencyx/Jun-LoRA-E2B-GGUF:Q4_K_M'
 }
 

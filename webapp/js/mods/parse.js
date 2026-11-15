@@ -1,4 +1,4 @@
-import * as Live2D from '../live2d/live2d.js?v=91';
+import * as Live2D from '../live2d/live2d.js?v=92';
 
 function displayText(value, fallback, max = 120) {
   const source = typeof value === 'string' ? value : fallback;
@@ -51,7 +51,36 @@ for (const m of src.matchAll(/(\w+)\s*\.\s*ColorSlots\s*=\s*\{([^}]*)\}/g)) {
     const folder = texVarFolder.get(m[2]);
     if (folder && prefabs.has(m[1])) pf(m[1]).folders.add(folder);
   }
+  numberItems(src, prefabs);
   return [...prefabs.values()].filter(p => p.name);
+}
+
+const luaNoise = /--\[(=*)\[[\s\S]*?\]\1\]|--[^\n]*|\[(=*)\[[\s\S]*?\]\2\]|"(?:\\[\s\S]|[^"\\\n])*"|'(?:\\[\s\S]|[^'\\\n])*'/g;
+const luaBlocks = /\b(function|for|while|repeat|if|do|end|until)\b|CreateNewItemAutoAssignId\s*\(((?:[^()]|\([^()]*\))*)\)/g;
+
+// _gameId._id is the order these calls RUN in, item sets included. one
+// in a loop, an if or a function makes every number a guess, so none
+function numberItems(src, prefabs) {
+  const code = src.replace(luaNoise, (m) => (m.startsWith('--') ? ' ' : '""'));
+  const stack = [];
+  const calls = [];
+  let loopDo = false;
+  for (const m of code.matchAll(luaBlocks)) {
+    const word = m[1];
+    if (word === 'do') {
+      if (loopDo) loopDo = false;
+      else stack.push('do');
+    } else if (word === 'end' || word === 'until') {
+      stack.pop();
+    } else if (word) {
+      stack.push(word);
+      loopDo = word === 'for' || word === 'while';
+    } else {
+      if (stack.some(w => w !== 'do')) return;
+      calls.push(m[2].split(',').pop().trim());
+    }
+  }
+  calls.forEach((arg, gameId) => { if (prefabs.has(arg)) prefabs.get(arg).gameId = gameId; });
 }
 
 // a RectInt the way the game writes it. field names change with
@@ -79,6 +108,8 @@ function drawableName(pd, validIds) {
 export function parseMod(guid, files) {
   let meta = {};
   let lua = [];
+  let luaDepth = Infinity;
+  let luaSiblings = 0;
   const folders = new Map();
   for (const [path, data] of Object.entries(files)) {
     const low = path.toLowerCase();
@@ -87,7 +118,12 @@ export function parseMod(guid, files) {
       continue;
     }
     if (low.endsWith('.lua')) {
-      try { lua = parseLua(new TextDecoder().decode(data)); } catch (e) { }
+      // zips ship stray copies in subfolders, the one nearest the root is the mod's
+      const depth = path.split('/').length;
+      if (depth === luaDepth) luaSiblings++;
+      if (depth < luaDepth) {
+        try { lua = parseLua(new TextDecoder().decode(data)); luaDepth = depth; luaSiblings = 1; } catch (e) { }
+      }
       continue;
     }
     const slash = path.indexOf('/');
@@ -101,12 +137,15 @@ export function parseMod(guid, files) {
   const items = [...folders.entries()]
     .filter(([, f]) => f.jsons.length)
     .map(([folder, f], i) => {
-      const prefab = lua.find(p => p.folders.has(folder)) || lua[i] || {};
+      const owner = lua.find(p => p.folders.has(folder));
+      const prefab = owner || lua[i] || {};
       return {
         folder, jsons: f.jsons, pngs: f.pngs,
         label: displayText(prefab.name, folder),
         slots: (prefab.slots || []).slice(0, 32).map(slot => displayText(slot, 'Color', 80)),
         equip: typeof prefab.equip === 'string' ? prefab.equip.slice(0, 120) : null,
+        // several scripts side by side number across files in an order we can't know
+        gameId: owner && luaSiblings === 1 && Number.isInteger(owner.gameId) ? owner.gameId : null,
       };
     });
   return {

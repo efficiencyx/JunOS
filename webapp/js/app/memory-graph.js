@@ -1,3 +1,4 @@
+import { locale, t } from '../core/i18n.js?v=1';
 var wrap;
 var canvas;
 var ctx;
@@ -202,7 +203,7 @@ export function setData(nextData) {
       source: note.source || null,
       revisions: Array.isArray(note.revisions) ? note.revisions : [],
       links: Array.isArray(note.links) ? note.links : [],
-      label: note.text || 'Memory ' + (index + 1),
+      label: note.text || t('memory.numbered', 'Memory {n}', { n: index + 1 }),
       r: 3.5,
       color: nodeColor(category, 70),
       x: position.x,
@@ -266,7 +267,7 @@ export function setData(nextData) {
   alpha = 1;
   updateA11y(slugs, notes, journalEntries);
   var contentCount = notes.length + journalEntries.length;
-  setStatus(contentCount ? '' : 'No memories yet. Ask Jun to remember something, or add one below.');
+  setStatus(contentCount ? '' : t('memory.empty', 'No memories yet. Ask Jun to remember something, or add one below.'));
   if (reducedMotion) {
     for (var i = 0; i < 300; i++) physicsStep();
     alpha = 0;
@@ -292,7 +293,7 @@ function updateA11y(slugs, notes, journalEntries) {
     a11y.appendChild(item);
   });
   var journalItem = document.createElement('li');
-  journalItem.textContent = 'Journal';
+  journalItem.textContent = t('memory.journalCap', 'Journal');
   var journalList = document.createElement('ul');
   journalEntries.forEach(function (entry) {
     var entryItem = document.createElement('li');
@@ -599,13 +600,13 @@ export function onNoteActions(callback) {
 }
 
 var SOURCE_LABELS = {
-  chat: 'From a chat',
-  date: 'From a date',
-  karaoke: 'From karaoke',
-  game: 'From the game',
-  watch: 'From watching something',
-  pass: 'From her memory pass',
-  manual: 'Added in Settings',
+  chat: t('memory.src.chat', 'From a chat'),
+  date: t('memory.src.date', 'From a date'),
+  karaoke: t('memory.src.karaoke', 'From karaoke'),
+  game: t('memory.src.game', 'From the game'),
+  watch: t('memory.src.watch', 'From watching something'),
+  pass: t('memory.src.pass', 'From her memory pass'),
+  manual: t('memory.src.manual', 'Added in Settings'),
 };
 
 function sourceLine(ref, label) {
@@ -614,14 +615,14 @@ function sourceLine(ref, label) {
   line.textContent = label;
   if (!ref.conv) return line;
   if (!ref.chat) {
-    line.textContent += ' (chat deleted)';
+    line.textContent += t('memory.chatDeleted', ' (chat deleted)');
     return line;
   }
   line.textContent += ' · ';
   var open = document.createElement('button');
   open.type = 'button';
   open.className = 'link';
-  open.textContent = ref.chat.title || 'New conversation';
+  open.textContent = ref.chat.title || t('chat.newConversation', 'New conversation');
   open.addEventListener('click', function () {
     if (openChat) openChat(ref.conv, ref.msg || 0);
   });
@@ -635,21 +636,23 @@ function appendOrigin(node) {
   var details = document.createElement('details');
   details.className = 'memory-revisions';
   var summary = document.createElement('summary');
-  summary.textContent = node.revisions.length === 1 ? 'Changed once' : 'Changed ' + node.revisions.length + ' times';
+  summary.textContent = node.revisions.length === 1 ? t('memory.changedOnce', 'Changed once') : t('memory.changedN', 'Changed {n} times', { n: node.revisions.length });
   details.appendChild(summary);
   node.revisions.slice().reverse().forEach(function (rev) {
     var item = document.createElement('div');
     var was = document.createElement('p');
     was.textContent = rev.text;
     item.appendChild(was);
-    item.appendChild(sourceLine(rev, 'Until ' + formatDate(rev.at) + (rev.kind === 'pass' ? ', changed by her memory pass' : rev.kind === 'request' ? ', changed when you asked her' : '')));
+    item.appendChild(sourceLine(rev, rev.kind === 'pass' ? t('memory.untilPass', 'Until {date}, changed by her memory pass', { date: formatDate(rev.at) })
+      : rev.kind === 'request' ? t('memory.untilRequest', 'Until {date}, changed when you asked her', { date: formatDate(rev.at) })
+        : t('memory.until', 'Until {date}', { date: formatDate(rev.at) })));
     details.appendChild(item);
   });
   readerBody.appendChild(details);
 }
 
 function formatDate(timestamp) {
-  return timestamp ? new Date(timestamp * 1000).toLocaleDateString() : 'Date unknown';
+  return timestamp ? new Date(timestamp * 1000).toLocaleDateString(locale) : t('memory.dateUnknown', 'Date unknown');
 }
 
 function appendMemoryList(items, emptyText) {
@@ -672,7 +675,7 @@ function openReader(node) {
   reader.hidden = false;
   if (node.type === 'leaf') {
     readerMeta.textContent = node.category + ' · ' + formatDate(node.created);
-    readerTitle.textContent = 'Saved memory';
+    readerTitle.textContent = t('memory.saved', 'Saved memory');
     readerBody.replaceChildren();
     var text = document.createElement('p');
     text.textContent = node.text;
@@ -682,7 +685,7 @@ function openReader(node) {
     return;
   }
   if (node.type === 'journal-leaf') {
-    readerMeta.textContent = 'journal';
+    readerMeta.textContent = t('memory.journal', 'journal');
     readerTitle.textContent = node.date;
     readerBody.replaceChildren();
     var entry = document.createElement('p');
@@ -692,13 +695,13 @@ function openReader(node) {
     return;
   }
   if (node.type === 'journal-hub') {
-    readerMeta.textContent = 'journal';
-    readerTitle.textContent = 'Jun’s journal';
+    readerMeta.textContent = t('memory.journal', 'journal');
+    readerTitle.textContent = t('memory.junJournal', 'Jun’s journal');
     appendMemoryList(
       (data.journal && Array.isArray(data.journal.entries) ? data.journal.entries : []).map(function (entry) {
         return entry.date + ': ' + entry.text;
       }),
-      'The journal is empty.'
+      t('memory.journalEmpty', 'The journal is empty.')
     );
     return;
   }
@@ -708,6 +711,6 @@ function openReader(node) {
     (Array.isArray(data.notes) ? data.notes : [])
       .filter(function (note) { return (note.category || 'general') === node.category; })
       .map(function (note) { return note.text || ''; }),
-    'No notes in this category.'
+    t('memory.categoryEmpty', 'No notes in this category.')
   );
 }

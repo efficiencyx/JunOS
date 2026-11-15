@@ -22,6 +22,7 @@ export const TRACKED = [
   'think',
   'cabinet.rules_seen',
   'tour.done',
+  'ui.lang',
 ];
 
 function debounce(fn, ms) {
@@ -52,7 +53,7 @@ async function pushNow() {
     if (v !== null) data[k] = v;
   }
   try {
-    await apiJson('prefs.php', data, { method: 'PUT' });
+    await apiJson('prefs.php', data, { method: 'PUT', keepalive: true });
   } catch (e) {
   }
 }

@@ -59,6 +59,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.compose.ui.zIndex
@@ -129,6 +130,7 @@ private fun JunRoot(viewModel: MainViewModel) {
     }
     val context = LocalContext.current
     val activity = LocalActivity.current
+    val scanPrompt = stringResource(R.string.pair_scan_prompt)
     val colab = (context.applicationContext as JunApplication).colab
     val colabState by colab.state.collectAsStateWithLifecycle()
     val notificationPermission = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) {}
@@ -156,7 +158,7 @@ private fun JunRoot(viewModel: MainViewModel) {
                     onScan = {
                         scanner.launch(
                             ScanOptions().setDesiredBarcodeFormats(ScanOptions.QR_CODE).setBeepEnabled(false)
-                                .setOrientationLocked(false).setPrompt("The code from your PC or the notebook"),
+                                .setOrientationLocked(false).setPrompt(scanPrompt),
                         )
                     },
                     onPaste = {
@@ -185,19 +187,18 @@ private fun JunRoot(viewModel: MainViewModel) {
         state.offer?.let { offer ->
             AlertDialog(
                 onDismissRequest = viewModel::dismissOffer,
-                title = { Text("Pair with ${offer.name}?") },
+                title = { Text(stringResource(R.string.pair_offer_title, offer.name)) },
                 text = {
-                    Text(buildString {
-                        append(
-                            if (offer.mode == SessionMode.LAN) "LAN, at ${offer.host}."
-                            else "Cloud, through ${offer.host}. Chats pass through Google and Cloudflare.",
-                        )
-                        state.pairing(offer.mode)?.let { append(" Replaces ${it.name}.") }
-                        if (state.ready) append(" Used from the next launch.")
-                    })
+                    Text(
+                        listOfNotNull(
+                            stringResource(if (offer.mode == SessionMode.LAN) R.string.pair_offer_lan else R.string.pair_offer_cloud, offer.host),
+                            state.pairing(offer.mode)?.let { stringResource(R.string.pair_offer_replaces, it.name) },
+                            if (state.ready) stringResource(R.string.pair_offer_next_launch) else null,
+                        ).joinToString(" "),
+                    )
                 },
-                confirmButton = { TextButton(onClick = viewModel::acceptOffer) { Text("Pair") } },
-                dismissButton = { TextButton(onClick = viewModel::dismissOffer) { Text("Cancel") } },
+                confirmButton = { TextButton(onClick = viewModel::acceptOffer) { Text(stringResource(R.string.pair_accept)) } },
+                dismissButton = { TextButton(onClick = viewModel::dismissOffer) { Text(stringResource(R.string.pair_cancel)) } },
             )
         }
     }
@@ -217,13 +218,12 @@ private fun ColabLayer(session: ColabSession, state: ColabState, activity: Activ
         Row(Modifier.fillMaxWidth().padding(start = 16.dp), verticalAlignment = Alignment.CenterVertically) {
             Text(
                 state.attention
-                    ?: if (state.paired) "She's connected. Hide this, Colab keeps running."
-                    else "Runtime > Run all. She connects by herself at Step 3.",
+                    ?: stringResource(if (state.paired) R.string.colab_hint_paired else R.string.colab_hint_run),
                 style = MaterialTheme.typography.bodySmall,
                 modifier = Modifier.weight(1f),
             )
-            TextButton(onClick = session::hide) { Text("Hide") }
-            TextButton(onClick = session::stop) { Text("Stop") }
+            TextButton(onClick = session::hide) { Text(stringResource(R.string.colab_hide)) }
+            TextButton(onClick = session::stop) { Text(stringResource(R.string.colab_stop)) }
         }
         AndroidView(
             modifier = Modifier.fillMaxWidth().weight(1f),
@@ -262,7 +262,7 @@ private fun JunWebView(url: String) {
         if (target == null || source == null) return@rememberLauncherForActivityResult
         scope.launch {
             val saved = withContext(Dispatchers.IO) { runCatching { saveDownload(hostContext, source, target) }.isSuccess }
-            if (!saved) Toast.makeText(hostContext, "Couldn't save the file.", Toast.LENGTH_SHORT).show()
+            if (!saved) Toast.makeText(hostContext, R.string.err_save_file, Toast.LENGTH_SHORT).show()
         }
     }
     var pendingFiles by remember { mutableStateOf<ValueCallback<Array<Uri>>?>(null) }

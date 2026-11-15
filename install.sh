@@ -191,8 +191,8 @@ quant_for() {  # size vram-MB -> quant
     local mb="${2:-0}"
     case "$1" in
         12B) if [ "$mb" -ge 23500 ]; then echo Q8_0; elif [ "$mb" -ge 15500 ]; then echo Q6_K; else echo Q4_K_M; fi ;;
-        E4B) if [ "$mb" -ge 9500 ]; then echo Q8_0; else echo Q4_K_M; fi ;;
-        E2B) if [ "$mb" -ge 7500 ]; then echo Q8_0; elif [ "$mb" -ge 5500 ]; then echo Q6_K; else echo Q4_K_M; fi ;;
+        E4B) if [ "$mb" -ge 9500 ]; then echo Q8_0; elif [ "$mb" -ge 6500 ] || [ "$mb" -eq 0 ]; then echo Q6_K; else echo Q4_K_M; fi ;;
+        E2B) if [ "$mb" -ge 7500 ]; then echo Q8_0; elif [ "$mb" -ge 4500 ] || [ "$mb" -eq 0 ]; then echo Q6_K; else echo Q4_K_M; fi ;;
     esac
 }
 
@@ -1125,7 +1125,7 @@ install_asset_recovery() {
 
         if "$recovery_python" tools/recover_assets.py --game "$game_dir"; then
             ok "assets extracted to webapp/assets (local use only)"
-            note "optional: serve the repo root and open /tools/bake-items.html to"
+            note "optional: serve the repo root and open /tools/render/bake-items.html to"
             note "bake the wardrobe item tiles into webapp/assets/items/."
             return 0
         fi

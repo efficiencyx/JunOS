@@ -43,7 +43,7 @@ data class SetupState(
     val modelProgress: TransferProgress = TransferProgress(),
     val recoveryProgress: TransferProgress = TransferProgress(),
     val voiceProgress: TransferProgress = TransferProgress(),
-    val message: String = "Checking this phone…",
+    val message: String = "",
     val error: String? = null,
     val ready: Boolean = false,
     val serverUrl: String? = null,

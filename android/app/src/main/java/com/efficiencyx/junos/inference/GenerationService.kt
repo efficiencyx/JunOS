@@ -14,7 +14,7 @@ class GenerationService : Service() {
     override fun onCreate() {
         super.onCreate()
         getSystemService(NotificationManager::class.java).createNotificationChannel(
-            NotificationChannel(CHANNEL, "Generation", NotificationManager.IMPORTANCE_LOW),
+            NotificationChannel(CHANNEL, getString(R.string.notif_generation_channel), NotificationManager.IMPORTANCE_LOW),
         )
         enterForeground()
     }
@@ -31,8 +31,11 @@ class GenerationService : Service() {
     private fun enterForeground(where: String? = null) {
         val notification = NotificationCompat.Builder(this, CHANNEL)
             .setSmallIcon(R.drawable.ic_launcher_foreground)
-            .setContentTitle("Jun is thinking")
-            .setContentText(if (where == null || where == "this phone") "Generating locally on this phone" else "Generating on $where")
+            .setContentTitle(getString(R.string.notif_thinking))
+            .setContentText(
+                if (where == null || where == "this phone") getString(R.string.notif_generating_local)
+                else getString(R.string.notif_generating_on, where),
+            )
             .setOngoing(true)
             .build()
         startForeground(NOTIFICATION_ID, notification)

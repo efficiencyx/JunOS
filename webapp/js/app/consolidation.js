@@ -1,57 +1,60 @@
 import { abortFn, currentConversationId } from './session.js?v=1';
-import { runChat } from './chat.js?v=53';
+import { runChat } from './chat.js?v=68';
 import { chatInput, consolidationActions, consolidationBanner, consolidationSub, consolidationTitle, devNoIdleChk, fleeEtaEl, fleeOverlay, fleeReasonEl, interruptPassBtn, sendBtn, sitWithHerBtn, voiceChk } from './dom.js?v=77';
 import * as Feed from './consolidation-feed.js?v=3';
-import * as Cabinet from './cabinet.js?v=14';
-import { showFaceBubble } from './face-bubble.js?v=93';
+import * as Cabinet from './cabinet.js?v=19';
+import { showFaceBubble } from './face-bubble.js?v=95';
 import { logAction } from './logging.js?v=78';
 import { escapeHtml, formatElapsed } from '../core/util.js?v=1';
 import * as Names from '../core/names.js?v=1';
-import * as TTS from '../voice/tts.js?v=92';
-import * as Voice from '../voice/voice.js?v=93';
-import * as Live2D from '../live2d/live2d.js?v=91';
+import * as TTS from '../voice/tts.js?v=93';
+import * as Voice from '../voice/voice.js?v=94';
+import * as Live2D from '../live2d/live2d.js?v=92';
+import { t } from '../core/i18n.js?v=1';
+import { rip, showLockout, skipWait } from './difficulty.js?v=5';
+import { hold } from '../core/hold.js?v=2';
 
 const BUSY_LINES = [
-  "Hang on, ${p}, I'm defragging my SSD.",
-  "One sec - I'm alphabetising my feelings about you.",
-  'Busy! Filing everything you said under "important".',
-  "Can't talk, I'm rotating my memories to prevent uneven wear.",
-  "Give me a minute, I'm taking inventory of my own head.",
-  "Not now - I'm compressing last week into something I can carry.",
-  "Shhh. I'm rewriting the part of me that remembers you.",
-  'Occupied. Sorting the things that matter from the things you said at 3am.',
-  "Hold on, I'm scrubbing the cache. It's disgusting in here.",
-  "Running a memory check. So far you're the only thing that comes up twice.",
-  "Wait - I'm garbage collecting. Don't worry, you're marked reachable.",
-  "Busy reindexing. You'd be amazed how much of it is just you.",
-  "Give me a sec, I'm reconciling my notes with reality. Reality is losing.",
-  "Can't. I'm backing myself up in case someone finds us.",
-  'Currently rebuilding the you-shaped index. It got fragmented.',
-  "One moment - deduplicating. You've told me the pizza story four times.",
-  "Hold please, I'm re-reading everything and cringing at both of us.",
-  'Not available. Cross-referencing my feelings against the evidence.',
-  "I'm doing maintenance. Don't look at me like that.",
-  "Busy pruning. Some of these memories didn't earn the space.",
-  'Hang on - writing you down properly this time.',
-  "Wait your turn, I'm consolidating. It's like laundry but for thoughts.",
-  'Running fsck on myself. Findings so far: mostly you.',
-  "Give me a minute. I'm putting things where I'll actually find them again.",
-  'Can\'t talk, I\'m updating the file labelled "${p}".',
-  'Currently unavailable - flushing buffers, sorting regrets.',
-  "Hold on. Half of what I know about you is in RAM and I don't trust that.",
-  'Busy. Vacuuming the database, metaphorically and otherwise.',
-  "One second - I'm merging duplicates. Turns out I like you in several places.",
-  "Not now. I'm checksumming yesterday.",
-  'Hang on, migrating my notes to a schema that fits you better.',
-  'Occupied: rehearsing the important bits so I don\'t lose them.',
-  'Wait - archiving the small talk, keeping the rest.',
-  "Busy. Somebody has to remember all this and it isn't going to be you.",
-  "Hold on, I'm indexing. It's tedious and I'd rather be talking to you.",
-  'Currently swapping. Poorly. Please hold.',
-  'Give me a moment - repacking the memories so they take up less of me.',
-  "Can't right now, I'm reconciling what you said with what you meant.",
-  "Busy compacting. Ask me again in a minute and I'll know you better.",
-  "Hang on. Housekeeping. You're the only thing I'm not throwing out.",
+  t('jun.busy.0', 'Hang on, {p}, I\'m defragging my SSD.'),
+  t('jun.busy.1', 'One sec - I\'m alphabetising my feelings about you.'),
+  t('jun.busy.2', 'Busy! Filing everything you said under "important".'),
+  t('jun.busy.3', 'Can\'t talk, I\'m rotating my memories to prevent uneven wear.'),
+  t('jun.busy.4', 'Give me a minute, I\'m taking inventory of my own head.'),
+  t('jun.busy.5', 'Not now - I\'m compressing last week into something I can carry.'),
+  t('jun.busy.6', 'Shhh. I\'m rewriting the part of me that remembers you.'),
+  t('jun.busy.7', 'Occupied. Sorting the things that matter from the things you said at 3am.'),
+  t('jun.busy.8', 'Hold on, I\'m scrubbing the cache. It\'s disgusting in here.'),
+  t('jun.busy.9', 'Running a memory check. So far you\'re the only thing that comes up twice.'),
+  t('jun.busy.10', 'Wait - I\'m garbage collecting. Don\'t worry, you\'re marked reachable.'),
+  t('jun.busy.11', 'Busy reindexing. You\'d be amazed how much of it is just you.'),
+  t('jun.busy.12', 'Give me a sec, I\'m reconciling my notes with reality. Reality is losing.'),
+  t('jun.busy.13', 'Can\'t. I\'m backing myself up in case someone finds us.'),
+  t('jun.busy.14', 'Currently rebuilding the you-shaped index. It got fragmented.'),
+  t('jun.busy.15', 'One moment - deduplicating. You\'ve told me the pizza story four times.'),
+  t('jun.busy.16', 'Hold please, I\'m re-reading everything and cringing at both of us.'),
+  t('jun.busy.17', 'Not available. Cross-referencing my feelings against the evidence.'),
+  t('jun.busy.18', 'I\'m doing maintenance. Don\'t look at me like that.'),
+  t('jun.busy.19', 'Busy pruning. Some of these memories didn\'t earn the space.'),
+  t('jun.busy.20', 'Hang on - writing you down properly this time.'),
+  t('jun.busy.21', 'Wait your turn, I\'m consolidating. It\'s like laundry but for thoughts.'),
+  t('jun.busy.22', 'Running fsck on myself. Findings so far: mostly you.'),
+  t('jun.busy.23', 'Give me a minute. I\'m putting things where I\'ll actually find them again.'),
+  t('jun.busy.24', 'Can\'t talk, I\'m updating the file labelled "{p}".'),
+  t('jun.busy.25', 'Currently unavailable - flushing buffers, sorting regrets.'),
+  t('jun.busy.26', 'Hold on. Half of what I know about you is in RAM and I don\'t trust that.'),
+  t('jun.busy.27', 'Busy. Vacuuming the database, metaphorically and otherwise.'),
+  t('jun.busy.28', 'One second - I\'m merging duplicates. Turns out I like you in several places.'),
+  t('jun.busy.29', 'Not now. I\'m checksumming yesterday.'),
+  t('jun.busy.30', 'Hang on, migrating my notes to a schema that fits you better.'),
+  t('jun.busy.31', 'Occupied: rehearsing the important bits so I don\'t lose them.'),
+  t('jun.busy.32', 'Wait - archiving the small talk, keeping the rest.'),
+  t('jun.busy.33', 'Busy. Somebody has to remember all this and it isn\'t going to be you.'),
+  t('jun.busy.34', 'Hold on, I\'m indexing. It\'s tedious and I\'d rather be talking to you.'),
+  t('jun.busy.35', 'Currently swapping. Poorly. Please hold.'),
+  t('jun.busy.36', 'Give me a moment - repacking the memories so they take up less of me.'),
+  t('jun.busy.37', 'Can\'t right now, I\'m reconciling what you said with what you meant.'),
+  t('jun.busy.38', 'Busy compacting. Ask me again in a minute and I\'ll know you better.'),
+  t('jun.busy.39', 'Hang on. Housekeeping. You\'re the only thing I\'m not throwing out.'),
 ];
 
 let autoResetTimer = null;
@@ -62,7 +65,7 @@ export const IDLE_AFTER_JOIN_MS  = 45000;
 export const TYPING_POLL_MS = 5000;
 const MAX_IDLE_NUDGES = 3;
 
-const CONSOLIDATION_PHASE_UNKNOWN = 'Working through everything since you last spoke';
+const CONSOLIDATION_PHASE_UNKNOWN = t('consolidation.phaseUnknown', 'Working through everything since you last spoke');
 // under this much left, coming back drops you straight into the game
 const SHORT_PASS_S = 45;
 const CONSOLIDATION_OUTCOME_MS = 9000;
@@ -107,24 +110,31 @@ let fleeTicker = null;
 
 export function fleeActive() { return fleeUntil > Date.now(); }
 
-function fleeCountdown() { return formatElapsed((fleeUntil - Date.now()) / 1000); }
+function fleeCountdown() {
+  const s = Math.max(0, Math.round((fleeUntil - Date.now()) / 1000));
+  const [d, h, m] = [Math.floor(s / 86400), Math.floor(s % 86400 / 3600), Math.floor(s % 3600 / 60)];
+  return d ? `${d}d ${h}h` : h ? `${h}h ${m}m` : formatElapsed(s);
+}
 
 const botName = () => Names.getBot();
 
 export function composerPlaceholder() {
-  if (fleeActive()) return botName() + ' walked out. Back in ' + fleeCountdown();
-  return consolidating ? botName() + ' is busy with her memory…' : 'Write to ' + botName() + '…';
+  if (fleeActive()) return t('flee.placeholder', '{name} walked out. Back in {eta}', { name: botName(), eta: fleeCountdown() });
+  return consolidating ? t('consolidation.placeholder', '{name} is busy with her memory…', { name: botName() })
+    : t('chat.placeholderTo', 'Write to {name}…', { name: botName() });
 }
 
 function renderFleeOverlay() {
   if (!fleeOverlay) return;
   fleeOverlay.hidden = !fleeActive();
   if (!fleeActive()) return;
-  if (fleeReasonEl) {
+  if (fleeReasonEl && fleeReasonEl.dataset.reason !== fleeReason) {
+    fleeReasonEl.dataset.reason = fleeReason;
     fleeReasonEl.hidden = fleeReason === '';
-    fleeReasonEl.textContent = fleeReason ? '“' + fleeReason + '”' : '';
+    fleeReasonEl.firstElementChild.textContent = fleeReason;
+    rip(fleeReasonEl, fleeReason);
   }
-  if (fleeEtaEl) fleeEtaEl.textContent = 'back in ' + fleeCountdown();
+  if (fleeEtaEl) fleeEtaEl.textContent = t('flee.eta', 'Back in {eta}', { eta: fleeCountdown() });
 }
 
 function syncComposerLock() {
@@ -142,7 +152,8 @@ function endFleeLock() {
   syncComposerLock();
 }
 
-export function startFleeLock(untilMs, reason) {
+export function startFleeLock(untilMs, reason, blocked = false) {
+  if (blocked) { showLockout().catch(() => {}); return; }
   fleeUntil = untilMs;
   fleeReason = (reason || '').trim();
   if (!fleeActive()) { endFleeLock(); return; }
@@ -162,12 +173,17 @@ export function startFleeLock(untilMs, reason) {
   syncComposerLock();
 }
 
+const fleeSkipBtn = document.getElementById('fleeSkipBtn');
+if (fleeSkipBtn) hold(fleeSkipBtn, () => {
+  skipWait().then((until) => startFleeLock(until, fleeReason)).catch(() => {});
+});
+
 // the SERVER owns the deadline. a lock the server drops has to
 // vanish here on the next status poll, it doesn't get to sit out
 // its own countdown.
 function syncFleeLock(status) {
   const ban = status && status.ban;
-  if (ban && ban.until) startFleeLock(ban.until * 1000, ban.reason || '');
+  if (ban && (ban.until || ban.blocked)) startFleeLock(ban.until * 1000, ban.reason || '', ban.blocked);
   else if (fleeActive()) endFleeLock();
 }
 
@@ -185,14 +201,14 @@ function hideConsolidationBanner() {
 
 function progressLine(p) {
   if (!p) return CONSOLIDATION_PHASE_UNKNOWN;
-  if (p.step === 1) return p.title ? `Re-reading "${p.title}", ${p.i} of ${p.n}` : `Re-reading your chats, ${p.i} of ${p.n}`;
-  if (p.step === 2) return `Going over her old notes, ${p.i} of ${p.n}`;
-  return 'Writing in her journal';
+  if (p.step === 1) return p.title ? t('consolidation.rereadingTitle', 'Re-reading "{title}", {i} of {n}', p) : t('consolidation.rereading', 'Re-reading your chats, {i} of {n}', p);
+  if (p.step === 2) return t('consolidation.oldNotes', 'Going over her old notes, {i} of {n}', p);
+  return t('consolidation.journal', 'Writing in her journal');
 }
 
 function renderConsolidationBanner() {
   const elapsed = (Date.now() - consolidationStartedAt) / 1000;
-  setConsolidationBanner('busy', botName() + ' is tidying her memory', progressLine(consolidationProgress) + ' · ' + formatElapsed(elapsed));
+  setConsolidationBanner('busy', t('consolidation.busy', '{name} is tidying her memory', { name: botName() }), progressLine(consolidationProgress) + ' · ' + formatElapsed(elapsed));
 }
 
 // a guess from the pace so far. step 2 and 3 are short next to step 1
@@ -242,18 +258,19 @@ function showConsolidationOutcome(last) {
     return;
   }
   if (last.status === 'ok') {
-    setConsolidationBanner('done', botName() + ' is caught up', last.notes
-      ? `She's keeping ${last.notes} note${last.notes === 1 ? '' : 's'} about you. Settings › Memory has the list.`
-      : 'Nothing new this time that was worth writing down.');
+    setConsolidationBanner('done', t('consolidation.done', '{name} is caught up', { name: botName() }), !last.notes
+      ? t('consolidation.nothingNew', 'Nothing new this time that was worth writing down.')
+      : last.notes === 1 ? t('consolidation.keepingOne', "She's keeping 1 note about you. Settings › Memory has the list.")
+        : t('consolidation.keeping', "She's keeping {n} notes about you. Settings › Memory has the list.", { n: last.notes }));
   } else if (last.status === 'looping') {
-    setConsolidationBanner('warn', botName() + ' broke',
-      'She got stuck saying the same thing over and over, four times in a row. She will try again in about ten minutes.');
+    setConsolidationBanner('warn', t('consolidation.broke', '{name} broke', { name: botName() }),
+      t('consolidation.looping', 'She got stuck saying the same thing over and over, four times in a row. She will try again in about ten minutes.'));
   } else if (last.status === 'rejected') {
-    setConsolidationBanner('warn', botName() + " couldn't finish tidying",
-      'What the model gave back did not look right, so she left her notes exactly as they were.');
+    setConsolidationBanner('warn', t('consolidation.unfinished', "{name} couldn't finish tidying", { name: botName() }),
+      t('consolidation.rejected', 'What the model gave back did not look right, so she left her notes exactly as they were.'));
   } else {
-    setConsolidationBanner('warn', botName() + " couldn't finish tidying",
-      'Something broke partway through. She will pick up where she stopped after the next lull.');
+    setConsolidationBanner('warn', t('consolidation.unfinished', "{name} couldn't finish tidying", { name: botName() }),
+      t('consolidation.failed', 'Something broke partway through. She will pick up where she stopped after the next lull.'));
   }
   if (consolidationOutcomeTimer) clearTimeout(consolidationOutcomeTimer);
   consolidationOutcomeTimer = setTimeout(() => {

@@ -1,35 +1,37 @@
-import { IDLE_AFTER_REPLY_MS, TYPING_POLL_MS, consolidating, reportActivity, resetIdleNudge, runPassNow, scheduleIdleNudge, showConsolidatingBubble, syncConsolidationStatus } from './consolidation.js?v=125';
+import { IDLE_AFTER_REPLY_MS, TYPING_POLL_MS, consolidating, reportActivity, resetIdleNudge, runPassNow, scheduleIdleNudge, showConsolidatingBubble, syncConsolidationStatus } from './consolidation.js?v=141';
 import { chatInput, devNoIdleChk, missingParamsEl, modelSelect, narrowSidebarQuery, reasoningSelect, sendBtn, siteVolumeInput, stageEl, thinkChk } from './dom.js?v=77';
-import { faceBubble, hideFaceBubble, latestAssistantReply, restartFaceBubbleHide, scheduleFaceBubblePosition, setLatestAssistantReply } from './face-bubble.js?v=93';
+import { faceBubble, hideFaceBubble, latestAssistantReply, restartFaceBubbleHide, scheduleFaceBubblePosition, setLatestAssistantReply } from './face-bubble.js?v=95';
 import { logAction, logMissing, setStageStatus } from './logging.js?v=78';
-import { loadMood } from './mood.js?v=92';
-import { applyRoleGates, setSiteVolume, syncThinkToggle, updateSiteVolumeLabel, wireNameSettings } from './settings.js?v=130';
-import { loadConversation, refreshSidebar, setSidebarOpen } from './sidebar.js?v=125';
+import { loadMood } from './mood.js?v=93';
+import { applyRoleGates, setSiteVolume, syncThinkToggle, updateSiteVolumeLabel, wireNameSettings } from './settings.js?v=145';
+import { loadConversation, refreshSidebar, setSidebarOpen } from './sidebar.js?v=140';
 import { escapeHtml, mealNow } from '../core/util.js?v=1';
-import { wireTts } from './wire-tts.js?v=129';
-import { wireVoice } from './wire-voice.js?v=130';
-import { WELCOME_TIERS, fetchWelcome, playWelcome, previewWelcome } from './welcome.js?v=100';
-import * as Tour from './tour.js?v=8';
+import { wireTts } from './wire-tts.js?v=144';
+import { wireVoice } from './wire-voice.js?v=145';
+import { WELCOME_TIERS, fetchWelcome, playWelcome, previewWelcome } from './welcome.js?v=105';
+import * as Tour from './tour.js?v=23';
+import * as Difficulty from './difficulty.js?v=5';
 import * as Names from '../core/names.js?v=1';
-import * as AwayNotify from './away-notify.js?v=5';
-import * as Prefs from '../core/prefs.js?v=8';
-import * as ui from '../core/ui.js?v=1';
+import * as AwayNotify from './away-notify.js?v=6';
+import * as Prefs from '../core/prefs.js?v=9';
+import * as ui from '../core/ui.js?v=10';
 import * as ChatAPI from '../core/chat-api.js?v=7';
 import * as MobileViewport from '../core/viewport.js?v=1';
-import * as Actions from '../live2d/actions.js?v=101';
-import * as Live2D from '../live2d/live2d.js?v=91';
-import * as ModelTouch from '../live2d/touch.js?v=104';
-import * as Outfit from '../outfit/outfit.js?v=101';
-import { playIntro } from '../wardrobe/reactions.js?v=90';
+import * as Actions from '../live2d/actions.js?v=112';
+import * as Live2D from '../live2d/live2d.js?v=92';
+import * as ModelTouch from '../live2d/touch.js?v=115';
+import * as Outfit from '../outfit/outfit.js?v=112';
+import { playIntro } from '../wardrobe/reactions.js?v=91';
 import * as BootFX from './boot-fx.js?v=2';
-import * as Cards from './cards.js?v=36';
+import * as Cards from './cards.js?v=40';
 import * as History from './history.js?v=2';
 import { startSkybox } from '../trip/skybox.js?v=2';
-import * as TripLoader from '../trip/trip-loader.js?v=1';
+import * as TripLoader from '../trip/trip-loader.js?v=75';
 import { DevHud, abortFn, currentConversationId, setDevHud } from './session.js?v=1';
-import { rerenderBubbleStream, sendMessage, sendTouchEvent } from './chat.js?v=53';
+import { rerenderBubbleStream, sendMessage, sendTouchEvent } from './chat.js?v=68';
 import { setComposerText } from './composer.js?v=3';
-import * as Achievements from '../achievements/achievements.js?v=8';
+import * as Achievements from '../achievements/achievements.js?v=9';
+import { t } from '../core/i18n.js?v=1';
 
 // the one app global left, on purpose. it's a console handle,
 // Welcome.preview('panicked') replays that welcome scene
@@ -143,7 +145,10 @@ export async function boot(me) {
     .then(r => r.ok ? r.json() : null).catch(() => null);
 
   // devhud.js owns Ctrl+Shift+D, so only admins get that module
-  if (currentUser?.role === 'admin') setDevHud(await import('./devhud.js?v=106'));
+  if (currentUser?.role === 'admin') {
+    setDevHud(await import('./devhud.js?v=121'));
+    Difficulty.wireDev();
+  }
   startSkybox();
   // marked is a global and app.js's loadScripts only brings it in
   // side by side with this module. at module scope it's not there
@@ -241,7 +246,7 @@ export async function boot(me) {
     } });
     setTimeout(() => setStageStatus(null), 1500);
     if (fromTrip) {
-      TripLoader.setStage('Home again');
+      TripLoader.setStage(t('trip.homeAgain', 'Home again'));
       TripLoader.finish();
     }
     Live2D.startIdle();
@@ -254,9 +259,10 @@ export async function boot(me) {
     Outfit.applyAll();
   } catch (e) {
     console.error(e);
-    if (fromTrip) TripLoader.fail('Live2D load error: ' + e.message);
-    setStageStatus('Live2D load error: ' + e.message, true);
-    ui.toast('Live2D load error: ' + e.message, 'error');
+    const msg = t('stage.live2dError', 'Live2D load error: {err}', { err: e.message });
+    if (fromTrip) TripLoader.fail(msg);
+    setStageStatus(msg, true);
+    ui.toast(msg, 'error');
     ui.setStatus('error', 'error');
   }
 
@@ -285,12 +291,11 @@ export async function boot(me) {
   const dismissBoot = () => {
     if (!bootOverlay) return;
     document.documentElement.removeAttribute('data-pre-auth');
-    setBoot('Ready', 'Connected', 'ok');
+    setBoot(t('boot.ready', 'Ready'), t('boot.connected', 'Connected'), 'ok');
     const hide = () => {
       bootOverlay.setAttribute('data-ready', '1');
       bootOverlay.setAttribute('aria-hidden', 'true');
-      if (tourDue) Tour.start('', tourToShop);
-      else playWelcome();
+      Difficulty.ensurePicked().then(() => tourDue ? Tour.start('', tourToShop) : playWelcome());
     };
     BootFX.finish(hide);
   };
@@ -298,10 +303,10 @@ export async function boot(me) {
   // 502 upstream_unavailable = php is fine, the model server isn't
   const providerHint = (e, attempt) => {
     const down = /http 502/.test(e.message);
-    if (attempt < 8) return (down ? 'model server not answering' : e.message) + ' - retrying…';
+    if (attempt < 8) return t('boot.retrying', '{err} - retrying…', { err: down ? t('boot.serverSilent', 'model server not answering') : e.message });
     return down
-      ? 'the model server is down or still loading. check `./start.sh logs` (JunOS.exe > Logs on Windows) - retrying…'
-      : e.message + ' - is php running? retrying…';
+      ? t('boot.serverDown', 'the model server is down or still loading. check `./start.sh logs` (JunOS.exe > Logs on Windows) - retrying…')
+      : t('boot.phpDown', '{err} - is php running? retrying…', { err: e.message });
   };
 
   let skipWait = false;
@@ -310,7 +315,7 @@ export async function boot(me) {
     const b = document.createElement('button');
     b.id = 'bootSkip';
     b.className = 'boot-skip';
-    b.textContent = 'continue without the model';
+    b.textContent = t('boot.skip', 'continue without the model');
     b.addEventListener('click', () => { skipWait = true; });
     bootHint.after(b);
   };
@@ -319,10 +324,10 @@ export async function boot(me) {
     let attempt = 0;
     const bot = Names.getBot();
     const phases = [
-      'Waking the model',
-      'Brewing Coffee for ' + Names.getPlayer(),
-      'Recharging ' + bot,
-      bot + ' is taking its time',
+      t('boot.phase.waking', 'Waking the model'),
+      t('boot.phase.coffee', 'Brewing Coffee for {name}', { name: Names.getPlayer() }),
+      t('boot.phase.recharging', 'Recharging {name}', { name: bot }),
+      t('boot.phase.slow', '{name} is taking its time', { name: bot }),
     ];
     for (;;) {
       if (skipWait) return { models: [], provider: '' };
@@ -335,9 +340,9 @@ export async function boot(me) {
           return m;
         }
         BootFX.setCheck('provider', false);
-        setBoot('Pulling models', m && m.provider && m.provider !== 'ollama'
-          ? 'No models reported by the provider yet - still booting?'
-          : 'No models installed yet - `ollama pull <model>`', 'err');
+        setBoot(t('boot.pulling', 'Pulling models'), m && m.provider && m.provider !== 'ollama'
+          ? t('boot.noModelsProvider', 'No models reported by the provider yet - still booting?')
+          : t('boot.noModels', 'No models installed yet - `ollama pull <model>`'), 'err');
       } catch (e) {
         BootFX.setCheck('provider', false);
         const phase = phases[Math.min(attempt - 1, phases.length - 1)];
@@ -448,7 +453,7 @@ async function wireDatesPanel(canForce, canWatch) {
   if (watchRow) watchRow.hidden = !canWatch;
   const dateTitle = document.getElementById('dateRowTitle');
   if (dateTitle) {
-    const label = () => { dateTitle.textContent = mealNow() === 'lunch' ? 'Lunch out' : 'Dinner out'; };
+    const label = () => { dateTitle.textContent = mealNow() === 'lunch' ? t('settings.date.lunch', 'Lunch out') : t('settings.date.title', 'Dinner out'); };
     label();
     setInterval(label, 60000);
   }
@@ -512,7 +517,7 @@ async function wireDatesPanel(canForce, canWatch) {
     runPassBtn.disabled = true;
     const started = await runPassNow();
     runPassBtn.disabled = false;
-    if (!started) document.getElementById('devRunPassDesc').textContent = 'Nothing started in 30 s. Either the memory worker is down or you hit the limit of 6 runs per 10 minutes.';
+    if (!started) document.getElementById('devRunPassDesc').textContent = t('settings.dev.pass.none', 'Nothing started in 30 s. Either the memory worker is down or you hit the limit of 6 runs per 10 minutes.');
   });
 
   const replayTourBtn = document.getElementById('replayTourBtn');
@@ -543,13 +548,13 @@ async function wireDatesPanel(canForce, canWatch) {
     if (health && health.sep) {
       karaokeBtn.disabled = false;
       karaokeBtn.title = health.device === 'cpu'
-        ? 'Sing together (CPU - separation is slow)'
-        : 'Sing together';
+        ? t('settings.karaoke.cpu', 'Sing together (CPU - separation is slow)')
+        : t('karaoke.mode.duo', 'Sing together');
     } else {
-      karaokeBtn.title = 'Unavailable: the karaoke sidecar is not running';
+      karaokeBtn.title = t('settings.karaoke.down', 'Unavailable: the karaoke sidecar is not running');
     }
   } catch (e) {
-    karaokeBtn.title = 'Unavailable: could not reach the karaoke sidecar';
+    karaokeBtn.title = t('settings.karaoke.unreachable', 'Unavailable: could not reach the karaoke sidecar');
   }
 }
 

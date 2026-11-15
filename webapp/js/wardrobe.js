@@ -1,14 +1,15 @@
-import * as Live2D from './live2d/live2d.js?v=91';
+import * as Live2D from './live2d/live2d.js?v=92';
 import * as MobileViewport from './core/viewport.js?v=1';
 import * as Names from './core/names.js?v=1';
 import { api } from './core/api.js?v=1';
-import * as Outfit from './outfit/outfit.js?v=101';
+import * as Outfit from './outfit/outfit.js?v=112';
 import * as Scene from './trip/scene.js?v=1';
 import { startSkybox } from './trip/skybox.js?v=2';
-import * as TripLoader from './trip/trip-loader.js?v=1';
-import { armCurtains } from './wardrobe/curtains.js?v=18';
-import { openWardrobe } from './wardrobe/panel.js?v=36';
-import { shopLeg } from './wardrobe/tour-shop.js?v=1';
+import * as TripLoader from './trip/trip-loader.js?v=75';
+import { armCurtains } from './wardrobe/curtains.js?v=19';
+import { openWardrobe } from './wardrobe/panel.js?v=49';
+import { shopLeg } from './wardrobe/tour-shop.js?v=2';
+import { applyI18n, t } from './core/i18n.js?v=1';
 
 const status = document.getElementById('stageStatus');
 const HEAD_HOME_ICON = '<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="19" y1="12" x2="5" y2="12"/><polyline points="12 19 5 12 12 5"/></svg>';
@@ -35,14 +36,15 @@ function dressPanel() {
   const title = document.createElement('h2');
   title.className = 'wd-title';
   title.id = 'collectionTitle';
-  title.textContent = 'Find her next look.';
+  title.textContent = t('shop.title', 'Find her next look.');
   titles.prepend(title);
   const actions = panel.querySelector('.wd-actions');
   panel.appendChild(actions);
-  actions.querySelector('.wd-looks').textContent = 'Saved looks';
+  actions.querySelector('.wd-looks').textContent = t('shop.savedLooks', 'Saved looks');
   const leave = actions.querySelector('.wd-close');
   leave.className = 'head-home';
-  leave.innerHTML = HEAD_HOME_ICON + 'Head home';
+  leave.innerHTML = HEAD_HOME_ICON;
+  leave.append(t('page.headHome', 'Head home'));
   leave.removeAttribute('aria-label');
   leave.removeAttribute('title');
   document.body.appendChild(leave);
@@ -50,6 +52,7 @@ function dressPanel() {
 }
 
 async function main() {
+  applyI18n();
   startSkybox();
   syncOrientation();
   window.addEventListener('resize', () => syncOrientation());
@@ -93,15 +96,15 @@ async function main() {
     dressPanel();
     const bot = Names.getBot();
     status.textContent = coarsePointer.matches
-      ? `Hold an item, then drag it onto ${bot} to dress her`
-      : `Shift+wheel to zoom · drag items onto ${bot} to dress her`;
-    TripLoader.setStage("Welcome to Annalie's");
+      ? t('shop.hintTouch', 'Hold an item, then drag it onto {name} to dress her', { name: bot })
+      : t('shop.hint', 'Shift+wheel to zoom · drag items onto {name} to dress her', { name: bot });
+    TripLoader.setStage(t('shop.welcome', "Welcome to Annalie's"));
     await TripLoader.finish();
     shopLeg();
   } catch (e) {
     console.error(e);
-    status.textContent = 'Load error: ' + e.message;
-    TripLoader.fail('Load error: ' + e.message);
+    status.textContent = t('stage.loadError', 'Load error: {err}', { err: e.message });
+    TripLoader.fail(status.textContent);
   }
 }
 

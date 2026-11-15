@@ -17,6 +17,35 @@ try {
     [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
 }
 
+# windows PowerShell can't write or delete through an 8.3 path
+# (the DOS alias, C:\Users\USURIO~2). TEMP is often one
+function ConvertTo-LongPath([string]$path) {
+    if ($path -notmatch '~' -or -not [IO.Path]::IsPathRooted($path)) { return $path }
+    try {
+        if (-not ('Jun.LongPath' -as [type])) {
+            Add-Type -Namespace Jun -Name LongPath -MemberDefinition '[DllImport("kernel32.dll", CharSet = CharSet.Unicode)] public static extern uint GetLongPathNameW(string shortPath, System.Text.StringBuilder longPath, uint size);'
+        }
+        $head = [IO.Path]::GetFullPath($path)
+        $tail = @()
+        while ($head -and -not ([IO.Directory]::Exists($head) -or [IO.File]::Exists($head))) {
+            $tail = @([IO.Path]::GetFileName($head)) + $tail
+            $head = [IO.Path]::GetDirectoryName($head)
+        }
+        if (-not $head) { return $path }
+        $buf = [Text.StringBuilder]::new(32767)
+        if ([Jun.LongPath]::GetLongPathNameW($head, $buf, $buf.Capacity) -eq 0) { return $path }
+        return [IO.Path]::Combine([string[]](@($buf.ToString()) + $tail))
+    } catch {
+        return $path
+    }
+}
+
+$env:TEMP = ConvertTo-LongPath $env:TEMP
+$env:TMP  = ConvertTo-LongPath $env:TMP
+if ($env:JUN_DIR) { $env:JUN_DIR = ConvertTo-LongPath $env:JUN_DIR }
+$longHere = ConvertTo-LongPath (Get-Location).ProviderPath
+if ($longHere -ne (Get-Location).ProviderPath) { Set-Location -LiteralPath $longHere }
+
 $repoUpstream = 'https://github.com/efficiencyx/JunOS.git'
 $repo = if ($env:JUN_REPO) { $env:JUN_REPO } else { $repoUpstream }
 $dir  = if ($env:JUN_DIR)  { $env:JUN_DIR }  else { 'JunOS' }
@@ -156,8 +185,8 @@ $manualUrls = @{
 function Get-QuantFor([string]$size, [int]$mb) {
     switch ($size) {
         '12B' { if ($mb -ge 23500) { return 'Q8_0' }; if ($mb -ge 15500) { return 'Q6_K' } }
-        'E4B' { if ($mb -ge 9500) { return 'Q8_0' } }
-        'E2B' { if ($mb -ge 7500) { return 'Q8_0' }; if ($mb -ge 5500) { return 'Q6_K' } }
+        'E4B' { if ($mb -ge 9500) { return 'Q8_0' }; if ($mb -ge 6500 -or $mb -eq 0) { return 'Q6_K' } }
+        'E2B' { if ($mb -ge 7500) { return 'Q8_0' }; if ($mb -ge 4500 -or $mb -eq 0) { return 'Q6_K' } }
     }
     return 'Q4_K_M'
 }
@@ -2286,6 +2315,7 @@ if ($existing) {
     Copy-JunRepo $target $dir
 }
 
+$dir = ConvertTo-LongPath $dir
 Set-Location -LiteralPath $dir
 if (-not (Test-Path .env)) { Copy-Item .env.example .env }
 # every run, not just the first. an .env from an older install is

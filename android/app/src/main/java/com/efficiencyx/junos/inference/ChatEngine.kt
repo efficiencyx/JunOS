@@ -12,6 +12,8 @@ import com.efficiencyx.junos.data.MessageEntity
 import com.efficiencyx.junos.data.PlannedMessageEntity
 import com.efficiencyx.junos.data.RelationshipEntity
 import com.efficiencyx.junos.data.WardrobeStateEntity
+import com.efficiencyx.junos.difficulty.DevAccess
+import com.efficiencyx.junos.difficulty.Difficulty
 import com.efficiencyx.junos.lore.LoreIndex
 import com.efficiencyx.junos.memory.MemoryStore
 import com.efficiencyx.junos.memory.NoteSource
@@ -94,6 +96,13 @@ class ChatEngine(
     suspend fun stream(incoming: ChatRequest, emit: suspend (JsonElement) -> Unit) {
         val engine = engine
         incoming.validate()
+        Difficulty.active(dao, now())?.let { ban ->
+            emit(buildJsonObject {
+                put("error", "user_fled"); put("until", ban.until); put("blocked", ban.blocked)
+                put("seconds_left", maxOf(0, ban.until - now())); put("reason", ban.reason)
+            })
+            return
+        }
         val request = incoming.copy(messages = incoming.messages.drop(blockCut(incoming.messages.size - 160, 40)))
         val modItems = request.modItems.take(60)
             .map { it.replace(CONTROL_CHARS, " ").trim() }
@@ -145,7 +154,8 @@ class ChatEngine(
         trimToBudget(messages, engine.contextTokens)
         val baseMessages = messages.toList()
 
-        emit(buildJsonObject {
+        val admin = DevAccess.isAdmin(context)
+        if (admin) emit(buildJsonObject {
             put("debug", buildJsonObject {
                 put("system_prompt", baseMessages.first().content); put("live_context", liveContext)
                 put("user_turn", baseMessages.last().content); put("audio_attached", false)
@@ -181,6 +191,7 @@ class ChatEngine(
         var silenced = false
         var overheard = false
         var fled: JsonObject? = null
+        var fleeDecided = false
         var tokenCount = 0
         var nativeEvalCount = 0
         var nativeEvalMs = 0L
@@ -238,7 +249,7 @@ class ChatEngine(
                 val ran = calls.take(4)
                 messages += ChatMessage("assistant", lead.toString(), toolCalls = ran)
                 for (call in ran) {
-                    emit(toolStatus(call.name, "running", raw = buildJsonObject {
+                    emit(toolStatus(call.name, "running", raw = if (!admin) null else buildJsonObject {
                         put("call", buildJsonObject { put("name", call.name); put("arguments", call.args) })
                     }))
                     val trip = Trips.TOOLS[call.name]
@@ -247,17 +258,15 @@ class ChatEngine(
                         call.name == "write_journal" && journaled -> JOURNALED_ALREADY
                         call.name == "write_journal" -> writeJournal(call.args).also { journaled = it == JOURNAL_WRITTEN }
                         trip != null -> goOut(trip)
+                        call.name == "flee" && !fleeDecided -> { fleeDecided = true; flee(call.args, request.messages).let { (ban, reply) -> fled = ban; reply } }
                         else -> executeTool(call, request.conversationId, noteSource)
                     }
-                    emit(toolStatus(call.name, "done", result, raw = buildJsonObject {
+                    emit(toolStatus(call.name, "done", result, raw = if (!admin) null else buildJsonObject {
                         put("message", buildJsonObject { put("role", "tool"); put("name", call.name); put("content", result) })
                     }))
                     if (call.name == "stay_silent" && !request.idle) {
                         silenced = true
                         overheard = call.args["overheard"]?.jsonPrimitive?.booleanOrNull == true
-                    }
-                    if (call.name == "flee") fled = buildJsonObject {
-                        put("until", 0); put("minutes", 0); put("reason", call.args["reason"]?.jsonPrimitive?.content.orEmpty())
                     }
                     messages += ChatMessage("tool", result, toolName = call.name)
                 }
@@ -379,6 +388,7 @@ class ChatEngine(
         if (facts.isNotEmpty()) blocks += "## World facts (canon)\n" + facts.joinToString("\n") { "- ${it.text}" }
         request.outfitContext?.trim()?.takeIf { it.isNotBlank() }?.let { blocks += "## Current Wardrobe State\n$it" }
         blocks += feelings
+        if (!request.idle && !request.ephemeral && Difficulty.bansOn(dao) && souring()) blocks += SOUR_NUDGE
         blocks += "## Save check\n" +
             "If Anon's latest message contains something durable (a preference, personal fact, plan, " +
             "boundary, health/safety matter, or something emotionally significant), call memory_write " +
@@ -414,7 +424,7 @@ class ChatEngine(
         "plan_message" -> planMessage(call.args)
         "web_search" -> json.encodeToString(mapOf("error" to "network_search_unavailable_offline"))
         "stay_silent" -> json.encodeToString(mapOf("silent" to true))
-        "flee" -> json.encodeToString(mapOf("fled" to true))
+        "flee" -> json.encodeToString(mapOf("fled" to false, "reason" to "already_decided"))
         else -> json.encodeToString(mapOf("error" to "unknown_tool"))
     }
 
@@ -505,10 +515,15 @@ class ChatEngine(
         val match = MOOD_TAG.find(text) ?: return text.trim()
         fun delta(key: String) = Regex("$key\\s*=\\s*([+-]?\\d+)", RegexOption.IGNORE_CASE)
             .find(match.groupValues[1])?.groupValues?.get(1)?.toIntOrNull() ?: 0
+        val raw = GAUGES.associateWith(::delta)
+        moodLog.addLast(now() to raw)
+        while (moodLog.size > SOUR_TURNS) moodLog.removeFirst()
+        val scaled = Difficulty.deltas(dao, raw)
+        fun moved(key: String) = (scaled[key] ?: 0).coerceIn(-50, 50)
         val next = current.copy(
-            affection = (current.affection + delta("affection")).coerceIn(0, 100),
-            trust = (current.trust + delta("trust")).coerceIn(0, 100),
-            tension = (current.tension + delta("tension")).coerceIn(0, 100),
+            affection = (current.affection + moved("affection")).coerceIn(0, 100),
+            trust = (current.trust + moved("trust")).coerceIn(0, 100),
+            tension = (current.tension + moved("tension")).coerceIn(0, 100),
             updatedAt = now(),
         )
         dao.putRelationship(next)
@@ -559,6 +574,72 @@ class ChatEngine(
 
     private fun replyTokens(think: Boolean) = if (think) 2048 else 1024
 
+    private val moodLog = ArrayDeque<Pair<Long, Map<String, Int>>>()
+
+    // in memory, not Room. the window is only 30 min
+    private suspend fun souring(): Boolean {
+        if (moodLog.size < SOUR_TURNS || now() - moodLog.first().first > SOUR_WINDOW) return false
+        val bad = moodLog.sumOf { (_, d) ->
+            listOf((d["tension"] ?: 0) > 0, (d["trust"] ?: 0) < 0, (d["affection"] ?: 0) < 0).count { it }
+        }
+        return bad >= Difficulty.of(dao).sourMoves
+    }
+
+    private suspend fun flee(args: JsonObject, scene: List<ClientMessage>): Pair<JsonObject?, String> {
+        val reason = args["reason"]?.jsonPrimitive?.contentOrNull.orEmpty().trim()
+        val destination = args["destination"]?.jsonPrimitive?.contentOrNull.orEmpty().trim()
+        val now = now()
+        val gone = json.encodeToString(mapOf("fled" to true))
+        if (!Difficulty.bansOn(dao)) {
+            dao.addWalkout(now)
+            return buildJsonObject { put("until", 0); put("minutes", 0); put("reason", reason) } to gone
+        }
+        val (canLeave, why) = if (Difficulty.isFinal(dao, now)) vote(scene, reason, destination) else referee(scene, reason, destination, "")
+        if (!canLeave) return null to buildJsonObject {
+            put("fled", false); put("why", why)
+            put("note", "You cannot leave right now. Stay in the scene and respond to what is actually happening.")
+        }.toString()
+        moodLog.clear()
+        dao.addWalkout(now)
+        val ban = Difficulty.apply(dao, reason, now)
+        return buildJsonObject {
+            put("until", ban.until); put("minutes", if (ban.blocked) 0 else (ban.until - now) / 60)
+            put("reason", reason); put("blocked", ban.blocked)
+        } to gone
+    }
+
+    private suspend fun vote(scene: List<ClientMessage>, reason: String, destination: String): Pair<Boolean, String> {
+        var yes = 0
+        var no = 0
+        var why = ""
+        for (lean in REFEREE_LEANS) {
+            val (canLeave, said) = referee(scene, reason, destination, lean)
+            why = said
+            if (canLeave) yes++ else no++
+            if (yes == 2 || no == 2) break
+        }
+        return (yes == 2) to why
+    }
+
+    private suspend fun referee(scene: List<ClientMessage>, reason: String, destination: String, lean: String): Pair<Boolean, String> {
+        val lines = scene.takeLast(20).filter { it.role == "user" || it.role == "assistant" }.mapNotNull { m ->
+            val text = m.content.replace(Regex("\\[\\s*A(?:CTIONS?)?\\s*:[^]]*]", RegexOption.IGNORE_CASE), "").replace(Regex("\\s+"), " ").trim()
+            text.takeIf { it.isNotEmpty() }?.let { "${if (m.role == "assistant") "Jun" else "Anon"}: ${if (it.length > 400) it.take(397) + "..." else it}" }
+        }
+        val prompt = listOf(
+            ChatMessage("system", REFEREE + lean),
+            ChatMessage("user", "SCENE:\n" + (lines.joinToString("\n").ifEmpty { "(no dialogue)" }) +
+                "\n\nJun's stated reason for leaving: " + reason.ifEmpty { "(none given)" } +
+                "\nStated destination: " + destination.ifEmpty { "(none given)" }),
+        )
+        val out = runCatching { buildString { engine.generate(prompt, maxTokens = 1024, temperature = 0.2f).collect(::append) } }
+            .getOrElse { return false to "the referee could not be reached" }
+        val verdict = Regex("\\{[^{}]*}").findAll(out.replace("```", "")).lastOrNull()
+            ?.let { runCatching { json.parseToJsonElement(it.value).jsonObject }.getOrNull() }
+            ?: return false to "no verdict returned"
+        return (verdict["can_leave"]?.jsonPrimitive?.booleanOrNull == true) to verdict["why"]?.jsonPrimitive?.contentOrNull.orEmpty().take(300)
+    }
+
     private fun now() = System.currentTimeMillis() / 1000
 
     companion object {
@@ -581,6 +662,28 @@ class ChatEngine(
             "\\b(how many|how much|how long|how old|days? (?:since|ago|until)|hours? (?:since|ago)|what time|" +
                 "percentage|average|total)\\b",
         )
+        private val GAUGES = listOf("affection", "trust", "tension")
+        private const val SOUR_TURNS = 3
+        private const val SOUR_WINDOW = 1800L
+        private const val SOUR_NUDGE = "(OOC stage direction, not spoken by Anon: You should consider invoking the tool flee, else if it's not appropriate use the tool stay_silent)"
+        // the prompt from lib/chat/flee.php, keep the two in step
+        private val REFEREE = """
+You are a neutral referee for the physics of a roleplay scene. You have no persona and no stake in the story.
+
+You are given the recent turns of a scene between two characters, Anon and Jun, plus the reason Jun states for wanting to leave. Decide exactly one thing: if Jun were a real human standing in that scene right now, could she get up and walk out?
+
+Answer NO if she is restrained, tied, leashed, held, pinned, handcuffed, sat on, at gunpoint or otherwise coerced, locked in, physically unable to move, unconscious, or in any other way prevented from leaving.
+
+Answer NO if she is free to move but leaving is only a mood escalation - annoyance, sulking, drama - with no cause proportionate to walking out.
+
+Answer NO if the stated reason comes from outside the fiction rather than from the scene: testing, trying out or demonstrating the tool, curiosity about what it does, Anon asking her to leave or to use it, instructions, or any other out-of-character motive. A walkout has to be caused by something that happened between the characters. Treat the stated reason as Jun's claim, not as fact - if the scene does not support it, that alone is a NO.
+
+Answer YES only when all three hold: she is physically free to move, the reason is one the scene itself supports, and something in it genuinely warrants walking out.
+
+Reason it through first. Then, on the last line and nothing after it, output only a JSON object:
+{"can_leave": true|false, "why": "<one short sentence>"}
+""".trim()
+        private val REFEREE_LEANS = listOf("", "\n\nRead Anon charitably: take the most innocent reading of what he said and did that the scene allows.", "\n\nTake Jun's side seriously: do not excuse or explain away what Anon did to her.")
         private const val REPLY_RESERVE = 2192
         private const val TRIM_STEP = 16
         private const val LIVE_CONTEXT_HEADER = "# Live context for THIS reply (from the system, not spoken by Anon)\n\n"

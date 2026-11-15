@@ -8,10 +8,11 @@
 // up on the face preset so her lines land in the face bubble.
 
 import * as Names from '../core/names.js?v=1';
-import * as Live2D from '../live2d/live2d.js?v=91';
+import * as Live2D from '../live2d/live2d.js?v=92';
 import * as Scene from '../trip/scene.js?v=1';
-import * as VoiceMode from '../voice/voicemode.js?v=92';
-import * as Achievements from '../achievements/achievements.js?v=8';
+import * as VoiceMode from '../voice/voicemode.js?v=96';
+import * as Achievements from '../achievements/achievements.js?v=9';
+import { t } from '../core/i18n.js?v=1';
 
 const SUITS = ['♠', '♥', '♦', '♣'];
 const RANKS = ['A', '2', '3', '4', '5', '6', '7', '8', '9', '10', 'J', 'Q', 'K'];
@@ -59,6 +60,12 @@ const show = (cards) => cards.map(c => c.r + c.s).join(' ');
 function tallyText() {
   if (score.you === score.her) return `tied ${score.you}-${score.her}`;
   return score.you > score.her ? `Anon leads ${score.you}-${score.her}` : `${bot()} leads ${score.her}-${score.you}`;
+}
+
+function tallyLabel() {
+  const [hi, lo] = [Math.max(score.you, score.her), Math.min(score.you, score.her)];
+  if (hi === lo) return t('cards.tied', 'tied {a}-{b}', { a: hi, b: lo });
+  return t('cards.leads', '{name} leads {a}-{b}', { name: score.you > score.her ? 'Anon' : bot(), a: hi, b: lo });
 }
 
 // ponytail: sendTouchEvent drops the event while she's still
@@ -126,7 +133,7 @@ async function herTurn() {
   while (active && phase === 'her' && !herStood) {
     const hv = value(her);
     if (hv >= 21) { herStood = true; break; }
-    setStatus(`${bot()} is thinking…`);
+    setStatus(t('cards.thinking', '{name} is thinking…', { name: bot() }));
     const anon = youStood ? `Anon is standing on ${yv} with ${show(you)}` : `Anon holds ${show(you)} = ${yv} and is still playing`;
     const reply = await send(`(Card table, hand ${hand}, your move: you hold ${show(her)} = ${hv}. ${anon}. Say HIT to take another card or STAND to stop, that word first, then one short line.)`);
     if (!active || phase !== 'her') return;
@@ -156,7 +163,7 @@ function settle(winner, how) {
   if (winner !== 'push') Achievements.bump(winner === 'you' ? 'bj_won' : 'bj_lost');
   render();
   const won = winner === 'push' ? 'Nobody wins the hand.' : (winner === 'you' ? 'Anon wins the hand.' : `${bot()} wins the hand.`);
-  setStatus(won);
+  setStatus(winner === 'push' ? t('cards.push', 'Nobody wins the hand.') : t('cards.wins', '{name} wins the hand.', { name: winner === 'you' ? 'Anon' : bot() }));
   send(`(Card table, hand ${hand}: ${how}. ${won} Score: ${tallyText()}.)`);
 }
 
@@ -168,7 +175,7 @@ function cardEl(c, down) {
   const el = document.createElement('div');
   el.className = 'card' + (down ? ' down' : '') + (c.s === '♥' || c.s === '♦' ? ' red' : '');
   el.setAttribute('role', 'img');
-  el.setAttribute('aria-label', down ? 'Face-down card' : c.r + c.s);
+  el.setAttribute('aria-label', down ? t('cards.faceDown', 'Face-down card') : c.r + c.s);
   if (!down) {
     el.innerHTML = `<span class="card-corner" aria-hidden="true">${c.r}<small>${c.s}</small></span>
       <span class="card-suit" aria-hidden="true">${c.s}</span>
@@ -183,10 +190,10 @@ function render() {
   youRow.replaceChildren(...you.map(c => cardEl(c, false)));
   herVal.textContent = hole ? String(value([her[0]])) + ' + ?' : String(value(her));
   youVal.textContent = String(value(you));
-  tallyEl.textContent = `hand ${hand} · ${tallyText()}`;
+  tallyEl.textContent = t('cards.hand', 'hand {n}', { n: hand }) + ' · ' + tallyLabel();
   hitBtn.disabled = standBtn.disabled = phase !== 'player';
   nextBtn.hidden = phase !== 'done';
-  if (phase === 'player') setStatus(herStood ? `${bot()} is standing. your move` : 'your move');
+  if (phase === 'player') setStatus(herStood ? t('cards.herStands', '{name} is standing. your move', { name: bot() }) : t('cards.yourMove', 'your move'));
 }
 
 function build() {
@@ -196,9 +203,9 @@ function build() {
   overlay.hidden = true;
   overlay.setAttribute('role', 'dialog');
   overlay.setAttribute('aria-modal', 'true');
-  overlay.setAttribute('aria-label', 'Blackjack table');
+  overlay.setAttribute('aria-label', t('cards.table', 'Blackjack table'));
   overlay.innerHTML = `
-    <button class="voice-overlay-btn cards-close" type="button" aria-label="Leave the table" title="Leave the table">
+    <button class="voice-overlay-btn cards-close" type="button" aria-label="${t('cards.leave', 'Leave the table')}" title="${t('cards.leave', 'Leave the table')}">
       <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
     </button>
     <div class="cards-tally"></div>
@@ -207,12 +214,12 @@ function build() {
       <div class="cards-table-mark" aria-hidden="true">BLACKJACK<span>♠ &nbsp; ♥ &nbsp; ♣ &nbsp; ♦</span></div>
       <div class="cards-deck" aria-hidden="true"></div>
       <div class="cards-chips" aria-hidden="true"></div>
-      <div class="cards-hand cards-you"><div class="cards-label">You <span class="cards-val"></span></div><div class="cards-row"></div></div>
+      <div class="cards-hand cards-you"><div class="cards-label">${t('cards.you', 'You')} <span class="cards-val"></span></div><div class="cards-row"></div></div>
       <div class="cards-status" role="status" aria-live="polite"></div>
       <div class="cards-actions">
-        <button class="secondary cards-hit" type="button">Hit</button>
-        <button class="secondary cards-stand" type="button">Stand</button>
-        <button class="cards-next" type="button" hidden>Next hand</button>
+        <button class="secondary cards-hit" type="button">${t('cards.hit', 'Hit')}</button>
+        <button class="secondary cards-stand" type="button">${t('cards.stand', 'Stand')}</button>
+        <button class="cards-next" type="button" hidden>${t('cards.next', 'Next hand')}</button>
       </div>
     </div>`;
   // the room sits OUTSIDE the overlay on purpose. the overlay's

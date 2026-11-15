@@ -44,7 +44,10 @@ how to report something you find.
   bound.
 * *Developer-only operations.* Privileged endpoints enforce the account role
   server-side. `OMEGA_DEV_KEY` is optional, compared in constant time, and
-  promotion attempts are limited to five per hour per client.
+  promotion attempts are limited to five per hour per client. The Android
+  app's key is built into the app on purpose and is not a secret: the phone
+  has one local profile, and admin there only unlocks developer tools for
+  whoever holds it.
 * *Containers escalating.* Every service runs with `no-new-privileges` and
   `cap_drop: ALL` (nginx and the sidecars add back the handful they need to
   bind and drop root), the model servers and sidecars have read-only root
@@ -383,11 +386,16 @@ sidecar does not log what you said unless `STT_LOG_TRANSCRIPTS=1` is set.
 Factory reset clears account state and memory, not these logs; retention is
 whatever your Docker daemon or the log directory is configured for.
 
-**In your browser:** IndexedDB holds any game-mod zips you loaded, and
+**Mods:** the game-mod zips you load are kept in your state directory
+(`mods/user-<id>/`), sealed under your data key, together with which items
+she wears, so another browser signed in to your account gets them too.
+Factory reset deletes them. The server only stores them, opening and
+drawing a mod happens in the browser.
+
+**In your browser:** IndexedDB holds a copy of your mod zips, and
 localStorage holds UI preferences plus the unsent text in each chat's message
 box, in plain text until you send it or sign out. A video you open in Watch
-something plays from your disk in the page and is never uploaded. Mods are never uploaded, the server only ever
-sees item names.
+something plays from your disk in the page and is never uploaded.
 
 **Extracted game assets** land in `webapp/assets/`, are gitignored, and are for
 your own use only - see [NOTICE](NOTICE). `/api/assets.php?probe` tells a
@@ -397,7 +405,7 @@ page shows placeholder art when they are not.
 ## Encryption and recovery
 
 The PHP application encrypts message content, conversation titles and summaries,
-saved preferences, welcome messages, walk-out reasons, memory files and the per-line
+saved preferences, welcome messages, walk-out reasons, memory files, mod zips and the per-line
 breakdown of karaoke takes with a random 32-byte key per account. Take scores stay
 plaintext, and the song they belong to is an HMAC under that key, never the file hash. Stored values use `v1:` followed by base64-encoded nonce and sodium
 secretbox ciphertext. This is application-level encryption of selected content,

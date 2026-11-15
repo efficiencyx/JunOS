@@ -53,12 +53,12 @@ class ColabKeepAliveService : Service() {
 
     private fun running() = NotificationCompat.Builder(this, CHANNEL)
         .setSmallIcon(R.drawable.ic_launcher_foreground)
-        .setContentTitle("Colab session running")
-        .setContentText("Her brain stays up while this is here.")
+        .setContentTitle(getString(R.string.notif_colab_running))
+        .setContentText(getString(R.string.notif_colab_running_text))
         .setContentIntent(showIntent(this))
-        .addAction(0, "Show", showIntent(this))
+        .addAction(0, getString(R.string.colab_show), showIntent(this))
         .addAction(
-            0, "Stop",
+            0, getString(R.string.colab_stop),
             PendingIntent.getService(
                 this, 1, Intent(this, ColabKeepAliveService::class.java).setAction(ACTION_STOP_SESSION),
                 PendingIntent.FLAG_IMMUTABLE,
@@ -97,7 +97,7 @@ class ColabKeepAliveService : Service() {
             channels(context)
             val notification = NotificationCompat.Builder(context, ATTENTION_CHANNEL)
                 .setSmallIcon(R.drawable.ic_launcher_foreground)
-                .setContentTitle("Colab needs you")
+                .setContentTitle(context.getString(R.string.notif_colab_attention))
                 .setContentText(text)
                 .setContentIntent(showIntent(context))
                 .setAutoCancel(true)
@@ -108,8 +108,8 @@ class ColabKeepAliveService : Service() {
 
         private fun channels(context: Context) {
             context.getSystemService(NotificationManager::class.java).createNotificationChannels(listOf(
-                NotificationChannel(CHANNEL, "Colab session", NotificationManager.IMPORTANCE_LOW),
-                NotificationChannel(ATTENTION_CHANNEL, "Colab needs you", NotificationManager.IMPORTANCE_HIGH),
+                NotificationChannel(CHANNEL, context.getString(R.string.notif_colab_channel), NotificationManager.IMPORTANCE_LOW),
+                NotificationChannel(ATTENTION_CHANNEL, context.getString(R.string.notif_colab_attention), NotificationManager.IMPORTANCE_HIGH),
             ))
         }
 

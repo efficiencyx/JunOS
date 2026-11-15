@@ -1,6 +1,7 @@
 <?php
 require_once __DIR__ . '/lib/bootstrap.php';
 require_once __DIR__ . '/lib/bridge/apply.php';
+require_once __DIR__ . '/lib/mods.php';
 
 function user_keys_mint(string $password): array {
     $dek = random_bytes(SODIUM_CRYPTO_SECRETBOX_KEYBYTES);
@@ -20,7 +21,7 @@ switch ($_GET['action'] ?? '') {
 case 'me':
     $user = current_user();
     if (!$user) fail(401, 'unauthorized');
-    json_out(['user' => user_public($user)]);
+    json_out(['user' => user_public($user) + ['blocked' => ban_blocked((int)$user['id'])]]);
 
 case 'signup_info':
     json_out([
@@ -243,7 +244,7 @@ case 'factory_reset':
         $db->prepare('DELETE FROM messages WHERE conversation_id IN (SELECT id FROM conversations WHERE user_id = ?)')
            ->execute([$userId]);
         foreach (['conversations', 'preferences', 'relationship', 'memory_consolidation',
-                  'user_bans', 'wardrobe_presets', 'wardrobe_state', 'welcome_queue', 'trips',
+                  'user_bans', 'difficulty', 'wardrobe_presets', 'wardrobe_state', 'welcome_queue', 'trips',
                   'achievement_stats', 'achievement_seen', 'karaoke_takes', 'reply_ratings',
                   'mood_log', 'relationship_history', 'planned_messages',
                   'bridge_tokens', 'bridge_sync', 'bridge_seen', 'bridge_inbox'] as $table) {
@@ -261,6 +262,7 @@ case 'factory_reset':
 
     try {
         $res = memory_wipe_user($userId);
+        if (!isset($res['error']) && !mods_wipe_user($userId)) $res = ['error' => 'mods_delete_failed'];
     } catch (RuntimeException $e) {
         $res = ['error' => $e->getMessage()];
     }

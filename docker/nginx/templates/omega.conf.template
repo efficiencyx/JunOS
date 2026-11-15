@@ -170,6 +170,18 @@ server {
         fastcgi_pass  $php_upstream;
     }
 
+    # Mod zips go up in 4 MiB parts, MOD_PART_BYTES in lib/mods.php.
+    location = /api/mods.php {
+        limit_req zone=api_other burst=40 delay=20;
+        client_max_body_size 5m;
+
+        gzip off;
+
+        include fastcgi_params;
+        fastcgi_param SCRIPT_FILENAME /var/www/omega/api/mods.php;
+        fastcgi_pass  $php_upstream;
+    }
+
     # The game mod posts its whole GameVariables json, ~420KB on a
     # long save. Keep it in step with read_json_body in bridge.php.
     location = /api/bridge.php {

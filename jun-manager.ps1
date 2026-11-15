@@ -26,7 +26,7 @@ $script:Root = if ($script:IsCompiled) {
 }
 
 if ([Threading.Thread]::CurrentThread.GetApartmentState() -ne [Threading.ApartmentState]::STA) {
-    if ($script:IsCompiled) { throw 'This build was compiled without -STA. Rebuild with tools/build-installer-exe.ps1 -Manager.' }
+    if ($script:IsCompiled) { throw 'This build was compiled without -STA. Rebuild with tools/build/build-installer-exe.ps1 -Manager.' }
     Start-Process -FilePath $script:PowerShellExe -WindowStyle Hidden `
         -ArgumentList '-NoProfile', '-ExecutionPolicy', 'Bypass', '-STA', '-File', "`"$PSCommandPath`""
     exit
@@ -278,6 +278,10 @@ function Invoke-StartScript([string]$action) {
     $info.StandardOutputEncoding = [Text.Encoding]::UTF8
     $info.StandardErrorEncoding = [Text.Encoding]::UTF8
     if ($action -eq 'start' -or $action -like 'phone*') { $info.EnvironmentVariables['JUN_LINK_CHECKED'] = '1' }
+    if ($action -eq 'start') {
+        foreach ($k in $script:modelAnswers.Keys) { $info.EnvironmentVariables[$k] = $script:modelAnswers[$k] }
+        $script:modelAnswers = @{}
+    }
     $script:action = $action
     $script:pairLink = $null
 
@@ -308,6 +312,39 @@ function Start-ConsoleScript([string]$file, [switch]$FullSetup, [string]$Only = 
 
 function Confirm-Action([string]$text) {
     return [System.Windows.MessageBox]::Show($window, $text, 'Jun OS', 'YesNo', 'Question') -eq 'Yes'
+}
+
+$script:modelAnswers = @{}
+# start.ps1 can't ask through our hidden pipe. `start.ps1 model` says
+# whether her model changed on Hugging Face, the answers ride the env
+function Confirm-ModelUpdate {
+    $script:modelAnswers = @{}
+    if ((Get-EnvValue 'AI_PROVIDER' 'ollama').ToLower() -ne 'llamacpp') { return }
+    $info = [Diagnostics.ProcessStartInfo]::new($script:PowerShellExe,
+        "-NoProfile -ExecutionPolicy Bypass -File `"$(Join-Path $script:Root 'start.ps1')`" model")
+    $info.WorkingDirectory = $script:Root
+    $info.UseShellExecute = $false
+    $info.CreateNoWindow = $true
+    $info.RedirectStandardOutput = $true
+    $info.StandardOutputEncoding = [Text.Encoding]::UTF8
+    try { $check = [Diagnostics.Process]::Start($info) } catch { return }
+    # model starts nothing, so the pipe closes when it exits
+    $line = $check.StandardOutput.ReadToEnd() -split "`r?`n" | Where-Object { $_ -like 'model-*' } | Select-Object -First 1
+    if (-not $line) { return }
+    $kind, $ref, $a, $b = "$line" -split '\|'
+    $gb = { '{0:N1}' -f ([double]$args[0] / 1e9) }
+    if ($kind -eq 'model-update') {
+        if (-not (Confirm-Action "Her model has a new version on Hugging Face ($ref, $(& $gb $a) GB).`n`nDownload it now? No keeps the one you have, the next Start asks again.")) {
+            $script:modelAnswers['JUN_MODEL_UPDATE'] = 'no'
+            return
+        }
+        $script:modelAnswers['JUN_MODEL_UPDATE'] = 'yes'
+        $prune = Confirm-Action "Delete the old version once the new one is loaded? It frees about $(& $gb $b) GB."
+        $script:modelAnswers['JUN_MODEL_PRUNE'] = if ($prune) { 'yes' } else { 'no' }
+    } elseif ($kind -eq 'model-old') {
+        $prune = Confirm-Action "An old version of her model ($ref) is still on disk, $(& $gb $a) GB.`n`nDelete it?"
+        $script:modelAnswers['JUN_MODEL_PRUNE'] = if ($prune) { 'yes' } else { 'no' }
+    }
 }
 
 $timer = [Windows.Threading.DispatcherTimer]::new()
@@ -563,6 +600,7 @@ function Show-ConfigureDialog {
 $ConfigureButton.Add_Click({ Show-ConfigureDialog })
 $RestartButton.Add_Click({
     if (-not (Confirm-CloudLink)) { return }
+    Confirm-ModelUpdate
     if (@(Get-RunningServices).Count -gt 0) {
         $script:then = 'start'
         Invoke-StartScript 'stop'
@@ -579,7 +617,7 @@ $BridgeButton.Add_Click({
         Start-ConsoleScript 'install.ps1' -Only 'bridge'
     }
 })
-$StartButton.Add_Click({ if (Confirm-CloudLink) { Invoke-StartScript 'start' } })
+$StartButton.Add_Click({ if (Confirm-CloudLink) { Confirm-ModelUpdate; Invoke-StartScript 'start' } })
 $LinkButton.Add_Click({
     [void](Show-CloudDialog 'Lend her brain to the Colab or Kaggle notebook in inference only mode. Stop then Start afterwards to use it.' 'Save' 'Cancel')
 })

@@ -158,6 +158,8 @@ export const ITEM_VARIANTS = {
   shirt: ['shirt_logo', 'sleeve_logo'],
   hoodie: ['hoodie_logo'],
   panties: ['panties_logo'],
+  bikini_top: ['bikini_top_style'],
+  bikini_bot: ['bikini_bot_style'],
   skirt: ['skirt_style'],
   choker: ['choker_style'],
   bow: ['bow_style'],
@@ -358,6 +360,23 @@ export const VARIANTS = [
       { name: 'Default', textures: {} },
       { name: 'Sneakers', textures: { Shoe_L: 'assets/variants/sneakerL.png', Shoe_R: 'assets/variants/sneakerR.png' } },
       { name: 'Classy', textures: { Shoe_L: 'assets/variants/classyShoeL.png', Shoe_R: 'assets/variants/classyShoeR.png' } },
+    ],
+  },
+  {
+    key: 'bikini_top_style', label: 'Bikini top style',
+    drawables: ['BikiniTop_M_CupL', 'BikiniTop_M_CupR'],
+    options: [
+      { name: 'Normal', textures: {}, opacity: { BikiniTop_M_CupL: 1, BikiniTop_M_CupR: 1 } },
+      // the game's see-through one is the same mesh, main colour at 50% alpha
+      { name: 'See-through', textures: {}, opacity: { BikiniTop_M_CupL: 0.5, BikiniTop_M_CupR: 0.5 } },
+    ],
+  },
+  {
+    key: 'bikini_bot_style', label: 'Bikini bottom style',
+    drawables: ['BikiniBot_M_Cloth'],
+    options: [
+      { name: 'Normal', textures: {}, opacity: { BikiniBot_M_Cloth: 1 } },
+      { name: 'See-through', textures: {}, opacity: { BikiniBot_M_Cloth: 0.5 } },
     ],
   },
   {

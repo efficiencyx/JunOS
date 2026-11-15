@@ -1,4 +1,4 @@
-import { itemDrawables } from './parse.js?v=19';
+import { itemDrawables } from './parse.js?v=23';
 
 export const MOD_SLOT = /^Moddable/;
 
@@ -63,7 +63,7 @@ export async function bakeDrawable(id, entries, colorsFor, hostTint, replaceVani
   let W = 1, H = 1;
   const imgs = [];
   for (const e of entries) {
-    const img = await loadImg(e.url);
+    const img = e.img || await loadImg(e.url);
     imgs.push(img);
     W = Math.max(W, e.r.w); H = Math.max(H, e.r.h);
   }
@@ -74,7 +74,7 @@ export async function bakeDrawable(id, entries, colorsFor, hostTint, replaceVani
     const img = imgs[i];
     // RectInt is Unity coordinates, origin bottom-left. canvas
     // wants top-left, hence the flip
-    const sy = img.naturalHeight - e.r.y - e.r.h;
+    const sy = (img.naturalHeight ?? img.height) - e.r.y - e.r.h;
     const tints = [];
     if (e.colorIndex >= 0) {
       const hex = colorsFor(e);

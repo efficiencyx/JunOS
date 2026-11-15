@@ -1,7 +1,8 @@
-import * as ui from '../core/ui.js?v=1';
-import * as Live2D from '../live2d/live2d.js?v=91';
-import * as TTS from './tts.js?v=92';
-import * as Voice from './voice.js?v=93';
+import * as ui from '../core/ui.js?v=10';
+import * as Live2D from '../live2d/live2d.js?v=92';
+import * as TTS from './tts.js?v=93';
+import * as Voice from './voice.js?v=94';
+import { t } from '../core/i18n.js?v=1';
 
 let active = false;
 let muted = false;
@@ -15,14 +16,14 @@ export async function enter() {
   if (active) return;
   const sup = Voice.support();
   if (!sup.ok) {
-    ui.toast('⚠ Voice mode unavailable: ' + (sup.reason === 'insecure_context'
-      ? 'needs HTTPS or localhost' : sup.reason), 'error');
+    ui.toast(t('voice.modeUnavailableToast', '⚠ Voice mode unavailable: {why}', { why: sup.reason === 'insecure_context'
+      ? t('voice.why.httpsShort', 'needs HTTPS or localhost') : sup.reason }), 'error');
     return;
   }
   try {
     await Voice.enable();
   } catch (e) {
-    ui.toast('⚠ Mic blocked - check the browser permission', 'error');
+    ui.toast(t('voice.err.micBlocked', '⚠ Mic blocked - check the browser permission'), 'error');
     return;
   }
   TTS.setEnabled(true);
@@ -31,7 +32,7 @@ export async function enter() {
   const ov = overlay();
   if (ov) {
     ov.hidden = false;
-    ov.classList.remove('muted');
+    ov.classList.remove(t('voice.state.muted', 'muted'));
     updateMuteIcon();
     // force layout NOW, or the fade has nothing to start from
     void ov.offsetHeight;
@@ -65,7 +66,7 @@ function updateMuteIcon() {
   if (!btn) return;
   btn.querySelector('.ico-mic').style.display = muted ? 'none' : '';
   btn.querySelector('.ico-mic-off').style.display = muted ? '' : 'none';
-  btn.title = btn.ariaLabel = muted ? 'Unmute microphone' : 'Mute microphone';
+  btn.title = btn.ariaLabel = muted ? t('voice.unmute', 'Unmute microphone') : t('voice.mute', 'Mute microphone');
 }
 
 function toggleMute() {
@@ -74,10 +75,10 @@ function toggleMute() {
   if (muted) Voice.disable();
   else Voice.enable().catch(() => { muted = true; });
   const ov = overlay();
-  if (ov) ov.classList.toggle('muted', muted);
+  if (ov) ov.classList.toggle(t('voice.state.muted', 'muted'), muted);
   updateMuteIcon();
   const status = document.getElementById('voiceOverlayStatus');
-  if (status && muted) { status.textContent = 'muted'; status.dataset.state = 'idle'; }
+  if (status && muted) { status.textContent = t('voice.state.muted', 'muted'); status.dataset.state = 'idle'; }
 }
 
 export function init(h) {

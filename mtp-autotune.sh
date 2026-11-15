@@ -289,7 +289,7 @@ llamacpp_chat_model() {
         return
     fi
     _hf="$(env_get LLAMACPP_MODEL_HF)"
-    _hf="${_hf:-efficiencyx/Jun-LoRA-E2B-GGUF:Q4_K_M}"
+    _hf="${_hf:-efficiencyx/Jun-LoRA-E2B-GGUF:Q6_K}"
     echo "${_hf%%,*}"
 }
 
