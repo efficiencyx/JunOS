@@ -80,9 +80,9 @@ install_bridge_mod "$fixture/proton"
 rm "$fixture/proton/version.dll"
 install_bridge_mod "$fixture/proton"
 [ "$(cat "$fixture/proton/version.dll")" = stock-loader ]
-cp /bin/sleep "$fixture/game/My Dystopian Robot Girlfriend.x86_64"
+cp "$(command -v perl)" "$fixture/game/My Dystopian Robot Girlfriend.x86_64"
 chmod +x "$fixture/game/My Dystopian Robot Girlfriend.x86_64"
-"$fixture/game/My Dystopian Robot Girlfriend.x86_64" 60 &
+"$fixture/game/My Dystopian Robot Girlfriend.x86_64" -e "sleep 60" &
 running_pid=$!
 for attempt in {1..100}; do
     [ "$(readlink "/proc/$running_pid/exe" 2>/dev/null)" = "$fixture/game/My Dystopian Robot Girlfriend.x86_64" ] && break

@@ -29,8 +29,8 @@ class AwayTextsTest {
     @Test
     fun everyTierHasAFallback() {
         for (spec in AwayTexts.MILESTONES) {
-            val texts = AwayTexts.fallback(spec.tier, -7)
-            assertTrue(spec.tier, texts.isNotEmpty() && texts.size <= spec.texts)
+            val sets = AwayTexts.FALLBACK[spec.tier].orEmpty()
+            assertTrue(spec.tier, sets.isNotEmpty() && sets.all { it.isNotEmpty() && it.size <= spec.texts })
         }
     }
 
