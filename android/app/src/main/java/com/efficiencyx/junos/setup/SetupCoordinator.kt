@@ -22,6 +22,7 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
+import java.net.URI
 
 class SetupCoordinator(
     private val app: JunApplication,
@@ -96,21 +97,26 @@ class SetupCoordinator(
         refresh()
     }
 
-    fun saveApiKey(provider: String, key: String, model: String) {
+    fun saveApiKey(provider: String, url: String, key: String, model: String) {
         val token = key.trim()
         val name = model.trim()
         if (token.isEmpty() || name.isEmpty()) {
             mutableState.value = mutableState.value.copy(pickError = app.getString(R.string.err_api_missing))
             return
         }
-        val openRouter = provider == "openrouter"
+        val compat = provider == "openai-compat"
+        val address = url.trim()
+        if (compat && !address.startsWith("https://")) {
+            mutableState.value = mutableState.value.copy(pickError = app.getString(R.string.err_api_url))
+            return
+        }
         pairings.save(
             Pairing(
                 mode = SessionMode.API,
-                name = if (openRouter) "OpenRouter" else "OpenAI",
-                urls = listOf(if (openRouter) RemoteWire.OPENROUTER else RemoteWire.OPENAI),
+                name = if (compat) runCatching { URI(address).host }.getOrNull() ?: address else "OpenAI",
+                urls = listOf(if (compat) address else RemoteWire.OPENAI),
                 token = token,
-                api = if (openRouter) "openrouter" else "openai-key",
+                api = if (compat) "openai-compat" else "openai-key",
                 model = name,
                 ctx = API_CONTEXT,
             ),

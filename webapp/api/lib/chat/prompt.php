@@ -95,6 +95,31 @@ function chat_build_messages(array $req, string $systemContent, string $liveCont
     return $messages;
 }
 
+function chat_build_warm_messages(
+    array $req,
+    string $systemContent,
+    int $summaryCoveredCount,
+    string $lastUserMsg,
+    string $cleanReply = ''
+): array {
+    $messages = [['role' => 'system', 'content' => $systemContent]];
+    $skipCovered = max(0, $summaryCoveredCount - $req['dropped_oldest']);
+    foreach ($req['body']['messages'] as $m) {
+        if (!is_array($m) || !isset($m['role'], $m['content'])) continue;
+        if ($m['role'] === 'system') continue;
+        if ($skipCovered > 0) { $skipCovered--; continue; }
+        $messages[] = ['role' => $m['role'], 'content' => (string)$m['content']];
+    }
+    $lastIdx = count($messages) - 1;
+    if (!$req['idle'] && $lastIdx >= 0 && $messages[$lastIdx]['role'] === 'user') {
+        $messages[$lastIdx]['content'] = $lastUserMsg;
+    }
+    if ($cleanReply !== '') {
+        $messages[] = ['role' => 'assistant', 'content' => $cleanReply];
+    }
+    return $messages;
+}
+
 // tuple order is effort, think, reason
 function route_reasoning(string $msg, bool $idle): array {
     if ($idle || trim($msg) === '') return ['low', false, 'idle/empty'];

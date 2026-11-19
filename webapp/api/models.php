@@ -31,13 +31,13 @@ function http_get_json(string $url, array $headers = [], int $timeout = 10): ?ar
 $provider = ai_provider();
 $models = null;
 
-if ($provider === 'openrouter') {
-    // the boot screen hits this every 1-3s and OpenRouter's catalog
+if (provider_is_hosted($provider)) {
+    // the boot screen hits this every 1-3s and a hosted catalog
     // is ~1-2 MB. so the id list we pulled out goes on disk, and
     // when they error we hand back the stale one instead of
     // hammering their public API.
     header('Cache-Control: public, max-age=300');
-    $cacheFile = state_dir() . '/openrouter_models.json';
+    $cacheFile = state_dir() . '/' . str_replace('-', '_', $provider) . '_models.json';
     $ttl = 3600;
 
     if (is_readable($cacheFile) && time() - (int)filemtime($cacheFile) < $ttl) {

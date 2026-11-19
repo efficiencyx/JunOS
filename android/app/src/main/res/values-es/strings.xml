@@ -25,7 +25,7 @@
     <string name="setup_mode_cloud_detail">Una GPU gratis de Colab, arrancada desde aquí. Kaggle también sirve, escanea su código del Step 3. Los chats pasan por Google y Cloudflare.</string>
     <string name="setup_mode_api">API en línea</string>
     <string name="setup_mode_api_paired">%1$s, %2$s. Los chats salen de este teléfono.</string>
-    <string name="setup_mode_api_detail">OpenRouter, OpenAI o tu plan de ChatGPT. Los chats salen de este teléfono.</string>
+    <string name="setup_mode_api_detail">Un servidor estilo OpenAI, OpenAI o tu plan de ChatGPT. Los chats salen de este teléfono.</string>
     <string name="setup_pause_download">Pausar descarga</string>
     <string name="setup_download_model">Descargar el modelo de Jun</string>
     <string name="setup_download_paused">Descarga en pausa. Tu progreso está guardado.</string>
@@ -45,14 +45,16 @@
     <string name="setup_retry">Reintentar</string>
     <string name="setup_ram_warning">Aviso: con menos de 8 GB de RAM las respuestas pueden ir lentas o el modelo puede detenerse.</string>
     <string name="setup_free_storage">Almacenamiento libre</string>
-    <string name="setup_api_openrouter_detail">Casi todos los modelos alojados, con una clave de openrouter.ai/keys.</string>
+    <string name="setup_api_compat_detail">Un servidor tuyo o alquilado. Escribes la dirección, la clave y el modelo.</string>
     <string name="setup_api_openai">API de OpenAI</string>
     <string name="setup_api_openai_detail">Una clave de platform.openai.com, se cobra por mensaje.</string>
     <string name="setup_api_chatgpt">Plan de ChatGPT</string>
     <string name="setup_api_chatgpt_detail">Inicia sesión con tu cuenta de ChatGPT, usa los límites del plan.</string>
     <string name="setup_api_key">Clave API</string>
     <string name="setup_api_model">Modelo</string>
-    <string name="setup_api_privacy_openrouter">Los chats van a OpenRouter y a la empresa del modelo. No es su propio fine-tune, y la mayoría de estos modelos no hacen 18+.</string>
+    <string name="setup_api_privacy_compat">Los chats van a ese servidor. No es su fine-tune, salvo que lo pongas tú.</string>
+    <string name="setup_api_url">Dirección del servidor</string>
+    <string name="err_api_url">Escribe la dirección del servidor, empieza por https://.</string>
     <string name="setup_api_privacy_openai">Los chats van a OpenAI. No es su propio fine-tune, y la mayoría de estos modelos no hacen 18+.</string>
     <string name="setup_api_save">Guardar</string>
     <string name="setup_api_signing_in">Termina de iniciar sesión en el navegador</string>

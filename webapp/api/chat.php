@@ -292,6 +292,7 @@ if ($usedTools && !$sawError && !$state['silenced'] && $state['fled'] === null &
     if ($result['stats'] !== null) $stats = provider_merge_stats($stats, $result['stats']);
 }
 
+$rawReply = $assistantBuffer;
 if (!$sawError && $assistantBuffer !== '') {
     $assistantBuffer = chat_parse_action_tags($assistantBuffer, [
         'provider' => $PROVIDER, 'model' => $model, 'user' => $user, 'conv_id' => $convId, 'req' => $req,
@@ -362,5 +363,18 @@ if (!$sawError && $assistantBuffer !== '') {
 }
 
 sse_done();
+if (function_exists('fastcgi_finish_request')) fastcgi_finish_request();
+
+if (!$sawError && $assistantBuffer !== '' && !$req['ephemeral'] && !$state['overheard'] && $state['fled'] === null) {
+    $cleanReply = $state['silenced'] ? '...' : chat_strip_client_tags($rawReply);
+    if (trim($cleanReply) !== '') {
+        $warmSystem = $state['journaled'] ? chat_system_content($toolsOffered, (int)$user['id']) : $systemContent;
+        $warmUserMsg = chat_warm_user_text($userRowId, $req, $lastUserMsg);
+        $warmMessages = chat_build_warm_messages($req, $warmSystem, $summaryCoveredCount, $warmUserMsg, $cleanReply);
+        $warmMessages = fit_messages_to_context($warmMessages, provider_window_tokens($PROVIDER, $model));
+        $warmTools = $toolsOffered ? tool_catalog(null, false) : [];
+        provider_warm_chat($PROVIDER, $model, $warmMessages, $think, $warmTools, $reasoning);
+    }
+}
 
 exit;

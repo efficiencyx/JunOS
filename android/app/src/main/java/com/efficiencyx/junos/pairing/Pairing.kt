@@ -8,7 +8,7 @@ enum class SessionMode { LOCAL, LAN, CLOUD, API }
 
 // api is the wire protocol: "jun" is the desktop's api/model.php,
 // "openai" vllm and "ollama" ollama, both behind the notebook's gate.
-// API mode ("openrouter", "openai-key", "chatgpt") is never scanned
+// API mode ("openai-compat", "openai-key", "chatgpt") is never scanned
 @Serializable
 data class Pairing(
     val mode: SessionMode,

@@ -2,17 +2,21 @@
 
 function ai_provider(): string {
     $p = strtolower(env_str('AI_PROVIDER', 'ollama'));
-    return in_array($p, ['ollama', 'openrouter', 'llamacpp', 'vllm'], true) ? $p : 'ollama';
+    return in_array($p, ['ollama', 'openai-compatible', 'llamacpp', 'vllm'], true) ? $p : 'ollama';
 }
 
 function provider_uses_openai_protocol(?string $p = null): bool {
-    return in_array($p ?? ai_provider(), ['openrouter', 'llamacpp', 'vllm'], true);
+    return in_array($p ?? ai_provider(), ['openai-compatible', 'llamacpp', 'vllm'], true);
+}
+
+function provider_is_hosted(?string $p = null): bool {
+    return ($p ?? ai_provider()) === 'openai-compatible';
 }
 
 function chat_api_base(?string $provider = null): string {
     switch ($provider ?? ai_provider()) {
-        case 'openrouter':
-            return rtrim(env_str('OPENROUTER_BASE_URL', 'https://openrouter.ai/api/v1'), '/');
+        case 'openai-compatible':
+            return rtrim(env_str('OPENAI_COMPAT_BASE_URL'), '/');
         case 'llamacpp':
             return rtrim(env_str('LLAMACPP_URL', 'http://127.0.0.1:8081'), '/') . '/v1';
         case 'vllm':
@@ -26,16 +30,12 @@ function chat_request_headers(?string $provider = null): array {
     $provider = $provider ?? ai_provider();
     $h = ['Content-Type: application/json'];
     $key = match ($provider) {
-        'openrouter' => env_str('OPENROUTER_API_KEY'),
+        'openai-compatible' => env_str('OPENAI_COMPAT_API_KEY'),
         'ollama' => env_str('OLLAMA_API_KEY'),
         'vllm' => env_str('VLLM_API_KEY'),
         default => '',
     };
     if ($key !== '') $h[] = 'Authorization: Bearer ' . $key;
-    if ($provider === 'openrouter') {
-        $h[] = 'HTTP-Referer: https://github.com/efficiencyx/JunOS';
-        $h[] = 'X-Title: Jun OS';
-    }
     return $h;
 }
 
@@ -45,7 +45,7 @@ function chat_request_headers(?string $provider = null): array {
 // her over there to free OUR card for karaoke just costs a reload
 function model_server_is_remote(?string $provider = null): bool {
     $provider = $provider ?? ai_provider();
-    if ($provider === 'openrouter') return true;
+    if (provider_is_hosted($provider)) return true;
     $host = strtolower(trim((string)parse_url(chat_api_base($provider), PHP_URL_HOST), '[]'));
     return !in_array($host, ['localhost', '127.0.0.1', '::1', 'ollama', 'llamacpp', 'host.docker.internal'], true);
 }
@@ -113,8 +113,8 @@ function title_model(): string {
 
 function default_chat_model(): string {
     switch (ai_provider()) {
-        case 'openrouter':
-            return env_str('OPENROUTER_MODEL', 'openrouter/auto');
+        case 'openai-compatible':
+            return env_str('OPENAI_COMPAT_MODEL');
         case 'llamacpp':
             // the router names her preset after the GGUF alias or the
             // first HF repo in the list, see docker/llamacpp-entrypoint.sh

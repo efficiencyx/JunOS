@@ -46,7 +46,7 @@ function prewarm_load(string $model, int $ctx): string {
     return (string)($res['error'] ?? 'no answer from ollama within ' . PREWARM_LOAD_TIMEOUT_S . 's');
 }
 
-// llama.cpp gets preloaded by start.sh / start.ps1, openrouter has
+// llama.cpp gets preloaded by start.sh / start.ps1, openai-compatible has
 // nothing to load
 if (ai_provider() !== 'ollama') exit(0);
 

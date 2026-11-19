@@ -146,15 +146,18 @@ if grep -q '"stats":{' "$work/sse"; then pass 'stats frame'; else fail 'no stats
 if grep -q '"error"' "$work/sse"; then fail 'the turn reported an error (below)'; grep '"error"' "$work/sse"; else pass 'no error frame'; fi
 
 # two /api/chat calls for the turn (tool round, then the reply)
-# plus one non streaming title call. the prompt checks read the
-# reply round, the last streaming request.
+# plus two non streaming calls: the title call and the post-turn
+# KV cache warm (num_predict 0).
 python3 - "$work/ollama-requests.jsonl" "$question" <<'PY' || fail 'prompt assembly (above)'
 import json, os, pathlib, sys
 reqs = [json.loads(l) for l in pathlib.Path(sys.argv[1]).read_text().splitlines()]
 question = sys.argv[2]
 streams = [r for r in reqs if r.get('stream', True)]
+warms = [r for r in reqs if not r.get('stream', True) and (r.get('options') or {}).get('num_predict') == 0]
+titles = [r for r in reqs if not r.get('stream', True) and (r.get('options') or {}).get('num_predict') != 0]
 assert len(streams) == 2, f'expected 2 streaming rounds, got {len(streams)}'
-assert len(reqs) - len(streams) == 1, 'expected exactly one title call'
+assert len(titles) == 1, f'expected 1 title call, got {len(titles)}'
+assert len(warms) == 1, f'expected 1 prewarm call, got {len(warms)}'
 req = streams[-1]
 msgs = req['messages']
 assert msgs[0]['role'] == 'system', 'system turn is not first'
@@ -168,7 +171,12 @@ marker = '\n\n# Live context for THIS reply'
 assert user.startswith(question + marker), 'his words must come first, then the live context'
 assert '## World facts (canon)' in user, 'lore never made it into the live context'
 assert user.rstrip('>').rsplit('<think:', 1)[-1] in ('low', 'med', 'high') and user.endswith('>'), 'the <think:LEVEL> budget token is not the last thing in the user turn'
-print('  ok   system prefix is byte-identical, question before live context, lore attached, budget token last')
+wmsgs = warms[0]['messages']
+assert wmsgs[0] == msgs[0], 'the prewarm system turn drifted from the chat turn'
+assert wmsgs[1] == {'role': 'user', 'content': question}, f'prewarm user turn was not stripped back to his bare question: {wmsgs[1]}'
+assert wmsgs[2] == {'role': 'assistant', 'content': 'hey.  there you are.\n\n'}, f'prewarm assistant turn did not strip tags like the browser: {wmsgs[2]}'
+assert wmsgs[3] == {'role': 'user', 'content': ''}, f'prewarm did not close the assistant turn with an empty user turn: {wmsgs[3]}'
+print('  ok   system prefix is byte-identical, question before live context, lore attached, budget token last, clean turn prewarmed')
 PY
 
 curl -sS -b "$cookies" "$BASE/api/conversations.php?action=messages&id=$convo" >"$work/body"

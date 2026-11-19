@@ -692,27 +692,27 @@ configure() {
         {
             printf '\n     %sselect an AI provider%s\n' "$B" "$R"
             printf '       %s1%s  llama.cpp   %s-%s local llama-server, fully managed %s(default)%s\n' "$ACCENT" "$R" "$DIM" "$R" "$DIM" "$R"
-            printf '       %s2%s  OpenRouter  %s-%s cloud API - needs an API key; chats leave this machine\n' "$ACCENT" "$R" "$DIM" "$R"
+            printf '       %s2%s  OpenAI-compatible  %s-%s a server you name, with its key; chats leave this machine\n' "$ACCENT" "$R" "$DIM" "$R"
             printf '       %s3%s  Ollama      %s-%s local, fully managed\n' "$ACCENT" "$R" "$DIM" "$R"
             printf '     %s$%s choice %s[enter = llama.cpp]%s %s→%s ' \
                 "$OK" "$R" "$DIM" "$R" "$ACCENT" "$R"
         } > /dev/tty
         read -r ans < /dev/tty || ans=""
         case "$ans" in
-            2) provider=openrouter ;; 3) provider=ollama ;;
+            2) provider=openai-compatible ;; 3) provider=ollama ;;
             ""|1) provider=llamacpp ;;
             *) printf '     %s✗%s unrecognized choice, using llama.cpp\n' "$DANGER" "$R" > /dev/tty; provider=llamacpp ;;
         esac
     fi
     case "$provider" in
-        ollama|openrouter|llamacpp|cloud) ;;
+        ollama|openai-compatible|llamacpp|cloud) ;;
         *) printf '     %s✗%s unknown provider "%s", using llama.cpp\n' "$DANGER" "$R" "$provider" > /dev/tty 2>/dev/null || true
            provider=llamacpp ;;
     esac
 
     TENSOR_PARALLEL=off
     case "$provider" in
-        openrouter|cloud) ;;
+        openai-compatible|cloud) ;;
         *) ask_tensor_parallel ;;
     esac
 
@@ -725,31 +725,38 @@ configure() {
         configure_mtp ollama
         ;;
 
-    openrouter)
-        local key orm
-        key="${OPENROUTER_API_KEY:-}"
-        if [ -z "$key" ] && [ "${JUN_YES:-}" != "1" ] && [ -r /dev/tty ]; then
-            # Silent read: the key must never be echoed (or land in
-            # scrollback).
-            printf '     %s$%s OpenRouter API key %s(hidden; from openrouter.ai/keys)%s %s→%s ' \
-                "$OK" "$R" "$DIM" "$R" "$ACCENT" "$R" > /dev/tty
-            read -rs key < /dev/tty || key=""
-            printf '\n' > /dev/tty
+    openai-compatible)
+        local base key model
+        base="${OPENAI_COMPAT_BASE_URL:-}"
+        key="${OPENAI_COMPAT_API_KEY:-}"
+        model="${OPENAI_COMPAT_MODEL:-}"
+        if [ "${JUN_YES:-}" != "1" ] && [ -r /dev/tty ]; then
+            if [ -z "$base" ]; then
+                printf '     %s$%s server address %s(ends in /v1, e.g. https://llm.example.com/v1)%s %s→%s ' \
+                    "$OK" "$R" "$DIM" "$R" "$ACCENT" "$R" > /dev/tty
+                read -r base < /dev/tty || base=""
+            fi
+            if [ -z "$key" ]; then
+                # Silent read: the key must never be echoed (or land in
+                # scrollback).
+                printf '     %s$%s API key %s(hidden, enter = none)%s %s→%s ' \
+                    "$OK" "$R" "$DIM" "$R" "$ACCENT" "$R" > /dev/tty
+                read -rs key < /dev/tty || key=""
+                printf '\n' > /dev/tty
+            fi
+            if [ -z "$model" ]; then
+                printf '     %s$%s model id %s→%s ' "$OK" "$R" "$ACCENT" "$R" > /dev/tty
+                read -r model < /dev/tty || model=""
+            fi
         fi
-        [ -z "$key" ] && warn_ "no API key set - add OPENROUTER_API_KEY to .env before chatting"
+        [ -z "$base" ] && warn_ "no server address - add OPENAI_COMPAT_BASE_URL to .env before chatting"
+        [ -z "$model" ] && warn_ "no model - add OPENAI_COMPAT_MODEL to .env before chatting"
 
-        orm="${OPENROUTER_MODEL:-}"
-        if [ -z "$orm" ] && [ "${JUN_YES:-}" != "1" ] && [ -r /dev/tty ]; then
-            printf '     %s$%s model id %s[enter = openrouter/auto]%s %s→%s ' \
-                "$OK" "$R" "$DIM" "$R" "$ACCENT" "$R" > /dev/tty
-            read -r orm < /dev/tty || orm=""
-        fi
-        orm="${orm:-openrouter/auto}"
-
-        set_env OPENROUTER_API_KEY "$key"
-        set_env OPENROUTER_MODEL "$orm"
+        set_env OPENAI_COMPAT_BASE_URL "$base"
+        set_env OPENAI_COMPAT_API_KEY "$key"
+        set_env OPENAI_COMPAT_MODEL "$model"
         profiles=""
-        ok "model $orm"
+        ok "model $model"
         ;;
 
     llamacpp)
@@ -1653,6 +1660,28 @@ confirm_deps() {
     fi
 }
 
+# OpenRouter had its own provider once, same wire as openai-compatible.
+# declining leaves .env alone and start.sh refuses to run it
+migrate_openrouter_env() {
+    local f="$EXISTING/.env" ans base key model tmp
+    grep -qE '^AI_PROVIDER=openrouter' "$f" 2>/dev/null || return 0
+    if [ "${JUN_YES:-}" != "1" ] && { true >/dev/tty; } 2>/dev/null; then
+        printf '     %s$%s OpenRouter has its own provider no more. move this .env to openai-compatible, same address, key and model? %s[Y/n]%s %s→%s ' \
+            "$OK" "$R" "$DIM" "$R" "$ACCENT" "$R" > /dev/tty
+        read -r ans < /dev/tty || ans=""
+        case "$ans" in n|N|no|NO) warn_ "left as it was, start.sh won't run until AI_PROVIDER is changed"; return 0 ;; esac
+    fi
+    base="$(sed -n 's/^OPENROUTER_BASE_URL=//p' "$f" | tail -n 1)"
+    key="$(sed -n 's/^OPENROUTER_API_KEY=//p' "$f" | tail -n 1)"
+    model="$(sed -n 's/^OPENROUTER_MODEL=//p' "$f" | tail -n 1)"
+    tmp="$(mktemp)"
+    grep -vE '^(OPENROUTER_|OPENAI_COMPAT_)' "$f" | sed 's/^AI_PROVIDER=.*/AI_PROVIDER=openai-compatible/' > "$tmp"
+    cat "$tmp" > "$f"; rm -f "$tmp"
+    printf 'OPENAI_COMPAT_BASE_URL=%s\nOPENAI_COMPAT_API_KEY=%s\nOPENAI_COMPAT_MODEL=%s\n' \
+        "${base:-https://openrouter.ai/api/v1}" "$key" "${model:-openrouter/auto}" >> "$f"
+    ok ".env moved to openai-compatible"
+}
+
 # Express alone puts llama.cpp and karaoke back over what they
 # picked. a yes skips configure() and .env stays as it is
 choose_reuse() {
@@ -1673,6 +1702,7 @@ choose_reuse() {
             fi
             ;;
     esac
+    migrate_openrouter_env
     REUSE=1; JUN_REUSE=1; JUN_YES=1
     export JUN_REUSE JUN_YES
     ok "updating with the settings in .env"
@@ -2112,7 +2142,7 @@ else
 fi
 
 cd "$DIR"
-# .env holds the OpenRouter key once someone types one in, so it
+# .env holds the API key once someone types one in, so it
 # is the owner's business and nobody else's. chmod on every run,
 # not just the first. an .env from an older install is exactly
 # the one still sitting there world-readable.

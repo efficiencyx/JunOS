@@ -26,4 +26,8 @@ llamacpp_old_snapshots "$d" bbb rm
 [ ! -e "$d/blobs/aaa" ] && [ ! -e "$d/snapshots/old" ] || { echo "old version still there"; exit 1; }
 [ -e "$d/blobs/bbb" ] && [ -e "$d/blobs/mm" ] && [ -L "$d/snapshots/new/X.BF16-mmproj.gguf" ] || { echo "removed something the new version uses"; exit 1; }
 [ -z "$(llamacpp_old_snapshots "$d" bbb)" ] || { echo "still sizes something after rm"; exit 1; }
+[ -z "$(llamacpp_drop_damaged "$d" bbb 10)" ] && [ -e "$d/blobs/bbb" ] || { echo "dropped a blob of the right size"; exit 1; }
+[ "$(llamacpp_drop_damaged "$d" bbb 7381383840)" = damaged ] || { echo "kept a blob of the wrong size"; exit 1; }
+[ ! -e "$d/blobs/bbb" ] && [ ! -L "$d/snapshots/new/X.Q4_K_M.gguf" ] || { echo "damaged blob or its link still there"; exit 1; }
+[ -e "$d/blobs/mm" ] && [ -L "$d/snapshots/new/X.BF16-mmproj.gguf" ] || { echo "dropped the mmproj with it"; exit 1; }
 echo "model-update: ok"

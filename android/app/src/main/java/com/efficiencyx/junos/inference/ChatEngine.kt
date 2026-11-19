@@ -334,8 +334,14 @@ class ChatEngine(
                 dao.renameConversation(request.conversationId, title, now())
             }
         }
-        if (!request.idle && !request.ephemeral && request.messages.lastOrNull()?.role == "user") {
-            engine.warm(baseMessages.dropLast(1) + ChatMessage("user", lastUser), tools, think)
+        if (!request.idle && !request.ephemeral && request.messages.lastOrNull()?.role == "user" && fled == null) {
+            val cleanReply = if (silenced) "..." else stripClientTags(visible.toString())
+            val warmMessages = buildList {
+                addAll(baseMessages.dropLast(1))
+                add(ChatMessage("user", lastUser))
+                if (cleanReply.isNotBlank()) add(ChatMessage("assistant", cleanReply))
+            }
+            engine.warm(warmMessages, tools, think)
         }
     }
 
@@ -741,6 +747,44 @@ Reason it through first. Then, on the last line and nothing after it, output onl
 // split across tokens, so hold any partial tag and keep the whole
 // block out of the reply (drainThought() hands it over seperately)
 internal fun blockCut(over: Int, block: Int): Int = if (over <= 0) 0 else (over + block - 1) / block * block
+
+private val CLIENT_TAG_START = Regex("\\[\\s*(?:A(?:CTIONS?)?|TOOL)\\s*:", RegexOption.IGNORE_CASE)
+
+internal fun stripClientTags(text: String): String {
+    val out = StringBuilder()
+    var pos = 0
+    while (pos < text.length) {
+        val match = CLIENT_TAG_START.find(text, pos)
+        if (match == null) {
+            out.append(text, pos, text.length)
+            break
+        }
+        val start = match.range.first
+        if (start > pos) out.append(text, pos, start)
+        var depth = 0
+        var inStr = false
+        var esc = false
+        var end = -1
+        for (i in start until text.length) {
+            val c = text[i]
+            if (inStr) {
+                if (esc) esc = false
+                else if (c == '\\') esc = true
+                else if (c == '"') inStr = false
+                continue
+            }
+            when (c) {
+                '"' -> inStr = true
+                '{' -> depth++
+                '}' -> if (depth > 0) depth--
+                ']' -> if (depth == 0) { end = i; break }
+            }
+        }
+        if (end < 0) break
+        pos = end + 1
+    }
+    return out.toString()
+}
 
 internal class ThinkStreamFilter {
     private val held = StringBuilder()

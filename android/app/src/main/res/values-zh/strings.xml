@@ -25,7 +25,7 @@
     <string name="setup_mode_cloud_detail">一块免费的 Colab GPU，从这里启动。Kaggle 也可以，扫描它 Step 3 的码。聊天会经过 Google 和 Cloudflare。</string>
     <string name="setup_mode_api">在线 API</string>
     <string name="setup_mode_api_paired">%1$s，%2$s。聊天会离开这部手机。</string>
-    <string name="setup_mode_api_detail">OpenRouter、OpenAI 或你的 ChatGPT 套餐。聊天会离开这部手机。</string>
+    <string name="setup_mode_api_detail">OpenAI 风格的服务器、OpenAI 或你的 ChatGPT 套餐。聊天会离开这部手机。</string>
     <string name="setup_pause_download">暂停下载</string>
     <string name="setup_download_model">下载 Jun 模型</string>
     <string name="setup_download_paused">下载已暂停。进度已保存。</string>
@@ -45,14 +45,16 @@
     <string name="setup_retry">重试</string>
     <string name="setup_ram_warning">警告：内存低于 8 GB 级别时，回复可能会很慢，模型也可能会停止。</string>
     <string name="setup_free_storage">可用存储空间</string>
-    <string name="setup_api_openrouter_detail">大多数托管模型，使用 openrouter.ai/keys 上的密钥。</string>
+    <string name="setup_api_compat_detail">你自己的或租用的服务器。你输入它的地址、密钥和模型。</string>
     <string name="setup_api_openai">OpenAI API</string>
     <string name="setup_api_openai_detail">来自 platform.openai.com 的密钥，按消息计费。</string>
     <string name="setup_api_chatgpt">ChatGPT 套餐</string>
     <string name="setup_api_chatgpt_detail">用你的 ChatGPT 账号登录，使用套餐的额度。</string>
     <string name="setup_api_key">API 密钥</string>
     <string name="setup_api_model">模型</string>
-    <string name="setup_api_privacy_openrouter">聊天会发送给 OpenRouter 和模型所属的公司。这不是她自己的微调模型，而且这些模型大多不做 18+ 内容。</string>
+    <string name="setup_api_privacy_compat">聊天会发送到那台服务器。除非你自己放上去，否则这不是她的微调模型。</string>
+    <string name="setup_api_url">服务器地址</string>
+    <string name="err_api_url">请输入以 https:// 开头的服务器地址。</string>
     <string name="setup_api_privacy_openai">聊天会发送给 OpenAI。这不是她自己的微调模型，而且这些模型大多不做 18+ 内容。</string>
     <string name="setup_api_save">保存</string>
     <string name="setup_api_signing_in">请在浏览器中完成登录</string>

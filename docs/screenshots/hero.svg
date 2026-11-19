@@ -165,7 +165,7 @@
     <use href="#ollama-mark" x="72" y="48" width="40" height="58"/>
     <text class="body" x="128" y="84">Ollama</text>
     <use class="white-icon" href="#icon-router" x="266" y="48" width="54" height="57"/>
-    <text class="body" x="335" y="84">OpenRouter</text>
+    <text class="body" x="335" y="74">OpenAI-<tspan x="335" dy="22">compatible</tspan></text>
     <use class="white-icon" href="#icon-llama" x="479" y="42" width="49" height="59"/>
     <text class="body" x="545" y="84">llamacpp</text>
   </g>

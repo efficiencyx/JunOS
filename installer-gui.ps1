@@ -530,16 +530,18 @@ public sealed class InstallerProcessOutput
                                 <TextBlock Text="AI provider" FontWeight="SemiBold" />
                                 <ComboBox x:Name="ProviderCombo" Margin="0,7,0,0">
                                     <ComboBoxItem Content="llama.cpp — local and fully managed" Tag="llamacpp" IsSelected="True" />
-                                    <ComboBoxItem Content="OpenRouter — cloud API" Tag="openrouter" />
+                                    <ComboBoxItem Content="OpenAI-compatible — a server you name" Tag="openai-compatible" />
                                     <ComboBoxItem Content="Ollama — local and fully managed" Tag="ollama" />
                                 </ComboBox>
 
-                                <StackPanel x:Name="OpenRouterPanel" Visibility="Collapsed" Margin="0,14,0,0">
-                                    <TextBlock Text="OpenRouter API key" />
-                                    <PasswordBox x:Name="OpenRouterKey" Margin="0,6,0,0" />
+                                <StackPanel x:Name="CompatPanel" Visibility="Collapsed" Margin="0,14,0,0">
+                                    <TextBlock Text="Server address (ends in /v1)" />
+                                    <TextBox x:Name="CompatUrl" Margin="0,6,0,0" />
+                                    <TextBlock Text="API key" Margin="0,10,0,0" />
+                                    <PasswordBox x:Name="CompatKey" Margin="0,6,0,0" />
                                     <TextBlock Text="Model ID" Margin="0,10,0,0" />
-                                    <TextBox x:Name="OpenRouterModel" Text="openrouter/auto" Margin="0,6,0,0" />
-                                    <TextBlock Text="Cloud inference sends chat content to OpenRouter and the selected model provider." TextWrapping="Wrap" Foreground="#FFC46B" FontSize="12" Margin="0,8,0,0" />
+                                    <TextBox x:Name="CompatModel" Margin="0,6,0,0" />
+                                    <TextBlock Text="Chats are sent to that server." TextWrapping="Wrap" Foreground="#FFC46B" FontSize="12" Margin="0,8,0,0" />
                                 </StackPanel>
 
                                 <StackPanel x:Name="LlamaPanel" Visibility="Collapsed" Margin="0,14,0,0">
@@ -669,7 +671,7 @@ $controlNames = @(
     'HardwareText', 'UpdateRadio', 'UpdateSummary', 'UpdateSummaryText', 'ExpressRadio', 'CustomRadio', 'CloudRadio', 'ExpressSummary', 'ExpressSummaryText',
     'CloudOptions', 'CloudLines', 'CloudVoiceCheck', 'CloudKaraokeCheck',
     'CustomOptions', 'ChannelPanel', 'ChannelCombo', 'ProviderCombo',
-    'OpenRouterPanel', 'OpenRouterKey', 'OpenRouterModel', 'LlamaPanel', 'LlamaUrl',
+    'CompatPanel', 'CompatUrl', 'CompatKey', 'CompatModel', 'LlamaPanel', 'LlamaUrl',
     'LocalModelPanel', 'ModelCombo', 'TensorParallelCheck', 'TensorParallelHint', 'VoiceCheck',
     'KaraokeCheck', 'ShortcutCheck', 'MtpCheck', 'MtpDepthPanel', 'MtpDepthCombo', 'ExtractCheck',
     'BridgeCheck', 'AssetOptions', 'GameLocation', 'BrowseGameButton', 'AssetAgreement',
@@ -893,11 +895,12 @@ function Set-CustomFromEnv {
     $e = $script:existingEnv
     if (-not $e['AI_PROVIDER']) { return }
     $provider = $e['AI_PROVIDER'].ToLower()
-    if ($provider -in 'llamacpp', 'openrouter', 'ollama') { Select-Tag $ProviderCombo $provider }
+    if ($provider -in 'llamacpp', 'openai-compatible', 'ollama') { Select-Tag $ProviderCombo $provider }
     if ($e['JUN_CHANNEL']) { Select-Tag $ChannelCombo $e['JUN_CHANNEL'] }
     $model = Get-ExistingModel
     if ($model) { Select-Model $model }
-    if ($e['OPENROUTER_MODEL']) { $OpenRouterModel.Text = $e['OPENROUTER_MODEL'] }
+    if ($e['OPENAI_COMPAT_MODEL']) { $CompatModel.Text = $e['OPENAI_COMPAT_MODEL'] }
+    if ($e['OPENAI_COMPAT_BASE_URL']) { $CompatUrl.Text = $e['OPENAI_COMPAT_BASE_URL'] }
     if ($provider -eq 'llamacpp' -and -not (Test-ManagedLlamaUrl $e['LLAMACPP_URL'])) { $LlamaUrl.Text = $e['LLAMACPP_URL'] }
     $voice = Test-EnvOn $e['VOICE'] $true
     $VoiceCheck.IsChecked = $voice
@@ -920,7 +923,7 @@ function Use-ExistingSettings([string]$path) {
     $voice = Test-EnvOn $e['VOICE'] $true
     $karaoke = $voice -and (Test-EnvOn $e['KARAOKE'] $false)
     $model = Get-ExistingModel
-    $modelLine = if ($e['AI_PROVIDER'] -eq 'openrouter') { $e['OPENROUTER_MODEL'] } elseif ($model) { $model -replace '^hf\.co/efficiencyx/', '' } else { '' }
+    $modelLine = if ($e['AI_PROVIDER'] -eq 'openai-compatible') { $e['OPENAI_COMPAT_MODEL'] } elseif ($model) { $model -replace '^hf\.co/efficiencyx/', '' } else { '' }
     $lines = @("Provider: $($e['AI_PROVIDER'])")
     if ($modelLine) { $lines += "Model: $modelLine" }
     $lines += "Voice $(if ($voice) { 'on' } else { 'off' }), karaoke $(if ($karaoke) { 'on' } else { 'off' }), game bridge $(if (Test-EnvOn $e['GAME_BRIDGE'] $false) { 'on' } else { 'off' })"
@@ -960,7 +963,7 @@ function Update-Mode {
 
 function Update-ProviderPanels {
     $provider = Get-SelectedTag $ProviderCombo
-    $OpenRouterPanel.Visibility = if ($provider -eq 'openrouter') { 'Visible' } else { 'Collapsed' }
+    $CompatPanel.Visibility = if ($provider -eq 'openai-compatible') { 'Visible' } else { 'Collapsed' }
     $LlamaPanel.Visibility = if ($provider -eq 'llamacpp') { 'Visible' } else { 'Collapsed' }
     $managedLocal = $provider -eq 'ollama' -or ($provider -eq 'llamacpp' -and -not $LlamaUrl.Text.Trim())
     $LocalModelPanel.Visibility = if ($managedLocal) { 'Visible' } else { 'Collapsed' }
@@ -1024,12 +1027,12 @@ function Validate-Options {
         return
     }
     $provider = Get-SelectedTag $ProviderCombo
-    if ($provider -eq 'openrouter') {
-        if ([string]::IsNullOrWhiteSpace($OpenRouterKey.Password) -and -not $script:existingEnv['OPENROUTER_API_KEY']) {
-            throw 'Enter an OpenRouter API key, or choose a local provider.'
+    if ($provider -eq 'openai-compatible') {
+        if ($CompatUrl.Text.Trim() -notmatch '^https?://') {
+            throw 'Enter the server address, starting with https:// or http://.'
         }
-        if ([string]::IsNullOrWhiteSpace($OpenRouterModel.Text)) {
-            throw 'Enter an OpenRouter model ID.'
+        if ([string]::IsNullOrWhiteSpace($CompatModel.Text)) {
+            throw 'Enter a model ID.'
         }
     }
     if ($provider -eq 'llamacpp' -and $LlamaUrl.Text.Trim() -and
@@ -1078,7 +1081,7 @@ function Get-SetupValues {
 function Update-Review {
     $values = Get-SetupValues
     $path = Resolve-InstallLocation
-    $providerNames = @{ ollama = 'Ollama (local)'; openrouter = 'OpenRouter (cloud)'; llamacpp = 'llama.cpp (local)'; cloud = 'Your Colab or Kaggle notebook' }
+    $providerNames = @{ ollama = 'Ollama (local)'; 'openai-compatible' = 'OpenAI-compatible server'; llamacpp = 'llama.cpp (local)'; cloud = 'Your Colab or Kaggle notebook' }
     if ($values.Update) {
         $ReviewText.Text = @(
             "Folder       $path",
@@ -1093,8 +1096,8 @@ function Update-Review {
         $cloud = Get-CloudValues
         $url = if ($cloud['AI_PROVIDER'] -eq 'vllm') { $cloud['VLLM_URL'] } else { $cloud['OLLAMA_URL'] }
         if ($url) { "On the notebook, at $url" } else { 'On the notebook, link goes in .env later' }
-    } elseif ($values.Provider -eq 'openrouter') {
-        $OpenRouterModel.Text.Trim()
+    } elseif ($values.Provider -eq 'openai-compatible') {
+        $CompatModel.Text.Trim()
     } elseif ($values.Provider -eq 'llamacpp' -and $LlamaUrl.Text.Trim()) {
         "Existing server at $($LlamaUrl.Text.Trim())"
     } else {
@@ -1284,7 +1287,7 @@ function Start-Installation {
         'JUN_YES', 'JUN_EXPRESS', 'JUN_DIR', 'JUN_CHANNEL', 'JUN_REF', 'JUN_PIN_SHA', 'JUN_PROVIDER', 'JUN_MODEL',
         'JUN_TENSOR_PARALLEL', 'JUN_MTP', 'JUN_MTP_DEPTH', 'JUN_KARAOKE',
         'JUN_EXTRACT', 'JUN_BRIDGE', 'JUN_SHORTCUTS', 'JUN_UPDATE_CHECK', 'JUN_TRUST_CA', 'JUN_MANAGER_EXE', 'JUN_GAME_DIR', 'JUN_BOOTSTRAP_WINGET', 'VOICE',
-        'KARAOKE', 'OPENROUTER_API_KEY', 'OPENROUTER_MODEL', 'LLAMACPP_URL', 'JUN_CLOUD', 'JUN_CLOUD_ASK', 'JUN_REUSE'
+        'KARAOKE', 'OPENAI_COMPAT_BASE_URL', 'OPENAI_COMPAT_API_KEY', 'OPENAI_COMPAT_MODEL', 'LLAMACPP_URL', 'JUN_CLOUD', 'JUN_CLOUD_ASK', 'JUN_REUSE'
     ) + $CloudKeys
     foreach ($key in $managedKeys) { $info.EnvironmentVariables.Remove($key) }
 
@@ -1316,10 +1319,11 @@ function Start-Installation {
     if (($values.Extract -or $values.Bridge) -and $GameLocation.Text.Trim()) {
         $info.EnvironmentVariables['JUN_GAME_DIR'] = $GameLocation.Text.Trim()
     }
-    if (-not $values.Update -and $values.Provider -eq 'openrouter') {
-        $key = if ($OpenRouterKey.Password) { $OpenRouterKey.Password } else { $script:existingEnv['OPENROUTER_API_KEY'] }
-        $info.EnvironmentVariables['OPENROUTER_API_KEY'] = $key
-        $info.EnvironmentVariables['OPENROUTER_MODEL'] = $OpenRouterModel.Text.Trim()
+    if (-not $values.Update -and $values.Provider -eq 'openai-compatible') {
+        $key = if ($CompatKey.Password) { $CompatKey.Password } else { $script:existingEnv['OPENAI_COMPAT_API_KEY'] }
+        $info.EnvironmentVariables['OPENAI_COMPAT_BASE_URL'] = $CompatUrl.Text.Trim()
+        $info.EnvironmentVariables['OPENAI_COMPAT_API_KEY'] = $key
+        $info.EnvironmentVariables['OPENAI_COMPAT_MODEL'] = $CompatModel.Text.Trim()
     }
     if (-not $values.Update -and $values.Provider -eq 'llamacpp' -and $LlamaUrl.Text.Trim()) {
         $info.EnvironmentVariables['LLAMACPP_URL'] = $LlamaUrl.Text.Trim()

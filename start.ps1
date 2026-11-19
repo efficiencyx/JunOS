@@ -234,7 +234,7 @@ $CloudKeys = @('AI_PROVIDER', 'OLLAMA_URL', 'OLLAMA_API_KEY', 'OLLAMA_MODELS_TO_
 function Get-CloudLink {
     switch ("$env:AI_PROVIDER".ToLower()) {
         'vllm' { return @{ Url = "$env:VLLM_URL"; Key = "$env:VLLM_API_KEY"; Probe = '/v1/models' } }
-        { $_ -in 'openrouter', 'llamacpp' } { return $null }
+        { $_ -in 'openai-compatible', 'llamacpp' } { return $null }
     }
     # unset is ours too, the loader above drops .env.example's ollama:11434
     if (-not $env:OLLAMA_URL -or $env:OLLAMA_URL -match '://(127\.0\.0\.1|localhost|\[::1\])(:|/|$)') { return $null }
@@ -291,7 +291,10 @@ function Get-HfGguf([string]$repo, [string]$rev, [string]$quant) {
 function Get-CachedGguf([string]$repoDir, [string]$repo, [string]$quant) {
     foreach ($f in @(Get-ChildItem -Path (Join-Path $repoDir 'snapshots\*\*') -Filter "*.$quant.gguf" -Force -ErrorAction SilentlyContinue)) {
         $sha = if ($f.LinkType) { Split-Path -Leaf (@($f.Target)[0]) } else { (Get-HfGguf $repo $f.Directory.Name $quant).oid }
-        [pscustomobject]@{ Dir = $f.Directory.FullName; Sha = $sha }
+        $files = @($f.FullName)
+        if ($f.LinkType) { $files += Join-Path $repoDir "blobs\$sha" }
+        $bytes = (Get-Item -LiteralPath $files[-1] -Force -ErrorAction SilentlyContinue).Length
+        [pscustomobject]@{ Dir = $f.Directory.FullName; Sha = $sha; Files = $files; Bytes = $bytes }
     }
 }
 
@@ -318,7 +321,8 @@ function Get-ModelUpdate([string]$ref) {
     if (-not $cached.Count) { return $null }
     $remote = Get-HfGguf $repo 'main' $quant
     if (-not $remote) { return $null }
-    [pscustomobject]@{ Ref = $ref; Repo = $repo; Quant = $quant; Dir = $dir; Sha = $remote.oid; Size = $remote.size; New = $cached.Sha -notcontains $remote.oid }
+    [pscustomobject]@{ Ref = $ref; Repo = $repo; Quant = $quant; Dir = $dir; Sha = $remote.oid; Size = $remote.size; New = $cached.Sha -notcontains $remote.oid
+        Damaged = @($cached | Where-Object { $_.Sha -eq $remote.oid -and $_.Bytes -ne $remote.size }) }
 }
 
 function Get-OldModelBytes($update) {
@@ -541,7 +545,11 @@ if ($Action -eq 'start' -and $BindAddr -notin @('127.0.0.1', 'localhost', '::1')
 }
 
 $Provider  = if ($env:AI_PROVIDER) { $env:AI_PROVIDER.ToLower() } else { 'ollama' }
-if ($Provider -notin 'ollama', 'openrouter', 'llamacpp', 'vllm') { $Provider = 'ollama' }
+if ($Provider -eq 'openrouter') {
+    Write-Host 'AI_PROVIDER=openrouter is gone. Run install.ps1 again and say yes to the migration, or set AI_PROVIDER=openai-compatible with OPENAI_COMPAT_BASE_URL (https://openrouter.ai/api/v1 still works), OPENAI_COMPAT_API_KEY and OPENAI_COMPAT_MODEL in .env' -ForegroundColor Red
+    exit 1
+}
+if ($Provider -notin 'ollama', 'openai-compatible', 'llamacpp', 'vllm') { $Provider = 'ollama' }
 $LlamaPort = if ($env:LLAMACPP_PORT) { $env:LLAMACPP_PORT } else { '8081' }
 $LlamacppUrl = if ($env:LLAMACPP_URL) { $env:LLAMACPP_URL } else { "http://127.0.0.1:$LlamaPort" }
 
@@ -1115,6 +1123,12 @@ if ($Provider -eq 'llamacpp' -and $LlamacppUrl -match '://(127\.0\.0\.1|localhos
         $askUser = -not $Yes -and [Environment]::UserInteractive -and -not [Console]::IsInputRedirected
         $offline = "$env:LLAMACPP_OFFLINE" -match '^(on|1|true|yes)$'
         $update = Get-ModelUpdate $chatModels[0]
+        # llama.cpp never checks a cached file again, a botched resume
+        # left one 6.8 GB too big and she said <unused49> forever
+        foreach ($bad in @($update.Damaged | Where-Object { $_ })) {
+            Warn_ ("{0} on disk isn't the size Hugging Face says ({1:N1} GB), the download broke. getting it again" -f $update.Ref, ($update.Size / 1e9))
+            Remove-Item -LiteralPath $bad.Files -Force -ErrorAction SilentlyContinue
+        }
         if ($update -and $update.New) {
             $ans = "$env:JUN_MODEL_UPDATE"
             if (-not $ans -and $askUser) {
@@ -1269,7 +1283,7 @@ $env:OMEGA_ALLOWED_ORIGINS  = $SiteUrl
 # listens on loopback, so here the header is safe to believe.
 $env:TRUST_PROXY            = '1'
 $libPath = (Join-Path $JunRoot 'webapp\api\lib\bootstrap.php').Replace('\', '/')
-& $phpExe -r "require '$libPath'; db();"
+& $phpExe -r 'require $argv[1]; db();' $libPath
 if ($LASTEXITCODE -ne 0) { throw 'database migration failed' }
 # the game's save into her memory, gauges and wardrobe, once per
 # boot. never writes while the game runs, it'd save over us on exit

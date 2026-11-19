@@ -20,20 +20,19 @@ class RemoteError(val code: String, cause: Throwable? = null) : Exception(code, 
 // "jun" is the desktop's api/model.php: openai-shaped, but php picks
 // the model and the sampling, same as for her chat page
 internal object RemoteWire {
-    const val OPENROUTER = "https://openrouter.ai/api"
     const val OPENAI = "https://api.openai.com"
 
     fun chatUrl(api: String, base: String): String = when (api) {
-        "openai", "openrouter", "openai-key" -> base.trimEnd('/') + "/v1/chat/completions"
+        "openai", "openai-key" -> base.trimEnd('/') + "/v1/chat/completions"
+        "openai-compat" -> base.trimEnd('/') + "/chat/completions"
         "ollama" -> base.trimEnd('/') + "/api/chat"
         "chatgpt" -> ResponsesWire.URL
         else -> base
     }
 
-    // openrouter's /models answers without a key, /key doesn't
     fun probeUrl(api: String, base: String): String = when (api) {
         "openai", "openai-key" -> base.trimEnd('/') + "/v1/models"
-        "openrouter" -> base.trimEnd('/') + "/v1/key"
+        "openai-compat" -> base.trimEnd('/') + "/models"
         "ollama" -> base.trimEnd('/') + "/api/tags"
         else -> base
     }
@@ -76,13 +75,13 @@ internal object RemoteWire {
                     // trips a capability check her GGUFs fail, ollama 400s
                     if (!think) put("think", false)
                 }
-                "openrouter" -> {
+                "openai-compat" -> {
                     put("model", model)
                     put("stream", true)
                     put("temperature", temperature)
                     put("top_p", 0.95); put("top_k", 80); put("min_p", 0.01)
                     put("max_tokens", maxTokens)
-                    if (think) put("reasoning", buildJsonObject { put("effort", effort) })
+                    if (think) put("reasoning_effort", effort)
                     put("stream_options", buildJsonObject { put("include_usage", true) })
                 }
                 // reasoning models 400 on temperature, top_p and max_tokens.
@@ -103,6 +102,47 @@ internal object RemoteWire {
                     put("chat_template_kwargs", buildJsonObject { put("enable_thinking", think) })
                     put("stream_options", buildJsonObject { put("include_usage", true) })
                 }
+            }
+        }
+    }
+
+    fun warmRequest(
+        api: String,
+        model: String?,
+        messages: List<ChatMessage>,
+        tools: List<String>,
+        think: Boolean,
+        temperature: Float,
+        reasoning: String,
+        contextTokens: Int,
+    ): JsonObject? {
+        if (api !in setOf("jun", "ollama", "openai") || messages.isEmpty()) return null
+        val warmMessages = if (messages.last().role == "assistant") messages + ChatMessage("user", "") else messages
+        if (api == "jun") return request(api, model, warmMessages, tools, think, 0, temperature, reasoning, contextTokens)
+        val effort = if (reasoning == "med") "medium" else reasoning
+        val toolArray = JsonArray(tools.map { Json.parseToJsonElement(it) })
+        return buildJsonObject {
+            put("model", model)
+            put("messages", messages(api, warmMessages))
+            put("stream", false)
+            if (tools.isNotEmpty()) put("tools", toolArray)
+            if (api == "ollama") {
+                put("keep_alive", -1)
+                put("options", buildJsonObject {
+                    put("reasoning_effort", effort)
+                    put("temperature", temperature)
+                    put("top_p", 0.95); put("top_k", 80); put("min_p", 0.01)
+                    put("num_ctx", contextTokens)
+                    put("num_predict", 0)
+                })
+                if (!think) put("think", false)
+            } else {
+                put("temperature", temperature)
+                put("top_p", 0.95); put("top_k", 80); put("min_p", 0.01)
+                put("max_tokens", 0)
+                put("n_predict", 0)
+                put("cache_prompt", true)
+                put("chat_template_kwargs", buildJsonObject { put("enable_thinking", think) })
             }
         }
     }

@@ -1,14 +1,17 @@
 <?php
 // usage: php .github/scripts/lib.test.php
 $lib = __DIR__ . '/../../webapp/api/lib';
+require "$lib/env.php";
 require "$lib/text.php";
 require "$lib/memory.php";
 require "$lib/providers/context.php";
 require "$lib/providers/stream.php";
 require "$lib/chat/request.php";
+require "$lib/chat/prompt.php";
 require "$lib/chat/websearch.php";
 require "$lib/chat/tags.php";
 require "$lib/providers/config.php";
+require "$lib/providers/llamacpp.php";
 require "$lib/providers/payload.php";
 require "$lib/difficulty.php";
 
@@ -99,6 +102,31 @@ $eq('tags: no deltas no call', $applied, []);
 $applied = [];
 $out = chat_apply_bookkeeping_tags('Ha. [A:mood_shift|affection=+2]', 1, [], false);
 $eq('tags: tick strips without applying', [$out, $applied], ['Ha.', []]);
+$eq('tags: client strip matches stream-filters', chat_strip_client_tags("hey. [A:smile] there you are.\n[A:memory_write|category=likes|memory=tea]\n[A:mood_shift|affection=-3]"), "hey.  there you are.\n\n");
+$eq('tags: client strip ignores ] inside tool JSON strings', chat_strip_client_tags('[TOOL:call{"q":"a]b"}] hi [ACTION: wave]'), ' hi ');
+
+$warmMsgs = chat_build_warm_messages(
+    ['body' => ['messages' => [['role' => 'user', 'content' => 'old'], ['role' => 'assistant', 'content' => 'ok'], ['role' => 'user', 'content' => 'new']]], 'dropped_oldest' => 0, 'idle' => false],
+    'sys', 0, 'new', 'clean reply'
+);
+$eq('warm: clean history + reply without live context', $warmMsgs, [
+    ['role' => 'system', 'content' => 'sys'],
+    ['role' => 'user', 'content' => 'old'],
+    ['role' => 'assistant', 'content' => 'ok'],
+    ['role' => 'user', 'content' => 'new'],
+    ['role' => 'assistant', 'content' => 'clean reply'],
+]);
+$llamaWarm = provider_chat_warm_payload('llamacpp', 'jun', $warmMsgs, 'low', false, [['type' => 'function']]);
+$eq('warm: llamacpp closes assistant with empty user turn and n_predict 0', [
+    $llamaWarm['stream'], $llamaWarm['max_tokens'], $llamaWarm['n_predict'], $llamaWarm['cache_prompt'],
+    end($llamaWarm['messages']), isset($llamaWarm['stream_options']),
+], [false, 0, 0, true, ['role' => 'user', 'content' => ''], false]);
+$ollamaWarm = provider_chat_warm_payload('ollama', 'jun', $warmMsgs, 'low', false);
+$eq('warm: ollama sets num_predict 0 and stream false', [
+    $ollamaWarm['stream'], $ollamaWarm['options']['num_predict'], end($ollamaWarm['messages']),
+], [false, 0, ['role' => 'user', 'content' => '']]);
+$vllmWarm = provider_chat_warm_payload('vllm', 'jun', $warmMsgs, 'low', false);
+$eq('warm: vllm keeps max_tokens at 1', [$vllmWarm['stream'], $vllmWarm['max_tokens']], [false, 1]);
 
 // SOI + a baseline SOF0 header is all getimagesizefromstring reads
 $fakeJpeg = fn(int $w, int $h) => base64_encode("\xFF\xD8\xFF\xC0\x00\x11\x08" . pack('nn', $h, $w)

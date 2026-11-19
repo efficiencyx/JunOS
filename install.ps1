@@ -440,7 +440,7 @@ function Confirm-RepoSource {
     if ($a -notmatch '^(y|yes)$') { Fail_ 'aborted.'; Exit-Install 1 }
 }
 
-# .env holds the OpenRouter key once somebody types one in.
+# .env holds the API key once somebody types one in.
 # windows hands new files the folder's inherited ACL, which on a
 # shared box can mean every local account reads it. so break
 # inheritance, then owner + SYSTEM only.
@@ -476,6 +476,24 @@ function Enter-CloudMode {
 
 # Express alone puts llama.cpp and karaoke back over what they
 # picked. a yes skips Configure-Jun and .env stays as it is
+# OpenRouter had its own provider once, same wire as openai-compatible.
+# declining leaves .env alone and start.ps1 refuses to run it
+function Move-OpenRouterEnv([string]$envFile) {
+    if ((Get-EnvValue 'AI_PROVIDER' $envFile) -ne 'openrouter') { return }
+    if (-not $env:JUN_YES -and [Environment]::UserInteractive) {
+        $ans = Read-Styled "     ${OK}▸${R} OpenRouter has its own provider no more. move this .env to openai-compatible, same address, key and model? ${DIM}[Y/n]${R} ${ACCENT}›${R} "
+        if ($ans -match '^(n|no)$') { Warn_ "left as it was, start.ps1 won't run until AI_PROVIDER is changed"; return }
+    }
+    $base = Get-EnvValue 'OPENROUTER_BASE_URL' $envFile; if (-not $base) { $base = 'https://openrouter.ai/api/v1' }
+    $model = Get-EnvValue 'OPENROUTER_MODEL' $envFile; if (-not $model) { $model = 'openrouter/auto' }
+    $key = Get-EnvValue 'OPENROUTER_API_KEY' $envFile
+    $lines = @(Get-Content -LiteralPath $envFile | Where-Object { $_ -notmatch '^(OPENROUTER_|OPENAI_COMPAT_)' } |
+        ForEach-Object { if ($_ -match '^AI_PROVIDER=') { 'AI_PROVIDER=openai-compatible' } else { $_ } })
+    $lines += "OPENAI_COMPAT_BASE_URL=$base", "OPENAI_COMPAT_API_KEY=$key", "OPENAI_COMPAT_MODEL=$model"
+    Set-Content -LiteralPath $envFile -Value $lines
+    Ok '.env moved to openai-compatible'
+}
+
 function Choose-Reuse([string]$existing) {
     if (-not $existing) { return }
     $envFile = Join-Path $existing '.env'
@@ -490,6 +508,7 @@ function Choose-Reuse([string]$existing) {
             if ($ans -match '^(n|no)$') { $env:JUN_REUSE = '0'; return }
         }
     }
+    Move-OpenRouterEnv $envFile
     $script:reuse = $true
     $env:JUN_REUSE = '1'; $env:JUN_YES = '1'
     $script:interactive = $false
@@ -796,11 +815,11 @@ function Configure-Jun {
             Write-Host ''
             Write-Host "     ${B}select an AI provider${R}"
             Write-Host "       ${ACCENT}[1]${R}  llama.cpp   ${DIM}- local llama-server, fully managed${R} ${DIM}(default)${R}"
-            Write-Host "       ${ACCENT}[2]${R}  OpenRouter  ${DIM}- cloud API - needs an API key; chats leave this machine${R}"
+            Write-Host "       ${ACCENT}[2]${R}  OpenAI-compatible  ${DIM}- a server you name, with its key; chats leave this machine${R}"
             Write-Host "       ${ACCENT}[3]${R}  Ollama      ${DIM}- local, fully managed${R}"
             $ans = Read-Styled "     ${OK}▸${R} choice ${DIM}[Enter = llama.cpp]${R} ${ACCENT}›${R} "
             $provider = switch -Regex ($ans) {
-                '^(2|openrouter)$'                 { 'openrouter' }
+                '^(2|openai-compatible)$'            { 'openai-compatible' }
                 '^(3|ollama)$'                     { 'ollama' }
                 '^(1|llama|llamacpp|llama\.cpp)?$' { 'llamacpp' }
                 default { Warn_ "unrecognized choice '$ans', using llama.cpp"; 'llamacpp' }
@@ -809,7 +828,7 @@ function Configure-Jun {
             $provider = 'llamacpp'
         }
     }
-    if ($provider -notin 'ollama', 'openrouter', 'llamacpp', 'cloud') {
+    if ($provider -notin 'ollama', 'openai-compatible', 'llamacpp', 'cloud') {
         Warn_ "unknown provider '$provider', using llama.cpp"
         $provider = 'llamacpp'
     }
@@ -818,7 +837,7 @@ function Configure-Jun {
 
     # we ask this before the model question. splitting across cards
     # changes how much VRAM we get to assume when recommending one.
-    $script:tensorParallel = if ($provider -in 'openrouter', 'cloud') { 'off' } else { Ask-TensorParallel }
+    $script:tensorParallel = if ($provider -in 'openai-compatible', 'cloud') { 'off' } else { Ask-TensorParallel }
 
     $needsOllama = ($provider -eq 'ollama')
     $needsLlamacpp = $false
@@ -830,27 +849,31 @@ function Configure-Jun {
             Ok "model $modelRef"
             $script:mtpAutotune = Configure-Mtp 'ollama' $modelRef
         }
-        'openrouter' {
-            $key = $env:OPENROUTER_API_KEY
-            if (-not $key -and $interactive) {
-                # hidden input that works on PS 5.1. the key is never echoed
-                # back and never printed in the summary at the end.
-                Write-Host "     ${OK}▸${R} OpenRouter API key ${DIM}(hidden; from openrouter.ai/keys)${R}"
-                $sec = Read-Host '       key' -AsSecureString
-                $key = [Runtime.InteropServices.Marshal]::PtrToStringAuto(
-                    [Runtime.InteropServices.Marshal]::SecureStringToBSTR($sec))
+        'openai-compatible' {
+            $base = $env:OPENAI_COMPAT_BASE_URL
+            $key = $env:OPENAI_COMPAT_API_KEY
+            $model = $env:OPENAI_COMPAT_MODEL
+            if ($interactive) {
+                if (-not $base) {
+                    $base = Read-Styled "     ${OK}▸${R} server address ${DIM}(ends in /v1, e.g. https://llm.example.com/v1)${R} ${ACCENT}›${R} "
+                }
+                if (-not $key) {
+                    # hidden input that works on PS 5.1. the key is never echoed
+                    # back and never printed in the summary at the end.
+                    Write-Host "     ${OK}▸${R} API key ${DIM}(hidden, Enter = none)${R}"
+                    $sec = Read-Host '       key' -AsSecureString
+                    $key = [Runtime.InteropServices.Marshal]::PtrToStringAuto(
+                        [Runtime.InteropServices.Marshal]::SecureStringToBSTR($sec))
+                }
+                if (-not $model) { $model = Read-Styled "     ${OK}▸${R} model id ${ACCENT}›${R} " }
             }
-            if (-not $key) { Warn_ 'no API key set - add OPENROUTER_API_KEY to .env before chatting' }
+            if (-not $base) { Warn_ 'no server address - add OPENAI_COMPAT_BASE_URL to .env before chatting' }
+            if (-not $model) { Warn_ 'no model - add OPENAI_COMPAT_MODEL to .env before chatting' }
 
-            $orm = $env:OPENROUTER_MODEL
-            if (-not $orm -and $interactive) {
-                $orm = Read-Styled "     ${OK}▸${R} model id ${DIM}[Enter = openrouter/auto]${R} ${ACCENT}›${R} "
-            }
-            if (-not $orm) { $orm = 'openrouter/auto' }
-
-            Set-EnvKey 'OPENROUTER_API_KEY' "$key"
-            Set-EnvKey 'OPENROUTER_MODEL' $orm
-            Ok "model $orm"
+            Set-EnvKey 'OPENAI_COMPAT_BASE_URL' "$base"
+            Set-EnvKey 'OPENAI_COMPAT_API_KEY' "$key"
+            Set-EnvKey 'OPENAI_COMPAT_MODEL' "$model"
+            Ok "model $model"
         }
         'llamacpp' {
             $url = $env:LLAMACPP_URL

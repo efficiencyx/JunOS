@@ -40,7 +40,7 @@ how to report something you find.
   ceiling (`OMEGA_TURN_TIMEOUT_S`, 900 s), an idle limit (`OMEGA_STREAM_IDLE_S`,
   300 s), and byte caps on the stream (1 MiB per frame, 4 MiB of content,
   64 KiB of error body); a thinking turn is capped at 16k generated tokens. A
-  logged-in user cannot hold a PHP worker or spend OpenRouter credit without
+  logged-in user cannot hold a PHP worker or spend someone's API credit without
   bound.
 * *Developer-only operations.* Privileged endpoints enforce the account role
   server-side. `OMEGA_DEV_KEY` is optional, compared in constant time, and
@@ -177,7 +177,7 @@ The installers fetch code from other people and run it. What is checked:
 | Android build | `services.gradle.org`, GitHub release, PyPI, Maven Central / Google Maven | The Gradle distribution (`android/gradlew`, `android/gradle-bootstrap.ps1`), the sherpa-onnx AAR and the UnityPy / tpk_ar source archives are pinned by sha256 and refused on a mismatch. Maven libraries are pinned by exact version only. |
 | winget itself, if absent | PSGallery | Not automatic. It asks first, or takes `JUN_BOOTSTRAP_WINGET=1`. |
 | Python packages | PyPI, `download.pytorch.org` | Exact versions in `tts/requirements*.txt` and `tools/requirements-recovery.txt`. Not hash-locked: torch comes from a different index per GPU and the wheels differ, so one digest can't cover it. Transitive deps float. |
-| Base images | Docker Hub, ghcr.io | Exact version tags (`php:8.5.12-fpm-alpine`, `nginx:1.30.6-alpine`, `python:3.11.17-slim`, `certbot/certbot:v5.8.0`, `ollama/ollama:0.40.10` - 0.32 is the floor for the MTP drafter's `gemma4-assistant` architecture, and the AMD/Colab pins move with it). The llama.cpp server images are pinned by sha256 digest in the compose files. The php image builds APCu from its GitHub tag (`krakjoe/apcu`, version and sha256 pinned in `docker/php.Dockerfile`), not from pecl.php.net. A tag is still mutable upstream; the digest is not. |
+| Base images | Docker Hub, ghcr.io | Exact version tags (`php:8.5.12-fpm-alpine`, `nginx:1.30.7-alpine`, `python:3.11.17-slim`, `certbot/certbot:v5.8.0`, `ollama/ollama:0.40.10` - 0.32 is the floor for the MTP drafter's `gemma4-assistant` architecture, and the AMD/Colab pins move with it). The llama.cpp server images are pinned by sha256 digest in the compose files. The php image builds APCu from its GitHub tag (`krakjoe/apcu`, version and sha256 pinned in `docker/php.Dockerfile`), not from pecl.php.net. A tag is still mutable upstream; the digest is not. |
 | Models | Hugging Face, via Ollama or llama.cpp | Tags only. Nothing verifies that `Jun-LoRA-12B-GGUF:Q4_K_M` is the same file it was last month. |
 | MTP drafters | Hugging Face, third-party uploads (`Janvitos/...`, `amaranus/...` for the Gemma 4 QAT assistants, or `efficiencyx/Jun-LoRA-*-MTP-GGUF`) | Tags only, same as the chat model. Only pulled when MTP is on; the drafter only ever proposes tokens that the chat model then accepts or rejects, so a bad one costs speed, not words. |
 | Title model (Ollama and llama.cpp) | Hugging Face, `efficiencyx/Titlewen-GGUF` | Tags only. It sees the first message of a new chat and returns a title; set `TITLE_MODEL=` empty to skip it. |
@@ -253,9 +253,8 @@ downloads or changes anything.
   notebook (below) they ride along with the prompt like everything else.
 * `lrclib.net` - only when karaoke looks up lyrics for a song you loaded. Title,
   artist, album and duration go out.
-* `openrouter.ai` - **only** if you chose OpenRouter as the provider, and then
-  your messages go to their cloud. That is the whole point of the option, and it
-  is not the default nor recommended.
+* Whatever `OPENAI_COMPAT_BASE_URL` says - **only** with `AI_PROVIDER=openai-compatible`,
+  and then your messages go to that server. Nothing is preset, you type the URL.
 * `*.trycloudflare.com` - **only** if you pointed `OLLAMA_URL` or `VLLM_URL` at
   `colab.ipynb` running in inference-only mode (by hand, with `start.sh link`,
   the manager's Notebook link button, or the installer's Cloud option). Each
@@ -287,7 +286,7 @@ model, voice and asset downloads. In LAN mode it talks to the paired PC on your
 network and nothing else. In Cloud mode it sends every prompt to the notebook's
 `*.trycloudflare.com` URL, with the same contents and the same gate as the PC
 case above, and the picker says so next to the option. In Online API mode it
-sends every prompt to OpenRouter (`openrouter.ai`) or OpenAI (`api.openai.com`,
+sends every prompt to the OpenAI-compatible server you typed or OpenAI (`api.openai.com`,
 or `chatgpt.com` and `auth.openai.com` for the ChatGPT sign-in), under the key
 or account you gave it. Keys and ChatGPT tokens sit in the same Keystore-sealed
 store as pairings and only go to that provider. The ChatGPT sign-in listens on
@@ -362,7 +361,7 @@ Discord: effx__
   The filenames keep their Markdown/JSON extensions; their stored contents
   are ciphertext after encryption, not directly editable documents.
 * `rl/`, `consolidating/` - rate-limit buckets and idle-consolidation locks.
-* `openrouter_models.json` - the cached model catalog, OpenRouter only.
+* `openai_compatible_models.json` - the cached model catalog, openai-compatible only.
 
 Model weights sit in their own volumes (`ollama_data`, `tts_cache`,
 `karaoke_cache`, `llamacpp_cache`), certificates in `letsencrypt` /
@@ -373,7 +372,7 @@ Model weights sit in their own volumes (`ollama_data`, `tts_cache`,
 `runtime\tts-venv`, `runtime\asset-recovery-venv`, `runtime\logs`.
 
 **Both:** `.env` in the repo root, which holds the generated registration key,
-the sidecar secret, your developer key and OpenRouter key if you set them, and
+the sidecar secret, your developer key and `OPENAI_COMPAT_API_KEY` if you set them, and
 other deployment configuration. The installers restrict it to your user
 (`chmod 600`, or an ACL on Windows). It is gitignored.
 

@@ -25,7 +25,7 @@
     <string name="setup_mode_cloud_detail">無料の Colab GPU をここから起動。Kaggle も使えます、Step 3 のコードをスキャンしてください。チャットは Google と Cloudflare を経由します。</string>
     <string name="setup_mode_api">オンライン API</string>
     <string name="setup_mode_api_paired">%1$s、%2$s。チャットはこのスマホの外に送られます。</string>
-    <string name="setup_mode_api_detail">OpenRouter、OpenAI、または ChatGPT のプラン。チャットはこのスマホの外に送られます。</string>
+    <string name="setup_mode_api_detail">OpenAI 互換サーバー、OpenAI、または ChatGPT のプラン。チャットはこのスマホの外に送られます。</string>
     <string name="setup_pause_download">ダウンロードを一時停止</string>
     <string name="setup_download_model">Jun のモデルをダウンロード</string>
     <string name="setup_download_paused">ダウンロードを一時停止しました。進行状況は保存されています。</string>
@@ -45,14 +45,16 @@
     <string name="setup_retry">もう一度</string>
     <string name="setup_ram_warning">注意：RAM が 8 GB クラス未満だと、応答が遅くなったりモデルが止まったりすることがあります。</string>
     <string name="setup_free_storage">空きストレージ</string>
-    <string name="setup_api_openrouter_detail">ほとんどのホスト型モデル。キーは openrouter.ai/keys で取得。</string>
+    <string name="setup_api_compat_detail">自分のサーバー、または借りたサーバー。アドレス、キー、モデルを入力します。</string>
     <string name="setup_api_openai">OpenAI API</string>
     <string name="setup_api_openai_detail">platform.openai.com のキー。メッセージごとに課金されます。</string>
     <string name="setup_api_chatgpt">ChatGPT プラン</string>
     <string name="setup_api_chatgpt_detail">ChatGPT アカウントでログイン。プランの利用上限を使います。</string>
     <string name="setup_api_key">API キー</string>
     <string name="setup_api_model">モデル</string>
-    <string name="setup_api_privacy_openrouter">チャットは OpenRouter とモデルの提供企業に送られます。彼女専用のファインチューンではなく、ほとんどのモデルは 18+ に対応していません。</string>
+    <string name="setup_api_privacy_compat">チャットはそのサーバーに送られます。そこに置かない限り、彼女専用のファインチューンではありません。</string>
+    <string name="setup_api_url">サーバーのアドレス</string>
+    <string name="err_api_url">https:// で始まるサーバーのアドレスを入力してください。</string>
     <string name="setup_api_privacy_openai">チャットは OpenAI に送られます。彼女専用のファインチューンではなく、ほとんどのモデルは 18+ に対応していません。</string>
     <string name="setup_api_save">保存</string>
     <string name="setup_api_signing_in">ブラウザでログインを完了してください</string>

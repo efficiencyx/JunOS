@@ -75,15 +75,18 @@ $messages = model_messages($body['messages'] ?? null, $provider);
 ollama_evict_if_partially_offloaded($model);
 if ($provider === 'llamacpp') llamacpp_unload_chat_models($model);
 $messages = fit_messages_to_context($messages, provider_window_tokens($provider, $model));
+$tools = is_array($body['tools'] ?? null) && $body['tools'] && provider_tools_enabled()
+    ? array_slice(array_values($body['tools']), 0, 16) : [];
+if (array_key_exists('max_tokens', $body) && (int)$body['max_tokens'] === 0) {
+    json_out(['ok' => provider_warm_chat($provider, $model, $messages, $think, $tools, $reasoning)]);
+}
 
 $payload = provider_chat_payload($provider, $model, $messages, $reasoning, $think);
 $maxTokens = (int)($body['max_tokens'] ?? 0) ?: ($think ? THINK_MAX_TOKENS : PLAIN_MAX_TOKENS);
 $maxTokens = max(16, min($maxTokens, THINK_MAX_TOKENS));
 if (isset($payload['options'])) $payload['options']['num_predict'] = $maxTokens;
 else $payload['max_tokens'] = $maxTokens;
-if (is_array($body['tools'] ?? null) && $body['tools'] && provider_tools_enabled()) {
-    $payload['tools'] = array_slice(array_values($body['tools']), 0, 16);
-}
+if ($tools) $payload['tools'] = $tools;
 
 sse_open();
 $delta = function (array $delta, ?string $finish = null): void {

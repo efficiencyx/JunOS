@@ -52,8 +52,8 @@ function provider_complete_tools(string $provider, string $model, array $message
             'max_tokens' => $maxTokens,
         ];
         if ($tools) $payload['tools'] = $tools;
-        if ($think && $provider === 'openrouter') $payload['reasoning'] = ['effort' => $reasoning];
         if ($provider === 'llamacpp' || $provider === 'vllm') $payload['chat_template_kwargs'] = ['enable_thinking' => $think];
+        if ($think && $provider === 'openai-compatible') $payload['reasoning_effort'] = $reasoning;
     } else {
         $payload = [
             'model' => $model,
@@ -90,10 +90,23 @@ function provider_complete_tools(string $provider, string $model, array $message
     ];
 }
 
+function provider_warm_chat(
+    string $provider,
+    string $model,
+    array $messages,
+    bool $think,
+    array $tools = [],
+    string $reasoning = 'low'
+): bool {
+    if (provider_is_hosted($provider) || !$messages) return false;
+    $payload = provider_chat_warm_payload($provider, $model, $messages, $reasoning, $think, $tools);
+    return provider_post_chat($provider, $payload, $error) !== null;
+}
+
 function generate_chat_title(string $userMessage): ?string {
     $provider = ai_provider();
     // vllm serves her and nothing else, no title model next to her
-    if ($provider === 'openrouter' || $provider === 'vllm') return null;
+    if (provider_is_hosted($provider) || $provider === 'vllm') return null;
     $model = $provider === 'llamacpp' ? llamacpp_title_model() : title_model();
     if ($model === '') return null;
 

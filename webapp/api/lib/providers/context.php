@@ -13,7 +13,7 @@ const CTX_TIERS = [6144, 8192, 12288, 16384];
 
 // NOT num_predict -1 ("no limit") on a thinking turn. the client
 // picks think, so any logged-in user could park the runner for
-// the full 600s nginx timeout (or burn openrouter credit) on
+// the full 600s nginx timeout (or burn hosted credit) on
 // every turn. 16k is more than any real trace needs and still a
 // ceiling.
 const THINK_MAX_TOKENS = 16384;
@@ -83,16 +83,16 @@ function default_num_ctx(): int {
 }
 
 // how many tokens the window holds, before anything is put in it.
-// zero for openrouter, the model behind it is whatever the user
+// zero for openai-compatible, the model behind it is whatever the user
 // picked and we have no idea what its window is.
 function provider_window_tokens(string $provider, string $model = ''): int {
     if ($provider === 'llamacpp') return llamacpp_window_tokens($model !== '' ? $model : default_chat_model());
     if ($provider === 'vllm') return vllm_window_tokens($model !== '' ? $model : default_chat_model());
-    if ($provider === 'openrouter') return 0;
+    if (provider_is_hosted($provider)) return 0;
     return default_num_ctx();
 }
 
-// openrouter has no window we know of, budgets still need a number
+// openai-compatible has no window we know of, budgets still need a number
 function chat_window_tokens(): int {
     return provider_window_tokens(ai_provider()) ?: default_num_ctx();
 }

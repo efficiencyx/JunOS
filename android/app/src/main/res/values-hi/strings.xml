@@ -25,7 +25,7 @@
     <string name="setup_mode_cloud_detail">एक मुफ़्त Colab GPU, यहीं से शुरू। Kaggle भी चलता है, उसका Step 3 कोड स्कैन करें। चैट Google और Cloudflare से होकर जाती हैं।</string>
     <string name="setup_mode_api">ऑनलाइन API</string>
     <string name="setup_mode_api_paired">%1$s, %2$s। चैट इस फ़ोन से बाहर जाती हैं।</string>
-    <string name="setup_mode_api_detail">OpenRouter, OpenAI या आपका ChatGPT प्लान। चैट इस फ़ोन से बाहर जाती हैं।</string>
+    <string name="setup_mode_api_detail">OpenAI-स्टाइल सर्वर, OpenAI या आपका ChatGPT प्लान। चैट इस फ़ोन से बाहर जाती हैं।</string>
     <string name="setup_pause_download">डाउनलोड रोकें</string>
     <string name="setup_download_model">Jun मॉडल डाउनलोड करें</string>
     <string name="setup_download_paused">डाउनलोड रुका हुआ है। आपकी प्रगति सेव है।</string>
@@ -45,14 +45,16 @@
     <string name="setup_retry">फिर से कोशिश करें</string>
     <string name="setup_ram_warning">चेतावनी: 8 GB से कम RAM पर जवाब धीमे आ सकते हैं या मॉडल रुक सकता है।</string>
     <string name="setup_free_storage">खाली स्टोरेज</string>
-    <string name="setup_api_openrouter_detail">ज़्यादातर होस्टेड मॉडल, openrouter.ai/keys से मिली key के साथ।</string>
+    <string name="setup_api_compat_detail">आपका अपना या किराये का सर्वर। आप उसका पता, key और मॉडल खुद लिखते हैं।</string>
     <string name="setup_api_openai">OpenAI API</string>
     <string name="setup_api_openai_detail">platform.openai.com से मिली key, हर मैसेज का बिल लगता है।</string>
     <string name="setup_api_chatgpt">ChatGPT प्लान</string>
     <string name="setup_api_chatgpt_detail">अपने ChatGPT अकाउंट से साइन इन करें, इसमें प्लान की लिमिट इस्तेमाल होती है।</string>
     <string name="setup_api_key">API key</string>
     <string name="setup_api_model">मॉडल</string>
-    <string name="setup_api_privacy_openrouter">चैट OpenRouter और मॉडल की कंपनी को जाती हैं। यह उसका अपना fine-tune नहीं है, और इनमें से ज़्यादातर मॉडल 18+ नहीं करते।</string>
+    <string name="setup_api_privacy_compat">चैट उसी सर्वर को जाती हैं। यह उसका fine-tune नहीं है, जब तक आप उसे वहाँ न रखें।</string>
+    <string name="setup_api_url">सर्वर का पता</string>
+    <string name="err_api_url">सर्वर का पता लिखें, जो https:// से शुरू हो।</string>
     <string name="setup_api_privacy_openai">चैट OpenAI को जाती हैं। यह उसका अपना fine-tune नहीं है, और इनमें से ज़्यादातर मॉडल 18+ नहीं करते।</string>
     <string name="setup_api_save">सेव करें</string>
     <string name="setup_api_signing_in">ब्राउज़र में साइन इन पूरा करें</string>

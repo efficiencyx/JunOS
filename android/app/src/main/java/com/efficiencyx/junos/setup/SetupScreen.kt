@@ -51,7 +51,7 @@ fun SetupScreen(
     colabRunning: Boolean,
     onColab: () -> Unit,
     onColabInBrowser: () -> Unit,
-    onSaveApiKey: (provider: String, key: String, model: String) -> Unit,
+    onSaveApiKey: (provider: String, url: String, key: String, model: String) -> Unit,
     onChatGptSignIn: (model: String) -> Unit,
     onForgetApi: () -> Unit,
     onStart: () -> Unit,
@@ -210,7 +210,7 @@ fun SetupScreen(
 }
 
 private val API_MODELS = mapOf(
-    "openrouter" to "openrouter/auto",
+    "openai-compat" to "",
     "openai-key" to "gpt-5-mini",
     "chatgpt" to "gpt-5.1",
 )
@@ -218,18 +218,29 @@ private val API_MODELS = mapOf(
 @Composable
 private fun ApiForm(
     state: SetupState,
-    onSaveApiKey: (provider: String, key: String, model: String) -> Unit,
+    onSaveApiKey: (provider: String, url: String, key: String, model: String) -> Unit,
     onChatGptSignIn: (model: String) -> Unit,
 ) {
-    var provider by rememberSaveable { mutableStateOf("openrouter") }
+    var provider by rememberSaveable { mutableStateOf("openai-compat") }
+    var url by rememberSaveable { mutableStateOf("") }
     var key by rememberSaveable { mutableStateOf("") }
     var model by rememberSaveable(provider) { mutableStateOf(API_MODELS.getValue(provider)) }
     val chatgpt = provider == "chatgpt"
     Column(Modifier.fillMaxWidth()) {
-        ProviderOption(provider, "openrouter", "OpenRouter", stringResource(R.string.setup_api_openrouter_detail)) { provider = it }
+        ProviderOption(provider, "openai-compat", "OpenAI-compatible", stringResource(R.string.setup_api_compat_detail)) { provider = it }
         ProviderOption(provider, "openai-key", stringResource(R.string.setup_api_openai), stringResource(R.string.setup_api_openai_detail)) { provider = it }
         ProviderOption(provider, "chatgpt", stringResource(R.string.setup_api_chatgpt), stringResource(R.string.setup_api_chatgpt_detail)) { provider = it }
         Spacer(Modifier.height(8.dp))
+        if (provider == "openai-compat") {
+            OutlinedTextField(
+                value = url,
+                onValueChange = { url = it },
+                label = { Text(stringResource(R.string.setup_api_url)) },
+                placeholder = { Text("https://llm.example.com/v1") },
+                singleLine = true,
+                modifier = Modifier.fillMaxWidth(),
+            )
+        }
         if (!chatgpt) {
             OutlinedTextField(
                 value = key,
@@ -248,13 +259,13 @@ private fun ApiForm(
             modifier = Modifier.fillMaxWidth(),
         )
         Text(
-            stringResource(if (provider == "openrouter") R.string.setup_api_privacy_openrouter else R.string.setup_api_privacy_openai),
+            stringResource(if (provider == "openai-compat") R.string.setup_api_privacy_compat else R.string.setup_api_privacy_openai),
             style = MaterialTheme.typography.bodySmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
             modifier = Modifier.padding(vertical = 8.dp),
         )
         Button(
-            onClick = { if (chatgpt) onChatGptSignIn(model) else onSaveApiKey(provider, key, model) },
+            onClick = { if (chatgpt) onChatGptSignIn(model) else onSaveApiKey(provider, url, key, model) },
             enabled = !state.signingIn,
             modifier = Modifier.fillMaxWidth(),
         ) {

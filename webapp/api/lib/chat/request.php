@@ -70,7 +70,7 @@ function chat_parse_request(string $provider): array {
 
     // she hears through the mmproj (the multimodal projector) that
     // sits next to the GGUF. ollama and llama.cpp both say whether
-    // the loaded one does audio, OpenRouter + the Android build
+    // the loaded one does audio, a hosted server + the Android build
     // can't take it at all. client hears this and falls back to
     // stt.php
     if ($frames && !provider_model_sees($provider, $model)) sse_fail('vision_unsupported');

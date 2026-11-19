@@ -63,3 +63,37 @@ function chat_apply_bookkeeping_tags(string $buffer, int $userId, array $rel, bo
     }
     return trim(preg_replace('/\[\s*A(?:CTIONS?)?\s*:\s*memory_write\b[^\]]*\]/i', '', $buffer));
 }
+
+function chat_strip_client_tags(string $text): string {
+    $out = '';
+    $pos = 0;
+    $len = strlen($text);
+    while ($pos < $len) {
+        if (!preg_match('/\[\s*(?:A(?:CTIONS?)?|TOOL)\s*:/i', $text, $m, PREG_OFFSET_CAPTURE, $pos)) {
+            $out .= substr($text, $pos);
+            break;
+        }
+        $start = $m[0][1];
+        if ($start > $pos) $out .= substr($text, $pos, $start - $pos);
+        $depth = 0;
+        $inStr = false;
+        $esc = false;
+        $end = -1;
+        for ($i = $start; $i < $len; $i++) {
+            $c = $text[$i];
+            if ($inStr) {
+                if ($esc) $esc = false;
+                elseif ($c === '\\') $esc = true;
+                elseif ($c === '"') $inStr = false;
+                continue;
+            }
+            if ($c === '"') $inStr = true;
+            elseif ($c === '{') $depth++;
+            elseif ($c === '}') { if ($depth > 0) $depth--; }
+            elseif ($c === ']' && $depth === 0) { $end = $i; break; }
+        }
+        if ($end < 0) break;
+        $pos = $end + 1;
+    }
+    return $out;
+}

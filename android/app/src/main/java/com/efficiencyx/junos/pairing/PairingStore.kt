@@ -24,8 +24,11 @@ class PairingStore(context: Context) {
 
     fun get(mode: SessionMode): Pairing? {
         val sealed = prefs.getString(mode.name, null) ?: return null
-        return runCatching { json.decodeFromString<Pairing>(open(sealed)) }.getOrNull()
+        return runCatching { json.decodeFromString<Pairing>(open(sealed)) }.getOrNull()?.let(::dropOpenRouter)
     }
+
+    private fun dropOpenRouter(p: Pairing) =
+        if (p.api == "openrouter") p.copy(api = "openai-compat", urls = p.urls.map { it.trimEnd('/') + "/v1" }) else p
 
     fun save(pairing: Pairing) {
         prefs.edit().putString(pairing.mode.name, seal(json.encodeToString(pairing))).apply()

@@ -44,12 +44,12 @@ function consolidation_payload(string $provider, string $model, array $messages,
         'stream_options' => ['include_usage' => true],
     ];
     if ($schema) $payload['response_format'] = ['type' => 'json_schema', 'json_schema' => ['name' => 'answer', 'schema' => $schema]];
-    if ($provider === 'openrouter' && $think) $payload['reasoning'] = ['effort' => $effort];
     if ($provider === 'llamacpp' || $provider === 'vllm') $payload['chat_template_kwargs'] = ['enable_thinking' => $think];
+    if ($think && $provider === 'openai-compatible') $payload['reasoning_effort'] = $effort;
     return $payload;
 }
 
-// json_schema is a request not a promise (openrouter, LLAMACPP_TOOLS=off), dig it out of fences and prose
+// json_schema is a request not a promise (hosted servers, LLAMACPP_TOOLS=off), dig it out of fences and prose
 function consolidation_parse_json(string $content): ?array {
     $text = trim(provider_strip_think($content));
     $data = json_decode($text, true);

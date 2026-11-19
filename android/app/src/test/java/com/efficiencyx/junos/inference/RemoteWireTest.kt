@@ -118,17 +118,19 @@ class RemoteWireTest {
 
     @Test
     fun hostedApisGetOnlyWhatTheyAccept() {
-        val openRouter = request("openrouter", true)
+        val compat = request("openai-compat", true)
         val openAi = request("openai-key", false)
 
-        assertEquals("medium", openRouter["reasoning"]!!.jsonObject["effort"]!!.jsonPrimitive.content)
-        assertNull(openRouter["chat_template_kwargs"])
+        assertNull(compat["reasoning"])
+        assertEquals("medium", compat["reasoning_effort"]!!.jsonPrimitive.content)
+        assertNull(request("openai-compat", false)["reasoning_effort"])
+        assertNull(compat["chat_template_kwargs"])
         assertNull(openAi["temperature"])
         assertNull(openAi["top_k"])
         assertNull(openAi["max_tokens"])
         assertNull(openAi["reasoning_effort"])
         assertTrue(openAi["max_completion_tokens"]!!.jsonPrimitive.int > 1024)
-        assertEquals("https://openrouter.ai/api/v1/chat/completions", RemoteWire.chatUrl("openrouter", RemoteWire.OPENROUTER))
+        assertEquals("https://llm.example.com/v1/chat/completions", RemoteWire.chatUrl("openai-compat", "https://llm.example.com/v1/"))
         assertEquals("https://api.openai.com/v1/models", RemoteWire.probeUrl("openai-key", RemoteWire.OPENAI))
     }
 
@@ -137,5 +139,33 @@ class RemoteWireTest {
         assertEquals(16384, Json.parseToJsonElement("""{"model":"x","ctx":16384}""").ctxFromProbe("jun"))
         assertEquals(8192, Json.parseToJsonElement("""{"data":[{"id":"jun","max_model_len":8192}]}""").ctxFromProbe("openai"))
         assertNull(Json.parseToJsonElement("""{"models":[]}""").ctxFromProbe("ollama"))
+    }
+
+    @Test
+    fun warmRequestClosesAssistantTurnAndSkipsHostedApis() {
+        val clean = listOf(
+            ChatMessage("system", "sys"),
+            ChatMessage("user", "hi"),
+            ChatMessage("assistant", stripClientTags("hey. [A:smile] there [TOOL:call{\"q\":\"a]b\"}]")),
+        )
+        assertEquals("hey.  there ", clean.last().content)
+        val llama = RemoteWire.warmRequest("openai", "jun", clean, ChatEngine.TOOL_SCHEMAS, false, 0.5f, "low", 8192)!!
+        assertFalse(llama["stream"]!!.jsonPrimitive.boolean)
+        assertEquals(0, llama["max_tokens"]!!.jsonPrimitive.int)
+        assertEquals(0, llama["n_predict"]!!.jsonPrimitive.int)
+        assertTrue(llama["cache_prompt"]!!.jsonPrimitive.boolean)
+        assertEquals("user", llama["messages"]!!.jsonArray.last().jsonObject["role"]!!.jsonPrimitive.content)
+        assertEquals("", llama["messages"]!!.jsonArray.last().jsonObject["content"]!!.jsonPrimitive.content)
+
+        val ollama = RemoteWire.warmRequest("ollama", "jun", clean, ChatEngine.TOOL_SCHEMAS, false, 0.5f, "low", 8192)!!
+        assertFalse(ollama["stream"]!!.jsonPrimitive.boolean)
+        assertEquals(0, ollama["options"]!!.jsonObject["num_predict"]!!.jsonPrimitive.int)
+        assertEquals("", ollama["messages"]!!.jsonArray.last().jsonObject["content"]!!.jsonPrimitive.content)
+
+        val jun = RemoteWire.warmRequest("jun", null, clean, ChatEngine.TOOL_SCHEMAS, false, 0.5f, "low", 8192)!!
+        assertEquals(0, jun["max_tokens"]!!.jsonPrimitive.int)
+
+        assertNull(RemoteWire.warmRequest("openai-compat", "jun", clean, emptyList(), false, 0.5f, "low", 8192))
+        assertNull(RemoteWire.warmRequest("openai-key", "jun", clean, emptyList(), false, 0.5f, "low", 8192))
     }
 }

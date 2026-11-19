@@ -157,7 +157,7 @@ cloud_link() {
   local url
   case "$(env_get AI_PROVIDER)" in
     vllm) printf '%s|%s|/v1/models' "$(env_get VLLM_URL)" "$(env_get VLLM_API_KEY)" ;;
-    openrouter|llamacpp) ;;
+    openai-compatible|llamacpp) ;;
     *)
       url="$(env_get OLLAMA_URL)"
       case "$url" in ''|*://ollama[:/]*|*://localhost[:/]*|*://127.0.0.1[:/]*|*://host.docker.internal[:/]*) ;;
@@ -348,6 +348,10 @@ for p in ${file_profiles//,/ }; do
 done
 
 provider="$(env_get AI_PROVIDER)"; provider="${provider:-ollama}"
+if [ "$provider" = openrouter ]; then
+  echo "AI_PROVIDER=openrouter is gone. Run install.sh again and say yes to the migration, or set AI_PROVIDER=openai-compatible with OPENAI_COMPAT_BASE_URL (https://openrouter.ai/api/v1 still works), OPENAI_COMPAT_API_KEY and OPENAI_COMPAT_MODEL in .env" >&2
+  exit 1
+fi
 llamacpp_url="$(env_get LLAMACPP_URL)"
 case "$provider" in
   llamacpp)
@@ -370,7 +374,7 @@ case "$provider" in
     ;;
   # vllm is never ours to run, it's the colab/kaggle TPU (or a
   # server of your own) behind VLLM_URL
-  openrouter|vllm) : ;;
+  openai-compatible|vllm) : ;;
   *)
     # We run ollama ourselves unless you pointed us at your own.
     case "$(env_get OLLAMA_URL)" in
@@ -706,6 +710,18 @@ if [ "${3:-}" = rm ]; then xargs -r rm -f < /tmp/drop; rm -rf $old; else xargs -
 EOF
 }
 
+# llama.cpp never checks a cached blob again. a botched resume left one
+# 6.8 GB too big and she said <unused49> forever. prints "damaged" + deletes it
+llamacpp_drop_damaged() {  # repo-dir sha256 bytes
+  docker exec -i omega-llamacpp sh -s -- "$@" <<'EOF' || true
+cd "$1" 2>/dev/null || exit 0
+[ "$(stat -c %s "blobs/$2" 2>/dev/null)" = "$3" ] && exit 0
+rm -f "blobs/$2"
+find snapshots -type l -lname "*/$2" -delete
+echo damaged
+EOF
+}
+
 gb() { awk -v b="$1" 'BEGIN { printf "%.1f", b / 1e9 }'; }
 
 # llama.cpp re-resolves the repo on EVERY load, a same-tag re-upload
@@ -736,6 +752,12 @@ llamacpp_model_update() {
     esac
     llamacpp_post_load "$ref" || true
     echo "llama.cpp: downloading the new $ref. ./start.sh logs llamacpp to watch"
+    wait_for_llamacpp_model
+  elif [ "$(llamacpp_drop_damaged "$dir" "$want" "$bytes")" = damaged ]; then
+    docker exec omega-llamacpp curl -fsS -X POST http://127.0.0.1:8080/models/unload \
+      -H 'Content-Type: application/json' -d "{\"model\":\"$ref\"}" >/dev/null 2>&1 || true
+    llamacpp_post_load "$ref" || true
+    echo "llama.cpp: $ref on disk isn't the size Hugging Face says ($(gb "$bytes") GB), the download broke. getting it again"
     wait_for_llamacpp_model
   fi
 

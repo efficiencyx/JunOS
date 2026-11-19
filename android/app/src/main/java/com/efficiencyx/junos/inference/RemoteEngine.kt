@@ -22,10 +22,12 @@ import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
 import okhttp3.Call
+import okhttp3.Callback
 import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.OkHttpClient
 import okhttp3.Request
 import okhttp3.RequestBody.Companion.toRequestBody
+import okhttp3.Response
 import java.io.IOException
 import java.net.URI
 import java.security.KeyStore
@@ -178,6 +180,18 @@ class RemoteEngine(initial: Pairing, private val store: PairingStore) : Inferenc
     override fun cancel() {
         active?.cancel()
         active = null
+    }
+
+    override fun warm(messages: List<ChatMessage>, tools: List<String>, think: Boolean, temperature: Float) {
+        val url = base ?: return
+        val http = client ?: return
+        val body = RemoteWire.warmRequest(pairing.api, pairing.model, messages, tools, think, temperature, "low", window) ?: return
+        val request = Request.Builder().url(RemoteWire.chatUrl(pairing.api, url)).authorized()
+            .post(body.toString().toRequestBody(JSON)).build()
+        http.newCall(request).enqueue(object : Callback {
+            override fun onFailure(call: Call, e: IOException) = Unit
+            override fun onResponse(call: Call, response: Response) = response.close()
+        })
     }
 
     override fun close() {

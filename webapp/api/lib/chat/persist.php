@@ -44,3 +44,13 @@ function chat_save_reply(int $convId, string $reply, array $req, string $lastUse
         }
     }
 }
+
+function chat_warm_user_text(int $userRowId, array $req, string $lastUserMsg): string {
+    if ($req['audio'] === '') return $lastUserMsg;
+    if ($userRowId <= 0) return '<audio>';
+    $st = db()->prepare('SELECT content FROM messages WHERE id=?');
+    $st->execute([$userRowId]);
+    $raw = $st->fetchColumn();
+    if (!is_string($raw) || $raw === '' || $raw === '<audio>') return '<audio>';
+    return (string)(dec($raw) ?: '<audio>');
+}
