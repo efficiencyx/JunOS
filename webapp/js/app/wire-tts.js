@@ -1,12 +1,12 @@
-import { IDLE_AFTER_REPLY_MS, scheduleIdleNudge } from './consolidation.js?v=141';
+import { IDLE_AFTER_REPLY_MS, scheduleIdleNudge } from './consolidation.js?v=142';
 import { ttsChk, ttsEngineSelect, ttsLangRow, ttsLangSelect, ttsSpeedInput, ttsVoiceSelect } from './dom.js?v=77';
-import { finishPendingFaceBubbleHide } from './face-bubble.js?v=95';
+import { finishPendingFaceBubbleHide } from './face-bubble.js?v=96';
 import { logAction } from './logging.js?v=78';
-import { syncVoiceDeps, updateTtsSpeedLabel } from './settings.js?v=145';
+import { syncVoiceDeps, updateTtsSpeedLabel } from './settings.js?v=146';
 import { escapeHtml } from '../core/util.js?v=1';
 import * as Names from '../core/names.js?v=1';
 import * as Prefs from '../core/prefs.js?v=9';
-import * as TTS from '../voice/tts.js?v=93';
+import * as TTS from '../voice/tts.js?v=94';
 import { previewLine } from '../voice/languages.js?v=1';
 import { t } from '../core/i18n.js?v=1';
 

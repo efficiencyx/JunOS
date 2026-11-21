@@ -50,17 +50,6 @@ function provider_chat_payload(
         $payload['chat_template_kwargs'] = ['enable_thinking' => $think];
     }
     if ($think && $provider === 'openai-compatible') $payload['reasoning_effort'] = $reasoning;
-    // DRY, a penalty on reusing her own earlier lines word for word.
-    // no "\n" breaker ON PURPOSE, she dodges via mid-sentence newlines. -1 = 400
-    if ($provider === 'llamacpp') {
-        $payload += [
-            'dry_multiplier' => 0.4,
-            'dry_base' => 1.75,
-            'dry_allowed_length' => 3,
-            'dry_penalty_last_n' => llamacpp_window_tokens($model),
-            'dry_sequence_breakers' => [':', '"', '*', '[', '|', ']'],
-        ];
-    }
     return $payload;
 }
 
@@ -113,6 +102,15 @@ function provider_json_body(array $payload, int $flags = JSON_UNESCAPED_UNICODE)
     }
     log_event(['msg' => 'payload_not_json', 'err' => json_last_error_msg(), 'messages' => $bad]);
     return (string)json_encode($payload, $flags | JSON_INVALID_UTF8_SUBSTITUTE | JSON_PARTIAL_OUTPUT_ON_ERROR);
+}
+
+// v8 trains the trace ON the call turn. without it the next round
+// re-decides from the tool result and calls memory_write AGAIN (8/16
+// on v9 E4B). real openai might choke on the key, so only these two
+function provider_call_thought(string $provider, string $thinking): array {
+    if ($thinking === '') return [];
+    if ($provider === 'llamacpp') return ['reasoning_content' => $thinking];
+    return provider_uses_openai_protocol($provider) ? [] : ['thinking' => $thinking];
 }
 
 function provider_tool_message(string $provider, string $name, string $callId, string $result): array {

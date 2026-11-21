@@ -38,3 +38,18 @@ test('a watch turn carries its frames and the watch block', async () => {
   assert.equal(sent.body.audio, 'UklGRg==');
   assert.deepEqual(sent.body.watch, watch);
 });
+
+test('cue and interrupted reach chat.php', async () => {
+  const sent = await send({ messages: [], idle: true, cue: 'followup', interrupted: 'so anyway i was' });
+  assert.equal(sent.body.cue, 'followup');
+  assert.equal(sent.body.interrupted, 'so anyway i was');
+});
+
+test('a wait frame calls onWait and still ends the turn', async () => {
+  globalThis.fetch = async () => new Response('data: {"wait":true}\n\ndata: [DONE]\n\n', { status: 200 });
+  let waited = false;
+  await new Promise((resolve, reject) => {
+    chat({ messages: [], idle: true }, { onWait: () => { waited = true; }, onDone: resolve, onError: reject, onToken: () => reject(new Error('token')) });
+  });
+  assert.equal(waited, true);
+});

@@ -1367,6 +1367,66 @@ function Install-Caddy {
     Ok 'Caddy ready'
 }
 
+# winget only has the vulkan build. same build number as the
+# winget pin, the sha256s from github's asset digests, bump all together
+$LlamacppGpuZips = @{
+    cuda = @{ 'llama-b11804-bin-win-cuda-12.4-x64.zip' = '09fe6c2e5b5ad2fc0073f9bd8eb03b42f205b1c5360855393514ec76dd5fdce4'
+              'cudart-llama-bin-win-cuda-12.4-x64.zip'  = '8c79a9b226de4b3cacfd1f83d24f962d0773be79f1e7b75c6af4ded7e32ae1d6' }
+    rocm = @{ 'llama-b11804-bin-win-rocm-10.0-x64.zip'  = '37e16d56c8debf9dab048fa80a40b2bcbabf340b70f7d3c615ef008c0abcf740' }
+}
+
+function Get-LlamacppGpuBackend {
+    $pref = if ($env:LLAMACPP_BACKEND) { $env:LLAMACPP_BACKEND } else { Get-EnvValue 'LLAMACPP_BACKEND' }
+    if ($pref -eq 'vulkan') { return $null }
+    if (Get-Command nvidia-smi -ErrorAction SilentlyContinue) { return 'cuda' }
+    # 4 GB floor so a ryzen iGPU doesn't pull 250 MB of ROCm
+    if ((Get-VramMb) -ge 4096) { return 'rocm' }
+    return $null
+}
+
+# kept only if --list-devices shows the card. ROCm on a gfx1031
+# loaded nothing but the CPU backend, vulkan beats that easily
+function Install-LlamacppGpu {
+    $dir = Join-Path (Get-Location) 'runtime\llamacpp'
+    $stamp = Join-Path $dir 'jun-build.txt'
+    $backend = Get-LlamacppGpuBackend
+    $want = "$($wingetVersions.llamacpp) $backend"
+    if ($backend -and (Test-Path $stamp) -and (Get-Content -LiteralPath $stamp -Raw).Trim() -eq $want) { return }
+    Remove-Item -LiteralPath $dir -Recurse -Force -ErrorAction SilentlyContinue
+    if (-not $backend) { return }
+
+    $label = if ($backend -eq 'cuda') { 'CUDA, about 650 MB' } else { 'ROCm, about 250 MB' }
+    Step "download llama.cpp $($wingetVersions.llamacpp) for $label"
+    $tmpDir = Join-Path $env:TEMP ('jun-llamacpp-' + [guid]::NewGuid().ToString('N'))
+    New-Item -ItemType Directory -Force -Path $tmpDir | Out-Null
+    try {
+        Add-Type -AssemblyName System.IO.Compression.FileSystem
+        foreach ($z in $LlamacppGpuZips[$backend].GetEnumerator()) {
+            $zip = Join-Path $tmpDir $z.Key
+            $url = "https://github.com/ggml-org/llama.cpp/releases/download/$($wingetVersions.llamacpp)/$($z.Key)"
+            Invoke-WebRequest -Uri $url -OutFile $zip -UseBasicParsing
+            $got = (Get-FileHash -Algorithm SHA256 -LiteralPath $zip).Hash
+            if ($got -ine $z.Value) { throw "$($z.Key) doesn't match the pinned sha256 (wanted $($z.Value), got $got)." }
+            [IO.Compression.ZipFile]::ExtractToDirectory($zip, (Join-Path $tmpDir 'x'))
+        }
+        $exe = Join-Path $tmpDir 'x\llama-server.exe'
+        if (-not (Test-Path $exe)) { throw 'the verified archive did not contain llama-server.exe.' }
+        $devices = (cmd /c "`"$exe`" --list-devices 2>&1" | Out-String)
+        if ($devices -notmatch '(?m)^\s*(CUDA|ROCm)\d+:') {
+            Warn_ "the $backend build doesn't see the card, staying on the Vulkan one"
+            return
+        }
+        New-Item -ItemType Directory -Force -Path (Split-Path $dir) | Out-Null
+        Move-Item -LiteralPath (Join-Path $tmpDir 'x') -Destination $dir
+        [IO.File]::WriteAllText($stamp, $want)
+        Ok "llama.cpp runs on $backend"
+    } catch {
+        Warn_ ("couldn't set up the {0} build ({1}), staying on the Vulkan one" -f $backend, $_.Exception.Message)
+    } finally {
+        Remove-Item -LiteralPath $tmpDir -Recurse -Force -ErrorAction SilentlyContinue
+    }
+}
+
 # a JunOS.exe that's running is locked for writing, but windows
 # still lets you rename it. so the old one steps aside and the new
 # one takes its name. the .old goes on the next run.
@@ -2356,7 +2416,7 @@ if ($cfg.needsOllama -and -not (Get-Command ollama -ErrorAction SilentlyContinue
 if ($cfg.needsLlamacpp -and -not (Test-LlamaServerBuild)) { $missing += 'llamacpp' }
 Install-MachineTools $missing
 if ($cfg.needsOllama) { Assert-OnPath ollama }
-if ($cfg.needsLlamacpp) { Assert-OnPath llama-server }
+if ($cfg.needsLlamacpp) { Assert-OnPath llama-server; Install-LlamacppGpu }
 
 Install-Php
 Install-Caddy

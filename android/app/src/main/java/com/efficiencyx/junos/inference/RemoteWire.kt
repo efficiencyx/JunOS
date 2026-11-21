@@ -158,6 +158,11 @@ internal object RemoteWire {
                 put("role", message.role)
                 put("content", message.content)
                 if (message.role == "assistant" && message.toolCalls.isNotEmpty()) {
+                    // v8 trains the trace on the call turn, without it she
+                    // re-decides from the tool result and calls memory_write again
+                    if (message.thought.isNotEmpty() && (ollama || api == "jun")) {
+                        put(if (ollama) "thinking" else "reasoning_content", message.thought)
+                    }
                     put("tool_calls", buildJsonArray {
                         for (call in message.toolCalls) add(buildJsonObject {
                             val id = "call_${next++}"

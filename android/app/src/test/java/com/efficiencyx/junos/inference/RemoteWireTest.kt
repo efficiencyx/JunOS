@@ -168,4 +168,16 @@ class RemoteWireTest {
         assertNull(RemoteWire.warmRequest("openai-compat", "jun", clean, emptyList(), false, 0.5f, "low", 8192))
         assertNull(RemoteWire.warmRequest("openai-key", "jun", clean, emptyList(), false, 0.5f, "low", 8192))
     }
+
+    @Test
+    fun callTurnCarriesHerThoughtForJunAndOllamaOnly() {
+        val turns = listOf(ChatMessage("user", "hi"), ChatMessage("assistant", "", toolCalls = listOf(call), thought = "Tool check: search_lore."))
+        val jun = RemoteWire.messages("jun", turns)[1].jsonObject
+        val ollama = RemoteWire.messages("ollama", turns)[1].jsonObject
+        val openai = RemoteWire.messages("openai", turns)[1].jsonObject
+        assertEquals("Tool check: search_lore.", jun["reasoning_content"]!!.jsonPrimitive.content)
+        assertEquals("Tool check: search_lore.", ollama["thinking"]!!.jsonPrimitive.content)
+        assertNull(openai["reasoning_content"])
+        assertNull(openai["thinking"])
+    }
 }

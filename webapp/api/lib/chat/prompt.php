@@ -51,8 +51,10 @@ function chat_build_messages(array $req, string $systemContent, string $liveCont
     }
 
     if ($req['idle']) {
-        $messages[] = ['role' => 'user', 'content' =>
-            '(OOC stage direction, not spoken by Anon: Anon has gone quiet and is just '
+        $messages[] = ['role' => 'user', 'content' => $req['cue'] !== ''
+            ? '(OOC stage direction, not spoken by Anon: ' . CHAT_IDLE_CUES[$req['cue']] . ' He hasn\'t said anything yet. '
+                . 'Say or do something on your own initiative, the way Jun naturally would right now.)'
+            : '(OOC stage direction, not spoken by Anon: Anon has gone quiet and is just '
             . 'saying nothing. The silence has stretched on. '
             . 'Unless he specifically asked you to be quiet say or do something on your own initiative, the way Jun '
             . 'naturally would when Anon goes still and stares at her. '

@@ -12,5 +12,6 @@ public class FungusSayDialogPatch {
   [HarmonyPrefix]
   public static void BeforeDoSay(SayDialog __instance, string text, bool clearPrevious, bool waitForInput, bool fadeWhenDone, Action onComplete) {
     ChatWriter.EventBus.Fire("say-dialog-changed", __instance);
+    GameLines.Said(__instance.NameText, text);
   }
 }

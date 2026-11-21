@@ -1,5 +1,5 @@
-import { makeItemColorButton } from '../wardrobe/color-picker.js?v=49';
-import { bindTileDrag } from '../wardrobe/tiles.js?v=49';
+import { makeItemColorButton } from '../wardrobe/color-picker.js?v=50';
+import { bindTileDrag } from '../wardrobe/tiles.js?v=50';
 import { modItemKey } from '../wardrobe/worn.js?v=43';
 import { itemThumbUrl } from './layers.js?v=25';
 import { ensureLoaded, followsHerColors, gameStandIns, importZip, isEquipped, missingGameItems, modState, mods, removeMod, setColor, setEquipped, setFollowsHerColors } from './engine.js?v=42';

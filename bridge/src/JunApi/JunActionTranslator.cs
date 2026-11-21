@@ -5,12 +5,13 @@ using System.Text;
 
 namespace JunBridge.JunApi;
 
-public class JunActionTranslator {
-  // Longest text we are willing to hold back while waiting for a ']'
+public class JunActionTranslator(string playerName = "", string botName = "") {
+  // Longest text we are willing to hold back while waiting for a ']' or '}'
   private const int maxTagLength = 300;
 
   private readonly StringBuilder held = new(64);
   private bool holding = false;
+  private char closer;
 
   // emote/brow value -> game expression command
   private static readonly Dictionary<string, string> emoteMap = new(StringComparer.OrdinalIgnoreCase) {
@@ -41,8 +42,9 @@ public class JunActionTranslator {
 
     foreach (var character in chunk) {
       if (!holding) {
-        if (character == '[') {
+        if (character == '[' || character == '{') {
           holding = true;
+          closer = character == '[' ? ']' : '}';
           held.Clear();
           held.Append(character);
         } else {
@@ -53,8 +55,8 @@ public class JunActionTranslator {
 
       held.Append(character);
 
-      if (character == ']') {
-        output.Append(TranslateTag(held.ToString()));
+      if (character == closer) {
+        output.Append(closer == ']' ? TranslateTag(held.ToString()) : ResolveName(held.ToString()));
         held.Clear();
         holding = false;
       } else if (held.Length >= maxTagLength) {
@@ -84,6 +86,14 @@ public class JunActionTranslator {
   public void Reset() {
     held.Clear();
     holding = false;
+  }
+
+  private string ResolveName(string placeholder) {
+    return placeholder switch {
+      "{f_playerName}" => playerName != "" ? playerName : "Anon",
+      "{f_botName}" => botName != "" ? botName : "Jun",
+      _ => placeholder,
+    };
   }
 
   private static string TranslateTag(string tag) {

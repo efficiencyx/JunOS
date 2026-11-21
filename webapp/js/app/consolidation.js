@@ -1,14 +1,14 @@
 import { abortFn, currentConversationId } from './session.js?v=1';
-import { runChat } from './chat.js?v=68';
+import { runChat } from './chat.js?v=69';
 import { chatInput, consolidationActions, consolidationBanner, consolidationSub, consolidationTitle, devNoIdleChk, fleeEtaEl, fleeOverlay, fleeReasonEl, interruptPassBtn, sendBtn, sitWithHerBtn, voiceChk } from './dom.js?v=77';
 import * as Feed from './consolidation-feed.js?v=3';
-import * as Cabinet from './cabinet.js?v=19';
-import { showFaceBubble } from './face-bubble.js?v=95';
+import * as Cabinet from './cabinet.js?v=20';
+import { showFaceBubble } from './face-bubble.js?v=96';
 import { logAction } from './logging.js?v=78';
 import { escapeHtml, formatElapsed } from '../core/util.js?v=1';
 import * as Names from '../core/names.js?v=1';
-import * as TTS from '../voice/tts.js?v=93';
-import * as Voice from '../voice/voice.js?v=94';
+import * as TTS from '../voice/tts.js?v=94';
+import * as Voice from '../voice/voice.js?v=95';
 import * as Live2D from '../live2d/live2d.js?v=92';
 import { t } from '../core/i18n.js?v=1';
 import { rip, showLockout, skipWait } from './difficulty.js?v=5';
@@ -64,6 +64,7 @@ export const IDLE_AFTER_REPLY_MS = 60000;
 export const IDLE_AFTER_JOIN_MS  = 45000;
 export const TYPING_POLL_MS = 5000;
 const MAX_IDLE_NUDGES = 3;
+const FOLLOWUP_MS = 6000;
 
 const CONSOLIDATION_PHASE_UNKNOWN = t('consolidation.phaseUnknown', 'Working through everything since you last spoke');
 // under this much left, coming back drops you straight into the game
@@ -82,6 +83,7 @@ let statusSynced = false;
 export let consolidating = false;
 let previousBusyLine = -1;
 let idleNudgeStreak = 0;
+let followupDue = false;
 export let cancelActiveIdleNudge = null;
 
 // app.js owns the per turn cancel hook but the idle timer lives
@@ -368,8 +370,11 @@ export async function runPassNow() {
 
 export function resetIdleNudge() {
   idleNudgeStreak = 0;
+  followupDue = false;
   cancelIdleNudge();
 }
+
+export function armFollowup() { followupDue = true; }
 
 export function scheduleIdleNudge(delayMs) {
   cancelIdleNudge();
@@ -378,18 +383,24 @@ export function scheduleIdleNudge(delayMs) {
   if (fleeActive()) return;
   if (!currentConversationId) return;
   if (idleNudgeStreak >= MAX_IDLE_NUDGES) return;
+  const followup = followupDue && delayMs === IDLE_AFTER_REPLY_MS;
   idleTimer = setTimeout(() => {
     idleTimer = null;
     if (abortFn) return;
-    if (document.hidden || document.body.classList.contains('tour-mode')) { scheduleIdleNudge(delayMs); return; }
+    if (document.hidden || document.body.classList.contains('tour-mode')) { followupDue = false; scheduleIdleNudge(delayMs); return; }
     if (chatInput.value.trim() !== '') { scheduleIdleNudge(delayMs); return; }
     if (Voice.isEnabled()) {
       const vs = Voice.getState();
       if (vs === 'speech' || vs === 'maybe' || vs === 'thinking') { scheduleIdleNudge(delayMs); return; }
     }
+    if (followup) {
+      followupDue = false;
+      runChat({ idle: true, cue: 'followup' });
+      return;
+    }
     idleNudgeStreak++;
     runChat({ idle: true });
-  }, delayMs);
+  }, followup ? FOLLOWUP_MS : delayMs);
 }
 
 // start the idle timer once TTS is DONE, not when the text stops

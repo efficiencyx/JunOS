@@ -821,7 +821,7 @@ if ($script:gpuVendor -eq 'cpu') {
     $amdName = $script:gpuNames -join ', '
     if ($script:gpuMemory.Count -gt 0) {
         $largestMb = [int](($script:gpuMemory | Measure-Object -Maximum).Maximum)
-        $HardwareText.Text = "Detected $amdName with $largestMb MB VRAM. llama.cpp accelerates it through Vulkan; a matching model has been selected."
+        $HardwareText.Text = "Detected $amdName with $largestMb MB VRAM. llama.cpp uses ROCm when the card supports it, Vulkan otherwise; a matching model has been selected."
     } else {
         $HardwareText.Text = "Detected $amdName, but Windows did not report its VRAM reliably. The CPU-friendly Jun E2B model is selected; llama.cpp can still use Vulkan acceleration."
     }

@@ -219,13 +219,17 @@ class ChatEngine(
                 visible.append(text)
                 emit(buildJsonObject { put("token", text) })
             }
-            suspend fun streamThoughts(thoughts: ThinkStreamFilter) {
-                val thought = thoughts.drainThought()
-                if (thought.isNotEmpty()) emit(buildJsonObject { put("thinking", thought) })
+            val thought = StringBuilder()
+            suspend fun think(text: String) {
+                if (text.isEmpty()) return
+                thought.append(text)
+                emit(buildJsonObject { put("thinking", text) })
             }
+            suspend fun streamThoughts(thoughts: ThinkStreamFilter) = think(thoughts.drainThought())
             for (round in 0 until 3) {
                 val thoughts = ThinkStreamFilter()
                 val lead = StringBuilder()
+                thought.clear()
                 val calls = mutableListOf<ParsedToolCall>()
                 engine.turn(messages, tools, think, replyTokens(think), reasoning = reasoning).collect { event ->
                     when (event) {
@@ -234,7 +238,7 @@ class ChatEngine(
                             show(thoughts.push(event.text), lead)
                             streamThoughts(thoughts)
                         }
-                        is TurnEvent.Thought -> emit(buildJsonObject { put("thinking", event.text) })
+                        is TurnEvent.Thought -> think(event.text)
                         is TurnEvent.Call -> calls += event.call
                     }
                 }
@@ -247,7 +251,7 @@ class ChatEngine(
                 }
                 if (calls.isEmpty()) break
                 val ran = calls.take(4)
-                messages += ChatMessage("assistant", lead.toString(), toolCalls = ran)
+                messages += ChatMessage("assistant", lead.toString(), toolCalls = ran, thought = thought.toString())
                 for (call in ran) {
                     emit(toolStatus(call.name, "running", raw = if (!admin) null else buildJsonObject {
                         put("call", buildJsonObject { put("name", call.name); put("arguments", call.args) })

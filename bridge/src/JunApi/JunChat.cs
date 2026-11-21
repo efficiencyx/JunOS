@@ -35,14 +35,31 @@ public class JunChat {
     SaveStorage.Instance.SetValue(conversationSaveKey, 0);
   }
 
-  public async IAsyncEnumerable<string> SendMessage(string message) {
+  public IAsyncEnumerable<string> SendMessage(string message, GameContext game) {
     messages.Add(new ChatMessage { Role = "user", Content = message });
+    return Stream(game, null);
+  }
 
+  public IAsyncEnumerable<string> SendCue(string cue, bool ephemeral, GameContext game) {
+    var extra = new Dictionary<string, object> { { "idle", true }, { "ephemeral", ephemeral } };
+    if (cue != null) {
+      extra["cue"] = cue;
+    }
+    return Stream(game, extra);
+  }
+
+  // client side only, the next turns see what she said but the server never stored it
+  public void Remember(string assistantText) {
+    messages.Add(new ChatMessage { Role = "assistant", Content = assistantText });
+  }
+
+  private async IAsyncEnumerable<string> Stream(GameContext game, Dictionary<string, object> extra) {
+    var userTurn = extra == null;
     HttpResponseMessage response = null;
     string error = null;
 
     try {
-      response = await MakeChatRequest();
+      response = await MakeChatRequest(game, extra);
       if (!response.IsSuccessStatusCode) {
         error = $"Jun webapp returned {(int)response.StatusCode} ({response.StatusCode})";
       }
@@ -50,7 +67,7 @@ public class JunChat {
       error = ex.Message;
     }
 
-    var translator = new JunActionTranslator();
+    var translator = new JunActionTranslator(game.PlayerName, game.BotName);
     var raw = new StringBuilder(2048);
 
     if (error == null) {
@@ -88,6 +105,9 @@ public class JunChat {
     }
 
     if (error != null) {
+      if (!userTurn) {
+        throw new InvalidOperationException(error);
+      }
       messages.RemoveAt(messages.Count - 1);
       yield return $"Error: {error}";
       yield break;
@@ -98,11 +118,11 @@ public class JunChat {
       yield return trailing;
     }
 
-    // raw with the tags, same as the server stores it
+    // raw with the tags, same as the server stores it. an ephemeral line stays client side only
     messages.Add(new ChatMessage { Role = "assistant", Content = raw.ToString() });
   }
 
-  private async Task<HttpResponseMessage> MakeChatRequest() {
+  private async Task<HttpResponseMessage> MakeChatRequest(GameContext game, Dictionary<string, object> extra) {
     var history = messages.Count > maxHistoryMessages
       ? messages.GetRange(messages.Count - maxHistoryMessages, maxHistoryMessages)
       : messages;
@@ -110,9 +130,23 @@ public class JunChat {
     var payload = new Dictionary<string, object> {
       { "conversation_id", conversationId },
       { "messages", history },
-      { "reasoning", NormalizeReasoning(session.Config.Reasoning) },
-      { "client_time", DateTime.Now.ToString("dddd, MMMM d, yyyy 'at' h:mm tt") }
+      { "reasoning", NormalizeReasoning(ModConfig.GetJunConfig().Reasoning) },
+      { "client_time", game.ClientTime }
     };
+    if (game.Outfit != "") {
+      payload["outfit_context"] = game.Outfit;
+    }
+    var lines = Chat.GameLines.Drain();
+    if (lines.Count > 0) {
+      payload["game_lines"] = lines;
+    }
+    var actions = Chat.Interactions.Drain();
+    if (actions.Count > 0) {
+      payload["game_actions"] = actions;
+    }
+    foreach (var (key, value) in extra ?? []) {
+      payload[key] = value;
+    }
 
     if (!string.IsNullOrEmpty(session.Config.Model)) {
       payload["model"] = session.Config.Model;
@@ -195,6 +229,22 @@ public class JunChat {
     }
   }
 
+  // drains the queue and closes the absence, so only call it when she can say it right away
+  public async Task<Welcome> FetchWelcome(int hour) {
+    try {
+      using var response = await session.SendAuthenticated(() => session.Client.GetAsync($"api/consolidate.php?action=welcome&hour={hour}"));
+      if (!response.IsSuccessStatusCode) {
+        logger.LogWarning($"Welcome fetch failed: {response.StatusCode}");
+        return null;
+      }
+      var welcome = JsonSerializer.Deserialize<Welcome>(await response.Content.ReadAsStringAsync());
+      return welcome?.Show == true ? welcome : null;
+    } catch (Exception ex) {
+      logger.LogWarning($"Welcome fetch failed: {ex.Message}");
+      return null;
+    }
+  }
+
   private static string NormalizeReasoning(string value) {
     return (value ?? "auto").ToLowerInvariant() switch {
       "low" => "low",
@@ -218,6 +268,33 @@ public class JunChat {
 
     [JsonPropertyName("error")]
     public string Error { get; set; }
+  }
+
+  public class Welcome {
+    [JsonPropertyName("show")]
+    public bool Show { get; set; }
+
+    [JsonPropertyName("tier")]
+    public string Tier { get; set; }
+
+    [JsonPropertyName("live")]
+    public List<string> Live { get; set; }
+
+    [JsonPropertyName("milestones")]
+    public List<Milestone> Milestones { get; set; }
+  }
+
+  public class Milestone {
+    [JsonPropertyName("items")]
+    public List<MilestoneItem> Items { get; set; }
+  }
+
+  public class MilestoneItem {
+    [JsonPropertyName("kind")]
+    public string Kind { get; set; }
+
+    [JsonPropertyName("text")]
+    public string Text { get; set; }
   }
 
   private class CreatedConversation {

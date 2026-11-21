@@ -14,21 +14,26 @@ public static class ModConfig {
   private static MelonPreferences_Entry<string> junPasswordEntry;
   private static MelonPreferences_Entry<int> junConversationIdEntry;
   private static MelonPreferences_Entry<string> junModelEntry;
-  private static MelonPreferences_Entry<string> junReasoningEntry;
+  internal static MelonPreferences_Entry<string> junReasoningEntry;
   private static MelonPreferences_Entry<int> junTimeoutSecondsEntry;
 
-  private static MelonPreferences_Entry<bool> syncEnabledEntry;
+  internal static MelonPreferences_Entry<bool> syncEnabledEntry;
   private static MelonPreferences_Entry<string> syncTokenEntry;
 
-  private static MelonPreferences_Entry<bool> ttsEnabledEntry;
-  private static MelonPreferences_Entry<string> ttsVoiceEntry;
-  private static MelonPreferences_Entry<string> ttsEngineEntry;
-  private static MelonPreferences_Entry<double> ttsSpeedEntry;
-  private static MelonPreferences_Entry<double> ttsVolumeEntry;
-  private static MelonPreferences_Entry<bool> ttsLipSyncEntry;
+  internal static MelonPreferences_Entry<bool> ttsEnabledEntry;
+  internal static MelonPreferences_Entry<string> ttsVoiceEntry;
+  internal static MelonPreferences_Entry<string> ttsEngineEntry;
+  internal static MelonPreferences_Entry<double> ttsSpeedEntry;
+  internal static MelonPreferences_Entry<double> ttsVolumeEntry;
+  internal static MelonPreferences_Entry<bool> ttsLipSyncEntry;
   private static MelonPreferences_Entry<double> ttsLipSyncGainEntry;
   private static MelonPreferences_Entry<int> ttsMaxConcurrentRequestsEntry;
   private static MelonPreferences_Entry<int> ttsTimeoutSecondsEntry;
+
+  internal static MelonPreferences_Entry<bool> initiativeEnabledEntry;
+  internal static MelonPreferences_Entry<double> idleMinutesEntry;
+  internal static MelonPreferences_Entry<double> cooldownMinutesEntry;
+  internal static MelonPreferences_Entry<double> expressionLingerSecondsEntry;
 
   public static void Load() {
     var jun = MelonPreferences.CreateCategory("Jun");
@@ -51,6 +56,10 @@ public static class ModConfig {
     ttsEnabledEntry = tts.CreateEntry("Enabled", false, "Speak her replies with the JunOS voice");
     ttsVoiceEntry = tts.CreateEntry("Voice", "af_heart", "Voice name");
     ttsEngineEntry = tts.CreateEntry("Engine", "kokoro", "kokoro or pockettts");
+    // tts.php refuses anything else and every line goes silent
+    if (ttsEngineEntry.Value is not ("kokoro" or "pockettts")) {
+      ttsEngineEntry.Value = ttsEngineEntry.Value.StartsWith("pocket", System.StringComparison.OrdinalIgnoreCase) ? "pockettts" : "kokoro";
+    }
     ttsSpeedEntry = tts.CreateEntry("Speed", 1.0, "Speech speed multiplier", validator: new ValueRange<double>(0.25, 4.0));
     ttsVolumeEntry = tts.CreateEntry("Volume", 2.5, "Playback gain (1.0 = original level)", validator: new ValueRange<double>(0.0, 5.0));
     ttsLipSyncEntry = tts.CreateEntry("LipSync", true, "Move the mouth with the audio");
@@ -58,8 +67,20 @@ public static class ModConfig {
     ttsMaxConcurrentRequestsEntry = tts.CreateEntry("MaxConcurrentRequests", 2, "Sentences generated in parallel", validator: new ValueRange<int>(1, 8));
     ttsTimeoutSecondsEntry = tts.CreateEntry("TimeoutSeconds", 60, "Timeout in seconds");
 
+    var initiative = MelonPreferences.CreateCategory("Initiative");
+    initiative.SetFilePath(configPath);
+    initiativeEnabledEntry = initiative.CreateEntry("Enabled", true, "She talks first: welcome back, after outings, intimacy and sleep, and now and then when you're idle in her room");
+    idleMinutesEntry = initiative.CreateEntry("IdleMinutes", 3.0, "Idle time in her room before she says something on her own", validator: new ValueRange<double>(0.5, 120.0));
+    cooldownMinutesEntry = initiative.CreateEntry("CooldownMinutes", 10.0, "At most one unprompted line every this many minutes", validator: new ValueRange<double>(1.0, 240.0));
+    expressionLingerSecondsEntry = initiative.CreateEntry("ExpressionLingerSeconds", 30.0, "How long her last expression stays after the chat closes (0 = reset right away)", validator: new ValueRange<double>(0.0, 600.0));
+
     MelonPreferences.Save();
   }
+
+  public static bool InitiativeEnabled => initiativeEnabledEntry.Value;
+  public static float IdleSeconds => (float)(idleMinutesEntry.Value * 60);
+  public static float CooldownSeconds => (float)(cooldownMinutesEntry.Value * 60);
+  public static float ExpressionLingerSeconds => (float)expressionLingerSecondsEntry.Value;
 
   public static bool SyncEnabled => syncEnabledEntry.Value;
   public static string SyncToken => syncTokenEntry.Value;

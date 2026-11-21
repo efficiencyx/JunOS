@@ -10,6 +10,7 @@ require_once __DIR__ . '/lib/chat/prompt.php';
 require_once __DIR__ . '/lib/chat/tools.php';
 require_once __DIR__ . '/lib/chat/websearch.php';
 require_once __DIR__ . '/lib/chat/flee.php';
+require_once __DIR__ . '/lib/chat/gate.php';
 require_once __DIR__ . '/lib/chat/tags.php';
 require_once __DIR__ . '/lib/chat/persist.php';
 require_once __DIR__ . '/lib/bridge/apply.php';
@@ -99,6 +100,29 @@ $upstreamPayload = provider_chat_payload($PROVIDER, $model, $messages, $reasonin
 
 if ($toolsOffered) $upstreamPayload['tools'] = tool_catalog($approvedWebSearchQuery, $req['watch'] !== null);
 
+// thinking on turns the gate into a full reply (2-4 s, bench 2026-11-21), so no gate there
+if ($req['idle']) {
+    $fallback = $req['cue'] === 'followup' ? 'wait' : 'speak';
+    $pick = $think ? $fallback : chat_gate($PROVIDER, $upstreamPayload, $fallback, $req['cue']);
+    if ($pick === 'wait') {
+        sse_send(['wait' => true]);
+        sse_done();
+        exit;
+    }
+    if ($pick === 'act') {
+        $last = count($messages) - 1;
+        $messages[$last]['content'] = chat_gate_act($messages[$last]['content']);
+        $upstreamPayload['messages'] = provider_messages($PROVIDER, $messages);
+    }
+}
+
+// a wav would get encoded twice, once for the check and once for real
+if ($PROVIDER === 'llamacpp' && isset($upstreamPayload['tools']) && !$think && !$req['idle'] && !$req['ephemeral']
+    && $req['audio'] === '' && strtolower(env_str('LLAMACPP_TOOL_CHECK', 'on')) !== 'off'
+    && chat_tool_check($PROVIDER, $upstreamPayload) !== '') {
+    $upstreamPayload['tool_choice'] = 'required';
+}
+
 $prepMs = (int)round((microtime(true) - $_SERVER['REQUEST_TIME_FLOAT']) * 1000);
 $sawError = false;
 $modelFellBack = false;
@@ -120,17 +144,39 @@ $state = [
     'went' => '',
 ];
 
+// only llama.cpp takes a half-written thought back
+$earlierReplies = $think && $PROVIDER === 'llamacpp' ? copy_guard_earlier($messages) : [];
+
 $loops = 0;
 for ($round = 0; $round < 3; $round++) {
     $roundContent = '';
     $toolCalls = [];
     $retriedWithoutTools = false;
     $rerolledEmpty = false;
+    $copies = 0;
+    $prefill = '';
 
     do {
         $retryRound = false;
         [$emit, $stuck] = stream_loop_guard('sse_send');
-        $result = provider_stream_round($PROVIDER, $upstreamPayload, $emit, $round, null, $stuck);
+        [$copyHit, $flushHeld] = [fn() => null, fn() => null];
+        $copying = fn() => '';
+        if ($earlierReplies && $copies < COPY_GUARD_RETRIES) {
+            [$emit, $copying, $copyHit, $flushHeld] = stream_copy_guard($emit, $earlierReplies);
+        }
+        $result = provider_stream_round($PROVIDER, $upstreamPayload, $emit, $round, null, fn() => $stuck() ?: $copying());
+        $flushHeld();
+        if ($result['aborted'] === 'copying') {
+            $hit = $copyHit();
+            log_event(['msg' => 'chat_copy_caught', 'model' => $model, 'round' => $round, 'attempt' => $copies + 1]);
+            $line = copy_guard_line(++$copies, $hit['earlier']);
+            sse_send(['thinking' => $line]);
+            $prefill .= $hit['thinking'] . $line;
+            $upstreamPayload['messages'] = copy_guard_resend($PROVIDER, $messages, $prefill);
+            $retryRound = true;
+            continue;
+        }
+        $result['thinking'] = $prefill . $result['thinking'];
         if ($result['aborted'] === 'looping') {
             log_event(['msg' => 'chat_looping', 'model' => $model, 'round' => $round, 'retry' => $loops + 1]);
             if (++$loops <= STREAM_LOOP_RETRIES) {
@@ -138,6 +184,8 @@ for ($round = 0; $round < 3; $round++) {
                 sse_send(['restart' => ['retry' => $loops, 'of' => STREAM_LOOP_RETRIES]]);
                 if ($assistantBuffer !== '') sse_send(['token' => $assistantBuffer]);
                 $upstreamPayload = stream_warmer($upstreamPayload);
+                $upstreamPayload['messages'] = provider_messages($PROVIDER, $messages);
+                [$prefill, $copies] = ['', COPY_GUARD_RETRIES];
                 $retryRound = true;
                 continue;
             }
@@ -191,7 +239,7 @@ for ($round = 0; $round < 3; $round++) {
                 }
                 if ($round === 0 && !$retriedWithoutTools && isset($upstreamPayload['tools'])) {
                     // one more go, for llama.cpp templates that refuse tools
-                    unset($upstreamPayload['tools']);
+                    unset($upstreamPayload['tools'], $upstreamPayload['tool_choice']);
                     $toolsOffered = false;
                     $retriedWithoutTools = true;
                     $retryRound = true;
@@ -227,6 +275,7 @@ for ($round = 0; $round < 3; $round++) {
     } while ($retryRound);
 
     $assistantBuffer .= $roundContent;
+    unset($upstreamPayload['tool_choice']);
     if ($sawError || !$toolCalls) break;
 
     if ($roundContent !== '') {
@@ -239,13 +288,7 @@ for ($round = 0; $round < 3; $round++) {
         'content' => $roundContent,
         'tool_calls' => $toolCalls,
     ];
-    // v8 trains the trace ON the call turn, and the next round has to
-    // see it again or she re-decides cold from the tool result. only
-    // ollama's gemma4 renderer prints it back (jun-mtp path), the gguf
-    // jinja path drops it, the openai protocol might choke on the key
-    if (!provider_uses_openai_protocol($PROVIDER) && $result['thinking'] !== '') {
-        $callTurn['thinking'] = $result['thinking'];
-    }
+    $callTurn += provider_call_thought($PROVIDER, $result['thinking']);
     $messages[] = $callTurn;
     foreach (array_slice($toolCalls, 0, 4) as $call) {
         $name = (string)($call['function']['name'] ?? '');

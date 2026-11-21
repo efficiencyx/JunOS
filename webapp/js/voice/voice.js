@@ -4,7 +4,7 @@
 import { api } from '../core/api.js?v=1';
 import * as Names from '../core/names.js?v=1';
 import { base64Of, encodeWav } from '../core/wav.js?v=1';
-import * as TTS from './tts.js?v=93';
+import * as TTS from './tts.js?v=94';
 
 // whisper wants 16 kHz. browser resamples for us, free real estate
 const SAMPLE_RATE = 16000;
@@ -276,7 +276,7 @@ function onRms(rms) {
       if (rms > closeThresh) lastLoudAt = now;
       if (!confirmed && now - speechStartedAt >= CONFIRM_MS) {
         confirmed = true;
-        if (TTS.isSpeaking()) TTS.stop();
+        if (TTS.isSpeaking()) TTS.stop(true);
         // fires even when she isn't speaking. the reply can still
         // be streaming while she thinks or runs a tool, and talking
         // over that still means "shut up and listen to me".

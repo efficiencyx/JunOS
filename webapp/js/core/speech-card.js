@@ -3,7 +3,7 @@ import { apiGet } from './api.js?v=1';
 import { gaugeTier } from './mood-tier.js?v=4';
 import * as Names from './names.js?v=1';
 import * as MobileViewport from './viewport.js?v=1';
-import * as TTS from '../voice/tts.js?v=93';
+import * as TTS from '../voice/tts.js?v=94';
 
 export let affection = 0;
 export let trust = 0;

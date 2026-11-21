@@ -150,6 +150,9 @@ jobs:
       - name: Trip intent
         run: php .github/scripts/trip-intent.test.php
 
+      - name: Idle gate
+        run: php .github/scripts/gate.test.php
+
       - name: Lib units
         run: php .github/scripts/lib.test.php
 

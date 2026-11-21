@@ -74,6 +74,9 @@ class Handler(BaseHTTPRequestHandler):
                 f.write(json.dumps(body) + '\n')
 
         msgs = body.get('messages') or []
+        if not body.get('stream', True) and msgs and msgs[-1] == {'role': 'assistant', 'content': 'Pick:'}:
+            return self._json({'model': MODEL, 'message': {'role': 'assistant', 'content': 'Pick: WAIT'},
+                               'done': True, 'done_reason': 'stop', **STATS})
         if not body.get('stream', True):
             # the title call. no system prompt, stream off, one shot.
             return self._json({'model': MODEL, 'message': {'role': 'assistant', 'content': 'Fake Title'},

@@ -11,11 +11,11 @@
 
 import * as Auth from './core/auth.js?v=1';
 import { api, apiJson } from './core/api.js?v=1';
-import * as ChatAPI from './core/chat-api.js?v=7';
+import * as ChatAPI from './core/chat-api.js?v=8';
 import { applyI18n, locale, t } from './core/i18n.js?v=1';
 import * as Names from './core/names.js?v=1';
 import * as Prefs from './core/prefs.js?v=9';
-import { say } from './core/speech-card.js?v=21';
+import { say } from './core/speech-card.js?v=22';
 import { localTimeString, mealNow } from './core/util.js?v=1';
 import * as Live2D from './live2d/live2d.js?v=92';
 import * as Outfit from './outfit/outfit.js?v=112';

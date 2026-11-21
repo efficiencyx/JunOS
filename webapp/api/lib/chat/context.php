@@ -8,6 +8,10 @@ const INITIATIVE_ODDS_REPLY = 12;
 
 const MEMORY_CONTEXT_MAX_CHARS = 2500;
 
+function chat_is_short_ack(string $msg): bool {
+    return trim($msg) !== '' && (bool)preg_match('/^\s*(?:ok(?:ay)?|k+|lol+|lmao|ha(?:ha)+|yeah|yep|ya|mhm+|hm+|sure|fine|cool|nice|[\p{So}\p{Sk}\s])+[.!?]*\s*$/iu', $msg);
+}
+
 // the newest few go in whatever he just said, so the thing that
 // happened an hour ago doesn't vanish on an off topic turn
 const MEMORY_CONTEXT_RECENT_KEEP = 3;
@@ -191,6 +195,19 @@ function chat_live_context(array $req, array $user, string $lastUserMsg, string 
         $contextParts[] = "## Current Wardrobe State\n" . $req['outfit_context'];
     }
 
+    if ($req['game_lines']) {
+        $contextParts[] = "## Said in the game since your last reply\n" . implode("\n", $req['game_lines']);
+    }
+
+    if ($req['game_actions']) {
+        $contextParts[] = "## What Anon did since your last reply\n" . implode("\n", $req['game_actions']);
+    }
+
+    if ($req['interrupted'] !== '') {
+        $contextParts[] = "## He cut you off\nAnon started talking over you and you stopped mid-sentence. "
+            . "All he heard of your last reply was: \"" . $req['interrupted'] . '"';
+    }
+
     $feelingsBlock = "## YOUR FEELINGS TOWARD ANON RIGHT NOW - highest priority for this reply\n"
         . relationship_directives($rel);
     $contextParts[] = $feelingsBlock;
@@ -222,7 +239,7 @@ function chat_live_context(array $req, array $user, string $lastUserMsg, string 
     // she only reaches for tools something in the context named, so
     // the block names them. and tells her NOT to call them yet, on an
     // idle nudge they'd answer not_available_on_idle anyway
-    if ($toolsOffered && !$req['ephemeral'] && $invite === '' && $approvedWebSearchQuery === null
+    if ($toolsOffered && !$req['ephemeral'] && $req['cue'] === '' && $invite === '' && $approvedWebSearchQuery === null
         && random_int(1, $req['idle'] ? INITIATIVE_ODDS_IDLE : INITIATIVE_ODDS_REPLY) === 1) {
         $contextParts[] = "## Take the initiative\n"
             . "Right now YOU want something from Anon. Pick ONE and actually ask for it in this reply, in your own words: "
@@ -237,6 +254,10 @@ function chat_live_context(array $req, array $user, string $lastUserMsg, string 
     // still has the last word, this only puts the tool in her head
     if ($toolsOffered && !$req['idle'] && !$req['ephemeral'] && $invite === '' && mood_is_souring((int)$user['id'])) {
         $contextParts[] = "(OOC stage direction, not spoken by Anon: You should consider invoking the tool flee, else if it's not appropriate use the tool stay_silent)";
+    }
+
+    if (!$req['idle'] && !$req['ephemeral'] && $invite === '' && chat_is_short_ack($lastUserMsg)) {
+        $contextParts[] = "(OOC stage direction, not spoken by Anon: a line like this doesn't need words back. An action alone, a look or a nod, is fine.)";
     }
 
     // same trap, other direction. with the notes already listed above

@@ -15,13 +15,32 @@ public static class ChatExecutor {
     "#!bot.Expression.Angry", "#!bot.Expression.VeryAngry"
   ];
 
+  // what her face shows right now, so the linger can put it back after the game wipes it
+  private static readonly Dictionary<string, string> shownEmotes = [];
+
+  // FaceResetPatch lets our own resets through and blocks the game's
+  public static bool IsOwnReset { get; private set; }
+
   public static Task Run(string command) {
     logger.Log($"Executing command: {command}");
     var parts = command.Split('.');
     if (parts.Length == 3 && parts[0] == "bot") {
       SetEmote(parts[0], parts[1], parts[2]);
+      if (!parts[1].StartsWith("Arm")) {
+        lock (shownEmotes) {
+          shownEmotes[parts[1]] = parts[2];
+        }
+      }
     }
     return Task.CompletedTask;
+  }
+
+  public static void ReapplyShownEmotes() {
+    lock (shownEmotes) {
+      foreach (var (slot, item) in shownEmotes) {
+        SetEmote("bot", slot, item);
+      }
+    }
   }
 
   public static void SetEmote(string characterId, string slotId, string itemId) {
@@ -51,6 +70,9 @@ public static class ChatExecutor {
 
   public static void ResetBotEmotes(bool instantly = false) {
     var isCuddling = Utils.GameState.IsStateType<CuddleState>();
+    lock (shownEmotes) {
+      shownEmotes.Clear();
+    }
 
     MainThreadRunner.Run(() => {
       var live2DController = Live2DControllerSingleton.Instance;
@@ -59,7 +81,12 @@ public static class ChatExecutor {
         ResetEmotesExceptArms(character);
         return;
       }
-      character?.SetDefaultEmote(instantly);
+      IsOwnReset = true;
+      try {
+        character?.SetDefaultEmote(instantly);
+      } finally {
+        IsOwnReset = false;
+      }
     });
   }
 

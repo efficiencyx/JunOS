@@ -10,7 +10,7 @@
 import * as Names from '../core/names.js?v=1';
 import * as Live2D from '../live2d/live2d.js?v=92';
 import * as Scene from '../trip/scene.js?v=1';
-import * as VoiceMode from '../voice/voicemode.js?v=96';
+import * as VoiceMode from '../voice/voicemode.js?v=97';
 import * as Achievements from '../achievements/achievements.js?v=9';
 import { t } from '../core/i18n.js?v=1';
 

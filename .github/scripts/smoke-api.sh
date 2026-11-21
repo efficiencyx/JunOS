@@ -207,6 +207,17 @@ fi
 curl -sS -b "$cookies" "$BASE/api/conversations.php?action=list" >"$work/body"
 if grep -q '"title":"Fake Title"' "$work/body"; then pass 'the title came from the model'; else fail 'no generated title'; fi
 
+# the fake gate always says WAIT
+rows_before=$(curl -sS -b "$cookies" "$BASE/api/conversations.php?action=messages&id=$convo" | grep -o '"role"' | wc -l)
+sse "{\"messages\":[{\"role\":\"user\",\"content\":\"$question\"}],\"conversation_id\":$convo,\"idle\":true,\"cue\":\"followup\"}" >"$work/sse"
+rows_after=$(curl -sS -b "$cookies" "$BASE/api/conversations.php?action=messages&id=$convo" | grep -o '"role"' | wc -l)
+if grep -q '"wait":true' "$work/sse" && ! grep -q '"token":"' "$work/sse" && grep -q 'data: \[DONE\]' "$work/sse"; then
+	pass 'a follow-up the gate turns down sends wait and no tokens'
+else
+	fail "the follow-up gate did not wait: $(cat "$work/sse")"
+fi
+if [ "$rows_before" = "$rows_after" ]; then pass 'a waited follow-up stores nothing'; else fail "a waited follow-up stored a row ($rows_before -> $rows_after)"; fi
+
 # rows are sealed under the user's key (migration 016). the
 # question and the title reading back in clear from the file means
 # enc() got dropped somewhere and the volume is plaintext again.

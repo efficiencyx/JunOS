@@ -1,5 +1,5 @@
-import { hideFaceBubble, replayFaceBubbleIntro, showFaceBubble } from './face-bubble.js?v=95';
-import { setSidebarOpen } from './sidebar.js?v=140';
+import { hideFaceBubble, replayFaceBubbleIntro, showFaceBubble } from './face-bubble.js?v=96';
+import { setSidebarOpen } from './sidebar.js?v=141';
 import { DEV, JUN } from './tour-lines.js?v=8';
 import { SKIPPED, caption, close, hush, makeRun, unionRect } from '../core/tour-kit.js?v=2';
 import { escapeHtml } from '../core/util.js?v=1';
@@ -11,7 +11,7 @@ import * as Live2D from '../live2d/live2d.js?v=92';
 import { COLOR_GROUPS } from '../outfit/catalog.js?v=5';
 import { colors } from '../outfit/current.js?v=6';
 import * as Outfit from '../outfit/outfit.js?v=112';
-import * as TTS from '../voice/tts.js?v=93';
+import * as TTS from '../voice/tts.js?v=94';
 import { t } from '../core/i18n.js?v=1';
 
 const DONE_KEY = 'tour.done';

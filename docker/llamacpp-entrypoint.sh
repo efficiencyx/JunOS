@@ -29,6 +29,11 @@ chat_section() {  # name, where-the-weights-are line, mtp yes/no
     fi
     # every slot past the first costs the 12B ~310 MiB of VRAM
     printf 'fit-target = 1024\nparallel = %s\n' "${LLAMACPP_PARALLEL:-1}"
+    # q8 halves the 320 MiB checkpoints llama.cpp copies out on EVERY
+    # request, swa-full makes rolling back a turn a trim, not a re-read
+    if [ "${LLAMACPP_FAST_CACHE:-on}" != off ]; then
+        printf 'cache-type-k = q8_0\ncache-type-v = q8_0\nswa-full = true\n'
+    fi
     # the drafter matches ONE gemma 4 size, so only the default
     # model gets it
     if [ "$3" = yes ] && [ -n "${LLAMACPP_MTP:-}" ]; then

@@ -1,25 +1,25 @@
-import { armIdleAfterReply, cancelActiveIdleNudge, cancelAutoReset, cancelIdleNudge, composerPlaceholder, consolidating, fleeActive, reportActivity, resetIdleNudge, scheduleAutoReset, setCancelActiveIdleNudge, setConsolidating, showConsolidatingBubble, startFleeLock, syncConsolidationStatus } from './consolidation.js?v=141';
+import { armFollowup, armIdleAfterReply, cancelActiveIdleNudge, cancelAutoReset, cancelIdleNudge, composerPlaceholder, consolidating, fleeActive, reportActivity, resetIdleNudge, scheduleAutoReset, setCancelActiveIdleNudge, setConsolidating, showConsolidatingBubble, startFleeLock, syncConsolidationStatus } from './consolidation.js?v=142';
 import { chatInput, messagesEl, modelSelect, reasoningSelect, sendBtn, sendButtonIdleMarkup, sendButtonStopMarkup, thinkChk } from './dom.js?v=77';
-import { announceMobileReply, hideFaceBubble, scheduleFaceBubbleHide, setLatestAssistantReply, showFaceBubble } from './face-bubble.js?v=95';
+import { announceMobileReply, hideFaceBubble, scheduleFaceBubbleHide, setLatestAssistantReply, showFaceBubble } from './face-bubble.js?v=96';
 import { appendDebugReply, appendDebugThinking, beginDebugTurn, logToolStatus, setDebugPrompt } from './logging.js?v=78';
 import { loadMood } from './mood.js?v=93';
-import { refreshSidebar } from './sidebar.js?v=140';
+import { refreshSidebar } from './sidebar.js?v=141';
 import { makeNameFilter, makeStreamBuffer } from './stream-filters.js?v=115';
 import { localTimeString, phoneMode } from '../core/util.js?v=1';
 import * as Names from '../core/names.js?v=1';
 import * as ui from '../core/ui.js?v=10';
 import { apiJson } from '../core/api.js?v=1';
-import * as ChatAPI from '../core/chat-api.js?v=7';
+import * as ChatAPI from '../core/chat-api.js?v=8';
 import * as Mods from '../mods/mods.js?v=113';
 import * as Outfit from '../outfit/outfit.js?v=112';
-import * as Cards from './cards.js?v=40';
+import * as Cards from './cards.js?v=41';
 import * as Achievements from '../achievements/achievements.js?v=9';
 import * as History from './history.js?v=2';
-import * as TTS from '../voice/tts.js?v=93';
-import * as Voice from '../voice/voice.js?v=94';
-import * as VoiceMode from '../voice/voicemode.js?v=96';
+import * as TTS from '../voice/tts.js?v=94';
+import * as Voice from '../voice/voice.js?v=95';
+import * as VoiceMode from '../voice/voicemode.js?v=97';
 import { DevHud, abortFn, currentConversationId, messages, setAbortFn, setRenderVoiceDraft, setStopActiveStream, stopActiveStream } from './session.js?v=1';
-import { appendMsg, followLatest, renderMarkdown, updateEmptyState } from './messages.js?v=24';
+import { appendMsg, followLatest, renderMarkdown, updateEmptyState } from './messages.js?v=25';
 import { setComposerText } from './composer.js?v=3';
 import { t } from '../core/i18n.js?v=1';
 
@@ -220,7 +220,7 @@ function leaveFor(where) {
   tick();
 }
 
-export function runChat({ idle, ephemeral, audio, voice, invite = '', regenerate = false, onOverheard, onAudioUnsupported, onReply }) {
+export function runChat({ idle, cue = '', ephemeral, audio, voice, invite = '', regenerate = false, onOverheard, onAudioUnsupported, onReply }) {
   if (abortFn) return;
   cancelIdleNudge();
   cancelAutoReset();
@@ -269,6 +269,7 @@ export function runChat({ idle, ephemeral, audio, voice, invite = '', regenerate
   let shown = '';
   let silenced = false;
   let overheard = false;
+  let waited = false;
   let trip = '';
   let replied = false;
   const reply = (text) => {
@@ -363,7 +364,7 @@ export function runChat({ idle, ephemeral, audio, voice, invite = '', regenerate
       outfit_context: Outfit.describe(),
       mod_items: Mods.itemNames(),
       conversation_id: currentConversationId,
-      idle: !!idle, ephemeral: !!ephemeral, client_time: localTimeString(),
+      idle: !!idle, cue, interrupted: TTS.takeCutOff(), ephemeral: !!ephemeral, client_time: localTimeString(),
       audio, voice: !!voice, invite, regenerate, tts: TTS.isEnabled(),
       hear_all: !!Voice.hearAll() },
     {
@@ -406,6 +407,9 @@ export function runChat({ idle, ephemeral, audio, voice, invite = '', regenerate
         }
         draft.className = 'msg silence';
         draft.textContent = t('chat.saysNothing', '{name} says nothing.', { name: Names.getBot() });
+      },
+      onWait: () => {
+        if (isCurrent()) waited = true;
       },
       onFled: (info) => {
         if (!isCurrent()) return;
@@ -456,7 +460,12 @@ export function runChat({ idle, ephemeral, audio, voice, invite = '', regenerate
         } else if (visible.trim()) {
           messages.push({ role: 'assistant', content: visible });
           if (!ephemeral) addReplyActions(draft, model);
-        } else draft.remove();
+        } else {
+          draft.remove();
+          // actions only, the row is stored and a reload pushes '' for it too
+          if (!waited && !ephemeral) messages.push({ role: 'assistant', content: '' });
+        }
+        if (!idle && !ephemeral && !silenced) armFollowup();
         finalize();
         ui.setStatus('idle', 'idle');
         updateEmptyState();

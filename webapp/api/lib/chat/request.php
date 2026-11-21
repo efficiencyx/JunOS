@@ -8,6 +8,14 @@ const WATCH_FRAME_MAX_PX = 768;
 // at 30 s a clip
 const WATCH_AUDIO_MAX_BYTES = 25 * 32000 + 44;
 
+// the game bridge sends these when she talks first
+const CHAT_IDLE_CUES = [
+    'outing' => 'Anon just came back home from being out.',
+    'intimacy' => 'You and Anon were just intimate and it has gone quiet.',
+    'morning' => 'A new day just started and you both just woke up.',
+    'followup' => 'You just finished talking and Anon hasn\'t answered yet. A second thought, a reaction to your own words or nothing at all.',
+];
+
 function chat_parse_request(string $provider): array {
     // big enough for a base64 wav plus the history. nginx caps
     // /api/chat.php at 4m and THAT's the limit that actually bites,
@@ -107,12 +115,33 @@ function chat_parse_request(string $provider): array {
     }
 
     $clientTime = chat_clean_text($body['client_time'] ?? '', 80);
+    $interrupted = chat_clean_text($body['interrupted'] ?? '', 300);
+
+    // the game bridge: touches and clothes since her last reply, one short line each,
+    // plus the game's own scripted lines
+    $gameActions = [];
+    if (isset($body['game_actions'])) {
+        if (!is_array($body['game_actions'])) sse_fail('invalid_request');
+        foreach (array_slice($body['game_actions'], 0, 20) as $line) {
+            $line = chat_clean_text($line, 160);
+            if ($line !== '') $gameActions[] = $line;
+        }
+    }
+    $gameLines = [];
+    if (isset($body['game_lines'])) {
+        if (!is_array($body['game_lines'])) sse_fail('invalid_request');
+        foreach (array_slice($body['game_lines'], -12) as $line) {
+            $line = chat_clean_text($line, 340);
+            if ($line !== '') $gameLines[] = $line;
+        }
+    }
 
     // minutes east of UTC, so the achievement day and the 2-5 am
     // window are Anon's and not the container's
     $tz = isset($body['tz']) && is_int($body['tz']) ? $body['tz'] : 0;
 
     $idle = isset($body['idle']) && $body['idle'] === true;
+    $cue = $idle && isset($body['cue']) && isset(CHAT_IDLE_CUES[$body['cue']]) ? (string)$body['cue'] : '';
     $ephemeral = !empty($body['ephemeral']) || $watch !== null;
     $regenerate = !$idle && !$ephemeral && ($body['regenerate'] ?? false) === true;
     $invite = isset($body['invite']) && in_array($body['invite'], TRIP_TOOLS, true) ? (string)$body['invite'] : '';
@@ -120,7 +149,8 @@ function chat_parse_request(string $provider): array {
     return [
         'body' => $body, 'dropped_oldest' => $droppedOldest, 'audio' => $audioB64, 'spoken' => $spoken,
         'model' => $model, 'reasoning' => $reasoning, 'outfit_context' => $outfitContext,
-        'mod_items' => $modItems, 'client_time' => $clientTime, 'tz' => $tz, 'idle' => $idle,
+        'mod_items' => $modItems, 'client_time' => $clientTime, 'tz' => $tz, 'idle' => $idle, 'cue' => $cue, 'game_actions' => $gameActions,
+        'interrupted' => $interrupted, 'game_lines' => $gameLines,
         'ephemeral' => $ephemeral, 'invite' => $invite, 'regenerate' => $regenerate,
         'watch' => $watch, 'frames' => $frames,
     ];

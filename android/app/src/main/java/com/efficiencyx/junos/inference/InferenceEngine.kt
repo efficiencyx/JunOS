@@ -10,6 +10,7 @@ data class ChatMessage(
     val content: String,
     val toolCalls: List<ParsedToolCall> = emptyList(),
     val toolName: String? = null,
+    val thought: String = "",
 )
 
 data class ParsedToolCall(val name: String, val args: JsonObject)

@@ -27,6 +27,8 @@ let currentSource = null;
 let rafId = 0;
 let sentenceBuf = '';
 let chunkIndex = 0;
+let spoken = '';
+let cutOff = '';
 
 let speaking = false;
 let onAllDone = () => {};
@@ -322,6 +324,7 @@ function enqueue(text, hooks) {
   if (audioCtx.state === 'suspended') audioCtx.resume().catch(() => {});
 
   updateDetect(text);
+  if (chunkIndex === 0) spoken = '';
   const id = nextId++;
   // each chunk keeps the language it started with. a later guess
   // must not rewrite one already in flight
@@ -398,6 +401,7 @@ function playJob(job) {
   if (!job.audioBuffer) { job.status = 'done'; jobs.shift(); pump(); return; }
   playingJobId = job.id;
   job.status = 'playing';
+  spoken += (spoken ? ' ' : '') + job.text;
 
   const src = audioCtx.createBufferSource();
   src.buffer = job.audioBuffer;
@@ -420,6 +424,12 @@ function playJob(job) {
   };
   if (job.hooks && job.hooks.onStart) job.hooks.onStart();
   src.start();
+}
+
+export function takeCutOff() {
+  const text = cutOff;
+  cutOff = '';
+  return text;
 }
 
 export function speak(text, hooks) {
@@ -512,7 +522,9 @@ function stopLipsyncLoop() {
   Live2D.setMouthOverride(null);
 }
 
-export function stop() {
+// interrupted = Anon talked over her, what she got out goes in her next turn
+export function stop(interrupted = false) {
+  if (interrupted && isSpeaking() && spoken) cutOff = spoken;
   sentenceBuf = '';
   speaking = false;
   duck(1);

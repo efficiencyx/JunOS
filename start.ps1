@@ -1071,6 +1071,7 @@ function Write-LlamacppPresets([string]$path, [string[]]$chatModels) {
         if ($env:OMEGA_NUM_CTX) { $lines += "ctx-size = $($env:OMEGA_NUM_CTX)" }
         else { $lines += 'override-kv = gemma4.context_length=int:16384', 'fit-ctx = 6144' }
         $lines += 'fit-target = 1024', "parallel = $(if ($env:LLAMACPP_PARALLEL) { $env:LLAMACPP_PARALLEL } else { '1' })"
+        if ($env:LLAMACPP_FAST_CACHE -ne 'off') { $lines += 'cache-type-k = q8_0', 'cache-type-v = q8_0', 'swa-full = true' }
         if ($TensorParallel) { $lines += 'split-mode = row' }
         if ($first -and $env:LLAMACPP_MTP) {
             $nMax = if ($env:LLAMACPP_MTP_N_MAX) { $env:LLAMACPP_MTP_N_MAX } else { '4' }
@@ -1106,7 +1107,9 @@ if ($Provider -eq 'llamacpp' -and $LlamacppUrl -match '://(127\.0\.0\.1|localhos
         $p = Get-TrackedProcess $oldPids 'llamacpp'
         if ($p) { $newPids['llamacpp'] = $p.Id }
     } else {
-        if (-not (Get-Command llama-server -ErrorAction SilentlyContinue)) {
+        $llamaExe = Join-Path $Runtime 'llamacpp\llama-server.exe'
+        if ($env:LLAMACPP_BACKEND -eq 'vulkan' -or -not (Test-Path -LiteralPath $llamaExe)) { $llamaExe = 'llama-server' }
+        if (-not (Get-Command $llamaExe -ErrorAction SilentlyContinue)) {
             throw 'llama-server is not installed. Run install.ps1 first (it installs llama.cpp via winget).'
         }
         $presets = Join-Path $Runtime 'llamacpp-models.ini'
@@ -1142,7 +1145,7 @@ if ($Provider -eq 'llamacpp' -and $LlamacppUrl -match '://(127\.0\.0\.1|localhos
         }
         if ($offline) { $env:LLAMA_ARG_OFFLINE = 'on' } else { Remove-Item Env:LLAMA_ARG_OFFLINE -ErrorAction SilentlyContinue }
         $llamaArgs = @('--models-preset', $presets, '--models-max', '2', '--host', '127.0.0.1', '--port', $LlamaPort)
-        $llamaProc = Start-Tracked 'llamacpp' 'llama-server' $llamaArgs
+        $llamaProc = Start-Tracked 'llamacpp' $llamaExe $llamaArgs
 
         $deadline = (Get-Date).AddMinutes(2)
         while (-not (Test-Http "$LlamacppUrl/health")) {

@@ -54,6 +54,8 @@ function model_messages(mixed $raw, string $provider): array {
             $openai = provider_uses_openai_protocol($provider);
             $message['tool_calls'] = array_map(fn($c, $i) => model_tool_call($c, $openai, $i),
                 array_values($m['tool_calls']), array_keys(array_values($m['tool_calls'])));
+            $thought = is_string($m['reasoning_content'] ?? null) ? mb_substr($m['reasoning_content'], 0, 32000) : '';
+            $message += provider_call_thought($provider, $thought);
         }
         $out[] = $message;
     }
@@ -98,11 +100,26 @@ $emit = function (array $event) use ($delta): void {
     elseif (isset($event['error'])) sse_send(['error' => ['message' => (string)$event['error']]]);
 };
 
-// chat.php's two retries: an MTP twin or preset that won't load falls
-// back to her plain model, a template that refuses tools goes again without
+// chat.php's retries: an MTP twin or preset that won't load falls back
+// to her plain model, a template that refuses tools goes again without,
+// a draft that copies an earlier reply gets her thinking back plus a nudge
 $fellBack = false;
+$earlier = $think && $provider === 'llamacpp' ? copy_guard_earlier($messages) : [];
+[$copies, $prefill] = [0, ''];
 while (true) {
-    $result = provider_stream_round($provider, $payload, $emit);
+    [$roundEmit, $copying, $caught, $flush] = $earlier && $copies < COPY_GUARD_RETRIES
+        ? stream_copy_guard($emit, $earlier) : [$emit, fn() => '', fn() => null, fn() => null];
+    $result = provider_stream_round($provider, $payload, $roundEmit, 0, null, $copying);
+    $flush();
+    if ($result['aborted'] === 'copying') {
+        $hit = $caught();
+        log_event(['msg' => 'model_copy_caught', 'attempt' => $copies + 1]);
+        $line = copy_guard_line(++$copies, $hit['earlier']);
+        $delta(['reasoning_content' => $line]);
+        $prefill .= $hit['thinking'] . $line;
+        $payload['messages'] = copy_guard_resend($provider, $messages, $prefill);
+        continue;
+    }
     if ($result['curl_error'] !== '' || $result['http_status'] < 400) break;
     log_event(['msg' => 'model_upstream_error', 'provider' => $provider, 'model' => $payload['model'],
                'status' => $result['http_status'], 'body' => mb_substr($result['error_body'], 0, 500)]);

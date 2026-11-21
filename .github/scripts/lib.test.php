@@ -116,6 +116,12 @@ $eq('warm: clean history + reply without live context', $warmMsgs, [
     ['role' => 'user', 'content' => 'new'],
     ['role' => 'assistant', 'content' => 'clean reply'],
 ]);
+$cueMsgs = chat_build_messages(['body' => ['messages' => []], 'dropped_oldest' => 0, 'idle' => true, 'cue' => 'outing', 'watch' => null, 'audio' => ''], 'sys', 'LIVE', 0);
+$eq('idle: a cue words the stage direction and still takes the live context', [
+    str_contains($cueMsgs[1]['content'], CHAT_IDLE_CUES['outing']), str_contains($cueMsgs[1]['content'], 'gone quiet'), str_contains($cueMsgs[1]['content'], 'LIVE'),
+], [true, false, true]);
+$plainIdle = chat_build_messages(['body' => ['messages' => []], 'dropped_oldest' => 0, 'idle' => true, 'cue' => '', 'watch' => null, 'audio' => ''], 'sys', 'LIVE', 0);
+$eq('idle: no cue keeps the trained silence nudge', str_contains($plainIdle[1]['content'], 'gone quiet'), true);
 $llamaWarm = provider_chat_warm_payload('llamacpp', 'jun', $warmMsgs, 'low', false, [['type' => 'function']]);
 $eq('warm: llamacpp closes assistant with empty user turn and n_predict 0', [
     $llamaWarm['stream'], $llamaWarm['max_tokens'], $llamaWarm['n_predict'], $llamaWarm['cache_prompt'],
@@ -172,5 +178,28 @@ $eq('difficulty: hard caps at a day', difficulty_ban_minutes(DIFFICULTY['hard'],
 $eq('difficulty: hard drops one per 14 days', difficulty_strikes(DIFFICULTY['hard'], 3, 0, 29 * 86400), 1);
 $eq('difficulty: hardcore never forgets', difficulty_strikes($hc, 3, 0, 999 * 86400), 3);
 $eq('difficulty: normal resets after a day', difficulty_strikes(DIFFICULTY['normal'], 4, 0, 86400), 0);
+
+$said = ['[A:emote|happy] Physics! It explains how everything moves, even me~', 'You work at the vet clinic, right?'];
+$guard = function (array $chunks) use ($said): array {
+    $shown = '';
+    [$emit, $stop, $hit, $flush] = stream_copy_guard(function ($o) use (&$shown) { $shown .= $o['thinking'] ?? ''; }, $said);
+    foreach ($chunks as $chunk) {
+        $emit(['thinking' => $chunk]);
+        if ($stop() !== '') break;
+    }
+    $flush();
+    return [$stop(), $hit()['thinking'] ?? null, $shown];
+};
+$eq('copy: a copied draft split over chunks stops', $guard(["intro\n- [A:nod]Physics! It ", "explains how everything moves, even me~\n- more"]),
+    ['copying', "intro\n- [A:nod]Physics! It explains how everything moves, even me~\n", "intro\n- [A:nod]Physics! It explains how everything moves, even me~\n"]);
+$eq('copy: new wording passes', $guard(["- [A:nod]Physics, the laws of motion are neat\nTool check: none\n"])[0], '');
+$eq('copy: short drafts are never copies', $guard(["- vet clinic, right?\n"])[0], '');
+$eq('copy: a half draft is held back', $guard(["ok\n- [A:nod]Physics! It"])[2], "ok\n- [A:nod]Physics! It");
+$eq('copy: the old line plus a new sentence stops', $guard(["- [A:nod]Physics. It explains how everything moves, even me. Come sit down, you look tired~\n"])[0], 'copying');
+$eq('copy: a short old line inside a long draft passes', copy_closest('I will remember that, you told me earlier and it matters to me a lot', ['You told me earlier~'])[0] < COPY_GUARD_SHARE, true);
+$eq('copy: plain trace lines pass', $guard(["Physics! It explains how everything moves, even me~\n"])[0], '');
+$eq('copy: second line drops the idea', str_starts_with(copy_guard_line(2, 'x'), 'Still the same line'), true);
+$eq('copy: first line quotes it without tags', copy_guard_line(1, $said[0]),
+    "Wait, I already said \"Physics! It explains how everything moves, even me~\" earlier. Not repeating myself, I will answer with new words and a new angle.\n");
 
 exit($fails ? 1 : 0);

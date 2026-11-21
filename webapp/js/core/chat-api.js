@@ -6,13 +6,13 @@ export async function listModels() {
   return r.json();
 }
 
-export function chat({ messages, model, reasoning, think, outfit_context, mod_items, conversation_id, idle, ephemeral, client_time, audio, voice, hear_all, invite, tts, regenerate, frames, watch }, { onToken, onThinking, onDone, onError, onDebug, onStats, onToolStatus, onOutfit, onGo, onSilence, onFled, onRestart }) {
+export function chat({ messages, model, reasoning, think, outfit_context, mod_items, conversation_id, idle, cue, interrupted, ephemeral, client_time, audio, voice, hear_all, invite, tts, regenerate, frames, watch }, { onToken, onThinking, onDone, onError, onDebug, onStats, onToolStatus, onOutfit, onGo, onSilence, onFled, onRestart, onWait }) {
   const ctrl = new AbortController();
 
   (async () => {
     try {
       const res = await apiJson('chat.php',
-        { messages, model, reasoning, think, outfit_context, mod_items, conversation_id, idle, ephemeral, client_time, audio, voice, hear_all, invite, tts: !!tts, regenerate: !!regenerate, frames, watch,
+        { messages, model, reasoning, think, outfit_context, mod_items, conversation_id, idle, cue, interrupted, ephemeral, client_time, audio, voice, hear_all, invite, tts: !!tts, regenerate: !!regenerate, frames, watch,
           tz: -new Date().getTimezoneOffset() },
         { signal: ctrl.signal });
       if (!res.ok || !res.body) {
@@ -49,6 +49,7 @@ export function chat({ messages, model, reasoning, think, outfit_context, mod_it
               }
               if (obj.restart) { onRestart && onRestart(obj.restart); continue; }
               if (obj.silence) { onSilence && onSilence(obj.silence); continue; }
+              if (obj.wait) { onWait && onWait(); continue; }
               if (obj.fled) { onFled && onFled(obj.fled); continue; }
               if (obj.debug) { onDebug && onDebug(obj.debug); continue; }
               if (obj.stats) { onStats && onStats(obj.stats); continue; }

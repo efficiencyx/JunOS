@@ -114,7 +114,10 @@ function provider_parse_openai_chunk(
         $delta = is_array($choice['delta'] ?? null) ? $choice['delta'] : [];
 
         $thinking = (string)($delta['reasoning'] ?? $delta['reasoning_content'] ?? '');
-        if ($thinking !== '') $emit(['thinking' => $thinking]);
+        if ($thinking !== '') {
+            $emit(['thinking' => $thinking]);
+            $state['thinking'] .= $thinking;
+        }
 
         if (is_array($delta['tool_calls'] ?? null)) {
             foreach ($delta['tool_calls'] as $fragment) {
@@ -208,6 +211,107 @@ function stream_loop_guard(callable $emit): array {
         return stream_looping($tail['thinking']) || stream_looping($tail['token']) ? 'looping' : '';
     };
     return [$track, $stuck];
+}
+
+const COPY_GUARD_SHARE = 0.5;
+const COPY_GUARD_MIN_WORDS = 4;
+const COPY_GUARD_OLD_SHARE = 0.6;
+const COPY_GUARD_OLD_MIN_WORDS = 6;
+const COPY_GUARD_RETRIES = 2;
+
+function copy_words(string $text): array {
+    $text = strtolower(preg_replace('/\[[^\]]*\]/', ' ', $text));
+    return preg_split("/[^a-z0-9']+/", $text, -1, PREG_SPLIT_NO_EMPTY);
+}
+
+function copy_trigrams(array $words): array {
+    $grams = [];
+    for ($i = 0; $i + 2 < count($words); $i++) $grams[$words[$i] . ' ' . $words[$i + 1] . ' ' . $words[$i + 2]] = true;
+    return $grams;
+}
+
+// [how much of one earlier reply the draft reuses, that reply]. both
+// ways, or the old line word for word plus a new sentence slips through
+function copy_closest(string $draft, array $earlier): array {
+    $words = copy_words($draft);
+    if (count($words) < COPY_GUARD_MIN_WORDS) return [0.0, ''];
+    $grams = copy_trigrams($words);
+    $best = [0.0, ''];
+    foreach ($earlier as $reply) {
+        $oldWords = copy_words($reply);
+        $old = copy_trigrams($oldWords);
+        $shared = count(array_intersect_key($grams, $old));
+        $share = $shared / count($grams);
+        if (count($oldWords) >= COPY_GUARD_OLD_MIN_WORDS && $shared / count($old) >= COPY_GUARD_OLD_SHARE) $share = max($share, $shared / count($old));
+        if ($share > $best[0]) $best = [$share, $reply];
+    }
+    return $best;
+}
+
+// her replies before the new user turn, for the copy guard
+function copy_guard_earlier(array $messages): array {
+    $earlier = [];
+    foreach (array_slice($messages, 0, -1) as $m) {
+        if (($m['role'] ?? '') !== 'assistant' || !empty($m['tool_calls']) || !is_string($m['content'] ?? null)) continue;
+        if (trim($m['content']) !== '') $earlier[] = $m['content'];
+    }
+    return $earlier;
+}
+
+// the same in content makes llama-server inject an empty thought block
+function copy_guard_resend(string $provider, array $messages, string $prefill): array {
+    return [...provider_messages($provider, $messages), ['role' => 'assistant', 'content' => '', 'reasoning_content' => $prefill]];
+}
+
+// her own voice, it goes into her thinking. the second one is for
+// when she writes the same draft right back after the first
+function copy_guard_line(int $attempt, string $earlier): string {
+    $earlier = trim(preg_replace('/\s+/', ' ', preg_replace('/\[[^\]]*\]/', ' ', $earlier)));
+    return $attempt === 1
+        ? "Wait, I already said \"{$earlier}\" earlier. Not repeating myself, I will answer with new words and a new angle.\n"
+        : "Still the same line as before. I will drop that idea completely and say something I have not said to him yet.\n";
+}
+
+// [emit, stop, hit, flush] for provider_stream_round. her trace drafts
+// "- " lines and the reply copies the pick, so a copied draft gets
+// caught BEFORE she says it. held until whole, the cut is a line end
+function stream_copy_guard(callable $emit, array $earlier): array {
+    $line = '';
+    $shown = 0;
+    $seen = '';
+    $hit = null;
+    $flush = function () use (&$line, &$shown, $emit) {
+        if (strlen($line) > $shown) $emit(['thinking' => substr($line, $shown)]);
+        $shown = strlen($line);
+    };
+    $track = function (array $out) use (&$line, &$shown, &$seen, &$hit, $emit, $earlier, $flush) {
+        if (($out['error'] ?? '') === 'copying') return;
+        if (!isset($out['thinking']) || $hit !== null) {
+            $flush();
+            $emit($out);
+            return;
+        }
+        $line .= $out['thinking'];
+        while (($nl = strpos($line, "\n")) !== false) {
+            $whole = substr($line, 0, $nl + 1);
+            if (strlen($whole) > $shown) $emit(['thinking' => substr($whole, $shown)]);
+            $seen .= $whole;
+            $line = substr($line, $nl + 1);
+            $shown = 0;
+            if (!str_starts_with($whole, '- ')) continue;
+            [$share, $reply] = copy_closest(substr($whole, 2), $earlier);
+            if ($share >= COPY_GUARD_SHARE) {
+                $hit = ['thinking' => $seen, 'earlier' => $reply];
+                [$line, $shown] = ['', 0];
+                return;
+            }
+        }
+        if ($line !== '' && $line !== '-' && !str_starts_with($line, '- ')) $flush();
+    };
+    // NOT fn(), an arrow fn copies $hit while it's still null
+    $stop = function () use (&$hit): string { return $hit !== null ? 'copying' : ''; };
+    $caught = function () use (&$hit): ?array { return $hit; };
+    return [$track, $stop, $caught, $flush];
 }
 
 // a turn's stats across tool rounds. generation is spread over

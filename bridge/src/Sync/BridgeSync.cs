@@ -64,7 +64,7 @@ public static class BridgeSync {
   private static void Push() {
     var vars = GameScript.Instance?.GameVariables;
     var http = Client();
-    if (vars == null || busy || http == null) {
+    if (vars == null || busy || http == null || !ModConfig.SyncEnabled) {
       return;
     }
     string json;

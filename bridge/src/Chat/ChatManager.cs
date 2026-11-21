@@ -1,5 +1,8 @@
 using System;
 using System.Collections;
+using System.Collections.Concurrent;
+using System.Collections.Generic;
+using System.Linq;
 using System.Threading.Tasks;
 using UnityEngine;
 using MelonLoader;
@@ -43,7 +46,52 @@ public class ChatManager : MonoBehaviour {
   }
 
   public void StartChat() {
-    MelonCoroutines.Start(ChatLoop());
+    Begin(null);
+  }
+
+  public void StartInitiative(string cue, bool mutter) {
+    Begin(game => junChat.SendCue(cue, mutter, game));
+  }
+
+  // false = nothing to say or JunOS isn't there, and nothing was drained
+  [HideFromIl2Cpp]
+  public async Task<bool> TryWelcome() {
+    var game = GameContext.Capture();
+    if (await JunApi.JunSession.Instance.Check() != JunApi.JunSession.State.SignedIn) {
+      return false;
+    }
+    var welcome = await junChat.FetchWelcome(game.Hour);
+    if (welcome == null) {
+      return false;
+    }
+
+    var names = new JunApi.JunActionTranslator(game.PlayerName, game.BotName);
+    string Resolve(string text) => names.Process(text) + names.Flush();
+    var spoken = Resolve(string.Join(" ", welcome.Live ?? []));
+    var notes = (welcome.Milestones ?? [])
+      .SelectMany(m => m.Items ?? [])
+      .Where(i => i.Kind == "text" && !string.IsNullOrWhiteSpace(i.Text))
+      .Select(i => Resolve(i.Text))
+      .ToList();
+    if (spoken == "" && notes.Count == 0) {
+      return false;
+    }
+
+    var face = welcomeFaces.TryGetValue(welcome.Tier ?? "", out var expression) ? $"#!bot.Expression.{expression} " : "";
+    Action greet = () => {
+      if (spoken != "") {
+        Begin(_ => Canned(face + spoken), () => junChat.Remember(spoken));
+      }
+    };
+    await MainThreadRunner.Run(() => {
+      if (notes.Count == 0) {
+        greet();
+        return;
+      }
+      var who = game.BotName != "" ? game.BotName : "Jun";
+      UiOverlay.Instance.OkPopup($"{who} left you messages", string.Join("\n\n", notes), greet);
+    });
+    return true;
   }
 
   public void StopChat() {
@@ -52,9 +100,30 @@ public class ChatManager : MonoBehaviour {
 
     IsChatActive = false;
     isInConversation = false;
+  }
 
-    // Reset bot emotes just in case
-    ChatExecutor.ResetBotEmotes();
+  [HideFromIl2Cpp]
+  private void Begin(Func<GameContext, IAsyncEnumerable<string>> opening, Action afterOpening = null) {
+    if (IsChatActive) {
+      return;
+    }
+    IsChatActive = true;
+    MelonCoroutines.Start(ChatLoop(opening, afterOpening));
+  }
+
+  private static readonly Dictionary<string, string> welcomeFaces = new() {
+    ["none"] = "Happy",
+    ["missed"] = "Happy",
+    ["ached"] = "Sad",
+    ["panicked"] = "VeryShock",
+    ["unravelled"] = "VerySad",
+    ["hollow"] = "Sad",
+  };
+
+  [HideFromIl2Cpp]
+  private static async IAsyncEnumerable<string> Canned(string text) {
+    await Task.CompletedTask;
+    yield return text;
   }
 
   private static void EnterStoryState() {
@@ -75,24 +144,61 @@ public class ChatManager : MonoBehaviour {
   }
 
   [HideFromIl2Cpp]
-  private IEnumerator ChatLoop() {
+  private IEnumerator ChatLoop(Func<GameContext, IAsyncEnumerable<string>> opening, Action afterOpening) {
+    ExpressionLinger.Cancel();
+
+    // an unprompted line waits for its first words before the story state starts,
+    // a dead model or a sign-in box must not cost him the room
+    ReplyStream openingStream = null;
+    if (opening != null) {
+      var signedIn = JunApi.JunSession.Instance.Check();
+      while (!signedIn.IsCompleted) {
+        yield return null;
+      }
+      var ready = signedIn.Result == JunApi.JunSession.State.SignedIn ? junChat.EnsureReady() : Task.FromResult(false);
+      while (!ready.IsCompleted) {
+        yield return null;
+      }
+      if (ready.Result) {
+        openingStream = new ReplyStream(opening(GameContext.Capture()));
+        while (openingStream.Chunks.IsEmpty && !openingStream.Done.IsCompleted) {
+          yield return null;
+        }
+      }
+      if (openingStream == null || openingStream.Chunks.IsEmpty || !Utils.GameState.IsWithHer()) {
+        if (openingStream?.Done.Exception != null) {
+          logger.LogWarning($"She kept quiet: {openingStream.Done.Exception.InnerException?.Message}");
+        }
+        IsChatActive = false;
+        yield break;
+      }
+    }
+
     var uiOverlay = UiOverlay.Instance;
     var gameScript = GameScript.Instance;
     var gameVariables = gameScript.GameVariables;
 
-    IsChatActive = true;
-
     var interactState = gameScript.GameState?.TryCast<InteractState>();
     var wasZoomedIn = interactState != null && interactState._isZoomedIn;
+    var wasInRoom = gameScript.GameState?.TryCast<GameScript.RoomState>() != null;
     var cuddle = CuddleReturn.Capture(gameScript);
 
     EnterStoryState();
 
-    // still opens when this fails, the send then shows the error in her box
-    var preflightTask = junChat.EnsureReady();
-    while (!preflightTask.IsCompleted) {
-      yield return null;
+    if (openingStream == null) {
+      // still opens when this fails, the send then shows the error in her box
+      var preflightTask = junChat.EnsureReady();
+      while (!preflightTask.IsCompleted) {
+        yield return null;
+      }
+    } else {
+      var speaking = SpeakReply(openingStream);
+      while (!speaking.IsCompleted) {
+        yield return null;
+      }
+      afterOpening?.Invoke();
     }
+
 
     while (IsChatActive) {
       isInConversation = true;
@@ -108,9 +214,12 @@ public class ChatManager : MonoBehaviour {
       }
     }
 
-    if (!CuddleReturn.TryRestore(cuddle)) {
+    if (wasInRoom) {
+      gameScript.ChangeToRoomState();
+    } else if (!CuddleReturn.TryRestore(cuddle)) {
       ExitStoryState(wasZoomedIn);
     }
+    ExpressionLinger.Begin();
   }
 
   private static bool ValidateUserInput(string userInput) {
@@ -149,24 +258,14 @@ public class ChatManager : MonoBehaviour {
       return;
     }
 
-    // Start fetching AI response in background immediately while player reads and clicks their echo.
-    // This hides VRAM/loading/network latency completely.
-    var chunksQueue = new System.Collections.Concurrent.ConcurrentQueue<string>();
-    var fetchCompletion = new TaskCompletionSource<bool>();
-    _ = Task.Run(async () => {
-      try {
-        await foreach (var chunk in junChat.SendMessage(userInput)) {
-          chunksQueue.Enqueue(chunk);
-        }
-        fetchCompletion.TrySetResult(true);
-      } catch (Exception ex) {
-        fetchCompletion.TrySetException(ex);
-      }
-    });
-
-    // Echo the player's line in the dialogue box, the same way the bot speaks it.
+    // fetching starts now and runs while he reads and clicks his own echo, that hides the model's latency
+    var stream = new ReplyStream(junChat.SendMessage(userInput, GameContext.Capture()));
     await SayPlayerLine(userInput);
+    await SpeakReply(stream);
+  }
 
+  [HideFromIl2Cpp]
+  private async Task SpeakReply(ReplyStream stream) {
     var tts = Tts.TtsManager.Instance;
     bool prepared = false;
 
@@ -175,19 +274,16 @@ public class ChatManager : MonoBehaviour {
       await parser.Prepare();
       prepared = true;
 
-      // Stream the chunks as they arrive from the background thread
-      while (!fetchCompletion.Task.IsCompleted || !chunksQueue.IsEmpty) {
-        if (chunksQueue.TryDequeue(out var chunk)) {
+      while (!stream.Done.IsCompleted || !stream.Chunks.IsEmpty) {
+        if (stream.Chunks.TryDequeue(out var chunk)) {
           await parser.Parse(chunk);
         } else {
-          // Wait briefly for next chunk
           await Task.Delay(10);
         }
       }
 
-      // Propagate any exceptions from the background fetch
-      if (fetchCompletion.Task.IsFaulted) {
-        throw fetchCompletion.Task.Exception.InnerException ?? fetchCompletion.Task.Exception;
+      if (stream.Done.IsFaulted) {
+        throw stream.Done.Exception.InnerException ?? stream.Done.Exception;
       }
 
       // Speak the trailing partial sentence before waiting for the user's click
@@ -202,6 +298,19 @@ public class ChatManager : MonoBehaviour {
         // Without this the Writer stays locked and the game softlocks.
         try { await parser.Flush(); } catch { /* best effort */ }
       }
+    }
+  }
+
+  private sealed class ReplyStream {
+    public readonly ConcurrentQueue<string> Chunks = new();
+    public readonly Task Done;
+
+    public ReplyStream(IAsyncEnumerable<string> source) {
+      Done = Task.Run(async () => {
+        await foreach (var chunk in source) {
+          Chunks.Enqueue(chunk);
+        }
+      });
     }
   }
 
