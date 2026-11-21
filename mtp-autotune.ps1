@@ -66,7 +66,7 @@ function Set-EnvKey([string]$key, [string]$val) {
 function Get-GpuSignature {
     if (-not (Get-Command nvidia-smi -ErrorAction SilentlyContinue)) { return '' }
     $rows = @(& nvidia-smi --query-gpu=name,memory.total --format=csv,noheader,nounits 2>$null |
-        ForEach-Object { $_.Trim() } | Where-Object { $_ -match ',' })
+        ForEach-Object { $_.Trim() } | Where-Object { $_ -match ',\s*\d+$' })
     if ($rows.Count -eq 0) { return '' }
     $cards = @($rows | ForEach-Object {
         $f = $_ -split ',', 2

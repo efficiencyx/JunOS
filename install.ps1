@@ -324,12 +324,16 @@ function Get-AmdMemoryMb([object[]]$controllers) {
     } | Where-Object { $_ -ge 1024 })
 }
 
+# a leftover nvidia-smi on an AMD box prints "NVIDIA-SMI has failed..." on stdout
+function Get-NvidiaMemoryMb {
+    if (-not (Get-Command nvidia-smi -ErrorAction SilentlyContinue)) { return @() }
+    $out = & nvidia-smi --query-gpu=memory.total --format=csv,noheader,nounits 2>$null
+    return @($out | Where-Object { $_ -match '^\s*\d+\s*$' } | ForEach-Object { [int]($_.Trim()) })
+}
+
 function Get-GpuMemoryMb {
-    if (Get-Command nvidia-smi -ErrorAction SilentlyContinue) {
-        $out = & nvidia-smi --query-gpu=memory.total --format=csv,noheader,nounits 2>$null
-        $mb = @($out | Where-Object { $_ -match '\d' } | ForEach-Object { [int]($_.Trim()) })
-        if ($mb.Count -gt 0) { return $mb }
-    }
+    $mb = @(Get-NvidiaMemoryMb)
+    if ($mb.Count -gt 0) { return $mb }
     try {
         $amd = @(Get-CimInstance Win32_VideoController -ErrorAction Stop |
             Where-Object { $_.Name -match '(?i)AMD|Radeon' })
@@ -1378,7 +1382,7 @@ $LlamacppGpuZips = @{
 function Get-LlamacppGpuBackend {
     $pref = if ($env:LLAMACPP_BACKEND) { $env:LLAMACPP_BACKEND } else { Get-EnvValue 'LLAMACPP_BACKEND' }
     if ($pref -eq 'vulkan') { return $null }
-    if (Get-Command nvidia-smi -ErrorAction SilentlyContinue) { return 'cuda' }
+    if (@(Get-NvidiaMemoryMb).Count -gt 0) { return 'cuda' }
     # 4 GB floor so a ryzen iGPU doesn't pull 250 MB of ROCm
     if ((Get-VramMb) -ge 4096) { return 'rocm' }
     return $null
@@ -1720,16 +1724,18 @@ function Find-GameDir {
     $cands = @($env:JUN_GAME_DIR, (Get-EnvValue 'JUN_GAME_DIR'))
     $libs = @((Get-ItemProperty 'HKCU:\Software\Valve\Steam' -ErrorAction SilentlyContinue).SteamPath,
               (Join-Path ${env:ProgramFiles(x86)} 'Steam')) | Where-Object { $_ }
+    # [IO.Path]::Combine, not Join-Path. 5.1's Join-Path throws on a
+    # library whose drive is gone (H: unplugged) and kills the install
     foreach ($lib in @($libs)) {
-        $vdf = Join-Path $lib 'steamapps\libraryfolders.vdf'
+        $vdf = [IO.Path]::Combine($lib, 'steamapps\libraryfolders.vdf')
         if (Test-Path -LiteralPath $vdf) {
             $libs += [regex]::Matches((Get-Content -LiteralPath $vdf -Raw), '"path"\s+"([^"]+)"') |
                 ForEach-Object { $_.Groups[1].Value.Replace('\\', '\') }
         }
     }
-    $cands += $libs | ForEach-Object { Join-Path $_ "steamapps\common\$GameName" }
+    $cands += $libs | ForEach-Object { [IO.Path]::Combine($_, "steamapps\common\$GameName") }
     foreach ($c in $cands) {
-        if ($c -and (Test-Path -LiteralPath (Join-Path $c $marker))) { return $c }
+        if ($c -and (Test-Path -LiteralPath ([IO.Path]::Combine($c, $marker)))) { return $c }
     }
     # the itch zip unpacks as factorial-omega-windows-64 wherever they put it
     foreach ($root in @((Join-Path $env:APPDATA 'itch\apps'), (Join-Path $env:USERPROFILE 'Downloads'),

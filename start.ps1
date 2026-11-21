@@ -94,7 +94,7 @@ function Fail_([string]$msg)   { Write-Host "    ${DANGER}✗${R} ${DANGER}${msg
 function Get-GpuOrder {
     if (-not (Get-Command nvidia-smi -ErrorAction SilentlyContinue)) { return $null }
     $rows = & nvidia-smi --query-gpu=memory.total,uuid --format=csv,noheader,nounits 2>$null
-    $uuids = @($rows | Where-Object { $_ -match ',' } | ForEach-Object {
+    $uuids = @($rows | Where-Object { $_ -match '^\s*\d+\s*,' } | ForEach-Object {
         $f = $_ -split ','
         [pscustomobject]@{ Mb = [int]($f[0].Trim()); Uuid = $f[1].Trim() }
     } | Sort-Object Mb -Descending | ForEach-Object { $_.Uuid })
@@ -120,7 +120,7 @@ function Get-GpuOrder {
 function Get-GpuSignature {
     if (-not (Get-Command nvidia-smi -ErrorAction SilentlyContinue)) { return '' }
     $rows = @(& nvidia-smi --query-gpu=name,memory.total --format=csv,noheader,nounits 2>$null |
-        ForEach-Object { $_.Trim() } | Where-Object { $_ -match ',' })
+        ForEach-Object { $_.Trim() } | Where-Object { $_ -match ',\s*\d+$' })
     if ($rows.Count -eq 0) { return '' }
     $cards = @($rows | ForEach-Object {
         $f = $_ -split ',', 2
@@ -163,7 +163,7 @@ function Get-AmdMemoryMb([object[]]$controllers) {
 function Get-GpuMemoryMb {
     if (Get-Command nvidia-smi -ErrorAction SilentlyContinue) {
         $out = & nvidia-smi --query-gpu=memory.total --format=csv,noheader,nounits 2>$null
-        $mb = @($out | Where-Object { $_ -match '\d' } | ForEach-Object { [int]($_.Trim()) })
+        $mb = @($out | Where-Object { $_ -match '^\s*\d+\s*$' } | ForEach-Object { [int]($_.Trim()) })
         if ($mb.Count -gt 0) { return $mb }
     }
     try {
@@ -826,7 +826,8 @@ if ($Action -eq 'trust') {
 # JunBridge.ca.pem, so a new JUN_PORT or CA reaches the game next start
 function Update-BridgeMod {
     $gameDir = $env:JUN_GAME_DIR
-    if (-not $gameDir -or -not (Test-Path -LiteralPath (Join-Path $gameDir 'Mods\JunBridge.dll'))) { return $false }
+    # Combine, 5.1's Join-Path throws when the game's drive is unplugged
+    if (-not $gameDir -or -not (Test-Path -LiteralPath ([IO.Path]::Combine($gameDir, 'Mods\JunBridge.dll')))) { return $false }
     $userData = Join-Path $gameDir 'UserData'
     New-Item -ItemType Directory -Force -Path $userData | Out-Null
     $ca = Join-Path $CertDir 'ca.pem'
