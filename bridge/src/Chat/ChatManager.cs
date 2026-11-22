@@ -49,8 +49,13 @@ public class ChatManager : MonoBehaviour {
     Begin(null);
   }
 
-  public void StartInitiative(string cue, bool mutter) {
-    Begin(game => junChat.SendCue(cue, mutter, game));
+  public void StartInitiative(string cue, bool mutter, int awayMinutes = 0) {
+    Begin(game => junChat.SendCue(cue, mutter, game, awayMinutes));
+  }
+
+  // no chat box after this one, he's still mid-headpat
+  public void StartReaction() {
+    Begin(game => junChat.SendCue(Initiative.Touched, true, game), openChat: false);
   }
 
   // false = nothing to say or JunOS isn't there, and nothing was drained
@@ -68,29 +73,12 @@ public class ChatManager : MonoBehaviour {
     var names = new JunApi.JunActionTranslator(game.PlayerName, game.BotName);
     string Resolve(string text) => names.Process(text) + names.Flush();
     var spoken = Resolve(string.Join(" ", welcome.Live ?? []));
-    var notes = (welcome.Milestones ?? [])
-      .SelectMany(m => m.Items ?? [])
-      .Where(i => i.Kind == "text" && !string.IsNullOrWhiteSpace(i.Text))
-      .Select(i => Resolve(i.Text))
-      .ToList();
-    if (spoken == "" && notes.Count == 0) {
+    if (spoken == "") {
       return false;
     }
 
     var face = welcomeFaces.TryGetValue(welcome.Tier ?? "", out var expression) ? $"#!bot.Expression.{expression} " : "";
-    Action greet = () => {
-      if (spoken != "") {
-        Begin(_ => Canned(face + spoken), () => junChat.Remember(spoken));
-      }
-    };
-    await MainThreadRunner.Run(() => {
-      if (notes.Count == 0) {
-        greet();
-        return;
-      }
-      var who = game.BotName != "" ? game.BotName : "Jun";
-      UiOverlay.Instance.OkPopup($"{who} left you messages", string.Join("\n\n", notes), greet);
-    });
+    await MainThreadRunner.Run(() => Begin(_ => Canned(face + spoken), () => junChat.Remember(spoken)));
     return true;
   }
 
@@ -103,12 +91,12 @@ public class ChatManager : MonoBehaviour {
   }
 
   [HideFromIl2Cpp]
-  private void Begin(Func<GameContext, IAsyncEnumerable<string>> opening, Action afterOpening = null) {
+  private void Begin(Func<GameContext, IAsyncEnumerable<string>> opening, Action afterOpening = null, bool openChat = true) {
     if (IsChatActive) {
       return;
     }
     IsChatActive = true;
-    MelonCoroutines.Start(ChatLoop(opening, afterOpening));
+    MelonCoroutines.Start(ChatLoop(opening, afterOpening, openChat));
   }
 
   private static readonly Dictionary<string, string> welcomeFaces = new() {
@@ -144,7 +132,7 @@ public class ChatManager : MonoBehaviour {
   }
 
   [HideFromIl2Cpp]
-  private IEnumerator ChatLoop(Func<GameContext, IAsyncEnumerable<string>> opening, Action afterOpening) {
+  private IEnumerator ChatLoop(Func<GameContext, IAsyncEnumerable<string>> opening, Action afterOpening, bool openChat) {
     ExpressionLinger.Cancel();
 
     // an unprompted line waits for its first words before the story state starts,
@@ -197,8 +185,10 @@ public class ChatManager : MonoBehaviour {
         yield return null;
       }
       afterOpening?.Invoke();
+      if (!openChat || Outing.IsQueued) {
+        IsChatActive = false;
+      }
     }
-
 
     while (IsChatActive) {
       isInConversation = true;
@@ -220,6 +210,10 @@ public class ChatManager : MonoBehaviour {
       ExitStoryState(wasZoomedIn);
     }
     ExpressionLinger.Begin();
+    if (Outing.IsQueued) {
+      yield return null;
+      Outing.StartIfQueued();
+    }
   }
 
   private static bool ValidateUserInput(string userInput) {
@@ -262,6 +256,10 @@ public class ChatManager : MonoBehaviour {
     var stream = new ReplyStream(junChat.SendMessage(userInput, GameContext.Capture()));
     await SayPlayerLine(userInput);
     await SpeakReply(stream);
+    // she said yes to going out, the box doesn't come back and the door opens
+    if (Outing.IsQueued) {
+      IsChatActive = false;
+    }
   }
 
   [HideFromIl2Cpp]

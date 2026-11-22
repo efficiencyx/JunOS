@@ -69,9 +69,9 @@ public static class ModConfig {
 
     var initiative = MelonPreferences.CreateCategory("Initiative");
     initiative.SetFilePath(configPath);
-    initiativeEnabledEntry = initiative.CreateEntry("Enabled", true, "She talks first: welcome back, after outings, intimacy and sleep, and now and then when you're idle in her room");
+    initiativeEnabledEntry = initiative.CreateEntry("Enabled", true, "She talks first: welcome back, after outings, games, intimacy and sleep, when you touch her (in place of the game's own lines), and now and then when you're idle in her room");
     idleMinutesEntry = initiative.CreateEntry("IdleMinutes", 3.0, "Idle time in her room before she says something on her own", validator: new ValueRange<double>(0.5, 120.0));
-    cooldownMinutesEntry = initiative.CreateEntry("CooldownMinutes", 10.0, "At most one unprompted line every this many minutes", validator: new ValueRange<double>(1.0, 240.0));
+    cooldownMinutesEntry = initiative.CreateEntry("CooldownMinutes", 10.0, "At most one unprompted line every this many minutes, touch reactions aside", validator: new ValueRange<double>(1.0, 240.0));
     expressionLingerSecondsEntry = initiative.CreateEntry("ExpressionLingerSeconds", 30.0, "How long her last expression stays after the chat closes (0 = reset right away)", validator: new ValueRange<double>(0.0, 600.0));
 
     MelonPreferences.Save();

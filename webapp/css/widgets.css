@@ -283,7 +283,7 @@
   background: rgba(255,138,138,.14);
   color: var(--danger);
 }
-.confirm-ok.danger:hover { background: var(--danger); color: #2a0d0d; }
+.confirm-ok.danger:not(.hold):hover { background: var(--danger); color: #2a0d0d; }
 
 .devhud {
   position: fixed;

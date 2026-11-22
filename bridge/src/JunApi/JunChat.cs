@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.IO;
+using System.Linq;
 using System.Net.Http;
 using System.Text;
 using System.Text.Json;
@@ -40,10 +41,16 @@ public class JunChat {
     return Stream(game, null);
   }
 
-  public IAsyncEnumerable<string> SendCue(string cue, bool ephemeral, GameContext game) {
+  public IAsyncEnumerable<string> SendCue(string cue, bool ephemeral, GameContext game, int awayMinutes = 0) {
     var extra = new Dictionary<string, object> { { "idle", true }, { "ephemeral", ephemeral } };
     if (cue != null) {
       extra["cue"] = cue;
+    }
+    if (awayMinutes > 0) {
+      extra["away_minutes"] = awayMinutes;
+    }
+    if (game.DayPart != "") {
+      extra["client_time"] = game.DayPart;
     }
     return Stream(game, extra);
   }
@@ -88,6 +95,12 @@ public class JunChat {
             error = chunk.Error;
             break;
           }
+          if (chunk?.GameOutfit != null) {
+            Chat.GameOutfit.Apply(game, chunk.GameOutfit);
+          }
+          if (!string.IsNullOrEmpty(chunk?.GameGo)) {
+            Chat.Outing.Queue(chunk.GameGo);
+          }
 
           // debug/thinking/stats events carry no token
           if (!string.IsNullOrEmpty(chunk?.Token)) {
@@ -104,6 +117,7 @@ public class JunChat {
       }
     }
 
+    JunHealth.Report(error == null);
     if (error != null) {
       if (!userTurn) {
         throw new InvalidOperationException(error);
@@ -131,7 +145,8 @@ public class JunChat {
       { "conversation_id", conversationId },
       { "messages", history },
       { "reasoning", NormalizeReasoning(ModConfig.GetJunConfig().Reasoning) },
-      { "client_time", game.ClientTime }
+      { "client_time", game.ClientTime },
+      { "game", true }
     };
     if (game.Outfit != "") {
       payload["outfit_context"] = game.Outfit;
@@ -141,8 +156,25 @@ public class JunChat {
       payload["game_lines"] = lines;
     }
     var actions = Chat.Interactions.Drain();
+    actions.AddRange(game.Played);
     if (actions.Count > 0) {
       payload["game_actions"] = actions;
+    }
+    if (game.Outing != null) {
+      payload["game_outing"] = new Dictionary<string, object> {
+        { "out", game.Outing.Out }, { "date", game.Outing.Date }, { "shop", game.Outing.Shop },
+      };
+    }
+    if (game.Body != null) {
+      payload["game_state"] = new Dictionary<string, object> {
+        { "stamina", game.Body.Stamina }, { "satiation", game.Body.Satiation }, { "mental", game.Body.Mental },
+        { "longing", game.Body.Longing }, { "horniness", game.Body.Horniness }, { "hour", game.Hour },
+      };
+    }
+    if (game.Clothes.Count > 0) {
+      payload["game_items"] = game.Clothes.Select(c => new Dictionary<string, object> {
+        { "name", c.Name }, { "slot", c.Slot }, { "worn", c.Worn },
+      }).ToList();
     }
     foreach (var (key, value) in extra ?? []) {
       payload[key] = value;
@@ -268,6 +300,12 @@ public class JunChat {
 
     [JsonPropertyName("error")]
     public string Error { get; set; }
+
+    [JsonPropertyName("game_outfit")]
+    public Chat.GameOutfit.Change GameOutfit { get; set; }
+
+    [JsonPropertyName("game_go")]
+    public string GameGo { get; set; }
   }
 
   public class Welcome {
@@ -279,22 +317,6 @@ public class JunChat {
 
     [JsonPropertyName("live")]
     public List<string> Live { get; set; }
-
-    [JsonPropertyName("milestones")]
-    public List<Milestone> Milestones { get; set; }
-  }
-
-  public class Milestone {
-    [JsonPropertyName("items")]
-    public List<MilestoneItem> Items { get; set; }
-  }
-
-  public class MilestoneItem {
-    [JsonPropertyName("kind")]
-    public string Kind { get; set; }
-
-    [JsonPropertyName("text")]
-    public string Text { get; set; }
   }
 
   private class CreatedConversation {

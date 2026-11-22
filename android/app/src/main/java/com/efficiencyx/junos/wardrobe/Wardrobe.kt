@@ -321,4 +321,82 @@ object Wardrobe {
         } else null
         return ToolOutcome(if (applyItems.isNotEmpty()) next else null, apply, reply)
     }
+
+    // WARDROBE_COLOR_DEFAULTS keys, php order
+    val COLOR_KEYS: List<String> = listOf(
+        "skin", "blush", "hair", "hair_h0_strand", "hair_h1_strand", "hair_h2_strand", "hair_h3_strand",
+        "hair_hologram", "ear", "ear_mid", "tail", "eyebrows", "eye_sclera", "eye_iris",
+        "eye_pupil", "eye_highlight", "lips", "mouth_interior", "glasses_frame", "glasses_lens",
+        "shirt", "hoodie", "hoodie_strings", "dress", "dress1", "skirt", "pants", "bra", "panties",
+        "bikini_top", "bikini_bot", "shoe_l", "shoe_r", "stockings", "stockings_accent", "headband",
+        "wizard_hat", "bow", "choker", "hair_clip", "eyepatch", "heart_choker", "eyeshadow", "goth_eyeshadow", "eyeliner",
+        "lashes", "eye_sticker", "lipstick", "septum", "septum2", "tongue_piercing", "manicure", "pedicure",
+    )
+
+    val COLOR_ALIASES: Map<String, List<String>> = linkedMapOf(
+        "eyes" to listOf("eye_iris"), "eye" to listOf("eye_iris"), "iris" to listOf("eye_iris"),
+        "eye_white" to listOf("eye_sclera"), "eye_whites" to listOf("eye_sclera"), "pupil" to listOf("eye_pupil"), "pupils" to listOf("eye_pupil"),
+        "brows" to listOf("eyebrows"), "mouth" to listOf("mouth_interior"), "body" to listOf("skin"),
+        "ears" to listOf("ear"), "cat_ears" to listOf("ear", "ear_mid"), "pointy_ears" to listOf("ear"),
+        "nails" to listOf("manicure"), "toenails" to listOf("pedicure"), "glasses" to listOf("glasses_frame"),
+    )
+
+    val RESET_WORDS: List<String> = listOf("default", "original", "reset", "none")
+
+    private val HEX6 = Regex("^#?([0-9a-f]{6})$", RegexOption.IGNORE_CASE)
+    private val HEX3 = Regex("^#?([0-9a-f]{3})$", RegexOption.IGNORE_CASE)
+
+    fun resolveColor(name: String): List<String> {
+        val key = name.trim().lowercase().replace(NOT_KEY, "_").trim('_')
+        COLOR_ALIASES[key]?.let { return it }
+        if (key in COLOR_KEYS) return listOf(key)
+        return resolveItem(name).map { if (it.startsWith("hair_h")) "hair" else it }.filter { it in COLOR_KEYS }.distinct()
+    }
+
+    fun hex(value: String): String? {
+        HEX6.find(value)?.let { return "#" + it.groupValues[1].lowercase() }
+        return HEX3.find(value)?.let { m -> "#" + m.groupValues[1].lowercase().map { "$it$it" }.joinToString("") }
+    }
+
+    // wardrobe_tool_recolor(), same reply keys and notes
+    fun toolRecolor(items: Map<String, Boolean>, args: JsonObject): ToolOutcome {
+        val color = ((args["color"] as? JsonPrimitive)?.takeIf { it.isString }?.content ?: "").trim().lowercase()
+        val hex = hex(color)
+        if (hex == null && color !in RESET_WORDS) {
+            return ToolOutcome(null, null, buildJsonObject {
+                put("changed", false)
+                put("error", "not_a_hex_color")
+                put("note", "Nothing changed: color has to be a 6-digit hex code like #ff69b4, or \"default\". Converting is your job, never ask Anon for a hex code. Turn the color into hex yourself and call recolor again now, before you say anything.")
+            })
+        }
+        val apply = LinkedHashMap<String, String?>()
+        val unknown = mutableListOf<String>()
+        val hidden = mutableListOf<String>()
+        for (name in toolNames(args["parts"])) {
+            val keys = resolveColor(name)
+            if (keys.isEmpty()) { unknown += name; continue }
+            for (key in keys) {
+                apply[key] = hex
+                if (items[key] == false) hidden += label(key)
+            }
+        }
+        val reply = buildJsonObject {
+            put("changed", apply.isNotEmpty())
+            put("color", hex ?: "default")
+            put("recolored", strings(apply.keys.map(::label)))
+            if (hidden.isNotEmpty()) {
+                put("not_wearing", strings(hidden.distinct()))
+                put("note", "You are not wearing the items in not_wearing. They changed color, but nobody sees it until you put them on.")
+            }
+            if (unknown.isNotEmpty()) {
+                put("unknown", strings(unknown.distinct()))
+                put("valid_parts", strings(COLOR_KEYS.map(::label)))
+                put("note", "The names in unknown are not parts of you and nothing about them changed. Only names from valid_parts exist. " +
+                    "Say so plainly rather than pretending.")
+            }
+            if (apply.isEmpty() && unknown.isEmpty()) put("note", "You named nothing to recolor, so nothing changed.")
+        }
+        val applyJson = if (apply.isEmpty()) null else JsonObject(apply.mapValues { JsonPrimitive(it.value) })
+        return ToolOutcome(null, applyJson, reply)
+    }
 }

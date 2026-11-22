@@ -47,6 +47,8 @@ $lastUserMsg = chat_last_user_message($req);
 $approvedWebSearchQuery = chat_approved_search($lastUserMsg);
 if ($req['invite'] === '' && !$req['idle'] && !$req['ephemeral']) {
     $req['invite'] = trip_guess_invite($lastUserMsg, chat_last_reply($req));
+    // no card table in the game
+    if ($req['game'] && !isset(GAME_TRIPS[$req['invite']])) $req['invite'] = '';
 }
 $toolsOffered = provider_tools_enabled();
 
@@ -290,6 +292,7 @@ for ($round = 0; $round < 3; $round++) {
     ];
     $callTurn += provider_call_thought($PROVIDER, $result['thinking']);
     $messages[] = $callTurn;
+    $retryCall = false;
     foreach (array_slice($toolCalls, 0, 4) as $call) {
         $name = (string)($call['function']['name'] ?? '');
         $args = tool_call_args($call);
@@ -301,6 +304,7 @@ for ($round = 0; $round < 3; $round++) {
             'provider' => $PROVIDER, 'model' => $model, 'user' => $user, 'conv_id' => $convId, 'req' => $req,
         ], $state);
         $toolMessage = provider_tool_message($PROVIDER, $name, (string)($call['id'] ?? ''), $toolResult);
+        if (tool_result_retryable($toolResult)) $retryCall = true;
         $done = [
             'name' => $name, 'state' => 'done',
             'duration_ms' => (int)round((microtime(true) - $t0) * 1000),
@@ -313,6 +317,9 @@ for ($round = 0; $round < 3; $round++) {
     }
     if ($state['silenced'] || $state['fled'] !== null) break;
     $usedTools = true;
+    // the error note alone: she asks Anon for a hex code half the time.
+    // forced call: she fixes it 12/12 (v9 E4B, 2026-11-22). ollama has no tool_choice
+    if ($retryCall && $round < 2 && provider_uses_openai_protocol($PROVIDER)) $upstreamPayload['tool_choice'] = 'required';
     $upstreamPayload['messages'] = provider_messages($PROVIDER, $messages);
 }
 
@@ -349,6 +356,14 @@ if ($req['invite'] !== '' && !$sawError && $state['went'] === '' && !$state['sil
     && trip_reply_accepts($assistantBuffer)) {
     log_event(['msg' => 'trip_inferred', 'where' => $req['invite']]);
     chat_run_tool(array_search($req['invite'], TRIP_TOOLS, true), [], [
+        'provider' => $PROVIDER, 'model' => $model, 'user' => $user, 'conv_id' => $convId, 'req' => $req,
+    ], $state);
+}
+
+if ($req['game'] && !$sawError && $state['went'] === '' && !$state['silenced'] && $state['fled'] === null
+    && game_bed_offered($req['game_state']) && game_reply_invites_to_bed($assistantBuffer)) {
+    log_event(['msg' => 'bed_inferred']);
+    chat_run_tool('invite_to_bed', [], [
         'provider' => $PROVIDER, 'model' => $model, 'user' => $user, 'conv_id' => $convId, 'req' => $req,
     ], $state);
 }

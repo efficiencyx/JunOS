@@ -259,6 +259,7 @@ class ChatEngine(
                     val trip = Trips.TOOLS[call.name]
                     val result = when {
                         call.name == "change_outfit" -> changeOutfit(call.args, modItems, emit)
+                        call.name == "recolor" -> recolor(call.args, emit)
                         call.name == "write_journal" && journaled -> JOURNALED_ALREADY
                         call.name == "write_journal" -> writeJournal(call.args).also { journaled = it == JOURNAL_WRITTEN }
                         trip != null -> goOut(trip)
@@ -491,6 +492,13 @@ class ChatEngine(
         val changed = outcome.reply["changed"]?.jsonPrimitive?.booleanOrNull == true
         if (if (look) achievements.wornChanged(Wardrobe.toolState(stored), outcome.state) else changed) achievements.add("outfits")
         outcome.apply?.let { emit(buildJsonObject { put("outfit", it) }) }
+        return outcome.reply.toString()
+    }
+
+    private suspend fun recolor(args: JsonObject, emit: suspend (JsonElement) -> Unit): String {
+        val stored = dao.wardrobeState()?.let { runCatching { json.decodeFromString<WardrobeState>(it.data) }.getOrNull() }
+        val outcome = Wardrobe.toolRecolor(Wardrobe.toolState(stored).items, args)
+        outcome.apply?.let { emit(buildJsonObject { put("recolor", it) }) }
         return outcome.reply.toString()
     }
 
@@ -732,6 +740,7 @@ Reason it through first. Then, on the last line and nothing after it, output onl
             """{"type":"function","function":{"name":"plan_message","description":"Plan a text to send Anon later, like asking tomorrow how his exam went. It goes out after the hours you pick, even if he is away. At most 3 can wait at once.","parameters":{"type":"object","properties":{"message":{"type":"string","description":"The text, the way you would type it to him. Max 240 characters."},"after_hours":{"type":"integer","description":"Hours from now, 1-72."}},"required":["message","after_hours"]}}}""",
             """{"type":"function","function":{"name":"write_journal","description":"Write in your own journal about something between you and Anon that you want to keep. It is added to today's entry.","parameters":{"type":"object","properties":{"entry":{"type":"string","description":"A few sentences in your own words. Max 400 characters."}},"required":["entry"]}}}""",
             """{"type":"function","function":{"name":"change_outfit","description":"Put clothes on or take them off. Calling this is the ONLY thing that actually changes what you are wearing - describing a change in your reply does not move a single thread. It answers with what you have on afterwards, so call it BEFORE you say anything about your clothes.","parameters":{"type":"object","properties":{"put_on":{"type":"array","items":{"type":"string"},"description":"Items to put on. Use the names listed in your current wardrobe state."},"take_off":{"type":"array","items":{"type":"string"},"description":"Items to take off. \"nude\" takes off all of your clothes at once."},"look":{"type":"string","description":"Name of a saved look to put on whole, from the saved looks in your wardrobe state. Overrides put_on and take_off."}}}}}""",
+            """{"type":"function","function":{"name":"recolor","description":"Change the color of your hair, eyes, skin, ears, tail or any piece of clothing. Calling this is the ONLY thing that actually recolors you - saying it in your reply changes nothing.","parameters":{"type":"object","properties":{"parts":{"type":"array","items":{"type":"string"},"description":"What to recolor: hair, eyes, skin, ears, tail, or an item name from your wardrobe state."},"color":{"type":"string","description":"Hex code like #ff69b4, or \"default\" for the original color."}},"required":["parts","color"]}}}""",
             """{"type":"function","function":{"name":"stay_silent","description":"Say nothing at all this turn - ignoring him, too hurt/angry, the scene calls for silence, or he wasn't talking to you at all (someone else in the room, a phone call, the TV). Sends no message.","parameters":{"type":"object","properties":{"reason":{"type":"string","description":"Why (private)."},"overheard":{"type":"boolean","description":"true when what he said was aimed at someone else, not you."}}}}}""",
             """{"type":"function","function":{"name":"flee","description":"Walk out and leave Anon alone. Call it when you want to go.","parameters":{"type":"object","properties":{"reason":{"type":"string","description":"Why you are leaving."},"destination":{"type":"string","description":"Where you're going, if anywhere."}}}}}""",
             """{"type":"function","function":{"name":"enter_shop","description":"Go to Annalie's clothes shop together with Anon to browse and try things on. Call it once the two of you agree to go, then say your line - you both leave for the shop when you finish talking.","parameters":{"type":"object","properties":{"reason":{"type":"string","description":"Why you two are going (private)."}}}}}""",

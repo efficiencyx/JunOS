@@ -13,7 +13,7 @@ object Trips {
     private val WORDS = mapOf(
         "shop" to "annalie|shop|shopping|boutique|clothes store|buy (?:you )?(?:some )?clothes",
         "karaoke" to "karaoke|sing together|sing with me|sing a song|go singing",
-        "date" to "dinner|lunch|restaurant|eat out|go out to eat|grab (?:a bite|food|something to eat)",
+        "date" to "dinner|lunch|restaurant|eat out|go out to eat|grab (?:a bite|food|something to eat)|on a date|date night",
         "cards" to "blackjack|cards|card game",
     ).mapValues { Regex("\\b(?:${it.value})\\b") }
     private val TAG = Regex("\\[[^]]*]")

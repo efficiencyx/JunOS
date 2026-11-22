@@ -1,16 +1,16 @@
 import { hideFaceBubble, replayFaceBubbleIntro, showFaceBubble } from './face-bubble.js?v=96';
-import { setSidebarOpen } from './sidebar.js?v=141';
+import { setSidebarOpen } from './sidebar.js?v=146';
 import { DEV, JUN } from './tour-lines.js?v=8';
 import { SKIPPED, caption, close, hush, makeRun, unionRect } from '../core/tour-kit.js?v=2';
 import { escapeHtml } from '../core/util.js?v=1';
 import * as Names from '../core/names.js?v=1';
 import * as Prefs from '../core/prefs.js?v=9';
-import * as ui from '../core/ui.js?v=10';
-import * as Actions from '../live2d/actions.js?v=112';
+import * as ui from '../core/ui.js?v=11';
+import * as Actions from '../live2d/actions.js?v=116';
 import * as Live2D from '../live2d/live2d.js?v=92';
-import { COLOR_GROUPS } from '../outfit/catalog.js?v=5';
-import { colors } from '../outfit/current.js?v=6';
-import * as Outfit from '../outfit/outfit.js?v=112';
+import { COLOR_GROUPS } from '../outfit/catalog.js?v=7';
+import { colors } from '../outfit/current.js?v=8';
+import * as Outfit from '../outfit/outfit.js?v=116';
 import * as TTS from '../voice/tts.js?v=94';
 import { t } from '../core/i18n.js?v=1';
 

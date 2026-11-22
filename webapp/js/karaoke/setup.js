@@ -1,4 +1,4 @@
-import * as ui from '../core/ui.js?v=10';
+import * as ui from '../core/ui.js?v=11';
 import { assignOwners, buildSections, fetchLrclib, parseId3Lyrics, trackMeta } from './lyrics.js?v=2';
 import { audioCtx, ensureCtx, renderLyrics, start } from './playback.js?v=25';
 import { $, overlay } from './karaoke.js?v=32';

@@ -2,12 +2,12 @@ import * as Live2D from './live2d/live2d.js?v=92';
 import * as MobileViewport from './core/viewport.js?v=1';
 import * as Names from './core/names.js?v=1';
 import { api } from './core/api.js?v=1';
-import * as Outfit from './outfit/outfit.js?v=112';
+import * as Outfit from './outfit/outfit.js?v=116';
 import * as Scene from './trip/scene.js?v=1';
 import { startSkybox } from './trip/skybox.js?v=2';
 import * as TripLoader from './trip/trip-loader.js?v=75';
 import { armCurtains } from './wardrobe/curtains.js?v=19';
-import { openWardrobe } from './wardrobe/panel.js?v=50';
+import { openWardrobe } from './wardrobe/panel.js?v=54';
 import { shopLeg } from './wardrobe/tour-shop.js?v=2';
 import { applyI18n, t } from './core/i18n.js?v=1';
 

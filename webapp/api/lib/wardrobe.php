@@ -492,6 +492,144 @@ function wardrobe_tool_change(array $args, int $userId, array $modItems): array 
     return ['apply' => $apply, 'reply' => $reply];
 }
 
+// change_outfit in the game. apply is indexes into the mod's $items,
+// JunOS's wardrobe stays put and the bridge sync brings the outfit over
+function wardrobe_game_change(array $args, array $items): array {
+    if (is_string($args['look'] ?? null) && trim($args['look']) !== '' && !isset($args['put_on']) && !isset($args['take_off'])) {
+        return ['apply' => null, 'reply' => ['changed' => false, 'error' => 'no_saved_looks_here',
+            'note' => 'Saved looks do not exist here. Use put_on and take_off with your clothes.']];
+    }
+    $on = $off = $put = $took = $already = $unknown = [];
+    foreach ([[wardrobe_tool_names($args['put_on'] ?? []), true],
+              [wardrobe_tool_names($args['take_off'] ?? []), false]] as [$names, $wear]) {
+        foreach ($names as $name) {
+            if (in_array(strtolower($name), WARDROBE_STRIP_WORDS, true)) {
+                foreach ($items as $i => $item) {
+                    if ($item['worn'] && $item['name'] !== '') { $off[$i] = true; unset($on[$i]); $took[] = $item['name']; }
+                }
+                continue;
+            }
+            $i = wardrobe_game_match($name, $items, $wear);
+            if ($i === null) { $unknown[] = $name; continue; }
+            $label = $items[$i]['name'];
+            if ($items[$i]['worn'] === $wear && !isset($on[$i]) && !isset($off[$i])) { $already[] = $label; continue; }
+            if ($wear) { $on[$i] = true; unset($off[$i]); $put[] = $label; }
+            else { $off[$i] = true; unset($on[$i]); $took[] = $label; }
+        }
+    }
+
+    $slotsTaken = array_filter(array_map(fn($i) => $items[$i]['slot'], array_keys($on)));
+    $wearing = [];
+    foreach ($items as $i => $item) {
+        if ($item['name'] === '') continue;
+        $staysOn = $item['worn'] && !isset($off[$i]) && !in_array($item['slot'], $slotsTaken, true);
+        if ($staysOn || isset($on[$i])) $wearing[] = $item['name'];
+    }
+    $reply = [
+        'changed' => (bool)($on || $off),
+        'put_on' => array_values(array_unique($put)),
+        'took_off' => array_values(array_unique($took)),
+        'wearing' => $wearing,
+    ];
+    if ($already) {
+        $reply['already_like_that'] = array_values(array_unique($already));
+        $reply['note'] = 'The items in already_like_that were in that state before you asked. Do not announce a change you did not make.';
+    }
+    if ($unknown) {
+        $reply['unknown'] = array_values(array_unique($unknown));
+        $reply['you_can_put_on'] = array_slice(array_values(array_unique(array_column(
+            array_filter($items, fn($item) => !$item['worn'] && $item['name'] !== ''), 'name'))), 0, 60);
+        $reply['note'] = 'You do not have the names in unknown and nothing about them changed. you_can_put_on is what you have. '
+            . 'Say so plainly rather than pretending.';
+    }
+    if (!$reply['changed'] && !$unknown && !$already) {
+        $reply['note'] = 'You named nothing to change, so nothing changed. wearing is what you have on right now.';
+    }
+    $apply = ($on || $off) ? ['on' => array_keys($on), 'off' => array_keys($off)] : null;
+    return ['apply' => $apply, 'reply' => $reply];
+}
+
+// two shirts can share a name, so the one that would actually change wins
+function wardrobe_game_match(string $name, array $items, bool $wear): ?int {
+    $want = strtolower(trim($name));
+    $hits = [];
+    foreach ($items as $i => $item) {
+        if ($item['name'] !== '' && strtolower($item['name']) === $want) $hits[] = $i;
+    }
+    if (!$hits && mb_strlen($want) >= 3) {
+        foreach ($items as $i => $item) {
+            $label = strtolower($item['name']);
+            if (mb_strlen($label) >= 3 && (str_contains($label, $want) || str_contains($want, $label))) $hits[] = $i;
+        }
+    }
+    foreach ($hits as $i) {
+        if ($items[$i]['worn'] !== $wear) return $i;
+    }
+    return $hits[0] ?? null;
+}
+
+const WARDROBE_COLOR_ALIASES = [
+    'eyes' => ['eye_iris'], 'eye' => ['eye_iris'], 'iris' => ['eye_iris'],
+    'eye_white' => ['eye_sclera'], 'eye_whites' => ['eye_sclera'], 'pupil' => ['eye_pupil'], 'pupils' => ['eye_pupil'],
+    'brows' => ['eyebrows'], 'mouth' => ['mouth_interior'], 'body' => ['skin'],
+    'ears' => ['ear'], 'cat_ears' => ['ear', 'ear_mid'], 'pointy_ears' => ['ear'],
+    'nails' => ['manicure'], 'toenails' => ['pedicure'], 'glasses' => ['glasses_frame'],
+];
+
+const WARDROBE_RESET_WORDS = ['default', 'original', 'reset', 'none'];
+
+function wardrobe_resolve_color(string $name): array {
+    $key = trim((string)preg_replace('/[^a-z0-9]+/', '_', strtolower(trim($name))), '_');
+    if (isset(WARDROBE_COLOR_ALIASES[$key])) return WARDROBE_COLOR_ALIASES[$key];
+    if (array_key_exists($key, WARDROBE_COLOR_DEFAULTS)) return [$key];
+    // every hair piece shares the one hair color
+    $keys = array_map(fn($k) => str_starts_with($k, 'hair_h') ? 'hair' : $k, wardrobe_resolve_item($name));
+    return array_values(array_unique(array_filter($keys, fn($k) => array_key_exists($k, WARDROBE_COLOR_DEFAULTS))));
+}
+
+function wardrobe_hex(string $value): ?string {
+    if (preg_match('/^#?([0-9a-f]{6})$/iD', $value, $m)) return '#' . strtolower($m[1]);
+    if (!preg_match('/^#?([0-9a-f]{3})$/iD', $value, $m)) return null;
+    return '#' . strtolower(preg_replace('/(.)/', '$1$1', $m[1]));
+}
+
+// the recolor tool. colors live in the browser's prefs, so apply is
+// the whole answer: key -> hex, null = the group's default color
+function wardrobe_tool_recolor(array $args, array $items): array {
+    $color = strtolower(trim(is_string($args['color'] ?? null) ? $args['color'] : ''));
+    $hex = wardrobe_hex($color);
+    if ($hex === null && !in_array($color, WARDROBE_RESET_WORDS, true)) {
+        return ['apply' => null, 'reply' => ['changed' => false, 'error' => 'not_a_hex_color',
+            'note' => 'Nothing changed: color has to be a 6-digit hex code like #ff69b4, or "default". Converting is your job, never ask Anon for a hex code. Turn the color into hex yourself and call recolor again now, before you say anything.']];
+    }
+    $apply = $unknown = $hidden = [];
+    foreach (wardrobe_tool_names($args['parts'] ?? []) as $name) {
+        $keys = wardrobe_resolve_color($name);
+        if (!$keys) { $unknown[] = $name; continue; }
+        foreach ($keys as $key) {
+            $apply[$key] = $hex;
+            if (($items[$key] ?? true) === false) $hidden[] = wardrobe_label($key);
+        }
+    }
+    $reply = [
+        'changed' => (bool)$apply,
+        'color' => $hex ?? 'default',
+        'recolored' => array_map('wardrobe_label', array_keys($apply)),
+    ];
+    if ($hidden) {
+        $reply['not_wearing'] = array_values(array_unique($hidden));
+        $reply['note'] = 'You are not wearing the items in not_wearing. They changed color, but nobody sees it until you put them on.';
+    }
+    if ($unknown) {
+        $reply['unknown'] = array_values(array_unique($unknown));
+        $reply['valid_parts'] = array_map('wardrobe_label', array_keys(WARDROBE_COLOR_DEFAULTS));
+        $reply['note'] = 'The names in unknown are not parts of you and nothing about them changed. Only names from valid_parts exist. '
+            . 'Say so plainly rather than pretending.';
+    }
+    if (!$apply && !$unknown) $reply['note'] = 'You named nothing to recolor, so nothing changed.';
+    return ['apply' => $apply ?: null, 'reply' => $reply];
+}
+
 function wardrobe_state(int $userId): ?array {
     $stmt = db()->prepare('SELECT data FROM wardrobe_state WHERE user_id=?');
     $stmt->execute([$userId]);

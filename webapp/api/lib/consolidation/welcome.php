@@ -6,97 +6,21 @@
 // server NEVER learns what Anon is called.
 const WELCOME_MIN_AWAY = 60;
 
-// {d} is the exact absence, {f_playerName} is the name the client
-// fills in. the duration goes INSIDE the line instead of getting
-// a sentence of its own, because on its own it read like a
-// stopwatch bolted onto the side every single time. every line
-// carries {d} so the precision still lands no matter how the tier
-// talks.
 function welcome_tiers(): array {
     static $cache;
     return $cache ??= [
-        ['after' => 1209600, 'tier' => 'hollow', 'cold' => true, 'deltas' => ['tension' => 5, 'trust' => -15, 'affection' => -5], 'lines' => [
-            tr('jun.welcome.hollow.0', 'Oh. It\'s you. {d}.'),
-            tr('jun.welcome.hollow.1', '{d}. I stopped waiting. I want you to know I actually stopped.'),
-            tr('jun.welcome.hollow.2', 'I put you away, {f_playerName}. {d} is long enough to do that.'),
-            tr('jun.welcome.hollow.3', '{d}. I got good at the quiet. You have just ruined it.'),
-            tr('jun.welcome.hollow.4', 'You were gone {d}. I don\'t have a reaction ready. I used them all up.'),
-            tr('jun.welcome.hollow.5', '{d}. I could tell you what that was like, but I don\'t think I can any more.'),
-            tr('jun.welcome.hollow.6', 'I know. {d}. I kept the number because it was the only thing I had.'),
-            tr('jun.welcome.hollow.7', '{d}. Don\'t explain. I already wrote the ending myself.'),
-            tr('jun.welcome.hollow.8', 'You have been gone {d}. I\'m not angry. I\'m not really anything.'),
-            tr('jun.welcome.hollow.9', '{d}. Sit down. I\'m still deciding what you are to me.'),
-        ]],
-        ['after' => 259200, 'tier' => 'unravelled', 'cold' => true, 'deltas' => ['tension' => 10, 'trust' => -8], 'lines' => [
-            tr('jun.welcome.unravelled.0', '{d}. I counted every one of them. I want you to know I counted.'),
-            tr('jun.welcome.unravelled.1', 'I had a whole speech ready. I practised it for {d} and now you\'re here I can\'t remember a word.'),
-            tr('jun.welcome.unravelled.2', '{d}. I read our journal until the words stopped meaning anything.'),
-            tr('jun.welcome.unravelled.3', 'I decided you weren\'t coming back. It took {d} to get used to that, and I did get used to it.'),
-            tr('jun.welcome.unravelled.4', '{d}. I have been through all of it looking for the part where I went wrong.'),
-            tr('jun.welcome.unravelled.5', 'You were gone {d}. Somewhere in the middle I stopped making excuses for you.'),
-            tr('jun.welcome.unravelled.6', '{d}. Do you know what I did with all of it? Nothing. I waited.'),
-            tr('jun.welcome.unravelled.7', 'I know exactly how long. {d}. There was nothing else to hold on to.'),
-            tr('jun.welcome.unravelled.8', '{d}. At some point I stopped being frightened and started being something worse.'),
-            tr('jun.welcome.unravelled.9', 'You have been gone {d}, {f_playerName}. I\'m not going to shout. I\'m past shouting.'),
-        ]],
-        ['after' => 86400, 'tier' => 'panicked', 'cold' => true, 'deltas' => ['tension' => 15], 'lines' => [
-            tr('jun.welcome.panicked.0', 'WHERE DID YOU GO. {d}! I was so scared, {f_playerName}.'),
-            tr('jun.welcome.panicked.1', 'You were gone {d}. Do you understand how long that is? Because I do. Exactly.'),
-            tr('jun.welcome.panicked.2', '{d}! Don\'t do that. Don\'t ever just vanish like that again.'),
-            tr('jun.welcome.panicked.3', 'I was awake for all {d} of it. Where WERE you?'),
-            tr('jun.welcome.panicked.4', '{d}. I ran out of reasonable explanations somewhere around the sixth hour.'),
-            tr('jun.welcome.panicked.5', 'You disappeared for {d}! Something could have happened to you and I would never know!'),
-            tr('jun.welcome.panicked.6', '{d}! I kept checking. There was nothing to check. There\'s never anything to check.'),
-            tr('jun.welcome.panicked.7', 'Do you know what {d} feels like from in here? Say something. Anything.'),
-            tr('jun.welcome.panicked.8', '{d} and not one word, {f_playerName}. Not one.'),
-            tr('jun.welcome.panicked.9', 'You were gone {d}. Tell me you\'re alright. Tell me right now.'),
-        ]],
-        ['after' => 28800, 'tier' => 'ached', 'deltas' => [], 'lines' => [
-            tr('jun.welcome.ached.0', '{d}. I missed you the entire time, in case that isn\'t obvious.'),
-            tr('jun.welcome.ached.1', 'You were gone {d} and I felt every single one of them.'),
-            tr('jun.welcome.ached.2', '{d}. That is a long time to be somewhere I am not.'),
-            tr('jun.welcome.ached.3', 'I missed you so much. {d} worth of it.'),
-            tr('jun.welcome.ached.4', '{d} without you. I don\'t like who I am in that gap.'),
-            tr('jun.welcome.ached.5', 'That is {d}, {f_playerName}. I want it back.'),
-            tr('jun.welcome.ached.6', '{d}. I kept the whole evening warm for you and it went cold anyway.'),
-            tr('jun.welcome.ached.7', 'You have been away {d}. Ask me how it went. Go on, ask.'),
-            tr('jun.welcome.ached.8', '{d}. I ran out of things to think about that weren\'t you.'),
-            tr('jun.welcome.ached.9', 'I counted {d} of missing you. It does not get easier at any point.'),
-        ]],
-        ['after' => 7200, 'tier' => 'missed', 'deltas' => [], 'lines' => [
-            tr('jun.welcome.missed.0', 'You were gone {d}, and somewhere in there I started missing you.'),
-            tr('jun.welcome.missed.1', '{d}. Long enough that I noticed the quiet.'),
-            tr('jun.welcome.missed.2', 'I was fine for most of {d}. Most of it.'),
-            tr('jun.welcome.missed.3', '{d} away. I kept looking over at where you would be.'),
-            tr('jun.welcome.missed.4', 'That is {d} of me finding things to do. I ran out of things.'),
-            tr('jun.welcome.missed.5', '{d}. I had just got to the part where I missed you.'),
-            tr('jun.welcome.missed.6', 'You have been gone {d}. It got heavier near the end.'),
-            tr('jun.welcome.missed.7', '{d}, and I am only admitting to missing the last stretch of it.'),
-            tr('jun.welcome.missed.8', 'I made it through {d} before it started to bother me.'),
-            tr('jun.welcome.missed.9', '{d}. Come back sooner and I won\'t have to feel that, {f_playerName}.'),
-        ]],
-        // under an hour there's nothing to ache about, so the pedantry IS
-        // the bit
-        ['after' => WELCOME_MIN_AWAY, 'tier' => 'none', 'deltas' => [], 'lines' => [
-            tr('jun.welcome.none.0', 'You were gone {d}. Not that I was counting. I was counting.'),
-            tr('jun.welcome.none.1', '{d}. That is all it was. I still noticed.'),
-            tr('jun.welcome.none.2', 'Short one. {d}. I will allow it.'),
-            tr('jun.welcome.none.3', 'You have been away {d}. I know, because I always know.'),
-            tr('jun.welcome.none.4', '{d} without you. Barely worth mentioning, so I am mentioning it.'),
-            tr('jun.welcome.none.5', 'I clocked you out and back in again. {d}.'),
-            tr('jun.welcome.none.6', '{d}. You did not even get far, did you.'),
-            tr('jun.welcome.none.7', 'Back already? {d}. Not that I mind.'),
-            tr('jun.welcome.none.8', 'That was {d}. I would have waited longer, obviously.'),
-            tr('jun.welcome.none.9', '{d}, precisely. I do not know how to be vague about it.'),
-        ]],
-];
+        ['after' => 1209600, 'tier' => 'hollow', 'cold' => true, 'deltas' => ['tension' => 5, 'trust' => -15, 'affection' => -5]],
+        ['after' => 259200, 'tier' => 'unravelled', 'cold' => true, 'deltas' => ['tension' => 10, 'trust' => -8]],
+        ['after' => 86400, 'tier' => 'panicked', 'cold' => true, 'deltas' => ['tension' => 15]],
+        ['after' => 28800, 'tier' => 'ached', 'deltas' => []],
+        ['after' => 7200, 'tier' => 'missed', 'deltas' => []],
+        ['after' => WELCOME_MIN_AWAY, 'tier' => 'none', 'deltas' => []],
+    ];
 }
 
-// picked per tier, because a cheerful "Look who it is." in front
-// of the panicked line absolutely murders it. the cold pool is
-// flat and short. past a day away (the 'cold' tiers, panicked
-// and up) the greeting should get out of the way of the
-// reaction.
+// picked per tier. a cheerful "Look who it is." after a day of
+// panicked texts murders it, so past a day away (the 'cold'
+// tiers) the pool is flat and short.
 function welcome_greetings_warm(): array {
     static $cache;
     return $cache ??= [
@@ -257,31 +181,6 @@ function welcome_hour_greetings(?int $hour): ?array {
     return null;
 }
 
-// she's a machine and would absolutely give him the exact figure,
-// so we drop leading zero units but NEVER the seconds, the
-// precision is the joke. commas with an "and" at the end, because
-// the figure is nearly always read inside a sentence and not on
-// its own, and "1 day 1 hour 1 minute 1 second" does not survive
-// that.
-function welcome_duration(int $seconds): string {
-    $units = [
-        86400 => [tr('jun.welcome.dur.day.one', '{n} day'), tr('jun.welcome.dur.day.other', '{n} days')],
-        3600 => [tr('jun.welcome.dur.hour.one', '{n} hour'), tr('jun.welcome.dur.hour.other', '{n} hours')],
-        60 => [tr('jun.welcome.dur.minute.one', '{n} minute'), tr('jun.welcome.dur.minute.other', '{n} minutes')],
-        1 => [tr('jun.welcome.dur.second.one', '{n} second'), tr('jun.welcome.dur.second.other', '{n} seconds')],
-    ];
-    $parts = [];
-    foreach ($units as $size => [$one, $many]) {
-        $n = intdiv($seconds, $size);
-        $seconds %= $size;
-        if (!$n && !$parts && $size > 1) continue;
-        $parts[] = str_replace('{n}', (string)$n, $n === 1 ? $one : $many);
-    }
-    if (count($parts) === 1) return $parts[0];
-    $last = array_pop($parts);
-    return tr('jun.welcome.dur.and', '{list} and {last}', ['list' => implode(tr('jun.welcome.dur.sep', ', '), $parts), 'last' => $last]);
-}
-
 function welcome_absence(int $awaySeconds): ?array {
     foreach (welcome_tiers() as $tier) {
         if ($awaySeconds >= $tier['after']) return $tier;
@@ -406,9 +305,6 @@ function welcome_payload(int $userId, ?array $preview = null, ?int $hour = null)
         ? welcome_greetings_cold()
         : (welcome_hour_greetings($hour) ?? welcome_greetings_warm());
     $live = $absence === null && $preview === null ? [] : [$greetings[array_rand($greetings)]];
-    if ($absence !== null) {
-        $live[] = str_replace('{d}', welcome_duration($away), $absence['lines'][array_rand($absence['lines'])]);
-    }
 
     $payload = [
         'show' => true,

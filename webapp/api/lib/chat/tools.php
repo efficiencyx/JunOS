@@ -7,12 +7,20 @@ const TRIP_TOOLS = ['enter_shop' => 'shop', 'enter_karaoke' => 'karaoke', 'go_ou
 // her out of the film
 const WATCH_TOOLS = ['stay_silent', 'memory_write'];
 
+// errors from a call she got wrong herself, so the next round forces a call
+const TOOL_RETRY_ERRORS = ['not_a_hex_color', 'query_required', 'memory_required', 'message_required', 'query_refused'];
+
+function tool_result_retryable(string $result): bool {
+    return in_array(json_decode($result, true)['error'] ?? null, TOOL_RETRY_ERRORS, true);
+}
+
 const TRIP_WORDS = [
     'shop' => "annalie|shop|shopping|boutique|clothes store|buy (?:you )?(?:some )?clothes",
     'karaoke' => 'karaoke|sing together|sing with me|sing a song|go singing',
-    'date' => 'dinner|lunch|restaurant|eat out|go out to eat|grab (?:a bite|food|something to eat)',
+    'date' => 'dinner|lunch|restaurant|eat out|go out to eat|grab (?:a bite|food|something to eat)|on a date|date night',
     'cards' => 'blackjack|cards|card game',
-    'watch' => 'watch (?:a |some |an? )?(?:movies?|films?|videos?|shows?|episodes?|anime|youtube|something)|movie night|netflix',
+    'watch' => 'watch (?:a |some |an? )?(?:movies?|films?|videos?|shows?|episodes?|anime|youtube|something)|movie night|netflix'
+        . '|cinema|go to the movies|see a (?:movie|film)',
 ];
 
 const TRIP_APOS = "['\x{2019}]?";
@@ -197,6 +205,28 @@ function tool_catalog(?string $approvedWebSearchQuery, bool $watching = false): 
         [
             'type' => 'function',
             'function' => [
+                'name' => 'recolor',
+                'description' => 'Change the color of your hair, eyes, skin, ears, tail or any piece of clothing. Calling this is the ONLY thing that actually recolors you - saying it in your reply changes nothing.',
+                'parameters' => [
+                    'type' => 'object',
+                    'properties' => [
+                        'parts' => [
+                            'type' => 'array',
+                            'items' => ['type' => 'string'],
+                            'description' => 'What to recolor: hair, eyes, skin, ears, tail, or an item name from your wardrobe state.',
+                        ],
+                        'color' => [
+                            'type' => 'string',
+                            'description' => 'Hex code like #ff69b4, or "default" for the original color.',
+                        ],
+                    ],
+                    'required' => ['parts', 'color'],
+                ],
+            ],
+        ],
+        [
+            'type' => 'function',
+            'function' => [
                 'name' => 'stay_silent',
                 'description' => 'Say nothing at all this turn - ignoring him, too hurt/angry, the scene calls for silence, or he wasn\'t talking to you at all (someone else in the room, a phone call, the TV). Sends no message.',
                 'parameters' => [
@@ -287,6 +317,19 @@ function tool_catalog(?string $approvedWebSearchQuery, bool $watching = false): 
                 ],
             ],
         ],
+        [
+            'type' => 'function',
+            'function' => [
+                'name' => 'invite_to_bed',
+                'description' => 'Invite Anon to bed with you, when you want him or want him close tonight. Only works in the game: call it, then say your line, and the bed is ready when you finish talking.',
+                'parameters' => [
+                    'type' => 'object',
+                    'properties' => [
+                        'reason' => ['type' => 'string', 'description' => 'Why you want him in bed now (private).'],
+                    ],
+                ],
+            ],
+        ],
     ];
     if ($watching) {
         return array_values(array_filter($tools, fn($tool) => in_array($tool['function']['name'] ?? '', WATCH_TOOLS, true)));
@@ -300,6 +343,64 @@ function tool_catalog(?string $approvedWebSearchQuery, bool $watching = false): 
     return $tools;
 }
 
+// the game's own outings, same rules as its CheckDate block and Annalie's
+// door, so she hears no before she promises anything
+const GAME_TRIPS = ['shop' => 'shop', 'date' => 'restaurant', 'karaoke' => 'karaoke', 'watch' => 'cinema'];
+
+function game_trip(string $where, ?array $outing): array {
+    $no = fn(string $why) => ['going' => false, 'note' => $why . ' Do not say you are leaving.'];
+    $game = GAME_TRIPS[$where] ?? null;
+    if ($game === null || $outing === null) return $no('Nothing happens if you call this here. If you two go out, Anon takes you himself.');
+    if (!$outing['out']) return $no('You two cannot go out together right now.');
+    $why = $game === 'shop' ? $outing['shop'] : $outing['date'];
+    if ($why !== 'ok') {
+        return $no(match ($why) {
+            'hours' => $game === 'shop' ? "Annalie's shop is closed now, it is open from 8:00 to 18:00."
+                : 'Not at this hour, dates happen between 9:00 and 19:00.',
+            'money' => 'There is not enough money for a date right now.',
+            'recent' => 'You two already had a date in the last 14 hours.',
+            default => 'That cannot happen right now.',
+        });
+    }
+    return ['going' => $game, 'note' => 'Say one short line about heading out together. You both leave when you finish talking.'];
+}
+
+// words, never the numbers, or she reads "stamina 0.33" back to him
+function game_state_lines(?array $s): array {
+    if ($s === null) return [];
+    $lines = [];
+    if ($s['stamina'] !== null && $s['stamina'] < 0.35) {
+        $lines[] = $s['stamina'] < 0.15 ? 'Anon is exhausted, barely on his feet.' : 'Anon looks tired.';
+    }
+    if ($s['satiation'] !== null && $s['satiation'] < 0.35) {
+        $lines[] = $s['satiation'] < 0.15 ? 'Anon is starving.' : 'Anon is hungry.';
+    }
+    if ($s['mental'] !== null && $s['mental'] < 0.6) $lines[] = 'Anon has been feeling down lately.';
+    if (($s['horniness'] ?? 0) >= 0.4) {
+        $lines[] = 'You want him. If the moment fits, you can invite him to bed (invite_to_bed).';
+    } elseif (game_bed_offered($s)) {
+        $lines[] = 'It is late and you have been longing for him. You could invite him to bed (invite_to_bed).';
+    } elseif (($s['longing'] ?? 0) >= 9) {
+        $lines[] = 'You have been longing for some closeness with him.';
+    }
+    return $lines;
+}
+
+// horniness sits at 0 and only jumps now and then (0.41, 0.69 in the saves), longing is 7-10 most of the time
+function game_bed_offered(?array $s): bool {
+    if ($s === null) return false;
+    $late = $s['hour'] !== null && ($s['hour'] >= 21 || $s['hour'] < 3);
+    return ($s['horniness'] ?? 0) >= 0.4 || (($s['longing'] ?? 0) >= 7 && $late);
+}
+
+// idle turns skip the tool check. bench: asked in words 4/8, called it 0/8
+function game_reply_invites_to_bed(string $reply): bool {
+    $a = TRIP_APOS;
+    $reply = mb_strtolower(preg_replace('/\[[^\]]*\]/', ' ', $reply));
+    return (bool)preg_match("/\b(?:(?:come|get|go) (?:back )?(?:to|into|in) bed|(?:lie|lay) down with me|(?:to|in|into) bed with me|"
+        . "join me in bed|take me to bed|let{$a}s go to bed)\b/u", $reply);
+}
+
 // the tools that change how the rest of the turn goes. $state is
 // the turn's: silenced, silence_reason, overheard, flee_decided,
 // fled, journaled (one write_journal a turn), and approved_search,
@@ -309,6 +410,35 @@ function chat_run_tool(string $name, array $args, array $ctx, array &$state): st
     $idle = $ctx['req']['idle'];
     if ($ctx['req']['watch'] !== null && !in_array($name, WATCH_TOOLS, true)) {
         return json_encode(['error' => 'not_available_while_watching']);
+    }
+    // the game owns the doors there. the list stays the web's, another
+    // list is another prompt prefix and a full re-read
+    if ($ctx['req']['game'] && $name === 'flee') {
+        return json_encode(['error' => 'not_possible_here',
+            'note' => 'You cannot leave right now. Stay in the scene and respond to what is actually happening.']);
+    }
+    if ($ctx['req']['game'] && isset(TRIP_TOOLS[$name])) {
+        $trip = game_trip(TRIP_TOOLS[$name], $ctx['req']['game_outing']);
+        if ($trip['going'] !== false) {
+            sse_send(['game_go' => $trip['going']]);
+            relationship_history_add((int)$ctx['user']['id'], null, 'outing:' . TRIP_TOOLS[$name]);
+            $state['went'] = TRIP_TOOLS[$name];
+        }
+        return json_encode($trip);
+    }
+    if ($name === 'invite_to_bed') {
+        if (!$ctx['req']['game']) return json_encode(['error' => 'not_possible_here', 'note' => 'Nothing happens if you call this here.']);
+        sse_send(['game_go' => 'bed']);
+        $state['went'] = 'bed';
+        return json_encode(['going' => 'bed', 'note' => 'Say one short line inviting him to bed. The bed is ready when you finish talking.']);
+    }
+    if ($name === 'change_outfit' && $ctx['req']['game']) {
+        $outfit = wardrobe_game_change($args, $ctx['req']['game_items']);
+        if ($outfit['apply'] !== null) {
+            sse_send(['game_outfit' => $outfit['apply']]);
+            ach_add((int)$ctx['user']['id'], 'outfits');
+        }
+        return json_encode($outfit['reply'], JSON_UNESCAPED_UNICODE);
     }
 
     if ($name === 'stay_silent') {
@@ -335,6 +465,15 @@ function chat_run_tool(string $name, array $args, array $ctx, array &$state): st
         $itemsChanged = !isset($outfit['apply']['look']) && !empty($outfit['reply']['changed']);
         if ($lookChanged || $itemsChanged) ach_add($userId, 'outfits');
         return json_encode($outfit['reply'], JSON_UNESCAPED_UNICODE);
+    }
+
+    if ($name === 'recolor') {
+        // the mod can't set game item colors, she'd announce a dye job that never happened
+        if ($ctx['req']['game']) return json_encode(['error' => 'not_possible_here',
+            'note' => 'Colors cannot be changed here. Say so plainly rather than pretending.']);
+        $recolor = wardrobe_tool_recolor($args, wardrobe_tool_state((int)$ctx['user']['id'])['items']);
+        if ($recolor['apply'] !== null) sse_send(['recolor' => $recolor['apply']]);
+        return json_encode($recolor['reply'], JSON_UNESCAPED_UNICODE);
     }
 
     if ($name === 'flee') {

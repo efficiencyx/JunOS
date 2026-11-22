@@ -1,9 +1,9 @@
 import * as Live2D from '../live2d/live2d.js?v=92';
-import * as Mods from '../mods/mods.js?v=113';
+import * as Mods from '../mods/mods.js?v=117';
 import { bakeDrawable } from '../mods/layers.js?v=25';
-import { ITEMS, VARIANTS, VARIANT_OWNER, colorGroup } from './catalog.js?v=5';
+import { COLOR_GROUPS, ITEMS, VARIANTS, VARIANT_OWNER, colorGroup } from './catalog.js?v=7';
 import { hexToRgb01 } from './colors.js?v=1';
-import { colors, state, variantState } from './current.js?v=6';
+import { colors, state, variantState } from './current.js?v=8';
 
 const rgbToHex = (rgb) => '#' + rgb.map(v => Math.round(v * 255).toString(16).padStart(2, '0')).join('');
 
@@ -20,7 +20,9 @@ let sheets = {};
 let modKey = '[]';
 
 function activeDecals() {
-  const active = ITEMS.filter(it => it.decal && state[it.key]).map(it => ({ decal: it.decal, colorKey: it.key }));
+  // first, so real lipstick stacks on top of it
+  const active = COLOR_GROUPS.filter(g => g.decal && colors[g.key]).map(g => ({ decal: g.decal, colorKey: g.key }));
+  for (const it of ITEMS) if (it.decal && state[it.key]) active.push({ decal: it.decal, colorKey: it.key });
   for (const v of VARIANTS) {
     const opt = v.options[variantState[v.key] || 0];
     if (opt.decal && VARIANT_OWNER[v.key]?.some(k => state[k])) active.push({ decal: opt.decal, replace: true });

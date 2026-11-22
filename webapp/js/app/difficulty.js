@@ -3,7 +3,7 @@ import { moodPhrase } from '../core/mood-tier.js?v=4';
 import { hold } from '../core/hold.js?v=2';
 import * as Names from '../core/names.js?v=1';
 import * as Prefs from '../core/prefs.js?v=9';
-import * as ui from '../core/ui.js?v=10';
+import * as ui from '../core/ui.js?v=11';
 
 async function call(action, body) {
   const r = await fetch('api/difficulty.php' + (action ? '?action=' + action : ''), body === undefined

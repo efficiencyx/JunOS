@@ -1,10 +1,12 @@
 using System;
+using System.Diagnostics;
+using System.IO;
 using System.Linq;
 using HarmonyLib;
 using Il2CppInterop.Common.XrefScans;
 using MelonLoader;
 
-[assembly: MelonInfo(typeof(JunBridge.LinuxFix.LinuxFix), "JunBridge.LinuxFix", "0.2.0", "JunOS")]
+[assembly: MelonInfo(typeof(JunBridge.LinuxFix.LinuxFix), "JunBridge.LinuxFix", "0.2.1", "JunOS")]
 [assembly: MelonPriority(int.MinValue)]
 [assembly: MelonGame("IncontinentCell", "My Dystopian Robot Girlfriend")]
 
@@ -25,8 +27,42 @@ public class LinuxFix : MelonPlugin {
       var early = injector?.GetField("il2cpp_resolve_icall_hook", System.Reflection.BindingFlags.Static | System.Reflection.BindingFlags.NonPublic)?.GetValue(null);
       bool earlyInstalled = early?.GetType().GetProperty("IsHooked")?.GetValue(early) is true;
       LoggerInstance.Msg($"loader hook present before plugin: {earlyInstalled}");
+      ReapDumpForks();
     }
   }
+
+  public override void OnApplicationQuit() {
+    if (OperatingSystem.IsLinux()) {
+      ReapDumpForks();
+    }
+  }
+
+  // MelonLoader's ClrMD check asks .NET for a dump before any plugin runs.
+  // .NET forks the game for createdump, the dump fails and that fork never
+  // execs. it sits in poll and outlives the game
+  private void ReapDumpForks() {
+    var self = Environment.ProcessId;
+    var exe = new FileInfo("/proc/self/exe").LinkTarget;
+    foreach (var dir in Directory.EnumerateDirectories("/proc")) {
+      if (!int.TryParse(Path.GetFileName(dir), out var pid) || pid == self) {
+        continue;
+      }
+      try {
+        if (ParentOf(File.ReadAllText($"{dir}/stat")) != self || new FileInfo($"{dir}/exe").LinkTarget != exe
+            || !File.ReadLines($"{dir}/status").Contains("Threads:\t1")) {
+          continue;
+        }
+        using var fork = Process.GetProcessById(pid);
+        fork.Kill();
+        LoggerInstance.Msg($"killed stray dump fork {pid}");
+      } catch (Exception) {
+        // gone already, or not ours to read
+      }
+    }
+  }
+
+  // comm is free text ("My Dystopian Ro", parens allowed), ppid is the 2nd field after the last ')'
+  internal static int ParentOf(string stat) => int.Parse(stat[(stat.LastIndexOf(')') + 2)..].Split(' ')[1]);
 
   public override void OnPreInitialization() {
     if (!OperatingSystem.IsLinux()) {

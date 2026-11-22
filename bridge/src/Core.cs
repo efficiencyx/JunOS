@@ -4,7 +4,7 @@ using MelonLoader;
 using UnityEngine;
 using JunBridge.Utils;
 
-[assembly: MelonInfo(typeof(JunBridge.Core), "JunBridge", "0.2.0", "JunOS", null)]
+[assembly: MelonInfo(typeof(JunBridge.Core), "JunBridge", "0.3.2", "JunOS", null)]
 [assembly: MelonGame("IncontinentCell", "My Dystopian Robot Girlfriend")]
 
 namespace JunBridge;
@@ -49,6 +49,7 @@ public class Core : MelonMod {
 
   public override void OnUpdate() {
     JunApi.LoginPrompt.Update();
+    Chat.Interactions.Poll();
     Chat.Initiative.Update();
     SettingsMenu.Update();
     if (Input.GetKeyDown(KeyCode.F8)) {

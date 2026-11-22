@@ -203,6 +203,9 @@ function chat_live_context(array $req, array $user, string $lastUserMsg, string 
         $contextParts[] = "## What Anon did since your last reply\n" . implode("\n", $req['game_actions']);
     }
 
+    $gameState = game_state_lines($req['game_state'] ?? null);
+    if ($gameState) $contextParts[] = "## How things are right now\n" . implode("\n", $gameState);
+
     if ($req['interrupted'] !== '') {
         $contextParts[] = "## He cut you off\nAnon started talking over you and you stopped mid-sentence. "
             . "All he heard of your last reply was: \"" . $req['interrupted'] . '"';
@@ -230,8 +233,10 @@ function chat_live_context(array $req, array $user, string $lastUserMsg, string 
             'cards' => 'play a game of blackjack',
             'watch' => 'watch something together',
         ][$invite];
-        $contextParts = ["(OOC stage direction, not spoken by Anon: Anon wants to {$plan}. "
-            . "If you wish to go along with it, invoke the tool {$tool}.)", $feelingsBlock];
+        $trip = $req['game'] ? game_trip($invite, $req['game_outing']) : null;
+        $then = $trip !== null && $trip['going'] === false ? "It cannot happen right now: {$trip['note']}"
+            : "If you wish to go along with it, invoke the tool {$tool}.";
+        $contextParts = ["(OOC stage direction, not spoken by Anon: Anon wants to {$plan}. {$then})", $feelingsBlock];
     } else {
         $invite = '';
     }

@@ -12,7 +12,7 @@ public class GameScriptPatch {
   [HarmonyPostfix]
   public static void AfterLoadGame(GameScript __instance, GameVariables save, GameScript.LoadProcedureData lpd) {
     SaveStorage.Instance.InvalidateCache();
-    Initiative.Mark(null);
+    Initiative.OnLoad();
     GameLines.Clear();
     BridgeSync.SyncNow();
   }
@@ -21,6 +21,7 @@ public class GameScriptPatch {
   [HarmonyPostfix]
   public static void AfterStartNewGame(GameScript __instance, GameScript.LoadProcedureData lpd) {
     SaveStorage.Instance.InvalidateCache();
+    Initiative.OnLoad();
     BridgeSync.SyncNow();
   }
 
@@ -28,7 +29,10 @@ public class GameScriptPatch {
   // GoOutside only opens the prompt, cancelling it still called it
   [HarmonyPatch("GoHome")]
   [HarmonyPostfix]
-  public static void AfterGoHome() => Initiative.Mark(Initiative.Outing);
+  public static void AfterGoHome() {
+    Outing.Clear();
+    Initiative.CameHome();
+  }
 
   // GoToSleep is just getting into bed, cuddles start there too. a nap isn't a morning
   [HarmonyPatch("Sleep")]

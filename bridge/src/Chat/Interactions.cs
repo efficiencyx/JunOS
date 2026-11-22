@@ -26,20 +26,52 @@ public static class Interactions {
   };
 
   private static readonly List<(string Text, int Times)> pending = [];
-  private static readonly Dictionary<InteractionMemoryEnum, double> lastTouch = [];
+  private static readonly Dictionary<string, double> lastTouch = [];
+  private static IntPtr lastHeld;
 
   public static void Touched(InteractionMemoryEnum touch) {
-    if (!touches.TryGetValue(touch, out var text)) {
-      return;
+    if (touches.TryGetValue(touch, out var text)) {
+      Touched(text);
     }
+  }
+
+  private static void Touched(string text) {
+    Initiative.NoteTouch();
     var now = Environment.TickCount64 / 1000.0;
     lock (pending) {
-      var held = lastTouch.TryGetValue(touch, out var last) && now - last < sameTouchSeconds;
-      lastTouch[touch] = now;
+      var held = lastTouch.TryGetValue(text, out var last) && now - last < sameTouchSeconds;
+      lastTouch[text] = now;
       if (!held) {
         Add(text);
       }
     }
+  }
+
+  // skirt and panties have no InteractionMemory entry, a chest touch logged none in play. so watch his hand
+  public static void Poll() {
+    var controller = Utils.GameState.IsWithHer() ? Live2DControllerSingleton.Instance?.GetReadyController("bot") : null;
+    ILive2DInteractable held = null;
+    if (controller == null || !controller.TryGetHeldInteractable(out held)) {
+      held = null;
+    }
+    var pointer = held?.Pointer ?? IntPtr.Zero;
+    if (pointer == lastHeld) {
+      return;
+    }
+    lastHeld = pointer;
+    var text = pointer == IntPtr.Zero ? null : Describe(controller.CurrentBrain?.CurrentState?.TryCast<NewInteractBrainState>(), pointer);
+    if (text != null) {
+      Touched(text);
+    }
+  }
+
+  private static string Describe(NewInteractBrainState brain, IntPtr held) {
+    bool Is(Il2CppInterop.Runtime.InteropTypes.Il2CppObjectBase part) => part != null && part.Pointer == held;
+    if (brain == null) return null;
+    if (Is(brain._skirtInteractable)) return "Anon lifted your skirt";
+    if (Is(brain._pantiesInteractable)) return "Anon pulled your panties aside";
+    if (Is(brain._boobL) || Is(brain._boobR) || Is(brain._boobsBoth)) return touches[InteractionMemoryEnum.BoobsFondle];
+    return null;
   }
 
   public static void Dressed(string itemName) {

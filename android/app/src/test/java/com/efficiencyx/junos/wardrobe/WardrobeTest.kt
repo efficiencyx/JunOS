@@ -149,4 +149,19 @@ class WardrobeTest {
         assertEquals(WardrobeState.default(), Wardrobe.toolState(WardrobeState(mapOf("shirt" to true, "junk" to true), emptyMap(), emptyList())))
         assertEquals(JsonPrimitive(true), Json.parseToJsonElement(encoded).jsonObject["items"]!!.jsonObject["shirt"])
     }
+
+    @Test
+    fun recolorMatchesPhp() {
+        val items = Wardrobe.ITEM_DEFAULTS
+        val pink = Wardrobe.toolRecolor(items, args("""{"parts":["hair","eyes","shoes"],"color":"F6C"}"""))
+        assertEquals(obj("""{"hair":"#ff66cc","eye_iris":"#ff66cc","shoe_l":"#ff66cc","shoe_r":"#ff66cc"}"""), pink.apply)
+        val hoodie = Wardrobe.toolRecolor(items, args("""{"parts":["hoodie"],"color":"#32a852"}"""))
+        assertEquals(listOf("hoodie"), hoodie.reply["not_wearing"]!!.jsonArray.map { it.jsonPrimitive.content })
+        assertEquals(listOf("hair"), Wardrobe.resolveColor("ponytail"))
+        assertEquals(obj("""{"skin":null}"""), Wardrobe.toolRecolor(items, args("""{"parts":["skin"],"color":"default"}""")).apply)
+        assertNull(Wardrobe.toolRecolor(items, args("""{"parts":["hair"],"color":"pink"}""")).apply)
+        val wings = Wardrobe.toolRecolor(items, args("""{"parts":["wings"],"color":"#000000"}"""))
+        assertNull(wings.apply)
+        assertTrue(wings.reply["valid_parts"]!!.jsonArray.all { Wardrobe.resolveColor(it.jsonPrimitive.content).isNotEmpty() })
+    }
 }

@@ -21,6 +21,8 @@ class TripsTest {
     fun guessesTypedInvites() {
         assertEquals("shop", Trips.guessInvite("Wanna go to Annalie's shop with me?", ""))
         assertEquals("cards", Trips.guessInvite("yeah sure", "Want to play some blackjack?"))
+        assertEquals("date", Trips.guessInvite("wanna go on a date?", ""))
+        assertEquals("", Trips.guessInvite("let's set a date for the move", ""))
         assertEquals("", Trips.guessInvite("not the shop today", ""))
         assertEquals("", Trips.guessInvite("What is your favorite color?", ""))
     }

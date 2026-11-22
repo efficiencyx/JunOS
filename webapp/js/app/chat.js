@@ -1,17 +1,17 @@
-import { armFollowup, armIdleAfterReply, cancelActiveIdleNudge, cancelAutoReset, cancelIdleNudge, composerPlaceholder, consolidating, fleeActive, reportActivity, resetIdleNudge, scheduleAutoReset, setCancelActiveIdleNudge, setConsolidating, showConsolidatingBubble, startFleeLock, syncConsolidationStatus } from './consolidation.js?v=142';
+import { armFollowup, armIdleAfterReply, cancelActiveIdleNudge, cancelAutoReset, cancelIdleNudge, composerPlaceholder, consolidating, fleeActive, reportActivity, resetIdleNudge, scheduleAutoReset, setCancelActiveIdleNudge, setConsolidating, showConsolidatingBubble, startFleeLock, syncConsolidationStatus } from './consolidation.js?v=146';
 import { chatInput, messagesEl, modelSelect, reasoningSelect, sendBtn, sendButtonIdleMarkup, sendButtonStopMarkup, thinkChk } from './dom.js?v=77';
 import { announceMobileReply, hideFaceBubble, scheduleFaceBubbleHide, setLatestAssistantReply, showFaceBubble } from './face-bubble.js?v=96';
 import { appendDebugReply, appendDebugThinking, beginDebugTurn, logToolStatus, setDebugPrompt } from './logging.js?v=78';
 import { loadMood } from './mood.js?v=93';
-import { refreshSidebar } from './sidebar.js?v=141';
-import { makeNameFilter, makeStreamBuffer } from './stream-filters.js?v=115';
+import { refreshSidebar } from './sidebar.js?v=146';
+import { makeNameFilter, makeStreamBuffer } from './stream-filters.js?v=119';
 import { localTimeString, phoneMode } from '../core/util.js?v=1';
 import * as Names from '../core/names.js?v=1';
-import * as ui from '../core/ui.js?v=10';
+import * as ui from '../core/ui.js?v=11';
 import { apiJson } from '../core/api.js?v=1';
-import * as ChatAPI from '../core/chat-api.js?v=8';
-import * as Mods from '../mods/mods.js?v=113';
-import * as Outfit from '../outfit/outfit.js?v=112';
+import * as ChatAPI from '../core/chat-api.js?v=9';
+import * as Mods from '../mods/mods.js?v=117';
+import * as Outfit from '../outfit/outfit.js?v=116';
 import * as Cards from './cards.js?v=41';
 import * as Achievements from '../achievements/achievements.js?v=9';
 import * as History from './history.js?v=2';
@@ -386,6 +386,7 @@ export function runChat({ idle, cue = '', ephemeral, audio, voice, invite = '', 
       // another chat leaves the model wearing one thing and the
       // database saying another.
       onOutfit: (change) => Outfit.applyToolChange(change),
+      onRecolor: (change) => Outfit.applyToolRecolor(change),
       onGo: (where) => { trip = where; },
       onSilence: (s) => {
         if (!isCurrent()) return;

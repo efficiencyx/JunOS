@@ -1,9 +1,9 @@
 import * as Live2D from '../live2d/live2d.js?v=92';
 import { idbStore } from '../core/idb.js?v=1';
 import { hexToRgb01, normalizeHex } from '../outfit/colors.js?v=1';
-import { applyDrawOrder, applyFootCover, applyVariants, hiddenItemDrawables, refreshVisibility, setModdedDrawables } from '../outfit/apply.js?v=42';
-import { styleBase } from '../outfit/composite.js?v=42';
-import { VARIANTS } from '../outfit/catalog.js?v=5';
+import { applyDrawOrder, applyFootCover, applyVariants, hiddenItemDrawables, refreshVisibility, setModdedDrawables } from '../outfit/apply.js?v=46';
+import { styleBase } from '../outfit/composite.js?v=46';
+import { VARIANTS } from '../outfit/catalog.js?v=7';
 import { unzip } from './zip.js?v=1';
 import { deleteRemote, fetchRemote, listRemote, saveRemoteState, uploadRemote } from './server.js?v=2';
 import { itemDrawables, parseMod } from './parse.js?v=23';
@@ -484,21 +484,16 @@ export function setColor(guid, itemIndex, slotIndex, hex) {
 // she asks for. capped at 40 because this list rides the live
 // context on Every turn.
 const DESCRIBE_MAX = 40;
-export function describe() {
+export function inventory() {
   const worn = [], owned = [];
   for (const mod of mods) {
     mod.items.forEach((item, i) => (isEquipped(mod, i) ? worn : owned).push(item.label));
   }
-  let s = worn.length ? ` You are also wearing these special items: ${worn.join(', ')}.` : '';
-  if (owned.length) {
-    s += ` Special items you own but are not wearing, usable by this exact name in`
-      + ` an [A:outfit|item=NAME|state=on] tag: ${owned.slice(0, DESCRIBE_MAX).join(', ')}.`;
-  }
-  return s;
+  return { worn, owned: owned.slice(0, DESCRIBE_MAX) };
 }
 
 // change_outfit needs the owned names to tell a real mod item
-// from one she made up. same names-only boundary as describe().
+// from one she made up. same names-only boundary as inventory().
 export function itemNames() {
   const out = [];
   for (const mod of mods) for (const item of mod.items) out.push(item.label);

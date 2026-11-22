@@ -123,7 +123,7 @@ export function confirm(opts) {
     okBtn.type = 'button';
     okBtn.className = 'confirm-btn confirm-ok' + (opts.danger || opts.hold ? ' danger' : '');
     okBtn.textContent = opts.confirmLabel || t('ui.confirm', 'Confirm');
-    if (opts.hold) hold(okBtn, function () { close(true); });
+    if (opts.hold) hold(okBtn, function () { close(true); }, opts.holdMs);
     else okBtn.addEventListener('click', function () { close(true); });
 
     actions.appendChild(cancelBtn);

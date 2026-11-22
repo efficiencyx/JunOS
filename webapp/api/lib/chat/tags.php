@@ -16,7 +16,7 @@ function chat_parse_action_tags(string $buffer, array $ctx, array &$state): stri
         if (preg_match('/\breason\s*=\s*([^|\]]+)/i', $sm[1], $sr)) $state['silence_reason'] = trim($sr[1]);
         $state['overheard'] = $ctx['req']['spoken'] && (bool)preg_match('/\boverheard\s*[:=]\s*true\b/i', $sm[1]);
     }
-    if (!$state['silenced'] && $state['fled'] === null && !$state['flee_decided']
+    if (!$state['silenced'] && $state['fled'] === null && !$state['flee_decided'] && !$ctx['req']['game']
         && preg_match('/\[\s*A(?:CTIONS?)?\s*:\s*flee\b([^\]]*)\]/i', $buffer, $fm)) {
         $state['flee_decided'] = true;
         $fleeReason = preg_match('/\breason\s*=\s*([^|\]]+)/i', $fm[1], $fr) ? trim($fr[1]) : '';

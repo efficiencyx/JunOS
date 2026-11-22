@@ -1,8 +1,8 @@
 import * as Live2D from '../live2d/live2d.js?v=92';
-import * as Mods from '../mods/mods.js?v=113';
-import { GLASSES_STYLES, VARIANTS, VARIANT_OWNER } from './catalog.js?v=5';
-import { availableAssets, textureAvailable } from './sync.js?v=42';
-import { colors, state, variantState } from './current.js?v=6';
+import * as Mods from '../mods/mods.js?v=117';
+import { GLASSES_STYLES, VARIANTS, VARIANT_OWNER } from './catalog.js?v=7';
+import { availableAssets, textureAvailable } from './sync.js?v=46';
+import { colors, state, variantState } from './current.js?v=8';
 import { hexToRgb01 } from './colors.js?v=1';
 
 const textureImgCache = {};

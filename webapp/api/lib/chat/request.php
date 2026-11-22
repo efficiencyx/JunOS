@@ -10,9 +10,13 @@ const WATCH_AUDIO_MAX_BYTES = 25 * 32000 + 44;
 
 // the game bridge sends these when she talks first
 const CHAT_IDLE_CUES = [
-    'outing' => 'Anon just came back home from being out.',
+    'outing' => 'Anon just walked back in after being out on his own.',
+    'outing_work' => 'Anon just walked in from his shift at work.',
+    'outing_together' => 'You and Anon just came back home from being out together.',
     'intimacy' => 'You and Anon were just intimate and it has gone quiet.',
     'morning' => 'A new day just started and you both just woke up.',
+    'played' => 'You and Anon just finished playing a game together.',
+    'touched' => 'Anon is touching you right now, what he did is listed below.',
     'followup' => 'You just finished talking and Anon hasn\'t answered yet. A second thought, a reaction to your own words or nothing at all.',
 ];
 
@@ -135,6 +139,37 @@ function chat_parse_request(string $provider): array {
             if ($line !== '') $gameLines[] = $line;
         }
     }
+    // her clothes in the game, worn and in the bag. change_outfit hands
+    // back indexes into this list, so a bad entry stays in as a blank
+    $game = ($body['game'] ?? false) === true;
+    $gameOuting = null;
+    if ($game && is_array($body['game_outing'] ?? null)) {
+        $o = $body['game_outing'];
+        $gameOuting = [
+            'out' => ($o['out'] ?? false) === true,
+            'date' => in_array($o['date'] ?? '', ['ok', 'hours', 'money', 'recent'], true) ? $o['date'] : '',
+            'shop' => in_array($o['shop'] ?? '', ['ok', 'hours'], true) ? $o['shop'] : '',
+        ];
+    }
+    // game scales: longing 0-10, the rest 0-1, read off the saves
+    $gameState = null;
+    if ($game && is_array($body['game_state'] ?? null)) {
+        $num = fn(string $k, float $max) => is_numeric($body['game_state'][$k] ?? null)
+            ? max(0.0, min($max, (float)$body['game_state'][$k])) : null;
+        $gameState = ['stamina' => $num('stamina', 1), 'satiation' => $num('satiation', 1), 'mental' => $num('mental', 1),
+            'longing' => $num('longing', 10), 'horniness' => $num('horniness', 1), 'hour' => $num('hour', 23)];
+    }
+    $gameItems = [];
+    if ($game && isset($body['game_items'])) {
+        if (!is_array($body['game_items'])) sse_fail('invalid_request');
+        foreach (array_slice($body['game_items'], 0, 150) as $item) {
+            $gameItems[] = [
+                'name' => is_array($item) ? chat_clean_text($item['name'] ?? '', 80) : '',
+                'slot' => is_array($item) ? chat_clean_text($item['slot'] ?? '', 40) : '',
+                'worn' => is_array($item) && ($item['worn'] ?? false) === true,
+            ];
+        }
+    }
 
     // minutes east of UTC, so the achievement day and the 2-5 am
     // window are Anon's and not the container's
@@ -142,15 +177,18 @@ function chat_parse_request(string $provider): array {
 
     $idle = isset($body['idle']) && $body['idle'] === true;
     $cue = $idle && isset($body['cue']) && isset(CHAT_IDLE_CUES[$body['cue']]) ? (string)$body['cue'] : '';
+    $awayMinutes = str_starts_with($cue, 'outing') && is_int($body['away_minutes'] ?? null)
+        ? max(0, min($body['away_minutes'], 7 * 24 * 60)) : 0;
     $ephemeral = !empty($body['ephemeral']) || $watch !== null;
     $regenerate = !$idle && !$ephemeral && ($body['regenerate'] ?? false) === true;
-    $invite = isset($body['invite']) && in_array($body['invite'], TRIP_TOOLS, true) ? (string)$body['invite'] : '';
+    $invite = !$game && isset($body['invite']) && in_array($body['invite'], TRIP_TOOLS, true) ? (string)$body['invite'] : '';
 
     return [
         'body' => $body, 'dropped_oldest' => $droppedOldest, 'audio' => $audioB64, 'spoken' => $spoken,
         'model' => $model, 'reasoning' => $reasoning, 'outfit_context' => $outfitContext,
         'mod_items' => $modItems, 'client_time' => $clientTime, 'tz' => $tz, 'idle' => $idle, 'cue' => $cue, 'game_actions' => $gameActions,
-        'interrupted' => $interrupted, 'game_lines' => $gameLines,
+        'interrupted' => $interrupted, 'game_lines' => $gameLines, 'game' => $game, 'game_items' => $gameItems, 'game_outing' => $gameOuting, 'game_state' => $gameState,
+        'away_minutes' => $awayMinutes,
         'ephemeral' => $ephemeral, 'invite' => $invite, 'regenerate' => $regenerate,
         'watch' => $watch, 'frames' => $frames,
     ];

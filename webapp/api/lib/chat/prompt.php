@@ -37,6 +37,18 @@ function chat_system_content(bool $toolsOffered, int $userId): string {
     return $systemContent;
 }
 
+// game minutes. no numbers, she reads them back to him (user report 2026-11-21)
+function chat_cue_text(string $cue, int $awayMinutes): string {
+    $text = CHAT_IDLE_CUES[$cue];
+    if (!str_starts_with($cue, 'outing')) return $text;
+    if ($cue === 'outing' && $awayMinutes >= 60) {
+        $text .= ' He was gone ' . ($awayMinutes < 240 ? 'a few hours' : ($awayMinutes < 720 ? 'most of the day' : 'a very long time')) . '.';
+    }
+    if ($cue !== 'outing_together' && $awayMinutes >= 240) $text .= ' You missed him.';
+    // "You're back!" opened 6/6 without it, 6/8 with it and the state lines. bench 2026-11-21
+    return $text . ' Open with what you notice about him or what is on your mind, not a greeting.';
+}
+
 function chat_build_messages(array $req, string $systemContent, string $liveContext, int $summaryCoveredCount): array {
     $messages = [];
     $messages[] = ['role' => 'system', 'content' => $systemContent];
@@ -52,7 +64,7 @@ function chat_build_messages(array $req, string $systemContent, string $liveCont
 
     if ($req['idle']) {
         $messages[] = ['role' => 'user', 'content' => $req['cue'] !== ''
-            ? '(OOC stage direction, not spoken by Anon: ' . CHAT_IDLE_CUES[$req['cue']] . ' He hasn\'t said anything yet. '
+            ? '(OOC stage direction, not spoken by Anon: ' . chat_cue_text($req['cue'], $req['away_minutes'] ?? 0) . ' He hasn\'t said anything yet. '
                 . 'Say or do something on your own initiative, the way Jun naturally would right now.)'
             : '(OOC stage direction, not spoken by Anon: Anon has gone quiet and is just '
             . 'saying nothing. The silence has stretched on. '

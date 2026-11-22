@@ -6,7 +6,7 @@ export async function listModels() {
   return r.json();
 }
 
-export function chat({ messages, model, reasoning, think, outfit_context, mod_items, conversation_id, idle, cue, interrupted, ephemeral, client_time, audio, voice, hear_all, invite, tts, regenerate, frames, watch }, { onToken, onThinking, onDone, onError, onDebug, onStats, onToolStatus, onOutfit, onGo, onSilence, onFled, onRestart, onWait }) {
+export function chat({ messages, model, reasoning, think, outfit_context, mod_items, conversation_id, idle, cue, interrupted, ephemeral, client_time, audio, voice, hear_all, invite, tts, regenerate, frames, watch }, { onToken, onThinking, onDone, onError, onDebug, onStats, onToolStatus, onOutfit, onRecolor, onGo, onSilence, onFled, onRestart, onWait }) {
   const ctrl = new AbortController();
 
   (async () => {
@@ -55,6 +55,7 @@ export function chat({ messages, model, reasoning, think, outfit_context, mod_it
               if (obj.stats) { onStats && onStats(obj.stats); continue; }
               if (obj.tool_status) { onToolStatus && onToolStatus(obj.tool_status); continue; }
               if (obj.outfit) { onOutfit && onOutfit(obj.outfit); continue; }
+              if (obj.recolor) { onRecolor && onRecolor(obj.recolor); continue; }
               if (obj.go) { onGo && onGo(obj.go); continue; }
               if (typeof obj.thinking === 'string') { onThinking && onThinking(obj.thinking); continue; }
               if (typeof obj.token === 'string') onToken && onToken(obj.token);

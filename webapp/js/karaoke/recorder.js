@@ -1,4 +1,4 @@
-import * as ui from '../core/ui.js?v=10';
+import * as ui from '../core/ui.js?v=11';
 import { $, active } from './karaoke.js?v=32';
 import { instrSource, practice, soloPhase } from './playback.js?v=25';
 import { mode, setStatus, track } from './setup.js?v=25';

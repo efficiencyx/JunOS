@@ -1,5 +1,5 @@
 import * as Live2D from '../live2d/live2d.js?v=92';
-import * as ui from '../core/ui.js?v=10';
+import * as ui from '../core/ui.js?v=11';
 import { assignOwners } from './lyrics.js?v=2';
 import { health, loadFile, mode, platformFlavor, queueLyrics, resetPanels, setLyricsChoice, setMode, showStage, splitPicks, track } from './setup.js?v=25';
 import { renderLyrics, setJunVolume, start, stopPlayback } from './playback.js?v=25';

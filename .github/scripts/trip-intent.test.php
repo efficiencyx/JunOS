@@ -25,6 +25,10 @@ $eq('typed watch invite', trip_guess_invite('wanna watch a movie together?', '')
 $eq('movie night', trip_guess_invite("let's do a movie night", ''), 'watch');
 $eq('watch your mouth is no invite', trip_guess_invite("let's watch your mouth", ''), '');
 $eq('two trips named', trip_guess_invite("let's do dinner then karaoke", ''), '');
+$eq('asked on a date', trip_guess_invite('wanna go on a date?', ''), 'date');
+$eq('set a date is no invite', trip_guess_invite("let's set a date for the move", ''), '');
+$eq('cinema invite', trip_guess_invite("let's go to the cinema", ''), 'watch');
+$eq('the movies', trip_guess_invite('wanna go to the movies?', ''), 'watch');
 
 $eq('reply yes', trip_reply_accepts("[A:happy] Yes! Let's go, I'll grab my coat."), true);
 $eq('reply cant wait', trip_reply_accepts("Can't wait!"), true);

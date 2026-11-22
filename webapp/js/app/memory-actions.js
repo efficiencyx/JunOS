@@ -1,6 +1,6 @@
 import { modelSelect } from './dom.js?v=77';
 import * as Names from '../core/names.js?v=1';
-import * as ui from '../core/ui.js?v=10';
+import * as ui from '../core/ui.js?v=11';
 import { t } from '../core/i18n.js?v=1';
 
 // her answer to an edit survives the reload that redraws the reader

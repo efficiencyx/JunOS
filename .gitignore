@@ -102,10 +102,10 @@ tools/promo/*showcase*
 tools/promo/showcase-rec/profile/
 
 # the landing page is tracked here, publish.sh keeps the whole
-# folder out of the public tree. the stills are renders of her
-# rig, so are the clips, so same deal as webapp/assets/.
-# landing/capture.html rebuilds both. audio/ is her lines,
-# make-audio.sh rebuilds those off the running tts sidecar
+# folder out of the public tree. media/ is copies of the release
+# videos in tools/promo, landing/media.sh rebuilds it. the rest is
+# the old reel's renders, nothing reads them anymore
+webapp/landing/media/
 webapp/landing/stills/
 webapp/landing/clips/
 webapp/landing/clips-raw/

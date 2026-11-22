@@ -6,9 +6,9 @@
 		<TargetFramework>net6.0</TargetFramework>
     <AssemblyName>JunBridge</AssemblyName>
     <Product>JunOS bridge for My Dystopian Robot Girlfriend</Product>
-    <Version>0.2.0</Version>
-    <FileVersion>0.2.0</FileVersion>
-    <AssemblyVersion>0.2.0</AssemblyVersion>
+    <Version>0.3.2</Version>
+    <FileVersion>0.3.2</FileVersion>
+    <AssemblyVersion>0.3.2</AssemblyVersion>
 		<NeutralLanguage>en-US</NeutralLanguage>
 
 		<RootNamespace>JunBridge</RootNamespace>

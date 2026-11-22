@@ -112,10 +112,12 @@ export const COLOR_GROUPS = [
   { key: 'eye_pupil', label: 'Eye pupil', includes: ['pupil'], excludes: [] },
   { key: 'eye_highlight', label: 'Eye shine', includes: ['highlight'], excludes: [] },
 
-  { key: 'lips', label: 'Lips', includes: ['lip'], excludes: [] },
+  // the SkinLip meshes are half chin and philtrum, a tint dyes all of
+  // it. so lips get the lipstick mask painted in their colour instead
+  { key: 'lips', label: 'Lips', includes: ['skinlip'], excludes: [], decal: 'lipstick' },
 
   { key: 'mouth_interior', label: 'Mouth interior',
-    includes: ['innermouth','tounge','tongue','teeth','saliva'], excludes: [] },
+    includes: ['innermouth','tounge','tongue','saliva'], excludes: ['skin'] },
 
   // applyGlassesTexture paints these into the ModdableFace
   // texture itself. they're not drawable tints (a drawable is one

@@ -14,6 +14,8 @@ require "$lib/providers/config.php";
 require "$lib/providers/llamacpp.php";
 require "$lib/providers/payload.php";
 require "$lib/difficulty.php";
+require "$lib/wardrobe.php";
+require "$lib/chat/tools.php";
 
 $applied = [];
 function relationship_apply(int $userId, array $rel, array $deltas): void { $GLOBALS['applied'][] = $deltas; }
@@ -122,6 +124,65 @@ $eq('idle: a cue words the stage direction and still takes the live context', [
 ], [true, false, true]);
 $plainIdle = chat_build_messages(['body' => ['messages' => []], 'dropped_oldest' => 0, 'idle' => true, 'cue' => '', 'watch' => null, 'audio' => ''], 'sys', 'LIVE', 0);
 $eq('idle: no cue keeps the trained silence nudge', str_contains($plainIdle[1]['content'], 'gone quiet'), true);
+$open = ' Open with what you notice about him or what is on your mind, not a greeting.';
+$eq('cue: a shift says no hours', chat_cue_text('outing_work', 535), CHAT_IDLE_CUES['outing_work'] . ' You missed him.' . $open);
+$eq('cue: out together, no span', chat_cue_text('outing_together', 300), CHAT_IDLE_CUES['outing_together'] . $open);
+$eq('cue: out alone gets a span in words', chat_cue_text('outing', 150), CHAT_IDLE_CUES['outing'] . ' He was gone a few hours.' . $open);
+$eq('cue: a short trip says nothing more', chat_cue_text('outing', 20), CHAT_IDLE_CUES['outing'] . $open);
+$eq('cue: not an outing stays as is', chat_cue_text('played', 600), CHAT_IDLE_CUES['played']);
+$st = fn(array $o) => $o + ['stamina' => null, 'satiation' => null, 'mental' => null, 'longing' => null, 'horniness' => null, 'hour' => null];
+$eq('state: nothing standing out says nothing', game_state_lines($st(['stamina' => 0.8, 'satiation' => 0.6, 'longing' => 5, 'hour' => 14])), []);
+$eq('state: tired and starving', game_state_lines($st(['stamina' => 0.2, 'satiation' => 0.1])), ['Anon looks tired.', 'Anon is starving.']);
+$eq('state: horny names the bed', game_state_lines($st(['horniness' => 0.69, 'hour' => 15])), ['You want him. If the moment fits, you can invite him to bed (invite_to_bed).']);
+$eq('state: longing at night names the bed', count(array_filter(game_state_lines($st(['longing' => 7.5, 'hour' => 23])), fn($l) => str_contains($l, 'invite_to_bed'))), 1);
+$eq('state: longing by day no bed', game_state_lines($st(['longing' => 7.5, 'hour' => 13])), []);
+$eq('state: an old mod sends none', game_state_lines(null), []);
+$eq('bed: come back to bed', game_reply_invites_to_bed('[A:blush|0.4]Do you want to come back to bed with me?'), true);
+$eq('bed: lie down with me', game_reply_invites_to_bed('...Do you want to come lie down with me?'), true);
+$eq('bed: just wanting him is not an invite', game_reply_invites_to_bed('I want you.'), false);
+$eq('bed: the bed as a thing is not an invite', game_reply_invites_to_bed('I made the bed this morning.'), false);
+$eq('bed: not offered by day', game_bed_offered($st(['longing' => 8, 'hour' => 14])), false);
+$eq('bed: no state, no bed', game_bed_offered(null), false);
+
+$closet = [
+    ['name' => 'T-shirt', 'slot' => 'UpperBody', 'worn' => true],
+    ['name' => 'Skirt', 'slot' => 'LowerBody', 'worn' => true],
+    ['name' => 'T-shirt', 'slot' => 'UpperBody', 'worn' => false],
+    ['name' => 'Maid dress', 'slot' => 'UpperBody', 'worn' => false],
+    ['name' => '', 'slot' => '', 'worn' => false],
+];
+$dress = wardrobe_game_change(['put_on' => ['maid dress']], $closet);
+$eq('game outfit: put on by name, same slot comes off in wearing', [$dress['apply'], $dress['reply']['wearing']],
+    [['on' => [3], 'off' => []], ['Skirt', 'Maid dress']]);
+$eq('game outfit: a twin name picks the one that changes', wardrobe_game_change(['put_on' => ['t-shirt']], $closet)['apply'], ['on' => [2], 'off' => []]);
+$eq('game outfit: worn twin is the one taken off', wardrobe_game_change(['take_off' => ['T-shirt']], $closet)['apply'], ['on' => [], 'off' => [0]]);
+$eq('game outfit: nude takes off what is worn and skips blanks', wardrobe_game_change(['take_off' => ['nude']], $closet)['apply'], ['on' => [], 'off' => [0, 1]]);
+$unknown = wardrobe_game_change(['put_on' => ['bikini']], $closet);
+$eq('game outfit: unknown lists the bag and changes nothing', [$unknown['apply'], $unknown['reply']['you_can_put_on']], [null, ['T-shirt', 'Maid dress']]);
+$items = wardrobe_default_state()['items'];
+$pink = wardrobe_tool_recolor(['parts' => ['hair', 'eyes', 'shoes'], 'color' => 'F6C'], $items);
+$eq('recolor: aliases resolve, short hex expands', $pink['apply'],
+    ['hair' => '#ff66cc', 'eye_iris' => '#ff66cc', 'shoe_l' => '#ff66cc', 'shoe_r' => '#ff66cc']);
+$eq('recolor: a hidden item says so', wardrobe_tool_recolor(['parts' => ['hoodie'], 'color' => '#32a852'], $items)['reply']['not_wearing'], ['hoodie']);
+$eq('recolor: a hair style label dyes the hair', wardrobe_tool_recolor(['parts' => ['ponytail', 'default hair'], 'color' => '#fff'], $items)['apply'], ['hair' => '#ffffff']);
+$eq('recolor: default resets to null', wardrobe_tool_recolor(['parts' => ['skin'], 'color' => 'default'], $items)['apply'], ['skin' => null]);
+$eq('recolor: a color name is refused', wardrobe_tool_recolor(['parts' => ['hair'], 'color' => 'pink'], $items)['apply'], null);
+$wings = wardrobe_tool_recolor(['parts' => ['wings'], 'color' => '#000000'], $items);
+$eq('recolor: unknown part changes nothing', [$wings['apply'], $wings['reply']['unknown']], [null, ['wings']]);
+$eq('recolor: every valid part resolves back', array_filter($wings['reply']['valid_parts'], fn($p) => !wardrobe_resolve_color($p)), []);
+$eq('retry: a bad hex forces another call', tool_result_retryable(json_encode(wardrobe_tool_recolor(['parts' => ['hair'], 'color' => 'white'], $items)['reply'])), true);
+$eq('retry: a refusal she cannot fix does not', tool_result_retryable('{"error":"not_possible_here"}'), false);
+$free = ['out' => true, 'date' => 'ok', 'shop' => 'ok'];
+$eq('game trip: dinner is the restaurant date', game_trip('date', $free)['going'], 'restaurant');
+$eq('game trip: watch is the cinema', game_trip('watch', $free)['going'], 'cinema');
+$eq('game trip: cards has no game side', game_trip('cards', $free)['going'], false);
+$eq('game trip: an old mod sends no outing state', game_trip('shop', null)['going'], false);
+$eq('game trip: she can not go out at all', game_trip('shop', ['out' => false] + $free)['going'], false);
+$eq('game trip: the shop keeps its own hours', [
+    game_trip('shop', ['shop' => 'hours'] + $free)['going'], game_trip('date', ['shop' => 'hours'] + $free)['going'],
+], [false, 'restaurant']);
+$eq('game trip: a recent date says why', str_contains(game_trip('karaoke', ['date' => 'recent'] + $free)['note'], '14 hours'), true);
+$eq('game outfit: no saved looks in the game', wardrobe_game_change(['look' => 'date night'], $closet)['reply']['error'], 'no_saved_looks_here');
 $llamaWarm = provider_chat_warm_payload('llamacpp', 'jun', $warmMsgs, 'low', false, [['type' => 'function']]);
 $eq('warm: llamacpp closes assistant with empty user turn and n_predict 0', [
     $llamaWarm['stream'], $llamaWarm['max_tokens'], $llamaWarm['n_predict'], $llamaWarm['cache_prompt'],

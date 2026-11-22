@@ -1,8 +1,8 @@
 import * as Live2D from '../live2d/live2d.js?v=92';
-import { ITEMS, VARIANTS } from '../outfit/catalog.js?v=5';
-import { itemDrawableIds, setItem, setVariant } from '../outfit/apply.js?v=42';
-import { state, variantState } from '../outfit/current.js?v=6';
-import { isEquipped, mods, setEquipped } from '../mods/engine.js?v=42';
+import { ITEMS, VARIANTS } from '../outfit/catalog.js?v=7';
+import { itemDrawableIds, setItem, setVariant } from '../outfit/apply.js?v=46';
+import { state, variantState } from '../outfit/current.js?v=8';
+import { isEquipped, mods, setEquipped } from '../mods/engine.js?v=46';
 import { itemDrawables } from '../mods/parse.js?v=23';
 import { hooks } from '../outfit/hooks.js?v=1';
 

@@ -47,7 +47,7 @@ public static class ModSettingsPage {
       Checkbox("LeftPanel", "Lip sync", ModConfig.ttsLipSyncEntry, ReloadVoice);
 
       Call("AddLabel", id, "RightPanel", "She talks first");
-      Checkbox("RightPanel", "Welcome back, events, idle lines", ModConfig.initiativeEnabledEntry);
+      Checkbox("RightPanel", "Welcome back, events, touches, idle lines", ModConfig.initiativeEnabledEntry);
       Slider("RightPanel", "Idle before she talks (min)", 0.5f, 30f, 60, ModConfig.idleMinutesEntry);
       Slider("RightPanel", "Between her own lines (min)", 1f, 60f, 60, ModConfig.cooldownMinutesEntry);
       Slider("RightPanel", "Face stays after a chat (s)", 0f, 120f, 25, ModConfig.expressionLingerSecondsEntry);

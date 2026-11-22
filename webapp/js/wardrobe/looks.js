@@ -1,5 +1,5 @@
-import { Presets, applyPreset, decodeOutfitCode, encodeOutfitCode, endPreview, schedulePreview } from '../outfit/presets.js?v=42';
-import { clearWornHover, wdOverlay } from './panel.js?v=50';
+import { Presets, applyPreset, decodeOutfitCode, encodeOutfitCode, endPreview, schedulePreview } from '../outfit/presets.js?v=46';
+import { clearWornHover, wdOverlay } from './panel.js?v=54';
 import { locale, t } from '../core/i18n.js?v=1';
 import { hold } from '../core/hold.js?v=2';
 

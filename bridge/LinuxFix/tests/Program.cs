@@ -24,6 +24,9 @@ internal static unsafe class Program {
 
   private static void Main(string[] args) {
     var directory = Path.Combine(Path.GetTempPath(), "junos-hooks-test-" + Guid.NewGuid().ToString("N"));
+    var parentOf = typeof(LinuxFix).GetMethod("ParentOf", statics);
+    Require((int)parentOf.Invoke(null, ["120529 (My Dystopian Ro) S 120475 120475 1"]) == 120475);
+    Require((int)parentOf.Invoke(null, ["7 (a) b (c)) R 42 7 7"]) == 42);
     var plugin = typeof(LinuxFix).Assembly;
     var ml = typeof(MelonPlugin).Assembly;
     var interop = ml.GetType("MelonLoader.InternalUtils.BootstrapInterop", true);

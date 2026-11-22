@@ -1,4 +1,4 @@
-import * as ui from '../core/ui.js?v=10';
+import * as ui from '../core/ui.js?v=11';
 import * as Live2D from '../live2d/live2d.js?v=92';
 import * as TTS from './tts.js?v=94';
 import * as Voice from './voice.js?v=95';

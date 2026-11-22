@@ -1,16 +1,16 @@
 import { currentConversationId, messages, setCurrentConversationId, stopActiveStream } from './session.js?v=1';
 import { appendMsg, renderMarkdown, scrollToLatest, updateEmptyState } from './messages.js?v=25';
 import { dropDraft, useDraftFor } from './composer.js?v=3';
-import { addReplyActions, discardActiveResponse } from './chat.js?v=69';
+import { addReplyActions, discardActiveResponse } from './chat.js?v=73';
 import { setConversationTitle } from './face-bubble.js?v=96';
 import { announceMobileReply, faceBubble, hideFaceBubble, latestAssistantReply, scheduleFaceBubbleHide, setLatestAssistantReply, showFaceBubble } from './face-bubble.js?v=96';
-import { IDLE_AFTER_JOIN_MS, cancelAutoReset, reportActivity, resetIdleNudge, scheduleIdleNudge } from './consolidation.js?v=142';
+import { IDLE_AFTER_JOIN_MS, cancelAutoReset, reportActivity, resetIdleNudge, scheduleIdleNudge } from './consolidation.js?v=146';
 import { chatInput, conversationSidebar, messagesEl, mobileConversationTitle, mobileMenuBtn, narrowSidebarQuery, reloadPromptBtn, resetLive2DBtn, sidebarBackdrop, sidebarBackground } from './dom.js?v=77';
 import { logAction } from './logging.js?v=78';
-import { makeStreamBuffer } from './stream-filters.js?v=115';
+import { makeStreamBuffer } from './stream-filters.js?v=119';
 import { escapeHtml, phoneMode } from '../core/util.js?v=1';
 import * as Names from '../core/names.js?v=1';
-import * as ui from '../core/ui.js?v=10';
+import * as ui from '../core/ui.js?v=11';
 import * as History from './history.js?v=2';
 import * as TTS from '../voice/tts.js?v=94';
 import * as Live2D from '../live2d/live2d.js?v=92';
@@ -231,6 +231,7 @@ async function deleteConversation(id, title) {
     confirmLabel: t('ui.holdDelete', 'Hold to delete'),
     cancelLabel: t('common.cancel', 'Cancel'),
     hold: true,
+    holdMs: 500,
   });
   if (!ok) return;
   if (id === currentConversationId) {

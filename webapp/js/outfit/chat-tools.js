@@ -1,39 +1,92 @@
-import { ITEMS, VARIANTS } from './catalog.js?v=5';
-import { Presets, applyPreset } from './presets.js?v=42';
-import { queueWardrobe } from './sync.js?v=42';
-import { setDraftItem } from './apply.js?v=42';
-import { state, variantState } from './current.js?v=6';
-import * as Mods from '../mods/mods.js?v=113';
+import { BODY_VARIANTS, COLOR_GROUPS, ITEM_COLOR_GROUPS, ITEM_VARIANTS, ITEMS, VARIANTS } from './catalog.js?v=7';
+import { Presets, applyPreset } from './presets.js?v=46';
+import { queueWardrobe } from './sync.js?v=46';
+import { setColor, setDraftItem } from './apply.js?v=46';
+import { colors, state, variantState } from './current.js?v=8';
+import * as Mods from '../mods/mods.js?v=117';
 
+// every color and style rides on the item it belongs to: "shirt (#333333, bedabots logo)"
 export function describe() {
   const clothes = ITEMS.filter(it => !it.section);
-  const worn = clothes.filter(it => state[it.key]);
-  const bare = clothes.filter(it => !state[it.key]);
-  const phrase = (arr) => arr.map(it => it.label.toLowerCase()).join(', ');
+  const mods = Mods.inventory();
+  const worn = pairShoes([...clothes.filter(it => state[it.key]).map(it => described(it)), ...glasses(), ...mods.worn]);
+  const bare = pairShoes(clothes.filter(it => !state[it.key]).map(it => it.label.toLowerCase()));
   let s;
   if (worn.length === 0) s = 'You are currently fully nude (wearing nothing).';
   else {
-    s = `You are currently wearing: ${phrase(worn)}.`;
-    if (bare.length) s += ` Not wearing: ${phrase(bare)}.`;
+    s = `You are currently wearing: ${worn.join(', ')}.`;
+    if (bare.length) s += ` Not wearing: ${bare.join(', ')}.`;
   }
-  const body = ITEMS.filter(it => it.section === 'body' && state[it.key]);
-  if (body.length) s += ` Your body features: ${phrase(body)}.`;
+  const body = [
+    ...ITEMS.filter(it => it.section === 'body' && state[it.key]).map(it => described(it)),
+    ...BODY_VARIANTS.map(styleName).filter(Boolean),
+  ];
+  if (body.length) s += ` Your body features: ${body.join(', ')}.`;
   const hair = ITEMS.filter(it => it.section === 'hair');
-  if (hair.some(it => state[it.key] !== it.defaultOn)) {
-    const on = hair.filter(it => state[it.key]);
-    s += on.length ? ` Your hair style: ${phrase(on)}.` : ' Your hair is completely hidden (bald).';
+  const hairOn = hair.filter(it => state[it.key]);
+  if (!hairOn.length) s += ' Your hair is completely hidden (bald).';
+  else {
+    const pieces = hairOn.map(it => described(it, 'hair'));
+    if (colors.hair || pieces.join() !== hairOn.map(it => it.label.toLowerCase()).join()
+      || hair.some(it => state[it.key] !== it.defaultOn)) {
+      s += ` Your hair${colors.hair ? ` (${colors.hair})` : ''}: ${pieces.join(', ')}.`;
+    }
   }
-  const styles = VARIANTS
-    .filter(v => (variantState[v.key] || 0) > 0)
-    .map(v => `${v.label.toLowerCase()}: ${v.options[variantState[v.key]].name.toLowerCase()}`);
-  if (styles.length) s += ` Styles - ${styles.join('; ')}.`;
-  s += Mods.describe();
+  const makeup = ITEMS.filter(it => it.section === 'makeup' && state[it.key]);
+  if (makeup.length) s += ` Your makeup: ${makeup.map(it => described(it)).join(', ')}.`;
+  const rest = COLOR_GROUPS.filter(g => colors[g.key] && colors[g.key] !== g.defaultColor && !itemOwned(g.key))
+    .map(g => colorName(g.key));
+  if (rest.length) s += ` Other colors: ${rest.join(', ')}.`;
+  if (mods.owned.length) {
+    s += ` Special items you own, put on by exact name with [A:outfit|item=NAME|state=on]: ${mods.owned.join(', ')}.`;
+  }
   const looks = Presets.cache.map(p => p.name);
-  if (looks.length) {
-    s += ` Saved looks you can put on whole, by name, with [A:wear_look|name=NAME]:`
-      + ` ${looks.join(', ')}.`;
-  }
+  if (looks.length) s += ` Saved looks, put on whole with [A:wear_look|name=NAME]: ${looks.join(', ')}.`;
   return s;
+}
+
+const colorName = (key) => `${key.replace(/_/g, ' ')} ${colors[key]}`;
+
+// the main color goes bare, any other one keeps its key so recolor can find it
+function described(it, sharedColor = null) {
+  const [main, ...extra] = ITEM_COLOR_GROUPS[it.key] || [];
+  const parts = [];
+  if (main && main !== sharedColor && colors[main]) parts.push(colors[main]);
+  for (const key of ITEM_VARIANTS[it.key] || []) {
+    const style = styleName(key);
+    if (style) parts.push(/logo/i.test(style) ? style.replace(`${it.label.toLowerCase()} `, '') : style);
+  }
+  for (const key of extra) if (colors[key]) parts.push(colorName(key));
+  return it.label.toLowerCase() + (parts.length ? ` (${parts.join(', ')})` : '');
+}
+
+function styleName(key) {
+  const variant = VARIANTS.find(v => v.key === key);
+  const pick = variantState[key] || 0;
+  if (!variant || pick === 0) return '';
+  const name = variant.options[pick].name.toLowerCase();
+  return /logo/i.test(variant.label) ? `${name} ${variant.label.toLowerCase()}` : name;
+}
+
+function glasses() {
+  const pick = variantState.glasses_style || 0;
+  if (pick === 3) return [colors.eyepatch ? `eyepatch (${colors.eyepatch})` : 'eyepatch'];
+  if (pick !== 1 && pick !== 2) return [];
+  const tints = ['glasses_frame', 'glasses_lens'].filter(key => colors[key]).map(colorName);
+  const name = `${pick === 1 ? 'classic' : 'heart'} glasses`;
+  return [name + (tints.length ? ` (${tints.join(', ')})` : '')];
+}
+
+function pairShoes(parts) {
+  const left = parts.find(p => p.startsWith('left shoe'));
+  const right = parts.find(p => p.startsWith('right shoe'));
+  if (!left || !right || left.slice(9) !== right.slice(10)) return parts;
+  return parts.filter(p => p !== right).map(p => (p === left ? `shoes${left.slice(9)}` : p));
+}
+
+function itemOwned(key) {
+  return key.startsWith('glasses_') || key === 'eyepatch'
+    || Object.values(ITEM_COLOR_GROUPS).some(keys => keys.includes(key));
 }
 
 export function wearLook(name) {
@@ -61,6 +114,14 @@ export function applyToolChange(change) {
   }
   const mods = change.mods && typeof change.mods === 'object' ? change.mods : {};
   for (const [name, on] of Object.entries(mods)) Mods.wearByName(name, !!on);
+}
+
+export function applyToolRecolor(change) {
+  if (!change || typeof change !== 'object') return;
+  for (const [key, hex] of Object.entries(change)) {
+    const group = COLOR_GROUPS.find(g => g.key === key);
+    if (group) setColor(key, hex ?? group.defaultColor ?? null);
+  }
 }
 
 export function snapshot() {
