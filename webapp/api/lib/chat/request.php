@@ -262,9 +262,7 @@ function chat_last_user_message(array $req): string {
         }
     }
     // a spoken turn has no text AT ALL, so anything reading the last
-    // message gets nothing. keyword lore lookup dies with it, which
-    // is fine, she's got search_lore and can just ask for what she
-    // needs.
+    // message gets nothing (lore match, memory recall, trip guessing)
     if ($req['audio'] !== '' && $req['watch'] === null) $lastUserMsg = '';
     return $lastUserMsg;
 }

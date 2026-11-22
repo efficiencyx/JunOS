@@ -98,7 +98,9 @@ function journal_context(int $userId): string {
         . $journal;
 }
 
-function lore_retrieve(string $lastUserMsg): string {
+// same block the rows trained on, but with tools she gets the
+// count and calls search_lore. the facts were mostly noise
+function lore_retrieve(string $lastUserMsg, bool $toolsOffered): string {
     if ($lastUserMsg === '') return '';
 
     try {
@@ -106,6 +108,7 @@ function lore_retrieve(string $lastUserMsg): string {
         $hits = array_filter($hits, fn($h) => $h['score'] >= LORE_FLOOR);
         if (!$hits) return '';
 
+        if ($toolsOffered) return "## World facts (canon)\nFound " . count($hits) . ' canon facts. Invoke the tool search_lore to recall them.';
         $bullets = implode("\n", array_map(fn($h) => '- ' . $h['answer'], $hits));
         return "## World facts (canon)\n" . $bullets;
     } catch (Throwable $e) {
@@ -187,7 +190,7 @@ function chat_live_context(array $req, array $user, string $lastUserMsg, string 
     }
 
 
-    $loreBlock = $invite === '' && $watch === null ? lore_retrieve($lastUserMsg) : '';
+    $loreBlock = $invite === '' && $watch === null ? lore_retrieve($lastUserMsg, $toolsOffered) : '';
     if ($loreBlock !== '') $contextParts[] = $loreBlock;
 
 

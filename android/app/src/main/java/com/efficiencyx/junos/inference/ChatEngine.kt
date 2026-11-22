@@ -396,7 +396,7 @@ class ChatEngine(
         memory.recentContext(1200).takeIf { it.isNotBlank() }?.let(blocks::add)
         if (summary.isNotBlank()) blocks += "## Story so far (earlier in THIS conversation)\n$summary"
         val facts = lore.search(lastUser, 5)
-        if (facts.isNotEmpty()) blocks += "## World facts (canon)\n" + facts.joinToString("\n") { "- ${it.text}" }
+        if (facts.isNotEmpty()) blocks += "## World facts (canon)\nFound ${facts.size} canon facts. Invoke the tool search_lore to recall them."
         request.outfitContext?.trim()?.takeIf { it.isNotBlank() }?.let { blocks += "## Current Wardrobe State\n$it" }
         blocks += feelings
         if (!request.idle && !request.ephemeral && Difficulty.bansOn(dao) && souring()) blocks += SOUR_NUDGE

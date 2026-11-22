@@ -49,7 +49,7 @@ Browser
        │  injects system_prompt.txt (static, byte-identical every turn)
        │  strips client system role
        │  appends the "live context" inside the LAST user turn, after the
-       │  question itself (clock, lore facts, story so far, memory notes,
+       │  question itself (clock, lore count, story so far, memory notes,
        │  wardrobe, gauges) so the static prefix + history stay in Ollama's KV
        │  prompt cache between turns. tools/train/build_dataset_v6.py trains this exact
        │  order, question first then the block, so it is not free to swap.
@@ -474,19 +474,16 @@ Character voice is handled by the fine-tuned model itself, so there is no voice
 RAG. Nothing in the pipeline uses embeddings; both retrieval paths are plain
 lexical matching over SQLite and a text corpus:
 
-- **Lore RAG** (`lore_retrieve` → `lore_search` in `webapp/api/lib/lore.php`): grounds
-  replies in curated game canon via keyword/IDF matching. It runs on every turn
-  and appends its block to the trailing live-context message (not the system
-  prompt, which stays static so Ollama's KV prompt cache holds across turns).
+- **Lore** (`lore_retrieve` -> `lore_search` in `webapp/api/lib/lore.php`): keyword/IDF
+  matching over curated game canon on every turn. With tools offered the
+  `## World facts (canon)` block carries only `Found N canon facts. Invoke the tool
+  search_lore to recall them.` and she fetches them; without tools it carries the
+  facts. The prompt frames `search_lore` as remembering, never as a lookup.
 - **Cross-conversation recall**: not a retriever at all - the model asks for it,
   by calling the `search_recent_chats` / `list_recent_chats` tools described
   under [Tool calling and durable memory](#tool-calling-and-durable-memory).
-- **`search_lore(query, limit)`**: the same `lore_search()` exposed as a tool,
-  because the automatic block only scores the *current* message - a follow-up
-  pronoun turn loses the fact the previous turn established, and this lets her
-  re-fetch it by name. The prompt frames it as remembering, never as a lookup.
 
-### Lore RAG (`## World facts (canon)`)
+### Lore (`## World facts (canon)` + `search_lore`)
 
 The fine-tune gives Jun her voice but blurs or invents specific world details, so
 canon facts are retrieved instead of baked in.
@@ -507,7 +504,7 @@ rebuild.
 
 `lore_search` (in `lib/lore.php`) builds a cached keyword index over the corpus (per-doc
 term counts, IDF, a proper-noun set mined from the corpus's own capitalization) and
-scores the user message against it:
+scores the user message (or her `search_lore` query) against it:
 
 1. Tokenize to lowercase stems (≥2 chars, plural `s` stripped), dropping an explicit
    stopword list of ordinary chat filler ("morning", "coffee", "love") that is rare
@@ -516,21 +513,19 @@ scores the user message against it:
    proper nouns in the corpus. A Levenshtein fallback fuzzy-matches distinctive
    (high-IDF) names so typos still land ("Annallie" → Annalie).
 3. Keep up to `LORE_MAX_INJECT` (5) **distinct** hits above the `LORE_FLOOR` (3.0),
-   collapsing candidates that share too much vocabulary (Jaccard ≥ 0.5). Chit-chat
-   scores ~0 and injects nothing; a single distinctive lore term clears the floor.
-4. The surviving answers become the `## World facts (canon)` block, framed as
-   established truths to weave in, not to recite.
+   collapsing candidates that share too much vocabulary (Jaccard >= 0.5). The tool
+   takes `limit` (1-6) hits with no floor.
 
-```
- user message ──tokenize/stopword──▶ IDF-weighted overlap vs keyword index
-                                              │   (+proper-noun boost, fuzzy names)
-                                       top-5 distinct, score ≥ 3.0
-                                              │
-                                       inject the ANSWERS as canon facts
-```
+Until 2026-11 the block carried the facts themselves. Measured over 300 dataset
+messages it fired on 279 of them, almost all noise (a panic attack got a fact
+about a joint, "going for a run" got the police hotline), and junk scored as high
+as real hits so no floor could separate them. The block stays where the v9 rows
+trained it (same trigger, same header) and only its body became the count plus
+the tool name. On v9 E4B: 0/10 `search_lore` calls on noisy chit-chat with the
+nudge, same as with facts, and 4-5/5 on lore questions either way.
 
 The index rebuilds itself from the corpus on demand (cached via APCu when
-available); a missing corpus degrades gracefully (block omitted).
+available); a missing corpus degrades gracefully (block omitted, the tool returns nothing).
 
 ### Cross-conversation recall
 

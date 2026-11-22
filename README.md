@@ -350,7 +350,7 @@ Browser ──HTTP/SSE──▶ nginx ──FastCGI──▶ php-fpm ──HTTP�
 **What happens when you hit send:**
 
 1. The browser `POST`s to `/api/chat.php`.
-2. PHP assembles the prompt in two halves. The cached half - `system_prompt.txt` and her journal - stays byte-identical between turns so the KV prompt cache keeps hitting. Everything that moves goes in a live-context block glued *after* your question in the last user turn: clock, matched lore facts, durable notes, outfit, relationship gauges. Dead last comes a `<think:low|med|high>` marker telling her how hard to think this turn.
+2. PHP assembles the prompt in two halves. The cached half - `system_prompt.txt` and her journal - stays byte-identical between turns so the KV prompt cache keeps hitting. Everything that moves goes in a live-context block glued *after* your question in the last user turn: clock, a count of matched lore facts, durable notes, outfit, relationship gauges. Dead last comes a `<think:low|med|high>` marker telling her how hard to think this turn.
 3. The model streams back (NDJSON from Ollama, OpenAI-style SSE from the others); `api/lib/providers/` normalizes both and PHP re-frames each token as an SSE event and flushes it immediately. If she reaches for a tool (search her notes, change outfit or colors, look something up, take you out, walk out) PHP runs it and streams another round, up to three.
 4. `js/app/stream-filters.js` watches the stream for `[A:` markers, holds back any half-typed marker so it never renders, and fires the action the instant its `]` arrives.
 5. `js/live2d/live2d.js` springs the model into the new pose, holds it a few seconds and eases her back to idle; if voice is on, `js/voice/tts.js` fetches audio per sentence and drives `ParamMouthOpen` from the analyser's RMS.
@@ -375,7 +375,7 @@ php tools/build/build_lore_index.php   # any PHP 8, no extensions
 ./sync-webapp.sh                 # the php restart drops the cached index
 ```
 
-That flattens each Q&A into `webapp/lore_corpus.txt` - one answer per line, matched at request time by keyword/IDF. No embeddings, no second model. Delete the corpus and she just stops quoting canon, nothing breaks.
+That flattens each Q&A into `webapp/lore_corpus.txt` - one answer per line, matched by keyword/IDF, and she reads the hits when she calls `search_lore`. No embeddings, no second model. Delete the corpus and she just stops quoting canon, nothing breaks.
 
 ## When things go sideways
 
