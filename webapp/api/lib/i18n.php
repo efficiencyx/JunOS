@@ -1,6 +1,6 @@
 <?php
 
-const I18N_LANGS = ['it', 'de', 'ja', 'fr', 'es', 'pt', 'hi', 'zh'];
+const I18N_LANGS = ['de', 'en', 'es', 'fr', 'hi', 'it', 'ja', 'pl', 'pt', 'zh'];
 
 function i18n_dict(): array {
     static $dict;

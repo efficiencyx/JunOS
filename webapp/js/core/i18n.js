@@ -1,4 +1,4 @@
-export const SUPPORTED = ['en', 'it', 'de', 'ja', 'fr', 'es', 'pt', 'hi', 'zh'];
+export const SUPPORTED = ['de', 'en', 'es', 'fr', 'hi', 'it', 'ja', 'pl', 'pt', 'zh'];
 
 function supported(code) {
   const base = String(code || '').toLowerCase().split('-')[0];
@@ -7,7 +7,7 @@ function supported(code) {
 
 function detect() {
   let pref = null;
-  try { pref = localStorage.getItem('ui.lang'); } catch {}
+  try { pref = localStorage.getItem('ui.lang'); } catch { }
   if (pref && pref !== 'auto' && supported(pref)) return supported(pref);
   const nav = typeof navigator === 'undefined' ? null : navigator;
   for (const l of nav?.languages?.length ? nav.languages : [nav?.language]) {
@@ -27,7 +27,7 @@ if (lang !== 'en' && typeof fetch === 'function') {
   try {
     const res = await fetch(new URL('../../i18n/' + lang + '.json', import.meta.url), { cache: 'no-cache' });
     if (res.ok) dict = await res.json();
-  } catch {}
+  } catch { }
 }
 
 if (typeof document !== 'undefined') document.documentElement.lang = lang;
