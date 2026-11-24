@@ -1,7 +1,7 @@
 import { api, apiJson } from '../core/api.js?v=1';
 import { escapeHtml } from '../core/util.js?v=1';
-import { TIER_NAMES, emblem } from './emblems.js?v=4';
-import { locale, t } from '../core/i18n.js?v=2';
+import { TIER_NAMES, emblem } from './emblems.js?v=5';
+import { locale, t } from '../core/i18n.js?v=3';
 
 let data = null;
 let drawer = null;

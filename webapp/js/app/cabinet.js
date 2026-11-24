@@ -1,13 +1,13 @@
 // every play lands on the server as it's made (consolidate.php?action=play)
 
 import * as Feed from './consolidation-feed.js?v=4';
-import * as Live2D from '../live2d/live2d.js?v=93';
-import * as VoiceMode from '../voice/voicemode.js?v=103';
-import * as Achievements from '../achievements/achievements.js?v=10';
-import { showFaceBubble } from './face-bubble.js?v=102';
+import * as Live2D from '../live2d/live2d.js?v=94';
+import * as VoiceMode from '../voice/voicemode.js?v=104';
+import * as Achievements from '../achievements/achievements.js?v=11';
+import { showFaceBubble } from './face-bubble.js?v=103';
 import { escapeHtml } from '../core/util.js?v=1';
 import { apiGet, apiJson } from '../core/api.js?v=1';
-import { t } from '../core/i18n.js?v=2';
+import { t } from '../core/i18n.js?v=3';
 
 const DRAWERS = [
   ['likes', 'preferences'],

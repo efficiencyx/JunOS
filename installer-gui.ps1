@@ -501,7 +501,8 @@ public sealed class InstallerProcessOutput
                                 <ComboBoxItem Content="Español" Tag="es" />
                                 <ComboBoxItem Content="Português" Tag="pt" />
                                 <ComboBoxItem Content="हिन्दी" Tag="hi" />
-                                <ComboBoxItem Content="中文" Tag="zh" />
+                                <ComboBoxItem Content="简体中文" Tag="zh" />
+                                <ComboBoxItem Content="繁體中文" Tag="zh-TW" />
                                 <ComboBoxItem Content="Polski" Tag="pl" />
                             </ComboBox>
                         </StackPanel>

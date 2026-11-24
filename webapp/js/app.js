@@ -7,9 +7,9 @@
 // imports. renumber the whole graph. and no example version
 // numbers in comments, a bulk renumber rewrites those too.
 
-import { showAuthScreen } from './app/auth-screen.js?v=86';
+import { showAuthScreen } from './app/auth-screen.js?v=87';
 import * as Auth from './core/auth.js?v=1';
-import { applyI18n } from './core/i18n.js?v=2';
+import { applyI18n } from './core/i18n.js?v=3';
 import { loadScripts } from './core/loader.js?v=1';
 // side effect only. it sets the phone-ui class and the viewport
 // css vars the auth screen lays out against
@@ -20,14 +20,14 @@ const me = await Auth.me().catch(() => null);
 if (!me) {
   showAuthScreen();
 } else if (me.user?.blocked) {
-  const { showLockout } = await import('./app/difficulty.js?v=8');
+  const { showLockout } = await import('./app/difficulty.js?v=9');
   showLockout({ admin: me.user.role === 'admin' });
 } else {
   // everything past the login loads only now, the vendor libs and
   // main.js's module graph side by side. nothing in that graph
   // touches PIXI or marked at import, boot() is the first to
   const [{ boot }] = await Promise.all([
-    import('./app/main.js?v=109'),
+    import('./app/main.js?v=110'),
     loadScripts([
       ['vendor/pixi.min.js', 'vendor/live2dcubismcore.min.js',
        'vendor/marked.umd.js', 'vendor/purify.min.js?v=5'],

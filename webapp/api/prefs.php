@@ -12,7 +12,7 @@ if ($method === 'GET') {
     $row = $stmt->fetch();
     $parsed = $row ? json_decode((string)dec($row['data']), true) : null;
     $prefs = is_array($parsed) ? $parsed : [];
-    $installLang = strtolower(env_str('UI_LANG'));
+    $installLang = i18n_lang(env_str('UI_LANG'));
     if (!isset($prefs['ui.lang']) && ($installLang === 'en' || in_array($installLang, I18N_LANGS, true))) {
         $prefs['ui.lang'] = $installLang;
     }

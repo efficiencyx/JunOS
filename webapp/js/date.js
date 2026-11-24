@@ -12,16 +12,16 @@
 import * as Auth from './core/auth.js?v=1';
 import { api, apiJson } from './core/api.js?v=1';
 import * as ChatAPI from './core/chat-api.js?v=9';
-import { applyI18n, locale, t } from './core/i18n.js?v=2';
+import { applyI18n, locale, t } from './core/i18n.js?v=3';
 import * as Names from './core/names.js?v=1';
 import * as Prefs from './core/prefs.js?v=11';
-import { say } from './core/speech-card.js?v=28';
+import { say } from './core/speech-card.js?v=29';
 import { localTimeString, mealNow } from './core/util.js?v=1';
-import * as Live2D from './live2d/live2d.js?v=93';
-import * as Outfit from './outfit/outfit.js?v=119';
+import * as Live2D from './live2d/live2d.js?v=94';
+import * as Outfit from './outfit/outfit.js?v=120';
 import * as Scene from './trip/scene.js?v=1';
 import { startSkybox } from './trip/skybox.js?v=2';
-import * as TripLoader from './trip/trip-loader.js?v=76';
+import * as TripLoader from './trip/trip-loader.js?v=77';
 
 async function main() {
   applyI18n();

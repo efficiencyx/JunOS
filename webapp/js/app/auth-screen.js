@@ -1,6 +1,6 @@
 import * as Prefs from '../core/prefs.js?v=11';
 import * as Auth from '../core/auth.js?v=1';
-import { t } from '../core/i18n.js?v=2';
+import { t } from '../core/i18n.js?v=3';
 
 const authScreen = document.getElementById('authScreen');
 const authTabLogin = document.getElementById('authTabLogin');

@@ -1,6 +1,6 @@
 import { apiGet } from '../core/api.js?v=1';
 import { escapeHtml } from '../core/util.js?v=1';
-import { locale, t } from '../core/i18n.js?v=2';
+import { locale, t } from '../core/i18n.js?v=3';
 
 const GAUGES = ['affection', 'trust', 'tension'];
 const ROW_H = 40;

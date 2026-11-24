@@ -1,6 +1,6 @@
-import { Presets, applyPreset, decodeOutfitCode, encodeOutfitCode, endPreview, schedulePreview } from '../outfit/presets.js?v=49';
-import { clearWornHover, wdOverlay } from './panel.js?v=60';
-import { locale, t } from '../core/i18n.js?v=2';
+import { Presets, applyPreset, decodeOutfitCode, encodeOutfitCode, endPreview, schedulePreview } from '../outfit/presets.js?v=50';
+import { clearWornHover, wdOverlay } from './panel.js?v=61';
+import { locale, t } from '../core/i18n.js?v=3';
 import { hold } from '../core/hold.js?v=2';
 
 export const looksOpen = () => document.body.classList.contains('looks-open');

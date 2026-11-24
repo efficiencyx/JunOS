@@ -444,7 +444,7 @@ ask_voice_cloning() {
 
 # JUN_LANG wins over UI_LANG, same as JUN_KARAOKE. picks the app
 # language and the voice the sidecar downloads on its first start
-UI_LANGS="en it de ja fr es pt hi zh pl"
+UI_LANGS="en it de ja fr es pt hi zh pl zh-tw"
 ask_language() {
     local v
     v="$(printf '%s' "${JUN_LANG:-${UI_LANG:-}}" | tr '[:upper:]' '[:lower:]')"
@@ -453,13 +453,13 @@ ask_language() {
             printf '\n     %slanguage%s %s(the app, and her voice)%s\n' "$B" "$R" "$DIM" "$R"
             printf '       %s1%s English  %s2%s Italiano  %s3%s Deutsch  %s4%s 日本語  %s5%s Français\n' \
                 "$ACCENT" "$R" "$ACCENT" "$R" "$ACCENT" "$R" "$ACCENT" "$R" "$ACCENT" "$R"
-            printf '       %s6%s Español  %s7%s Português  %s8%s हिन्दी  %s9%s 中文  %s10%s Polski\n' \
-                "$ACCENT" "$R" "$ACCENT" "$R" "$ACCENT" "$R" "$ACCENT" "$R" "$ACCENT" "$R"
+            printf '       %s6%s Español  %s7%s Português  %s8%s हिन्दी  %s9%s 简体中文  %s10%s Polski  %s11%s 繁體中文\n' \
+                "$ACCENT" "$R" "$ACCENT" "$R" "$ACCENT" "$R" "$ACCENT" "$R" "$ACCENT" "$R" "$ACCENT" "$R"
             printf '     %s$%s choice %s[enter = English]%s %s→%s ' "$OK" "$R" "$DIM" "$R" "$ACCENT" "$R"
         } > /dev/tty
         read -r v < /dev/tty || v=""
         case "$v" in
-            [1-9]|10) v="$(printf '%s' "$UI_LANGS" | cut -d' ' -f"$v")" ;;
+            [1-9]|1[01]) v="$(printf '%s' "$UI_LANGS" | cut -d' ' -f"$v")" ;;
         esac
     fi
     case " $UI_LANGS " in

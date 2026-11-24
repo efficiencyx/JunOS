@@ -1,11 +1,11 @@
-import * as Live2D from '../live2d/live2d.js?v=93';
-import * as ui from '../core/ui.js?v=12';
-import { assignOwners } from './lyrics.js?v=3';
-import { health, loadFile, mode, platformFlavor, queueLyrics, resetPanels, setLyricsChoice, setMode, showStage, splitPicks, track } from './setup.js?v=26';
-import { renderLyrics, setJunVolume, start, stopPlayback } from './playback.js?v=26';
-import { t } from '../core/i18n.js?v=2';
+import * as Live2D from '../live2d/live2d.js?v=94';
+import * as ui from '../core/ui.js?v=13';
+import { assignOwners } from './lyrics.js?v=4';
+import { health, loadFile, mode, platformFlavor, queueLyrics, resetPanels, setLyricsChoice, setMode, showStage, splitPicks, track } from './setup.js?v=27';
+import { renderLyrics, setJunVolume, start, stopPlayback } from './playback.js?v=27';
+import { t } from '../core/i18n.js?v=3';
 
-export { setVolume } from './playback.js?v=26';
+export { setVolume } from './playback.js?v=27';
 
 export let active = false;
 export let hooks = {};

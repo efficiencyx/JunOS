@@ -1,11 +1,11 @@
-import * as Live2D from '../live2d/live2d.js?v=93';
+import * as Live2D from '../live2d/live2d.js?v=94';
 import { apiGet } from './api.js?v=1';
-import { gaugeTier } from './mood-tier.js?v=5';
+import { gaugeTier } from './mood-tier.js?v=6';
 import * as Names from './names.js?v=1';
 import * as MobileViewport from './viewport.js?v=1';
-import * as TTS from '../voice/tts.js?v=155';
+import * as TTS from '../voice/tts.js?v=156';
 import { defaultEngine } from '../voice/languages.js?v=3';
-import { lang } from './i18n.js?v=2';
+import { lang } from './i18n.js?v=3';
 
 export let affection = 0;
 export let trust = 0;

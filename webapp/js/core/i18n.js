@@ -1,7 +1,10 @@
-export const SUPPORTED = ['en', 'it', 'de', 'ja', 'fr', 'es', 'pt', 'hi', 'zh', 'pl'];
+export const SUPPORTED = ['en', 'it', 'de', 'ja', 'fr', 'es', 'pt', 'hi', 'zh', 'zh-TW', 'pl'];
+
+const TRADITIONAL_ZH = new Set(['hant', 'tw', 'hk', 'mo']);
 
 function supported(code) {
-  const base = String(code || '').toLowerCase().split('-')[0];
+  const [base, sub] = String(code || '').toLowerCase().split('-');
+  if (base === 'zh' && TRADITIONAL_ZH.has(sub)) return 'zh-TW';
   return SUPPORTED.includes(base) ? base : null;
 }
 

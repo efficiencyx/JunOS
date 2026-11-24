@@ -1,8 +1,8 @@
-import * as ui from '../core/ui.js?v=12';
-import * as Live2D from '../live2d/live2d.js?v=93';
-import * as TTS from './tts.js?v=155';
-import * as Voice from './voice.js?v=156';
-import { t } from '../core/i18n.js?v=2';
+import * as ui from '../core/ui.js?v=13';
+import * as Live2D from '../live2d/live2d.js?v=94';
+import * as TTS from './tts.js?v=156';
+import * as Voice from './voice.js?v=157';
+import { t } from '../core/i18n.js?v=3';
 
 let active = false;
 let muted = false;

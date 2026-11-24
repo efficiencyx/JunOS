@@ -1,11 +1,11 @@
-import * as ui from '../core/ui.js?v=12';
-import { $, active } from './karaoke.js?v=33';
-import { instrSource, practice, soloPhase } from './playback.js?v=26';
-import { mode, setStatus, track } from './setup.js?v=26';
-import { normWord } from './lyrics.js?v=3';
+import * as ui from '../core/ui.js?v=13';
+import { $, active } from './karaoke.js?v=34';
+import { instrSource, practice, soloPhase } from './playback.js?v=27';
+import { mode, setStatus, track } from './setup.js?v=27';
+import { normWord } from './lyrics.js?v=4';
 import { api, apiJson } from '../core/api.js?v=1';
 import { escapeHtml } from '../core/util.js?v=1';
-import { t } from '../core/i18n.js?v=2';
+import { t } from '../core/i18n.js?v=3';
 
 // a sung word can miss its timestamp by 1.25 seconds and
 // still count. generous on purpose.

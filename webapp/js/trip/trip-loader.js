@@ -1,4 +1,4 @@
-import { t } from '../core/i18n.js?v=2';
+import { t } from '../core/i18n.js?v=3';
 const STAGES = {
   'Initializing PIXI...': t('trip.shoes', 'Lacing up shoes'),
   'Loading Live2D assets...': t('trip.savings', 'Counting the savings'),

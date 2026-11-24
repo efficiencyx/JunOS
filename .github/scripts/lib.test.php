@@ -16,6 +16,7 @@ require "$lib/providers/payload.php";
 require "$lib/difficulty.php";
 require "$lib/wardrobe.php";
 require "$lib/chat/tools.php";
+require "$lib/i18n.php";
 
 $applied = [];
 function relationship_apply(int $userId, array $rel, array $deltas): void { $GLOBALS['applied'][] = $deltas; }
@@ -266,5 +267,12 @@ $eq('copy: plain trace lines pass', $guard(["Physics! It explains how everything
 $eq('copy: second line drops the idea', str_starts_with(copy_guard_line(2, 'x'), 'Still the same line'), true);
 $eq('copy: first line quotes it without tags', copy_guard_line(1, $said[0]),
     "Wait, I already said \"Physics! It explains how everything moves, even me~\" earlier. Not repeating myself, I will answer with new words and a new angle.\n");
+
+foreach (['zh-TW' => 'zh-TW', 'zh-hk' => 'zh-TW', 'zh-MO' => 'zh-TW', 'zh-Hant' => 'zh-TW', 'zh-Hant-TW' => 'zh-TW',
+          'zh' => 'zh', 'zh-CN' => 'zh', 'zh-Hans-TW' => 'zh', 'pl' => 'pl', 'en-GB' => 'en'] as $code => $want) {
+    $eq("i18n: $code", i18n_lang($code), $want);
+}
+$_GET['lang'] = 'zh-Hant-HK';
+$eq('i18n: traditional loads zh-TW.json', tr('ach.group.all', 'All'), json_decode(file_get_contents(__DIR__ . '/../../webapp/i18n/zh-TW.json'), true)['ach.group.all']);
 
 exit($fails ? 1 : 0);

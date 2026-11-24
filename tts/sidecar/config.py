@@ -79,6 +79,7 @@ UI_LANG_VOICE = {
     "fr": ("pockettts", "french_24l"), "es": ("pockettts", "spanish_24l"),
     "pt": ("pockettts", "portuguese"), "pl": ("pockettts", "polish"),
     "ja": ("pockettts", "japanese"), "hi": ("kokoro", "hindi"), "zh": ("kokoro", "mandarin"),
+    "zh-tw": ("kokoro", "mandarin"),
 }
 
 # clips dropped in JunOS/voices/ become pocket-tts voices. compose

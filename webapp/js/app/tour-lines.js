@@ -1,4 +1,4 @@
-import { t } from '../core/i18n.js?v=2';
+import { t } from '../core/i18n.js?v=3';
 // two voices, NEVER mixed. JUN is her out loud and she has no
 // idea an app exists. anything she wouldn't say with no screen
 // in the room goes in DEV, the caption, she can't hear him.

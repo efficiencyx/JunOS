@@ -649,7 +649,7 @@ function Ask-VoiceCloning {
 
 # JUN_LANG first, then UI_LANG, same order as install.sh. picks the
 # app language and the voice the sidecar downloads on its first start
-$UiLangs = @('en', 'it', 'de', 'ja', 'fr', 'es', 'pt', 'hi', 'zh', 'pl')
+$UiLangs = @('en', 'it', 'de', 'ja', 'fr', 'es', 'pt', 'hi', 'zh', 'pl', 'zh-tw')
 function Ask-Language {
     $v = if ($env:JUN_LANG) { $env:JUN_LANG } else { "$env:UI_LANG" }
     $v = $v.Trim().ToLower()
@@ -657,9 +657,9 @@ function Ask-Language {
         Write-Host ''
         Write-Host "     ${B}language${R} ${DIM}(the app, and her voice)${R}"
         Write-Host "       ${ACCENT}[1]${R} English  ${ACCENT}[2]${R} Italiano  ${ACCENT}[3]${R} Deutsch  ${ACCENT}[4]${R} 日本語  ${ACCENT}[5]${R} Français"
-        Write-Host "       ${ACCENT}[6]${R} Español  ${ACCENT}[7]${R} Português  ${ACCENT}[8]${R} Hindi  ${ACCENT}[9]${R} 中文  ${ACCENT}[10]${R} Polski"
+        Write-Host "       ${ACCENT}[6]${R} Español  ${ACCENT}[7]${R} Português  ${ACCENT}[8]${R} Hindi  ${ACCENT}[9]${R} 简体中文  ${ACCENT}[10]${R} Polski  ${ACCENT}[11]${R} 繁體中文"
         $v = (Read-Styled "     ${OK}▸${R} choice ${DIM}[Enter = English]${R} ${ACCENT}›${R} ").Trim().ToLower()
-        if ($v -match '^([1-9]|10)$') { $v = $UiLangs[[int]$v - 1] }
+        if ($v -match '^([1-9]|1[01])$') { $v = $UiLangs[[int]$v - 1] }
     }
     if (-not $v) { return 'en' }
     if ($UiLangs -cnotcontains $v) {

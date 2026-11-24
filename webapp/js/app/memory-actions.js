@@ -1,7 +1,7 @@
 import { modelSelect } from './dom.js?v=77';
 import * as Names from '../core/names.js?v=1';
-import * as ui from '../core/ui.js?v=12';
-import { t } from '../core/i18n.js?v=2';
+import * as ui from '../core/ui.js?v=13';
+import { t } from '../core/i18n.js?v=3';
 
 // her answer to an edit survives the reload that redraws the reader
 const replies = new Map();

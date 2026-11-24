@@ -1,7 +1,7 @@
-import * as Live2D from '../live2d/live2d.js?v=93';
-import * as Mods from '../mods/mods.js?v=120';
+import * as Live2D from '../live2d/live2d.js?v=94';
+import * as Mods from '../mods/mods.js?v=121';
 import { GLASSES_STYLES, VARIANTS, VARIANT_OWNER } from './catalog.js?v=7';
-import { availableAssets, textureAvailable } from './sync.js?v=49';
+import { availableAssets, textureAvailable } from './sync.js?v=50';
 import { colors, state, variantState } from './current.js?v=8';
 import { hexToRgb01 } from './colors.js?v=1';
 

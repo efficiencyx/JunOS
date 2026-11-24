@@ -1,5 +1,5 @@
-import { SKIPPED, caption, close, makeRun, unionRect } from '../core/tour-kit.js?v=3';
-import { t } from '../core/i18n.js?v=2';
+import { SKIPPED, caption, close, makeRun, unionRect } from '../core/tour-kit.js?v=4';
+import { t } from '../core/i18n.js?v=3';
 
 // app/main.js leaves the look here on the way out of the tour
 const FLAG = 'tour.shop';

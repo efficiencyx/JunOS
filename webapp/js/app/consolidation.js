@@ -1,17 +1,17 @@
 import { abortFn, currentConversationId } from './session.js?v=1';
-import { runChat } from './chat.js?v=81';
+import { runChat } from './chat.js?v=82';
 import { chatInput, consolidationActions, consolidationBanner, consolidationSub, consolidationTitle, devNoIdleChk, fleeEtaEl, fleeOverlay, fleeReasonEl, interruptPassBtn, sendBtn, sitWithHerBtn, voiceChk } from './dom.js?v=77';
 import * as Feed from './consolidation-feed.js?v=4';
-import * as Cabinet from './cabinet.js?v=27';
-import { showFaceBubble } from './face-bubble.js?v=102';
+import * as Cabinet from './cabinet.js?v=28';
+import { showFaceBubble } from './face-bubble.js?v=103';
 import { logAction } from './logging.js?v=78';
 import { escapeHtml, formatElapsed } from '../core/util.js?v=1';
 import * as Names from '../core/names.js?v=1';
-import * as TTS from '../voice/tts.js?v=155';
-import * as Voice from '../voice/voice.js?v=156';
-import * as Live2D from '../live2d/live2d.js?v=93';
-import { t } from '../core/i18n.js?v=2';
-import { rip, showLockout, skipWait } from './difficulty.js?v=8';
+import * as TTS from '../voice/tts.js?v=156';
+import * as Voice from '../voice/voice.js?v=157';
+import * as Live2D from '../live2d/live2d.js?v=94';
+import { t } from '../core/i18n.js?v=3';
+import { rip, showLockout, skipWait } from './difficulty.js?v=9';
 import { hold } from '../core/hold.js?v=2';
 
 const BUSY_LINES = [

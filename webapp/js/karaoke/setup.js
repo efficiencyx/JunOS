@@ -1,11 +1,11 @@
-import * as ui from '../core/ui.js?v=12';
-import { assignOwners, buildSections, fetchLrclib, parseId3Lyrics, trackMeta } from './lyrics.js?v=3';
-import { audioCtx, ensureCtx, renderLyrics, start } from './playback.js?v=26';
-import { $, overlay } from './karaoke.js?v=33';
+import * as ui from '../core/ui.js?v=13';
+import { assignOwners, buildSections, fetchLrclib, parseId3Lyrics, trackMeta } from './lyrics.js?v=4';
+import { audioCtx, ensureCtx, renderLyrics, start } from './playback.js?v=27';
+import { $, overlay } from './karaoke.js?v=34';
 import { api, apiJson } from '../core/api.js?v=1';
 import { idbStore } from '../core/idb.js?v=1';
 import { escapeHtml } from '../core/util.js?v=1';
-import { t } from '../core/i18n.js?v=2';
+import { t } from '../core/i18n.js?v=3';
 
 let healthCache = null;
 export let track = null;

@@ -1,4 +1,4 @@
-import * as Live2D from '../live2d/live2d.js?v=93';
+import * as Live2D from '../live2d/live2d.js?v=94';
 import { api, apiJson } from '../core/api.js?v=1';
 import { SCRIPT_LANGS, pocketScriptLang, scriptLang } from './languages.js?v=3';
 

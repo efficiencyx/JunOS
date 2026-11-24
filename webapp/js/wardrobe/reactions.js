@@ -1,9 +1,9 @@
-import { affection, buildCard, configureTts, fetchGauges, openMood, present, refreshGauges, speakLine, trust, tension } from '../core/speech-card.js?v=28';
-import { gaugeTier } from '../core/mood-tier.js?v=5';
+import { affection, buildCard, configureTts, fetchGauges, openMood, present, refreshGauges, speakLine, trust, tension } from '../core/speech-card.js?v=29';
+import { gaugeTier } from '../core/mood-tier.js?v=6';
 import { hooks } from '../outfit/hooks.js?v=1';
-import { OPEN_LINES } from './open-lines.js?v=3';
-import { REACTION_LINES } from './reaction-lines.js?v=3';
-import { RETURN_LINES } from './return-lines.js?v=3';
+import { OPEN_LINES } from './open-lines.js?v=4';
+import { REACTION_LINES } from './reaction-lines.js?v=4';
+import { RETURN_LINES } from './return-lines.js?v=4';
 
 const BASE_REACT_CHANCE = 0.35;
 let reactChance = BASE_REACT_CHANCE;

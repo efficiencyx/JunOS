@@ -1,4 +1,4 @@
-import { locale, t } from '../core/i18n.js?v=2';
+import { locale, t } from '../core/i18n.js?v=3';
 var wrap;
 var canvas;
 var ctx;
