@@ -44,6 +44,10 @@ $eq('dates: same wording keeps it', memory_note_dated('dentist tomorrow', 'the D
 $eq('dates: a typo fix stays on created', memory_note_dated('dentist tomorow tomorrow', 'dentist tomorrow', 0), 0);
 $eq('dates: absolute date drops it', memory_note_dated('dentist tomorrow', 'dentist on 3 November', 300), 0);
 
+$eq('note days: tomorrow from the day it was written', array_map(fn($d) => date('Y-m-d', $d), memory_note_days(['text' => 'dentist tomorrow', 'created' => $monday])), ['2026-08-11']);
+$eq('note days: a plain date', array_map(fn($d) => date('Y-m-d', $d), memory_note_days(['text' => 'exam on 3 November 2026', 'created' => $monday])), ['2026-11-03']);
+$eq('note days: none', memory_note_days(['text' => 'likes ramen', 'created' => $monday]), []);
+
 $eq('recall: phrase', recall_match('we threw a party for her birthday', 'her birthday', ['birthday']), 21);
 $eq('recall: words any order', recall_match('threw a party for her birthday', 'birthday party', ['birthday', 'party']), 8);
 $eq('recall: one word missing', recall_match('threw a party', 'birthday party', ['birthday', 'party']), null);

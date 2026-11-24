@@ -1,4 +1,4 @@
-import { t } from '../core/i18n.js?v=1';
+import { t } from '../core/i18n.js?v=2';
 // the rank emblems. one 64x64 family, each tier adds a layer the
 // one below it doesn't have: bronze is a plain medallion, silver
 // turns it into a shield, gold puts wings and a crown on that,

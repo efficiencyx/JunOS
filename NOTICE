@@ -78,7 +78,7 @@ Please respect the wishes of the original creator.
 3. Game lore dataset
 ================================================================================
 
-tools/lore_dataset.jsonl and the webapp/lore_corpus.txt built from it are
+tools/lore_dataset.jsonl and the webapp/lore_corpus.jsonl built from it are
 question and answer pairs about the story, setting and characters of the game,
 written from the game's text. They are included with the original creator's
 permission. They are not Game Assets under section 1, and they are not covered
@@ -167,3 +167,26 @@ JunBridge.LinuxFix.NOTICES.txt; it also writes these notices beside the
 extracted helper under UserData/JunBridge.LinuxFix/. Build dependencies are
 fetched by bridge/LinuxFix/build.sh; no game material is needed and the
 stock MelonLoader bootstrap is not rebuilt or distributed by this build.
+
+================================================================================
+8. Polish voice model
+================================================================================
+
+The Polish pocket-tts voice is shefowl/pocket-tts-polish-6l
+(https://huggingface.co/shefowl/pocket-tts-polish-6l), a fine-tune of
+kyutai/pocket-tts by shefowl, licensed CC-BY-4.0. It is not part of this
+repository: the TTS sidecar downloads it from Hugging Face the first time the
+Polish voice is used. Its authors ask that it not be used to clone or
+impersonate a voice without that person's explicit and lawful consent, nor to
+present generated audio as a genuine recording of a real person.
+
+================================================================================
+9. Japanese voice model
+================================================================================
+
+The Japanese pocket-tts voice is takuma104/pocket-tts-ja
+(https://huggingface.co/takuma104/pocket-tts-ja), a fine-tune of
+kyutai/pocket-tts by takuma104, licensed CC-BY-NC-4.0 (non-commercial use
+only). It is not part of this repository: the TTS sidecar downloads it from
+Hugging Face the first time the Japanese voice is used, or when it starts with
+UI_LANG=ja.

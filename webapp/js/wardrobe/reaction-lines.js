@@ -1,4 +1,4 @@
-import { t } from '../core/i18n.js?v=1';
+import { t } from '../core/i18n.js?v=2';
 // event, then mood. {item} turns into the garment label, lowercased.
 export const REACTION_LINES = {
   wear: {

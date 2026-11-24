@@ -1,14 +1,14 @@
-import { IDLE_AFTER_REPLY_MS, scheduleIdleNudge } from './consolidation.js?v=146';
+import { IDLE_AFTER_REPLY_MS, scheduleIdleNudge } from './consolidation.js?v=154';
 import { ttsChk, ttsEngineSelect, ttsLangRow, ttsLangSelect, ttsSpeedInput, ttsVoiceSelect } from './dom.js?v=77';
-import { finishPendingFaceBubbleHide } from './face-bubble.js?v=96';
+import { finishPendingFaceBubbleHide } from './face-bubble.js?v=102';
 import { logAction } from './logging.js?v=78';
-import { syncVoiceDeps, updateTtsSpeedLabel } from './settings.js?v=150';
+import { syncVoiceDeps, updateTtsSpeedLabel } from './settings.js?v=158';
 import { escapeHtml } from '../core/util.js?v=1';
 import * as Names from '../core/names.js?v=1';
-import * as Prefs from '../core/prefs.js?v=9';
-import * as TTS from '../voice/tts.js?v=94';
-import { previewLine } from '../voice/languages.js?v=1';
-import { t } from '../core/i18n.js?v=1';
+import * as Prefs from '../core/prefs.js?v=11';
+import * as TTS from '../voice/tts.js?v=155';
+import { defaultEngine, previewLine } from '../voice/languages.js?v=3';
+import { lang as uiLang, t } from '../core/i18n.js?v=2';
 
 export async function wireTts() {
   TTS.setLogger(logAction);
@@ -20,7 +20,7 @@ export async function wireTts() {
   const savedVoice = localStorage.getItem('tts.voice') || '';
   const savedLang = localStorage.getItem('tts.lang') || '';
   const savedSpeed = parseFloat(localStorage.getItem('tts.speed') || '1.0');
-  const savedEngine = localStorage.getItem('tts.engine') || 'kokoro';
+  const savedEngine = localStorage.getItem('tts.engine') || defaultEngine(uiLang);
   // Kokoro only, {english: 'af_heart', ...}. tts.voice stays the English one
   let langVoices = {};
   try { langVoices = JSON.parse(localStorage.getItem('tts.voices') || '{}') || {}; } catch { langVoices = {}; }
@@ -149,6 +149,24 @@ export async function wireTts() {
       const main = lang ? mainVoice(engineKey) : ttsVoiceSelect.value;
       TTS.setVoice(main);
       localStorage.setItem('tts.voice', main);
+      Prefs.pushToServer();
+    });
+  }
+  const chunkSelect = document.getElementById('ttsChunkSelect');
+  TTS.setChunking(localStorage.getItem('tts.chunking'));
+  if (chunkSelect) {
+    chunkSelect.value = localStorage.getItem('tts.chunking') || 'normal';
+    chunkSelect.addEventListener('change', () => {
+      TTS.setChunking(chunkSelect.value);
+      localStorage.setItem('tts.chunking', chunkSelect.value);
+      Prefs.pushToServer();
+    });
+  }
+  const syncChk = document.getElementById('ttsSyncChk');
+  if (syncChk) {
+    syncChk.checked = localStorage.getItem('tts.sync') === '1';
+    syncChk.addEventListener('change', () => {
+      localStorage.setItem('tts.sync', syncChk.checked ? '1' : '0');
       Prefs.pushToServer();
     });
   }

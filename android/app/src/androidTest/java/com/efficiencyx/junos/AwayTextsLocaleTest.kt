@@ -26,7 +26,7 @@ class AwayTextsLocaleTest {
     fun everyLocaleHasItsOwnFallbacks() {
         val english = all("en")
         assertEquals("Hey. Just checking you're still out there.", english.first())
-        for (tag in listOf("it", "de", "ja", "fr", "es", "pt", "hi", "zh")) {
+        for (tag in listOf("it", "de", "ja", "fr", "es", "pt", "hi", "zh", "pl")) {
             val local = all(tag)
             assertEquals(tag, english.size, local.size)
             val same = english.zip(local).count { (en, l) -> en == l }

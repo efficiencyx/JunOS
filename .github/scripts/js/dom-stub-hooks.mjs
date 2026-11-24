@@ -27,7 +27,7 @@ export async function resolve(specifier, context, next) {
 
 export async function load(url, context, next) {
   if (url === 'stub:live2d') {
-    return { format: 'module', shortCircuit: true, source: 'export {};' };
+    return { format: 'module', shortCircuit: true, source: 'export function setMouthOverride() {}' };
   }
   if (url === 'stub:outfit') {
     return { format: 'module', shortCircuit: true, source: 'export function wearLook() {} export function syncFromAction() {}' };

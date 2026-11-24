@@ -195,6 +195,9 @@ abstract class JunDao {
     @Query("SELECT * FROM messages WHERE content LIKE '%' || :query || '%' ORDER BY id DESC LIMIT :limit")
     abstract suspend fun searchMessages(query: String, limit: Int): List<MessageEntity>
 
+    @Query("SELECT * FROM messages WHERE conversationId != :conversationId ORDER BY id DESC LIMIT :limit")
+    abstract suspend fun recentMessagesOutside(conversationId: Long, limit: Int): List<MessageEntity>
+
     @Insert
     abstract suspend fun insertMessage(value: MessageEntity): Long
 

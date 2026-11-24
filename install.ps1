@@ -1,5 +1,7 @@
 ﻿$ErrorActionPreference = 'Stop'
 $ProgressPreference = 'SilentlyContinue'
+# a pip cache left by an elevated run is unreadable later (Errno 13 on the cached UnityPy wheel)
+$env:PIP_NO_CACHE_DIR = '1'
 
 try {
     [Console]::OutputEncoding = [Text.Encoding]::UTF8
@@ -618,6 +620,55 @@ function Ask-Karaoke([string]$voice) {
     return $(if ($v -match '^(n|no)$') { 'off' } else { 'on' })
 }
 
+# kyutai gates the pocket-tts cloning weights behind a free HF
+# account. Enter skips it and nothing extra gets downloaded
+$CloneCheckUrl = 'https://huggingface.co/kyutai/pocket-tts/resolve/main/languages/english/model.safetensors'
+function Ask-VoiceCloning {
+    $token = "$env:JUN_HF_TOKEN".Trim()
+    if (-not $token -and -not (Get-EnvValue 'HF_TOKEN') -and ($interactive -or $script:expressInteractive -or $script:cloudAsk)) {
+        Write-Host ''
+        Write-Host "     ${B}voice cloning${R} ${DIM}(optional: she speaks in a voice from any clip you put in voices\)${R}"
+        Write-Host "     ${DIM}needs a free Hugging Face account. accept the terms at https://huggingface.co/kyutai/pocket-tts,${R}"
+        Write-Host "     ${DIM}then make a read token at https://huggingface.co/settings/tokens. only clone a voice whose owner said yes.${R}"
+        Write-Host -NoNewline "     ${OK}▸${R} paste the token ${DIM}[Enter = skip]${R} ${ACCENT}›${R} "
+        $token = [Net.NetworkCredential]::new('', (Read-Host -AsSecureString)).Password.Trim()
+    }
+    if (-not $token) { return }
+    $code = try {
+        [int](Invoke-WebRequest -Method Head -Uri $CloneCheckUrl -Headers @{ Authorization = "Bearer $token" } -UseBasicParsing).StatusCode
+    } catch {
+        if ($_.Exception.Response) { [int]$_.Exception.Response.StatusCode } else { 0 }
+    }
+    switch ($code) {
+        { $_ -ge 200 -and $_ -lt 400 } { Set-EnvKey 'HF_TOKEN' $token; Ok 'voice cloning on' }
+        401 { Warn_ "Hugging Face doesn't know that token, voice cloning stays off" }
+        403 { Warn_ 'accept the terms at https://huggingface.co/kyutai/pocket-tts first, voice cloning stays off' }
+        default { Set-EnvKey 'HF_TOKEN' $token; Warn_ "couldn't check the token (HTTP $code), saved it anyway" }
+    }
+}
+
+# JUN_LANG first, then UI_LANG, same order as install.sh. picks the
+# app language and the voice the sidecar downloads on its first start
+$UiLangs = @('en', 'it', 'de', 'ja', 'fr', 'es', 'pt', 'hi', 'zh', 'pl')
+function Ask-Language {
+    $v = if ($env:JUN_LANG) { $env:JUN_LANG } else { "$env:UI_LANG" }
+    $v = $v.Trim().ToLower()
+    if (-not $v -and ($interactive -or $script:expressInteractive -or $script:cloudAsk)) {
+        Write-Host ''
+        Write-Host "     ${B}language${R} ${DIM}(the app, and her voice)${R}"
+        Write-Host "       ${ACCENT}[1]${R} English  ${ACCENT}[2]${R} Italiano  ${ACCENT}[3]${R} Deutsch  ${ACCENT}[4]${R} 日本語  ${ACCENT}[5]${R} Français"
+        Write-Host "       ${ACCENT}[6]${R} Español  ${ACCENT}[7]${R} Português  ${ACCENT}[8]${R} Hindi  ${ACCENT}[9]${R} 中文  ${ACCENT}[10]${R} Polski"
+        $v = (Read-Styled "     ${OK}▸${R} choice ${DIM}[Enter = English]${R} ${ACCENT}›${R} ").Trim().ToLower()
+        if ($v -match '^([1-9]|10)$') { $v = $UiLangs[[int]$v - 1] }
+    }
+    if (-not $v) { return 'en' }
+    if ($UiLangs -cnotcontains $v) {
+        Warn_ "unknown language '$v', using English"
+        return 'en'
+    }
+    return $v
+}
+
 # JUN_SHORTCUTS first, then what .env says from last time, so a
 # no in Custom sticks across re-runs instead of Express quietly
 # putting the icons back.
@@ -930,6 +981,7 @@ function Configure-Jun {
     # she wants for her own layers.
     if ($voice -eq 'on') {
         Set-EnvKey 'TTS_DEVICE' 'cpu'
+        Ask-VoiceCloning
     }
 
     # on bare metal one process does both jobs, so karaoke is just a
@@ -945,6 +997,10 @@ function Configure-Jun {
         Set-EnvKey 'SEP_DEVICE' 'cpu'
     }
     Ok "karaoke $karaoke"
+
+    $uiLang = Ask-Language
+    Set-EnvKey 'UI_LANG' $uiLang
+    Ok "language $uiLang"
 
     $shortcuts = Ask-Shortcuts
     Set-EnvKey 'JUN_SHORTCUTS' $shortcuts
@@ -1379,53 +1435,135 @@ $LlamacppGpuZips = @{
     rocm = @{ 'llama-b11804-bin-win-rocm-10.0-x64.zip'  = '37e16d56c8debf9dab048fa80a40b2bcbabf340b70f7d3c615ef008c0abcf740' }
 }
 
+# the zip's ggml-hip.dll needs hipblas.dll and the driver doesn't
+# have it, so AMD's own wheels ride along. same 10.0.0 as the zip
+$RocmWheelBase = 'https://stable.repo.amd.com/rocm/whl-next'
+$RocmWheels = @{
+    libraries = 'bfc7a1bd3b6050fb4d36d8ac2eea80d3afd70c5604a29142463d6cb890fc73bf'
+    gfx1010   = '2b6da925376de9689ab9f22ce7cc55b6d476722d9458fbd1ec52d4aa066d3e6c'
+    gfx1012   = '51f2998d2f33164e4a14594107e6c33db54da1d9867fa6947ea993997c4ae06e'
+    gfx1030   = '19ada0359b499c19c1ecb1cba21b067fce89b4f0b0de6f0f7b76cbef85dcb85b'
+    gfx1031   = 'ab7cbfb41e1ada00fb7254c974f7386303cdd1139a170fb022e84e6f10d9f5f2'
+    gfx1032   = '5d0581e077cc1a482e70430539c63e60c4b4d7b9b82be0ac0bab6d62c3feb4de'
+    gfx1034   = '8d527c2f127d42ecb098e0abc45c15ca28689b6317f01b99d455e6d3562a3b52'
+    gfx1100   = 'db39cbc5aae7a67c73d76692899a6a89bbc10eafc92f856f48e9c03247a91f8e'
+    gfx1101   = '7b8edd82943a11c29c80f84c95822e36ddd794b7024878e9660170d050a29243'
+    gfx1102   = 'b9e0f3fa492f0a05a5c4f479b80915477911f8402956c0e2c593b593d6214531'
+    gfx1200   = 'f33226078932ee2200f5595c521895edf5d7abf3170975d8c6f72a2a3949f516'
+    gfx1201   = 'c6e4c5a0da941230bed975765e644597570081c9a41654d5a052c277167f4576'
+}
+$RocmDlls = 'hipblas.dll', 'rocblas.dll', 'rocsolver.dll', 'libhipblaslt.dll', 'origami.dll'
+# name or PCI id, some drivers only say "AMD Radeon Graphics Processor (0x7550)".
+# first match wins. the 6750 GRE 10GB is navi 22 but says DEV_73FF,
+# the 6700S/6800S are navi 23 (DEV_73EF), hence this order
+$RocmCards = [ordered]@{
+    gfx1201 = 'RX\s*9070|R9700|(DEV_|0x)755[01]'
+    gfx1200 = 'RX\s*9060|(DEV_|0x)7590'
+    gfx1100 = 'RX\s*7900|W7[89]00|(DEV_|0x)744C'
+    gfx1101 = 'RX\s*7[78]00(?!\s*S)|W7700|(DEV_|0x)747E'
+    gfx1102 = 'RX\s*76[05]0|RX\s*7700\s*S|W7[56]00|(DEV_|0x)7480'
+    gfx1031 = 'RX\s*67[05]0(?!\s*S)|RX\s*6[78][05]0\s*M|(DEV_|0x)73DF'
+    gfx1032 = 'RX\s*66[05]0|W6600|(DEV_|0x)73[EF]F'
+    gfx1030 = 'RX\s*6[89][05]0|W6800|(DEV_|0x)73(A[0-5F]|BF)'
+    gfx1034 = 'RX\s*6[45]00|(DEV_|0x)743F'
+    gfx1010 = 'RX\s*5[67]00|(DEV_|0x)731F'
+    gfx1012 = 'RX\s*5[35]00|W5500|(DEV_|0x)7340'
+}
+
+function Get-RocmArch([string]$card) {
+    foreach ($arch in $RocmCards.Keys) { if ($card -match $RocmCards[$arch]) { return $arch } }
+}
+
+# 4 GB floor so a ryzen iGPU never pulls ROCm
+function Get-RocmArchs {
+    try {
+        $amd = @(Get-CimInstance Win32_VideoController -ErrorAction Stop | Where-Object { $_.Name -match '(?i)AMD|Radeon' })
+    } catch { return @() }
+    return @($amd | Where-Object { (@(Get-AmdMemoryMb @($_)) | Measure-Object -Maximum).Maximum -ge 4096 } |
+        ForEach-Object { Get-RocmArch "$($_.Name) $($_.PNPDeviceID)" } | Sort-Object -Unique)
+}
+
 function Get-LlamacppGpuBackend {
     $pref = if ($env:LLAMACPP_BACKEND) { $env:LLAMACPP_BACKEND } else { Get-EnvValue 'LLAMACPP_BACKEND' }
     if ($pref -eq 'vulkan') { return $null }
     if (@(Get-NvidiaMemoryMb).Count -gt 0) { return 'cuda' }
-    # 4 GB floor so a ryzen iGPU doesn't pull 250 MB of ROCm
-    if ((Get-VramMb) -ge 4096) { return 'rocm' }
+    $archs = @(Get-RocmArchs)
+    if ($archs.Count -gt 0) { return "rocm $($archs -join ' ')" }
     return $null
 }
 
-# kept only if --list-devices shows the card. ROCm on a gfx1031
-# loaded nothing but the CPU backend, vulkan beats that easily
+function Save-Pinned([string]$url, [string]$file, [string]$sha) {
+    Invoke-WebRequest -Uri $url -OutFile $file -UseBasicParsing
+    $got = (Get-FileHash -Algorithm SHA256 -LiteralPath $file).Hash
+    if ($got -ine $sha) { throw "$(Split-Path $file -Leaf) doesn't match the pinned sha256 (wanted $sha, got $got)." }
+}
+
+# keeps the wheel's layout: rocblas wants its kernels in rocblas\library
+# next to it and the .kpack at ..\.kpack, so that's runtime\.kpack
+function Expand-RocmWheel([string]$whl, [string]$root) {
+    $zip = [IO.Compression.ZipFile]::OpenRead($whl)
+    try {
+        foreach ($e in $zip.Entries) {
+            if (-not $e.Name -or $e.FullName -notmatch '^_rocm_sdk_libraries/(bin|\.kpack)/(.+)$') { continue }
+            $rel = $Matches[2]
+            if ($Matches[1] -eq '.kpack') {
+                $dest = Join-Path $root ".kpack\$rel"
+            } elseif ($rel -in $RocmDlls -or $rel -like 'rocblas/library/*') {
+                $dest = Join-Path $root "x\$rel"
+            } else { continue }
+            New-Item -ItemType Directory -Force -Path (Split-Path $dest) | Out-Null
+            [IO.Compression.ZipFileExtensions]::ExtractToFile($e, $dest, $true)
+        }
+    } finally { $zip.Dispose() }
+}
+
+# kept only if --list-devices shows the card, vulkan beats CPU easily
 function Install-LlamacppGpu {
     $dir = Join-Path (Get-Location) 'runtime\llamacpp'
+    $kpack = Join-Path (Get-Location) 'runtime\.kpack'
     $stamp = Join-Path $dir 'jun-build.txt'
     $backend = Get-LlamacppGpuBackend
     $want = "$($wingetVersions.llamacpp) $backend"
     if ($backend -and (Test-Path $stamp) -and (Get-Content -LiteralPath $stamp -Raw).Trim() -eq $want) { return }
-    Remove-Item -LiteralPath $dir -Recurse -Force -ErrorAction SilentlyContinue
+    Remove-Item -LiteralPath $dir, $kpack -Recurse -Force -ErrorAction SilentlyContinue
     if (-not $backend) { return }
 
-    $label = if ($backend -eq 'cuda') { 'CUDA, about 650 MB' } else { 'ROCm, about 250 MB' }
+    $kind, $archs = $backend -split ' '
+    $label = if ($kind -eq 'cuda') { 'CUDA, about 650 MB' } else { "ROCm on $($archs -join ', '), 400 to 800 MB" }
     Step "download llama.cpp $($wingetVersions.llamacpp) for $label"
     $tmpDir = Join-Path $env:TEMP ('jun-llamacpp-' + [guid]::NewGuid().ToString('N'))
     New-Item -ItemType Directory -Force -Path $tmpDir | Out-Null
     try {
         Add-Type -AssemblyName System.IO.Compression.FileSystem
-        foreach ($z in $LlamacppGpuZips[$backend].GetEnumerator()) {
+        foreach ($z in $LlamacppGpuZips[$kind].GetEnumerator()) {
             $zip = Join-Path $tmpDir $z.Key
-            $url = "https://github.com/ggml-org/llama.cpp/releases/download/$($wingetVersions.llamacpp)/$($z.Key)"
-            Invoke-WebRequest -Uri $url -OutFile $zip -UseBasicParsing
-            $got = (Get-FileHash -Algorithm SHA256 -LiteralPath $zip).Hash
-            if ($got -ine $z.Value) { throw "$($z.Key) doesn't match the pinned sha256 (wanted $($z.Value), got $got)." }
+            Save-Pinned "https://github.com/ggml-org/llama.cpp/releases/download/$($wingetVersions.llamacpp)/$($z.Key)" $zip $z.Value
             [IO.Compression.ZipFile]::ExtractToDirectory($zip, (Join-Path $tmpDir 'x'))
+        }
+        if ($kind -eq 'rocm') {
+            foreach ($w in @('libraries') + $archs) {
+                $pkg = if ($w -eq 'libraries') { 'rocm-sdk-libraries' } else { "rocm-sdk-device-$w" }
+                $file = "$($pkg -replace '-', '_')-10.0.0-py3-none-win_amd64.whl"
+                $whl = Join-Path $tmpDir $file
+                Save-Pinned "$RocmWheelBase/$pkg/$file" $whl $RocmWheels[$w]
+                Expand-RocmWheel $whl $tmpDir
+                Remove-Item -LiteralPath $whl -Force
+            }
         }
         $exe = Join-Path $tmpDir 'x\llama-server.exe'
         if (-not (Test-Path $exe)) { throw 'the verified archive did not contain llama-server.exe.' }
         $devices = (cmd /c "`"$exe`" --list-devices 2>&1" | Out-String)
         if ($devices -notmatch '(?m)^\s*(CUDA|ROCm)\d+:') {
-            Warn_ "the $backend build doesn't see the card, staying on the Vulkan one"
+            Warn_ "the $kind build doesn't see the card, staying on the Vulkan one"
             return
         }
         New-Item -ItemType Directory -Force -Path (Split-Path $dir) | Out-Null
         Move-Item -LiteralPath (Join-Path $tmpDir 'x') -Destination $dir
+        if (Test-Path (Join-Path $tmpDir '.kpack')) { Move-Item -LiteralPath (Join-Path $tmpDir '.kpack') -Destination $kpack }
         [IO.File]::WriteAllText($stamp, $want)
-        Ok "llama.cpp runs on $backend"
+        Ok "llama.cpp runs on $kind"
     } catch {
-        Warn_ ("couldn't set up the {0} build ({1}), staying on the Vulkan one" -f $backend, $_.Exception.Message)
+        Warn_ ("couldn't set up the {0} build ({1}), staying on the Vulkan one" -f $kind, $_.Exception.Message)
     } finally {
         Remove-Item -LiteralPath $tmpDir -Recurse -Force -ErrorAction SilentlyContinue
     }

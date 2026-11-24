@@ -1,5 +1,5 @@
 import * as Names from '../core/names.js?v=1';
-import { t } from '../core/i18n.js?v=1';
+import { t } from '../core/i18n.js?v=2';
 
 // her absence texts as desktop notifications. the server writes them
 // during the idle pass, this page fetches them while it still can and

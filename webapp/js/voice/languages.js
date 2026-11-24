@@ -4,7 +4,7 @@ const KANA_RE = /[\u3040-\u30ff\u31f0-\u31ff\uff66-\uff9f]/;
 const HANZI_RE = /[\u3400-\u9fff\uf900-\ufaff]/;
 const DEVANAGARI_RE = /[\u0900-\u097f]/;
 
-export const SCRIPT_LANGS = new Set(['mandarin', 'hindi']);
+export const SCRIPT_LANGS = new Set(['mandarin', 'hindi', 'japanese']);
 
 export function scriptLang(text) {
   const s = text || '';
@@ -14,12 +14,25 @@ export function scriptLang(text) {
   return null;
 }
 
+export function pocketScriptLang(text) {
+  return KANA_RE.test(text || '') ? 'japanese' : null;
+}
+
+// languages Kokoro can't say well get pocket-tts until somebody picks an engine
+const POCKET_FIRST = new Set(['it', 'de', 'fr', 'es', 'pt', 'pl', 'ja']);
+
+export function defaultEngine(uiLang) {
+  return POCKET_FIRST.has(uiLang) ? 'pockettts' : 'kokoro';
+}
+
 const PREVIEW_LINES = {
   french_24l: (n) => `Salut ${n}, tu aimes cette voix ?`,
   german_24l: (n) => `Hallo ${n}, gefällt dir diese Stimme?`,
   hindi: () => 'नमस्ते, क्या तुम्हें यह आवाज़ पसंद है?',
   italian: (n) => `Ciao ${n}, ti piace questa voce?`,
+  japanese: () => 'こんにちは、この声は好き？',
   mandarin: () => '你好，你喜欢这个声音吗？',
+  polish: (n) => `Cześć ${n}, podoba ci się ten głos?`,
   portuguese: (n) => `Oi ${n}, você gosta desta voz?`,
   spanish_24l: (n) => `Hola ${n}, ¿te gusta esta voz?`,
 };

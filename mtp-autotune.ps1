@@ -105,10 +105,11 @@ $Tokens = 80
 # in place depth 1 won by 6%. same box, same drafter, same
 # afternoon. Tuning without it picks the winner for a setup the
 # app never runs in.
+# not Get-Content: on 5.1 its string carries PSPath and friends,
+# ConvertTo-Json sends content as an object and llama-server 400s
 $SystemPrompt = ''
-if (Test-Path 'webapp/system_prompt.txt') {
-    $SystemPrompt = Get-Content 'webapp/system_prompt.txt' -Raw
-}
+$promptFile = Join-Path $PSScriptRoot 'webapp\system_prompt.txt'
+if (Test-Path -LiteralPath $promptFile) { $SystemPrompt = [IO.File]::ReadAllText($promptFile) }
 
 function Get-Messages([string]$prompt) {
     if ($SystemPrompt) {

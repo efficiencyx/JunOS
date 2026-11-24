@@ -1,4 +1,4 @@
-import { locale, t } from '../core/i18n.js?v=1';
+import { locale, t } from '../core/i18n.js?v=2';
 var wrap;
 var canvas;
 var ctx;
@@ -607,6 +607,7 @@ var SOURCE_LABELS = {
   watch: t('memory.src.watch', 'From watching something'),
   pass: t('memory.src.pass', 'From her memory pass'),
   manual: t('memory.src.manual', 'Added in Settings'),
+  cabinet: t('memory.src.cabinet', 'Kept when you sorted with her'),
 };
 
 function sourceLine(ref, label) {
@@ -645,7 +646,8 @@ function appendOrigin(node) {
     item.appendChild(was);
     item.appendChild(sourceLine(rev, rev.kind === 'pass' ? t('memory.untilPass', 'Until {date}, changed by her memory pass', { date: formatDate(rev.at) })
       : rev.kind === 'request' ? t('memory.untilRequest', 'Until {date}, changed when you asked her', { date: formatDate(rev.at) })
-        : t('memory.until', 'Until {date}', { date: formatDate(rev.at) })));
+        : rev.kind === 'cabinet' ? t('memory.untilCabinet', 'Until {date}, changed when you sorted with her', { date: formatDate(rev.at) })
+          : t('memory.until', 'Until {date}', { date: formatDate(rev.at) })));
     details.appendChild(item);
   });
   readerBody.appendChild(details);

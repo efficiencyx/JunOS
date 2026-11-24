@@ -1,6 +1,7 @@
 package com.efficiencyx.junos.memory
 
 import android.content.Context
+import com.efficiencyx.junos.retrieval.Retrieval
 import android.util.AtomicFile
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.sync.Mutex
@@ -51,7 +52,7 @@ data class JournalPayload(val entries: List<JournalEntry>)
 @Serializable
 private data class MetaEntry(val created: Long, val updated: Long, val source: NoteSource? = null, val dated: Long = 0)
 
-class MemoryStore(context: Context) {
+class MemoryStore(context: Context, private val retrieval: Retrieval) {
     private val root = File(context.filesDir, "memory/user-1").also { it.mkdirs() }
     private val mutex = Mutex()
     private val random = SecureRandom()
@@ -115,25 +116,72 @@ class MemoryStore(context: Context) {
         }
     }
 
-    suspend fun recentContext(maxChars: Int = 2500): String {
+    // memory_recent_context() in lib/chat/context.php: limits and health
+    // first, the newest few, anything due soon, then the rest by score
+    suspend fun recentContext(turns: List<Pair<String, Double>>, maxChars: Int = 2500): String {
         val snapshot = snapshot()
         if (snapshot.notes.isEmpty()) return ""
-        val grouped = snapshot.notes.groupBy { it.category }
-            .entries.sortedByDescending { (_, notes) -> notes.maxOfOrNull { it.updated } ?: 0 }
-        val blocks = grouped.map { (category, notes) ->
-            "### $category\n" +
-                notes.sortedByDescending { it.updated }.joinToString("\n") { note ->
-                    val created = MemoryDates.day(note.anchor)
-                    "- " + MemoryDates.stamp(note.text, created) +
-                        MemoryDates.render(note.text, created).replace(WIKI_LINK, "$1")
-                }
+        val today = LocalDate.now()
+        val bullet = { note: MemoryNote ->
+            val created = MemoryDates.day(note.anchor)
+            "- " + MemoryDates.stamp(note.text, created) + MemoryDates.render(note.text, created).replace(WIKI_LINK, "$1")
         }
-        val out = StringBuilder(CONTEXT_HEADER)
-        for (block in blocks) {
-            if (out.length + block.length + 2 > maxChars) continue
-            out.append('\n').append(block).append('\n')
+        val picked = LinkedHashMap<String, MemoryNote>()
+        var room = maxChars * PINNED_SHARE_PERCENT / 100
+        for (note in snapshot.notes.filter { it.category in PINNED }.sortedWith(compareBy<MemoryNote> { PINNED.indexOf(it.category) }.thenByDescending { it.updated })) {
+            val size = bullet(note).length
+            if (size > room) break
+            room -= size
+            picked[note.id] = note
         }
-        return out.toString().trim()
+        var rest = snapshot.notes.filter { it.id !in picked }.sortedByDescending { it.updated }
+        rest.take(RECENT_KEEP).forEach { picked[it.id] = it }
+        for (note in rest) {
+            if (MemoryDates.days(note.text, MemoryDates.day(note.anchor)).any { java.time.temporal.ChronoUnit.DAYS.between(today, it) in SOON_FROM..SOON_TO }) {
+                picked.putIfAbsent(note.id, note)
+            }
+        }
+        rest = rest.filter { it.id !in picked }
+        val scores = if (turns.isEmpty()) emptyMap() else retrieval.score(
+            retrieval.index(rest.map { mapOf("t" to it.category + " " + it.text) }, linkedMapOf("t" to 1.0)),
+            retrieval.query(turns),
+        ).associate { it.doc to it.score }
+        val now = System.currentTimeMillis() / 1000
+        rest.mapIndexed { i, note -> note to (scores[i] ?: 0.0) + Math.pow(0.5, maxOf(0L, now - note.updated) / 86400.0 / HALF_LIFE_DAYS) }
+            .sortedByDescending { it.second }
+            .forEach { (note, _) -> picked[note.id] = note }
+
+        val chosen = mutableMapOf<String, MutableList<MemoryNote>>()
+        var size = CONTEXT_HEADER.length
+        for (note in picked.values) {
+            val cost = bullet(note).length + 1 + if (note.category in chosen) 0 else note.category.length + 7
+            if (size + cost > maxChars) continue
+            chosen.getOrPut(note.category) { mutableListOf() } += note
+            size += cost
+        }
+        if (chosen.isEmpty()) return ""
+        val order = snapshot.notes.withIndex().associate { it.value.id to it.index }
+        val sections = chosen.entries.sortedByDescending { (_, notes) -> notes.maxOf { it.updated } }.map { (category, notes) ->
+            "### $category\n" + notes.sortedBy { order[it.id] }.joinToString("\n", transform = bullet)
+        }
+        return CONTEXT_HEADER + "\n" + sections.joinToString("\n\n")
+    }
+
+    // recall_notes() / recall_journal() in lib/chat/recall.php, for search_recent_chats
+    suspend fun search(query: com.efficiencyx.junos.retrieval.Query, enough: (List<String>) -> Boolean): Pair<List<Map<String, String>>, List<Map<String, String>>> {
+        val snapshot = snapshot()
+        val notes = if (snapshot.notes.isEmpty()) emptyList() else retrieval.score(
+            retrieval.index(snapshot.notes.map { mapOf("t" to it.text) }, linkedMapOf("t" to 1.0)), query,
+        ).filter { enough(it.matched) }.take(RECALL_NOTES_MAX).map { hit ->
+            val note = snapshot.notes[hit.doc]
+            val created = MemoryDates.day(note.anchor)
+            mapOf("category" to note.category, "note" to MemoryDates.stamp(note.text, created) + MemoryDates.render(note.text, created))
+        }
+        val entries = snapshot.journal.entries
+        val journal = if (entries.isEmpty()) emptyList() else retrieval.score(
+            retrieval.index(entries.map { mapOf("t" to it.text) }, linkedMapOf("t" to 1.0)), query,
+        ).filter { enough(it.matched) }.take(RECALL_JOURNAL_MAX).map { mapOf("date" to entries[it.doc].date, "entry" to entries[it.doc].text) }
+        return notes to journal
     }
 
     suspend fun journalText(): String = withContext(Dispatchers.IO) {
@@ -253,6 +301,15 @@ class MemoryStore(context: Context) {
 
     companion object {
         private const val ALPHABET = "abcdefghijklmnopqrstuvwxyz0123456789"
+        private val PINNED = listOf("boundaries", "health")
+        // 700 of the 2500 chars on the PC, the same share of the phone's 1200
+        private const val PINNED_SHARE_PERCENT = 28
+        private const val RECENT_KEEP = 3
+        private const val SOON_FROM = -1L
+        private const val SOON_TO = 3L
+        private const val HALF_LIFE_DAYS = 30.0
+        private const val RECALL_NOTES_MAX = 4
+        private const val RECALL_JOURNAL_MAX = 2
         private const val JOURNAL_ENTRY_MAX = 400
         private const val JOURNAL_DAY_MAX = 1600
         private val CATEGORIES = setOf("preferences", "work", "health", "family", "plans", "boundaries", "events")

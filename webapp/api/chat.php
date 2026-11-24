@@ -8,6 +8,7 @@ require_once __DIR__ . '/lib/chat/request.php';
 require_once __DIR__ . '/lib/chat/context.php';
 require_once __DIR__ . '/lib/chat/prompt.php';
 require_once __DIR__ . '/lib/chat/tools.php';
+require_once __DIR__ . '/lib/chat/recall.php';
 require_once __DIR__ . '/lib/chat/websearch.php';
 require_once __DIR__ . '/lib/chat/flee.php';
 require_once __DIR__ . '/lib/chat/gate.php';

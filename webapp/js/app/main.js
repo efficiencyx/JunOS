@@ -1,37 +1,37 @@
-import { IDLE_AFTER_REPLY_MS, TYPING_POLL_MS, consolidating, reportActivity, resetIdleNudge, runPassNow, scheduleIdleNudge, showConsolidatingBubble, syncConsolidationStatus } from './consolidation.js?v=146';
+import { IDLE_AFTER_REPLY_MS, TYPING_POLL_MS, consolidating, reportActivity, resetIdleNudge, runPassNow, scheduleIdleNudge, showConsolidatingBubble, syncConsolidationStatus } from './consolidation.js?v=154';
 import { chatInput, devNoIdleChk, missingParamsEl, modelSelect, narrowSidebarQuery, reasoningSelect, sendBtn, siteVolumeInput, stageEl, thinkChk } from './dom.js?v=77';
-import { faceBubble, hideFaceBubble, latestAssistantReply, restartFaceBubbleHide, scheduleFaceBubblePosition, setLatestAssistantReply } from './face-bubble.js?v=96';
+import { faceBubble, hideFaceBubble, latestAssistantReply, restartFaceBubbleHide, scheduleFaceBubblePosition, setLatestAssistantReply } from './face-bubble.js?v=102';
 import { logAction, logMissing, setStageStatus } from './logging.js?v=78';
-import { loadMood } from './mood.js?v=93';
-import { applyRoleGates, setSiteVolume, syncThinkToggle, updateSiteVolumeLabel, wireNameSettings } from './settings.js?v=150';
-import { loadConversation, refreshSidebar, setSidebarOpen } from './sidebar.js?v=146';
+import { loadMood } from './mood.js?v=94';
+import { applyRoleGates, setSiteVolume, syncThinkToggle, updateSiteVolumeLabel, wireNameSettings } from './settings.js?v=158';
+import { loadConversation, refreshSidebar, setSidebarOpen } from './sidebar.js?v=154';
 import { escapeHtml, mealNow } from '../core/util.js?v=1';
-import { wireTts } from './wire-tts.js?v=149';
-import { wireVoice } from './wire-voice.js?v=150';
-import { WELCOME_TIERS, fetchWelcome, playWelcome, previewWelcome } from './welcome.js?v=108';
-import * as Tour from './tour.js?v=28';
-import * as Difficulty from './difficulty.js?v=5';
+import { wireTts } from './wire-tts.js?v=157';
+import { wireVoice } from './wire-voice.js?v=158';
+import { WELCOME_TIERS, fetchWelcome, playWelcome, previewWelcome } from './welcome.js?v=114';
+import * as Tour from './tour.js?v=36';
+import * as Difficulty from './difficulty.js?v=8';
 import * as Names from '../core/names.js?v=1';
-import * as AwayNotify from './away-notify.js?v=6';
-import * as Prefs from '../core/prefs.js?v=9';
-import * as ui from '../core/ui.js?v=11';
+import * as AwayNotify from './away-notify.js?v=7';
+import * as Prefs from '../core/prefs.js?v=11';
+import * as ui from '../core/ui.js?v=12';
 import * as ChatAPI from '../core/chat-api.js?v=9';
 import * as MobileViewport from '../core/viewport.js?v=1';
-import * as Actions from '../live2d/actions.js?v=116';
-import * as Live2D from '../live2d/live2d.js?v=92';
-import * as ModelTouch from '../live2d/touch.js?v=119';
-import * as Outfit from '../outfit/outfit.js?v=116';
-import { playIntro } from '../wardrobe/reactions.js?v=92';
+import * as Actions from '../live2d/actions.js?v=119';
+import * as Live2D from '../live2d/live2d.js?v=93';
+import * as ModelTouch from '../live2d/touch.js?v=122';
+import * as Outfit from '../outfit/outfit.js?v=119';
+import { playIntro } from '../wardrobe/reactions.js?v=98';
 import * as BootFX from './boot-fx.js?v=2';
-import * as Cards from './cards.js?v=41';
+import * as Cards from './cards.js?v=47';
 import * as History from './history.js?v=2';
 import { startSkybox } from '../trip/skybox.js?v=2';
-import * as TripLoader from '../trip/trip-loader.js?v=75';
+import * as TripLoader from '../trip/trip-loader.js?v=76';
 import { DevHud, abortFn, currentConversationId, setDevHud } from './session.js?v=1';
-import { rerenderBubbleStream, sendMessage, sendTouchEvent } from './chat.js?v=73';
+import { rerenderBubbleStream, sendMessage, sendTouchEvent } from './chat.js?v=81';
 import { setComposerText } from './composer.js?v=3';
-import * as Achievements from '../achievements/achievements.js?v=9';
-import { t } from '../core/i18n.js?v=1';
+import * as Achievements from '../achievements/achievements.js?v=10';
+import { SUPPORTED, lang, t } from '../core/i18n.js?v=2';
 
 // the one app global left, on purpose. it's a console handle,
 // Welcome.preview('panicked') replays that welcome scene
@@ -146,7 +146,7 @@ export async function boot(me) {
 
   // devhud.js owns Ctrl+Shift+D, so only admins get that module
   if (currentUser?.role === 'admin') {
-    setDevHud(await import('./devhud.js?v=126'));
+    setDevHud(await import('./devhud.js?v=134'));
     Difficulty.wireDev();
   }
   startSkybox();
@@ -187,6 +187,8 @@ export async function boot(me) {
   // fill in the synced preferences BEFORE any module reads its
   // local keys
   await Prefs.pullFromServer();
+  const pinnedLang = localStorage.getItem('ui.lang');
+  if (SUPPORTED.includes(pinnedLang) && pinnedLang !== lang) { location.reload(); return; }
   Names.load();
   Names.decorate();
   wireNameSettings();

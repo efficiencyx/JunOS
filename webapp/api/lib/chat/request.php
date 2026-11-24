@@ -267,6 +267,14 @@ function chat_last_user_message(array $req): string {
     return $lastUserMsg;
 }
 
+function chat_prev_user_message(array $req): string {
+    $seen = 0;
+    foreach (array_reverse($req['body']['messages']) as $m) {
+        if (($m['role'] ?? '') === 'user' && ++$seen === 2) return trim((string)($m['content'] ?? ''));
+    }
+    return '';
+}
+
 function chat_last_reply(array $req): string {
     $messages = $req['body']['messages'];
     for ($i = count($messages) - 1; $i >= 0; $i--) {

@@ -42,6 +42,20 @@ object MemoryDates {
         return if (phrases == phrases(oldText)) dated else now
     }
 
+    // memory_note_days() in lib/memory.php: its own "tomorrow" from the
+    // day it was written, and plain dates like "3 November"
+    fun days(text: String, created: LocalDate?): List<LocalDate> {
+        val out = mutableListOf<LocalDate>()
+        if (created != null) phrases(text).forEach { phrase -> resolve(phrase, created)?.let(out::add) }
+        val year = (created ?: LocalDate.now()).year
+        for (m in ABSOLUTE.findAll(text)) {
+            val day = m.groupValues[1].ifEmpty { m.groupValues[4] }.toInt()
+            val month = MONTHS.indexOf(m.groupValues[2].ifEmpty { m.groupValues[3] }.lowercase(Locale.ROOT)) + 1
+            runCatching { LocalDate.of(m.groupValues[5].toIntOrNull() ?: year, month, day) }.getOrNull()?.let(out::add)
+        }
+        return out
+    }
+
     private fun phrases(text: String): Set<String> =
         RELATIVE.findAll(text.lowercase(Locale.ROOT)).mapTo(sortedSetOf()) { it.value }
 
@@ -82,6 +96,12 @@ object MemoryDates {
             "last (?:night|week|month|weekend)|" +
             "next (?:week|month|weekend|monday|tuesday|wednesday|thursday|friday|saturday|sunday)|" +
             "in (?:a few|a couple of|\\d{1,2}) (?:days?|weeks?|months?)|days? from now|weeks? from now)\\b",
+        RegexOption.IGNORE_CASE,
+    )
+
+    private val MONTHS = listOf("january", "february", "march", "april", "may", "june", "july", "august", "september", "october", "november", "december")
+    private val ABSOLUTE = Regex(
+        "\\b(?:(\\d{1,2})(?:st|nd|rd|th)? (${MONTHS.joinToString("|")})|(${MONTHS.joinToString("|")}) (\\d{1,2})(?:st|nd|rd|th)?)(?:,? (\\d{4}))?\\b",
         RegexOption.IGNORE_CASE,
     )
 

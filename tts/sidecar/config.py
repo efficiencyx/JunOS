@@ -1,4 +1,5 @@
 import os
+from pathlib import Path
 
 KOKORO_SAMPLE_RATE = 24000
 KOKORO_DEFAULT = "af_heart"
@@ -59,8 +60,30 @@ POCKET_LANGUAGES = [
     {"id": "italian", "label": "Italian"},
     {"id": "portuguese", "label": "Portuguese"},
     {"id": "spanish_24l", "label": "Spanish"},
+    {"id": "polish", "label": "Polish"},
+    {"id": "japanese", "label": "Japanese"},
 ]
 POCKET_LANG_IDS = frozenset(lang["id"] for lang in POCKET_LANGUAGES)
+# community finetunes, no predefined voice embeddings. voices get
+# cloned from the clip each name was recorded from
+POCKET_CUSTOM_CONFIGS = {
+    "polish": "hf://shefowl/pocket-tts-polish-6l/config.yaml@cd9047ee2fc9d1eb40ed38673d8b220485713863",
+    "japanese": "hf://takuma104/pocket-tts-ja/japanese.yaml@eed931d7499a3db52048662af1a06e21ff70c13b",
+}
+
+# UI_LANG is the language the installer picked. its voice gets
+# downloaded at startup, so her first reply isn't a 300 MB wait
+UI_LANG = os.environ.get("UI_LANG", "").strip().lower()
+UI_LANG_VOICE = {
+    "it": ("pockettts", "italian"), "de": ("pockettts", "german_24l"),
+    "fr": ("pockettts", "french_24l"), "es": ("pockettts", "spanish_24l"),
+    "pt": ("pockettts", "portuguese"), "pl": ("pockettts", "polish"),
+    "ja": ("pockettts", "japanese"), "hi": ("kokoro", "hindi"), "zh": ("kokoro", "mandarin"),
+}
+
+# clips dropped in JunOS/voices/ become pocket-tts voices. compose
+# mounts it at /voices, bare metal reads the repo's own folder
+VOICES_DIR = Path(os.environ.get("VOICES_DIR") or Path(__file__).resolve().parents[2] / "voices")
 
 DEFAULT_ENGINE = "kokoro"
 TTS_ENGINES = ("kokoro", "pockettts")

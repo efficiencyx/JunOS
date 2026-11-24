@@ -77,3 +77,41 @@ test('pocket-tts never gets a script language', () => {
   TTS.setLang('english');
   assert.equal(TTS.predictLang('je ne sais pas'), null);
 });
+
+test('tts.sync reveals every fed char once, in order, played or stopped', async () => {
+  globalThis.AudioContext = class {
+    constructor() { this.state = 'running'; this.currentTime = 0; this.destination = {}; }
+    createGain() { return { gain: { value: 1, cancelScheduledValues() {}, setTargetAtTime() {} }, connect() {} }; }
+    createAnalyser() { return { connect() {} }; }
+  };
+  globalThis.fetch = async () => ({ status: 204, ok: true });
+  const reply = 'Oh, hey there Anon. *waves* ... Missed me?';
+  let seen = '';
+  const reveal = (n) => { seen += reply.slice(seen.length, seen.length + n); };
+  TTS.setEnabled(true);
+  for (const piece of reply.match(/.{1,5}/gs)) TTS.feed(piece, reveal);
+  TTS.flush();
+  await new Promise(r => setTimeout(r, 20));
+  assert.equal(seen, reply);
+
+  seen = '';
+  TTS.feed(reply, reveal);
+  TTS.stop(true);
+  assert.equal(seen, reply);
+  TTS.setEnabled(false);
+});
+
+test('chunk size: small soft-splits every chunk, large waits for 150 chars', () => {
+  const text = 'Well, I think, maybe. Then again, who knows. ';
+  try {
+    TTS.setChunking('small');
+    assert.equal(cuts(text, false), 'Well, I think,');
+    TTS.setChunking('large');
+    assert.equal(cuts('Oh, hi there. More', true), 'Oh, hi there.');
+    assert.equal(cuts(text, false), null);
+    assert.equal(cuts(text.repeat(4), false).length > 150, true);
+  } finally {
+    TTS.setChunking('normal');
+  }
+  assert.equal(cuts(text, false), 'Well, I think, maybe.');
+});

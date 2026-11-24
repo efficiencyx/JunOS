@@ -13,6 +13,8 @@ export const TRACKED = [
   'tts.voices',
   'tts.lang',
   'tts.speed',
+  'tts.sync',
+  'tts.chunking',
   'audio.volume',
   'voice.bargein',
   'voice.hear_all',

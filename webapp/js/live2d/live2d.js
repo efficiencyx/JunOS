@@ -3,7 +3,7 @@
 // builds a second copy of the module graph, and the two copies
 // don't share state.
 
-import { playSequence, releaseAll, resetIdle, renderIfDirty, setFidgetsEnabled, setMood, setMouthOverride, startIdle, stopIdle, tick } from './anim.js?v=87';
+import { playSequence, releaseAll, resetIdle, renderIfDirty, setFidgetsEnabled, setMood, setMouthOverride, startIdle, stopIdle, tick } from './anim.js?v=88';
 import { bakeThumb } from './bake.js?v=2';
 import { cameraStates, captureCameraState, currentCameraMode, fitModel, loadPos, measureStage, rendererResolution, setCameraPreset as setRigCameraPreset, watchStageSize, writeCameraStates } from './camera.js?v=79';
 import { drawableAt, faceAnchor, findDrawables, hitTest, isOverModel } from './geometry.js?v=81';

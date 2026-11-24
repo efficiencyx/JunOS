@@ -11,7 +11,12 @@ if ($method === 'GET') {
     $stmt->execute([$user['id']]);
     $row = $stmt->fetch();
     $parsed = $row ? json_decode((string)dec($row['data']), true) : null;
-    json_out(is_array($parsed) ? $parsed : new stdClass());
+    $prefs = is_array($parsed) ? $parsed : [];
+    $installLang = strtolower(env_str('UI_LANG'));
+    if (!isset($prefs['ui.lang']) && ($installLang === 'en' || in_array($installLang, I18N_LANGS, true))) {
+        $prefs['ui.lang'] = $installLang;
+    }
+    json_out($prefs ?: new stdClass());
 }
 
 $parsed = read_json_body(16 * 1024);

@@ -14,7 +14,8 @@ from . import state
 from .audio import to_wav
 from .config import (DEFAULT_ENGINE, KOKORO_DEFAULT, KOKORO_DEFAULT_LANG, KOKORO_LANG_BY_ID, KOKORO_LANGUAGES,
                      KOKORO_SAMPLE_RATE, KOKORO_VOICES, POCKET_DEFAULT,
-                     POCKET_DEFAULT_LANG, POCKET_LANG_IDS, POCKET_LANGUAGES, POCKET_VOICES, TTS_ENGINES,
+                     POCKET_CUSTOM_CONFIGS, POCKET_DEFAULT_LANG, POCKET_LANG_IDS, POCKET_LANGUAGES, POCKET_VOICES,
+                     TTS_ENGINES, VOICES_DIR,
                      TTS_MAX_QUEUE, TTS_QUEUE_WAIT_S)
 from .devices import get_device
 
@@ -107,7 +108,9 @@ def get_pocket_model(language=POCKET_DEFAULT_LANG):
             # so pass it only when the signature actually has one,
             # otherwise load first and .to(device) after.
             device_via_kwarg = "device" in inspect.signature(TTSModel.load_model).parameters
-            kwargs = {"language": language}
+            config = POCKET_CUSTOM_CONFIGS.get(language)
+            # int8 on the polish 6l: rtf 0.49 to 0.30 here, whisper still reads it word for word
+            kwargs = {"config": config, "quantize": True} if config else {"language": language}
             if device_via_kwarg:
                 kwargs["device"] = device
             log.info("loading pocket-tts model (%s) on %s...", language, device)
@@ -122,11 +125,47 @@ def get_pocket_model(language=POCKET_DEFAULT_LANG):
     return state.pocket_model
 
 
-def pocket_state(model, voice):
-    prompt = state.pocket_states.get(voice)
+CLIP_TYPES = {".wav", ".mp3", ".flac", ".ogg"}
+VOICE_ID = re.compile(r"^[a-z][a-z0-9_]*$")
+_clone_warned = set()
+
+
+def custom_voices():
+    try:
+        clips = sorted(p for p in VOICES_DIR.iterdir() if p.suffix.lower() in CLIP_TYPES and p.is_file())
+    except OSError:
+        return {}
+    found = {}
+    for clip in clips:
+        voice = clip.stem.lower()
+        if VOICE_ID.match(voice) and voice not in POCKET_VOICES:
+            found.setdefault(voice, clip)
+    return found
+
+
+def known_pocket_voice(voice):
+    return voice in POCKET_VOICES or voice in custom_voices()
+
+
+def pocket_state(model, voice, language):
+    clip = custom_voices().get(voice)
+    # stock weights without HF_TOKEN are the no-cloning build, it'd raise
+    if clip is not None and not getattr(model, "has_voice_cloning", True):
+        if language not in _clone_warned:
+            _clone_warned.add(language)
+            log.warning("pocket-tts %s can't clone without HF_TOKEN, custom voices speak as %s", language, POCKET_DEFAULT)
+        voice, clip = POCKET_DEFAULT, None
+    key = (voice, clip.stat().st_mtime_ns) if clip else voice
+    prompt = state.pocket_states.get(key)
     if prompt is None:
-        prompt = model.get_state_for_audio_prompt(voice)
-        state.pocket_states[voice] = prompt
+        if clip:
+            prompt = model.get_state_for_audio_prompt(clip, truncate=True)
+        elif language in POCKET_CUSTOM_CONFIGS:
+            from pocket_tts.utils.utils import _ORIGINS_OF_PREDEFINED_VOICES
+            prompt = model.get_state_for_audio_prompt(_ORIGINS_OF_PREDEFINED_VOICES[voice])
+        else:
+            prompt = model.get_state_for_audio_prompt(voice)
+        state.pocket_states[key] = prompt
     return prompt
 
 
@@ -153,7 +192,7 @@ def voices():
         "engines": {
             "kokoro": _kokoro_voices_info(),
             "pockettts": {
-                "voices": POCKET_VOICES,
+                "voices": POCKET_VOICES + list(custom_voices()),
                 "default": POCKET_DEFAULT,
                 "languages": POCKET_LANGUAGES,
                 "default_language": POCKET_DEFAULT_LANG,
@@ -218,10 +257,10 @@ def synth_kokoro(text, voice, speed, lang_id=KOKORO_DEFAULT_LANG):
 
 
 def synth_pocket(text, voice, language):
-    voice = voice if voice in POCKET_VOICES else POCKET_DEFAULT
+    voice = voice if known_pocket_voice(voice) else POCKET_DEFAULT
     language = language if language in POCKET_LANG_IDS else POCKET_DEFAULT_LANG
     model = get_pocket_model(language)
-    audio = model.generate_audio(pocket_state(model, voice), text)
+    audio = model.generate_audio(pocket_state(model, voice, language), text)
     if hasattr(audio, "detach"):
         audio = audio.detach().cpu().numpy()
     audio = np.asarray(audio, dtype=np.float32)
@@ -291,14 +330,14 @@ def warm(req: WarmReq):
     if req.engine != "pockettts":
         return {"ok": True, "warmed": None}
     language = req.lang if req.lang in POCKET_LANG_IDS else POCKET_DEFAULT_LANG
-    voice = req.voice if req.voice in POCKET_VOICES else POCKET_DEFAULT
+    voice = req.voice if known_pocket_voice(req.voice) else POCKET_DEFAULT
     if not _acquire_tts_slot():
         return _tts_busy()
     try:
         state.begin_use("pockettts")
         try:
             model = get_pocket_model(language)
-            pocket_state(model, voice)
+            pocket_state(model, voice, language)
         finally:
             state.end_use()
     finally:

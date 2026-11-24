@@ -1,4 +1,4 @@
-import { t } from './i18n.js?v=1';
+import { t } from './i18n.js?v=2';
 // the gauge bucketing, shared by her face and by the chat copy.
 // it sits out here so both read the SAME tier off the same
 // numbers. two copies of this arithmetic and the greeting

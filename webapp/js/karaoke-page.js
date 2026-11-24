@@ -1,13 +1,13 @@
 import * as Auth from './core/auth.js?v=1';
 import { api } from './core/api.js?v=1';
-import * as Prefs from './core/prefs.js?v=9';
-import * as Karaoke from './karaoke/karaoke.js?v=32';
-import * as Live2D from './live2d/live2d.js?v=92';
-import * as Outfit from './outfit/outfit.js?v=116';
+import * as Prefs from './core/prefs.js?v=11';
+import * as Karaoke from './karaoke/karaoke.js?v=33';
+import * as Live2D from './live2d/live2d.js?v=93';
+import * as Outfit from './outfit/outfit.js?v=119';
 import * as Scene from './trip/scene.js?v=1';
 import { startSkybox } from './trip/skybox.js?v=2';
-import * as TripLoader from './trip/trip-loader.js?v=75';
-import { applyI18n, t } from './core/i18n.js?v=1';
+import * as TripLoader from './trip/trip-loader.js?v=76';
+import { applyI18n, t } from './core/i18n.js?v=2';
 
 async function main() {
   applyI18n();

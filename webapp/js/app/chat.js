@@ -1,27 +1,27 @@
-import { armFollowup, armIdleAfterReply, cancelActiveIdleNudge, cancelAutoReset, cancelIdleNudge, composerPlaceholder, consolidating, fleeActive, reportActivity, resetIdleNudge, scheduleAutoReset, setCancelActiveIdleNudge, setConsolidating, showConsolidatingBubble, startFleeLock, syncConsolidationStatus } from './consolidation.js?v=146';
+import { armFollowup, armIdleAfterReply, cancelActiveIdleNudge, cancelAutoReset, cancelIdleNudge, composerPlaceholder, consolidating, fleeActive, reportActivity, resetIdleNudge, scheduleAutoReset, setCancelActiveIdleNudge, setConsolidating, showConsolidatingBubble, startFleeLock, syncConsolidationStatus } from './consolidation.js?v=154';
 import { chatInput, messagesEl, modelSelect, reasoningSelect, sendBtn, sendButtonIdleMarkup, sendButtonStopMarkup, thinkChk } from './dom.js?v=77';
-import { announceMobileReply, hideFaceBubble, scheduleFaceBubbleHide, setLatestAssistantReply, showFaceBubble } from './face-bubble.js?v=96';
+import { announceMobileReply, hideFaceBubble, scheduleFaceBubbleHide, setLatestAssistantReply, showFaceBubble } from './face-bubble.js?v=102';
 import { appendDebugReply, appendDebugThinking, beginDebugTurn, logToolStatus, setDebugPrompt } from './logging.js?v=78';
-import { loadMood } from './mood.js?v=93';
-import { refreshSidebar } from './sidebar.js?v=146';
-import { makeNameFilter, makeStreamBuffer } from './stream-filters.js?v=119';
+import { loadMood } from './mood.js?v=94';
+import { refreshSidebar } from './sidebar.js?v=154';
+import { applyActions, makeNameFilter, makeStreamBuffer } from './stream-filters.js?v=122';
 import { localTimeString, phoneMode } from '../core/util.js?v=1';
 import * as Names from '../core/names.js?v=1';
-import * as ui from '../core/ui.js?v=11';
+import * as ui from '../core/ui.js?v=12';
 import { apiJson } from '../core/api.js?v=1';
 import * as ChatAPI from '../core/chat-api.js?v=9';
-import * as Mods from '../mods/mods.js?v=117';
-import * as Outfit from '../outfit/outfit.js?v=116';
-import * as Cards from './cards.js?v=41';
-import * as Achievements from '../achievements/achievements.js?v=9';
+import * as Mods from '../mods/mods.js?v=120';
+import * as Outfit from '../outfit/outfit.js?v=119';
+import * as Cards from './cards.js?v=47';
+import * as Achievements from '../achievements/achievements.js?v=10';
 import * as History from './history.js?v=2';
-import * as TTS from '../voice/tts.js?v=94';
-import * as Voice from '../voice/voice.js?v=95';
-import * as VoiceMode from '../voice/voicemode.js?v=97';
+import * as TTS from '../voice/tts.js?v=155';
+import * as Voice from '../voice/voice.js?v=156';
+import * as VoiceMode from '../voice/voicemode.js?v=103';
 import { DevHud, abortFn, currentConversationId, messages, setAbortFn, setRenderVoiceDraft, setStopActiveStream, stopActiveStream } from './session.js?v=1';
-import { appendMsg, followLatest, renderMarkdown, updateEmptyState } from './messages.js?v=25';
+import { appendMsg, followLatest, renderMarkdown, updateEmptyState } from './messages.js?v=31';
 import { setComposerText } from './composer.js?v=3';
-import { t } from '../core/i18n.js?v=1';
+import { t } from '../core/i18n.js?v=2';
 
 const THUMBS_UP_ICON = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M14 9V5a3 3 0 0 0-3-3l-4 9v11h11.28a2 2 0 0 0 2-1.7l1.38-9a2 2 0 0 0-2-2.3zM7 22H4a2 2 0 0 1-2-2v-7a2 2 0 0 1 2-2h3"/></svg>';
 const THUMBS_DOWN_ICON = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M10 15v4a3 3 0 0 0 3 3l4-9V2H5.72a2 2 0 0 0-2 1.7l-1.38 9a2 2 0 0 0 2 2.3zm7-13h2.67A2.31 2.31 0 0 1 22 4v7a2.31 2.31 0 0 1-2.33 2H17"/></svg>';
@@ -267,6 +267,11 @@ export function runChat({ idle, cue = '', ephemeral, audio, voice, invite = '', 
 
   let visible = '';
   let shown = '';
+  // tts.sync: text and [A:] tags wait for the chunk of audio that says them
+  const synced = TTS.isEnabled() && localStorage.getItem('tts.sync') === '1';
+  let displayed = '';
+  let heldActs = [];
+  let streamDone = false;
   let silenced = false;
   let overheard = false;
   let waited = false;
@@ -280,19 +285,33 @@ export function runChat({ idle, cue = '', ephemeral, audio, voice, invite = '', 
   const bubbleSource = ephemeral ? 'ephemeral' : 'phone';
   const bubbleEnabled = () => !VoiceMode.isActive() && (ephemeral || phoneMode());
   const renderBubble = () => {
-    if (!shown.trim() || !bubbleEnabled()) return;
-    showFaceBubble(renderMarkdown(shown), bubbleSource);
+    if (!displayed.trim() || !bubbleEnabled()) return;
+    showFaceBubble(renderMarkdown(displayed), bubbleSource);
   };
   const bubbleStream = { ephemeral: !!ephemeral, render: renderBubble, text: () => shown };
   activeBubbleStream = bubbleStream;
-  const showText = (sub) => {
-    shown += sub;
+  const paint = () => {
     if (!VoiceMode.isActive()) {
-      body.innerHTML = renderMarkdown(shown);
-      body.appendChild(typing);
+      const dots = typing.isConnected;
+      body.innerHTML = renderMarkdown(displayed);
+      if (dots) body.appendChild(typing);
       followLatest();
     }
     renderBubble();
+  };
+  const reveal = (n) => {
+    displayed = shown.slice(0, displayed.length + n);
+    const end = displayed.length;
+    while (heldActs.length && (heldActs[0].at < end || (streamDone && end >= shown.length))) {
+      applyActions(heldActs.shift().acts);
+    }
+    paint();
+  };
+  const showText = (sub) => {
+    shown += sub;
+    if (synced) { TTS.feed(sub, reveal); return; }
+    displayed = shown;
+    paint();
     TTS.feed(sub);
   };
   let names = makeNameFilter(showText);
@@ -305,7 +324,8 @@ export function runChat({ idle, cue = '', ephemeral, audio, voice, invite = '', 
     visible += clean;
     names.push(clean);
   };
-  let stream = makeStreamBuffer(keepText);
+  const holdActs = synced ? (acts) => heldActs.push({ at: shown.length, acts }) : undefined;
+  let stream = makeStreamBuffer(keepText, holdActs);
 
   sendBtn.disabled = false;
   sendBtn.innerHTML = sendButtonStopMarkup;
@@ -317,6 +337,7 @@ export function runChat({ idle, cue = '', ephemeral, audio, voice, invite = '', 
     if (abortFn) abortFn();
     TTS.stop();
     typing.remove();
+    if (displayed !== shown) { displayed = shown; paint(); }
     if (!discard && visible.trim()) messages.push({ role: 'assistant', content: visible });
     else draft.remove();
     finalize(!discard);
@@ -396,7 +417,8 @@ export function runChat({ idle, cue = '', ephemeral, audio, voice, invite = '', 
         TTS.stop();
         hideFaceBubble();
         visible = '';
-        shown = '';
+        shown = displayed = '';
+        heldActs = [];
         typing.remove();
         // overheard = he wasn't talking to her. no marker either, the
         // whole exchange goes, his bubble included
@@ -422,7 +444,9 @@ export function runChat({ idle, cue = '', ephemeral, audio, voice, invite = '', 
         hideFaceBubble();
         visible = '';
         shown = '';
-        stream = makeStreamBuffer(keepText);
+        stream = makeStreamBuffer(keepText, holdActs);
+        displayed = '';
+        heldActs = [];
         names = makeNameFilter(showText);
         thinkEl?.remove();
         thinkEl = thinkBody = null;
@@ -449,13 +473,16 @@ export function runChat({ idle, cue = '', ephemeral, audio, voice, invite = '', 
         stream.flush();
         names.flush();
         settleThinking();
+        streamDone = true;
         TTS.flush();
         typing.remove();
+        if (synced) reveal(0);
         if (silenced) {
           // the flushes above can still push held back bytes. none of it
           // exists
           visible = '';
-          shown = '';
+          shown = displayed = '';
+          heldActs = [];
           TTS.stop();
           if (!overheard) messages.push({ role: 'assistant', content: '...' });
         } else if (visible.trim()) {
@@ -486,13 +513,15 @@ export function runChat({ idle, cue = '', ephemeral, audio, voice, invite = '', 
         if (!isCurrent()) return;
         stream.flush();
         names.flush();
+        streamDone = true;
         TTS.flush();
         typing.remove();
         if (err.message === 'looping') {
           TTS.stop();
           hideFaceBubble();
-          visible = shown = '';
-        }
+          visible = shown = displayed = '';
+          heldActs = [];
+        } else if (synced) reveal(0);
         if (!visible.trim()) draft.remove();
         if (err.message === 'user_fled') {
           const info = err.data || {};

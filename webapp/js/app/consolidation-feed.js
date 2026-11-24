@@ -24,7 +24,7 @@ function open() {
     let ev;
     try { ev = JSON.parse(m.data); } catch (e) { return; }
     lastAt = Date.now();
-    if (ev.id) lastId = ev.id;
+    if (ev.cursor) lastId = ev.cursor;
     if (ev.type === 'call') quietUntil = (ev.quiet_until || 0) * 1000;
     emit(ev);
     if (ev.type === 'done') stop();

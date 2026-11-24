@@ -156,6 +156,18 @@ jobs:
       - name: Lib units
         run: php .github/scripts/lib.test.php
 
+      - name: Retrieval
+        run: php .github/scripts/retrieval.test.php
+
+      - name: Chat recall
+        run: php .github/scripts/recall-db.test.php
+
+      - name: Memory pass
+        run: php .github/scripts/consolidation.test.php
+
+      - name: Memory pass end to end
+        run: php .github/scripts/consolidation-pass.test.php
+
       - name: Game bridge
         run: php .github/scripts/bridge.test.php
 

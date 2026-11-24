@@ -1,4 +1,4 @@
-import { t } from './i18n.js?v=1';
+import { t } from './i18n.js?v=2';
 import { hold } from './hold.js?v=2';
 var toastTimer = {};
 var toastSeq = 0;

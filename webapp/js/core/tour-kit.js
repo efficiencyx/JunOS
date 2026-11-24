@@ -1,4 +1,4 @@
-import { t } from './i18n.js?v=1';
+import { t } from './i18n.js?v=2';
 // the tour's chrome: spotlight, lower third, the skippable waits.
 // app/tour.js runs the chat page on it, wardrobe/tour-shop.js the shop
 

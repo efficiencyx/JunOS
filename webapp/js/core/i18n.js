@@ -1,4 +1,4 @@
-export const SUPPORTED = ['en', 'it', 'de', 'ja', 'fr', 'es', 'pt', 'hi', 'zh'];
+export const SUPPORTED = ['en', 'it', 'de', 'ja', 'fr', 'es', 'pt', 'hi', 'zh', 'pl'];
 
 function supported(code) {
   const base = String(code || '').toLowerCase().split('-')[0];

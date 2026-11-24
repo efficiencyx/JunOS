@@ -131,9 +131,8 @@ else
 	fail 'a foreign conversation id was served'
 fi
 
-# the question is a lore row verbatim, so lore_retrieve() has
-# something to score above LORE_FLOOR.
-question='What year is the game set in?'
+# a lore name, so lore_gate() fires and the block goes in
+question='Who is Shanice?'
 sse "{\"messages\":[{\"role\":\"user\",\"content\":\"$question\"}],\"conversation_id\":$convo}" >"$work/sse"
 if grep -q 'data: \[DONE\]' "$work/sse"; then pass 'the stream ends with [DONE]'; else fail 'no [DONE] frame'; fi
 if grep -q '"token":"' "$work/sse"; then pass 'tokens came through as SSE'; else fail 'no token frames'; fi

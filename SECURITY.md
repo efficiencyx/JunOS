@@ -174,6 +174,7 @@ The installers fetch code from other people and run it. What is checked:
 | Which release is current | `api.github.com` (anonymous, read-only), then `github.com/<repo>/releases/latest` | TLS. One or two requests to the releases endpoint per run to turn the channel into a tag, skipped for `experimental` and when `JUN_REF` is set. When the API doesn't answer, the website's `/releases/latest` redirect names the newest full release instead. Drafts are invisible to both. If neither answers, a fresh install stops rather than fall back to `main`. |
 | Ollama (Windows) | `ollama.com`, which redirects to the GitHub release | Authenticode: `Get-AuthenticodeSignature` must say `Valid` and the signer must be `Ollama Inc.` before `OllamaSetup.exe` runs. Nothing pins a version, you get the latest. |
 | Caddy (Windows) | GitHub release | Version and sha512 pinned in `install.ps1`; the zip is refused when the digest differs. |
+| llama.cpp GPU builds (Windows, NVIDIA or a listed Radeon) | GitHub release (`ggml-org/llama.cpp`), `stable.repo.amd.com` for the ROCm libraries | The CUDA / ROCm zips (`b11804`) and AMD's `rocm-sdk-libraries` + per-chip `rocm-sdk-device-gfxNNNN` 10.0.0 wheels are sha256-pinned in `install.ps1` and refused on a mismatch. Kept only when `llama-server --list-devices` sees the card. |
 | Android build | `services.gradle.org`, GitHub release, PyPI, Maven Central / Google Maven | The Gradle distribution (`android/gradlew`, `android/gradle-bootstrap.ps1`), the sherpa-onnx AAR and the UnityPy / tpk_ar source archives are pinned by sha256 and refused on a mismatch. Maven libraries are pinned by exact version only. |
 | winget itself, if absent | PSGallery | Not automatic. It asks first, or takes `JUN_BOOTSTRAP_WINGET=1`. |
 | Python packages | PyPI, `download.pytorch.org` | Exact versions in `tts/requirements*.txt` and `tools/requirements-recovery.txt`. Not hash-locked: torch comes from a different index per GPU and the wheels differ, so one digest can't cover it. Transitive deps float. |
@@ -181,6 +182,8 @@ The installers fetch code from other people and run it. What is checked:
 | Models | Hugging Face, via Ollama or llama.cpp | Tags only. Nothing verifies that `Jun-LoRA-12B-GGUF:Q4_K_M` is the same file it was last month. |
 | MTP drafters | Hugging Face, third-party uploads (`Janvitos/...`, `amaranus/...` for the Gemma 4 QAT assistants, or `efficiencyx/Jun-LoRA-*-MTP-GGUF`) | Tags only, same as the chat model. Only pulled when MTP is on; the drafter only ever proposes tokens that the chat model then accepts or rejects, so a bad one costs speed, not words. |
 | Title model (Ollama and llama.cpp) | Hugging Face, `efficiencyx/Titlewen-GGUF` | Tags only. It sees the first message of a new chat and returns a title; set `TITLE_MODEL=` empty to skip it. |
+| Community voice models (pocket-tts Polish and Japanese) | Hugging Face, third-party uploads (`shefowl/pocket-tts-polish-6l`, `takuma104/pocket-tts-ja`) | Pinned to a commit in `tts/sidecar/config.py`, and each config pins its weights the same way. Downloaded on first use of that language, or at sidecar start when `UI_LANG` picks it. |
+| pocket-tts voice cloning weights (optional) | Hugging Face, gated `kyutai/pocket-tts` | Pinned to a commit by pocket-tts's own configs. Only downloaded with `HF_TOKEN` set, which also makes the token the one credential the sidecar holds: it sits in `.env` and goes only to huggingface.co. |
 | vLLM (Colab/Kaggle notebook, TPU only) | PyPI | `vllm-tpu==0.32.0`, installed into its own venv. Not hash-locked, transitive deps (jax, torch) float. |
 | cloudflared (notebook, inference-only mode) | GitHub release | Version and sha256 pinned in `colab.ipynb`; the download is refused when the digest differs. |
 
@@ -212,7 +215,8 @@ Windows and Proton do not use this plugin.
 **During install:** github.com and api.github.com (which release is current), your distro's package mirrors or Homebrew,
 `get.docker.com` (Linux, only when Docker is missing), `nvidia.github.io` (Linux,
 only when an NVIDIA card needs the container toolkit), Docker Hub and ghcr.io
-for base images, `windows.php.net`, `curl.se` and `ollama.com` (Windows), winget
+for base images, `windows.php.net`, `curl.se` and `ollama.com` (Windows), `stable.repo.amd.com`
+(Windows, Radeon RX 5000 to 9000 only), winget
 and PSGallery (Windows), PyPI and `download.pytorch.org` when voice or karaoke is on.
 With the game bridge and a game folder found, the MelonLoader release zip from
 `github.com/LavaGang/MelonLoader` (pinned to v0.7.3) and `JunBridge-<tag>.dll`
@@ -221,6 +225,8 @@ Linux build), checked against that release's `SHA256SUMS`. The first game start
 with MelonLoader is MelonLoader's own: it asks `api.melonloader.com` about the
 game and pulls Cpp2IL, Unity's base assemblies and, when no .NET 6 is
 installed, a portable one from GitHub.
+
+**During install, only if you paste a Hugging Face token for voice cloning:** one `HEAD` request to huggingface.co with that token, to check it can read the gated pocket-tts weights.
 
 **On first run:** Hugging Face, for the chat model through Ollama or llama.cpp,
 the title model and the MTP drafter when those are on, and again for the voice
@@ -360,7 +366,9 @@ Discord: effx__
 * `memory/user-<id>/` - encrypted category notes, `journal.md` and `meta.json`.
   The filenames keep their Markdown/JSON extensions; their stored contents
   are ciphertext after encryption, not directly editable documents.
-* `rl/`, `consolidating/` - rate-limit buckets and idle-consolidation locks.
+* `rl/`, `consolidating/` - rate-limit buckets, idle-consolidation locks, the
+  sealed event feeds of the current memory pass and the two before it, and the
+  sealed tally of a filing game in progress.
 * `openai_compatible_models.json` - the cached model catalog, openai-compatible only.
 
 Model weights sit in their own volumes (`ollama_data`, `tts_cache`,

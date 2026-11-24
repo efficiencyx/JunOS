@@ -95,6 +95,7 @@ services:
       LLAMACPP_TOOL_CHECK: "${LLAMACPP_TOOL_CHECK:-}"
       FLEE_BANS: "${FLEE_BANS:-on}"
       FREE_ROAM: "${FREE_ROAM:-off}"
+      UI_LANG: "${UI_LANG:-}"
       WATCH_FRAME_EVERY: "${WATCH_FRAME_EVERY:-auto}"
       LAN_INFERENCE: "${LAN_INFERENCE:-off}"
       JUN_LAN_TOKEN: "${JUN_LAN_TOKEN:-}"
@@ -227,6 +228,8 @@ services:
     environment:
       SIDECAR_SECRET: "${SIDECAR_SECRET:-}"
       TTS_DEVICE: "${TTS_DEVICE:-cpu}"
+      UI_LANG: "${UI_LANG:-}"
+      HF_TOKEN: "${HF_TOKEN:-}"
       STT_MODEL: "${STT_MODEL:-base}"
       STT_LANG: "${STT_LANG-}"
       STT_DEVICE: "${STT_DEVICE:-cpu}"
@@ -236,6 +239,7 @@ services:
       TTS_MAX_QUEUE: "${TTS_MAX_QUEUE:-8}"
     volumes:
       - tts_cache:/home/omega/.cache
+      - ./voices:/voices:ro
     healthcheck:
       test: ["CMD", "curl", "-fsS", "http://127.0.0.1:8001/health"]
       interval: 10s

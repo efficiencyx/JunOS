@@ -1,0 +1,148 @@
+{
+    "tokens": [
+        {
+            "in": "Anon works night shifts at the Lidl warehouse",
+            "terms": [
+                "anon",
+                "work",
+                "night",
+                "shift",
+                "lidl",
+                "warehous"
+            ]
+        },
+        {
+            "in": "parties, boxes, running, stopped, studies",
+            "terms": [
+                "party",
+                "box",
+                "run",
+                "stop",
+                "study"
+            ]
+        },
+        {
+            "in": "Scatman Johnって誰?",
+            "terms": [
+                "scatman",
+                "john",
+                "って",
+                "て誰"
+            ]
+        },
+        {
+            "in": "perché Britannia odia Annalie?",
+            "terms": [
+                "britannia",
+                "odia",
+                "annali"
+            ]
+        },
+        {
+            "in": "Was kostet ein Besuch bei Dr. Blaubleim?",
+            "terms": [
+                "kostet",
+                "besuch",
+                "dr",
+                "blaubleim"
+            ]
+        },
+        {
+            "in": "I'm SO tired of the 92 bus",
+            "terms": [
+                "tir",
+                "92",
+                "bus"
+            ]
+        },
+        {
+            "in": "caffè con Luca",
+            "terms": [
+                "caffè",
+                "luca"
+            ]
+        },
+        {
+            "in": "ケーキが好き。全部お前のせいだ。",
+            "terms": [
+                "ケー",
+                "ーキ",
+                "キが",
+                "が好",
+                "好き",
+                "全部",
+                "部お",
+                "お前",
+                "前の",
+                "のせ",
+                "せい",
+                "いだ"
+            ]
+        },
+        {
+            "in": "ภาษาไทย 한국어",
+            "terms": [
+                "ภา",
+                "าษ",
+                "ษา",
+                "าไ",
+                "ไท",
+                "ทย",
+                "한국",
+                "국어"
+            ]
+        }
+    ],
+    "lore_top": [
+        {
+            "q": "who's Shanice again?",
+            "has": "How did Shanice die?"
+        },
+        {
+            "q": "Annallie",
+            "has": "Who is Annalie?"
+        },
+        {
+            "q": "how much does Blaubleim charge per visit?",
+            "has": "Who is Dr. Blaubleim?"
+        },
+        {
+            "q": "why did China ship all those bots to America?",
+            "has": "Is it legal to own Chinese bots in the US?"
+        },
+        {
+            "q": "Wolfmeister",
+            "has": "Who is the Wolfmeister?"
+        },
+        {
+            "q": "what bait should I use for fishing?",
+            "has": "What fishing baits are there?"
+        }
+    ],
+    "gate": [
+        {
+            "q": "Who is Shanice?",
+            "fires": true
+        },
+        {
+            "q": "what did the homeless guy find in the church cellar?",
+            "fires": true
+        },
+        {
+            "q": "Sorry about that.",
+            "fires": false
+        },
+        {
+            "q": "shut up",
+            "fires": false
+        },
+        {
+            "q": "its raining again. great. i wanted to go out",
+            "fires": false
+        },
+        {
+            "q": "we watched the sunday game",
+            "fires": false
+        }
+    ]
+}

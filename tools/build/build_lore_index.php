@@ -1,14 +1,15 @@
 <?php
-// webapp/api/lib/lore.php does plain keyword lookup over
-// lore_corpus.txt. this flattens every user -> assistant pair in
-// tools/lore_dataset.jsonl into one answer row. no Ollama, no
-// embeddings, none of that. --dry-run counts without writing.
+// webapp/api/lib/lore.php does BM25 keyword lookup over
+// lore_corpus.jsonl. this flattens every user -> assistant pair in
+// tools/lore_dataset.jsonl into one {q, a} row, the question too,
+// it's how people actually ask. no Ollama, no embeddings, none of
+// that. --dry-run counts without writing.
 
 define('DATASET_PATH', __DIR__ . '/../lore_dataset.jsonl');
 // in the repo it's ../webapp. deployed copies keep the files
 // two levels above tools/build/ in /var/www/omega/.
 $webappDir = is_dir(__DIR__ . '/../../webapp') ? __DIR__ . '/../../webapp' : __DIR__ . '/../..';
-define('CORPUS_OUT', $webappDir . '/lore_corpus.txt');
+define('CORPUS_OUT', $webappDir . '/lore_corpus.jsonl');
 
 function collapse(string $s): string {
     return trim(preg_replace('/\s+/', ' ', $s));
@@ -56,9 +57,9 @@ if (in_array('--dry-run', $argv ?? [], true)) {
     exit(0);
 }
 
-$answers = array_column($pairs, 'a');
-file_put_contents(CORPUS_OUT, implode("\n", $answers));
+$rows = array_map(fn($p) => json_encode($p, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES), $pairs);
+file_put_contents(CORPUS_OUT, implode("\n", $rows) . "\n");
 
 echo "Wrote:\n";
-echo "  " . CORPUS_OUT . "  ({$total} answers)\n";
+echo "  " . CORPUS_OUT . "  ({$total} pairs)\n";
 echo "Done.\n";

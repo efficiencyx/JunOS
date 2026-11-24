@@ -1,7 +1,7 @@
 import { logAction } from './logging.js?v=78';
-import { noteEmotionTint } from './mood.js?v=93';
+import { noteEmotionTint } from './mood.js?v=94';
 import * as Names from '../core/names.js?v=1';
-import * as Actions from '../live2d/actions.js?v=116';
+import * as Actions from '../live2d/actions.js?v=119';
 
 const MARK_RE = /\[\s*(?:A(?:CTIONS?)?|TOOL)\s*:/i;
 const PARTIAL_RE = /\[\s*(?:A(?:C(?:T(?:I(?:O(?:N(?:S)?)?)?)?)?)?|T(?:O(?:O(?:L)?)?)?)?\s*$/i;
@@ -40,7 +40,14 @@ function pendingMarkerSuffix(s) {
   return m ? m[0].length : 0;
 }
 
-export function makeStreamBuffer(onCleanText) {
+export function applyActions(acts) {
+  for (const a of acts) {
+    Actions.applyAction(a);
+    noteEmotionTint(a);
+  }
+}
+
+export function makeStreamBuffer(onCleanText, onActions = applyActions) {
   let buf = '';
   return {
     push(chunk) {
@@ -75,10 +82,7 @@ export function makeStreamBuffer(onCleanText) {
         if (acts.length === 0) {
           logAction('warn', 'block non parsabile: ' + blob);
         } else {
-          for (const a of acts) {
-            Actions.applyAction(a);
-            noteEmotionTint(a);
-          }
+          onActions(acts);
         }
       }
     },

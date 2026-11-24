@@ -1,4 +1,4 @@
-import { t } from '../core/i18n.js?v=1';
+import { t } from '../core/i18n.js?v=2';
 // Keyed by her affection, trust and tension tiers. 0 is under 34, 1 is 34-66,
 // 2 is 67 and up, so "210" is high affection, mid trust, low tension.
 export const RETURN_LINES = {

@@ -1,4 +1,4 @@
-import { daypart, moodFactors, moodTier } from '../core/mood-tier.js?v=4';
+import { daypart, moodFactors, moodTier } from '../core/mood-tier.js?v=5';
 import { cameraTween } from './camera.js?v=79';
 import { clampParam, hold, scheduleSequence, startLoop, stopLoop } from './params.js?v=4';
 import { S, app, currentValues, forcedPartOpacity, holds, loops, markDirty, model, paramDefault, paramIndex, paramMax, paramMin, pendingSequences, raw, targetParams, velocities } from './state.js?v=75';

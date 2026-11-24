@@ -1,10 +1,10 @@
-import { makeItemColorButton } from '../wardrobe/color-picker.js?v=54';
-import { bindTileDrag } from '../wardrobe/tiles.js?v=54';
-import { modItemKey } from '../wardrobe/worn.js?v=47';
-import { itemThumbUrl } from './layers.js?v=25';
-import { ensureLoaded, followsHerColors, gameStandIns, importZip, isEquipped, missingGameItems, modState, mods, removeMod, setColor, setEquipped, setFollowsHerColors } from './engine.js?v=46';
-import { queueWardrobe } from '../outfit/sync.js?v=46';
-import { t } from '../core/i18n.js?v=1';
+import { makeItemColorButton } from '../wardrobe/color-picker.js?v=60';
+import { bindTileDrag } from '../wardrobe/tiles.js?v=60';
+import { modItemKey } from '../wardrobe/worn.js?v=50';
+import { itemThumbUrl } from './layers.js?v=26';
+import { ensureLoaded, followsHerColors, gameStandIns, importZip, isEquipped, missingGameItems, modState, mods, removeMod, setColor, setEquipped, setFollowsHerColors } from './engine.js?v=49';
+import { queueWardrobe } from '../outfit/sync.js?v=49';
+import { t } from '../core/i18n.js?v=2';
 
 let uiBody = null;
 

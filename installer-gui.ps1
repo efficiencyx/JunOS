@@ -489,6 +489,31 @@ public sealed class InstallerProcessOutput
                             <RadioButton x:Name="CloudRadio" GroupName="Mode" Content="Cloud inference" />
                         </StackPanel>
 
+                        <StackPanel x:Name="LanguagePanel" Margin="0,16,0,0">
+                            <TextBlock Text="Language" FontWeight="SemiBold" />
+                            <TextBlock Text="For the app, and the voice she gets." Foreground="#8D95A5" FontSize="12" Margin="0,4,0,0" />
+                            <ComboBox x:Name="LanguageCombo" Width="210" HorizontalAlignment="Left" Margin="0,7,0,0">
+                                <ComboBoxItem Content="English" Tag="en" IsSelected="True" />
+                                <ComboBoxItem Content="Italiano" Tag="it" />
+                                <ComboBoxItem Content="Deutsch" Tag="de" />
+                                <ComboBoxItem Content="日本語" Tag="ja" />
+                                <ComboBoxItem Content="Français" Tag="fr" />
+                                <ComboBoxItem Content="Español" Tag="es" />
+                                <ComboBoxItem Content="Português" Tag="pt" />
+                                <ComboBoxItem Content="हिन्दी" Tag="hi" />
+                                <ComboBoxItem Content="中文" Tag="zh" />
+                                <ComboBoxItem Content="Polski" Tag="pl" />
+                            </ComboBox>
+                        </StackPanel>
+
+                        <StackPanel x:Name="ClonePanel" Margin="0,16,0,0">
+                            <CheckBox x:Name="CloneCheck" Content="Voice cloning (optional, needs a free Hugging Face account)" />
+                            <StackPanel x:Name="CloneDetails" Visibility="Collapsed" Margin="22,8,0,0">
+                                <TextBlock TextWrapping="Wrap" Foreground="#8D95A5" FontSize="12" Text="Accept the terms at huggingface.co/kyutai/pocket-tts, then make a read token at huggingface.co/settings/tokens and paste it here. She can then speak in a voice from any clip you put in the voices folder. Only clone a voice whose owner said yes." />
+                                <PasswordBox x:Name="HfTokenBox" Width="320" HorizontalAlignment="Left" Margin="0,8,0,0" />
+                            </StackPanel>
+                        </StackPanel>
+
                         <Border x:Name="UpdateSummary" Background="#16242B" BorderBrush="#315467" BorderThickness="1" CornerRadius="6" Padding="18" Margin="0,16,0,0" Visibility="Collapsed">
                             <StackPanel>
                                 <TextBlock Text="Jun OS is already installed here" FontWeight="SemiBold" Foreground="#CBEFFF" />
@@ -668,7 +693,7 @@ $window = [Windows.Markup.XamlReader]::Load($reader)
 $controlNames = @(
     'HeaderSubtitle', 'StepText', 'WelcomePage', 'OptionsPage', 'AssetsPage',
     'ReviewPage', 'InstallPage', 'InstallLocation', 'BrowseInstallButton',
-    'HardwareText', 'UpdateRadio', 'UpdateSummary', 'UpdateSummaryText', 'ExpressRadio', 'CustomRadio', 'CloudRadio', 'ExpressSummary', 'ExpressSummaryText',
+    'LanguagePanel', 'LanguageCombo', 'ClonePanel', 'CloneCheck', 'CloneDetails', 'HfTokenBox', 'HardwareText', 'UpdateRadio', 'UpdateSummary', 'UpdateSummaryText', 'ExpressRadio', 'CustomRadio', 'CloudRadio', 'ExpressSummary', 'ExpressSummaryText',
     'CloudOptions', 'CloudLines', 'CloudVoiceCheck', 'CloudKaraokeCheck',
     'CustomOptions', 'ChannelPanel', 'ChannelCombo', 'ProviderCombo',
     'CompatPanel', 'CompatUrl', 'CompatKey', 'CompatModel', 'LlamaPanel', 'LlamaUrl',
@@ -944,6 +969,8 @@ function Update-Mode {
     $custom = $CustomRadio.IsChecked -eq $true
     $cloud = $CloudRadio.IsChecked -eq $true
     $UpdateSummary.Visibility = if ($update) { 'Visible' } else { 'Collapsed' }
+    $LanguagePanel.Visibility = if ($update) { 'Collapsed' } else { 'Visible' }
+    $ClonePanel.Visibility = $LanguagePanel.Visibility
     $ExpressSummary.Visibility = if ($custom -or $cloud -or $update) { 'Collapsed' } else { 'Visible' }
     $CustomOptions.Visibility = if ($custom) { 'Visible' } else { 'Collapsed' }
     $CloudOptions.Visibility = if ($cloud) { 'Visible' } else { 'Collapsed' }
@@ -1067,6 +1094,8 @@ function Get-SetupValues {
         Channel = if ($express -or $cloud -or $script:PinnedRef) { '' } else { Get-SelectedTag $ChannelCombo }
         Provider = $provider
         Model = $model
+        Language = (Get-SelectedTag $LanguageCombo)
+        HfToken = if ($CloneCheck.IsChecked -eq $true) { $HfTokenBox.Password.Trim() } else { '' }
         TensorParallel = (-not $express -and -not $cloud -and $TensorParallelCheck.IsChecked -eq $true)
         Voice = if ($cloud) { $CloudVoiceCheck.IsChecked -eq $true } else { $express -or $VoiceCheck.IsChecked -eq $true }
         Karaoke = if ($cloud) { $CloudKaraokeCheck.IsChecked -eq $true } else { $express -or $KaraokeCheck.IsChecked -eq $true }
@@ -1107,10 +1136,12 @@ function Update-Review {
         "Folder       $path",
         "Setup        $(if ($values.Express) { 'Express' } elseif ($values.Cloud) { 'Cloud inference' } else { 'Custom' })",
         "Version      $(if ($script:PinnedRef) { "$($script:PinnedRef), pinned" } elseif ($values.Channel) { $values.Channel.Substring(0, 1).ToUpper() + $values.Channel.Substring(1) + ' channel' } else { 'Stable channel' })",
+        "Language     $($LanguageCombo.SelectedItem.Content)",
         "Provider     $($providerNames[$values.Provider])",
         "Model        $modelText",
         "Voice        $(if ($values.Voice) { 'On' } else { 'Off' })",
         "Karaoke      $(if ($values.Karaoke) { 'On' } else { 'Off' })",
+        "Cloning      $(if ($values.Voice -and $values.HfToken) { 'On, token checked during install' } else { 'Off' })",
         "Shortcut     $(if ($values.Shortcuts) { 'Desktop and Start menu' } else { 'None' })",
         "Live2D       $(if ($values.Extract) { 'Recover from your game copy' } else { 'Use placeholders for now' })",
         "Game bridge  $(if ($values.Bridge) { 'On' } else { 'Off' })"
@@ -1284,7 +1315,7 @@ function Start-Installation {
     $info.StandardErrorEncoding = [Text.Encoding]::UTF8
 
     $managedKeys = @(
-        'JUN_YES', 'JUN_EXPRESS', 'JUN_DIR', 'JUN_CHANNEL', 'JUN_REF', 'JUN_PIN_SHA', 'JUN_PROVIDER', 'JUN_MODEL',
+        'JUN_YES', 'JUN_EXPRESS', 'JUN_DIR', 'JUN_CHANNEL', 'JUN_REF', 'JUN_PIN_SHA', 'JUN_PROVIDER', 'JUN_MODEL', 'JUN_LANG', 'JUN_HF_TOKEN', 'HF_TOKEN',
         'JUN_TENSOR_PARALLEL', 'JUN_MTP', 'JUN_MTP_DEPTH', 'JUN_KARAOKE',
         'JUN_EXTRACT', 'JUN_BRIDGE', 'JUN_SHORTCUTS', 'JUN_UPDATE_CHECK', 'JUN_TRUST_CA', 'JUN_MANAGER_EXE', 'JUN_GAME_DIR', 'JUN_BOOTSTRAP_WINGET', 'VOICE',
         'KARAOKE', 'OPENAI_COMPAT_BASE_URL', 'OPENAI_COMPAT_API_KEY', 'OPENAI_COMPAT_MODEL', 'LLAMACPP_URL', 'JUN_CLOUD', 'JUN_CLOUD_ASK', 'JUN_REUSE'
@@ -1302,6 +1333,8 @@ function Start-Installation {
     if (-not $values.Update) {
         $info.EnvironmentVariables['JUN_PROVIDER'] = $values.Provider
         $info.EnvironmentVariables['JUN_MODEL'] = $values.Model
+        $info.EnvironmentVariables['JUN_LANG'] = $values.Language
+        if ($values.Voice -and $values.HfToken) { $info.EnvironmentVariables['JUN_HF_TOKEN'] = $values.HfToken }
         $info.EnvironmentVariables['JUN_TENSOR_PARALLEL'] = if ($values.TensorParallel) { 'on' } else { 'off' }
         $info.EnvironmentVariables['VOICE'] = if ($values.Voice) { 'on' } else { 'off' }
         $info.EnvironmentVariables['JUN_KARAOKE'] = if ($values.Karaoke) { 'on' } else { 'off' }
@@ -1365,6 +1398,9 @@ $CloudRadio.Add_Checked({ Update-Mode })
 $ProviderCombo.Add_SelectionChanged({ Update-ProviderPanels })
 $LlamaUrl.Add_TextChanged({ Update-ProviderPanels })
 $TensorParallelCheck.Add_Click({ Select-Model (Get-RecommendedModel ($TensorParallelCheck.IsChecked -eq $true)) })
+$CloneCheck.Add_Click({
+    $CloneDetails.Visibility = if ($CloneCheck.IsChecked -eq $true) { 'Visible' } else { 'Collapsed' }
+})
 $VoiceCheck.Add_Click({
     $voiceEnabled = $VoiceCheck.IsChecked -eq $true
     $KaraokeCheck.Visibility = if ($voiceEnabled) { 'Visible' } else { 'Collapsed' }

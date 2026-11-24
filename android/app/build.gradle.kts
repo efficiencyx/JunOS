@@ -137,9 +137,12 @@ tasks.matching { it.name.matches(Regex("merge(.*)PythonSources")) }.configureEac
 
 val generateJunWebAssets = tasks.register<Copy>("generateJunWebAssets") {
     from(rootProject.projectDir.parentFile.resolve("webapp")) {
-        exclude("api/**", "assets/**", "**/*.php", "lore_corpus.txt", "lore_index.bin", "lore_meta.json")
+        exclude("api/**", "assets/**", "**/*.php", "lore_corpus.jsonl")
     }
-    from(rootProject.projectDir.parentFile.resolve("tools/lore_dataset.jsonl")) {
+    from(rootProject.projectDir.parentFile.resolve("webapp/lore_corpus.jsonl")) {
+        into("data")
+    }
+    from(rootProject.projectDir.parentFile.resolve("webapp/api/lib/retrieval.json")) {
         into("data")
     }
     from(rootProject.projectDir.parentFile.resolve("webapp/api/lib/achievements.json")) {

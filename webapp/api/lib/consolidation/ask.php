@@ -8,12 +8,67 @@ const CONSOLIDATION_FEED_FLUSH_S = 0.4;
 // 3000 token chat gets two minutes of quiet before the watchdog cares
 const CONSOLIDATION_PREFILL_GUESS_TPS = 25;
 
-function consolidation_stopped(array $ctx): bool {
-    $stmt = db()->prepare('SELECT interrupt_at FROM memory_consolidation WHERE user_id = ?');
+// a thinking call needs room to think AND answer. at medium and high
+// the old flat 1500 ran out mid-thought and the fact was just gone
+const CONSOLIDATION_THINK_TOKENS = ['low' => 1500, 'medium' => 3000, 'high' => 6000];
+
+const CONSOLIDATION_CONTROL_EVERY_S = 1.0;
+const CONSOLIDATION_PAUSE_MAX_S = 1800;
+
+// a developer skipped something. 'call' is handled right in
+// consolidation_call, the rest bubble up to whoever owns that kind
+final class ConsolidationSkip extends RuntimeException {
+    public function __construct(public readonly string $kind) {
+        parent::__construct('consolidation_skip_' . $kind);
+    }
+}
+
+// stop, pause, skip:<kind> or ''. read at most once a second unless
+// $fresh, it runs inside the token stream
+function consolidation_control(array &$ctx, bool $fresh = false): string {
+    if (!$fresh && microtime(true) - ($ctx['control_at'] ?? 0) < CONSOLIDATION_CONTROL_EVERY_S) return '';
+    $ctx['control_at'] = microtime(true);
+    $stmt = db()->prepare('SELECT interrupt_at, pause_at, skip_kind, skip_at FROM memory_consolidation WHERE user_id = ?');
     $stmt->execute([$ctx['user']]);
-    $at = (int)$stmt->fetchColumn();
+    $row = $stmt->fetch() ?: [];
     $stmt->closeCursor();
-    return $at >= $ctx['started'];
+    if ((int)($row['interrupt_at'] ?? 0) >= $ctx['started']) return 'stop';
+    if ((int)($row['pause_at'] ?? 0) > 0) return 'pause';
+    $at = (int)($row['skip_at'] ?? 0);
+    if ($at >= $ctx['started'] && $at > ($ctx['skip_seen'] ?? 0) && in_array($row['skip_kind'] ?? '', CONSOLIDATION_SKIPS, true)) {
+        $ctx['skip_seen'] = $at;
+        return 'skip:' . $row['skip_kind'];
+    }
+    return '';
+}
+
+// lock and feed get touched or the stall watchdog calls it dead.
+// gives back whatever came after the pause (a skip, a stop, nothing)
+function consolidation_wait_paused(array &$ctx): string {
+    $since = time();
+    consolidation_feed_emit($ctx['user'], ['type' => 'paused']);
+    while (true) {
+        consolidation_lock_update($ctx['user'], ['paused' => true]);
+        @touch(consolidation_feed_path($ctx['user']));
+        $control = consolidation_control($ctx, true);
+        if ($control === 'stop' || time() - $since > CONSOLIDATION_PAUSE_MAX_S) throw new RuntimeException('consolidation_interrupted');
+        if ($control !== 'pause') break;
+        sleep(2);
+    }
+    consolidation_lock_update($ctx['user'], ['paused' => false]);
+    consolidation_feed_emit($ctx['user'], ['type' => 'resumed']);
+    return $control;
+}
+
+function consolidation_obey(array &$ctx, string $control): void {
+    if ($control === 'pause') $control = consolidation_wait_paused($ctx);
+    if ($control === 'stop') throw new RuntimeException('consolidation_interrupted');
+    if (str_starts_with($control, 'skip:')) throw new ConsolidationSkip(substr($control, 5));
+}
+
+function consolidation_skipped(array &$ctx, ConsolidationSkip $skip, string $what): void {
+    $ctx['skips'] = ($ctx['skips'] ?? 0) + 1;
+    consolidation_feed_emit($ctx['user'], ['type' => 'skip', 'kind' => $skip->kind, 'what' => $what]);
 }
 
 function consolidation_payload(string $provider, string $model, array $messages, ?array $schema, int $maxTokens, bool $think, string $effort, float $temperature): array {
@@ -62,15 +117,31 @@ function consolidation_parse_json(string $content): ?array {
 }
 
 // with a schema: array or null. without: text or ''
-function consolidation_call(array &$ctx, string $label, string $task, ?array $schema, int $maxTokens = 300, bool $think = false, float $temperature = 0.3) {
-    if (consolidation_stopped($ctx)) throw new RuntimeException('consolidation_interrupted');
+function consolidation_call(array &$ctx, string $label, string $task, ?array $schema, int $maxTokens = 300, bool|string $think = false, float $temperature = 0.3) {
+    try {
+        return consolidation_call_inner($ctx, $label, $task, $schema, $maxTokens, $think, $temperature);
+    } catch (ConsolidationSkip $skip) {
+        if ($skip->kind !== 'call') throw $skip;
+        consolidation_skipped($ctx, $skip, $label);
+        return $schema ? null : '';
+    }
+}
+
+// $think: false, true for the pass's own level, or a level by name
+function consolidation_call_inner(array &$ctx, string $label, string $task, ?array $schema, int $maxTokens, bool|string $think, float $temperature) {
+    consolidation_obey($ctx, consolidation_control($ctx, true));
     $provider = ai_provider();
     $model = default_chat_model();
-    // same budget token chat.php ends every turn with, it's what the dataset trained
-    $effort = $think ? $ctx['effort'] : 'low';
-    $marker = "\n\n<think:" . ($effort === 'medium' ? 'med' : $effort) . '>';
-    $messages = [['role' => 'system', 'content' => $ctx['voice']], ['role' => 'user', 'content' => $task . $marker]];
-    if ($think) $maxTokens = max($maxTokens, 1500);
+    $askedTokens = $maxTokens;
+    $setThink = function (bool|string $level) use (&$think, &$effort, &$messages, &$maxTokens, $ctx, $task, $askedTokens) {
+        $effort = $level === true ? $ctx['effort'] : (is_string($level) ? $level : 'low');
+        $think = $level !== false;
+        // same budget token chat.php ends every turn with, it's what the dataset trained
+        $marker = "\n\n<think:" . ($effort === 'medium' ? 'med' : $effort) . '>';
+        $messages = [['role' => 'system', 'content' => $ctx['voice']], ['role' => 'user', 'content' => $task . $marker]];
+        $maxTokens = $think ? max($askedTokens, CONSOLIDATION_THINK_TOKENS[$effort] ?? 1500) : $askedTokens;
+    };
+    $setThink($think);
 
     $loops = 0;
     for ($attempt = 0; $attempt < 2; $attempt++) {
@@ -81,7 +152,8 @@ function consolidation_call(array &$ctx, string $label, string $task, ?array $sc
         if ($ctx['calls'] === 1) $quiet += 60;
         $quietUntil = time() + $quiet;
         consolidation_lock_update($ctx['user'], ['quiet_until' => $quietUntil]);
-        consolidation_feed_emit($ctx['user'], ['type' => 'call', 'label' => $label, 'think' => $think, 'quiet_until' => $quietUntil]);
+        consolidation_feed_emit($ctx['user'], ['type' => 'call', 'label' => $label, 'think' => $think, 'effort' => $effort,
+            'quiet_until' => $quietUntil, 'prompt_tokens' => $promptTokens, 'prompt' => $task]);
 
         $pending = ['think' => '', 'out' => ''];
         $flushedAt = microtime(true);
@@ -98,13 +170,32 @@ function consolidation_call(array &$ctx, string $label, string $task, ?array $sc
             if (microtime(true) - $flushedAt >= CONSOLIDATION_FEED_FLUSH_S) $flush();
         };
         [$emit, $stuck] = stream_loop_guard($emit);
+        $stop = function () use (&$ctx, $stuck): string {
+            if (($why = $stuck()) !== '') return $why;
+            $control = consolidation_control($ctx);
+            if ($control === '') return '';
+            $ctx['control'] = $control;
+            return 'control';
+        };
 
         $payload = consolidation_payload($provider, $model, $messages, $schema, $maxTokens, $think, $effort, $temperature);
-        $state = provider_stream_round($provider, $payload, $emit, 0, microtime(true) + CONSOLIDATION_CALL_TIMEOUT, $stuck);
+        $began = microtime(true);
+        $state = provider_stream_round($provider, $payload, $emit, 0, microtime(true) + CONSOLIDATION_CALL_TIMEOUT, $stop);
         $flush();
+
+        // paused, skipped or stopped mid-answer. a pause asks the same thing again after
+        if ($state['aborted'] === 'control') {
+            $control = $ctx['control'];
+            unset($ctx['control']);
+            if ($control === 'pause') $control = consolidation_wait_paused($ctx);
+            consolidation_obey($ctx, $control);
+            $attempt--;
+            continue;
+        }
 
         if ($state['aborted'] === 'looping') {
             log_event(['msg' => 'consolidation_looping', 'user_id' => $ctx['user'], 'label' => $label, 'retry' => $loops + 1]);
+            $ctx['loops'] = ($ctx['loops'] ?? 0) + 1;
             if (++$loops > STREAM_LOOP_RETRIES) throw new RuntimeException('consolidation_looping');
             consolidation_feed_emit($ctx['user'], ['type' => 'loop', 'label' => $label, 'retry' => $loops, 'of' => STREAM_LOOP_RETRIES]);
             $temperature = min(1.0, $temperature + 0.2);
@@ -130,10 +221,20 @@ function consolidation_call(array &$ctx, string $label, string $task, ?array $sc
             throw new RuntimeException('consolidation_provider_error');
         }
         $content = (string)$state['content'];
+        $out = $stats['eval_count'] ?? null;
+        $genMs = ($stats['eval_duration'] ?? 0) / 1e6;
+        consolidation_feed_emit($ctx['user'], ['type' => 'answer', 'label' => $label,
+            'ms' => (int)round((microtime(true) - $began) * 1000), 'prompt_tokens' => $stats['prompt_eval_count'] ?? null,
+            'out_tokens' => $out, 'tok_s' => $out && $genMs > 0 ? round($out / ($genMs / 1000), 1) : null,
+            'budget' => $state['done_reason'] === 'length', 'text' => trim(provider_strip_think($content))]);
         if (!$schema) return trim(provider_strip_think($content));
         $data = consolidation_parse_json($content);
         if ($data !== null) return $data;
-        log_event(['msg' => 'consolidation_bad_json', 'user_id' => $ctx['user'], 'label' => $label]);
+        $ctx['bad_json'] = ($ctx['bad_json'] ?? 0) + 1;
+        log_event(['msg' => 'consolidation_bad_json', 'user_id' => $ctx['user'], 'label' => $label, 'budget' => $state['done_reason'] === 'length']);
+        // mostly she thought until the budget ran out and never got to
+        // the JSON. once more without thinking beats losing the fact
+        $setThink(false);
     }
     return $schema ? null : '';
 }
@@ -148,5 +249,7 @@ function consolidation_vote(array &$ctx, string $label, string $task, array $val
     }
     arsort($tally);
     $top = (string)array_key_first($tally);
-    return [$tally[$top] > $n / 2 ? $top : $safe, $tally];
+    $result = $tally[$top] > $n / 2 ? $top : $safe;
+    consolidation_feed_emit($ctx['user'], ['type' => 'vote', 'label' => $label, 'tally' => $tally, 'result' => $result]);
+    return [$result, $tally];
 }

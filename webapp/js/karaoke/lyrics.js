@@ -1,5 +1,5 @@
 import { api } from '../core/api.js?v=1';
-import { t } from '../core/i18n.js?v=1';
+import { t } from '../core/i18n.js?v=2';
 
 export const normWord = (w) => (w || '').toLowerCase().replace(/[^\p{L}\p{N}]/gu, '');
 

@@ -8,7 +8,7 @@ const TRIP_TOOLS = ['enter_shop' => 'shop', 'enter_karaoke' => 'karaoke', 'go_ou
 const WATCH_TOOLS = ['stay_silent', 'memory_write'];
 
 // errors from a call she got wrong herself, so the next round forces a call
-const TOOL_RETRY_ERRORS = ['not_a_hex_color', 'query_required', 'memory_required', 'message_required', 'query_refused'];
+const TOOL_RETRY_ERRORS = ['not_a_hex_color', 'query_required', 'memory_required', 'message_required', 'query_refused', 'no_match'];
 
 function tool_result_retryable(string $result): bool {
     return in_array(json_decode($result, true)['error'] ?? null, TOOL_RETRY_ERRORS, true);
@@ -107,11 +107,11 @@ function tool_catalog(?string $approvedWebSearchQuery, bool $watching = false): 
             'type' => 'function',
             'function' => [
                 'name' => 'search_lore',
-                'description' => 'Look up canon world facts - people, places, jobs, events from your own world - when you are unsure of a detail.',
+                'description' => 'Look up canon world facts - people, places, jobs, events from your own world - when you are unsure of a detail. Write the query in English.',
                 'parameters' => [
                     'type' => 'object',
                     'properties' => [
-                        'query' => ['type' => 'string', 'description' => 'Name or topic to look up.'],
+                        'query' => ['type' => 'string', 'description' => 'Name or topic to look up, in English.'],
                         'limit' => ['type' => 'integer', 'description' => 'Max facts, 1-6.'],
                     ],
                     'required' => ['query'],
@@ -557,38 +557,19 @@ function run_tool_call(string $name, array $args, array $user, int $convId): str
             $query = trim((string)($args['query'] ?? ''));
             $limit = max(1, min(8, (int)($args['limit'] ?? 5)));
             if ($query === '') return json_encode(['error' => 'query_required']);
-            // ponytail: rows are ciphertext so LIKE can't see them. walk
-            // his messages newest first, open each, stop at $limit hits.
-            // one person's chats, fine. an index would need a plaintext
-            // copy somewhere, which is the exact thing we don't keep.
-            $st = db()->prepare(
-                'SELECT m.role, m.content, m.created_at, c.title, c.id AS conversation_id
-                   FROM messages m JOIN conversations c ON c.id = m.conversation_id
-                  WHERE c.user_id = ? AND c.id != ?
-                  ORDER BY m.created_at DESC, m.id DESC'
-            );
-            $st->execute([(int)$user['id'], $convId]);
-            $terms = array_values(array_unique(array_column(lore_tokens($query), 0)));
-            $rows = [];
-            while ($r = $st->fetch()) {
-                $content = trim(preg_replace('/\s+/', ' ', (string)dec($r['content'])));
-                $at = recall_match($content, $query, $terms);
-                if ($at === null) continue;
-                $content = recall_excerpt($content, $at);
-                $rows[] = ['date' => date('Y-m-d H:i', (int)$r['created_at']), 'conversation_id' => (int)$r['conversation_id'], 'title' => (string)dec($r['title'] ?? null), 'role' => (string)$r['role'], 'content' => $content];
-                if (count($rows) >= $limit) break;
-            }
-            $st->closeCursor();
-            if (!$rows) {
+            $found = recall_search((int)$user['id'], $convId, $query, $limit);
+            $rows = $found['results'] ?? [];
+            if (!$found) {
                 // the fine-tune only ever saw THIS tool name, so a lore
                 // question lands here first. hand it the right tool instead
                 // of an empty result.
-                $note = lore_search($query, 1, true)
-                    ? 'No earlier conversation mentions this, but it is something from your world, not something Anon told you. Call search_lore with the same query before answering.'
+                $note = lore_gate($query)
+                    ? 'No earlier conversation mentions this, but it is something from your world, not something Anon told you. Call search_lore with the query in English before answering.'
                     : 'No earlier conversation mentions this. You do not remember it. Say so instead of describing one.';
-                return json_encode(['results' => [], 'found' => false, 'note' => $note], JSON_UNESCAPED_UNICODE);
+                $try = recall_try((int)$user['id'], $query);
+                return json_encode(['results' => [], 'found' => false, 'note' => $note] + ($try ? ['try' => $try] : []), JSON_UNESCAPED_UNICODE);
             }
-            return json_encode(['results' => $rows], JSON_UNESCAPED_UNICODE);
+            return json_encode(['results' => $rows] + $found, JSON_UNESCAPED_UNICODE);
         }
         if ($name === 'list_recent_chats') {
             $limit = max(1, min(10, (int)($args['limit'] ?? 5)));
@@ -631,12 +612,18 @@ function run_tool_call(string $name, array $args, array $user, int $convId): str
             $query = trim((string)($args['query'] ?? ''));
             $limit = max(1, min(6, (int)($args['limit'] ?? 4)));
             if ($query === '') return json_encode(['error' => 'query_required']);
-            $facts = array_map(fn($h) => $h['answer'], lore_search($query, $limit, true));
+            $facts = array_map(fn($h) => $h['answer'], lore_search($query, $limit, true, $matched));
             ach_add((int)$user['id'], 'lore');
             if (!$facts) {
+                $near = lore_did_you_mean($query);
+                if ($near) {
+                    return json_encode(['facts' => [], 'found' => false, 'error' => 'no_match', 'did_you_mean' => $near,
+                        'note' => 'Nothing matches that spelling. If you meant one of these, search again with it.'], JSON_UNESCAPED_UNICODE);
+                }
                 return json_encode(['facts' => [], 'found' => false, 'note' => 'Nothing in your world matches this. You do not know it. Say so instead of inventing a detail.'], JSON_UNESCAPED_UNICODE);
             }
-            return json_encode(['facts' => $facts], JSON_UNESCAPED_UNICODE);
+            $understood = lore_understood($query, $matched ?? []);
+            return json_encode($understood ? ['facts' => $facts, 'read_as' => $understood] : ['facts' => $facts], JSON_UNESCAPED_UNICODE);
         }
         if ($name === 'memory_write') {
             $memory = (string)($args['memory'] ?? '');

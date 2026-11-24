@@ -10,6 +10,8 @@ import com.efficiencyx.junos.inference.LiteRtEngine
 import com.efficiencyx.junos.lore.LoreIndex
 import com.efficiencyx.junos.memory.MemoryStore
 import com.efficiencyx.junos.pairing.PairingStore
+import com.efficiencyx.junos.retrieval.Retrieval
+import com.efficiencyx.junos.retrieval.Words
 import com.efficiencyx.junos.server.LocalServer
 import com.efficiencyx.junos.setup.AssetRecovery
 import com.efficiencyx.junos.setup.ModelStore
@@ -18,8 +20,9 @@ import com.efficiencyx.junos.voice.VoiceEngine
 class JunApplication : Application() {
     val database by lazy { JunDatabase.create(this) }
     val modelStore by lazy { ModelStore(this) }
-    val memoryStore by lazy { MemoryStore(this) }
-    val loreIndex by lazy { LoreIndex(this) }
+    val retrieval by lazy { Retrieval(Words.parse(assets.open("data/retrieval.json").bufferedReader().use { it.readText() })) }
+    val memoryStore by lazy { MemoryStore(this, retrieval) }
+    val loreIndex by lazy { LoreIndex(retrieval) { assets.open("data/lore_corpus.jsonl") } }
     val pairingStore by lazy { PairingStore(this) }
     val colab by lazy { ColabSession(this) }
     val localEngine by lazy { LiteRtEngine(modelStore) }
@@ -28,7 +31,7 @@ class JunApplication : Application() {
     val voiceEngine by lazy { VoiceEngine(this, modelStore) }
     val achievements by lazy { Achievements(this, database) }
     val chatEngine by lazy {
-        ChatEngine(this, database, memoryStore, loreIndex, achievements) { inferenceEngine }
+        ChatEngine(this, database, memoryStore, loreIndex, retrieval, achievements) { inferenceEngine }
     }
     val assetRecovery by lazy { AssetRecovery(this) }
     val localServer by lazy {

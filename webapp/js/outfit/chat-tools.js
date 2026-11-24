@@ -1,9 +1,9 @@
 import { BODY_VARIANTS, COLOR_GROUPS, ITEM_COLOR_GROUPS, ITEM_VARIANTS, ITEMS, VARIANTS } from './catalog.js?v=7';
-import { Presets, applyPreset } from './presets.js?v=46';
-import { queueWardrobe } from './sync.js?v=46';
-import { setColor, setDraftItem } from './apply.js?v=46';
+import { Presets, applyPreset } from './presets.js?v=49';
+import { queueWardrobe } from './sync.js?v=49';
+import { setColor, setDraftItem } from './apply.js?v=49';
 import { colors, state, variantState } from './current.js?v=8';
-import * as Mods from '../mods/mods.js?v=117';
+import * as Mods from '../mods/mods.js?v=120';
 
 // every color and style rides on the item it belongs to: "shirt (#333333, bedabots logo)"
 export function describe() {

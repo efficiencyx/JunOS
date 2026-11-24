@@ -637,13 +637,13 @@ html[data-pre-auth] #app { visibility: hidden; }
    (the page's allowlist for what may run) forbids the usual
    media="print" onload= trick. and blocking on the full sheet
    costs a round trip the auth screen doesn't even need. -->
-<link rel="preload" as="style" href="styles.css?v=86">
+<link rel="preload" as="style" href="styles.css?v=88">
 <link rel="preload" as="style" href="css/trip-loader.css?v=1">
-<noscript><link rel="stylesheet" href="styles.css?v=86"></noscript>
+<noscript><link rel="stylesheet" href="styles.css?v=88"></noscript>
 
 <script type="module" src="js/core/pwa.js?v=2"></script>
-<script src="js/boot-gate.js?v=41"></script>
-<script type="module" src="js/app.js?v=175"></script>
+<script src="js/boot-gate.js?v=43"></script>
+<script type="module" src="js/app.js?v=183"></script>
 </head>
 <body>
 
@@ -917,6 +917,7 @@ html[data-pre-auth] #app { visibility: hidden; }
             <option value="hi">हिन्दी</option>
             <option value="it">Italiano</option>
             <option value="ja">日本語</option>
+            <option value="pl">Polski</option>
             <option value="pt">Português (Brasil)</option>
             <option value="es">Español</option>
           </select></div>
@@ -977,6 +978,24 @@ html[data-pre-auth] #app { visibility: hidden; }
             <input type="range" id="ttsSpeed" min="0.5" max="2.0" step="0.05" value="1.0" aria-label="TTS speed" data-i18n-aria-label="settings.speed.aria">
             <output id="ttsSpeedVal" for="ttsSpeed">1.0×</output>
           </div>
+        </div>
+        <div class="set-row" data-dep="tts">
+          <div class="set-row-text">
+            <div class="set-row-title" data-i18n="settings.ttsChunk.title">Chunk size</div>
+            <div class="set-row-desc" data-i18n="settings.ttsChunk.desc">Smaller chunks start talking sooner, bigger ones sound smoother.</div>
+          </div>
+          <div class="set-row-control"><select id="ttsChunkSelect" aria-label="Chunk size" data-i18n-aria-label="settings.ttsChunk.title">
+            <option value="small" data-i18n="settings.ttsChunk.small">Small</option>
+            <option value="normal" data-i18n="settings.ttsChunk.normal">Normal</option>
+            <option value="large" data-i18n="settings.ttsChunk.large">Large</option>
+          </select></div>
+        </div>
+        <div class="set-row" data-dep="tts">
+          <div class="set-row-text">
+            <div class="set-row-title" data-i18n="settings.ttsSync.title">Wait for her voice</div>
+            <div class="set-row-desc" data-i18n="settings.ttsSync.desc">Her words and reactions show up as she says them, not as she writes them.</div>
+          </div>
+          <label class="set-row-control"><input type="checkbox" id="ttsSyncChk" class="toggle" aria-label="Wait for her voice" data-i18n-aria-label="settings.ttsSync.title"></label>
         </div>
 
         <div class="set-row">

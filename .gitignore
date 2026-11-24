@@ -116,3 +116,7 @@ webapp/landing/audio/
 .of
 .many
 .eastereggs
+
+# voice clips people clone her voice from, theirs not ours
+voices/*
+!voices/.gitkeep

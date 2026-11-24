@@ -1,5 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
+# a root-owned ~/.cache/pip from some old sudo pip makes every install die on Errno 13
+export PIP_NO_CACHE_DIR=1
 
 REPO_UPSTREAM="https://github.com/efficiencyx/JunOS.git"
 REPO="${JUN_REPO:-$REPO_UPSTREAM}"
@@ -413,6 +415,59 @@ ask_update_check() {
     ok "update check $val"
 }
 
+# kyutai gates the pocket-tts cloning weights behind a free HF
+# account. Enter skips it and nothing extra gets downloaded
+CLONE_CHECK_URL="https://huggingface.co/kyutai/pocket-tts/resolve/main/languages/english/model.safetensors"
+ask_voice_cloning() {
+    local token="${JUN_HF_TOKEN:-}" code
+    if [ -z "$token" ] && [ -z "$(env_value HF_TOKEN)" ] && [ -r /dev/tty ] \
+        && { [ "${JUN_YES:-}" != "1" ] || [ "$EXPRESS" = 1 ]; }; then
+        {
+            printf '\n     %svoice cloning%s %s(optional: she speaks in a voice from any clip you put in voices/)%s\n' "$B" "$R" "$DIM" "$R"
+            printf '     %sneeds a free Hugging Face account. accept the terms at https://huggingface.co/kyutai/pocket-tts,%s\n' "$DIM" "$R"
+            printf '     %sthen make a read token at https://huggingface.co/settings/tokens. only clone a voice whose owner said yes.%s\n' "$DIM" "$R"
+            printf '     %s$%s paste the token %s[enter = skip]%s %s→%s ' "$OK" "$R" "$DIM" "$R" "$ACCENT" "$R"
+        } > /dev/tty
+        read -rs token < /dev/tty || token=""
+        printf '\n' > /dev/tty
+    fi
+    [ -n "$token" ] || return 0
+    code="$(printf 'Authorization: Bearer %s\n' "$token" \
+        | curl --proto '=https' -s -o /dev/null -w '%{http_code}' -I -H @- "$CLONE_CHECK_URL" || true)"
+    case "$code" in
+        2??|3??) set_env HF_TOKEN "$token"; ok "voice cloning on" ;;
+        401) warn_ "Hugging Face doesn't know that token, voice cloning stays off" ;;
+        403) warn_ "accept the terms at https://huggingface.co/kyutai/pocket-tts first, voice cloning stays off" ;;
+        *) set_env HF_TOKEN "$token"; warn_ "couldn't check the token (HTTP ${code:-none}), saved it anyway" ;;
+    esac
+}
+
+# JUN_LANG wins over UI_LANG, same as JUN_KARAOKE. picks the app
+# language and the voice the sidecar downloads on its first start
+UI_LANGS="en it de ja fr es pt hi zh pl"
+ask_language() {
+    local v
+    v="$(printf '%s' "${JUN_LANG:-${UI_LANG:-}}" | tr '[:upper:]' '[:lower:]')"
+    if [ -z "$v" ] && [ -r /dev/tty ] && { [ "${JUN_YES:-}" != "1" ] || [ "$EXPRESS" = 1 ]; }; then
+        {
+            printf '\n     %slanguage%s %s(the app, and her voice)%s\n' "$B" "$R" "$DIM" "$R"
+            printf '       %s1%s English  %s2%s Italiano  %s3%s Deutsch  %s4%s 日本語  %s5%s Français\n' \
+                "$ACCENT" "$R" "$ACCENT" "$R" "$ACCENT" "$R" "$ACCENT" "$R" "$ACCENT" "$R"
+            printf '       %s6%s Español  %s7%s Português  %s8%s हिन्दी  %s9%s 中文  %s10%s Polski\n' \
+                "$ACCENT" "$R" "$ACCENT" "$R" "$ACCENT" "$R" "$ACCENT" "$R" "$ACCENT" "$R"
+            printf '     %s$%s choice %s[enter = English]%s %s→%s ' "$OK" "$R" "$DIM" "$R" "$ACCENT" "$R"
+        } > /dev/tty
+        read -r v < /dev/tty || v=""
+        case "$v" in
+            [1-9]|10) v="$(printf '%s' "$UI_LANGS" | cut -d' ' -f"$v")" ;;
+        esac
+    fi
+    case " $UI_LANGS " in
+        *" ${v:-en} "*) UI_LANG="${v:-en}" ;;
+        *) warn_ "unknown language \"$v\", using English"; UI_LANG=en ;;
+    esac
+}
+
 # off skips the seperate demucs/CUDA/ROCm image (demucs is the
 # model that splits a song into stems). JUN_KARAOKE=on|off
 # defaults on and wins over KARAOKE, same as install.ps1.
@@ -820,6 +875,7 @@ configure() {
     # she wants for her own layers.
     if [ "$voice" = on ]; then
         set_env TTS_DEVICE cpu
+        ask_voice_cloning
     fi
 
     ask_karaoke
@@ -840,6 +896,10 @@ configure() {
     if [ "$TENSOR_PARALLEL" = on ]; then
         ok "tensor parallelism on"
     fi
+
+    ask_language
+    set_env UI_LANG "$UI_LANG"
+    ok "language $UI_LANG"
 
     ensure_key OMEGA_REGISTRATION_KEY
     ensure_key SIDECAR_SECRET

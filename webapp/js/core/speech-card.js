@@ -1,9 +1,11 @@
-import * as Live2D from '../live2d/live2d.js?v=92';
+import * as Live2D from '../live2d/live2d.js?v=93';
 import { apiGet } from './api.js?v=1';
-import { gaugeTier } from './mood-tier.js?v=4';
+import { gaugeTier } from './mood-tier.js?v=5';
 import * as Names from './names.js?v=1';
 import * as MobileViewport from './viewport.js?v=1';
-import * as TTS from '../voice/tts.js?v=94';
+import * as TTS from '../voice/tts.js?v=155';
+import { defaultEngine } from '../voice/languages.js?v=3';
+import { lang } from './i18n.js?v=2';
 
 export let affection = 0;
 export let trust = 0;
@@ -50,7 +52,7 @@ function showCard() {
 
 export function configureTts() {
   TTS.setEnabled(localStorage.getItem('tts.enabled') === '1');
-  TTS.setEngine(localStorage.getItem('tts.engine') || 'kokoro');
+  TTS.setEngine(localStorage.getItem('tts.engine') || defaultEngine(lang));
   TTS.setVoice(localStorage.getItem('tts.voice') || 'af_heart');
   TTS.setLang(localStorage.getItem('tts.lang') || 'auto');
   try { TTS.setLangVoices(JSON.parse(localStorage.getItem('tts.voices') || '{}')); } catch { TTS.setLangVoices({}); }

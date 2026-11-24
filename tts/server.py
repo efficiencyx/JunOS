@@ -4,7 +4,7 @@ from js/voice/tts.js and sends back a WAV for its AudioContext.
 
 `engine` picks kokoro (Kokoro-82M, the default, needs
 espeak-ng) or pockettts (kyutai-labs pocket-tts, 100M, CPU,
-English + 5 languages). /voices lists voices and pocket-tts
+English + 6 languages). /voices lists voices and pocket-tts
 languages for the picker. js/voice/voice.js sends a raw WAV
 to /stt and faster-whisper transcribes it.
 
@@ -32,7 +32,8 @@ import threading
 from fastapi import FastAPI
 
 from sidecar import gate, karaoke, state, stt, tts
-from sidecar.config import KOKORO_DEFAULT, SIDECAR_ALLOWED_HOSTS, SIDECAR_ROLE, SIDECAR_SECRET, TTS_IDLE_UNLOAD_S
+from sidecar.config import (KOKORO_DEFAULT, SIDECAR_ALLOWED_HOSTS, SIDECAR_ROLE, SIDECAR_SECRET, TTS_IDLE_UNLOAD_S,
+                            UI_LANG, UI_LANG_VOICE)
 from sidecar.devices import get_sep_device
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s: %(message)s")
@@ -42,6 +43,15 @@ app = FastAPI()
 gate.install(app)
 for module in (tts, stt, karaoke):
     app.include_router(module.router)
+
+
+def prefetch_ui_voice():
+    engine, lang = UI_LANG_VOICE[UI_LANG]
+    try:
+        tts.warm(tts.WarmReq(engine=engine, lang=lang))
+        log.info("UI_LANG=%s voice ready (%s %s)", UI_LANG, engine, lang)
+    except Exception:
+        log.exception("UI_LANG=%s voice prefetch failed (non-fatal), it loads on first use", UI_LANG)
 
 
 @app.on_event("startup")
@@ -61,6 +71,8 @@ def prewarm():
             log.info("pre-warm done (engine=kokoro voice=%s)", KOKORO_DEFAULT)
         except Exception:
             log.exception("pre-warm failed (non-fatal)")
+        if UI_LANG in UI_LANG_VOICE:
+            threading.Thread(target=prefetch_ui_voice, name="tts-prefetch", daemon=True).start()
 
     # start the idle clock here, so the time prewarm took doesn't
     # count against it

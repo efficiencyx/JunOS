@@ -93,6 +93,7 @@ html body.cabinet-mode #stage { position: fixed; inset: -16dvh 0 16dvh; width: 1
 .cabinet-card:hover { filter: none; }
 .cabinet-card[aria-pressed="true"] { transform: translateY(-12px); outline: 2px solid var(--cab-brass); outline-offset: 2px; }
 .cabinet-card--choice { display: grid; place-items: center; text-align: center; font-size: 17px; }
+.cabinet-was { display: block; margin-top: 8px; color: var(--cab-muted); font-size: .85em; }
 
 .cabinet-drawers {
   display: grid;

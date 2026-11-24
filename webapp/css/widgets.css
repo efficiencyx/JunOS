@@ -360,6 +360,9 @@
   font-size: 9px;
 }
 .devhud-run { padding: 1px 8px; font-size: 10px; letter-spacing: normal; text-transform: none; }
+.devhud-ctl { display: flex; flex-wrap: wrap; gap: 4px; justify-content: flex-end; }
+.devhud-fold { cursor: pointer; }
+.devhud-more { padding-left: 2em; max-height: 16em; overflow: auto; }
 .devhud-term {
   flex: 1 1 auto;
   min-height: 90px;

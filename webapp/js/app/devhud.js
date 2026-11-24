@@ -1,7 +1,7 @@
-import { api } from '../core/api.js?v=1';
+import { api, apiGet, apiJson } from '../core/api.js?v=1';
 import { clamp } from '../core/util.js?v=1';
-import * as Feed from './consolidation-feed.js?v=3';
-import { runPassNow } from './consolidation.js?v=146';
+import * as Feed from './consolidation-feed.js?v=4';
+import { runPassNow } from './consolidation.js?v=154';
 
 const STORAGE_KEY = 'omega.devhud.v1';
 const GEOM_KEY = 'omega.devhud.geom.v1';
@@ -15,6 +15,9 @@ let pollTimer = null;
 let visible = false;
 let term = null;
 let liveLine = null;
+let pauseBtn = null;
+let paused = false;
+let viewing = 0;
 
 let gen = { t0: 0, tFirst: 0, tLast: 0, active: 0, chunks: 0, final: null };
 
@@ -60,7 +63,17 @@ function build() {
       row('host RAM', 'hram') +
       row('model', 'model') +
     '</div>' +
-    '<div class="devhud-term-head"><span>memory</span><button class="devhud-run" type="button">run now</button></div>' +
+    '<div class="devhud-term-head"><span>memory</span><span class="devhud-ctl">' +
+      '<button class="devhud-run" type="button">run now</button>' +
+      '<button class="devhud-run" type="button" data-dry>dry run</button>' +
+      '<button class="devhud-run" type="button" data-op="pause">pause</button>' +
+      '<select class="devhud-run" data-skip aria-label="Skip">' +
+        '<option value="">skip</option><option value="call">this call</option><option value="item">this fact or note</option>' +
+        '<option value="chat">this chat</option><option value="step">this step</option></select>' +
+      '<button class="devhud-run" type="button" data-op="stop">stop</button>' +
+      '<select class="devhud-run" data-back aria-label="Which pass">' +
+        '<option value="0">this pass</option><option value="1">last pass</option><option value="2">one before</option></select>' +
+    '</span></div>' +
     '<div class="devhud-term" role="log" aria-label="Memory pass"></div>';
   document.body.appendChild(root);
   root.querySelector('.devhud-close').addEventListener('click', () => set(false));
@@ -72,6 +85,22 @@ function build() {
     if (!(await runPassNow())) termLine('nothing started in 30 s', 'warn');
     runBtn.disabled = false;
   });
+  root.querySelector('[data-dry]').addEventListener('click', async (e) => {
+    e.currentTarget.disabled = true;
+    termLine('dry run requested, nothing gets written', 'dim');
+    if (!(await runPassNow({ dry: true }))) termLine('nothing started in 30 s', 'warn');
+    e.currentTarget.disabled = false;
+  });
+  pauseBtn = root.querySelector('[data-op="pause"]');
+  pauseBtn.addEventListener('click', () => control(paused ? 'resume' : 'pause'));
+  root.querySelector('[data-op="stop"]').addEventListener('click', () => control('stop'));
+  const skip = root.querySelector('[data-skip]');
+  skip.addEventListener('change', () => {
+    if (skip.value) control('skip', skip.value);
+    skip.value = '';
+  });
+  const back = root.querySelector('[data-back]');
+  back.addEventListener('change', () => showPass(Number(back.value)));
   Feed.subscribe(onFeed);
   fields = {};
   root.querySelectorAll('.devhud-v').forEach((el) => { fields[el.id.replace('devhud-', '')] = el; });
@@ -144,11 +173,56 @@ function termLine(text, kind = '') {
 
 const clock = (at) => new Date((at || Date.now() / 1000) * 1000).toTimeString().slice(0, 8);
 
+async function control(op, kind) {
+  const r = await apiJson('consolidate.php?action=control', kind ? { op, kind } : { op }).catch(() => null);
+  if (!r || !r.ok) { termLine(`  !! ${op} refused${r ? ' (' + r.status + ')' : ''}`, 'warn'); return; }
+  const body = await r.json().catch(() => ({}));
+  termLine(body.queued ? '  resume queued' : `  ${op}${kind ? ' ' + kind : ''} sent`, 'dim');
+}
+
+function setPaused(on) {
+  paused = on;
+  if (pauseBtn) pauseBtn.textContent = on ? 'resume' : 'pause';
+}
+
+// 0 is the pass the live feed is on, 1 and 2 the ones the server kept
+async function showPass(back) {
+  viewing = back;
+  term.textContent = '';
+  liveLine = null;
+  const data = await apiGet('consolidate.php?action=history&back=' + back);
+  if (!data) { termLine('nothing kept', 'dim'); return; }
+  for (const ev of data.events) render(ev);
+}
+
+function foldLine(text, kind, full) {
+  const line = termLine(text, kind);
+  if (!full) return line;
+  const more = document.createElement('div');
+  more.className = 'devhud-tl devhud-tl--dim devhud-more';
+  more.hidden = true;
+  more.textContent = full;
+  line.after(more);
+  line.classList.add('devhud-fold');
+  line.addEventListener('click', () => { more.hidden = !more.hidden; });
+  return line;
+}
+
+function tallyText(t) {
+  return Object.entries(t || {}).map(([k, n]) => `${k} ${n}`).join(', ');
+}
+
 function onFeed(ev) {
+  if (ev.type === 'paused' || ev.type === 'resumed') setPaused(ev.type === 'paused');
+  if (ev.type === 'done') setPaused(false);
+  if (viewing === 0) render(ev);
+}
+
+function render(ev) {
   if (ev.type !== 'tok') liveLine = null;
   switch (ev.type) {
     case 'pass':
-      termLine(`${clock(ev.at)} pass · ${ev.chats} chats · ${ev.notes} notes`, 'head');
+      termLine(`${clock(ev.at)} pass · ${ev.chats} chats · ${ev.notes} notes${ev.effort ? ' · think ' + ev.effort : ''}${ev.dry ? ' · DRY RUN' : ''}`, 'head');
       break;
     case 'step': {
       const where = ev.step === 1 ? `chat ${ev.i}/${ev.n} ${ev.title}` : ev.step === 2 ? `note ${ev.i}/${ev.n}` : `journal ${ev.i}/${ev.n}`;
@@ -156,7 +230,24 @@ function onFeed(ev) {
       break;
     }
     case 'call':
-      termLine(`  > ${ev.label}${ev.think ? ' (thinking)' : ''}`, 'dim');
+      foldLine(`  > ${ev.label}${ev.think ? ' (thinking ' + (ev.effort || '') + ')' : ''}${ev.prompt_tokens ? ' · ~' + ev.prompt_tokens + ' tok in' : ''}`, 'dim', ev.prompt);
+      break;
+    case 'answer': {
+      const bits = [ev.ms != null ? ev.ms + ' ms' : '', ev.out_tokens ? ev.out_tokens + ' tok' : '', ev.tok_s ? ev.tok_s + ' tok/s' : ''].filter(Boolean);
+      foldLine(`  < ${bits.join(' · ')}${ev.budget ? ' · RAN OUT OF TOKENS' : ''}`, ev.budget ? 'warn' : 'dim', ev.text);
+      break;
+    }
+    case 'vote':
+      termLine(`  vote ${ev.label}: ${tallyText(ev.tally)} -> ${ev.result}`, 'dim');
+      break;
+    case 'paused':
+      termLine(`${clock(ev.at)} paused`, 'warn');
+      break;
+    case 'resumed':
+      termLine(`${clock(ev.at)} resumed`, 'warn');
+      break;
+    case 'skip':
+      termLine(`  >> skipped ${ev.kind}: ${ev.what}`, 'warn');
       break;
     case 'tok':
       if (!liveLine || liveLine.dataset.kind !== ev.kind) {
@@ -167,7 +258,7 @@ function onFeed(ev) {
       if (term.scrollTop + term.clientHeight >= term.scrollHeight - 40) term.scrollTop = term.scrollHeight;
       break;
     case 'note':
-      termLine(`  ${NOTE_SIGNS[ev.action] || '?'} ${ev.action}${ev.category ? ' [' + ev.category + ']' : ''} ${ev.text}${ev.why ? ' (' + ev.why + ')' : ''}`, 'note');
+      termLine(`  ${NOTE_SIGNS[ev.action] || '?'} ${ev.action}${ev.dry ? ' (dry)' : ''}${ev.category ? ' [' + ev.category + ']' : ''} ${ev.text}${ev.why ? ' (' + ev.why + ')' : ''}`, 'note');
       break;
     case 'check':
       termLine(`  ? ${ev.text}`, 'dim');
@@ -181,9 +272,12 @@ function onFeed(ev) {
     case 'loop':
       termLine(`  !! repeating herself, asking again ${ev.retry}/${ev.of}`, 'warn');
       break;
-    case 'done':
-      termLine(`${clock(ev.at)} done · ${ev.status}${ev.notes != null ? ' · ' + ev.notes + ' notes' : ''}`, 'head');
+    case 'done': {
+      const sum = ev.summary;
+      termLine(`${clock(ev.at)} done · ${ev.status}${ev.dry ? ' (dry)' : ''}${ev.notes != null ? ' · ' + ev.notes + ' notes' : ''}${ev.seconds != null ? ' · ' + ev.seconds + ' s' : ''}`, 'head');
+      if (sum) termLine(`  ${sum.calls} calls · ${tallyText(sum.tally) || 'nothing changed'}${sum.bad_json ? ' · bad json ' + sum.bad_json : ''}${sum.loops ? ' · loops ' + sum.loops : ''}${sum.skips ? ' · skips ' + sum.skips : ''}`, 'dim');
       break;
+    }
   }
 }
 

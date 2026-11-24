@@ -73,7 +73,7 @@ https://github.com/user-attachments/assets/f6c25482-611c-4dde-9f16-8e4cc9474dc2
 - **She has feelings about you.** Affection, trust and tension move with every exchange, and she treats you accordingly. Push her far enough and she goes quiet, or walks out - and the door stays shut for a few minutes. Pick **Hard** on first start and she warms up slowly and stays gone for days. Pick **Hardcore** and her last walkout is the end.
 - **She can think before she answers.** A reasoning knob (auto / low / medium / high) and a toggle to watch the chain of thought stream by.
 - **She remembers.** She'll bring up things you said in other chats, and quietly keeps notes and a journal between sessions. Tell her about tomorrow's exam and she might write it down mid-chat, or text you the next day to ask how it went (on the phone that needs notifications on).
-- **Help her tidy up.** Catch her sorting her memory and you can sit with her and file the notes she's writing into her cabinet. She'll tell you when she'd have put one somewhere else. Or interrupt her, she picks it up next time.
+- **Help her tidy up.** Catch her sorting her memory and you can sit with her and file what she's writing into her cabinet. Where you put a note is where it goes, shred one and she'll check it again, and you can rescue something she was about to drop or undo a rewrite. Limits stay hers. Or interrupt her, she picks it up next time.
 - **She knows her lore.** Ask her about the game's world and she stays in canon.
 - **She'll sing with you.** Load a song, get timed lyrics, and see how close you got.
 - **Dress her up.** A whole wardrobe to toggle and recolor - she'll tell you what she thinks of it. Or just ask her for pink hair, she dyes it herself.
@@ -82,7 +82,7 @@ https://github.com/user-attachments/assets/f6c25482-611c-4dde-9f16-8e4cc9474dc2
 - **Collect achievements.** 32 of them, from *Yapper* to *Door Slammed*, each climbing Bronze → Silver → Gold → Diamond. They don't unlock anything, they're just for bragging. Some stay hidden until you stumble into them.
 - **Bring your mods.** Load a game-mod zip once in the wardrobe and she can wear it in every browser you sign in from. The mod clothes she wears in the game come along too.
 - **Bridge her with the game.** Say yes in the installer and every start reads your newest save: what you did together lands in her memory, the game's sympathy moves her affection (with `GAME_SAVE_WRITE=on` hers goes back into the save too), and the wardrobe picks up what she's wearing. With the JunBridge mod (Windows, Linux, Proton) it happens live and lets you chat with this Jun right inside the game, and she doesn't always wait for you: welcome back when you return, a word when you get home (she knows if it was work, or if she came along) or wake up, the odd line while you just sit there. Pat her head, hold her hand or lift her skirt and she answers in her own words instead of the game's canned lines. When she says she's changing clothes she actually does, and when she decides you two are going to dinner, to Annalie's, to karaoke or the cinema, the game takes you there (its own rules still apply: no dates at midnight or on an empty wallet). She notices when you come home wiped out or hungry, and when she wants you she invites you to bed. [How it works](docs/game-bridge.md).
-- **Your language.** The app follows your browser (or your phone): English, Italian, German, French, Spanish, Brazilian Portuguese, Hindi, Simplified Chinese or Japanese, switch in Settings. Talk to her in yours and she answers in it.
+- **Your language.** The installer asks (Enter = English) and fetches her voice for it, otherwise the app follows your browser (or your phone): English, Italian, German, French, Spanish, Brazilian Portuguese, Hindi, Simplified Chinese, Japanese or Polish, switch in Settings. Talk to her in yours and she answers in it, out loud too. Want her in another voice? Drop a clip in `voices/` (Polish and Japanese clone right away, every other language needs a free Hugging Face token the installer asks for). Only clone a voice whose owner said yes.
 - **It's yours.** She runs on your machine. No external account, no cloud inference by default, no analytics, nothing reporting back to us - the only things that leave your box are the ones you ask for: [The full list](SECURITY.md#what-talks-to-the-internet).
 
 Curious how any of it works? [Under the hood](#under-the-hood).
@@ -281,7 +281,7 @@ Gemma 4 ships a tiny *drafter* that guesses the next few tokens; Jun checks the 
 
 llama.cpp can also serve a GGUF straight off your disk (`LLAMACPP_MODELS_DIR` + `LLAMACPP_MODEL_FILE`), offer several models in the picker (comma-separate `LLAMACPP_MODEL_HF`, the first is the default), and `LLAMACPP_TOOLS=off` exists for fine-tunes whose tool-call syntax llama-server can't parse. Two llama.cpp tricks ship on: `LLAMACPP_FAST_CACHE` (8-bit cache, every reply starts sooner, a slightly shorter context on a tight card) and `LLAMACPP_TOOL_CHECK` (she gets asked if she needs a tool before she answers, so she actually saves what you tell her). Either one acting up, set it `off` and restart.
 
-**No retrieval model:** lore lookup and cross-chat recall are plain text matching - keyword/IDF over the corpus, word matching over your decrypted history - so lore and recall need no embedding model, whichever provider you choose. The only extra model in the stack is the Ollama-only chat titler (`TITLE_MODEL`, a 0.6B fine-tune pinned to the CPU so it never fights her for VRAM; set it empty and titles fall back to your first message).
+**No retrieval model:** lore lookup and cross-chat recall are plain text matching - BM25 keyword scoring over the corpus and over your decrypted history, with a small hand-made synonym list - so lore and recall need no embedding model, whichever provider you choose. The only extra model in the stack is the Ollama-only chat titler (`TITLE_MODEL`, a 0.6B fine-tune pinned to the CPU so it never fights her for VRAM; set it empty and titles fall back to your first message).
 
 ### Picking your GPU
 
@@ -319,6 +319,8 @@ Everything is environment variables in `.env` - the full reference is [`docs/con
 | `GAME_BRIDGE` | Syncs her with your game save on every start, and opens the door for the JunBridge mod. `GAME_SAVE_DIR` is the save folder, `GAME_SAVE_WRITE=on` also writes her affection back into it (backup first, never while the game runs) | `off` |
 | `TTS_DEVICE` | Voice synthesis device. Keep it on CPU: both engines are real-time there, and a GPU copy parks ~2 GB your LLM wants more | `cpu` |
 | `KARAOKE` / `SEP_DEVICE` | Karaoke sidecar on/off, and where stem separation runs. *This* is the audio job that wants a GPU - minutes on CPU, seconds on a card, VRAM handed back after | `on` · `auto` |
+| `HF_TOKEN` | Optional voice cloning: a Hugging Face read token (accept Kyutai's terms first), then any clip in `voices/` becomes a voice she can use. The installers ask, Enter skips | *(off)* |
+| `UI_LANG` | App language for accounts that never picked one, and the voice the sidecar downloads at start. The installers write it | *(browser)* |
 | `STT_MODEL` / `STT_LANG` | Whisper size and language; blank lang = per-utterance auto-detect | `base` · *(auto)* |
 | `OMEGA_NUM_CTX` | Context window. Auto-sized from leftover VRAM (falling back to RAM) - pin it if she's crowding your card | *(auto)* |
 | `OMEGA_STATE_DIR` / `MEMORY_DIR` | Where the database, rate-limit state and memory notes live | `/var/lib/omega` |
@@ -375,7 +377,7 @@ php tools/build/build_lore_index.php   # any PHP 8, no extensions
 ./sync-webapp.sh                 # the php restart drops the cached index
 ```
 
-That flattens each Q&A into `webapp/lore_corpus.txt` - one answer per line, matched by keyword/IDF, and she reads the hits when she calls `search_lore`. No embeddings, no second model. Delete the corpus and she just stops quoting canon, nothing breaks.
+That flattens each Q&A into `webapp/lore_corpus.jsonl` - one question and answer per line, matched by BM25 keyword scoring, and she reads the hits when she calls `search_lore`. No embeddings, no second model. Delete the corpus and she just stops quoting canon, nothing breaks.
 
 ## When things go sideways
 
@@ -384,7 +386,7 @@ The plain-language versions live in the wiki: **[Common Fixes](https://github.co
 <details>
 <summary><b>The boot screen has a red KO</b></summary>
 
-Each line is a real check now. **neural-core** KO means the model server isn't answering (`./start.sh logs llamacpp` or `logs ollama`, Logs in JunOS.exe), and she keeps retrying until it does (after a few tries a "continue without the model" link appears under the status line, the page opens but chat fails until the server is up). **live2d-rig** KO is the placeholder art, the game assets were never extracted. **voice-synth** KO means the voice sidecar is off or down, chat works without it. **lore-corpus** KO means `webapp/lore_corpus.txt` is missing. Only neural-core keeps you on the boot screen.
+Each line is a real check now. **neural-core** KO means the model server isn't answering (`./start.sh logs llamacpp` or `logs ollama`, Logs in JunOS.exe), and she keeps retrying until it does (after a few tries a "continue without the model" link appears under the status line, the page opens but chat fails until the server is up). **live2d-rig** KO is the placeholder art, the game assets were never extracted. **voice-synth** KO means the voice sidecar is off or down, chat works without it. **lore-corpus** KO means `webapp/lore_corpus.jsonl` is missing. Only neural-core keeps you on the boot screen.
 </details>
 
 <details>
@@ -501,7 +503,7 @@ Read the line under **existing install**, it says which of these it was:
 ├── android/          Same webapp on a phone: Ktor server + LiteRT-LM on-device (or a paired PC/notebook), its own Gradle project
 ├── webapp/           Everything nginx and php-fpm serve
 │   ├── api/          chat.php, auth.php, memory.php, outfit.php, karaoke.php, trip.php, migrations/, …
-│   │   └── lib/      the shared stuff: bootstrap, db, crypto, memory, providers/, chat/, consolidation/ (never served)
+│   │   └── lib/      the shared stuff: bootstrap, db, crypto, memory, retrieval (the one search scorer), providers/, chat/, consolidation/ (never served)
 │   ├── js/           one entry per page (app.js is just the login gate) + the folders they share:
 │   │                 core/, app/, live2d/, outfit/, wardrobe/, mods/, voice/, karaoke/, trip/, watch/, achievements/
 │   ├── css/          base, shell, chat, stage, sidebar, settings, widgets, welcome, voice-karaoke, cards, cabinet, achievements, subpage, responsive
@@ -520,13 +522,13 @@ Read the line under **existing install**, it says which of these it was:
 ├── mtp-autotune.sh · .ps1       Measures the MTP draft depth and writes the winner to .env
 ├── sync-webapp.sh               The dev loop
 ├── colab.ipynb                  The Colab/Kaggle notebook (GPU or TPU, whole app or just her brain)
-├── .github/workflows/           CI (syntax, stream-buffer tests, a chat turn against a fake Ollama) + the draft release with JunSetup-<version>.exe, JunOS.exe and JunOS-<version>.apk
+├── .github/workflows/           CI (syntax, stream-buffer tests, a chat turn and a whole memory pass against fake models) + the draft release with JunSetup-<version>.exe, JunOS.exe and JunOS-<version>.apk
 └── docker-compose*.yml          Base (CPU) + nvidia / amd overlays, llamacpp-local add-on
 ```
 
 ## Standing on the shoulders of
 
-[PIXI.js](https://pixijs.com/) · [pixi-live2d-display](https://github.com/guansss/pixi-live2d-display) · [Live2D Cubism SDK](https://www.live2d.com/en/sdk/about/) · [Ollama](https://ollama.com/) · [llama.cpp](https://github.com/ggml-org/llama.cpp) · [Kokoro-82M](https://huggingface.co/hexgrad/Kokoro-82M) · [pocket-tts](https://github.com/kyutai-labs/pocket-tts) · [faster-whisper](https://github.com/SYSTRAN/faster-whisper) · [demucs](https://github.com/adefossez/demucs) · [marked](https://github.com/markedjs/marked) + [DOMPurify](https://github.com/cure53/DOMPurify)
+[PIXI.js](https://pixijs.com/) · [pixi-live2d-display](https://github.com/guansss/pixi-live2d-display) · [Live2D Cubism SDK](https://www.live2d.com/en/sdk/about/) · [Ollama](https://ollama.com/) · [llama.cpp](https://github.com/ggml-org/llama.cpp) · [Kokoro-82M](https://huggingface.co/hexgrad/Kokoro-82M) · [pocket-tts](https://github.com/kyutai-labs/pocket-tts) (+ [Polish](https://huggingface.co/shefowl/pocket-tts-polish-6l) and [Japanese](https://huggingface.co/takuma104/pocket-tts-ja) fine-tunes) · [faster-whisper](https://github.com/SYSTRAN/faster-whisper) · [demucs](https://github.com/adefossez/demucs) · [marked](https://github.com/markedjs/marked) + [DOMPurify](https://github.com/cure53/DOMPurify)
 
 And of course [**Incontinent Cell**](https://itch.io/profile/incontinentcell), creator of *Factorial Omega* (MDRG), for giving us Jun in the first place.
 

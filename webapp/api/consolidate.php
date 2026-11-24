@@ -79,7 +79,7 @@ if ($method === 'GET' && $action === 'stream') {
     do {
         [$events, $cursor] = consolidation_feed_read($userId, $cursor);
         foreach ($events as $event) {
-            echo 'id: ' . $event['id'] . "\ndata: " . json_encode($event, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES) . "\n\n";
+            echo 'id: ' . $event['cursor'] . "\ndata: " . json_encode($event, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES) . "\n\n";
         }
         if ($events) @flush();
         if (time() >= $until || (!$events && !consolidation_locked($userId))) break;
@@ -96,9 +96,61 @@ if ($method === 'POST' && $action === 'interrupt') {
     json_out(['ok' => true]);
 }
 
+// the dev terminal's controls, admins only
+if ($method === 'GET' && $action === 'history') {
+    if (!is_admin($user)) fail(403, 'forbidden');
+    rate_limit('consolidate_history', 30, 60);
+    $back = max(1, min(CONSOLIDATION_FEEDS_KEPT, (int)($_GET['back'] ?? 1)));
+    [$events] = consolidation_feed_read($userId, '', $back);
+    json_out(['pass' => consolidation_feed_pass($userId, $back), 'events' => $events]);
+}
+
+if ($method === 'POST' && $action === 'control') {
+    if (!is_admin($user)) fail(403, 'forbidden');
+    rate_limit('consolidate_control', 60, 60);
+    $body = read_json_body(1024);
+    $op = (string)($body['op'] ?? '');
+    $running = consolidation_locked($userId);
+    $set = fn(string $sql, array $args) => db()->prepare("UPDATE memory_consolidation SET $sql WHERE user_id = ?")->execute([...$args, $userId]);
+    if ($op === 'pause') {
+        if (!$running) fail(409, 'not_running');
+        $set('pause_at = ?', [time()]);
+    } elseif ($op === 'resume' && $running) {
+        $set('pause_at = 0', []);
+    } elseif ($op === 'resume') {
+        // a stopped pass carries on where it stopped, same feed, no idle wait
+        $set("force_at = ?, force_mode = 'resume'", [time()]);
+        key_push($userId, true);
+        json_out(['queued' => true]);
+    } elseif ($op === 'skip') {
+        $kind = (string)($body['kind'] ?? '');
+        if (!in_array($kind, CONSOLIDATION_SKIPS, true)) fail(400, 'bad_kind');
+        if (!$running) fail(409, 'not_running');
+        $set('skip_kind = ?, skip_at = ?', [$kind, time()]);
+    } elseif ($op === 'stop') {
+        $set('interrupt_at = ?, pause_at = 0', [time()]);
+        consolidation_touch($userId);
+    } else {
+        fail(400, 'bad_op');
+    }
+    json_out(['ok' => true]);
+}
+
+if ($method === 'GET' && $action === 'deck') {
+    rate_limit('consolidate_deck', 30, 600);
+    json_out(cabinet_deck($userId));
+}
+
+if ($method === 'POST' && $action === 'play') {
+    rate_limit('consolidate_play', 240, 600);
+    $result = cabinet_play($userId, read_json_body(4096));
+    if (isset($result['error'])) fail(409, $result['error']);
+    json_out($result);
+}
+
 if ($method === 'POST' && $action === 'game') {
     rate_limit('consolidate_game', 30, 600);
-    json_out(cabinet_settle($userId, read_json_body(64 * 1024)));
+    json_out(cabinet_settle($userId, read_json_body(4096)));
 }
 
 // admin only, and queued for the worker: a guided pass outlives any fastcgi timeout
@@ -106,8 +158,8 @@ require_post();
 if (!is_admin($user)) fail(403, 'forbidden');
 rate_limit('consolidate', 6, 600);
 db()->prepare(
-    'INSERT INTO memory_consolidation (user_id, force_at) VALUES (?, ?)
-     ON CONFLICT(user_id) DO UPDATE SET force_at = excluded.force_at'
-)->execute([$userId, time()]);
+    'INSERT INTO memory_consolidation (user_id, force_at, force_mode) VALUES (?, ?, ?)
+     ON CONFLICT(user_id) DO UPDATE SET force_at = excluded.force_at, force_mode = excluded.force_mode'
+)->execute([$userId, time(), ($_GET['dry'] ?? '') === '1' ? 'dry' : '']);
 key_push($userId, true);
 json_out(['queued' => true]);

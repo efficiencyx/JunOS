@@ -22,10 +22,13 @@ function consolidation_lock_read(int $userId): ?array {
         'phase'       => (string)($data['phase'] ?? ''),
         'progress'    => is_array($data['progress'] ?? null) ? $data['progress'] : null,
         'quiet_until' => (int)($data['quiet_until'] ?? 0),
+        'paused'      => !empty($data['paused']),
+        'dry'         => !empty($data['dry']),
     ];
 }
 
 const CONSOLIDATION_LOCK_TTL = 600;
+const CONSOLIDATION_SKIPS = ['call', 'item', 'chat', 'step'];
 
 // rolling expiry, a healthy pass on a CPU box runs way past ten minutes
 function consolidation_lock_update(int $userId, array $fields): void {
@@ -56,6 +59,8 @@ function consolidation_status(int $userId): array {
         'elapsed' => $lock['started'] > 0 ? max(0, time() - $lock['started']) : 0,
     ];
     if ($lock['progress']) $status['progress'] = $lock['progress'];
+    if ($lock['paused']) $status['paused'] = true;
+    if ($lock['dry']) $status['dry'] = true;
     return $status;
 }
 

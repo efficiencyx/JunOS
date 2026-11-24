@@ -86,6 +86,28 @@ function memory_note_render(array $note): string {
     }, $text) ?? $text;
 }
 
+// every day a note points at: its own "tomorrow" from the day it was
+// written, and plain dates like "3 November" or "March 12th"
+function memory_note_days(array $note): array {
+    $text = (string)$note['text'];
+    $anchor = memory_note_anchor($note);
+    $days = [];
+    if ($anchor > 0) {
+        foreach (memory_relative_phrases($text) as $phrase) {
+            $day = memory_relative_day($phrase, $anchor);
+            if ($day) $days[] = $day;
+        }
+    }
+    $months = 'January|February|March|April|May|June|July|August|September|October|November|December';
+    preg_match_all('/\b(?:(\d{1,2})(?:st|nd|rd|th)? (' . $months . ')|(' . $months . ') (\d{1,2})(?:st|nd|rd|th)?)(?:,? (\d{4}))?\b/i', $text, $m, PREG_SET_ORDER);
+    foreach ($m as $d) {
+        $year = ($d[5] ?? '') ?: date('Y', $anchor ?: time());
+        $ts = strtotime(($d[1] !== '' ? $d[1] : $d[4]) . ' ' . ($d[2] !== '' ? $d[2] : $d[3]) . ' ' . $year);
+        if ($ts) $days[] = $ts;
+    }
+    return $days;
+}
+
 function memory_relative_day(string $phrase, int $created): ?int {
     $phrase = strtolower($phrase);
     $day = false;
@@ -193,7 +215,7 @@ function memory_meta_write(int $userId, array $meta): array {
     return memory_atomic_write(memory_user_dir($userId) . '/meta.json', $json . "\n", '.meta-');
 }
 
-const MEMORY_SOURCE_KINDS = ['chat', 'date', 'karaoke', 'watch', 'pass', 'manual', 'request', 'game'];
+const MEMORY_SOURCE_KINDS = ['chat', 'date', 'karaoke', 'watch', 'pass', 'manual', 'request', 'game', 'cabinet'];
 const MEMORY_REVISIONS_KEPT = 5;
 
 // chat.php sets this once per turn, so memory_write and the
@@ -506,6 +528,24 @@ function memory_note_move_unlocked(int $userId, string $id, string $category): a
     return ['error' => 'memory_not_found'];
 }
 
+// a stamp in the note's meta.json entry, 0 clears it. any edit or move drops them all
+function memory_note_flag(int $userId, string $id, string $field, int $value): array {
+    return memory_with_user_lock($userId, function () use ($userId, $id, $field, $value): array {
+        $meta = memory_meta_load($userId);
+        if (!isset($meta['notes'][$id])) {
+            $live = false;
+            foreach (memory_notes_load_unlocked($userId) as $data) {
+                foreach ($data['notes'] as $note) if ($note['id'] === $id) $live = true;
+            }
+            if (!$live) return ['error' => 'memory_not_found'];
+            $meta = memory_meta_load($userId);
+        }
+        if ($value) $meta['notes'][$id][$field] = $value;
+        else unset($meta['notes'][$id][$field]);
+        return memory_meta_write($userId, $meta);
+    });
+}
+
 function memory_note_add(int $userId, string $category, string $text, ?array $source = null): array {
     return memory_with_user_lock(
         $userId,
@@ -555,6 +595,9 @@ function memory_wipe_user(int $userId): array {
             memory_file_path($userId),
             memory_dir() . '/user-' . $userId . '.journal.md',
             dirname(consolidation_lock_path($userId)) . '/user-' . $userId . '.feed',
+            dirname(consolidation_lock_path($userId)) . '/user-' . $userId . '.feed.1',
+            dirname(consolidation_lock_path($userId)) . '/user-' . $userId . '.feed.2',
+            dirname(consolidation_lock_path($userId)) . '/user-' . $userId . '.game',
         ];
         foreach ($loose as $path) {
             if (is_file($path) && !@unlink($path)) return ['error' => 'memory_delete_failed'];

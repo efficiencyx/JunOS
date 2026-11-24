@@ -1,18 +1,18 @@
 import { abortFn, currentConversationId } from './session.js?v=1';
-import { sendMessage } from './chat.js?v=73';
-import { cancelIdleNudge } from './consolidation.js?v=146';
+import { sendMessage } from './chat.js?v=81';
+import { cancelIdleNudge } from './consolidation.js?v=154';
 import { closeSettingsBtn, devNoIdleChk, drawerBackdrop, modelSelect, openSettingsBtn, reasoningSelect, sendBtn, siteVolumeInput, thinkChk, ttsChk, ttsSpeedInput, voiceChk, voiceSilenceInput } from './dom.js?v=77';
 import { logAction } from './logging.js?v=78';
-import { loadMood, setMoodEditingEnabled } from './mood.js?v=93';
-import { loadConversation, setSidebarOpen } from './sidebar.js?v=146';
-import { loadTimeline } from './timeline.js?v=4';
+import { loadMood, setMoodEditingEnabled } from './mood.js?v=94';
+import { loadConversation, setSidebarOpen } from './sidebar.js?v=154';
+import { loadTimeline } from './timeline.js?v=5';
 import * as Names from '../core/names.js?v=1';
-import { locale, t } from '../core/i18n.js?v=1';
-import * as Prefs from '../core/prefs.js?v=9';
-import * as ui from '../core/ui.js?v=11';
+import { locale, t } from '../core/i18n.js?v=2';
+import * as Prefs from '../core/prefs.js?v=11';
+import * as ui from '../core/ui.js?v=12';
 import { hold } from '../core/hold.js?v=2';
-import { factoryReset } from './difficulty.js?v=5';
-import * as TTS from '../voice/tts.js?v=94';
+import { factoryReset } from './difficulty.js?v=8';
+import * as TTS from '../voice/tts.js?v=155';
 
 export function syncThinkToggle() {
   thinkChk.disabled = reasoningSelect.value === 'auto';
@@ -138,8 +138,8 @@ const memoryCount = document.getElementById('memoryCount');
 let MemoryGraph = null;
 async function loadMemories() {
   if (!MemoryGraph) {
-    MemoryGraph = await import('./memory-graph.js?v=8');
-    const { renderNoteActions } = await import('./memory-actions.js?v=6');
+    MemoryGraph = await import('./memory-graph.js?v=10');
+    const { renderNoteActions } = await import('./memory-actions.js?v=7');
     MemoryGraph.onNoteActions((node, body) => renderNoteActions(node, body, { isAdmin, reload: loadMemories }));
     MemoryGraph.onOpenChat((conv, messageId) => {
       ui.toggleDrawer(false);

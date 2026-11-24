@@ -1,7 +1,7 @@
-import * as Live2D from '../live2d/live2d.js?v=92';
+import * as Live2D from '../live2d/live2d.js?v=93';
 import { ITEMS, VARIANTS, VARIANT_OWNER } from '../outfit/catalog.js?v=7';
-import { applyChanged, exportPreset, loadPresetState } from '../outfit/presets.js?v=46';
-import { itemPatterns } from '../outfit/apply.js?v=46';
+import { applyChanged, exportPreset, loadPresetState } from '../outfit/presets.js?v=49';
+import { itemPatterns } from '../outfit/apply.js?v=49';
 import { state, variantState } from '../outfit/current.js?v=8';
 
 // tiles baked by tools/render/bake-items.html, sitting in the gitignored

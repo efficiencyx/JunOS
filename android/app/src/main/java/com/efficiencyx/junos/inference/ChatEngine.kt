@@ -17,6 +17,8 @@ import com.efficiencyx.junos.difficulty.Difficulty
 import com.efficiencyx.junos.lore.LoreIndex
 import com.efficiencyx.junos.memory.MemoryStore
 import com.efficiencyx.junos.memory.NoteSource
+import com.efficiencyx.junos.retrieval.Recall
+import com.efficiencyx.junos.retrieval.Retrieval
 import com.efficiencyx.junos.wardrobe.Wardrobe
 import com.efficiencyx.junos.wardrobe.WardrobeState
 import kotlinx.coroutines.CoroutineScope
@@ -32,6 +34,8 @@ import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonElement
 import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.add
+import kotlinx.serialization.json.addJsonObject
 import kotlinx.serialization.json.booleanOrNull
 import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.contentOrNull
@@ -40,6 +44,8 @@ import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
 import kotlinx.serialization.json.longOrNull
 import kotlinx.serialization.json.put
+import kotlinx.serialization.json.putJsonArray
+import kotlinx.serialization.json.putJsonObject
 
 @Serializable
 data class ClientMessage(val role: String, val content: String)
@@ -79,6 +85,7 @@ class ChatEngine(
     private val database: JunDatabase,
     private val memory: MemoryStore,
     private val lore: LoreIndex,
+    private val retrieval: Retrieval,
     private val achievements: Achievements,
     private val engines: () -> InferenceEngine,
 ) {
@@ -393,9 +400,12 @@ class ChatEngine(
         // first block, same as chat.php. it only works up top
         if (request.voice && !request.hearAll) blocks += SIDE_TALK_CHECK
         blocks += "## Current date and time\nIt is currently ${request.clientTime?.take(80) ?: java.time.ZonedDateTime.now()}."
-        memory.recentContext(1200).takeIf { it.isNotBlank() }?.let(blocks::add)
+        val herLast = request.messages.lastOrNull { it.role == "assistant" }?.content.orEmpty().replace(ACTION_TAG, "").trim()
+        val hisBefore = request.messages.filter { it.role == "user" }.dropLast(1).lastOrNull()?.content.orEmpty()
+        val turns = listOf(lastUser to 1.0, herLast to 0.4, hisBefore to 0.3).filter { it.first.isNotBlank() }
+        memory.recentContext(turns, 1200).takeIf { it.isNotBlank() }?.let(blocks::add)
         if (summary.isNotBlank()) blocks += "## Story so far (earlier in THIS conversation)\n$summary"
-        val facts = lore.search(lastUser, 5)
+        val facts = lore.gate(lastUser)
         if (facts.isNotEmpty()) blocks += "## World facts (canon)\nFound ${facts.size} canon facts. Invoke the tool search_lore to recall them."
         request.outfitContext?.trim()?.takeIf { it.isNotBlank() }?.let { blocks += "## Current Wardrobe State\n$it" }
         blocks += feelings
@@ -408,11 +418,7 @@ class ChatEngine(
     }
 
     private suspend fun executeTool(call: ParsedToolCall, conversationId: Long, noteSource: NoteSource): String = when (call.name) {
-        "search_lore" -> {
-            val query = call.args["query"]?.jsonPrimitive?.content.orEmpty()
-            achievements.add("lore")
-            json.encodeToString(lore.search(query, call.args["limit"]?.jsonPrimitive?.intOrNull ?: 5).map { it.text })
-        }
+        "search_lore" -> searchLore(call.args)
         "memory_write" -> {
             val note = memory.add(
                 call.args["category"]?.jsonPrimitive?.content ?: "events",
@@ -422,13 +428,7 @@ class ChatEngine(
             achievements.add("notes")
             json.encodeToString(mapOf("saved" to note.id))
         }
-        "search_recent_chats" -> {
-            val query = call.args["query"]?.jsonPrimitive?.content.orEmpty()
-            val hits = dao.searchMessages(query, (call.args["limit"]?.jsonPrimitive?.intOrNull ?: 5).coerceIn(1, 8))
-                .filter { it.conversationId != conversationId }
-                .map { mapOf("conversation_id" to it.conversationId.toString(), "role" to it.role, "content" to it.content.take(500)) }
-            json.encodeToString(hits)
-        }
+        "search_recent_chats" -> searchRecentChats(call.args, conversationId)
         "list_recent_chats" -> json.encodeToString(dao.conversations(10).filter { it.id != conversationId }.map {
             mapOf("id" to it.id.toString(), "title" to (it.title ?: "Untitled"))
         })
@@ -437,6 +437,68 @@ class ChatEngine(
         "stay_silent" -> json.encodeToString(mapOf("silent" to true))
         "flee" -> json.encodeToString(mapOf("fled" to false, "reason" to "already_decided"))
         else -> json.encodeToString(mapOf("error" to "unknown_tool"))
+    }
+
+    // run_tool_call()'s search_lore in lib/chat/tools.php, same answer shapes
+    private suspend fun searchLore(args: JsonObject): String {
+        val query = args["query"]?.jsonPrimitive?.contentOrNull.orEmpty().trim()
+        if (query.isEmpty()) return json.encodeToString(mapOf("error" to "query_required"))
+        val found = lore.lookup(query, args["limit"]?.jsonPrimitive?.intOrNull ?: 4)
+        achievements.add("lore")
+        return buildJsonObject {
+            if (found.facts.isEmpty()) {
+                putJsonArray("facts") {}
+                put("found", false)
+                if (found.didYouMean.isNotEmpty()) {
+                    put("error", "no_match")
+                    putJsonArray("did_you_mean") { found.didYouMean.forEach { add(it) } }
+                    put("note", "Nothing matches that spelling. If you meant one of these, search again with it.")
+                } else {
+                    put("note", "Nothing in your world matches this. You do not know it. Say so instead of inventing a detail.")
+                }
+            } else {
+                putJsonArray("facts") { found.facts.forEach { add(it) } }
+                if (found.readAs.isNotEmpty()) putJsonObject("read_as") { found.readAs.forEach { (k, v) -> put(k, v) } }
+            }
+        }.toString()
+    }
+
+    // lib/chat/recall.php. rows are plain on the phone, the scan is the same walk
+    private suspend fun searchRecentChats(args: JsonObject, conversationId: Long): String {
+        val query = args["query"]?.jsonPrimitive?.contentOrNull.orEmpty().trim()
+        if (query.isEmpty()) return json.encodeToString(mapOf("error" to "query_required"))
+        val limit = (args["limit"]?.jsonPrimitive?.intOrNull ?: 5).coerceIn(1, 8)
+        val q = retrieval.query(listOf(query to 1.0))
+        val recall = Recall(retrieval)
+        val messages = dao.recentMessagesOutside(conversationId, RECALL_SCAN_MAX)
+        val titles = dao.conversations(1000).associate { it.id to it.title.orEmpty() }
+        val docs = messages.map { Recall.Doc(it.content.replace(Regex("\\s+"), " ").trim(), it) }.filter { it.text.isNotEmpty() }
+        val rows = recall.rank(docs, query, q, limit)
+        val (notes, journal) = memory.search(q) { recall.enough(it, q) }
+        return buildJsonObject {
+            putJsonArray("results") {
+                for ((doc, at) in rows) {
+                    val m = doc.ref as MessageEntity
+                    addJsonObject {
+                        put("date", RECALL_DATE.format(java.time.Instant.ofEpochSecond(m.createdAt)))
+                        put("conversation_id", m.conversationId)
+                        put("title", titles[m.conversationId].orEmpty())
+                        put("role", m.role)
+                        put("content", Recall.excerpt(doc.text, at))
+                    }
+                }
+            }
+            if (rows.isEmpty() && notes.isEmpty() && journal.isEmpty()) {
+                put("found", false)
+                put("note", if (lore.gate(query).isNotEmpty())
+                    "No earlier conversation mentions this, but it is something from your world, not something Anon told you. Call search_lore with the query in English before answering."
+                else "No earlier conversation mentions this. You do not remember it. Say so instead of describing one.")
+                val names = recall.tryNames(memory.snapshot().notes.map { it.text }, query)
+                if (names.isNotEmpty()) putJsonArray("try") { names.forEach { add(it) } }
+            }
+            if (notes.isNotEmpty()) putJsonArray("notes") { notes.forEach { n -> addJsonObject { n.forEach { (k, v) -> put(k, v) } } } }
+            if (journal.isNotEmpty()) putJsonArray("journal") { journal.forEach { j -> addJsonObject { j.forEach { (k, v) -> put(k, v) } } } }
+        }.toString()
     }
 
     private suspend fun planMessage(args: JsonObject): String {
@@ -661,6 +723,9 @@ class ChatEngine(
     private fun now() = System.currentTimeMillis() / 1000
 
     companion object {
+        private val ACTION_TAG = Regex("\\[\\s*A(?:CTIONS?)?\\s*:[^]]*]", RegexOption.IGNORE_CASE)
+        private const val RECALL_SCAN_MAX = 5000
+        private val RECALL_DATE = java.time.format.DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm").withZone(java.time.ZoneId.systemDefault())
         private val MEMORY_TAG = Regex("\\[\\s*A(?:CTIONS?)?\\s*:\\s*memory_write\\b([^]]*)]", RegexOption.IGNORE_CASE)
         // the closing ] is optional, at the very end only. litertlm
         // 0.16 dropped the last token of every reply and the tag is
@@ -735,7 +800,7 @@ Reason it through first. Then, on the last line and nothing after it, output onl
         internal val TOOL_SCHEMAS = listOf(
             """{"type":"function","function":{"name":"search_recent_chats","description":"Search your saved chat history with Anon for a specific past topic he references or that you don't recall.","parameters":{"type":"object","properties":{"query":{"type":"string","description":"What to search for."},"limit":{"type":"integer","description":"Max messages, 1-8."}},"required":["query"]}}}""",
             """{"type":"function","function":{"name":"list_recent_chats","description":"Recap your most recent conversations with Anon when he wants to catch up, with no specific topic.","parameters":{"type":"object","properties":{"limit":{"type":"integer","description":"How many to recap, 1-10."}}}}}""",
-            """{"type":"function","function":{"name":"search_lore","description":"Look up canon world facts - people, places, jobs, events from your own world - when you are unsure of a detail.","parameters":{"type":"object","properties":{"query":{"type":"string","description":"Name or topic to look up."},"limit":{"type":"integer","description":"Max facts, 1-6."}},"required":["query"]}}}""",
+            """{"type":"function","function":{"name":"search_lore","description":"Look up canon world facts - people, places, jobs, events from your own world - when you are unsure of a detail. Write the query in English.","parameters":{"type":"object","properties":{"query":{"type":"string","description":"Name or topic to look up, in English."},"limit":{"type":"integer","description":"Max facts, 1-6."}},"required":["query"]}}}""",
             """{"type":"function","function":{"name":"memory_write","description":"Save a durable note about Anon (a preference, fact, plan, boundary, or something emotionally significant). Use often and proactively, not only when asked.","parameters":{"type":"object","properties":{"memory":{"type":"string","description":"One concise fact to remember."},"category":{"type":"string","description":"Category: preferences, work, health, family, plans, boundaries, or events."}},"required":["memory"]}}}""",
             """{"type":"function","function":{"name":"plan_message","description":"Plan a text to send Anon later, like asking tomorrow how his exam went. It goes out after the hours you pick, even if he is away. At most 3 can wait at once.","parameters":{"type":"object","properties":{"message":{"type":"string","description":"The text, the way you would type it to him. Max 240 characters."},"after_hours":{"type":"integer","description":"Hours from now, 1-72."}},"required":["message","after_hours"]}}}""",
             """{"type":"function","function":{"name":"write_journal","description":"Write in your own journal about something between you and Anon that you want to keep. It is added to today's entry.","parameters":{"type":"object","properties":{"entry":{"type":"string","description":"A few sentences in your own words. Max 400 characters."}},"required":["entry"]}}}""",

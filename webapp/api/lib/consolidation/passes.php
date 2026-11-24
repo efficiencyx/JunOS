@@ -6,28 +6,30 @@ const CONSOLIDATION_MIN_MESSAGES = 2;
 // consolidation_write_welcome for why. and only on idle runs, a
 // forced run means somebody is sitting right there. $resume is the
 // watchdog restarting a wedged pass: same feed, no idle check.
-function consolidation_run(int $userId, ?int $idleBefore = null, bool $forced = false, bool $resume = false): array {
+function consolidation_run(int $userId, ?int $idleBefore = null, bool $forced = false, bool $resume = false, bool $dry = false): array {
     $welcomeLines = null;
-    $result = consolidation_run_locked($userId, $idleBefore, $forced, $resume, $welcomeLines);
+    $result = consolidation_run_locked($userId, $idleBefore, $forced, $resume, $dry, $welcomeLines);
     if (!empty($result['ok']) && $idleBefore !== null && !$forced && $welcomeLines) {
         consolidation_write_welcome($userId, $welcomeLines, $idleBefore);
     }
     return $result;
 }
 
-function consolidation_run_locked(int $userId, ?int $idleBefore, bool $forced, bool $resume, ?array &$welcomeLines): array {
+function consolidation_run_locked(int $userId, ?int $idleBefore, bool $forced, bool $resume, bool $dry, ?array &$welcomeLines): array {
     $lockPath = consolidation_lock_path($userId);
     $startedAt = time();
     $lock = @fopen($lockPath, 'x');
     if ($lock === false && !consolidation_locked($userId)) $lock = @fopen($lockPath, 'x');
     if ($lock === false) return ['running' => true];
-    fwrite($lock, json_encode(['expiry' => $startedAt + CONSOLIDATION_LOCK_TTL, 'started' => $startedAt, 'phase' => 'notes']));
+    fwrite($lock, json_encode(['expiry' => $startedAt + CONSOLIDATION_LOCK_TTL, 'started' => $startedAt, 'phase' => 'notes', 'dry' => $dry]));
     fclose($lock);
     @chmod($lockPath, 0600);
 
     try {
         $db = db();
         consolidation_repair_watermarks($db);
+        // a killed pass never got to clear these, and only a running pass can set them
+        $db->prepare("UPDATE memory_consolidation SET pause_at = 0, skip_kind = '' WHERE user_id = ?")->execute([$userId]);
         if ($idleBefore !== null && !$forced && !$resume) {
             $activity = $db->prepare('SELECT last_activity, enabled FROM memory_consolidation WHERE user_id = ?');
             $activity->execute([$userId]);
@@ -49,11 +51,13 @@ function consolidation_run_locked(int $userId, ?int $idleBefore, bool $forced, b
         }
 
         if (!$resume || consolidation_feed_pass($userId) === '') consolidation_feed_reset($userId, (string)$startedAt);
-        $out = consolidation_guided($userId, $startedAt);
+        $out = consolidation_guided($userId, $startedAt, $dry);
         $noteCount = count(memory_list($userId));
-        consolidation_record_result($userId, 'ok', $noteCount);
-        consolidation_feed_emit($userId, ['type' => 'done', 'status' => 'ok', 'notes' => $noteCount]);
-        $welcomeLines = $out['lines'];
+        // a dry run changed nothing, so it isn't a result the banner or the game may count
+        if (!$dry) consolidation_record_result($userId, 'ok', $noteCount);
+        consolidation_feed_emit($userId, ['type' => 'done', 'status' => 'ok', 'notes' => $noteCount,
+            'seconds' => time() - $startedAt, 'summary' => $out['summary']] + ($dry ? ['dry' => true] : []));
+        $welcomeLines = $dry ? null : $out['lines'];
         log_event([
             'msg' => 'memory_consolidation_complete',
             'user_id' => $userId,
@@ -68,11 +72,14 @@ function consolidation_run_locked(int $userId, ?int $idleBefore, bool $forced, b
         $status = $stopped ? 'stopped' : ($e->getMessage() === 'consolidation_looping' ? 'looping' : 'error');
         log_event(['msg' => $stopped ? 'memory_consolidation_stopped' : 'memory_consolidation_error', 'user_id' => $userId, 'err' => $e->getMessage()]);
         try {
-            consolidation_record_result($userId, $status, count(memory_list($userId)));
-            consolidation_feed_emit($userId, ['type' => 'done', 'status' => $status]);
+            if (!$dry) consolidation_record_result($userId, $status, count(memory_list($userId)));
+            consolidation_feed_emit($userId, ['type' => 'done', 'status' => $status] + ($dry ? ['dry' => true] : []));
         } catch (Throwable $ignored) {}
         return $stopped ? ['stopped' => true] : ['ok' => false];
     } finally {
+        try {
+            db()->prepare("UPDATE memory_consolidation SET pause_at = 0, skip_kind = '' WHERE user_id = ?")->execute([$userId]);
+        } catch (Throwable $ignored) {}
         $held = consolidation_lock_read($userId);
         if ($held !== null && $held['started'] === $startedAt) @unlink($lockPath);
     }

@@ -28,7 +28,7 @@ if (($argv[1] ?? '') === '--run') {
     if ($dek === false || strlen($dek) !== SODIUM_CRYPTO_SECRETBOX_KEYBYTES) exit(CHILD_ERROR);
     crypt_bind($dek);
     $idleBefore = ($argv[3] ?? '') === '' ? null : (int)$argv[3];
-    $result = consolidation_run((int)$argv[2], $idleBefore, ($argv[4] ?? '0') === '1', ($argv[5] ?? '0') === '1');
+    $result = consolidation_run((int)$argv[2], $idleBefore, ($argv[4] ?? '0') === '1', ($argv[5] ?? '0') === '1', ($argv[6] ?? '0') === '1');
     if (!empty($result['ok'])) exit(CHILD_OK);
     if (!empty($result['stopped'])) exit(CHILD_STOPPED);
     exit(!empty($result['skipped']) || !empty($result['running']) ? CHILD_IDLE : CHILD_ERROR);
@@ -38,9 +38,9 @@ function stall_seconds(): int {
     return max(10, (int)env_str('CONSOLIDATION_STALL_SECONDS', '30'));
 }
 
-function child_start(int $userId, string $dek, ?int $idleBefore, bool $forced, bool $resume): ?array {
+function child_start(int $userId, string $dek, ?int $idleBefore, bool $forced, bool $resume, bool $dry = false): ?array {
     $proc = proc_open(
-        [PHP_BINARY, __FILE__, '--run', (string)$userId, $idleBefore === null ? '' : (string)$idleBefore, $forced ? '1' : '0', $resume ? '1' : '0'],
+        [PHP_BINARY, __FILE__, '--run', (string)$userId, $idleBefore === null ? '' : (string)$idleBefore, $forced ? '1' : '0', $resume ? '1' : '0', $dry ? '1' : '0'],
         [0 => ['pipe', 'r'], 1 => STDOUT, 2 => STDERR],
         $pipes
     );
@@ -50,7 +50,7 @@ function child_start(int $userId, string $dek, ?int $idleBefore, bool $forced, b
     }
     fwrite($pipes[0], base64_encode($dek) . "\n");
     fclose($pipes[0]);
-    return ['proc' => $proc, 'user' => $userId, 'idle' => $idleBefore, 'forced' => $forced, 'since' => time(), 'started' => time()];
+    return ['proc' => $proc, 'user' => $userId, 'idle' => $idleBefore, 'forced' => $forced, 'dry' => $dry, 'since' => time(), 'started' => time()];
 }
 
 function feed_as(int $userId, string $dek, array $event): void {
@@ -104,7 +104,7 @@ function child_check(array &$child, array $keys): ?int {
         return CHILD_ERROR;
     }
     feed_as($userId, $keys[$userId], ['type' => 'stall', 'restart' => $child['restarts']]);
-    $next = child_start($userId, $keys[$userId], $child['idle'], $child['forced'], true);
+    $next = child_start($userId, $keys[$userId], $child['idle'], $child['forced'], true, $child['dry']);
     if ($next === null) return CHILD_ERROR;
     $child = $next + ['restarts' => $child['restarts'], 'started' => $child['started']];
     return null;
@@ -116,7 +116,7 @@ function next_candidate(array $keys, array $retryAfter): ?array {
     $db = db();
     consolidation_repair_watermarks($db);
     $stmt = $db->prepare(
-        'SELECT user_id, force_at FROM memory_consolidation
+        'SELECT user_id, force_at, force_mode FROM memory_consolidation
          WHERE force_at > 0 OR (enabled = 1 AND last_activity > 0 AND last_activity <= ?)
          ORDER BY force_at DESC'
     );
@@ -126,8 +126,9 @@ function next_candidate(array $keys, array $retryAfter): ?array {
         $userId = (int)$row['user_id'];
         if (!isset($keys[$userId])) continue;
         if ((int)$row['force_at'] > 0) {
-            $db->prepare('UPDATE memory_consolidation SET force_at = 0 WHERE user_id = ?')->execute([$userId]);
-            return ['user' => $userId, 'idle' => null, 'forced' => true];
+            $db->prepare("UPDATE memory_consolidation SET force_at = 0, force_mode = '' WHERE user_id = ?")->execute([$userId]);
+            $mode = (string)$row['force_mode'];
+            return ['user' => $userId, 'idle' => null, 'forced' => true, 'resume' => $mode === 'resume', 'dry' => $mode === 'dry'];
         }
         if (($retryAfter[$userId] ?? 0) > $now) continue;
         if (consolidation_pending_count($db, $userId) < CONSOLIDATION_MIN_MESSAGES) continue;
@@ -193,7 +194,7 @@ while (true) {
         if (time() < $nextPoll) continue;
         $nextPoll = time() + CONSOLIDATION_POLL_SECONDS;
         $next = next_candidate($keys, $retryAfter);
-        if ($next) $child = child_start($next['user'], $keys[$next['user']], $next['idle'], $next['forced'], false);
+        if ($next) $child = child_start($next['user'], $keys[$next['user']], $next['idle'], $next['forced'], $next['resume'] ?? false, $next['dry'] ?? false);
     } catch (Throwable $e) {
         log_event(['msg' => 'memory_consolidation_worker_error', 'err' => $e->getMessage()]);
     }

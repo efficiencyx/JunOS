@@ -1,7 +1,7 @@
 import { moodControlPhrases, moodControlVals, moodInputs, moodPhrases, moodRefreshBtn, moodVals } from './dom.js?v=77';
-import { renderGreeting } from './greetings.js?v=16';
-import { moodPhrase } from '../core/mood-tier.js?v=4';
-import * as Live2D from '../live2d/live2d.js?v=92';
+import { renderGreeting } from './greetings.js?v=17';
+import { moodPhrase } from '../core/mood-tier.js?v=5';
+import * as Live2D from '../live2d/live2d.js?v=93';
 
 const EMOTION_TINTS = {
   angry:       { hue: 5,   sat: 20,  light: -8, w: .85 },
