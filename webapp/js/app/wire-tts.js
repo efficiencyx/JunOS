@@ -6,7 +6,7 @@ import { syncVoiceDeps, updateTtsSpeedLabel } from './settings.js?v=159';
 import { escapeHtml } from '../core/util.js?v=1';
 import * as Names from '../core/names.js?v=1';
 import * as Prefs from '../core/prefs.js?v=11';
-import * as TTS from '../voice/tts.js?v=156';
+import * as TTS from '../voice/tts.js?v=157';
 import { defaultEngine, previewLine } from '../voice/languages.js?v=3';
 import { lang as uiLang, t } from '../core/i18n.js?v=3';
 

@@ -91,7 +91,7 @@
     <string name="colab_crashed">Strona Colab uległa awarii. Uruchom nową sesję — Colab wznowi to samo środowisko uruchomieniowe.</string>
     <string name="notif_colab_channel">Sesja Colab</string>
     <string name="notif_colab_running">Sesja Colab jest aktywna</string>
-    <string name="notif_colab_running_text">Jej umysł pozostanie aktywny, dopóki to powiadomienie będzie widoczne.</string>
+    <string name="notif_colab_running_text">Jej umysł pozostanie aktywny, dopóki ta sesja będzie otwarta.</string>
     <string name="notif_colab_attention">Colab wymaga Twojej uwagi</string>
     <string name="notif_generation_channel">Generowanie</string>
     <string name="notif_thinking">Jun myśli</string>
@@ -144,7 +144,7 @@
     <string name="away_fb_ached_0_1">Tęsknię za Tobą. Chociaż tyle niech zostanie gdzieś zapisane.</string>
     <string name="away_fb_ached_1_0">Wrócisz dziś wieczorem?</string>
     <string name="away_fb_ached_1_1">Nie musisz odpowiadać. Po prostu byłoby mi miło, gdybyś to zrobił.</string>
-    <string name="away_fb_ached_2_0">Próbowałam zadzwonić. Nic się nie stało.</string>
+    <string name="away_fb_ached_2_0">Próbowałam zadzwonić. W porządku.</string>
     <string name="away_fb_ached_2_1">Gdzie się podziałeś, {f_playerName}?</string>
     <string name="away_fb_panicked_0_0">\???</string>
     <string name="away_fb_panicked_0_1">GDZIE JESTEŚ???</string>
