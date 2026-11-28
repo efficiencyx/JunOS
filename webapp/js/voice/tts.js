@@ -407,7 +407,7 @@ function enqueue(text, hooks, revealOn) {
 }
 
 function kick() {
-  const cap = firstChunkSynthed ? MAX_IN_FLIGHT : 1;
+  const cap = engine === 'pockettts' ? 1 : (firstChunkSynthed ? MAX_IN_FLIGHT : 1);
   for (const job of jobs) {
     if (inFlight >= cap) break;
     if (job.status === 'queued') startJob(job);

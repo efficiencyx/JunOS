@@ -27,6 +27,7 @@ router = APIRouter()
 # multi second load, so the second caller just waits and reuses
 # the result instead of redoing all of it.
 _pocket_load_lock = threading.Lock()
+_pocket_generate_lock = threading.Lock()
 _tts_waiting = 0
 
 # a G2P that won't build stays broken till restart, don't retry it every chunk
@@ -110,7 +111,7 @@ def get_pocket_model(language=POCKET_DEFAULT_LANG):
             device_via_kwarg = "device" in inspect.signature(TTSModel.load_model).parameters
             config = POCKET_CUSTOM_CONFIGS.get(language)
             # int8 on the polish 6l: rtf 0.49 to 0.30 here, whisper still reads it word for word
-            kwargs = {"config": config, "quantize": True} if config else {"language": language}
+            kwargs = ({"config": config, "temp": 0.3, "quantize": False} if language == "polish" else {"config": config, "quantize": True}) if config else {"language": language}
             if device_via_kwarg:
                 kwargs["device"] = device
             log.info("loading pocket-tts model (%s) on %s...", language, device)
@@ -257,16 +258,17 @@ def synth_kokoro(text, voice, speed, lang_id=KOKORO_DEFAULT_LANG):
 
 
 def synth_pocket(text, voice, language):
-    voice = voice if known_pocket_voice(voice) else POCKET_DEFAULT
-    language = language if language in POCKET_LANG_IDS else POCKET_DEFAULT_LANG
-    model = get_pocket_model(language)
-    audio = model.generate_audio(pocket_state(model, voice, language), text)
-    if hasattr(audio, "detach"):
-        audio = audio.detach().cpu().numpy()
-    audio = np.asarray(audio, dtype=np.float32)
-    if not audio.size:
-        return None
-    return audio, model.sample_rate
+    with _pocket_generate_lock:
+        voice = voice if known_pocket_voice(voice) else POCKET_DEFAULT
+        language = language if language in POCKET_LANG_IDS else POCKET_DEFAULT_LANG
+        model = get_pocket_model(language)
+        audio = model.generate_audio(pocket_state(model, voice, language), text,max_tokens=25,)
+        if hasattr(audio, "detach"):
+            audio = audio.detach().cpu().numpy()
+        audio = np.asarray(audio, dtype=np.float32)
+        if not audio.size:
+            return None
+        return audio, model.sample_rate
 
 
 def _tts_busy():
@@ -336,8 +338,9 @@ def warm(req: WarmReq):
     try:
         state.begin_use("pockettts")
         try:
-            model = get_pocket_model(language)
-            pocket_state(model, voice, language)
+            with _pocket_generate_lock:
+                model = get_pocket_model(language)
+                pocket_state(model, voice, language)
         finally:
             state.end_use()
     finally:

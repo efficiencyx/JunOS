@@ -11,7 +11,7 @@ import * as Live2D from '../live2d/live2d.js?v=94';
 import { COLOR_GROUPS } from '../outfit/catalog.js?v=7';
 import { colors } from '../outfit/current.js?v=8';
 import * as Outfit from '../outfit/outfit.js?v=120';
-import * as TTS from '../voice/tts.js?v=156';
+import * as TTS from '../voice/tts.js?v=157';
 import { t } from '../core/i18n.js?v=3';
 
 const DONE_KEY = 'tour.done';

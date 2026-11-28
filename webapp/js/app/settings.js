@@ -12,7 +12,7 @@ import * as Prefs from '../core/prefs.js?v=11';
 import * as ui from '../core/ui.js?v=13';
 import { hold } from '../core/hold.js?v=2';
 import { factoryReset } from './difficulty.js?v=9';
-import * as TTS from '../voice/tts.js?v=156';
+import * as TTS from '../voice/tts.js?v=157';
 
 export function syncThinkToggle() {
   thinkChk.disabled = reasoningSelect.value === 'auto';
