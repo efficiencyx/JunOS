@@ -1,7 +1,7 @@
 import { mobileConversationTitle, mobileReplyStatus, sidebarBackground, stageEl } from './dom.js?v=77';
 import { phoneMode, visualRect } from '../core/util.js?v=1';
 import * as Names from '../core/names.js?v=1';
-import * as TTS from '../voice/tts.js?v=156';
+import * as TTS from '../voice/tts.js?v=157';
 import * as Live2D from '../live2d/live2d.js?v=94';
 import { t } from '../core/i18n.js?v=3';
 
